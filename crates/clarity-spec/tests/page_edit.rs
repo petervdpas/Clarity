@@ -294,7 +294,7 @@ fn removes_widgets_tabs_and_data() {
                 item: at(PAGE, "title")
             }
         )
-        .contains("is not a window, app, widget")
+        .contains("is not a window, app, entity")
     );
 }
 

@@ -1,0 +1,7 @@
+// What is open in the main area: a window, the app, or a part of the data
+// dictionary or the module structure.
+
+export type Selected = {
+  kind: "window" | "app" | "entity" | "enum" | "module";
+  name: string;
+};

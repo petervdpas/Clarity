@@ -4,7 +4,11 @@ import type { Ident } from "./Ident";
 import type { Modifiers } from "./Modifiers";
 import type { Span } from "./Span";
 
-export type Field = { name: Ident, type: FieldType, modifiers: Modifiers, 
+export type Field = { name: Ident, type: FieldType, 
+/**
+ * The type as written in spec files: `text(80)`, `ref Customer`.
+ */
+typeText: string, modifiers: Modifiers, 
 /**
  * `modifiers.label`, or a label derived from the name.
  */

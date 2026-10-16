@@ -7,7 +7,15 @@
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
   import PageView from "./lib/PageView.svelte";
+  import ProjectTree from "./lib/ProjectTree.svelte";
   import RibbonButton from "./lib/RibbonButton.svelte";
+  import EntityEditor from "./lib/EntityEditor.svelte";
+  import EnumEditor from "./lib/EnumEditor.svelte";
+  import ModuleView from "./lib/ModuleView.svelte";
+  import NameDialog from "./lib/NameDialog.svelte";
+  import type { Selected } from "./lib/selection";
+  import type { Edit } from "./lib/generated/Edit";
+  import type { RenameKind } from "./lib/generated/RenameKind";
   import { applyEdit } from "./lib/applyEdit";
   import type { Diagnostic } from "./lib/generated/Diagnostic";
   import type { HistoryCounts } from "./lib/generated/HistoryCounts";
@@ -17,13 +25,12 @@
   import type { SpecFile } from "./lib/generated/SpecFile";
   import { pageDesigner } from "./lib/pageDesigner.svelte";
   import { findApp, frameForPage } from "./lib/frame";
-  import { describeType } from "./lib/model";
   import { appAsPage, findPage, pageData } from "./lib/pages";
 
   const LAST_DIR_KEY = "clarity.preview.lastDir";
 
-  /** One open window, or the app itself. Following a button pushes a window. */
-  type Open = { name: string; app?: boolean };
+  /** What is open. Following a button in the preview pushes a window. */
+  type Open = Selected;
 
   /** The ribbon tabs. Design and Preview are also the two modes. */
   type Tab = "project" | "design" | "preview";
@@ -57,20 +64,26 @@
   const current = $derived(stack.at(-1) ?? null);
   const app = $derived(preview ? findApp(preview) : null);
   /** The app, when it is the open element (it is designed like a window frame). */
-  const openApp = $derived(current?.app ? app : null);
-  const page = $derived(preview && current && !current.app ? findPage(preview, current.name) : undefined);
+  const openApp = $derived(current?.kind === "app" ? app : null);
+  const page = $derived(preview && current?.kind === "window" ? findPage(preview, current.name) : undefined);
+  const files = $derived(preview?.project.files ?? []);
+  const entity = $derived(current?.kind === "entity" ? files.flatMap((f) => f.entities).find((e) => e.name.name === current.name) : undefined);
+  const enumDecl = $derived(current?.kind === "enum" ? files.flatMap((f) => f.enums).find((e) => e.name.name === current.name) : undefined);
+  const moduleFile = $derived(current?.kind === "module" ? files.find((f) => (f.module?.name ?? "") === current.name) : undefined);
   const appPage = $derived(app ? appAsPage(app) : null);
   const file = $derived(
     preview?.project.files.find(
       (f) =>
         (page && f.pages.some((p) => p.name.name === page.name.name)) ||
-        (openApp && f.apps.some((a) => a.name.name === openApp.name.name)),
+        (openApp && f.apps.some((a) => a.name.name === openApp.name.name)) ||
+        (entity && f.entities.some((e) => e.name.name === entity.name.name)) ||
+        (enumDecl && f.enums.some((e) => e.name.name === enumDecl.name.name)) ||
+        f === moduleFile,
     ),
   );
   const designing = $derived(tab === "design" && (page !== undefined || openApp !== null));
   // Widgets in the app's sidebars and footer see the app's data next to the window's.
   const appData = $derived(preview && appPage ? pageData(preview, appPage) : {});
-  const entities = $derived(preview?.project.files.flatMap((f) => f.entities) ?? []);
   const errors = $derived(preview?.project.diagnostics.filter((d) => d.severity === "error") ?? []);
   const warnings = $derived(preview?.project.diagnostics.filter((d) => d.severity === "warning") ?? []);
   const projectName = $derived(app?.title ?? app?.name.name ?? (openDir ? fileName(openDir) : ""));
@@ -100,7 +113,7 @@
   function startWindow(p: Preview): Open[] {
     const main = findApp(p)?.main?.name;
     const first = main ?? p.project.files.flatMap((f) => f.pages)[0]?.name.name;
-    return first ? [{ name: first }] : [];
+    return first ? [{ kind: "window", name: first }] : [];
   }
 
   async function refreshHistory() {
@@ -114,9 +127,78 @@
   function applyPreview(next: Preview) {
     preview = next;
     // Keep the open windows that still exist after an edit.
-    const kept = stack.filter((o) => (o.app ? findApp(next) !== null : findPage(next, o.name)));
+    const kept = stack.filter((o) => exists(next, o));
     stack = kept.length > 0 ? kept : startWindow(next);
     refreshHistory();
+  }
+
+  /** Whether a selection still exists in a reloaded project. */
+  function exists(p: Preview, o: Open): boolean {
+    const all = p.project.files;
+    switch (o.kind) {
+      case "app":
+        return findApp(p) !== null;
+      case "window":
+        return findPage(p, o.name) !== undefined;
+      case "entity":
+        return all.some((f) => f.entities.some((e) => e.name.name === o.name));
+      case "enum":
+        return all.some((f) => f.enums.some((e) => e.name.name === o.name));
+      case "module":
+        return all.some((f) => (f.module?.name ?? "") === o.name);
+    }
+  }
+
+  function select(o: Open) {
+    stack = [o];
+    pageDesigner.selected = null;
+  }
+
+  /** Applies an edit from the data or module editors. */
+  async function editData(edit: Edit) {
+    if (!file) return;
+    actionError = null;
+    try {
+      applyPreview((await applyEdit(file, edit)).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** Renames an entity or enum and every reference to it, in all files. */
+  async function renameData(kind: RenameKind, name: string, newName: string) {
+    actionError = null;
+    try {
+      applyPreview(await invoke<Preview>("rename", { kind, name, newName }));
+      select({ kind, name: newName });
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** The file a new entity or enum goes into, while its dialog is open. */
+  let newData = $state<{ kind: "entity" | "enum"; file: SpecFile } | null>(null);
+  let newDataError = $state<string | null>(null);
+
+  function startNewData(kind: "entity" | "enum") {
+    const target = file ?? files.find((f) => f.entities.length > 0) ?? files[0];
+    if (target) {
+      newDataError = null;
+      newData = { kind, file: target };
+    }
+  }
+
+  async function addData(target: SpecFile, name: string) {
+    if (!newData) return;
+    const kind = newData.kind;
+    try {
+      const result = await applyEdit(target, kind === "entity" ? { op: "addEntity", name } : { op: "addEnum", name });
+      applyPreview(result.preview);
+      newData = null;
+      select({ kind, name });
+    } catch (err) {
+      newDataError = String(err);
+    }
   }
 
   async function openProject(dir: string) {
@@ -156,13 +238,13 @@
   }
 
   function selectApp() {
-    if (app) stack = [{ name: app.name.name, app: true }];
+    if (app) stack = [{ kind: "app", name: app.name.name }];
     pageDesigner.selected = null;
     tab = "design";
   }
 
   function selectPage(p: Page) {
-    stack = [{ name: p.name.name }];
+    stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
   }
 
@@ -173,7 +255,7 @@
       if (stack.length > 1) stack = stack.slice(0, -1);
       return;
     }
-    if (findPage(preview, target)) stack = [...stack, { name: target }];
+    if (findPage(preview, target)) stack = [...stack, { kind: "window", name: target }];
   }
 
   async function addWindow(target: SpecFile, name: string, template: PageTemplate) {
@@ -182,7 +264,7 @@
       applyPreview(result.preview);
       newWindowIn = null;
       newWindowError = null;
-      stack = [{ name }];
+      stack = [{ kind: "window", name }];
       pageDesigner.selected = null;
       tab = "design";
     } catch (err) {
@@ -224,10 +306,11 @@
     actionError = null;
     let item = pageDesigner.selected;
     if (item === null) {
-      const subject = openApp ? `the app ${openApp.name.name}` : page ? `the window ${page.name.name}` : null;
-      if (!subject) return;
-      if (!(await ask(`Delete ${subject}?`, { title: "Clarity", kind: "warning" }))) return;
-      item = openApp ? openApp.span.start : (page?.span.start ?? null);
+      const target = openApp ?? page ?? entity ?? enumDecl;
+      if (!target) return;
+      const noun = openApp ? "the app" : page ? "the window" : entity ? "the entity" : "the enum";
+      if (!(await ask(`Delete ${noun} ${target.name.name}?`, { title: "Clarity", kind: "warning" }))) return;
+      item = target.span.start;
       if (item === null) return;
     }
     try {
@@ -274,37 +357,20 @@
 
 <svelte:window {onkeydown} />
 
-{#snippet windowList(designList: boolean)}
-  <nav>
-    {#each preview?.project.files ?? [] as f (f.path)}
-      <div class="module">
-        <div class="module-name">
-          {f.module?.name ?? "(no module)"} <span class="file">{fileName(f.path)}</span>
-        </div>
-        {#each f.apps as a (a.name.name)}
-          <button class="screen-link" class:current={stack[0]?.app === true} onclick={selectApp}>
-            <span class="pattern app">app</span>
-            {a.name.name}
-          </button>
-        {/each}
-        {#each f.pages as p (p.name.name)}
-          <button class="screen-link" class:current={!stack[0]?.app && stack[0]?.name === p.name.name} onclick={() => selectPage(p)}>
-            <span class="pattern page">{p.kind}</span>
-            {p.name.name}
-          </button>
-        {/each}
-        {#if f.pages.length === 0 && f.apps.length === 0}
-          <div class="none">No windows</div>
-        {/if}
-        {#if designList}
-          <button class="add-page" onclick={() => ((newWindowError = null), (newWindowIn = f))}>+ New window</button>
-          {#if !app}
-            <button class="add-page" onclick={() => addApp(f)}>+ New app</button>
-          {/if}
-        {/if}
-      </div>
-    {/each}
-  </nav>
+{#snippet tree(full: boolean)}
+  {#if preview}
+    <ProjectTree
+      {preview}
+      selected={current}
+      {full}
+      onapp={selectApp}
+      onwindow={selectPage}
+      onselect={select}
+      onnewdata={full ? startNewData : null}
+      onnewwindow={full ? startNewWindow : null}
+      onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
+    />
+  {/if}
 {/snippet}
 
 <div class="app">
@@ -432,29 +498,12 @@
         </section>
         {#if preview}
           <section class="side-section">
-            <h2>Windows</h2>
-            {@render windowList(true)}
-          </section>
-          <section class="side-section">
-            <h2>Data</h2>
-            {#each entities as entity (entity.name.name)}
-              <details class="entity">
-                <summary>{entity.name.name} <span class="file">{entity.fields.length} fields</span></summary>
-                <ul>
-                  {#each entity.fields as field (field.name.name)}
-                    <li>{field.name.name} <code>{describeType(field)}</code></li>
-                  {/each}
-                </ul>
-              </details>
-            {:else}
-              <p class="none">No entities yet.</p>
-            {/each}
+            {@render tree(true)}
           </section>
         {/if}
       {:else if tab === "design" && (!designing || designSide === "windows")}
         <section class="side-section">
-          <h2>Windows</h2>
-          {@render windowList(true)}
+          {@render tree(true)}
         </section>
       {:else if tab === "design" && designSide === "settings"}
         <section class="side-section">
@@ -468,7 +517,7 @@
       {:else if tab === "preview"}
         <section class="side-section">
           <h2>Run a window</h2>
-          {@render windowList(false)}
+          {@render tree(false)}
         </section>
       {/if}
 
@@ -498,6 +547,25 @@
         <div class="placeholder">
           <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
         </div>
+      {:else if entity && file}
+        <EntityEditor
+          {preview}
+          {entity}
+          module={file.module?.name ?? ""}
+          onedit={editData}
+          ondelete={deletePicked}
+          onrename={(newName) => renameData("entity", entity.name.name, newName)}
+        />
+      {:else if enumDecl && file}
+        <EnumEditor
+          decl={enumDecl}
+          module={file.module?.name ?? ""}
+          onedit={editData}
+          ondelete={deletePicked}
+          onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
+        />
+      {:else if moduleFile}
+        <ModuleView {preview} file={moduleFile} onedit={editData} onopen={(kind, name) => select({ kind, name })} />
       {:else if tab === "design" && openApp && appPage && file}
         <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
       {:else if tab === "design" && page && file}
@@ -533,6 +601,19 @@
     </main>
   </div>
 </div>
+
+{#if newData && preview}
+  <NameDialog
+    {preview}
+    title={newData.kind === "entity" ? "New entity" : "New enum"}
+    placeholder={newData.kind === "entity" ? "Invoice" : "Priority"}
+    action={newData.kind === "entity" ? "Add entity" : "Add enum"}
+    file={newData.file}
+    error={newDataError}
+    onsubmit={addData}
+    oncancel={() => (newData = null)}
+  />
+{/if}
 
 {#if newWindowIn && preview}
   <NewWindowDialog
@@ -677,21 +758,8 @@
     white-space: nowrap;
   }
 
-  .side-section nav {
-    padding: 0;
-  }
 
-  .entity summary {
-    cursor: default;
-    font-size: 13px;
-    padding: 2px 0;
-  }
 
-  .entity ul {
-    margin: 2px 0 6px;
-    padding-left: 18px;
-    font-size: 12px;
-  }
 
   .entity code {
     font-family: var(--mono);
@@ -782,11 +850,6 @@
   }
 
 
-  nav {
-    flex: 1;
-    overflow: auto;
-    padding: 8px 0;
-  }
 
   .module {
     padding: 4px 8px 8px;

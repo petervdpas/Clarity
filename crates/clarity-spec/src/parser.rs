@@ -396,6 +396,7 @@ fn parse_field(node: &Node) -> ParseResult<Field> {
         .unwrap_or_else(|| default_label(&name.name));
     Ok(Field {
         name,
+        type_text: crate::dictionary::type_text(&ty),
         ty,
         modifiers,
         label,

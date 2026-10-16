@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use clarity_spec::Preview;
 use clarity_spec::edit::{self, Edit};
+use clarity_spec::rename::RenameKind;
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -27,12 +28,16 @@ struct WatchState {
     open: Mutex<Option<(PathBuf, notify::RecommendedWatcher)>>,
 }
 
-/// One applied edit: the file text before and after it.
-struct Change {
+/// One file's text before and after a change.
+struct FileChange {
     file: PathBuf,
     before: String,
     after: String,
 }
+
+/// One applied change: an edit of one file, or a rename across several.
+/// It is undone and redone as a whole.
+struct Change(Vec<FileChange>);
 
 /// Edits that can be undone and redone, newest last.
 #[derive(Default)]
@@ -172,21 +177,73 @@ fn apply_edit(
             return Err(error.message.clone());
         }
         write_atomically(&file, &outcome.text)?;
-        let mut history = history.0.lock().map_err(|_| "history is poisoned")?;
-        history.redo.clear();
-        history.undo.push(Change {
+        record(&history, vec![FileChange {
             file: file.clone(),
             before: source,
             after: outcome.text,
-        });
-        if history.undo.len() > HISTORY_LIMIT {
-            history.undo.remove(0);
-        }
+        }])?;
     }
     Ok(EditApplied {
         preview: load(&dir)?,
         focus: outcome.focus,
     })
+}
+
+/// Remembers an applied change for Undo; a new change clears Redo.
+fn record(history: &HistoryState, files: Vec<FileChange>) -> Result<(), String> {
+    let mut history = history.0.lock().map_err(|_| "history is poisoned")?;
+    history.redo.clear();
+    history.undo.push(Change(files));
+    if history.undo.len() > HISTORY_LIMIT {
+        history.undo.remove(0);
+    }
+    Ok(())
+}
+
+/// Renames an entity or enum and every reference to it, in all files.
+#[tauri::command]
+fn rename(
+    kind: RenameKind,
+    name: String,
+    new_name: String,
+    state: State<WatchState>,
+    history: State<HistoryState>,
+) -> Result<Preview, String> {
+    let dir = open_dir_of(&state)?;
+    let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
+    let before = clarity_spec::load_dir(&dir).map_err(read_err)?;
+    let source = |path: &str| std::fs::read_to_string(path).ok();
+    let renamed = clarity_spec::rename::rename(&before, source, kind, &name, new_name.trim())?;
+    if renamed.is_empty() {
+        return load(&dir);
+    }
+    // Check the whole project with every renamed file in place.
+    let mut sources = Vec::new();
+    for path in clarity_spec::spec_files(&dir).map_err(read_err)? {
+        let shown = path.display().to_string();
+        let text = match renamed.iter().find(|r| r.path == shown) {
+            Some(r) => r.text.clone(),
+            None => std::fs::read_to_string(&path).map_err(read_err)?,
+        };
+        sources.push((shown, text));
+    }
+    let after = clarity_spec::load_sources(sources.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    if let Some(error) = clarity_spec::new_error(&before, &after) {
+        return Err(error.message.clone());
+    }
+    let mut changes = Vec::new();
+    for r in renamed {
+        let file = PathBuf::from(&r.path);
+        let old = std::fs::read_to_string(&file).map_err(read_err)?;
+        write_atomically(&file, &r.text)?;
+        changes.push(FileChange {
+            file,
+            before: old,
+            after: r.text,
+        });
+    }
+    record(&history, changes)?;
+    load(&dir)
 }
 
 fn open_dir_of(state: &WatchState) -> Result<PathBuf, String> {
@@ -216,19 +273,23 @@ fn replay(state: &WatchState, history: &HistoryState, way: Replay) -> Result<Pre
         Replay::Redo => (&mut history.redo, Replay::Undo),
     };
     let change = from.pop().ok_or("nothing to undo or redo")?;
-    let (expected, wanted) = match way {
-        Replay::Undo => (&change.after, &change.before),
-        Replay::Redo => (&change.before, &change.after),
+    let pick = |c: &FileChange| match way {
+        Replay::Undo => (c.after.clone(), c.before.clone()),
+        Replay::Redo => (c.before.clone(), c.after.clone()),
     };
-    let current = std::fs::read_to_string(&change.file)
-        .map_err(|err| format!("cannot read {}: {err}", change.file.display()))?;
-    if &current != expected {
-        return Err(format!(
-            "{} changed outside the designer; it cannot be undone here",
-            change.file.file_name().unwrap_or_default().to_string_lossy()
-        ));
+    // Check every file first, so a change is replayed whole or not at all.
+    for c in &change.0 {
+        let current = std::fs::read_to_string(&c.file)
+            .map_err(|err| format!("cannot read {}: {err}", c.file.display()))?;
+        if current != pick(c).0 {
+            let name = c.file.file_name().unwrap_or_default().to_string_lossy().to_string();
+            from.push(change);
+            return Err(format!("{name} changed outside the designer; it cannot be undone here"));
+        }
     }
-    write_atomically(&change.file, wanted)?;
+    for c in &change.0 {
+        write_atomically(&c.file, &pick(c).1)?;
+    }
     match to {
         Replay::Redo => history.redo.push(change),
         Replay::Undo => history.undo.push(change),
@@ -366,7 +427,8 @@ pub fn run() {
             undo_edit,
             redo_edit,
             history_counts,
-            new_project
+            new_project,
+            rename
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

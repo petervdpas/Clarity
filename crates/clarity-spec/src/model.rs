@@ -69,6 +69,10 @@ pub struct Field {
     #[serde(rename = "type")]
     #[ts(rename = "type")]
     pub ty: FieldType,
+    /// The type as written in spec files: `text(80)`, `ref Customer`.
+    #[serde(rename = "typeText")]
+    #[ts(rename = "typeText")]
+    pub type_text: String,
     pub modifiers: Modifiers,
     /// `modifiers.label`, or a label derived from the name.
     pub label: String,
@@ -121,7 +125,7 @@ impl FieldType {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Modifiers {
     pub required: bool,
@@ -137,7 +141,7 @@ pub struct Modifiers {
     pub format: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 #[ts(export)]
 pub enum Literal {

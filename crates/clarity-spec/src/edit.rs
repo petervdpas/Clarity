@@ -13,6 +13,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::diagnostic::Severity;
+use crate::dictionary::{FieldSpec, validate_field};
 use crate::frame::{self, RegionKind, command_line, new_command, validate_command};
 use crate::lexer::{Token, TokenKind, lex, quote};
 use crate::model::{
@@ -82,6 +83,28 @@ pub enum Edit {
     /// Add a window at the end of the file, blank or from a template.
     /// Needs the project (see `apply_in`).
     AddWindow { name: String, template: PageTemplate },
+    /// Add an entity with a first field, after the other data declarations.
+    AddEntity { name: String },
+    /// Add an enum with a first variant, after the other data declarations.
+    AddEnum { name: String },
+    /// Add a field at the end of an entity.
+    AddField { entity: u32, spec: FieldSpec },
+    /// Rewrite a field's line.
+    UpdateField { item: u32, spec: FieldSpec },
+    /// Add a variant at the end of an enum.
+    AddVariant {
+        owner: u32,
+        name: String,
+        label: Option<String>,
+    },
+    /// Rewrite a variant's line.
+    UpdateVariant {
+        item: u32,
+        name: String,
+        label: Option<String>,
+    },
+    /// Set the modules this file uses, replacing its `use` lines.
+    SetUses { uses: Vec<String> },
     /// Add an app at the end of the file.
     AddApp { name: String },
     /// Set the main window of an app.
@@ -278,6 +301,11 @@ enum Kind {
     App,
     AppSetting,
     Region(RegionKind),
+    Entity,
+    Field,
+    Enum,
+    Variant,
+    Use,
     /// A menu item, button or separator.
     Command,
     RibbonTab,
@@ -327,6 +355,8 @@ fn child_kind(parent: Kind, node: &LNode) -> Kind {
     match parent {
         Kind::Page if is_page_setting(&node.tokens) => Kind::PageSetting,
         Kind::App if is_app_setting(&node.tokens) => Kind::AppSetting,
+        Kind::Entity => Kind::Field,
+        Kind::Enum => Kind::Variant,
         Kind::Page | Kind::App if is_region_line(&node.tokens) => region_kind(node),
         Kind::Region(RegionKind::Menu) | Kind::Command
             if command_keyword_is(node, &[CommandKind::Item, CommandKind::Separator]) =>
@@ -391,6 +421,12 @@ fn top_kind(node: &LNode) -> Kind {
         Kind::Page
     } else if starts_with_keyword(&node.tokens, "app", Some(TokenKind::Ident)) {
         Kind::App
+    } else if starts_with_keyword(&node.tokens, "entity", Some(TokenKind::Ident)) {
+        Kind::Entity
+    } else if starts_with_keyword(&node.tokens, "enum", Some(TokenKind::Ident)) {
+        Kind::Enum
+    } else if starts_with_keyword(&node.tokens, "use", Some(TokenKind::Ident)) {
+        Kind::Use
     } else {
         Kind::Other
     }
@@ -673,6 +709,13 @@ impl Doc {
             Edit::AddWindow { .. } => {
                 fail("this edit needs the whole project and cannot be part of a batch")
             }
+            Edit::AddEntity { name } => self.add_declaration("entity", name, "name: text(80)"),
+            Edit::AddEnum { name } => self.add_declaration("enum", name, "First"),
+            Edit::AddField { entity, spec } => self.add_field(*entity, spec),
+            Edit::UpdateField { item, spec } => self.update_field(*item, spec),
+            Edit::AddVariant { owner, name, label } => self.add_variant(*owner, name, label.as_deref()),
+            Edit::UpdateVariant { item, name, label } => self.update_variant(*item, name, label.as_deref()),
+            Edit::SetUses { uses } => self.set_uses(uses),
             Edit::AddApp { name } => self.add_app(name),
             Edit::SetMain { app, main } => self.set_main(*app, main),
             Edit::AddRegion {
@@ -698,12 +741,16 @@ impl Doc {
         let (path, _) = self
             .find(
                 item,
-                "a window, app, widget, tab, region, command or data declaration",
+                "a window, app, entity, field, enum, variant, widget, tab, region, command or data declaration",
                 |k| {
                     matches!(
                         k,
                         Kind::Page
                             | Kind::App
+                            | Kind::Entity
+                            | Kind::Field
+                            | Kind::Enum
+                            | Kind::Variant
                             | Kind::Widget(_)
                             | Kind::WidgetTab
                             | Kind::Region(_)
@@ -1314,10 +1361,15 @@ impl Doc {
 
     fn move_sibling(&mut self, item: u32, delta: i32) -> EditResult<Option<u32>> {
         let (path, kind) =
-            self.find(item, "a command, ribbon tab, ribbon group or region", |k| {
+            self.find(item, "a field, variant, command, ribbon tab, ribbon group or region", |k| {
                 matches!(
                     k,
-                    Kind::Command | Kind::RibbonTab | Kind::RibbonGroup | Kind::Region(_)
+                    Kind::Field
+                        | Kind::Variant
+                        | Kind::Command
+                        | Kind::RibbonTab
+                        | Kind::RibbonGroup
+                        | Kind::Region(_)
                 )
             })?;
         if delta != -1 && delta != 1 {
@@ -1390,4 +1442,127 @@ fn replace_token(node: &mut LNode, index: usize, replacement: &str) {
     let (start, end) = (token.span.start as usize, token.span.end as usize);
     let text = format!("{}{replacement}{}", &node.text[..start], &node.text[end..]);
     node.set_text(text);
+}
+
+impl Doc {
+    // -- data dictionary ----------------------------------------------------
+
+    /// Adds `entity Name` or `enum Name` with one first line, after the
+    /// last data declaration (or after `module` and `use`).
+    fn add_declaration(&mut self, keyword: &str, name: &str, first: &str) -> EditResult<Option<u32>> {
+        self.check_new_name(name)?;
+        let mut node = self.fresh_node(0, format!("{keyword} {name}"));
+        node.leading.push(Trivia {
+            indent: 0,
+            raw_indent: None,
+            text: String::new(),
+        });
+        let line = self.fresh_node(INDENT_STEP, first.to_string());
+        node.children.push(line);
+        let id = node.id;
+        let after = |kinds: &[Kind]| self.nodes.iter().rposition(|n| kinds.contains(&top_kind(n)));
+        let index = after(&[Kind::Entity, Kind::Enum])
+            .or_else(|| after(&[Kind::Use]))
+            .map(|i| i + 1)
+            .unwrap_or(1.min(self.nodes.len()));
+        self.nodes.insert(index, node);
+        Ok(Some(id))
+    }
+
+    fn add_field(&mut self, entity: u32, spec: &FieldSpec) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(entity, "an entity", |k| k == Kind::Entity)?;
+        let line = validate_field(spec).map_err(EditError)?;
+        if self.node(&path).children.iter().any(|c| c.tokens.first().is_some_and(|t| t.text == spec.name)) {
+            return fail(format!("the entity already has a field '{}'", spec.name));
+        }
+        let indent = self.node(&path).child_indent();
+        let node = self.fresh_node(indent, line);
+        let id = node.id;
+        self.node_mut(&path).children.push(node);
+        Ok(Some(id))
+    }
+
+    fn update_field(&mut self, item: u32, spec: &FieldSpec) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(item, "a field", |k| k == Kind::Field)?;
+        let line = validate_field(spec).map_err(EditError)?;
+        let parent = &path[..path.len() - 1];
+        let clash = self
+            .node(parent)
+            .children
+            .iter()
+            .any(|c| c.id != item && c.tokens.first().is_some_and(|t| t.text == spec.name));
+        if clash {
+            return fail(format!("the entity already has a field '{}'", spec.name));
+        }
+        set_line_keeping_comment(self.node_mut(&path), line);
+        Ok(Some(item))
+    }
+
+    fn variant_line(name: &str, label: Option<&str>) -> EditResult<String> {
+        if !is_identifier(name) {
+            return fail(format!("'{name}' is not a valid variant name"));
+        }
+        Ok(match label.map(str::trim).filter(|l| !l.is_empty()) {
+            Some(label) => format!("{name} label {}", quote(label)),
+            None => name.to_string(),
+        })
+    }
+
+    fn add_variant(&mut self, owner: u32, name: &str, label: Option<&str>) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(owner, "an enum", |k| k == Kind::Enum)?;
+        let line = Self::variant_line(name, label)?;
+        if self.node(&path).children.iter().any(|c| c.tokens.first().is_some_and(|t| t.text == name)) {
+            return fail(format!("the enum already has a variant '{name}'"));
+        }
+        let indent = self.node(&path).child_indent();
+        let node = self.fresh_node(indent, line);
+        let id = node.id;
+        self.node_mut(&path).children.push(node);
+        Ok(Some(id))
+    }
+
+    fn update_variant(&mut self, item: u32, name: &str, label: Option<&str>) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(item, "a variant", |k| k == Kind::Variant)?;
+        let line = Self::variant_line(name, label)?;
+        set_line_keeping_comment(self.node_mut(&path), line);
+        Ok(Some(item))
+    }
+
+    fn set_uses(&mut self, uses: &[String]) -> EditResult<Option<u32>> {
+        for name in uses {
+            if !is_identifier(name) {
+                return fail(format!("'{name}' is not a valid module name"));
+            }
+        }
+        // Drop the current `use` lines with the blank line before them; the
+        // new block brings its own.
+        while let Some(index) = self.nodes.iter().position(|n| top_kind(n) == Kind::Use) {
+            self.detach(&[index]);
+        }
+        let module = self
+            .nodes
+            .iter()
+            .position(|n| starts_with_keyword(&n.tokens, "module", Some(TokenKind::Ident)))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        for (offset, name) in uses.iter().enumerate() {
+            let mut node = self.fresh_node(0, format!("use {name}"));
+            if offset == 0 {
+                node.leading.push(Trivia {
+                    indent: 0,
+                    raw_indent: None,
+                    text: String::new(),
+                });
+            }
+            self.nodes.insert(module + offset, node);
+        }
+        Ok(None)
+    }
+}
+
+/// Replaces a line's content, keeping a trailing comment.
+fn set_line_keeping_comment(node: &mut LNode, line: String) {
+    let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
+    let rest = node.text[rest_start..].to_string();
+    node.set_text(line + &rest);
 }

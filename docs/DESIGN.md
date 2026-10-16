@@ -37,6 +37,63 @@ These decisions replace earlier parts of this document where they conflict:
 
 Superseded by this: the form and browse screen kinds (section 5.5 and later mentions of screens), behavior written in the target language (sections 6.1, 6.4 and 6.5), the spec-only scope of the language (section 2), and the restriction of the designer to business patterns (section 8). Those sections are rewritten as the Clarity language is designed. Adopted projects (section 3) still apply rules and directives to existing hand-written code.
 
+### 1.2 Projects, stacks and output (2026-10-16)
+
+A Clarity project is a folder with its `.clarity` files and one project file. The project file names the stack the application is transpiled into:
+
+```
+# clarity.toml
+[project]
+name = "Shop"
+
+[stack]
+backend = "csharp"          # rust, go, csharp, c, cpp
+ui = "avalonia"             # web, or a native toolkit for the backend
+targets = ["desktop"]       # desktop, web, or both
+```
+
+**Backends.** Five backend languages: Rust, Go, C#, C and C++. Each needs one transpile library, made of three parts:
+
+1. **Emitter:** Clarity in, that language out: data, behavior, bindings and the event dispatch to handlers.
+2. **Runtime library:** data access, validation from the dictionary, the binding protocol and event dispatch, written by hand once per language (section 7.5).
+3. **Shells:** the desktop host and the web server for that language.
+
+| Backend | Desktop shell (web UI) | Web server |
+|---|---|---|
+| Rust | Tauri | an HTTP server in Rust |
+| Go | Wails | net/http |
+| C# | WebView2 or Photino | ASP.NET |
+| C, C++ | the webview C library | a small embedded HTTP server |
+
+**UI.** The UI is either the web renderer or a native toolkit:
+
+- **Web renderer.** One frontend runtime, shared by every backend and both targets: HTML and JavaScript in a webview on the desktop and in a browser on the web. It is the renderer the designer's preview already uses, so the preview and the real application cannot drift apart. It is built and tested once, so a project does not choose a frontend framework: five backends need one frontend, not five times three. Svelte, Vue or React return only if hand-extending the frontend in that framework becomes a real need.
+- **Native toolkits.** A project can render its windows with a native toolkit of its backend instead. Each toolkit is one more transpile library: an emitter for its markup and a small runtime. Avalonia for C# comes first; Qt for C++ and Slint for Rust can follow where they are wanted. Avalonia can also target the browser through WebAssembly.
+
+The window model maps onto a toolkit without loss, because it does not depend on one. For Avalonia:
+
+| Clarity | Avalonia |
+|---|---|
+| a window on a 12-column grid | `Window` with a `Grid` of 12 `ColumnDefinitions` |
+| `textbox at 4,2 span 6 bind customer.email` | `<TextBox Grid.Column="3" Grid.Row="1" Grid.ColumnSpan="6" Text="{Binding Email}"/>` |
+| panel, tabs, splitter | `HeaderedContentControl` in a `Border`, `TabControl`, `GridSplitter` |
+| menu, toolbar, footer | `Menu`, a toolbar panel, a status bar `DockPanel` |
+| `on click: save_click` | `Command="{Binding SaveClick}"`, a generated command that calls the handler |
+| data and validation | a generated ViewModel with typed properties and validation from the dictionary |
+
+The designer is the same for every UI: a window is designed once, and the stack decides how it is rendered. For a native toolkit the preview shows the layout faithfully but not pixel for pixel; the real window appears with Run.
+
+**Output.** Clarity keeps an `out/` folder in sync with the project, the way the preview follows every change: a complete project for the chosen stack that its own toolchain compiles (`Cargo.toml`, `go.mod`, a `.csproj`, `CMakeLists.txt`). Nobody edits it; it is regenerated deterministically from the Clarity files. **Run** on the Preview tab compiles it and starts the real application; **Build** produces a release. Clarity calls the native toolchains and never replaces them.
+
+**AI.** Clarity knows the whole project as a structured model: data, windows, handlers, diagnostics, the edit history, the generated code, compile errors and, later, runtime measurements. Through its MCP server (section 17.3) an AI can read all of it. An AI changes a project only with the edits the designer uses, so the checker judges its changes like anyone's and Undo takes them back. Optimization works in two loops:
+
+- **Inside a project:** the AI proposes improvements (layout, data model, slow handlers, duplicated logic); the developer accepts or rejects them, and the rules decide what is valid.
+- **For Clarity itself:** patterns that recur across projects (the same field added everywhere, generated code that is always slow) become proposals for better templates, emitters and rules, and improve Clarity as a whole once a human approves them.
+
+Generation, checking and enforcement stay deterministic (section 2): the AI proposes, Clarity decides what is valid, humans decide what is accepted.
+
+Superseded by this: the frontend framework choice (sections 7.2 and 11.4 where they assume Svelte, Vue or React output) and the stack milestones M2, M5, M7 and M10 in the roadmap.
+
 ## 2. Goals and non-goals
 
 ### Goals
@@ -872,7 +929,7 @@ Clarity is developed under its own rules from the first milestone that can enfor
 
 ## 19. Roadmap
 
-The first goal is a visible screen slice: the screen spec, a live preview and then the visual designer, so the screen patterns can be tried early. After that, one stack end to end (Rust + Tauri + Svelte) before adding breadth.
+The first goal was a visible slice: the spec language, a live preview and the visual designer. Next come projects with a stack (section 1.2), the behavior language, and one stack end to end (Rust with the web renderer) before C# with Avalonia proves a native toolkit and the other backends add breadth.
 
 | Milestone | Content | Status |
 |---|---|---|
@@ -883,21 +940,26 @@ The first goal is a visible screen slice: the screen spec, a live preview and th
 | S3c | Frame regions: `app` construct, menu, toolbar, ribbon, sidebar and footer docked around the grid (section 5.6) | done |
 | S3d | One designer: every window is designed in the page designer with the same Parts catalog (frame, basic input, containers, data, graphics), free placement and resizing, and a Data panel of what it binds to; form and browse become starter templates (section 1.1) | done |
 | S3e | Part names and events: each part gets a name and an Events list; wiring an event writes the handler name into the window, ready for code behind | done |
-| P1 | Projects in the app: open Clarity, load or create a project, and work from there; the project holds the windows, data and behavior and names its stack | next |
+| P1 | Projects: `clarity.toml` with backend, UI and targets (section 1.2); New project asks for them; the Project tab shows and edits them. Opening and creating projects in the app is done | next |
 | L1 | The Clarity behavior language: handlers and actions written in Clarity, with typed access to a window's parts and data (section 1.1) | |
-| L2 | Transpiler: Clarity UI and behavior into the first stack (Rust backend, Tauri shell, Svelte frontend) | |
+| G1 | First stack: Rust emitter and runtime, Tauri shell, the web renderer as the frontend runtime, the `out/` folder kept in sync, Run and Build on the Preview tab | |
+| G2 | C# with Avalonia: C# emitter and runtime, the Avalonia emitter (windows as AXAML with ViewModels), desktop first | |
+| G3 | Go: emitter, runtime, Wails shell | |
+| G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted | |
+| W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |
+| A1 | AI through the MCP server: the whole project and its output readable, changes only as designer edits, proposals inside a project and for Clarity itself (section 1.2) | |
 | S4 | Graphics canvas (section 5.7): `bitmap` and `vector` field types, the standard canvas widget with view and edit modes, the `canvas` screen pattern, backend and frontend renderers | |
 | M0 | Workspace, `clarity.toml`, Rust pack, index, modularity rule, `clarity check`, severities | |
 | M1 | Rest of the spec language: actions, contracts, expression language, formatter | |
-| M2 | First stack end to end: Rust backend, Tauri shell, Svelte frontend, SQLite storage, `clarity gen --verify` | |
+| M2 | First stack end to end: Rust backend, Tauri shell, Svelte frontend, SQLite storage, `clarity gen --verify` | replaced by G1, apart from SQLite storage and `clarity gen --verify` |
 | M3 | TypeScript pack, TDD state machine, Claude Code hooks, protected rules file, shape-in-spec rule, directive integrity | |
 | M4 | Contracts to property tests and runtime checks, DRY, mutation testing for Rust and TypeScript, remaining screen patterns | |
-| M5 | Second stack to prove the generator split: Go + Wails + Vue | |
+| M5 | Second stack to prove the generator split: Go + Wails + Vue | replaced by G2 and G3 |
 | M6 | Metrics, waivers, ratchet mode, `clarity adopt`, `clarity tune` | |
-| M7 | Packs for C, C++, Python, C#, Ruby. Backend generators for C# and C++ | |
+| M7 | Packs for C, C++, Python, C#, Ruby. Backend generators for C# and C++ | generators replaced by G2 and G4; packs remain for adopted projects |
 | M8 | LSP server (spec and rules), MCP server | |
 | M9 | Desktop app: control room, with the designer from S3 | |
-| M10 | Web target (HTTP adapters, fetch transport, PostgreSQL), C backend generator, React frontend, external packs, Haxe | |
+| M10 | Web target (HTTP adapters, fetch transport, PostgreSQL), C backend generator, React frontend, external packs, Haxe | web target and generators replaced by W1 and G4; PostgreSQL and external packs remain |
 
 ## 20. Open questions
 

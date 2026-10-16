@@ -52,8 +52,8 @@ Without a folder, `./dev.sh` opens the folder used last time, or you enter one i
 
 Clarity has a ribbon with three tabs, and the left sidebar follows the tab:
 
-- **Project:** New project (in an empty folder), Open, Reload, New window, the app, and the error count. The sidebar shows the project settings, its windows and its data.
-- **Design:** Undo and Redo (also Ctrl+Z and Ctrl+Y), Delete (the picked part, or the window itself when nothing is picked), New window and the snap grid. Every change is written to the project files at once; the Save button shows that. The sidebar has the windows, the parts, a tree of the open window and the design settings. The right column shows the window's own properties and, below them, what is picked.
+- **Project:** New project (in an empty folder), Open, Reload, New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
+- **Design:** Undo and Redo (also Ctrl+Z and Ctrl+Y), Delete (the picked part, or the window itself when nothing is picked), New window and the snap grid. Every change is written to the project files at once; the Save button shows that. The sidebar has the project tree, the parts, a tree of the open window and the design settings. The right column shows the window's own properties and, below them, what is picked.
 - **Preview:** run the main window or any other window, and go back after following a button.
 
 Every window is designed the same way:

@@ -2,11 +2,13 @@
 
 pub mod check;
 pub mod diagnostic;
+pub mod dictionary;
 pub mod edit;
 pub mod frame;
 pub mod lexer;
 pub mod model;
 pub mod parser;
+pub mod rename;
 pub mod sample;
 pub mod span;
 pub mod templates;

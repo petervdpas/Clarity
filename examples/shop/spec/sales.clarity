@@ -48,5 +48,24 @@ page OrderForm: window
         number at 4,1 span 3 bind order.total
     label "Remarks" at 1,7 span 3
     textbox at 4,7 span 6 bind order.remarks
+    button "Approve" name approve_button at 7,9 span 2 on click: approve_clicked
     button "Save" at 9,9 span 2
     button "Close" at 11,9 span 2
+
+function within_credit(order: Order) -> bool
+    return order.total <= order.customer.credit_limit
+
+action approve(order: Order)
+    require order.status == Pending
+    require within_credit(order)
+    effects db.write
+    order.status = Approved
+    save order
+
+code OrderForm
+    handler approve_clicked
+        if not within_credit(order)
+            message warning "The total is above the customer's credit limit"
+            return
+        approve(order)
+        message "Order " + order.number + " is approved"

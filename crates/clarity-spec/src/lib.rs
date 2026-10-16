@@ -1,6 +1,7 @@
 //! Clarity spec language: lexer, parser, checker and the neutral model.
 
 pub mod check;
+pub mod code;
 pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
@@ -10,6 +11,7 @@ pub mod model;
 pub mod parser;
 pub mod rename;
 pub mod sample;
+pub mod source;
 pub mod span;
 pub mod templates;
 pub mod widgets;

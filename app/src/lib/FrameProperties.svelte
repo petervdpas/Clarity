@@ -15,10 +15,13 @@
     preview,
     element,
     onedit,
+    owner,
   }: {
     preview: Preview;
     element: FrameElement;
     onedit: (edit: Edit) => void;
+    /** The window or app whose code behind holds the handlers. */
+    owner: string;
   } = $props();
 
   const REGION_NAMES = {
@@ -55,6 +58,22 @@
   function update(props: CommandProps, changes: Partial<CommandProps>) {
     if (element.kind !== "command") return;
     onedit({ op: "updateCommand", item: element.command.span.start, props: { ...props, ...changes } });
+  }
+
+  /** Wires a click handler, together with an empty handler in the code behind, or unwires it. */
+  function setHandler(props: CommandProps, handler: string | null) {
+    if (element.kind !== "command") return;
+    const edit: Edit = {
+      op: "updateCommand",
+      item: element.command.span.start,
+      props: { ...props, handler, onClick: handler ? null : props.onClick },
+    };
+    if (handler === null) {
+      onedit(edit);
+      return;
+    }
+    onedit({ op: "batch", edits: [edit, { op: "addHandler", owner, name: handler }] });
+    pageDesigner.showCode(handler);
   }
 
   function remove(item: number) {
@@ -104,15 +123,16 @@
           <input
             value={p.handler ?? ""}
             placeholder="handler"
-            onchange={(e) => update(p, { handler: textOf(e), onClick: textOf(e) ? null : p.onClick })}
+            onchange={(e) => setHandler(p, textOf(e))}
           />
           {#if p.handler}
-            <button title="Unwire" onclick={() => update(p, { handler: null })}>&times;</button>
+            <button title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(p.handler)}>Code</button>
+            <button title="Unwire" onclick={() => setHandler(p, null)}>&times;</button>
           {:else}
             <button
               disabled={!p.name}
               title={p.name ? "Wire a handler named after the part" : "Give the part a name first"}
-              onclick={() => update(p, { handler: p.name + "_click", onClick: null })}>Wire</button
+              onclick={() => setHandler(p, p.name + "_click")}>Wire</button
             >
           {/if}
         </div>

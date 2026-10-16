@@ -44,6 +44,10 @@
       <path d="M8 5l11 7-11 7z" />
     {:else if icon === "back"}
       <path d="M11 6l-6 6 6 6" /><path d="M5 12h14" />
+    {:else if icon === "text"}
+      <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
+    {:else if icon === "code"}
+      <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />
     {:else if icon === "settings"}
       <circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
     {:else if icon === "check"}

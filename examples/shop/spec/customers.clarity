@@ -36,7 +36,7 @@ page CustomerForm: window
                 label "Name" at 1,1 span 3
                 textbox at 4,1 span 6 bind customer.name
                 label "Kind" at 1,2 span 3
-                dropdown at 4,2 span 4 bind customer.kind
+                dropdown name kind at 4,2 span 4 bind customer.kind on change: kind_changed
                 label "E-mail" at 1,3 span 2
                 textbox at 3,3 span 4 bind customer.email
                 label "Since" at 7,3 span 2
@@ -48,9 +48,28 @@ page CustomerForm: window
                 label "Credit limit" at 1,1 span 3
                 number at 4,1 span 3 bind customer.credit_limit
                 label "Vat number" at 1,2 span 3
-                textbox at 4,2 span 4 bind customer.vat_number
+                textbox name vat_number at 4,2 span 4 bind customer.vat_number
         tab "Notes"
             label "Notes" at 1,1 span 3
             textbox at 4,1 span 6 bind customer.notes
-    button "Save" at 9,8 span 2
-    button "Close" at 11,8 span 2
+    button "Save" name save at 9,8 span 2 on click: save_clicked
+    button "Close" name close_form at 11,8 span 2 on click: close_clicked
+
+code CustomerForm
+    handler kind_changed
+        // Only business customers have a VAT number.
+        vat_number.enabled = customer.kind == Business
+
+    handler save_clicked
+        if customer.name == ""
+            message error "Name is required"
+            return
+        if customer.kind == Business and customer.vat_number == ""
+            message warning "A business customer needs a VAT number"
+            return
+        save customer
+        message "Saved " + customer.name
+        close
+
+    handler close_clicked
+        close

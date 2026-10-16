@@ -130,6 +130,19 @@ pub enum Edit {
     /// Move a command, ribbon tab, ribbon group or region one place up
     /// (`-1`) or down (`1`) among its siblings of the same kind.
     MoveSibling { item: u32, delta: i32 },
+    /// Replace the code behind of a window or the app (section 5.9) with
+    /// `text`, written one level less indented than in the file. Empty
+    /// text removes the code block.
+    SetCode { owner: String, text: String },
+    /// Add an empty handler to the code behind of a window or the app,
+    /// unless it is there already. Sent with the edit that wires an event.
+    AddHandler { owner: String, name: String },
+    /// Replace the top-level declaration that starts at `item` (a window,
+    /// the app, an entity, an enum, a function, an action or a code block)
+    /// with `text`, which must be one declaration.
+    ReplaceDecl { item: u32, text: String },
+    /// Add `text`, one declaration, at the end of the file.
+    AppendDecl { text: String },
 }
 
 /// What `AddFrameItem` adds.
@@ -162,7 +175,7 @@ impl std::fmt::Display for EditError {
 
 impl std::error::Error for EditError {}
 
-type EditResult<T> = Result<T, EditError>;
+pub type EditResult<T> = Result<T, EditError>;
 
 fn fail<T>(message: impl Into<String>) -> EditResult<T> {
     Err(EditError(message.into()))
@@ -179,7 +192,54 @@ pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<Edit
     apply_with(source, edit, Some(project))
 }
 
+/// Edits that work on the text instead of the line tree, so the comments
+/// and blank lines a developer writes stay exactly as written.
+fn is_text_edit(edit: &Edit) -> bool {
+    matches!(
+        edit,
+        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. }
+    )
+}
+
 fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResult<EditOutcome> {
+    // Text edits work on the text after the layout edits of the same batch.
+    let (layout, code): (Vec<&Edit>, Vec<&Edit>) = match edit {
+        Edit::Batch { edits } => edits.iter().partition(|e| !is_text_edit(e)),
+        edit if is_text_edit(edit) => (Vec::new(), vec![edit]),
+        edit => (vec![edit], Vec::new()),
+    };
+    let (mut text, mut focus) = match layout.as_slice() {
+        [] => (source.to_string(), None),
+        [single] if !matches!(edit, Edit::Batch { .. }) => apply_layout(source, single, project)?,
+        many => {
+            let batch = Edit::Batch {
+                edits: many.iter().map(|e| (*e).clone()).collect(),
+            };
+            apply_layout(source, &batch, project)?
+        }
+    };
+    for edit in code {
+        text = match edit {
+            Edit::SetCode { owner, text: code } => crate::code::edit::set_code(&text, owner, code)?,
+            Edit::AddHandler { owner, name } => crate::code::edit::add_handler(&text, owner, name)?,
+            Edit::ReplaceDecl { item, text: decl } => {
+                focus = Some(*item);
+                crate::source::replace_decl(&text, *item, decl)?
+            }
+            Edit::AppendDecl { text: decl } => {
+                focus = Some(crate::source::appended_at(&text));
+                crate::source::append_decl(&text, decl)?
+            }
+            _ => unreachable!("only text edits are left"),
+        };
+    }
+    if text != source {
+        reject_new_parse_errors(source, &text)?;
+    }
+    Ok(EditOutcome { text, focus })
+}
+
+fn apply_layout(source: &str, edit: &Edit, project: Option<&Project>) -> EditResult<(String, Option<u32>)> {
     let mut doc = Doc::read(source);
     let focus = match (edit, project) {
         (Edit::AddWindow { name, template }, Some(project)) => doc.add_window(project, name, template)?,
@@ -188,11 +248,7 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
         }
         _ => doc.apply(edit)?,
     };
-    let (text, focus) = doc.write(focus);
-    if text != source {
-        reject_new_parse_errors(source, &text)?;
-    }
-    Ok(EditOutcome { text, focus })
+    Ok(doc.write(focus))
 }
 
 fn reject_new_parse_errors(before: &str, after: &str) -> EditResult<()> {
@@ -731,6 +787,9 @@ impl Doc {
             } => self.add_frame_item(*parent, *item, caption.clone()),
             Edit::UpdateCommand { item, props } => self.update_command(*item, props),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
+            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } => {
+                fail("text edits cannot be nested in a batch inside a batch")
+            }
         }
     }
 

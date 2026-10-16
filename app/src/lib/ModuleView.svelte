@@ -1,8 +1,13 @@
 <script lang="ts">
-  // One module of the project: its file, what it declares and which other
-  // modules it may use.
+  // One module of the project: its file, what it declares, which other
+  // modules it may use, and its functions and actions, written in Clarity.
 
+  import { invoke } from "@tauri-apps/api/core";
+  import SourceEditor from "./SourceEditor.svelte";
+  import type { CodeView } from "./generated/CodeView";
+  import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
+  import type { FunctionKind } from "./generated/FunctionKind";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
 
@@ -10,14 +15,42 @@
     preview,
     file,
     onedit,
+    onapply,
     onopen,
   }: {
     preview: Preview;
     file: SpecFile;
     onedit: (edit: Edit) => void;
+    /** Applies an edit and throws with the reason when it is refused. */
+    onapply: (edit: Edit) => Promise<void>;
     /** Opens a declaration by kind and name. */
     onopen: (kind: "window" | "app" | "entity" | "enum", name: string) => void;
   } = $props();
+
+  /** The function or action open in the editor, by name. */
+  let openFunction = $state<string | null>(null);
+  const fn = $derived(file.functions.find((f) => f.name.name === openFunction) ?? null);
+
+  const STARTERS = {
+    function: (name: string) => `function ${name}(value: integer) -> integer\n    return value\n`,
+    action: (name: string) => `action ${name}()\n    effects db.write\n`,
+  } as const;
+
+  /** Adds a function or action with a free name and opens it. */
+  async function addFunction(kind: FunctionKind) {
+    const taken = new Set(file.functions.map((f) => f.name.name));
+    let name = "new_" + kind;
+    for (let n = 2; taken.has(name); n++) name = "new_" + kind + n;
+    await onapply({ op: "appendDecl", text: STARTERS[kind](name) });
+    openFunction = name;
+  }
+
+  /** Saves the text and follows a rename. */
+  async function saveFunction(item: number, text: string) {
+    await onapply({ op: "replaceDecl", item, text });
+    const renamed = /^(?:function|action)\s+([A-Za-z_]\w*)/.exec(text)?.[1];
+    if (renamed) openFunction = renamed;
+  }
 
   const uses = $derived(file.uses.map((u) => u.name));
   const others = $derived(
@@ -67,6 +100,39 @@
       {/each}
     </ul>
   </section>
+
+  <section>
+    <h3>Functions and actions</h3>
+    <p class="muted">
+      A function computes a value and has no effects. An action may change data, and declares it with <code>effects</code>.
+      Handlers and other actions call them by name.
+    </p>
+    <ul>
+      {#each file.functions as f (f.name.name)}
+        <li>
+          <button class:active={openFunction === f.name.name} onclick={() => (openFunction = f.name.name)}>
+            <span class="kind">{f.kind}</span>{f.name.name}
+          </button>
+        </li>
+      {/each}
+    </ul>
+    <div class="buttons">
+      <button onclick={() => addFunction("function")}>New function</button>
+      <button onclick={() => addFunction("action")}>New action</button>
+    </div>
+    {#if fn}
+      {@const item = fn.span.start}
+      <div class="function-editor">
+        <SourceEditor
+          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+          save={(text) => saveFunction(item, text)}
+          reloadKey={file.path + "\n" + item + "\n" + file.version}
+          onclose={() => (openFunction = null)}
+        />
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -74,7 +140,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 640px;
+    max-width: 900px;
   }
 
   h2 {
@@ -141,5 +207,24 @@
     font-size: 10px;
     text-transform: uppercase;
     color: var(--text-muted);
+  }
+
+  li button.active {
+    background: var(--panel-alt);
+    font-weight: 600;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+  }
+
+  .function-editor {
+    display: flex;
+    height: 380px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
   }
 </style>

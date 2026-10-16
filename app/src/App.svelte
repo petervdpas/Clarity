@@ -504,6 +504,22 @@
           <div class="buttons">
             <RibbonButton icon="window" label="New window" disabled={!preview} onclick={startNewWindow} />
             <RibbonButton icon="grid" label="Grid" active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
+            <RibbonButton
+              icon="text"
+              label="Text"
+              title="Show this window as Clarity text; the designer follows what you type"
+              disabled={!designing}
+              active={pageDesigner.code.open && pageDesigner.code.view === "design"}
+              onclick={() => pageDesigner.togglePanel("design")}
+            />
+            <RibbonButton
+              icon="code"
+              label="Code"
+              title="Show the code behind of this window"
+              disabled={!designing}
+              active={pageDesigner.code.open && pageDesigner.code.view === "code"}
+              onclick={() => pageDesigner.togglePanel("code")}
+            />
           </div>
           <div class="group-name">Window</div>
         </div>
@@ -661,7 +677,13 @@
           onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
         />
       {:else if moduleFile}
-        <ModuleView {preview} file={moduleFile} onedit={editData} onopen={(kind, name) => select({ kind, name })} />
+        <ModuleView
+          {preview}
+          file={moduleFile}
+          onedit={editData}
+          onapply={async (edit) => applyPreview((await applyEdit(moduleFile, edit)).preview)}
+          onopen={(kind, name) => select({ kind, name })}
+        />
       {:else if tab === "design" && openApp && appPage && file}
         <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
       {:else if tab === "design" && page && file}
@@ -695,6 +717,8 @@
         <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
       {/if}
     </main>
+    <!-- The code behind panel slides out over the main area. -->
+    <div id="code-drawer" class="code-drawer"></div>
   </div>
 </div>
 
@@ -742,6 +766,14 @@
     display: grid;
     grid-template-columns: 300px minmax(0, 1fr);
     min-height: 0;
+    position: relative;
+  }
+
+  .code-drawer {
+    position: absolute;
+    inset: 0 0 0 300px;
+    pointer-events: none;
+    z-index: 20;
   }
 
   /* Ribbon */

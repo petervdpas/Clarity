@@ -190,7 +190,11 @@ fn commands_have_names_and_click_handlers() {
         "button \"New\" icon \"add\" on click -> CustomerCard\n        separator",
         "button \"New\" name new_customer icon \"add\" on click: new_clicked\n        separator",
     );
-    assert_eq!(diagnostics(&app), vec![]);
+    // Wired but without code behind yet: a warning, not an error.
+    assert_eq!(
+        diagnostics(&app),
+        vec![(Severity::Warning, "handler 'new_clicked' is wired but not written yet".to_string())]
+    );
     let (file, _) = parse(&app, "shop.clarity");
     let toolbar = file.apps[0].frame.toolbar.as_ref().unwrap();
     assert_eq!(toolbar.items[0].props.name.as_deref(), Some("new_customer"));

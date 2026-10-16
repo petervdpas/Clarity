@@ -1,0 +1,358 @@
+<script lang="ts">
+  // Clarity text with line numbers, problems from the backend while it is
+  // typed, and Save and Revert. What it edits (a window's design, its code
+  // behind, a function) is up to the caller, through `load`, `check` and
+  // `save`; the backend decides what is valid.
+
+  import type { Diagnostic } from "./generated/Diagnostic";
+
+  let {
+    load,
+    check,
+    save,
+    reloadKey,
+    navPattern = null,
+    placeholder = "",
+    ondirty = () => {},
+    onclose = () => {},
+  }: {
+    load: () => Promise<{ text: string; problems: Diagnostic[] }>;
+    /** The problems the text would have; called while it is typed. */
+    check: (text: string) => Promise<Diagnostic[]>;
+    /** Writes the text; throws with the reason when it is refused. */
+    save: (text: string) => Promise<void>;
+    /** Loads again when this changes, unless there are unsaved changes. */
+    reloadKey: string;
+    /** Lines worth a jump button, with the name in the first group. */
+    navPattern?: RegExp | null;
+    placeholder?: string;
+    ondirty?: (dirty: boolean) => void;
+    onclose?: () => void;
+  } = $props();
+
+  const INDENT = "    ";
+  const CHECK_DELAY = 300;
+  /** Lines after which the next line is indented one level more. */
+  const OPENS_BLOCK = /^\s*(handler|if|else|for|function|action|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
+
+  let saved = $state("");
+  let text = $state("");
+  let problems = $state<Diagnostic[]>([]);
+  let error = $state<string | null>(null);
+  let saving = $state(false);
+  let editor: HTMLTextAreaElement | undefined = $state();
+  let gutter: HTMLElement | undefined = $state();
+
+  const dirty = $derived(text !== saved);
+  const lineCount = $derived(text.split("\n").length);
+  const errorLines = $derived(new Set(problems.filter((p) => p.severity === "error").map((p) => p.span.line)));
+  const warningLines = $derived(new Set(problems.filter((p) => p.severity === "warning").map((p) => p.span.line)));
+  const errorCount = $derived(problems.filter((p) => p.severity === "error").length);
+  const jumps = $derived(
+    navPattern === null
+      ? []
+      : text
+          .split("\n")
+          .map((line, i) => ({ name: navPattern.exec(line)?.[1], line: i + 1 }))
+          .filter((j): j is { name: string; line: number } => j.name !== undefined),
+  );
+
+  $effect(() => ondirty(dirty));
+
+  async function reload() {
+    try {
+      const view = await load();
+      saved = view.text;
+      text = view.text;
+      problems = view.problems;
+      error = null;
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
+  let loadedFor: string | null = null;
+  $effect(() => {
+    const key = reloadKey;
+    if (key !== loadedFor && (loadedFor === null || !dirty)) {
+      loadedFor = key;
+      reload();
+    }
+  });
+
+  // Check the text while it is typed.
+  $effect(() => {
+    const draft = text;
+    if (draft === saved) return;
+    const timer = setTimeout(async () => {
+      try {
+        problems = await check(draft);
+        error = null;
+      } catch (err) {
+        error = String(err);
+      }
+    }, CHECK_DELAY);
+    return () => clearTimeout(timer);
+  });
+
+  async function store() {
+    if (!dirty || saving) return;
+    saving = true;
+    try {
+      await save(text);
+      saved = text;
+      error = null;
+    } catch (err) {
+      error = String(err);
+    } finally {
+      saving = false;
+    }
+  }
+
+  function revert() {
+    text = saved;
+    error = null;
+    reload();
+  }
+
+  /** Puts the caret on `line` (1-based); `inside` moves to the line after it. */
+  export function goToLine(line: number, inside = false) {
+    if (!editor) return;
+    const lines = text.split("\n");
+    const index = Math.min(inside ? line : line - 1, lines.length - 1);
+    const offset = lines.slice(0, index).reduce((sum, l) => sum + l.length + 1, 0) + (lines[index]?.length ?? 0);
+    editor.focus();
+    editor.setSelectionRange(offset, offset);
+    const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 18;
+    editor.scrollTop = Math.max(0, (index - 3) * lineHeight);
+  }
+
+  /** Jumps into the block whose jump button has `name`; false when there is none. */
+  export function jumpTo(name: string): boolean {
+    const target = jumps.find((j) => j.name === name);
+    if (target) goToLine(target.line, true);
+    return target !== undefined;
+  }
+
+  /** Tab indents, Enter keeps the indentation (one level more after a block line), Ctrl+S saves. */
+  function onkeydown(e: KeyboardEvent) {
+    if (!editor) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      store();
+      return;
+    }
+    if (e.key === "Escape") {
+      onclose();
+      return;
+    }
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    if (e.key === "Tab" && !e.shiftKey) {
+      e.preventDefault();
+      insert(start, end, INDENT);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+      const line = text.slice(lineStart, start);
+      const indent = /^ */.exec(line)?.[0] ?? "";
+      insert(start, end, "\n" + indent + (OPENS_BLOCK.test(line) ? INDENT : ""));
+    }
+  }
+
+  function insert(start: number, end: number, value: string) {
+    text = text.slice(0, start) + value + text.slice(end);
+    const caret = start + value.length;
+    requestAnimationFrame(() => editor?.setSelectionRange(caret, caret));
+  }
+</script>
+
+<div class="source">
+  <div class="bar">
+    {#if jumps.length > 0}
+      <nav class="jumps">
+        {#each jumps as j (j.line)}
+          <button onclick={() => goToLine(j.line, true)}>{j.name}</button>
+        {/each}
+      </nav>
+    {:else}
+      <span></span>
+    {/if}
+    <div class="actions">
+      {#if dirty}<span class="dirty">unsaved</span>{/if}
+      <button disabled={!dirty} onclick={revert} title="Put back the saved text">Revert</button>
+      <button
+        class="primary"
+        disabled={!dirty || saving || errorCount > 0}
+        onclick={store}
+        title={errorCount > 0 ? "Fix the errors first" : "Save (Ctrl+S)"}>{saving ? "Saving..." : "Save"}</button
+      >
+    </div>
+  </div>
+
+  <div class="editor">
+    <div class="gutter" bind:this={gutter} aria-hidden="true">
+      {#each { length: lineCount } as _, i (i)}
+        <div class:error={errorLines.has(i + 1)} class:warning={!errorLines.has(i + 1) && warningLines.has(i + 1)}>{i + 1}</div>
+      {/each}
+    </div>
+    <textarea
+      bind:this={editor}
+      bind:value={text}
+      {onkeydown}
+      onscroll={() => gutter && editor && (gutter.scrollTop = editor.scrollTop)}
+      spellcheck="false"
+      wrap="off"
+      {placeholder}
+    ></textarea>
+  </div>
+
+  <footer>
+    {#if error}<p class="refused" role="alert">{error}</p>{/if}
+    <ul>
+      {#each problems as p, i (i)}
+        <li class={p.severity}>
+          <button onclick={() => goToLine(p.span.line)}><code>{p.span.line}:{p.span.col}</code> {p.message}</button>
+        </li>
+      {:else}
+        <li class="ok">No problems</li>
+      {/each}
+    </ul>
+  </footer>
+</div>
+
+<style>
+  .source {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .jumps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .jumps button {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 1px 8px;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .dirty {
+    font-size: 11px;
+    color: var(--warning, #d9a400);
+  }
+
+  .editor {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 19px;
+  }
+
+  .gutter {
+    overflow: hidden;
+    padding: 8px 8px 8px 12px;
+    text-align: right;
+    color: var(--text-muted);
+    background: var(--panel-alt);
+    user-select: none;
+    min-width: 36px;
+  }
+
+  .gutter .error {
+    color: var(--error);
+    font-weight: 700;
+  }
+
+  .gutter .warning {
+    color: var(--warning, #d9a400);
+  }
+
+  textarea {
+    flex: 1;
+    resize: none;
+    border: none;
+    border-radius: 0;
+    padding: 8px 12px;
+    font: inherit;
+    line-height: inherit;
+    background: var(--bg, var(--panel));
+    color: var(--text);
+    outline: none;
+    tab-size: 4;
+  }
+
+  footer {
+    max-height: 30%;
+    overflow: auto;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .refused {
+    margin: 0;
+    padding: 6px 12px;
+    color: var(--error);
+  }
+
+  ul {
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+  }
+
+  li button {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    border-radius: 0;
+    padding: 3px 12px;
+    color: inherit;
+    font: inherit;
+  }
+
+  li button:hover {
+    background: var(--panel-alt);
+  }
+
+  li.error {
+    color: var(--error);
+  }
+
+  li.warning {
+    color: var(--warning, #d9a400);
+  }
+
+  li.ok {
+    padding: 3px 12px;
+    color: var(--text-muted);
+  }
+
+  li code {
+    font-family: var(--mono);
+    margin-right: 6px;
+  }
+</style>

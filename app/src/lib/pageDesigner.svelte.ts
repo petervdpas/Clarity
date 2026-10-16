@@ -4,6 +4,7 @@
 // pointer is translated into a cell of the innermost grid under it.
 
 import type { Dock } from "./generated/Dock";
+import type { Preview } from "./generated/Preview";
 import type { RegionKind } from "./generated/RegionKind";
 import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetProps } from "./generated/WidgetProps";
@@ -19,6 +20,9 @@ export type PageDragSource =
 /** Where a drop would land: a container and the rectangle in its grid. */
 export type Placement = { container: number; columns: number; col: number; row: number; width: number; height: number };
 
+/** What the text panel shows of a window: its design or its code behind. */
+export type PanelView = "design" | "code";
+
 const DRAG_THRESHOLD = 4;
 
 type Pending = { source: PageDragSource; x: number; y: number; onclick: () => void };
@@ -31,6 +35,10 @@ class PageDesigner {
   saving = $state(false);
   /** Show the snap grid cells while designing. */
   showGrid = $state(true);
+  /** The text panel: open or not, which view, and the handler to show in the code. */
+  code = $state<{ open: boolean; view: PanelView; focus: string | null }>({ open: false, view: "code", focus: null });
+  /** The project as the Design text being typed would make it; the canvas shows it until it is saved or reverted. */
+  draft = $state<Preview | null>(null);
 
   drag = $state<PageDragSource | null>(null);
   hover = $state<Placement | null>(null);
@@ -75,6 +83,17 @@ class PageDesigner {
     e.preventDefault();
     e.stopPropagation();
     this.#pending = { source, x: e.clientX, y: e.clientY, onclick };
+  }
+
+  /** Opens the code behind panel at a handler, or at the top. */
+  showCode(handler: string | null) {
+    this.code = { open: true, view: "code", focus: handler };
+  }
+
+  /** Opens the text panel at `view`, or closes it when it already shows that view. */
+  togglePanel(view: PanelView) {
+    const showing = this.code.open && this.code.view === view;
+    this.code = { open: !showing, view, focus: null };
   }
 
   cancel() {

@@ -75,6 +75,7 @@ pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
     for (file_index, file) in files.iter().enumerate() {
         checker.check_file(file_index, file);
     }
+    checker.diagnostics.extend(crate::code::check::check(files));
     checker.diagnostics
 }
 

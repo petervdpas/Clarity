@@ -18,6 +18,22 @@ pub enum TokenKind {
     Gt,
     Dot,
     Arrow,
+    /// `=`
+    Assign,
+    /// `==`
+    EqEq,
+    /// `!=`
+    NotEq,
+    /// `<=`
+    LtEq,
+    /// `>=`
+    GtEq,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    LBracket,
+    RBracket,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +120,15 @@ fn lex_line(
                 pos += 1;
                 TokenKind::RParen
             }
+            b'<' | b'>' | b'=' | b'!' if bytes.get(pos + 1) == Some(&b'=') => {
+                pos += 2;
+                match c {
+                    b'<' => TokenKind::LtEq,
+                    b'>' => TokenKind::GtEq,
+                    b'=' => TokenKind::EqEq,
+                    _ => TokenKind::NotEq,
+                }
+            }
             b'<' => {
                 pos += 1;
                 TokenKind::Lt
@@ -111,6 +136,34 @@ fn lex_line(
             b'>' => {
                 pos += 1;
                 TokenKind::Gt
+            }
+            b'=' => {
+                pos += 1;
+                TokenKind::Assign
+            }
+            b'+' => {
+                pos += 1;
+                TokenKind::Plus
+            }
+            b'*' => {
+                pos += 1;
+                TokenKind::Star
+            }
+            b'/' => {
+                pos += 1;
+                TokenKind::Slash
+            }
+            b'[' => {
+                pos += 1;
+                TokenKind::LBracket
+            }
+            b']' => {
+                pos += 1;
+                TokenKind::RBracket
+            }
+            b'-' if !bytes.get(pos + 1).is_some_and(|b| b.is_ascii_digit() || *b == b'>') => {
+                pos += 1;
+                TokenKind::Minus
             }
             b'.' => {
                 pos += 1;
@@ -145,13 +198,6 @@ fn lex_line(
                 pos += 1;
                 while pos < bytes.len() && (bytes[pos].is_ascii_digit() || bytes[pos] == b'.') {
                     pos += 1;
-                }
-                if &text[start..pos] == "-" {
-                    diagnostics.push(Diagnostic::error(
-                        "unexpected '-'",
-                        span_at(line_start, line_no, start, pos),
-                    ));
-                    continue;
                 }
                 TokenKind::Number
             }
@@ -361,5 +407,30 @@ mod tests {
     fn reports_unexpected_characters() {
         let (_, diags) = lex("name: text; €");
         assert_eq!(diags.len(), 2);
+    }
+
+    #[test]
+    fn lexes_operators() {
+        let (lines, diags) = lex("x = a == b != c <= d >= e + f - g * h / i [ ] < >");
+        assert!(diags.is_empty(), "{diags:?}");
+        let ops: Vec<TokenKind> = kinds(&lines[0]).into_iter().filter(|k| *k != TokenKind::Ident).collect();
+        assert_eq!(
+            ops,
+            [
+                TokenKind::Assign,
+                TokenKind::EqEq,
+                TokenKind::NotEq,
+                TokenKind::LtEq,
+                TokenKind::GtEq,
+                TokenKind::Plus,
+                TokenKind::Minus,
+                TokenKind::Star,
+                TokenKind::Slash,
+                TokenKind::LBracket,
+                TokenKind::RBracket,
+                TokenKind::Lt,
+                TokenKind::Gt,
+            ]
+        );
     }
 }

@@ -4,6 +4,7 @@
   import GridBox from "./GridBox.svelte";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
+  import CodePanel from "./CodePanel.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
   import { applyEdit } from "./applyEdit";
@@ -20,11 +21,11 @@
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
   import { describeType } from "./model";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesigner.svelte";
-  import { appAsPage, locateInnerPage, locateWidget, pageData, widgetForField, widgetInfo, withProps } from "./pages";
+  import { appAsPage, findPage, locateInnerPage, locateWidget, pageData, widgetForField, widgetInfo, withProps } from "./pages";
 
   let {
-    preview,
-    page,
+    preview: savedPreview,
+    page: savedPage,
     file,
     onapplied,
     app = null,
@@ -47,6 +48,19 @@
 
   let canvas: HTMLElement | undefined = $state();
 
+  // While the Design text is being typed, the designer shows the project as
+  // that text would make it.
+  const preview = $derived(pageDesigner.draft ?? savedPreview);
+  const page = $derived.by(() => {
+    const draft = pageDesigner.draft;
+    if (!draft) return savedPage;
+    if (app) {
+      const draftApp = findApp(draft);
+      return draftApp ? appAsPage(draftApp) : savedPage;
+    }
+    return findPage(draft, savedPage.name.name) ?? savedPage;
+  });
+
   const projectApp = $derived(findApp(preview));
   // The app's data is visible to the widgets in its sidebars and footer.
   const data = $derived({ ...(projectApp ? pageData(preview, appAsPage(projectApp)) : {}), ...pageData(preview, page) });
@@ -62,6 +76,10 @@
   const entities = $derived(preview.project.files.flatMap((f) => f.entities));
 
   async function apply(edit: Edit): Promise<void> {
+    if (pageDesigner.draft) {
+      pageDesigner.error = "The window shows unsaved Design text; save or revert it before changing the window here.";
+      return;
+    }
     pageDesigner.saving = true;
     pageDesigner.error = null;
     try {
@@ -322,6 +340,20 @@
       </div>
     {/if}
   </aside>
+</div>
+
+<div class="code-anchor">
+  {#if pageDesigner.code.open}
+    <div use:portal={"code-drawer"}>
+      <CodePanel
+        {file}
+        owner={app ? app.name.name : savedPage.name.name}
+        item={app ? app.span.start : savedPage.span.start}
+        {onapplied}
+        onclose={() => (pageDesigner.code = { ...pageDesigner.code, open: false, focus: null })}
+      />
+    </div>
+  {/if}
 </div>
 
 {#if pageDesigner.drag}

@@ -159,15 +159,7 @@ fn apply_edit(
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<EditApplied, String> {
-    let dir = open_dir_of(&state)?;
-
-    let file = PathBuf::from(&path)
-        .canonicalize()
-        .map_err(|err| format!("cannot open {path}: {err}"))?;
-    if file.parent() != Some(dir.as_path()) || !is_spec_file(&file) {
-        return Err(format!("{path} is not a spec file of the open directory"));
-    }
-
+    let (dir, file) = spec_file_of(&state, &path)?;
     let source =
         std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     if clarity_spec::content_version(&source) != version {
@@ -198,6 +190,91 @@ fn apply_edit(
         preview: load(&dir)?,
         focus: outcome.focus,
     })
+}
+
+/// The code behind of a window or the app, as the code panel shows it.
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct CodeView {
+    pub text: String,
+    pub problems: Vec<clarity_spec::Diagnostic>,
+}
+
+/// The code of `owner` in the spec file at `path`, with its problems.
+#[tauri::command]
+fn code_text(path: String, owner: String, state: State<WatchState>) -> Result<CodeView, String> {
+    let (dir, file) = spec_file_of(&state, &path)?;
+    let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
+    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    Ok(CodeView {
+        problems: clarity_spec::code::edit::problems_in_code(&source, &owner, &file.display().to_string(), &project.diagnostics),
+        text: clarity_spec::code::edit::code_text(&source, &owner),
+    })
+}
+
+/// The problems `text` would have as the code of `owner`, without saving
+/// it. The code panel calls this while the developer types.
+#[tauri::command]
+fn check_code(
+    path: String,
+    owner: String,
+    text: String,
+    state: State<WatchState>,
+) -> Result<Vec<clarity_spec::Diagnostic>, String> {
+    let (dir, file) = spec_file_of(&state, &path)?;
+    let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
+    let after = clarity_spec::code::edit::set_code(&source, &owner, &text).map_err(|err| err.to_string())?;
+    let project = clarity_spec::load_dir_with(&dir, &file, &after)
+        .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    Ok(clarity_spec::code::edit::problems_in_code(&after, &owner, &file.display().to_string(), &project.diagnostics))
+}
+
+/// The text of the declaration at `item` (a window, the app, a function,
+/// ...) in the spec file at `path`, with its problems.
+#[tauri::command]
+fn decl_text(path: String, item: u32, state: State<WatchState>) -> Result<CodeView, String> {
+    let (dir, file) = spec_file_of(&state, &path)?;
+    let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
+    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    Ok(CodeView {
+        text: clarity_spec::source::decl_text(&source, item).map_err(|err| err.to_string())?,
+        problems: clarity_spec::source::problems_in_decl(&source, item, &file.display().to_string(), &project.diagnostics),
+    })
+}
+
+/// What a declaration would look like with `text`, without saving it: its
+/// problems, and the whole project rendered with it, so the designer can
+/// follow the text while it is typed.
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct DeclTrial {
+    pub problems: Vec<clarity_spec::Diagnostic>,
+    pub preview: Preview,
+}
+
+#[tauri::command]
+fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> Result<DeclTrial, String> {
+    let (dir, file) = spec_file_of(&state, &path)?;
+    let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
+    let after = clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())?;
+    let project = clarity_spec::load_dir_with(&dir, &file, &after)
+        .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    Ok(DeclTrial {
+        problems: clarity_spec::source::problems_in_decl(&after, item, &file.display().to_string(), &project.diagnostics),
+        preview: Preview::new(project),
+    })
+}
+
+/// The open directory and the canonical path of one of its spec files.
+fn spec_file_of(state: &WatchState, path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let dir = open_dir_of(state)?;
+    let file = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|err| format!("cannot open {path}: {err}"))?;
+    if file.parent() != Some(dir.as_path()) || !is_spec_file(&file) {
+        return Err(format!("{path} is not a spec file of the open directory"));
+    }
+    Ok((dir, file))
 }
 
 /// Remembers an applied change for Undo; a new change clears Redo.
@@ -549,6 +626,10 @@ pub fn run() {
             save_settings,
             stack_catalog,
             create_project_file,
+            code_text,
+            check_code,
+            decl_text,
+            try_decl,
             rename
         ])
         .run(tauri::generate_context!())

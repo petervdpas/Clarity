@@ -20,7 +20,7 @@ use crate::model::{
 use crate::span::Span;
 use crate::widgets::{self, BindTarget, ContainerKind, Event, WidgetKind, WidgetProperty};
 
-type ParseResult<T> = Result<T, Diagnostic>;
+pub(crate) type ParseResult<T> = Result<T, Diagnostic>;
 
 pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
     let (lines, mut diagnostics) = lex(source);
@@ -35,6 +35,8 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         entities: Vec::new(),
         pages: Vec::new(),
         apps: Vec::new(),
+        code: Vec::new(),
+        functions: Vec::new(),
     };
 
     for (index, node) in tree.iter().enumerate() {
@@ -57,14 +59,14 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
 // ---------------------------------------------------------------------------
 // Block tree
 
-struct Node<'a> {
-    line: &'a Line,
-    children: Vec<Node<'a>>,
+pub(crate) struct Node<'a> {
+    pub(crate) line: &'a Line,
+    pub(crate) children: Vec<Node<'a>>,
 }
 
 impl Node<'_> {
     /// Span from the start of this line to the end of its last descendant.
-    fn span(&self) -> Span {
+    pub(crate) fn span(&self) -> Span {
         let mut span = self.line.span;
         if let Some(last) = self.children.last() {
             span.end = last.span().end;
@@ -126,14 +128,14 @@ fn build_block<'a>(
 // ---------------------------------------------------------------------------
 // Token cursor
 
-struct Cursor<'a> {
+pub(crate) struct Cursor<'a> {
     tokens: &'a [Token],
     pos: usize,
     line_span: Span,
 }
 
 impl<'a> Cursor<'a> {
-    fn new(line: &'a Line) -> Self {
+    pub(crate) fn new(line: &'a Line) -> Self {
         Self {
             tokens: &line.tokens,
             pos: 0,
@@ -141,15 +143,15 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn peek(&self) -> Option<&'a Token> {
+    pub(crate) fn peek(&self) -> Option<&'a Token> {
         self.tokens.get(self.pos)
     }
 
-    fn peek_kind(&self) -> Option<TokenKind> {
+    pub(crate) fn peek_kind(&self) -> Option<TokenKind> {
         self.peek().map(|t| t.kind)
     }
 
-    fn end_span(&self) -> Span {
+    pub(crate) fn end_span(&self) -> Span {
         Span {
             start: self.line_span.end,
             end: self.line_span.end,
@@ -158,7 +160,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn error_here(&self, message: impl Into<String>) -> Diagnostic {
+    pub(crate) fn error_here(&self, message: impl Into<String>) -> Diagnostic {
         let span = self
             .peek()
             .map(|t| t.span)
@@ -166,7 +168,7 @@ impl<'a> Cursor<'a> {
         Diagnostic::error(message, span)
     }
 
-    fn next(&mut self) -> Option<&'a Token> {
+    pub(crate) fn next(&mut self) -> Option<&'a Token> {
         let token = self.tokens.get(self.pos);
         if token.is_some() {
             self.pos += 1;
@@ -174,7 +176,7 @@ impl<'a> Cursor<'a> {
         token
     }
 
-    fn eat(&mut self, kind: TokenKind) -> bool {
+    pub(crate) fn eat(&mut self, kind: TokenKind) -> bool {
         if self.peek_kind() == Some(kind) {
             self.pos += 1;
             true
@@ -183,7 +185,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn eat_keyword(&mut self, keyword: &str) -> bool {
+    pub(crate) fn eat_keyword(&mut self, keyword: &str) -> bool {
         match self.peek() {
             Some(t) if t.kind == TokenKind::Ident && t.text == keyword => {
                 self.pos += 1;
@@ -193,7 +195,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn expect(&mut self, kind: TokenKind, what: &str) -> ParseResult<&'a Token> {
+    pub(crate) fn expect(&mut self, kind: TokenKind, what: &str) -> ParseResult<&'a Token> {
         match self.peek() {
             Some(t) if t.kind == kind => {
                 self.pos += 1;
@@ -203,7 +205,7 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn expect_ident(&mut self, what: &str) -> ParseResult<Ident> {
+    pub(crate) fn expect_ident(&mut self, what: &str) -> ParseResult<Ident> {
         let token = self.expect(TokenKind::Ident, what)?;
         Ok(Ident {
             name: token.text.clone(),
@@ -211,11 +213,11 @@ impl<'a> Cursor<'a> {
         })
     }
 
-    fn expect_string(&mut self, what: &str) -> ParseResult<String> {
+    pub(crate) fn expect_string(&mut self, what: &str) -> ParseResult<String> {
         Ok(self.expect(TokenKind::Str, what)?.text.clone())
     }
 
-    fn expect_number(&mut self, what: &str) -> ParseResult<u32> {
+    pub(crate) fn expect_number(&mut self, what: &str) -> ParseResult<u32> {
         let token = self.expect(TokenKind::Number, what)?;
         token
             .text
@@ -223,7 +225,7 @@ impl<'a> Cursor<'a> {
             .map_err(|_| Diagnostic::error(format!("expected {what}"), token.span))
     }
 
-    fn expect_end(&self) -> ParseResult<()> {
+    pub(crate) fn expect_end(&self) -> ParseResult<()> {
         match self.peek() {
             None => Ok(()),
             Some(t) => Err(Diagnostic::error(
@@ -234,7 +236,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// `ident (, ident)*`
-    fn ident_list(&mut self, what: &str) -> ParseResult<Vec<Ident>> {
+    pub(crate) fn ident_list(&mut self, what: &str) -> ParseResult<Vec<Ident>> {
         let mut items = vec![self.expect_ident(what)?];
         while self.eat(TokenKind::Comma) {
             items.push(self.expect_ident(what)?);
@@ -243,7 +245,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-fn first_word<'a>(node: &Node<'a>) -> Option<&'a str> {
+pub(crate) fn first_word<'a>(node: &Node<'a>) -> Option<&'a str> {
     node.line
         .tokens
         .first()
@@ -251,7 +253,7 @@ fn first_word<'a>(node: &Node<'a>) -> Option<&'a str> {
         .map(|t| t.text.as_str())
 }
 
-fn no_children(node: &Node) -> ParseResult<()> {
+pub(crate) fn no_children(node: &Node) -> ParseResult<()> {
     match node.children.first() {
         None => Ok(()),
         Some(child) => Err(Diagnostic::error(
@@ -312,9 +314,23 @@ fn parse_top_level(
             cursor.next();
             file.apps.push(parse_app(node, cursor, diagnostics)?);
         }
+        Some(word @ ("function" | "action")) => {
+            let kind = if word == "function" {
+                crate::code::FunctionKind::Function
+            } else {
+                crate::code::FunctionKind::Action
+            };
+            file.functions.push(crate::code::parse::parse_function(node, kind, diagnostics)?);
+        }
+        Some("code") => {
+            cursor.next();
+            let name = cursor.expect_ident("the name of a window or the app")?;
+            cursor.expect_end()?;
+            file.code.push(crate::code::parse::parse_code(node, name, diagnostics));
+        }
         _ => {
             return Err(cursor.error_here(
-                "expected 'module', 'use', 'enum', 'entity', 'page' or 'app'",
+                "expected 'module', 'use', 'enum', 'entity', 'page', 'app', 'code', 'function' or 'action'",
             ));
         }
     }

@@ -29,7 +29,7 @@ Clarity keeps that split (a visual tool writes a text description, generated glu
 
 These decisions replace earlier parts of this document where they conflict:
 
-- **One language.** Clarity is a programming language, not only a spec language. It describes the user interface (windows, their parts and properties) and the behavior behind it (event handlers, actions, validation). Clarity code is transpiled into real frontend and backend code for the chosen stack (backends: Rust, Go, C#, C, C++; frontends: Svelte, Vue, React). The target languages are output; in a Clarity project nobody writes them by hand.
+- **One language.** Clarity is a programming language, not only a spec language. It describes the user interface (windows, their parts and properties) and the behavior behind it (event handlers, actions, validation). Clarity code is transpiled into real frontend and backend code for the chosen stack (backends: Rust, Go, C#, C, C++; the UI is the web renderer or a native toolkit, section 1.2). The target languages are output; in a Clarity project nobody writes them by hand.
 - **A project is the unit.** A Clarity project holds the windows, the data and the behavior. Transpiling and compiling it produces a working application with its user interface, for the chosen stack, without any hand work in between.
 - **Designer first.** The UI is built in the designer, like Resource Workshop and Delphi: every window is placed together from the same Parts catalog (frame regions, basic input, containers, data, graphics), parts are moved and resized freely on a snap grid, and each part has properties and events. The designer writes Clarity; the text stays readable and diffable.
 - **Code behind, in Clarity.** Each part has events (click, change, open, ...). Wiring an event creates a handler in the window's code behind, written in Clarity, which the developer fills in. Clarity generates the typed bindings, so handlers read and set the window's parts and data.
@@ -436,6 +436,91 @@ The renderer is hand-written behavior and falls under the normal rules: modulari
 ### 5.8 Canonical form
 
 `clarity fmt` defines the only valid formatting. The parser keeps comments and blank lines (a lossless syntax tree), so the designer, the formatter and humans can all edit the same file without destroying each other's work.
+
+### 5.9 Code behind (2026-10-16)
+
+A window's handlers live in a `code` block with the window's name, in the same file as the window. The designer rewrites only the `page` block, so layout edits never touch the code.
+
+```
+page CustomerForm: window
+    title "Customer"
+    data customer: Customer
+    ...
+    dropdown name kind at 4,2 span 4 bind customer.kind on change: kind_changed
+    textbox name vat_number at 4,3 span 4 bind customer.vat_number
+    button "Save" name save at 9,8 span 2 on click: save_clicked
+
+code CustomerForm
+    handler kind_changed
+        vat_number.visible = customer.kind == Business
+
+    handler save_clicked
+        if customer.name == ""
+            message error "Name is required"
+            return
+        save customer
+        message "Saved " + customer.name
+        close
+```
+
+**Where handlers run.** In the backend. When an event fires, the UI sends it with the window's state; the handler runs and the backend returns what changed: data, part properties, messages, windows to open or close. With a native toolkit (Avalonia) the same handler becomes a ViewModel command. The UI never holds behavior of its own.
+
+**Names in a handler.** A handler sees the window's data (`customer`), its parts by name (`vat_number`, `save`) and its own local values (`let`). Enum values are written bare (`Business`) when the expected type says which enum they belong to, or qualified (`CustomerKind.Business`). A name that is both data and a part is an error.
+
+**Part properties.** Every part has `visible` and `enabled` (bool). Labels and buttons have `caption` (text). Tables and lists have `selected`, the record of the selected row (read-only). Bound inputs are changed through their data: `customer.name = "..."` updates the text box bound to it.
+
+**Statements**, one per line, blocks by indentation:
+
+| Statement | Meaning |
+|---|---|
+| `let name = expr` | a local value; its type is the expression's |
+| `target = expr` | set a local, a data field (`customer.credit_limit`) or a part property (`save.enabled`) |
+| `if expr` / `else if expr` / `else` | the condition must be bool |
+| `return` | leave the handler |
+| `message [info\|warning\|error] expr` | show a message; the default is info |
+| `open Window [with name = expr, ...]` | open a window, filling its data by name |
+| `close` | close this window |
+| `save expr` / `delete expr` | store or remove a record in its data source (section 1.3) |
+
+**Expressions:** literals (`12`, `9.95`, `"text"`, `true`, `false`), paths (`customer.name`, `orders.selected.total`), enum values, `not`, unary `-`, `* /`, `+ -` (`+` also joins text), comparisons `== != < <= > >=`, `and`, `or`, `x in [a, b]`, parentheses and `count(list)`.
+
+**Types** come from the dictionary: `text` (also email and url), `integer` (also id), `decimal` (also money), `bool`, `date`, `datetime`, an enum, a record of an entity and a list of records. Integers widen to decimals; nothing else converts implicitly. The checker reports unknown names, wrong types, assignments to read-only properties, and handlers that are wired but missing (an error) or written but not wired (a warning).
+
+Later, with D1 and beyond: queries (`find`, `where`).
+
+**Design as text.** The designer and the text are two views of the same declaration. The Text button shows a window's `page` block (or the `app` block) in the slide-out panel; while it is typed the backend parses and checks it, and the designer draws the window from the text without saving it. Save writes it as one edit; until then the canvas does not take edits, because its positions belong to the saved file. Every canvas edit shows up in the text at once.
+
+### 5.10 Functions and actions (2026-10-16)
+
+Modules hold logic that is not tied to one window: functions and actions, written in Clarity and callable from any handler and from each other through `use`.
+
+```
+function within_credit(order: Order) -> bool
+    return order.total <= order.customer.credit_limit
+
+function order_total(order: Order) -> money
+    ensure result >= 0
+    let total: money = 0
+    for line in order.lines
+        total = total + line.amount
+    return total
+
+action approve(order: Order)
+    require order.status == Pending
+    require within_credit(order)
+    effects db.write
+    order.status = Approved
+    save order
+```
+
+- **A function** has no effects. It may not `save` or `delete`, may not call actions, and may not show messages or open windows. It is safe to call anywhere, including in conditions.
+- **An action** may change data, and says so with `effects`: `db.write` for `save` and `delete`, `db.read` for reading. An action that calls another action declares that action's effects too. Messages and windows stay in handlers: the backend logic does not talk to the screen.
+- **Contracts.** `require` lines check the arguments before the body runs; `ensure` lines check `result` after it. Both must be bool. They become runtime checks and generated tests.
+- **Signatures.** Parameters and results are typed: `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (a record), an enum, or `list<Entity>`. A function with a result returns a value on every path; the checker says so when one is missing.
+- **Statements** are those of handlers (section 5.9), plus `return value`, `for item in list`, a call on its own line (`approve(order)`), and typed locals (`let total: money = 0`).
+- **In the designer** a module shows its functions and actions; each opens in the same editor as the code behind, checked while it is typed. New function and New action add a starter.
+
+Superseded by this: section 5.3, where an action only declares its signature and its body is written in the target language.
 
 ## 6. Generation
 
@@ -995,7 +1080,8 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | S3d | One designer: every window is designed in the page designer with the same Parts catalog (frame, basic input, containers, data, graphics), free placement and resizing, and a Data panel of what it binds to; form and browse become starter templates (section 1.1) | done |
 | S3e | Part names and events: each part gets a name and an Events list; wiring an event writes the handler name into the window, ready for code behind | done |
 | P1 | Projects: `clarity.toml` with backend, UI, targets and data sources (sections 1.2 and 1.3); New project asks for them and starts with one SQLite source; the Project tab shows and edits them. Opening and creating projects in the app is done | done |
-| L1 | The Clarity behavior language: handlers and actions written in Clarity, with typed access to a window's parts and data (section 1.1) | next |
+| L1 | The Clarity behavior language: handlers written in Clarity in `code` blocks, with typed access to a window's parts and data (sections 1.1 and 5.9); wiring an event writes an empty handler; the code panel in the designer checks while you type | core done; open: modules with shared functions and actions (L2) |
+| L2 | Backend modules in Clarity: functions and actions in modules, callable from handlers and each other, with `require`, `ensure` and `effects` (section 5.10); design as text with the designer following the text (section 5.9); modules show and edit their functions | done |
 | G1 | First stack: Rust emitter and runtime, Tauri shell, the web renderer as the frontend runtime, the `out/` folder kept in sync, Run and Build on the Preview tab | |
 | D1 | SQL data sources and migrations (section 1.3): SQLite first, then PostgreSQL, MySQL and SQL Server; entities placed per source; schema snapshot, pending changes, migration steps in Clarity with dialects per database, prompts for risky changes, data migrations, down steps, applying on Run and at startup; schema import for external databases and Take ownership | |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |

@@ -30,6 +30,10 @@ pub struct SpecFile {
     pub entities: Vec<Entity>,
     pub pages: Vec<Page>,
     pub apps: Vec<App>,
+    /// Code behind: one block per window or app, with its handlers.
+    pub code: Vec<crate::code::CodeBlock>,
+    /// Functions and actions declared in this module.
+    pub functions: Vec<crate::code::FunctionDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

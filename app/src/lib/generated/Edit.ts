@@ -21,4 +21,4 @@ caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<E
 /**
  * Sidebars only.
  */
-side: Side | null, } | { "op": "setSidebar", item: number, side: Side, width: number, } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, };
+side: Side | null, } | { "op": "setSidebar", item: number, side: Side, width: number, } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, } | { "op": "setCode", owner: string, text: string, } | { "op": "addHandler", owner: string, name: string, } | { "op": "replaceDecl", item: number, text: string, } | { "op": "appendDecl", text: string, };

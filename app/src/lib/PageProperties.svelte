@@ -64,9 +64,22 @@
     return (entity?.fields ?? []).filter((f) => f.type.kind !== "list");
   });
 
+  /** Whose code behind the handlers go into. */
+  const owner = $derived(app ? app.name.name : page.name.name);
+
   function update(changes: Partial<WidgetProps>) {
     if (!location || !p) return;
     onedit({ op: "updateWidget", item: location.widget.span.start, container: null, props: withProps(p, changes) });
+  }
+
+  /** Sends an edit that wires `handler`, together with an empty handler in the code behind, and shows it. */
+  function wire(edit: Edit, handler: string | null) {
+    if (handler === null) {
+      onedit(edit);
+      return;
+    }
+    onedit({ op: "batch", edits: [edit, { op: "addHandler", owner, name: handler }] });
+    pageDesigner.showCode(handler);
   }
 
   function toggle(list: string[], name: string, on: boolean): string[] {
@@ -87,7 +100,9 @@
     handlers.sort((a, b) => info.events.indexOf(a.event) - info.events.indexOf(b.event));
     // A click runs a handler or opens a window, not both.
     const onClick = event === "click" && handler ? null : p.onClick;
-    update({ handlers, onClick });
+    if (!location) return;
+    const props = withProps(p, { handlers, onClick });
+    wire({ op: "updateWidget", item: location.widget.span.start, container: null, props }, handler);
   }
 
   function textOf(e: Event): string | null {
@@ -198,6 +213,7 @@
             <span class="event-name">{ev}</span>
             <input value={handler} placeholder="handler" onchange={(e) => setHandler(ev, textOf(e))} />
             {#if handler}
+              <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
               <button class="small" title="Unwire" onclick={() => setHandler(ev, null)}>&times;</button>
             {:else}
               <button
@@ -269,7 +285,7 @@
       <div class="kind">Pane</div>
     {/if}
   {:else if subject === "picked" && frameElement}
-    <FrameProperties {preview} element={frameElement} {onedit} />
+    <FrameProperties {preview} element={frameElement} {onedit} {owner} />
   {:else if subject === "picked"}
     <p class="hint">Nothing yet. Click a part of the window, or a line in the Window tab.</p>
   {:else}

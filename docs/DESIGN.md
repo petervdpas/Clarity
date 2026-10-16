@@ -230,9 +230,11 @@ Both modes share the rule engine, the gates, the directives and the tuning loop.
 
 The spec language describes what an application consists of, not how it behaves. It is small on purpose: every construct has one meaning, and there is one canonical formatting (`clarity fmt`).
 
+This section records how the language came about. The reference for what it is today, construct by construct, is [LANGUAGE.md](LANGUAGE.md); where the two differ, LANGUAGE.md is current.
+
 ### 5.1 Files and modules
 
-Spec files have the extension `.clarity` and live in the project's folder, next to the project file (section 1.2). Each file starts with the module it belongs to; the module must exist in `clarity.toml`.
+Spec files have the extension `.clarity` and live in the project's folder, next to the project file (section 1.2). Each file starts with the module it belongs to.
 
 ```
 module sales

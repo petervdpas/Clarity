@@ -291,3 +291,20 @@ fn picked_paths_inside_the_project_folder_become_relative() {
     assert_eq!(project_path(file, Path::new("/work/examples/shop")), "/work/examples/shop");
     assert_eq!(project_path(file, Path::new("/work/examples/shopping/x")), "/work/examples/shopping/x");
 }
+
+/// The project files in docs/LANGUAGE.md are read like real ones.
+#[test]
+fn the_language_reference_project_files_are_valid() {
+    const DOC: &str = include_str!("../../../docs/LANGUAGE.md");
+    let mut found = 0;
+    for block in DOC.split("```").skip(1).step_by(2) {
+        let block = block.trim_start_matches('\n');
+        if !block.starts_with("project ") {
+            continue;
+        }
+        let settings = parse(block).unwrap_or_else(|e| panic!("{e} in\n{block}"));
+        assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
+        found += 1;
+    }
+    assert_eq!(found, 2);
+}

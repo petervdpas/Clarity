@@ -1,0 +1,710 @@
+# The Clarity language
+
+This is the reference for the Clarity language: every construct the checker accepts today, with its syntax and its rules. It is written for people and for AI assistants alike. When this file and the parser disagree, the parser is right and this file has a bug.
+
+A Clarity project is written entirely in Clarity: the project settings, the data, the windows and the behavior. Clarity transpiles it to a real application in the stack the project names. Why the language looks the way it does is in [DESIGN.md](DESIGN.md); this file only says what it is.
+
+Contents:
+
+1. [Lines, names and values](#1-lines-names-and-values)
+2. [The project file](#2-the-project-file)
+3. [Modules](#3-modules)
+4. [Data: enums and entities](#4-data-enums-and-entities)
+5. [Windows](#5-windows)
+6. [Parts](#6-parts)
+7. [The app and its frame](#7-the-app-and-its-frame)
+8. [Code behind](#8-code-behind)
+9. [Functions and actions](#9-functions-and-actions)
+10. [Statements and expressions](#10-statements-and-expressions)
+11. [A complete example](#11-a-complete-example)
+12. [Grammar summary](#12-grammar-summary)
+
+## 1. Lines, names and values
+
+Clarity is line based. Each declaration, setting, part or statement is one line, and a block is the lines indented below it.
+
+- **Indentation** uses spaces; a tab is an error. Four spaces per level is the convention, and the designer writes four.
+- **Comments** start with `//` and run to the end of the line. They can stand on their own line or follow code. The designer keeps them when it rewrites a file.
+- **Blank lines** are free and are kept too.
+- **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. By convention, entities, enums, windows and the app are `PascalCase`, and everything else is `snake_case`.
+- **Strings** are written in double quotes: `"Customer card"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
+- **Numbers** are written without quotes: `12`, `9.95`.
+- **Booleans** are `true` and `false`.
+
+Words such as `page`, `data` and `bind` are keywords only where the grammar expects them. Outside those places they are ordinary names, so a field may be called `data` and a part may be called `close_button`. The words `and`, `or`, `not` and `in` are reserved in expressions.
+
+When a name has a label that people see, Clarity derives it from the name unless one is given: `vat_number` becomes "Vat number", and `CustomerCard` becomes "Customer card".
+
+## 2. The project file
+
+A project is one file, `<name>.clarity`. Next to it is a folder with the same name, which holds the modules, the generated output and the data:
+
+```
+shop.clarity           the project file: open this one
+shop/
+    customers.clarity  modules
+    sales.clarity
+    out/               the generated application
+    data/
+```
+
+The project file holds one `project` block:
+
+```
+project Shop
+    title "Shop"
+    stack rust web desktop
+    output "out"
+    datasource main sqlite "data/shop.db"
+    datasource payments rest "https://api.example.com/v2"
+        auth bearer "env:PAYMENTS_TOKEN"
+```
+
+| Setting | Required | Meaning |
+|---|---|---|
+| `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
+| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
+| `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
+| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite and a connection string or URL for the others. |
+| `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
+
+Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
+
+Today the Rust backend with the web UI is generated; the other stacks are on the roadmap in DESIGN.md.
+
+## 3. Modules
+
+Every other `.clarity` file in the project folder is a module. It starts with `module`, then the modules it uses, then its declarations:
+
+```
+module sales
+
+use customers
+
+entity Order
+    customer: ref Customer
+```
+
+- `module name` is the first line of the file (comments and blank lines may come before it).
+- `use other` makes the declarations of module `other` visible in this file. Without it, a name from another module is an error that tells you which `use` is missing.
+- A name is declared once per module. Two modules may declare the same name, but a file that sees both (its own module and the modules it uses) cannot use that name: it is ambiguous, and the checker says so.
+
+The declarations a module can hold:
+
+| Declaration | Section |
+|---|---|
+| `enum Name` | [4](#4-data-enums-and-entities) |
+| `entity Name` | [4](#4-data-enums-and-entities) |
+| `page Name: kind` | [5](#5-windows) |
+| `app Name` | [7](#7-the-app-and-its-frame), one per project |
+| `code Name` | [8](#8-code-behind) |
+| `function name(...)` and `action name(...)` | [9](#9-functions-and-actions) |
+
+## 4. Data: enums and entities
+
+### Enums
+
+An enum is a fixed list of values. Each value can have a label; without one, the label is derived from the name.
+
+```
+enum CustomerKind
+    Private label "Private person"
+    Business
+```
+
+### Entities
+
+An entity is a kind of record that is stored in a data source. It is the data dictionary: everything about a field is said once, here, and the windows, the database schema and the validation all follow from it.
+
+```
+entity Customer
+    name: text(80), required, label "Name"
+    email: email, unique, label "E-mail"
+    kind: CustomerKind, default Private
+    vat_number: text(14), help "Only for business customers"
+    credit_limit: money, min 0, default 0
+    active: bool, default true
+    since: date
+    notes: text, help "Internal notes, not shown to the customer"
+```
+
+A field is `name: type`, followed by modifiers separated by commas. Every record also has an `id`, which Clarity adds itself.
+
+**Field types**
+
+| Type | Holds |
+|---|---|
+| `text` | text of any length |
+| `text(n)` | text of at most `n` characters |
+| `integer` | a whole number |
+| `decimal(p, s)` | a decimal number with `p` digits, `s` of them after the point |
+| `money` | an amount of money, exact |
+| `bool` | true or false |
+| `date` | a calendar date |
+| `datetime` | a date with a time |
+| `email` | an e-mail address |
+| `url` | a web address |
+| `id` | the id of a record |
+| an enum name | one value of that enum |
+| `ref Entity` | a reference to a record of another entity |
+| `list<Entity>` | the records of another entity that belong to this one |
+
+**Modifiers**
+
+| Modifier | Meaning |
+|---|---|
+| `required` | The field must have a value. Windows mark its label. |
+| `unique` | No two records have the same value. |
+| `min value`, `max value` | The lowest and highest value allowed. |
+| `pattern "regex"` | Text must match the regular expression. |
+| `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
+| `label "text"` | The label people see, instead of the derived one. |
+| `help "text"` | A help text, shown next to the field's input in windows. |
+| `format "text"` | How the value is shown. Accepted, but not used by the generated application yet. |
+| `owned` | For a `list<...>`: the listed records live and die with this record. |
+| `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
+
+Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
+
+## 5. Windows
+
+A window is a `page` block. Its settings come first, then its parts, which sit on a snap grid.
+
+```
+page CustomerForm: window
+    title "Customer"
+    data customer: Customer
+    data orders: list<Order>
+    grid 12 columns
+    on return: window_returned
+
+    label "Name" at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind customer.name
+    table name order_table at 1,3 span 12 rows 6 bind orders columns number, total
+    button "Save" name save at 11,10 span 2 default on click: save_clicked
+```
+
+### Kinds
+
+`page Name: kind`, where the kind is one of:
+
+| Kind | Is |
+|---|---|
+| `window` | a window of its own, which can have a menu, toolbar, ribbon, sidebars and a footer |
+| `dialog` | a modal window |
+| `view` | content shown inside the app's frame |
+
+Only a `window` has frame regions of its own.
+
+### Settings
+
+| Setting | Meaning |
+|---|---|
+| `title "text"` | The window's title. |
+| `data name: Entity` | One record the window works on. |
+| `data name: list<Entity>` | A list of records the window works on. |
+| `grid N columns` | The number of grid columns, 1 to 24. The default is 12. |
+| `on open: handler` | Runs when the window has opened and its data is loaded. |
+| `on close: handler` | Runs when the window is about to close. |
+| `on return: handler` | Runs when a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record. |
+
+The window's data is what its parts bind to and what its handlers work on. When a window is opened with `open CustomerForm with customer = ...`, the data is filled by name. Data that is not filled starts as a new, empty record, or for a list, as all records of the entity.
+
+### The grid
+
+Every part sits on the grid of the window or of the container it is in:
+
+- `at col,row` is the top-left cell, counted from 1. Every part needs one.
+- `span n` is the number of columns it covers. The default comes from the part's kind.
+- `rows n` is the number of rows it covers. The default also comes from the part's kind.
+
+Rows have a fixed height in the designer. In a running application the columns share the width of the window, and rows that hold something that grows (a table, a list, an image, a canvas, or a container with one of these inside) share the extra height. Everything else keeps its height.
+
+The checker reports parts that start outside the grid, run past its last column, or overlap another part in the same container.
+
+## 6. Parts
+
+A part is one line: its kind, then an optional caption in quotes, then its properties.
+
+```
+textbox name email at 4,2 span 6 bind customer.email placeholder "name@example.com" on change: email_changed
+```
+
+Properties may be written in any order. The designer writes them in a fixed order, which is the order the tables below use.
+
+### Properties every part has
+
+| Property | Meaning |
+|---|---|
+| `"caption"` | The text it shows, right after the kind, for the kinds that have one. |
+| `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts `button1`, `textbox2` and so on; templates name inputs after their field. |
+| `at col,row`, `span n`, `rows n` | Place and size on the grid; see [the grid](#the-grid). |
+| `tooltip "text"` | Shown when the pointer rests on the part. |
+| `on event: handler` | Runs `handler` in the window's code behind when `event` happens. Each event is wired at most once per part. |
+
+### The catalog
+
+**Text**
+
+| Part | Binds to | Own properties | Events |
+|---|---|---|---|
+| `label` | nothing | `for input` | none |
+| `help` | nothing | `for input` | none |
+| `heading` | nothing | none | none |
+| `text` | a field of any type: `bind customer.name` | none | none |
+
+**Input**
+
+| Part | Binds to fields of type | Own properties | Events |
+|---|---|---|---|
+| `textbox` | text, email, url | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `memo` | text (several lines) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `password` | text (hidden while typed) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `number` | integer, decimal, money, id | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `checkbox` | bool | `readonly`, `taborder` | `change` |
+| `switch` | bool | `readonly`, `taborder` | `change` |
+| `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
+| `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
+| `date` | date, datetime | `readonly`, `taborder` | `change` |
+| `button` | nothing | `taborder`, `key`, `default`, `cancel` | `click` |
+
+**Containers**
+
+| Part | Holds | Own properties | Events |
+|---|---|---|---|
+| `form` | parts, on its own grid; binds to one record: `bind customer` | none | `submit` |
+| `panel` | parts, on its own grid, in a frame with the caption | none | none |
+| `tabs` | `tab "Title"` blocks, each with parts | none | `change` |
+| `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
+
+**Data**
+
+| Part | Binds to | Own properties | Events |
+|---|---|---|---|
+| `table` | a list: `bind orders` | `columns field, field, ...` | `select`, `open` |
+| `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
+
+**Graphics**
+
+| Part | Binds to | Own properties | Events |
+|---|---|---|---|
+| `image` | nothing | `source "file"` | `click` |
+| `canvas` | nothing | `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `pointer`, `key` |
+
+`select` fires when a row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
+
+### Binding
+
+`bind` connects a part to the window's data:
+
+- An input or `text` binds to one field of a single record: `bind customer.name`. The field's type must be one the part accepts; a checkbox needs a `bool`.
+- A `table` or `list` binds to a list: `bind orders`. Its `columns` or `show` name fields of the listed entity.
+- A `form` binds to a single record: `bind customer`.
+
+What the user types goes into the data, and handlers read and change the data by name. A part that cannot be bound, such as a label, may not have `bind`. An input that is not bound yet is allowed while designing.
+
+### Labels, help texts and forms
+
+A label, its input and the input's help text are three separate parts. `for` ties a label or a help text to an input by the input's name:
+
+```
+form name details at 1,1 span 12 rows 3 bind customer
+    label "Name" at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
+    help at 10,1 span 3 for name
+    label "Kind" at 1,2 span 3 for kind
+    radio name kind at 4,2 span 6 bind customer.kind
+```
+
+- **A label** shows its caption. Clicking it focuses its input. When the input is bound to a `required` field, the label shows a marker. A label is never bound to data; to show a value, use `text`.
+- **A help text** shows its caption, or, when it has none, the `help` of the field its input is bound to. When a handler sets the input's `error`, the help text shows that message instead, and the input is marked.
+- **`for`** must name an input in the same window.
+- **A form** binds to one record and holds the inputs of that record, nested in panels and tabs if needed. Every input inside it binds to that record, and a form cannot contain another form. Pressing Enter in one of its inputs fires `submit`; when `submit` is not wired, Enter clicks the window's default button. A form without a caption has no frame, so its grid lines up with the grid around it.
+
+### Input and button properties
+
+| Property | On | Meaning |
+|---|---|---|
+| `placeholder "text"` | textbox, memo, password, number | Shown while the input is empty. |
+| `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
+| `taborder n` | inputs, buttons | Position in the keyboard order, from 1. Parts without one follow in reading order. |
+| `key "Ctrl+S"` | buttons | The key that clicks the button. |
+| `default` | buttons | Enter clicks this button. One per window. |
+| `cancel` | buttons | Escape clicks this button. One per window. |
+| `horizontal`, `vertical` | radio, splitter | Side by side or stacked. |
+
+A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`.
+
+### Clicking to open a window
+
+A button, an image, a menu item, or a toolbar or ribbon button can open a window without code:
+
+```
+button "All customers" at 1,12 span 3 on click -> CustomerBrowse
+```
+
+`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window and `quit` ends the application. A click either opens a window this way or runs a handler (`on click: handler`), not both.
+
+### Containers
+
+A container has its own grid, as many columns wide as its `span`. Its parts are indented below it, and their positions count from its own top-left cell:
+
+```
+tabs at 1,5 span 12 rows 7
+    tab "Orders"
+        table at 1,1 span 12 rows 5 bind orders columns number, total
+    tab "Notes"
+        text at 1,1 span 12 bind customer.notes
+splitter at 1,1 span 12 rows 10 vertical
+    pane
+        list at 1,1 span 12 rows 4 bind customers show name
+    pane
+        panel "Details" at 1,1 span 12 rows 4
+            text at 1,1 span 6 bind customer.name
+```
+
+`tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks.
+
+## 7. The app and its frame
+
+A project has one `app` block. It names the main window and declares the frame every window shares: a menu, a toolbar, a ribbon, sidebars and a footer.
+
+```
+app Shop
+    title "Shop"
+    main CustomerCard
+    data session: Session
+    on start: app_started
+    menu
+        item "File"
+            item "New customer" key "Ctrl+N" on click -> CustomerForm
+            separator
+            item "Quit" key "Ctrl+Q" on click -> quit
+    toolbar
+        button "Customers" icon "list" on click -> CustomerBrowse
+        separator
+        button "Orders" on click: orders_clicked
+    ribbon
+        tab "Home"
+            group "Customers"
+                button "New" icon "add" large on click -> CustomerForm
+                button "Browse" icon "list" on click -> CustomerBrowse
+    sidebar left span 3
+        list at 1,1 span 3 rows 10 bind recent show name
+    footer
+        status "Ready"
+        text at 10,1 span 3 bind session.user
+```
+
+### App settings
+
+| Setting | Meaning |
+|---|---|
+| `title "text"` | The application's title. |
+| `main Window` | The window shown at start; it must be a `window`. |
+| `data name: Entity` | Data for the parts in the sidebars and the footer. |
+| `on start: handler` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
+
+### Regions
+
+| Region | Docks | Holds |
+|---|---|---|
+| `menu` | at the top | `item "Caption"` lines, which can hold more items below them (a submenu), and `separator` |
+| `toolbar` | at the top, below the menu | `button` and `separator` |
+| `ribbon` | at the top | `tab "Title"` blocks with `group "Title"` blocks of `button` and `separator` |
+| `sidebar left` or `sidebar right` | at that side, `span n` columns wide (default 3) | parts, on its own grid |
+| `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
+
+A window can declare its own regions. A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
+
+### Commands
+
+Menu items and toolbar and ribbon buttons are commands. Their properties:
+
+| Property | On | Meaning |
+|---|---|---|
+| `"caption"` | all | The text, right after the kind. A menu item needs one; a button needs a caption or an icon. |
+| `name n` | all | The command's name, for handlers. |
+| `icon "name"` | all | An icon. |
+| `key "Ctrl+N"` | menu items | The key for it, shown in the menu. |
+| `large` | ribbon buttons | A large button. |
+| `on click -> Target` | all | Opens a window, or `close` or `quit`. |
+| `on click: handler` | all | Runs a handler. |
+
+An item with a submenu opens the submenu, so it has no `on click` of its own.
+
+## 8. Code behind
+
+A window's handlers are in a `code` block named after the window, in the same file as the window. The app's handlers are in a `code` block named after the app.
+
+```
+code CustomerForm
+    handler kind_changed
+        // Only business customers have a VAT number.
+        vat_number.enabled = customer.kind == Business
+
+    handler save_clicked
+        name.error = ""
+        if customer.name == ""
+            name.error = "Name is required"
+            return
+        save customer
+        message "Saved " + customer.name
+        close
+```
+
+- `handler name` declares a handler. It has no parameters. It runs when an event wired to it happens.
+- A handler that is wired but not written is an error. A handler that is written but not wired anywhere is a warning.
+- Handlers run in the backend. The window sends its data with the event, the handler runs, and the window shows what changed: data, part properties, messages, and windows to open or close.
+
+### What a handler sees
+
+- **The window's data**, by its `data` names: `customer`, `orders`.
+- **The window's parts**, by their names: `save`, `vat_number`.
+- **Its own locals**, made with `let`.
+- **Enum values**, written bare (`Business`) where the expected type says which enum is meant, and qualified (`CustomerKind.Business`) where it does not.
+- **Functions and actions** of its own module and of the modules it uses.
+
+A name that is both data and a part in the same window is an error.
+
+### Part properties
+
+| Property | On | Type | Can be set |
+|---|---|---|---|
+| `visible` | every part | bool | yes |
+| `enabled` | every part | bool | yes |
+| `caption` | labels, help texts, headings, buttons, commands | text | yes |
+| `error` | inputs | text | yes; `""` clears it |
+| `readonly` | inputs | bool | yes |
+| `selected` | tables, lists | the record of the selected row | no |
+
+A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
+
+## 9. Functions and actions
+
+Logic that is not tied to one window goes into functions and actions in a module. Handlers, functions and actions can call them.
+
+```
+function within_credit(order: Order) -> bool
+    return order.total <= order.customer.credit_limit
+
+function order_total(order: Order) -> money
+    ensure result >= 0
+    let total: money = 0
+    for line in order.lines
+        total = total + line.amount
+    return total
+
+action approve(order: Order)
+    require order.status == Pending
+    require within_credit(order)
+    effects db.write
+    order.status = Approved
+    save order
+```
+
+- **The signature** is `name(param: type, ...)`, optionally followed by `-> type` for the result. The types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum, and `list<Entity>`.
+- **`require expr`** checks the arguments before the body runs. **`ensure expr`** checks the result after it, as `result`. Both must be bool, and both come before the statements.
+- **`effects`** lists what an action does to data: `db.read`, `db.write` or both, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`.
+- **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
+- **An action** can change data. Neither functions nor actions talk to the screen: `message`, `open`, `close` and part properties belong in handlers.
+- A function or action with a result returns a value on every path; the checker reports a path that does not.
+
+## 10. Statements and expressions
+
+### Statements
+
+One statement per line; `if`, `else` and `for` take an indented block.
+
+| Statement | Meaning | Where |
+|---|---|---|
+| `let name = expr` | A local, with the type of the expression. | everywhere |
+| `let name: type = expr` | A local with a declared type. | everywhere |
+| `target = expr` | Sets a local, a data field (`customer.credit_limit`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
+| `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
+| `for item in list` | Runs the block once per item of a list. | everywhere |
+| `name(args)` | Calls a function or action on its own line. | everywhere |
+| `return` | Leaves the handler or action. | handlers, actions without a result |
+| `return expr` | Leaves with a result. | functions and actions with a result |
+| `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. | handlers |
+| `open Window` | Opens a window. | handlers |
+| `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
+| `close` | Closes this window. | handlers |
+| `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions |
+| `delete expr` | Removes a record from its data source. | handlers, actions |
+| `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). | handlers |
+
+### Expressions
+
+| Expression | Meaning |
+|---|---|
+| `12`, `9.95`, `"text"`, `true`, `false` | literals |
+| `customer`, `customer.name`, `grid.selected.total` | names and paths |
+| `Business`, `CustomerKind.Business` | enum values |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items |
+| `(expr)` | grouping |
+| `-x` | negation |
+| `a * b`, `a / b` | multiplication and division |
+| `a + b`, `a - b` | addition and subtraction; `+` also joins text |
+| `a == b`, `a != b`, `a < b`, `a <= b`, `a > b`, `a >= b` | comparison |
+| `x in [a, b, c]` | whether `x` equals one of the values |
+| `not a` | negation of a bool |
+| `a and b`, `a or b` | both, either |
+
+From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons and `in`, `not`, `and`, `or`.
+
+### Types
+
+The types of values follow the data dictionary:
+
+| Type | Values of fields of type |
+|---|---|
+| `text` | text, email, url |
+| `integer` | integer, id |
+| `decimal` | decimal, money |
+| `bool` | bool |
+| `date`, `datetime` | date, datetime |
+| an enum | that enum |
+| a record | an entity, a `ref` |
+| a list of records | `list<Entity>`, a list in the window's data |
+
+An integer is accepted where a decimal is expected. Nothing else converts by itself. The checker reports unknown names, wrong types, setting something that cannot be set, and calls with the wrong arguments.
+
+## 11. A complete example
+
+A project file and one module: a customer list that opens a form, and the form that saves a customer.
+
+`shop.clarity`:
+
+```
+project Shop
+    stack rust web desktop
+    datasource main sqlite "data/shop.db"
+```
+
+`shop/customers.clarity`:
+
+```
+module customers
+
+enum CustomerKind
+    Private label "Private person"
+    Business
+
+entity Customer
+    name: text(80), required
+    kind: CustomerKind, default Private
+    vat_number: text(14), help "Only for business customers"
+    notes: text
+
+app Shop
+    main CustomerBrowse
+
+page CustomerBrowse: window
+    title "Customers"
+    data customers: list<Customer>
+    on return: window_returned
+
+    table name grid at 1,1 span 12 rows 8 bind customers columns name, kind on open: open_clicked
+    button "New" at 9,9 span 2 on click -> CustomerForm
+    button "Open" name open_button at 11,9 span 2 on click: open_clicked
+
+page CustomerForm: window
+    title "Customer"
+    data customer: Customer
+
+    form name customer_form at 1,1 span 12 rows 4 bind customer
+        label "Name" at 1,1 span 3 for name
+        textbox name name at 4,1 span 6 bind customer.name
+        help at 10,1 span 3 for name
+        label "Kind" at 1,2 span 3 for kind
+        radio name kind at 4,2 span 6 bind customer.kind on change: kind_changed
+        label "Vat number" at 1,3 span 3 for vat_number
+        textbox name vat_number at 4,3 span 4 bind customer.vat_number
+        help at 8,3 span 5 for vat_number
+        label "Notes" at 1,4 span 3 for notes
+        textbox name notes at 4,4 span 9 bind customer.notes
+    button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: save_clicked
+    button "Close" name close_form at 11,6 span 2 cancel on click: close_clicked
+
+code CustomerBrowse
+    handler window_returned
+        // The form may have saved a customer.
+        reload customers
+
+    handler open_clicked
+        open CustomerForm with customer = grid.selected
+
+code CustomerForm
+    handler kind_changed
+        vat_number.enabled = customer.kind == Business
+
+    handler save_clicked
+        name.error = ""
+        vat_number.error = ""
+        if customer.name == ""
+            name.error = "Name is required"
+            return
+        if customer.kind == Business and customer.vat_number == ""
+            vat_number.error = "Needed for business customers"
+            return
+        save customer
+        message "Saved " + customer.name
+        close
+
+    handler close_clicked
+        close
+```
+
+The full shop example, with orders, a menu and a ribbon, is `examples/shop.clarity`.
+
+## 12. Grammar summary
+
+A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` is one of them, and an indented line is a line in the block above it. Words in quotes are written as shown.
+
+```
+project-file  = "project" Name
+                    setting*
+setting       = "title" String | "stack" word word word+ | "output" String
+              | "datasource" name kind String
+                    ["auth" kind String]
+
+module-file   = "module" name
+                ("use" name)*
+                declaration*
+declaration   = enum | entity | page | app | code | function | action
+
+enum          = "enum" Name
+                    (Value ["label" String])+
+entity        = "entity" Name
+                    (name ":" type ("," modifier)*)+
+type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "money" | "bool"
+              | "date" | "datetime" | "email" | "url" | "id" | Enum | "ref" Entity | "list" "<" Entity ">"
+modifier      = "required" | "unique" | "owned" | "computed"
+              | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "format") String
+
+page          = "page" Name ":" ("window" | "dialog" | "view")
+                    (page-setting | region | part)*
+page-setting  = "title" String | "data" name ":" (Entity | "list" "<" Entity ">")
+              | "grid" n "columns" | "on" ("open" | "close" | "return") ":" handler
+part          = kind [String] property*
+                    (part | "tab" String | "pane")*        // containers only
+property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
+              | "for" name | "placeholder" String | "tooltip" String | "readonly" | "taborder" n
+              | "key" String | "default" | "cancel" | "horizontal" | "vertical"
+              | "columns" names | "show" names | "source" String | "surface" word | "renderer" Name
+              | "on" event ":" handler | "on" "click" "->" Target
+
+app           = "app" Name
+                    ("title" String | "main" Window | "data" ... | "on" "start" ":" handler | region)*
+region        = "menu" | "toolbar" | "ribbon" | "sidebar" ("left" | "right") ["span" n] | "footer"
+command       = ("item" | "button" | "separator") [String]
+                ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target))*
+
+code          = "code" Name
+                    ("handler" name
+                        statement*)*
+function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" type-ref]
+                    ("require" expr | "ensure" expr | "effects" effect ("," effect)*)*
+                    statement*
+```

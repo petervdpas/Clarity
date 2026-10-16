@@ -314,9 +314,17 @@ impl Part<'_> {
 
     fn has_caption(&self) -> bool {
         match self {
-            Part::Widget(props) => matches!(props.kind, WidgetKind::Label | WidgetKind::Button),
+            Part::Widget(props) => matches!(
+                props.kind,
+                WidgetKind::Label | WidgetKind::Help | WidgetKind::Heading | WidgetKind::Button
+            ),
             Part::Command(_) => true,
         }
+    }
+
+    /// Inputs take an error message and can be made read-only.
+    fn is_input(&self) -> bool {
+        matches!(self, Part::Widget(props) if widgets::info(props.kind).input)
     }
 }
 
@@ -905,6 +913,8 @@ impl<'a> BodyChecker<'_, 'a> {
         match property {
             "visible" | "enabled" => value(Ty::Bool),
             "caption" if part.has_caption() => value(Ty::Text),
+            "error" if part.is_input() => value(Ty::Text),
+            "readonly" if part.is_input() => value(Ty::Bool),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List) {

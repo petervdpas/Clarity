@@ -24,6 +24,37 @@
   <svg viewBox="0 0 48 28" aria-hidden="true">
     {#if kind === "label"}
       <text x="24" y="18" text-anchor="middle" class="ink">Label</text>
+    {:else if kind === "help"}
+      <rect x="4" y="5" width="40" height="10" rx="2" />
+      <text x="5" y="23" class="ink tiny">Help for the input</text>
+    {:else if kind === "heading"}
+      <text x="24" y="19" text-anchor="middle" class="ink bold">Title</text>
+    {:else if kind === "text"}
+      <text x="5" y="17.5" class="ink small">Ada Lovelace</text>
+      <line x1="4" y1="21" x2="44" y2="21" class="dashed" />
+    {:else if kind === "memo"}
+      <rect x="4" y="3" width="40" height="22" rx="2" />
+      <line x1="8" y1="9" x2="38" y2="9" />
+      <line x1="8" y1="14" x2="34" y2="14" />
+      <line x1="8" y1="19" x2="24" y2="19" />
+    {:else if kind === "password"}
+      <rect x="4" y="7" width="40" height="14" rx="2" />
+      <text x="8" y="18.5" class="ink small">&#8226;&#8226;&#8226;&#8226;&#8226;</text>
+    {:else if kind === "switch"}
+      <rect x="14" y="8" width="20" height="12" rx="6" class="fill" />
+      <circle cx="28" cy="14" r="4" />
+    {:else if kind === "radio"}
+      <circle cx="10" cy="14" r="4" class="fill" />
+      <circle cx="10" cy="14" r="1.5" />
+      <text x="16" y="17" class="ink tiny">A</text>
+      <circle cx="28" cy="14" r="4" />
+      <text x="34" y="17" class="ink tiny">B</text>
+    {:else if kind === "form"}
+      <rect x="4" y="3" width="40" height="22" rx="2" class="dashed" />
+      <line x1="8" y1="9" x2="16" y2="9" />
+      <rect x="18" y="6" width="22" height="6" rx="1" />
+      <line x1="8" y1="18" x2="16" y2="18" />
+      <rect x="18" y="15" width="22" height="6" rx="1" />
     {:else if kind === "textbox"}
       <rect x="4" y="7" width="40" height="14" rx="2" />
       <text x="8" y="17.5" class="ink small">abc</text>
@@ -179,6 +210,11 @@
   .ink.tiny {
     font-size: 5px;
     fill: var(--text-muted);
+  }
+
+  .ink.bold {
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .name {

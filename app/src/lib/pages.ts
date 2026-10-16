@@ -169,3 +169,40 @@ export function widgetGrows(preview: Preview, widget: Widget): boolean {
   const inside = [...widget.children, ...widget.pages.flatMap((p) => p.children)];
   return inside.some((w) => widgetGrows(preview, w));
 }
+
+/** Every part of a page, its sidebars and footer included, nested parts too. */
+export function allParts(page: Page): Widget[] {
+  const out: Widget[] = [];
+  const visit = (widgets: Widget[]) => {
+    for (const w of widgets) {
+      out.push(w);
+      visit(w.children);
+      for (const inner of w.pages) visit(inner.children);
+    }
+  };
+  visit(page.widgets);
+  for (const grid of frameGrids(page.frame)) visit(grid.widgets);
+  return out;
+}
+
+/** A part by its name. */
+export function findPart(page: Page, name: string | null): Widget | undefined {
+  return name === null ? undefined : allParts(page).find((w) => w.props.name === name);
+}
+
+/** The field a `data.field` binding points at, without needing a record. */
+export function fieldOf(data: PageData, bind: string | null): Field | undefined {
+  if (!bind) return undefined;
+  const [name, fieldName] = bind.split(".");
+  return fieldName ? data[name]?.entity.fields.find((f) => f.name.name === fieldName) : undefined;
+}
+
+/** The DOM id of a named part, for labels and help texts that point at it. */
+export function partId(name: string): string {
+  return `part-${name}`;
+}
+
+/** The DOM id of the help text for a named input. */
+export function helpId(name: string): string {
+  return `help-for-${name}`;
+}

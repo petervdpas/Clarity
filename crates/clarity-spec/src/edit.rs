@@ -84,6 +84,17 @@ pub enum Edit {
     /// Add a window at the end of the file, blank or from a template.
     /// Needs the project (see `apply_in`).
     AddWindow { name: String, template: PageTemplate },
+    /// Place a field of the window's data at a cell: its input, with a
+    /// label for it and its help text when there is room. `room` is the
+    /// number of columns to the edge of the container. Needs the project.
+    PlaceField {
+        container: u32,
+        col: u32,
+        row: u32,
+        room: u32,
+        /// `data.field`
+        bind: String,
+    },
     /// Add an entity with a first field, after the other data declarations.
     AddEntity { name: String },
     /// Add an enum with a first variant, after the other data declarations.
@@ -251,7 +262,10 @@ fn apply_layout(source: &str, edit: &Edit, project: Option<&Project>) -> EditRes
     let mut doc = Doc::read(source);
     let focus = match (edit, project) {
         (Edit::AddWindow { name, template }, Some(project)) => doc.add_window(project, name, template)?,
-        (Edit::AddWindow { .. }, None) => {
+        (Edit::PlaceField { container, col, row, room, bind }, Some(project)) => {
+            doc.place_field(project, *container, *col, *row, *room, bind)?
+        }
+        (Edit::AddWindow { .. } | Edit::PlaceField { .. }, None) => {
             return fail("this edit needs the whole project");
         }
         _ => doc.apply(edit)?,
@@ -770,7 +784,7 @@ impl Doc {
             } => self.add_data(*page, name, entity, *list),
             Edit::SetGrid { page, columns } => self.set_grid(*page, *columns),
             Edit::AddPage { name, kind } => self.add_page(name, *kind),
-            Edit::AddWindow { .. } => {
+            Edit::AddWindow { .. } | Edit::PlaceField { .. } => {
                 fail("this edit needs the whole project and cannot be part of a batch")
             }
             Edit::AddEntity { name } => self.add_declaration("entity", name, "name: text(80)"),
@@ -904,9 +918,51 @@ impl Doc {
         Ok(path)
     }
 
-    /// The first `{base}{n}` not yet used as a part name in the top-level
-    /// block (window or app) at index `top`.
-    fn free_name(&self, top: usize, base: &str) -> String {
+    /// Places a field of the window's data with the parts that go with it
+    /// (see `templates::field_parts`); the input is named after the field.
+    fn place_field(
+        &mut self,
+        project: &Project,
+        container: u32,
+        col: u32,
+        row: u32,
+        room: u32,
+        bind: &str,
+    ) -> EditResult<Option<u32>> {
+        let path = self.widget_container(container)?;
+        let Some((data, field_name)) = bind.split_once('.') else {
+            return fail(format!("'{bind}' is not a field, use data.field"));
+        };
+        // The data declaration of the window: `data customer: Customer`.
+        let entity = self.nodes[path[0]]
+            .children
+            .iter()
+            .map(|n| &n.tokens)
+            .find(|t| t.len() >= 4 && t[0].text == "data" && t[1].text == data)
+            .map(|t| t[3].text.clone());
+        let Some(entity) = entity else {
+            return fail(format!("the window has no data '{data}'"));
+        };
+        let field = project
+            .entity(&entity)
+            .and_then(|e| e.field(field_name))
+            .ok_or_else(|| EditError(format!("'{entity}' has no field '{field_name}'")))?;
+        let input_name = if self.used_names(path[0]).iter().any(|n| n == field_name) {
+            self.free_name(path[0], field_name)
+        } else {
+            field_name.to_string()
+        };
+        let parts = templates::field_parts(field, data, &input_name, col, row, room.max(1));
+        let mut focus = None;
+        for props in &parts {
+            let id = self.place_widget(container, props)?;
+            focus = focus.or(id);
+        }
+        Ok(focus)
+    }
+
+    /// Part names used in the top-level block (window or app) at index `top`.
+    fn used_names(&self, top: usize) -> Vec<String> {
         fn collect(node: &LNode, out: &mut Vec<String>) {
             let tokens = &node.tokens;
             for (i, t) in tokens.iter().enumerate() {
@@ -923,6 +979,13 @@ impl Doc {
         }
         let mut used = Vec::new();
         collect(&self.nodes[top], &mut used);
+        used
+    }
+
+    /// The first `{base}{n}` not yet used as a part name in the top-level
+    /// block `top`.
+    fn free_name(&self, top: usize, base: &str) -> String {
+        let used = self.used_names(top);
         (1..)
             .map(|n| format!("{base}{n}"))
             .find(|name| !used.contains(name))

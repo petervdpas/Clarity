@@ -10,7 +10,14 @@ import type { Event as PartEvent } from "./generated/Event";
 const LIVE = Symbol("clarity-live");
 
 /** What a handler set on a part; anything unset keeps the design. */
-export type PartState = { visible?: boolean; enabled?: boolean; caption?: string | null };
+export type PartState = {
+  visible?: boolean;
+  enabled?: boolean;
+  caption?: string | null;
+  /** A message at an input; empty when there is none. */
+  error?: string | null;
+  readonly?: boolean;
+};
 
 export interface Live {
   /** Part properties by part name. */

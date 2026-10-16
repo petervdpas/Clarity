@@ -14,12 +14,20 @@ use crate::model::{FieldType, Orientation, Surface, WidgetProps};
 #[ts(export)]
 pub enum WidgetKind {
     Label,
+    Help,
+    Heading,
+    Text,
     Textbox,
+    Memo,
+    Password,
     Number,
     Checkbox,
+    Switch,
     Dropdown,
+    Radio,
     Date,
     Button,
+    Form,
     Panel,
     Tabs,
     Splitter,
@@ -33,6 +41,7 @@ pub enum WidgetKind {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum Category {
+    Text,
     BasicInput,
     Containers,
     Data,
@@ -64,6 +73,8 @@ pub enum Event {
     Return,
     /// The app starts, before its main window opens.
     Start,
+    /// Enter is pressed in an input of a form.
+    Submit,
 }
 
 /// The events a window has, in the order the designer lists them.
@@ -86,6 +97,7 @@ impl Event {
             Event::Close => "close",
             Event::Return => "return",
             Event::Start => "start",
+            Event::Submit => "submit",
         }
     }
 
@@ -102,6 +114,7 @@ impl Event {
             "close" => Some(Event::Close),
             "return" => Some(Event::Return),
             "start" => Some(Event::Start),
+            "submit" => Some(Event::Submit),
             _ => None,
         }
     }
@@ -118,6 +131,8 @@ pub enum BindTarget {
     Field,
     /// A collection data declaration: `bind orders`.
     Collection,
+    /// A single-record data declaration: `bind customer`.
+    Record,
 }
 
 /// How a container organizes its children.
@@ -144,6 +159,13 @@ pub enum WidgetProperty {
     Surface,
     Renderer,
     Source,
+    For,
+    Placeholder,
+    Readonly,
+    TabOrder,
+    Shortcut,
+    Default,
+    Cancel,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -192,97 +214,96 @@ struct Entry {
     properties: &'static [WidgetProperty],
 }
 
-const ENTRIES: &[Entry] = &[
+const INPUT_EVENTS: &[Event] = &[Event::Change, Event::Enter, Event::Leave];
+const TYPED: &[WidgetProperty] = &[
+    WidgetProperty::Placeholder,
+    WidgetProperty::Readonly,
+    WidgetProperty::TabOrder,
+];
+const PICKED: &[WidgetProperty] = &[WidgetProperty::Readonly, WidgetProperty::TabOrder];
+
+/// A part that shows text and takes no input.
+const fn text_part(
+    kind: WidgetKind,
+    keyword: &'static str,
+    name: &'static str,
+    size: (u32, u32),
+    caption: Option<&'static str>,
+    bind: BindTarget,
+    properties: &'static [WidgetProperty],
+) -> Entry {
     Entry {
-        kind: WidgetKind::Label,
-        keyword: "label",
-        name: "Label",
-        category: Category::BasicInput,
-        size: (3, 1),
-        caption: Some("Label"),
-        bind: BindTarget::Field,
+        kind,
+        keyword,
+        name,
+        category: Category::Text,
+        size,
+        caption,
+        bind,
         field_types: &[],
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Click],
-        properties: &[],
-    },
+        events: &[],
+        properties,
+    }
+}
+
+/// An input bound to a field of one of `field_types`, without a caption.
+const fn input(
+    kind: WidgetKind,
+    keyword: &'static str,
+    name: &'static str,
+    size: (u32, u32),
+    field_types: &'static [&'static str],
+    events: &'static [Event],
+    properties: &'static [WidgetProperty],
+) -> Entry {
     Entry {
-        kind: WidgetKind::Textbox,
-        keyword: "textbox",
-        name: "Text box",
+        kind,
+        keyword,
+        name,
         category: Category::BasicInput,
-        size: (4, 1),
+        size,
         caption: None,
         bind: BindTarget::Field,
-        field_types: &["text", "email", "url"],
+        field_types,
         input: true,
         container: None,
         clickable: false,
-        events: &[Event::Change, Event::Enter, Event::Leave],
-        properties: &[],
-    },
+        events,
+        properties,
+    }
+}
+
+const ENTRIES: &[Entry] = &[
+    text_part(WidgetKind::Label, "label", "Label", (3, 1), Some("Label"), BindTarget::Nothing, &[WidgetProperty::For]),
+    text_part(WidgetKind::Help, "help", "Help text", (4, 1), None, BindTarget::Nothing, &[WidgetProperty::For]),
+    text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Nothing, &[]),
+    text_part(WidgetKind::Text, "text", "Text", (4, 1), None, BindTarget::Field, &[]),
+    input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Password, "password", "Password", (4, 1), &["text"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id"], INPUT_EVENTS, TYPED),
     Entry {
-        kind: WidgetKind::Number,
-        keyword: "number",
-        name: "Number",
-        category: Category::BasicInput,
-        size: (3, 1),
-        caption: None,
-        bind: BindTarget::Field,
-        field_types: &["integer", "decimal", "money", "id"],
-        input: true,
-        container: None,
-        clickable: false,
-        events: &[Event::Change, Event::Enter, Event::Leave],
-        properties: &[],
-    },
-    Entry {
-        kind: WidgetKind::Checkbox,
-        keyword: "checkbox",
-        name: "Check box",
-        category: Category::BasicInput,
-        size: (3, 1),
         caption: Some("Check box"),
-        bind: BindTarget::Field,
-        field_types: &["bool"],
-        input: true,
-        container: None,
-        clickable: false,
-        events: &[Event::Change],
-        properties: &[],
+        ..input(WidgetKind::Checkbox, "checkbox", "Check box", (3, 1), &["bool"], &[Event::Change], PICKED)
     },
     Entry {
-        kind: WidgetKind::Dropdown,
-        keyword: "dropdown",
-        name: "Dropdown",
-        category: Category::BasicInput,
-        size: (4, 1),
-        caption: None,
-        bind: BindTarget::Field,
-        field_types: &["enum", "ref"],
-        input: true,
-        container: None,
-        clickable: false,
-        events: &[Event::Change],
-        properties: &[],
+        caption: Some("Switch"),
+        ..input(WidgetKind::Switch, "switch", "Switch", (3, 1), &["bool"], &[Event::Change], PICKED)
     },
-    Entry {
-        kind: WidgetKind::Date,
-        keyword: "date",
-        name: "Date",
-        category: Category::BasicInput,
-        size: (3, 1),
-        caption: None,
-        bind: BindTarget::Field,
-        field_types: &["date", "dateTime"],
-        input: true,
-        container: None,
-        clickable: false,
-        events: &[Event::Change],
-        properties: &[],
-    },
+    input(WidgetKind::Dropdown, "dropdown", "Dropdown", (4, 1), &["enum", "ref"], &[Event::Change], PICKED),
+    input(
+        WidgetKind::Radio,
+        "radio",
+        "Radio buttons",
+        (6, 1),
+        &["enum"],
+        &[Event::Change],
+        &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+    ),
+    input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
     Entry {
         kind: WidgetKind::Button,
         keyword: "button",
@@ -296,6 +317,26 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: true,
         events: &[Event::Click],
+        properties: &[
+            WidgetProperty::TabOrder,
+            WidgetProperty::Shortcut,
+            WidgetProperty::Default,
+            WidgetProperty::Cancel,
+        ],
+    },
+    Entry {
+        kind: WidgetKind::Form,
+        keyword: "form",
+        name: "Form",
+        category: Category::Containers,
+        size: (12, 4),
+        caption: None,
+        bind: BindTarget::Record,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[Event::Submit],
         properties: &[],
     },
     Entry {
@@ -526,6 +567,14 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         surface: has_property(kind, WidgetProperty::Surface).then_some(Surface::Svg),
         renderer: None,
         source: None,
+        for_part: None,
+        placeholder: None,
+        tooltip: None,
+        readonly: false,
+        tab_order: None,
+        shortcut: None,
+        default_button: false,
+        cancel: false,
     }
 }
 
@@ -540,7 +589,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     parts.push(format!("at {},{}", props.col, props.row));
     parts.push(format!("span {}", props.width));
-    if props.height != 1 {
+    // `rows` is left out only where the catalog height is also 1, so a
+    // one-row panel does not read back at its default height.
+    if props.height != 1 || default_size(props.kind).1 != 1 {
         parts.push(format!("rows {}", props.height));
     }
     if let Some(orientation) = props.orientation {
@@ -563,6 +614,30 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(source) = &props.source {
         parts.push(format!("source {}", quote(source)));
+    }
+    if let Some(target) = &props.for_part {
+        parts.push(format!("for {target}"));
+    }
+    if let Some(placeholder) = &props.placeholder {
+        parts.push(format!("placeholder {}", quote(placeholder)));
+    }
+    if let Some(tooltip) = &props.tooltip {
+        parts.push(format!("tooltip {}", quote(tooltip)));
+    }
+    if props.readonly {
+        parts.push("readonly".to_string());
+    }
+    if let Some(order) = props.tab_order {
+        parts.push(format!("taborder {order}"));
+    }
+    if let Some(shortcut) = &props.shortcut {
+        parts.push(format!("key {}", quote(shortcut)));
+    }
+    if props.default_button {
+        parts.push("default".to_string());
+    }
+    if props.cancel {
+        parts.push("cancel".to_string());
     }
     for h in &props.handlers {
         parts.push(format!("on {}: {}", h.event.keyword(), h.handler));
@@ -653,6 +728,17 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             "renderer",
         ),
         (WidgetProperty::Source, props.source.is_some(), "source"),
+        (WidgetProperty::For, props.for_part.is_some(), "for"),
+        (
+            WidgetProperty::Placeholder,
+            props.placeholder.is_some(),
+            "placeholder",
+        ),
+        (WidgetProperty::Readonly, props.readonly, "readonly"),
+        (WidgetProperty::TabOrder, props.tab_order.is_some(), "taborder"),
+        (WidgetProperty::Shortcut, props.shortcut.is_some(), "key"),
+        (WidgetProperty::Default, props.default_button, "default"),
+        (WidgetProperty::Cancel, props.cancel, "cancel"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -665,14 +751,52 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     if let Some(renderer) = &props.renderer {
         identifier("renderer name", renderer)?;
     }
+    if let Some(target) = &props.for_part {
+        identifier("part name", target)?;
+    }
+    if let Some(shortcut) = &props.shortcut {
+        check_shortcut(shortcut)?;
+    }
+    if props.tab_order == Some(0) {
+        return Err("tab order starts at 1".to_string());
+    }
     Ok(())
+}
+
+/// Keys a shortcut can hold besides its modifiers, by name.
+const NAMED_KEYS: [&str; 15] = [
+    "Enter", "Escape", "Tab", "Space", "Backspace", "Delete", "Insert", "Home", "End", "PageUp",
+    "PageDown", "Up", "Down", "Left", "Right",
+];
+
+/// `Ctrl+S`, `Ctrl+Shift+F2`: modifiers, then one key.
+pub fn check_shortcut(shortcut: &str) -> Result<(), String> {
+    let not = || Err(format!("'{shortcut}' is not a shortcut, as in 'Ctrl+S'"));
+    let mut keys: Vec<&str> = shortcut.split('+').collect();
+    let Some(key) = keys.pop() else { return not() };
+    for (i, modifier) in keys.iter().enumerate() {
+        if !["Ctrl", "Alt", "Shift", "Meta"].contains(modifier) || keys[..i].contains(modifier) {
+            return not();
+        }
+    }
+    let single = key.len() == 1 && key.chars().all(|c| c.is_ascii_alphanumeric());
+    let function = key
+        .strip_prefix('F')
+        .and_then(|n| n.parse::<u32>().ok())
+        .is_some_and(|n| (1..=12).contains(&n));
+    if single || function || NAMED_KEYS.contains(&key) {
+        Ok(())
+    } else {
+        not()
+    }
 }
 
 /// Parts that take extra height in a fluid window.
 fn grows(kind: WidgetKind) -> bool {
     matches!(
         kind,
-        WidgetKind::Panel
+        WidgetKind::Form
+            | WidgetKind::Panel
             | WidgetKind::Tabs
             | WidgetKind::Splitter
             | WidgetKind::Table

@@ -247,6 +247,27 @@ pub struct WidgetProps {
     pub surface: Option<Surface>,
     pub renderer: Option<String>,
     pub source: Option<String>,
+    /// The input a label or help text belongs to, by part name.
+    #[serde(rename = "for")]
+    #[ts(rename = "for")]
+    pub for_part: Option<String>,
+    /// Text shown in an empty input.
+    pub placeholder: Option<String>,
+    /// Text shown when the pointer rests on the part.
+    pub tooltip: Option<String>,
+    /// An input that shows its value but cannot be changed.
+    pub readonly: bool,
+    /// Position in the keyboard order; parts without one follow in reading
+    /// order.
+    pub tab_order: Option<u32>,
+    /// The key that clicks a button, as in `Ctrl+S`.
+    pub shortcut: Option<String>,
+    /// The button Enter clicks.
+    #[serde(rename = "default")]
+    #[ts(rename = "default")]
+    pub default_button: bool,
+    /// The button Escape clicks.
+    pub cancel: bool,
 }
 
 /// `on change: name_changed`: the handler in the code behind that runs

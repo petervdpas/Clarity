@@ -316,6 +316,10 @@ impl<'a> Checker<'a> {
         }
         self.check_frame(file, &context, &page.frame);
         self.check_names(file, &page.widgets, &page.frame);
+        self.check_forms(file, &page.widgets, None);
+        for sidebar in &page.frame.sidebars {
+            self.check_forms(file, &sidebar.widgets, None);
+        }
     }
 
     fn data_context(&mut self, file: usize, decls: &'a [DataDecl]) -> PageContext<'a> {
@@ -445,6 +449,77 @@ impl<'a> Checker<'a> {
         for (name, span) in named {
             if !seen.insert(name) {
                 self.error(file, format!("duplicate part name '{name}'"), span);
+            }
+        }
+
+        // A label or help text belongs to an input of the same window.
+        for widget in &all {
+            let p = &widget.props;
+            let Some(target) = &p.for_part else { continue };
+            let at = format!("{} at {},{}", widgets::keyword(p.kind), p.col, p.row);
+            match all.iter().find(|w| w.props.name.as_deref() == Some(target.as_str())) {
+                None => self.error(
+                    file,
+                    format!("{at}: there is no part '{target}' in this window"),
+                    widget.span,
+                ),
+                Some(other) if !widgets::info(other.props.kind).input => self.error(
+                    file,
+                    format!(
+                        "{at}: '{target}' is a {}, not an input",
+                        widgets::keyword(other.props.kind)
+                    ),
+                    widget.span,
+                ),
+                Some(_) => {}
+            }
+        }
+
+        // Enter clicks the default button and Escape the cancel button, so
+        // a window has at most one of each.
+        let defaults: Vec<&&Widget> = all.iter().filter(|w| w.props.default_button).collect();
+        if let Some(extra) = defaults.get(1) {
+            self.error(file, "more than one default button in this window", extra.span);
+        }
+        let cancels: Vec<&&Widget> = all.iter().filter(|w| w.props.cancel).collect();
+        if let Some(extra) = cancels.get(1) {
+            self.error(file, "more than one cancel button in this window", extra.span);
+        }
+    }
+
+    /// A form holds the inputs of the one record it binds, and no other
+    /// form.
+    fn check_forms(&mut self, file: usize, widgets: &[Widget], form: Option<&Widget>) {
+        for widget in widgets {
+            let p = &widget.props;
+            let at = format!("{} at {},{}", widgets::keyword(p.kind), p.col, p.row);
+            let mut inner = form;
+            if p.kind == WidgetKind::Form {
+                if form.is_some() {
+                    self.error(file, format!("{at}: a form cannot hold another form"), widget.span);
+                }
+                inner = Some(widget);
+            } else if let (Some(form), Some(bind)) = (form, &p.bind)
+                && widgets::info(p.kind).input
+            {
+                let data = bind.split('.').next().unwrap_or_default();
+                let held = form.props.bind.as_deref().unwrap_or_default();
+                let held = held.split('.').next().unwrap_or_default();
+                if data != held {
+                    let which = match &form.props.name {
+                        Some(name) => format!("'{name}'"),
+                        None => format!("at {},{}", form.props.col, form.props.row),
+                    };
+                    self.error(
+                        file,
+                        format!("{at}: binds to '{data}', but its form {which} holds '{held}'"),
+                        widget.span,
+                    );
+                }
+            }
+            self.check_forms(file, &widget.children, inner);
+            for page in &widget.pages {
+                self.check_forms(file, &page.children, inner);
             }
         }
     }
@@ -647,6 +722,15 @@ impl<'a> Checker<'a> {
 
         match info.bind {
             BindTarget::Nothing => {}
+            BindTarget::Record => {
+                if list || field_name.is_some() {
+                    self.error(
+                        file,
+                        format!("{at}: a {name} binds to one record, as in 'bind customer'"),
+                        widget.span,
+                    );
+                }
+            }
             BindTarget::Field => {
                 if list {
                     self.error(

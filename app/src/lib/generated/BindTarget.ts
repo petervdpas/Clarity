@@ -3,4 +3,4 @@
 /**
  * What a widget's `bind` refers to.
  */
-export type BindTarget = "nothing" | "field" | "collection";
+export type BindTarget = "nothing" | "field" | "collection" | "record";

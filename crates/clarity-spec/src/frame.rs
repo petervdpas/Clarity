@@ -222,6 +222,9 @@ pub fn validate_command(props: &CommandProps) -> Result<(), String> {
             if props.large {
                 return Err("'large' applies to ribbon buttons".to_string());
             }
+            if let Some(shortcut) = &props.shortcut {
+                crate::widgets::check_shortcut(shortcut)?;
+            }
         }
         CommandKind::Button => {
             if props.caption.is_none() && props.icon.is_none() {

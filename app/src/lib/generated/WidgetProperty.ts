@@ -3,4 +3,4 @@
 /**
  * Extra properties beyond position, caption, binding and events.
  */
-export type WidgetProperty = "columns" | "show" | "orientation" | "surface" | "renderer" | "source";
+export type WidgetProperty = "columns" | "show" | "orientation" | "surface" | "renderer" | "source" | "for" | "placeholder" | "readonly" | "tabOrder" | "shortcut" | "default" | "cancel";

@@ -42,6 +42,7 @@
   } = $props();
 
   const CATEGORIES: { key: Category; name: string }[] = [
+    { key: "text", name: "Text" },
     { key: "basicInput", name: "Basic input" },
     { key: "containers", name: "Containers" },
     { key: "data", name: "Data" },
@@ -115,32 +116,24 @@
         });
         break;
       case "field": {
-        // A field arrives as a caption label plus its input widget when there
-        // is room for both, in one edit.
-        const labelWidth = 2;
-        const withLabel = source.widget !== "checkbox" && source.widget !== "table" && at.columns - at.col + 1 > labelWidth;
-        const col = withLabel ? at.col + labelWidth : at.col;
-        const input: Edit = {
-          op: "createWidget",
-          container: at.container,
-          kind: source.widget,
-          col,
-          row: at.row,
-          width: Math.min(source.width, at.columns - col + 1),
-          caption: null,
-          bind: source.bind,
-        };
-        const label: Edit = {
-          op: "createWidget",
-          container: at.container,
-          kind: "label",
-          col: at.col,
-          row: at.row,
-          width: labelWidth,
-          caption: source.caption,
-          bind: null,
-        };
-        await apply(withLabel ? { op: "batch", edits: [label, input] } : input);
+        // A list arrives as a table. A field arrives as its input, with a
+        // label for it and its help text when there is room; the backend
+        // lays these out the same way the form template does.
+        const room = at.columns - at.col + 1;
+        if (source.widget === "table") {
+          await apply({
+            op: "createWidget",
+            container: at.container,
+            kind: "table",
+            col: at.col,
+            row: at.row,
+            width: Math.min(source.width, room),
+            caption: null,
+            bind: source.bind,
+          });
+        } else {
+          await apply({ op: "placeField", container: at.container, col: at.col, row: at.row, room, bind: source.bind });
+        }
         break;
       }
       case "move": {

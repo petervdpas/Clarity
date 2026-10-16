@@ -33,4 +33,37 @@ onClick: string | null,
 /**
  * Handlers in the code behind, per event.
  */
-handlers: Array<Handler>, columns: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, };
+handlers: Array<Handler>, columns: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+/**
+ * The input a label or help text belongs to, by part name.
+ */
+for: string | null, 
+/**
+ * Text shown in an empty input.
+ */
+placeholder: string | null, 
+/**
+ * Text shown when the pointer rests on the part.
+ */
+tooltip: string | null, 
+/**
+ * An input that shows its value but cannot be changed.
+ */
+readonly: boolean, 
+/**
+ * Position in the keyboard order; parts without one follow in reading
+ * order.
+ */
+tabOrder: number | null, 
+/**
+ * The key that clicks a button, as in `Ctrl+S`.
+ */
+shortcut: string | null, 
+/**
+ * The button Enter clicks.
+ */
+default: boolean, 
+/**
+ * The button Escape clicks.
+ */
+cancel: boolean, };

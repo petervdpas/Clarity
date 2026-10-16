@@ -21,6 +21,6 @@ page CustomerCard: window
         tab "Orders"
             table at 1,1 span 12 rows 5 bind orders columns number, ordered_on, status, total
         tab "Notes"
-            label at 1,1 span 12 bind customer.notes
+            text at 1,1 span 12 bind customer.notes
     button "All customers" at 1,13 span 3 on click -> CustomerBrowse
     button "Close" at 11,13 span 2 on click -> CustomerBrowse

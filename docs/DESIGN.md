@@ -307,7 +307,7 @@ Every window of an application is a `page` block: a `window`, a `dialog` or a `v
 
 | Template | Produces |
 |---|---|
-| Form for an entity | a caption label and a bound input per field, with Save and Close buttons |
+| Form for an entity | a `form` bound to the record, holding per field a label `for` its input, the input (a memo for text without a maximum length) and a help text when the field has `help`; Save (`default`) and Close (`cancel`) buttons |
 | Browse for an entity | a filter, a table of the entity with its first columns, and New and Open buttons |
 
 The result is an ordinary window; the designer changes it like any other. Labels, input types and validation still come from the data dictionary through the bindings.
@@ -341,12 +341,13 @@ page CustomerEdit: window
 
 The palette comes from a widget catalog in the Clarity core, not from the designer. Each catalog entry declares the widget's keyword, palette category, default size, the field types it can bind to, whether it is a container, and its extra properties. The palette, the checker and the properties panel all read the catalog, so adding a widget is one catalog entry.
 
-First catalog:
+The catalog so far (U1 in the roadmap adds to it in steps):
 
 | Category | Widgets |
 |---|---|
-| Basic input | `label`, `textbox`, `number`, `checkbox`, `dropdown`, `date`, `button` |
-| Containers | `panel`, `tabs`, `splitter` |
+| Text | `label` (with `for`), `help` (with `for`), `heading`, `text` (a field's value, read-only) |
+| Basic input | `textbox`, `memo`, `password`, `number`, `checkbox`, `switch`, `dropdown`, `radio` (an enum as radio buttons), `date`, `button` |
+| Containers | `form` (bound to one record), `panel`, `tabs`, `splitter` |
 | Data | `table` (bound to a list, with `columns`), `list` (bound to a list, with `show`) |
 | Graphics | `image` (`source "file"`), `canvas` (`surface` and `renderer`, see 5.7) |
 
@@ -358,9 +359,10 @@ Every part has a name, unique in its window (sidebars, footer, menus and toolbar
 
 | Parts | Events |
 |---|---|
-| button, label, image, menu item, toolbar or ribbon button | `click` |
-| text box, number | `change`, `enter`, `leave` |
-| check box, dropdown, date, tabs | `change` |
+| button, image, menu item, toolbar or ribbon button | `click` |
+| text box, memo, password, number | `change`, `enter`, `leave` |
+| check box, switch, dropdown, radio buttons, date, tabs | `change` |
+| form | `submit` (Enter in one of its inputs) |
 | table, list | `select`, `open` |
 | canvas | `pointer`, `key` |
 
@@ -370,6 +372,39 @@ textbox name email at 4,2 span 6 bind customer.email on change: email_changed
 ```
 
 `on click: save_clicked` wires the event to a handler, written in Clarity in the window's code behind (section 1.1). Parts placed in the designer get a free name at once (`button1`, `textbox2`), and templates name their parts after the field or caption, so events can be wired straight away. `on click -> Window` remains as the one built-in action, opening a window, so the preview can navigate before code behind exists; a click is wired to a handler or opens a window, not both.
+
+#### Forms, labels and help texts
+
+A label, its input and the input's help text are three separate parts, each placed on the grid like any other. `for` ties a label or help text to an input by its part name:
+
+```
+form name details at 1,1 span 12 rows 4 bind customer
+    label "Name" at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
+    help at 10,1 span 3 for name
+    label "Kind" at 1,2 span 3 for kind
+    radio name kind at 4,2 span 6 bind customer.kind
+button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: save_clicked
+button "Close" name close at 11,6 span 2 cancel on click: close_clicked
+```
+
+- **Label.** Clicking it focuses its input, and screen readers announce them together. A label only shows text: it cannot be bound. A field's value, read-only, is a `text` part.
+- **Required.** A label for an input bound to a `required` field shows a marker. The rule lives on the entity, so the page has no `required` of its own.
+- **Help text.** Shows its caption, or else the `help` of the field its input is bound to. When a handler sets the input's `error`, the help text shows that message instead, and the input is marked.
+- **Form.** Binds to one record (`bind customer`) and holds the inputs of that record; an input inside it bound to other data, or a form inside a form, is an error. Enter in one of its inputs fires the form's `submit` event; when that is not wired, Enter clicks the window's default button. Without a caption a form has no frame and its grid lines up with the grid around it.
+- **Properties for inputs and buttons.**
+
+| Property | On | Meaning |
+|---|---|---|
+| `placeholder "text"` | text box, memo, password, number | shown while the input is empty |
+| `tooltip "text"` | every part | shown when the pointer rests on it |
+| `readonly` | inputs | shows the value but cannot change it; handlers can change it (`notes.readonly = true`) |
+| `taborder N` | inputs, buttons | position in the keyboard order; parts without one follow in reading order |
+| `key "Ctrl+S"` | buttons (and menu items) | the key that clicks it: `Ctrl`, `Alt`, `Shift`, `Meta`, then a letter, digit, `F1` to `F12` or a named key such as `Enter` or `Delete` |
+| `default` | buttons | Enter clicks it; one per window |
+| `cancel` | buttons | Escape clicks it; one per window |
+
+Dropping a field from the Data panel places the same parts the form template makes: a label for the input, the input named after the field, and a help text when the field has one and there is room.
 
 #### Frame regions: menu, toolbar, ribbon, sidebar, footer
 
@@ -394,7 +429,7 @@ app Shop
         list at 1,1 span 3 rows 10 bind recent show name
     footer
         status "Ready"
-        label at 10,1 span 3 bind session.user
+        text at 10,1 span 3 bind session.user
 ```
 
 | Region | Docks | Holds |
@@ -493,7 +528,7 @@ code CustomerForm
 
 **Names in a handler.** A handler sees the window's data (`customer`), its parts by name (`vat_number`, `save`) and its own local values (`let`). Enum values are written bare (`Business`) when the expected type says which enum they belong to, or qualified (`CustomerKind.Business`). A name that is both data and a part is an error.
 
-**Part properties.** Every part has `visible` and `enabled` (bool). Labels and buttons have `caption` (text). Tables and lists have `selected`, the record of the selected row (read-only). Bound inputs are changed through their data: `customer.name = "..."` updates the text box bound to it.
+**Part properties.** Every part has `visible` and `enabled` (bool). Labels, help texts, headings and buttons have `caption` (text). Inputs have `error` (text: a message shown at the input and in its help text, empty clears it) and `readonly` (bool). Tables and lists have `selected`, the record of the selected row (read-only). Bound inputs are changed through their data: `customer.name = "..."` updates the text box bound to it.
 
 **Statements**, one per line, blocks by indentation:
 
@@ -1135,6 +1170,10 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | G1a | Rust backend: `clarity-gen` writes a Cargo project into `out/` (deterministic, kept in sync by `write_out`), with records and enums from the dictionary, the SQLite schema as the first migration, functions and actions as Rust with contract checks, and the `clarity-runtime` crate copied in; `clarity gen`; the generated shop builds and runs, and generated logic is tested | done |
 | G1b | Handlers and the event protocol, the web renderer as a standalone package, the Tauri shell, Run and Build on the Preview tab | done |
 | E1 | Events beyond parts: window `on open`, `on close` and `on return` (back from a window it opened, to refresh), app `on start`; data events (before and after save) follow with D1 | done (section 5.9): window and app events, `reload`, Events in the designer, the browse template refreshes on return; data events stay with D1 |
+| U1a | Forms and text parts (section 5.6): `form` bound to one record with `on submit`, `label for`, `help`, `heading`, `text`, `memo`, `password`, `switch`, `radio`; `placeholder`, `tooltip`, `readonly`, `taborder`, `key`, `default` and `cancel`; `error` and `readonly` as part properties in handlers; the form template and field drops place label, input and help together | done; open: a `time` part waits for a time field type, menu item keys are shown but not yet pressed at runtime |
+| U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator | |
+| U1c | Data parts: tree, tree table, pager, search bar, lookup (a reference picked from a searchable list), chart; combo box, slider, spin box, color, file and tags inputs | |
+| U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | |
 | C1 | Command-line applications: `targets = ["cli"]`; `command` declarations with typed arguments and options, written in Clarity like handlers; `print`, `ask` and `exit`; generated as a program without a window, over the same records and actions; needs queries (`find ... where`) from D1 | |
 | D1 | SQL data sources and migrations (section 1.3): SQLite first, then PostgreSQL, MySQL and SQL Server; entities placed per source; schema snapshot, pending changes, migration steps in Clarity with dialects per database, prompts for risky changes, data migrations, down steps, applying on Run and at startup; schema import for external databases and Take ownership | |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |

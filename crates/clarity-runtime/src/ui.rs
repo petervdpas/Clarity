@@ -20,6 +20,12 @@ pub struct PartState {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
+    /// A message at an input, such as why its value is not accepted;
+    /// empty clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readonly: Option<bool>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -121,6 +127,24 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().caption = Some(value);
     }
 
+    /// The message a handler set on an input, or an empty text.
+    pub fn error(&self, part: &str) -> String {
+        self.parts.get(part).and_then(|p| p.error.clone()).unwrap_or_default()
+    }
+
+    pub fn set_error(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().error = Some(value);
+    }
+
+    /// Whether an input is read-only: as a handler set it, or as designed.
+    pub fn readonly(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.readonly).unwrap_or(design)
+    }
+
+    pub fn set_readonly(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().readonly = Some(value);
+    }
+
     /// The selected record of a table or list showing `rows`.
     pub fn selected<R: Clone>(&self, part: &str, rows: &[R]) -> Result<R> {
         self.selected
@@ -181,4 +205,23 @@ pub fn to_value<T: Serialize>(value: &T) -> Result<Value> {
 pub struct RefOption {
     pub id: crate::Id,
     pub text: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inputs_keep_their_design_until_a_handler_sets_them() {
+        let mut ui = Ui::default();
+        assert_eq!(ui.error("name"), "");
+        assert!(ui.readonly("name", true));
+        ui.set_error("name", "Name is required".into());
+        ui.set_readonly("name", false);
+        assert_eq!(ui.error("name"), "Name is required");
+        assert!(!ui.readonly("name", true));
+        let reply = ui.reply("Card", Map::new());
+        let json = serde_json::to_value(&reply.state.parts["name"]).unwrap();
+        assert_eq!(json, serde_json::json!({ "error": "Name is required", "readonly": false }));
+    }
 }

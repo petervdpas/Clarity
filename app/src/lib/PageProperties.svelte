@@ -11,7 +11,7 @@
   import { findFrameElement } from "./frame";
   import { describeType } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
-  import { allPages, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
+  import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
 
   let {
     preview,
@@ -55,6 +55,14 @@
   });
 
   const listOptions = $derived(page.data.filter((d) => d.list).map((d) => d.name.name));
+  const recordOptions = $derived(page.data.filter((d) => !d.list).map((d) => d.name.name));
+
+  /** Named inputs of the window, which a label or help text can belong to. */
+  const inputNames = $derived(
+    allParts(page)
+      .filter((w) => w.props.name !== null && widgetInfo(preview, w.props.kind).input)
+      .map((w) => w.props.name as string),
+  );
 
   /** Fields of the entity behind a collection binding, for table columns and list items. */
   const collectionFields = $derived.by(() => {
@@ -152,10 +160,14 @@
       <input value={p.name ?? ""} placeholder="the name the code behind uses" onchange={(e) => update({ name: textOf(e) })} />
     </label>
 
-    {#if info.caption !== null || p.caption !== null}
+    {#if info.caption !== null || p.caption !== null || info.container === "plain" || info.properties.includes("for")}
       <label class="prop">
         <span>Caption</span>
-        <input value={p.caption ?? ""} onchange={(e) => update({ caption: textOf(e) })} />
+        <input
+          value={p.caption ?? ""}
+          placeholder={p.kind === "help" ? "the field's help text" : ""}
+          onchange={(e) => update({ caption: textOf(e) })}
+        />
       </label>
     {/if}
 
@@ -179,6 +191,16 @@
       {#if fieldOptions.length === 0}
         <p class="hint">Declare data on the page first (select the page background).</p>
       {/if}
+    {:else if info.bind === "record"}
+      <label class="prop">
+        <span>Bound to</span>
+        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e) })}>
+          <option value="">(not bound)</option>
+          {#each recordOptions as name (name)}
+            <option value={name}>{name}</option>
+          {/each}
+        </select>
+      </label>
     {:else if info.bind === "collection"}
       <label class="prop">
         <span>Bound to</span>
@@ -220,6 +242,60 @@
           {/each}
         </select>
       </label>
+    {/if}
+
+    {#if info.properties.includes("for")}
+      <label class="prop">
+        <span>For input</span>
+        <select value={p.for ?? ""} onchange={(e) => update({ for: textOf(e) })}>
+          <option value="">(none)</option>
+          {#each inputNames as name (name)}
+            <option value={name}>{name}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("placeholder")}
+      <label class="prop">
+        <span>Placeholder</span>
+        <input value={p.placeholder ?? ""} placeholder="shown while the input is empty" onchange={(e) => update({ placeholder: textOf(e) })} />
+      </label>
+    {/if}
+    <label class="prop">
+      <span>Tooltip</span>
+      <input value={p.tooltip ?? ""} placeholder="shown when the pointer rests on it" onchange={(e) => update({ tooltip: textOf(e) })} />
+    </label>
+    {#if info.properties.includes("tabOrder")}
+      <label class="prop">
+        <span>Tab order</span>
+        <input
+          type="number"
+          min="1"
+          value={p.tabOrder ?? ""}
+          placeholder="reading order"
+          onchange={(e) => update({ tabOrder: textOf(e) === null ? null : numberOf(e) })}
+        />
+      </label>
+    {/if}
+    {#if info.properties.includes("shortcut")}
+      <label class="prop">
+        <span>Shortcut</span>
+        <input value={p.shortcut ?? ""} placeholder="Ctrl+S" onchange={(e) => update({ shortcut: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("readonly") || info.properties.includes("default") || info.properties.includes("cancel")}
+      <fieldset class="checks">
+        <legend>Behavior</legend>
+        {#if info.properties.includes("readonly")}
+          <label><input type="checkbox" checked={p.readonly} onchange={(e) => update({ readonly: e.currentTarget.checked })} /> Read-only</label>
+        {/if}
+        {#if info.properties.includes("default")}
+          <label><input type="checkbox" checked={p.default} onchange={(e) => update({ default: e.currentTarget.checked })} /> Enter clicks it (default)</label>
+        {/if}
+        {#if info.properties.includes("cancel")}
+          <label><input type="checkbox" checked={p.cancel} onchange={(e) => update({ cancel: e.currentTarget.checked })} /> Escape clicks it (cancel)</label>
+        {/if}
+      </fieldset>
     {/if}
 
     {#if info.events.length > 0}

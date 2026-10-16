@@ -281,8 +281,8 @@ impl Emitter<'_> {
         }
     }
 
-    /// `part.visible`, `part.enabled` or `part.caption`: the part and the
-    /// property, when `expr` is one.
+    /// A part property such as `part.visible` or `part.error`: the part and
+    /// the property, when `expr` is one.
     fn part_property(&self, expr: &Expr) -> Option<(String, &'static str)> {
         let ExprKind::Member { object, member } = &expr.kind else { return None };
         let ExprKind::Name { name } = &object.kind else { return None };
@@ -293,6 +293,8 @@ impl Emitter<'_> {
             "visible" => "visible",
             "enabled" => "enabled",
             "caption" => "caption",
+            "error" => "error",
+            "readonly" => "readonly",
             "selected" => "selected",
             _ => return None,
         };
@@ -304,6 +306,7 @@ impl Emitter<'_> {
         let info = self.window.as_ref().and_then(|w| w.parts.get(part).cloned());
         match (property, info) {
             ("caption", Some(info)) => format!("ui.caption({part:?}, {:?})", info.caption.unwrap_or_default()),
+            ("readonly", Some(info)) => format!("ui.readonly({part:?}, {})", info.readonly),
             ("selected", Some(PartInfo { bind: Some(bind), .. })) => {
                 format!("ui.selected({part:?}, &w.{})?", ident(&bind))
             }
@@ -484,6 +487,8 @@ impl Emitter<'_> {
 pub struct PartInfo {
     pub bind: Option<String>,
     pub caption: Option<String>,
+    /// Whether the design makes the part read-only.
+    pub readonly: bool,
 }
 
 /// The parts of the window or app a handler belongs to, by name.
@@ -503,6 +508,7 @@ impl WindowCtx {
                     PartInfo {
                         bind: widget.props.bind.clone(),
                         caption: widget.props.caption.clone(),
+                        readonly: widget.props.readonly,
                     },
                 );
             }
@@ -521,6 +527,7 @@ impl WindowCtx {
                     PartInfo {
                         bind: None,
                         caption: command.props.caption.clone(),
+                        readonly: false,
                     },
                 );
             }

@@ -9,7 +9,7 @@
   import { frameForPage } from "../lib/frame";
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
-  import { provideLive } from "../lib/live";
+  import { provideLive, type PartState } from "../lib/live";
   import type { Row } from "../lib/model";
   import { findPage, type PageData } from "../lib/pages";
 
@@ -17,7 +17,7 @@
   type WindowState = {
     window: string;
     data: Record<string, unknown>;
-    parts: Record<string, { visible?: boolean; enabled?: boolean; caption?: string | null }>;
+    parts: Record<string, PartState>;
     selected: Record<string, number>;
   };
   type Message = { level: "info" | "warning" | "error"; text: string };

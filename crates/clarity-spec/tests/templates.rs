@@ -55,11 +55,28 @@ fn a_form_has_a_label_and_input_per_field() {
     let page = &text[text.find("page FreshWindow").unwrap()..];
     assert!(page.contains("    data customer: Customer\n"), "{page}");
     assert!(
-        page.contains("    label \"Name\" at 1,1 span 3\n    textbox name name at 4,1 span 6 bind customer.name\n"),
+        page.contains("\n    form name customer_form at 1,1 span 12 rows 10 bind customer\n"),
         "{page}"
     );
-    assert!(page.contains("checkbox name active at 4,"), "{page}");
-    assert!(page.contains("button \"Save\" name save"), "{page}");
+    assert!(
+        page.contains(
+            "        label \"Name\" at 1,1 span 3 for name\n        textbox name name at 4,1 span 6 bind customer.name\n"
+        ),
+        "{page}"
+    );
+    assert!(page.contains("        checkbox name active at 4,"), "{page}");
+    // A field's help becomes a help text next to its input.
+    assert!(
+        page.contains("        help at 8,4 span 5 for vat_number\n"),
+        "{page}"
+    );
+    // Text without a maximum length gets a memo.
+    assert!(
+        page.contains("        memo name notes at 4,8 span 6 rows 3 bind customer.notes\n        help at 10,8 span 3 for notes\n"),
+        "{page}"
+    );
+    assert!(page.contains("    button \"Save\" name save at 9,12 span 2 default\n"), "{page}");
+    assert!(page.contains("    button \"Close\" name close at 11,12 span 2 cancel"), "{page}");
 }
 
 #[test]
@@ -121,4 +138,62 @@ fn a_browse_window_reloads_its_list_when_a_form_closes() {
     );
     let problems: Vec<_> = after.diagnostics.iter().map(|d| &d.message).collect();
     assert!(problems.is_empty(), "{problems:?}");
+}
+
+#[test]
+fn a_dropped_field_brings_its_label_and_help() {
+    let dir = example_dir();
+    let path = dir.join("desk.clarity");
+    let project = load_dir(&dir).unwrap();
+    let source = std::fs::read_to_string(&path).unwrap();
+    let page = project
+        .pages()
+        .find(|p| p.name.name == "CustomerCard")
+        .unwrap();
+    let edit = Edit::PlaceField {
+        container: page.span.start,
+        col: 1,
+        row: 20,
+        room: 12,
+        bind: "customer.vat_number".into(),
+    };
+    let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        outcome.text.contains(
+            "    label \"Vat number\" name label1 at 1,20 span 3 for vat_number\n    textbox name vat_number at 4,20 span 4 bind customer.vat_number\n    help name help1 at 8,20 span 5 for vat_number\n"
+        ),
+        "{}",
+        outcome.text
+    );
+    let after = load_dir_with(&dir, &path, &outcome.text).unwrap();
+    assert!(after.diagnostics.is_empty(), "{:#?}", after.diagnostics);
+
+    // Dropped again, the input gets a free name and the label follows it.
+    let again = apply_in(&after, &outcome.text, &edit_at(&after, 21)).unwrap_or_else(|e| panic!("{e}"));
+    assert!(again.text.contains("for vat_number1\n    textbox name vat_number1 at 4,21"), "{}", again.text);
+
+    // Without room for a label, only the input is placed.
+    let narrow = Edit::PlaceField {
+        container: page.span.start,
+        col: 10,
+        row: 20,
+        room: 3,
+        bind: "customer.since".into(),
+    };
+    let outcome = apply_in(&project, &source, &narrow).unwrap_or_else(|e| panic!("{e}"));
+    assert!(outcome.text.contains("\n    date name since at 10,20 span 3 bind customer.since\n"), "{}", outcome.text);
+}
+
+fn edit_at(project: &Project, row: u32) -> Edit {
+    let page = project
+        .pages()
+        .find(|p| p.name.name == "CustomerCard")
+        .unwrap();
+    Edit::PlaceField {
+        container: page.span.start,
+        col: 1,
+        row,
+        room: 12,
+        bind: "customer.vat_number".into(),
+    }
 }

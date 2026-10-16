@@ -42,7 +42,8 @@ page OrderForm: window
     data order: Order
     data orders: list<Order>
     on return: window_returned
-    textbox at 1,1 span 4 bind order.number
+    form name order_form at 1,1 span 12 rows 1 bind order on submit: order_submitted
+        textbox name number_input at 1,1 span 4 bind order.number readonly
     table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: grid_opened
     button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked
 
@@ -58,6 +59,10 @@ code OrderForm
     handler window_returned
         reload orders
         reload order
+
+    handler order_submitted
+        number_input.error = \"Check the number\"
+        number_input.readonly = not number_input.readonly
 
     handler grid_opened
         open OrderForm with order = grid.selected
@@ -197,6 +202,22 @@ fn handlers_work_on_the_window_and_the_screen() {
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
     assert!(main.contains("const DATABASE: &str = \"data/shop.db\";"), "{main}");
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
+}
+
+#[test]
+fn handlers_set_errors_and_readonly_on_inputs() {
+    let files = files();
+    let sales = file(&files, "src/sales.rs");
+    assert!(
+        sales.contains("ui.set_error(\"number_input\", String::from(\"Check the number\"));"),
+        "{sales}"
+    );
+    assert!(
+        sales.contains("ui.set_readonly(\"number_input\", !ui.readonly(\"number_input\", true));"),
+        "{sales}"
+    );
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("(\"OrderForm\", \"order_submitted\") => {"), "{main}");
 }
 
 #[test]

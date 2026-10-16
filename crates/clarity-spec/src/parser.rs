@@ -1026,7 +1026,10 @@ fn parse_command(
         match clause.name.as_str() {
             "icon" => props.icon = Some(cursor.expect_string("an icon name")?),
             "key" => {
-                props.shortcut = Some(cursor.expect_string("a shortcut, as in key \"Ctrl+N\"")?)
+                let text = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
+                let shortcut = cursor.expect_string("a shortcut, as in key \"Ctrl+N\"")?;
+                widgets::check_shortcut(&shortcut).map_err(|m| Diagnostic::error(m, text))?;
+                props.shortcut = Some(shortcut);
             }
             "large" => props.large = true,
             "name" => props.name = Some(cursor.expect_ident("a part name")?.name),
@@ -1174,6 +1177,14 @@ fn parse_widget_props(
         surface: None,
         renderer: None,
         source: None,
+        for_part: None,
+        placeholder: None,
+        tooltip: None,
+        readonly: false,
+        tab_order: None,
+        shortcut: None,
+        default_button: false,
+        cancel: false,
     };
     if cursor.peek_kind() == Some(TokenKind::Str) {
         props.caption = Some(cursor.expect_string("a caption")?);
@@ -1318,6 +1329,42 @@ fn parse_widget_props(
             "source" => {
                 applies(WidgetProperty::Source)?;
                 props.source = Some(cursor.expect_string("a file name")?);
+            }
+            "for" => {
+                applies(WidgetProperty::For)?;
+                props.for_part = Some(cursor.expect_ident("a part name")?.name);
+            }
+            "placeholder" => {
+                applies(WidgetProperty::Placeholder)?;
+                props.placeholder = Some(cursor.expect_string("a placeholder text")?);
+            }
+            "tooltip" => props.tooltip = Some(cursor.expect_string("a tooltip text")?),
+            "readonly" => {
+                applies(WidgetProperty::Readonly)?;
+                props.readonly = true;
+            }
+            "taborder" => {
+                applies(WidgetProperty::TabOrder)?;
+                let order = cursor.expect_number("a position in the tab order")?;
+                if order == 0 {
+                    return Err(Diagnostic::error("tab order starts at 1", clause.span));
+                }
+                props.tab_order = Some(order);
+            }
+            "key" => {
+                applies(WidgetProperty::Shortcut)?;
+                let text = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
+                let shortcut = cursor.expect_string("a shortcut, as in key \"Ctrl+S\"")?;
+                widgets::check_shortcut(&shortcut).map_err(|m| Diagnostic::error(m, text))?;
+                props.shortcut = Some(shortcut);
+            }
+            "default" => {
+                applies(WidgetProperty::Default)?;
+                props.default_button = true;
+            }
+            "cancel" => {
+                applies(WidgetProperty::Cancel)?;
+                props.cancel = true;
             }
             _ => {
                 return Err(Diagnostic::error(

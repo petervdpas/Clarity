@@ -1,13 +1,16 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import GridBox from "./GridBox.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import { displayValue, findEnum, findField, isNumeric } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
-  import { GAP, ROW_HEIGHT, boundField, widgetInfo, type PageData } from "./pages";
+  import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
   import { useLive } from "./live";
+  import { provideForm, useForm } from "./form";
+  import { matchesShortcut } from "./shortcut";
 
   let {
     preview,
@@ -41,6 +44,50 @@
   const disabled = $derived(state?.enabled === false);
   const caption = $derived(state?.caption !== undefined && state.caption !== null ? state.caption : p.caption);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
+  const readonly = $derived(state?.readonly ?? p.readonly);
+  const error = $derived(state?.error ? state.error : null);
+
+  // Labels and help texts belong to the input named in `for`.
+  const target = $derived(findPart(page, p.for));
+  const targetField = $derived(target ? fieldOf(data, target.props.bind) : undefined);
+  const targetError = $derived(live && p.for ? live.parts[p.for]?.error || null : null);
+  const id = $derived(p.name ? partId(p.name) : undefined);
+  const describedBy = $derived(
+    p.name && allParts(page).some((w) => w.props.kind === "help" && w.props.for === p.name) ? helpId(p.name) : undefined,
+  );
+
+  // Enter in an input of a form runs the form's `on submit`. Context is set
+  // once, when the part is created, so its kind at that moment decides.
+  const form = useForm();
+  if (untrack(() => widget.props.kind) === "form") {
+    provideForm({
+      submit() {
+        if (!p.handlers.some((h) => h.event === "submit")) return false;
+        fire("submit");
+        return true;
+      },
+    });
+  }
+
+  function submitOnEnter(e: KeyboardEvent) {
+    if (e.key === "Enter" && !design && form?.submit()) e.preventDefault();
+  }
+
+  // A button's shortcut, and Enter and Escape for the default and cancel
+  // buttons, work anywhere in the running window.
+  function windowKey(e: KeyboardEvent) {
+    if (design || !live || p.kind !== "button" || hidden || disabled || e.defaultPrevented) return;
+    const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+    const inTextArea = e.target instanceof HTMLTextAreaElement;
+    const onButton = e.target instanceof HTMLButtonElement;
+    const hit =
+      (p.shortcut !== null && matchesShortcut(e, p.shortcut)) ||
+      (p.default && plain && e.key === "Enter" && !inTextArea && !onButton) ||
+      (p.cancel && plain && e.key === "Escape");
+    if (!hit) return;
+    e.preventDefault();
+    click();
+  }
 
   function setValue(next: string | boolean | number | null) {
     if (bound) bound.record[bound.field.name.name] = next;
@@ -96,6 +143,8 @@
   }
 </script>
 
+<svelte:window onkeydown={windowKey} />
+
 <div
   class="widget {p.kind}"
   class:design
@@ -103,7 +152,9 @@
   class:lifted={pageDesigner.drag?.kind === "move" && pageDesigner.drag.item === offset}
   class:hidden
   class:disabled
+  class:invalid={error !== null}
   data-widget={offset}
+  title={error ?? p.tooltip ?? undefined}
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
   onpointerdown={pressMove}
@@ -111,54 +162,131 @@
 >
   <div class="content" class:inert={design && !info.container}>
     {#if p.kind === "label"}
-      <span class="label-text" role="presentation" onclick={click}>{caption ?? (bound ? text : "")}{#if caption && bound}: <strong>{text}</strong>{/if}</span>
-    {:else if p.kind === "textbox"}
+      <label class="label-text" for={p.for ? partId(p.for) : undefined}
+        >{caption ?? ""}{#if targetField?.modifiers.required}<span class="required" title="Required">*</span>{/if}</label
+      >
+    {:else if p.kind === "help"}
+      <span class="help-text" class:error={targetError !== null} id={p.for ? helpId(p.for) : undefined} aria-live="polite"
+        >{targetError ?? caption ?? targetField?.modifiers.help ?? ""}</span
+      >
+    {:else if p.kind === "heading"}
+      <h2 class="heading-text">{caption ?? ""}</h2>
+    {:else if p.kind === "text"}
+      <span class="text-value" {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
+    {:else if p.kind === "textbox" || p.kind === "password"}
       <input
-        type={bound?.field.type.kind === "email" ? "email" : "text"}
+        {id}
+        type={p.kind === "password" ? "password" : bound?.field.type.kind === "email" ? "email" : "text"}
         value={text}
-        placeholder={caption ?? ""}
+        placeholder={p.placeholder ?? undefined}
+        tabindex={p.tabOrder ?? undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error !== null}
         {disabled}
+        {readonly}
         oninput={(e) => setValue(e.currentTarget.value)}
         onchange={() => fire("change")}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
+        onkeydown={submitOnEnter}
       />
+    {:else if p.kind === "memo"}
+      <textarea
+        {id}
+        value={text}
+        placeholder={p.placeholder ?? undefined}
+        tabindex={p.tabOrder ?? undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error !== null}
+        {disabled}
+        {readonly}
+        oninput={(e) => setValue(e.currentTarget.value)}
+        onchange={() => fire("change")}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      ></textarea>
     {:else if p.kind === "number"}
       <input
+        {id}
         class="numeric"
         inputmode="decimal"
         value={text}
+        placeholder={p.placeholder ?? undefined}
+        tabindex={p.tabOrder ?? undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error !== null}
         {disabled}
+        {readonly}
         oninput={(e) => setValue(e.currentTarget.value)}
         onchange={() => fire("change")}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
+        onkeydown={submitOnEnter}
       />
     {:else if p.kind === "date"}
       <input
+        {id}
         type={bound?.field.type.kind === "dateTime" ? "datetime-local" : "date"}
         value={text}
+        tabindex={p.tabOrder ?? undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error !== null}
         {disabled}
+        {readonly}
         oninput={(e) => setValue(e.currentTarget.value === "" ? null : e.currentTarget.value)}
         onchange={() => fire("change")}
+        onkeydown={submitOnEnter}
       />
-    {:else if p.kind === "checkbox"}
-      <label class="check">
+    {:else if p.kind === "checkbox" || p.kind === "switch"}
+      <label class={p.kind === "switch" ? "toggle" : "check"}>
         <input
+          {id}
           type="checkbox"
+          role={p.kind === "switch" ? "switch" : undefined}
           checked={value === true}
-          {disabled}
+          tabindex={p.tabOrder ?? undefined}
+          aria-describedby={describedBy}
+          aria-invalid={error !== null}
+          disabled={disabled || readonly}
           onchange={(e) => {
             setValue(e.currentTarget.checked);
             fire("change");
           }}
         />
-        {caption ?? bound?.field.label ?? ""}
+        {#if p.kind === "switch"}<span class="track" aria-hidden="true"></span>{/if}
+        {caption ?? ""}
       </label>
+    {:else if p.kind === "radio"}
+      <div class="choices {p.orientation ?? 'horizontal'}" role="radiogroup" aria-describedby={describedBy} aria-invalid={error !== null}>
+        {#if bound?.field.type.kind === "enum"}
+          {#each findEnum(preview, bound.field.type.name.name)?.variants ?? [] as v, i (v.name.name)}
+            <label>
+              <input
+                id={i === 0 ? id : undefined}
+                type="radio"
+                name="radio-{offset}"
+                value={v.name.name}
+                checked={text === v.name.name}
+                tabindex={p.tabOrder ?? undefined}
+                disabled={disabled || readonly}
+                onchange={() => {
+                  setValue(v.name.name);
+                  fire("change");
+                }}
+              />
+              {v.label}
+            </label>
+          {/each}
+        {/if}
+      </div>
     {:else if p.kind === "dropdown"}
       <select
+        {id}
         value={text}
-        {disabled}
+        tabindex={p.tabOrder ?? undefined}
+        aria-describedby={describedBy}
+        aria-invalid={error !== null}
+        disabled={disabled || readonly}
         onchange={(e) => {
           const chosen = e.currentTarget.value;
           // A reference holds the id of the record it points at.
@@ -182,9 +310,11 @@
         {/if}
       </select>
     {:else if p.kind === "button"}
-      <button class="push" {disabled} onclick={click}>{caption ?? ""}</button>
-    {:else if p.kind === "panel"}
-      <fieldset>
+      <button {id} class="push" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+        >{caption ?? ""}</button
+      >
+    {:else if p.kind === "panel" || p.kind === "form"}
+      <fieldset class={p.kind} class:bare={p.kind === "form" && !p.caption}>
         {#if p.caption}<legend>{p.caption}</legend>{/if}
         <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} container={offset} {onnavigate} />
       </fieldset>
@@ -362,10 +492,129 @@
     color: var(--text-muted);
   }
 
-  .check {
+  .required {
+    color: var(--error);
+    margin-left: 2px;
+  }
+
+  .help-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .help-text.error {
+    color: var(--error);
+  }
+
+  .heading-text {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .text-value {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .widget.invalid :global(input),
+  .widget.invalid :global(select),
+  .widget.invalid :global(textarea) {
+    border-color: var(--error);
+  }
+
+  textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+    font: inherit;
+  }
+
+  .check,
+  .toggle {
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+
+  .toggle input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .track {
+    flex: none;
+    position: relative;
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--border-strong);
+    transition: background 0.15s;
+  }
+
+  .track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--panel);
+    transition: transform 0.15s;
+  }
+
+  .toggle input:checked + .track {
+    background: var(--accent);
+  }
+
+  .toggle input:checked + .track::after {
+    transform: translateX(14px);
+  }
+
+  .toggle input:focus-visible + .track {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+
+  .choices.vertical {
+    flex-direction: column;
+  }
+
+  .choices label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .push.default {
+    border-color: var(--accent);
+  }
+
+  /* A form groups its inputs; it shows a frame only when it has a caption,
+     and without one its grid lines up with the grid around it. */
+  fieldset.form.bare {
+    border: none;
+    padding: 0;
+  }
+
+  .widget.design > .content > fieldset.form.bare {
+    outline: 1px dashed var(--border-strong);
   }
 
   .push {
@@ -378,14 +627,17 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Containers fill their area and lay out their own grid. */
-  .panel .content,
-  .tabs .content,
-  .splitter .content,
-  .table .content,
-  .list .content,
-  .image .content,
-  .canvas .content {
+  /* Containers fill their area and lay out their own grid; only their own
+     content, not the parts inside them. */
+  .form > .content,
+  .memo > .content,
+  .panel > .content,
+  .tabs > .content,
+  .splitter > .content,
+  .table > .content,
+  .list > .content,
+  .image > .content,
+  .canvas > .content {
     align-items: stretch;
   }
 

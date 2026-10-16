@@ -19,10 +19,10 @@ page CustomerBrowse: window
     data customers: list<Customer>
     on return: window_returned
 
-    label "Name" at 1,1 span 2
-    textbox at 3,1 span 4
-    label "E-mail" at 7,1 span 2
-    textbox at 9,1 span 4
+    label "Name" at 1,1 span 2 for name_filter
+    textbox name name_filter at 3,1 span 4 placeholder "Part of the name"
+    label "E-mail" at 7,1 span 2 for email_filter
+    textbox name email_filter at 9,1 span 4
     table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active on open: open_clicked
     button "New" at 9,10 span 2 on click -> CustomerForm
     button "Open" name open_button at 11,10 span 2 on click: open_clicked
@@ -31,30 +31,34 @@ page CustomerForm: window
     title "Customer"
     data customer: Customer
 
-    tabs at 1,1 span 12 rows 6
-        tab "General"
-            panel "Identity" at 1,1 span 12 rows 4
-                label "Name" at 1,1 span 3
-                textbox at 4,1 span 6 bind customer.name
-                label "Kind" at 1,2 span 3
-                dropdown name kind at 4,2 span 4 bind customer.kind on change: kind_changed
-                label "E-mail" at 1,3 span 2
-                textbox at 3,3 span 4 bind customer.email
-                label "Since" at 7,3 span 2
-                date at 9,3 span 3 bind customer.since
-            label "Active" at 1,5 span 3
-            checkbox at 4,5 span 3 bind customer.active
-        tab "Finance"
-            panel "Credit" at 1,1 span 12 rows 3
-                label "Credit limit" at 1,1 span 3
-                number at 4,1 span 3 bind customer.credit_limit
-                label "Vat number" at 1,2 span 3
-                textbox name vat_number at 4,2 span 4 bind customer.vat_number
-        tab "Notes"
-            label "Notes" at 1,1 span 3
-            textbox at 4,1 span 6 bind customer.notes
-    button "Save" name save at 9,8 span 2 on click: save_clicked
-    button "Close" name close_form at 11,8 span 2 on click: close_clicked
+    form name customer_form at 1,1 span 12 rows 6 bind customer
+        tabs at 1,1 span 12 rows 6
+            tab "General"
+                panel "Identity" at 1,1 span 12 rows 4
+                    label "Name" at 1,1 span 3 for name
+                    textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
+                    help at 10,1 span 3 for name
+                    label "Kind" at 1,2 span 3 for kind
+                    radio name kind at 4,2 span 6 bind customer.kind on change: kind_changed
+                    label "E-mail" at 1,3 span 2 for email
+                    textbox name email at 3,3 span 4 bind customer.email placeholder "name@example.com"
+                    label "Since" at 7,3 span 2 for since
+                    date name since at 9,3 span 3 bind customer.since
+                label "Active" at 1,5 span 3 for active
+                switch name active at 4,5 span 3 bind customer.active
+            tab "Finance"
+                panel "Credit" at 1,1 span 12 rows 3
+                    label "Credit limit" at 1,1 span 3 for credit_limit
+                    number name credit_limit at 4,1 span 3 bind customer.credit_limit
+                    label "Vat number" at 1,2 span 3 for vat_number
+                    textbox name vat_number at 4,2 span 4 bind customer.vat_number
+                    help at 8,2 span 5 for vat_number
+            tab "Notes"
+                label "Notes" at 1,1 span 3 for notes
+                memo name notes at 4,1 span 9 rows 4 bind customer.notes
+                help at 4,5 span 9 for notes
+    button "Save" name save at 9,8 span 2 tooltip "Save and close (Ctrl+S)" key "Ctrl+S" default on click: save_clicked
+    button "Close" name close_form at 11,8 span 2 cancel on click: close_clicked
 
 code CustomerBrowse
     handler window_returned
@@ -70,11 +74,15 @@ code CustomerForm
         vat_number.enabled = customer.kind == Business
 
     handler save_clicked
+        // Problems show at the input they are about.
+        name.error = ""
+        vat_number.error = ""
         if customer.name == ""
-            message error "Name is required"
+            name.error = "Name is required"
             return
         if customer.kind == Business and customer.vat_number == ""
-            message warning "A business customer needs a VAT number"
+            vat_number.error = "Needed for business customers"
+            message warning "A business customer needs a VAT number (Finance tab)"
             return
         save customer
         message "Saved " + customer.name

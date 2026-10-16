@@ -18,7 +18,11 @@ width: number | null,
 /**
  * Overrides the catalog caption.
  */
-caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name: string, } | { "op": "addField", entity: number, spec: FieldSpec, } | { "op": "updateField", item: number, spec: FieldSpec, } | { "op": "addVariant", owner: number, name: string, label: string | null, } | { "op": "updateVariant", item: number, name: string, label: string | null, } | { "op": "setUses", uses: Array<string>, } | { "op": "addApp", name: string, } | { "op": "setMain", app: number, main: string, } | { "op": "setOwnerEvent", owner: number, event: Event, handler: string | null, } | { "op": "addRegion", owner: number, region: RegionKind, 
+caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
+/**
+ * `data.field`
+ */
+bind: string, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name: string, } | { "op": "addField", entity: number, spec: FieldSpec, } | { "op": "updateField", item: number, spec: FieldSpec, } | { "op": "addVariant", owner: number, name: string, label: string | null, } | { "op": "updateVariant", item: number, name: string, label: string | null, } | { "op": "setUses", uses: Array<string>, } | { "op": "addApp", name: string, } | { "op": "setMain", app: number, main: string, } | { "op": "setOwnerEvent", owner: number, event: Event, handler: string | null, } | { "op": "addRegion", owner: number, region: RegionKind, 
 /**
  * Sidebars only.
  */

@@ -3,14 +3,14 @@
 //! how to write it in Rust (borrowing records, widening integers, loading
 //! referenced records through the database).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
+    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
-use clarity_spec::model::{FieldType, SpecFile};
+use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
 
 use super::names::{decimal, ident, value_type};
 use crate::print;
@@ -22,7 +22,8 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
         let mut emitter = Emitter {
             project,
             types,
-            decl,
+            decl: Some(decl),
+            window: None,
             refs: vec![HashSet::new()],
             errors: Vec::new(),
         };
@@ -73,7 +74,10 @@ fn coerce(code: String, from: &TypeInfo, to: &TypeInfo) -> String {
 struct Emitter<'a> {
     project: &'a Project,
     types: &'a FileTypes,
-    decl: &'a FunctionDecl,
+    /// The function or action being written; None for a handler.
+    decl: Option<&'a FunctionDecl>,
+    /// The window or app of a handler.
+    window: Option<WindowCtx>,
     /// Locals that hold a borrowed record or list (parameters and `for`
     /// variables), per block.
     refs: Vec<HashSet<String>>,
@@ -86,11 +90,11 @@ impl Emitter<'_> {
     }
 
     fn returns(&self) -> Option<TypeInfo> {
-        self.decl.returns.as_ref().map(|r| type_ref_info(self.project, r))
+        self.decl.and_then(|d| d.returns.as_ref()).map(|r| type_ref_info(self.project, r))
     }
 
     fn function(&mut self) -> String {
-        let decl = self.decl;
+        let decl = self.decl.expect("a function or action");
         let action = decl.kind == FunctionKind::Action;
         let mut params = vec!["db: &Db".to_string()];
         for param in &decl.params {
@@ -169,6 +173,11 @@ impl Emitter<'_> {
             StmtKind::Assign { target, value } => {
                 let to = self.types.type_of(target);
                 let from = self.types.type_of(value);
+                if let Some((part, property)) = self.part_property(target) {
+                    let value = coerce(self.value(value), &from, &to);
+                    out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
+                    return;
+                }
                 let place = self.place(target);
                 let value = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
@@ -188,9 +197,9 @@ impl Emitter<'_> {
                 out.push('\n');
             }
             StmtKind::For { var, list, body } => {
-                let source = match &list.kind {
-                    ExprKind::Name { name } if self.is_ref(name) => ident(name),
-                    _ => format!("({})", self.value(list)),
+                let source = match self.held(list) {
+                    Some((place, _)) => place,
+                    None => format!("({})", self.value(list)),
                 };
                 out.push_str(&format!("{pad}for {} in {source}.iter() {{\n", ident(&var.name)));
                 self.refs.push(HashSet::from([var.name.clone()]));
@@ -220,18 +229,85 @@ impl Emitter<'_> {
                 let record = self.record_mut(value, "delete");
                 out.push_str(&format!("{pad}db.delete({record})?;\n"));
             }
-            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close => {
+            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
                 self.errors.push("messages and windows belong in handlers".into());
             }
+            StmtKind::Message { level, text } => {
+                let level = match level {
+                    MessageLevel::Info => "Info",
+                    MessageLevel::Warning => "Warning",
+                    MessageLevel::Error => "Error",
+                };
+                let text = if self.types.type_of(text) == TypeInfo::Text {
+                    self.value(text)
+                } else {
+                    format!("{}.show()", self.value(text))
+                };
+                out.push_str(&format!("{pad}ui.message(Level::{level}, {text});\n"));
+            }
+            StmtKind::Open { window, with } => {
+                let args: Vec<String> = with
+                    .iter()
+                    .map(|arg| format!("({:?}, to_value(&{})?)", arg.name.name, self.value(&arg.value)))
+                    .collect();
+                out.push_str(&format!("{pad}ui.open({:?}, vec![{}]);\n", window.name, args.join(", ")));
+            }
+            StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
+        }
+    }
+
+    /// A name that holds a record or list, as a place, and whether it is
+    /// already borrowed (a parameter or `for` variable): locals and the
+    /// window's data.
+    fn held(&self, expr: &Expr) -> Option<(String, bool)> {
+        let ExprKind::Name { name } = &expr.kind else { return None };
+        match self.types.name_of(expr) {
+            Some(NameKind::Local) => Some((ident(name), self.is_ref(name))),
+            Some(NameKind::Data) => Some((format!("w.{}", ident(name)), false)),
+            _ => None,
+        }
+    }
+
+    /// `part.visible`, `part.enabled` or `part.caption`: the part and the
+    /// property, when `expr` is one.
+    fn part_property(&self, expr: &Expr) -> Option<(String, &'static str)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        let property = match member.name.as_str() {
+            "visible" => "visible",
+            "enabled" => "enabled",
+            "caption" => "caption",
+            "selected" => "selected",
+            _ => return None,
+        };
+        Some((name.clone(), property))
+    }
+
+    /// Reading a part property in a handler.
+    fn read_part(&mut self, part: &str, property: &str) -> String {
+        let info = self.window.as_ref().and_then(|w| w.parts.get(part).cloned());
+        match (property, info) {
+            ("caption", Some(info)) => format!("ui.caption({part:?}, {:?})", info.caption.unwrap_or_default()),
+            ("selected", Some(PartInfo { bind: Some(bind), .. })) => {
+                format!("ui.selected({part:?}, &w.{})?", ident(&bind))
+            }
+            ("selected", _) => {
+                self.errors.push(format!("'{part}' is not bound to a list"));
+                String::new()
+            }
+            (property, _) => format!("ui.{property}({part:?})"),
         }
     }
 
     /// The record `save` or `delete` works on: a name holding it.
     fn record_mut(&mut self, value: &Expr, word: &str) -> String {
-        match &value.kind {
-            ExprKind::Name { name } if self.is_ref(name) => ident(name),
-            ExprKind::Name { name } => format!("&mut {}", ident(name)),
-            _ => {
+        match self.held(value) {
+            Some((place, true)) => place,
+            Some((place, false)) => format!("&mut {place}"),
+            None => {
                 self.errors.push(format!(
                     "'{word} {}' needs the record in a name; use 'let' first",
                     print::expr(value)
@@ -249,9 +325,10 @@ impl Emitter<'_> {
                     format!("(*{})", ident(name))
                 }
                 Some(NameKind::Local) => ident(name),
+                Some(NameKind::Data) => format!("w.{}", ident(name)),
                 Some(NameKind::EnumValue(e)) => format!("{e}::{name}"),
                 _ => {
-                    self.errors.push(format!("'{name}' belongs to a window; handlers are generated in G1b"));
+                    self.errors.push(format!("'{name}' is a part; use one of its properties"));
                     String::new()
                 }
             },
@@ -296,6 +373,10 @@ impl Emitter<'_> {
             ExprKind::Number { value } => format!("{value}i64"),
             ExprKind::Str { value } => format!("String::from({value:?})"),
             ExprKind::Bool { value } => value.to_string(),
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => {
+                let (part, property) = self.part_property(expr).unwrap_or_default();
+                self.read_part(&part, property)
+            }
             ExprKind::Name { .. } | ExprKind::Member { .. } => {
                 let place = self.place(expr);
                 let loaded = place.ends_with(")?");
@@ -354,9 +435,11 @@ impl Emitter<'_> {
 
     fn call(&mut self, name: &str, args: &[Expr]) -> String {
         if name == "count" {
-            let list = match args.first().map(|a| &a.kind) {
-                Some(ExprKind::Name { name }) if self.is_ref(name) => ident(name),
-                Some(_) => format!("({})", self.value(&args[0])),
+            let list = match args.first() {
+                Some(arg) => match self.held(arg) {
+                    Some((place, _)) => place,
+                    None => format!("({})", self.value(arg)),
+                },
                 None => String::new(),
             };
             return format!("({list}.len() as i64)");
@@ -369,19 +452,13 @@ impl Emitter<'_> {
         for (arg, param) in args.iter().zip(&callee.params) {
             let expected = type_ref_info(self.project, &param.ty);
             let from = self.types.type_of(arg);
-            let held = match &arg.kind {
-                ExprKind::Name { name } if self.is_ref(name) => Some(ident(name)),
-                ExprKind::Name { name } => Some(ident(name)).filter(|_| !matches!(from, TypeInfo::Unknown)),
-                _ => None,
-            };
+            let held = self.held(arg);
             code.push(match (&expected, callee.kind, held) {
-                (TypeInfo::Record(_), _, Some(name)) if self.is_ref(&arg_name(arg)) => name,
-                (TypeInfo::Record(_), FunctionKind::Action, Some(name)) => format!("&mut {name}"),
-                (TypeInfo::Record(_), FunctionKind::Function, Some(name)) => format!("&{name}"),
+                (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, true))) => place,
+                (TypeInfo::Record(_), FunctionKind::Action, Some((place, false))) => format!("&mut {place}"),
+                (TypeInfo::Record(_) | TypeInfo::List(_), _, Some((place, false))) => format!("&{place}"),
                 (TypeInfo::Record(_), FunctionKind::Action, None) => format!("&mut {}", self.value(arg)),
                 (TypeInfo::Record(_) | TypeInfo::List(_), _, None) => format!("&{}", self.value(arg)),
-                (TypeInfo::List(_), _, Some(name)) if self.is_ref(&arg_name(arg)) => name,
-                (TypeInfo::List(_), _, Some(name)) => format!("&{name}"),
                 _ => coerce(self.value(arg), &from, &expected),
             });
         }
@@ -389,9 +466,174 @@ impl Emitter<'_> {
     }
 }
 
-fn arg_name(expr: &Expr) -> String {
-    match &expr.kind {
-        ExprKind::Name { name } => name.clone(),
-        _ => String::new(),
+/// What a handler may read of a part.
+#[derive(Debug, Clone)]
+pub struct PartInfo {
+    pub bind: Option<String>,
+    pub caption: Option<String>,
+}
+
+/// The parts of the window or app a handler belongs to, by name.
+#[derive(Debug, Default)]
+pub struct WindowCtx {
+    pub parts: HashMap<String, PartInfo>,
+}
+
+impl WindowCtx {
+    fn widgets(&mut self, widgets: &[Widget]) {
+        for widget in widgets {
+            if let Some(name) = &widget.props.name {
+                self.parts.insert(
+                    name.clone(),
+                    PartInfo {
+                        bind: widget.props.bind.clone(),
+                        caption: widget.props.caption.clone(),
+                    },
+                );
+            }
+            self.widgets(&widget.children);
+            for page in &widget.pages {
+                self.widgets(&page.children);
+            }
+        }
     }
+
+    fn commands(&mut self, commands: &[Command]) {
+        for command in commands {
+            if let Some(name) = &command.props.name {
+                self.parts.insert(
+                    name.clone(),
+                    PartInfo {
+                        bind: None,
+                        caption: command.props.caption.clone(),
+                    },
+                );
+            }
+            self.commands(&command.items);
+        }
+    }
+
+    fn frame(&mut self, frame: &Frame) {
+        if let Some(menu) = &frame.menu {
+            self.commands(&menu.items);
+        }
+        if let Some(toolbar) = &frame.toolbar {
+            self.commands(&toolbar.items);
+        }
+        if let Some(ribbon) = &frame.ribbon {
+            for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
+                self.commands(&group.items);
+            }
+        }
+        for sidebar in &frame.sidebars {
+            self.widgets(&sidebar.widgets);
+        }
+        if let Some(footer) = &frame.footer {
+            self.widgets(&footer.widgets);
+        }
+    }
+}
+
+/// A window or the app, as `main.rs` dispatches to it.
+#[derive(Debug, Clone)]
+pub struct Owner {
+    pub name: String,
+    /// The Rust struct holding its data: `CustomerFormWindow`, `ShopApp`.
+    pub struct_name: String,
+    pub module: String,
+    /// Handlers by Clarity name, with their Rust function names.
+    pub handlers: Vec<(String, String)>,
+    pub is_app: bool,
+}
+
+/// The struct and handlers of every window and the app in `file`.
+pub fn emit_windows(
+    project: &Project,
+    file: &SpecFile,
+    types: &FileTypes,
+    module: &str,
+) -> Result<(String, Vec<Owner>), Vec<String>> {
+    let mut out = String::new();
+    let mut owners = Vec::new();
+    let mut errors = Vec::new();
+    let pages = file.pages.iter().map(|p| (&p.name.name, &p.data, Some(p), None));
+    let apps = file.apps.iter().map(|a| (&a.name.name, &a.data, None, Some(a)));
+    for (name, data, page, app) in pages.chain(apps) {
+        let struct_name = if app.is_some() { format!("{name}App") } else { format!("{name}Window") };
+        let mut ctx = WindowCtx::default();
+        if let Some(page) = page {
+            ctx.widgets(&page.widgets);
+            ctx.frame(&page.frame);
+        }
+        if let Some(app) = app {
+            ctx.frame(&app.frame);
+        }
+
+        let fields: String = data
+            .iter()
+            .map(|d| {
+                let ty = if d.list { format!("Vec<{}>", d.entity.name) } else { d.entity.name.clone() };
+                format!("    pub {}: {ty},\n", ident(&d.name.name))
+            })
+            .collect();
+        let loads: String = data
+            .iter()
+            .map(|d| {
+                let value = if d.list {
+                    format!("db.all::<{}>()?", d.entity.name)
+                } else {
+                    format!("{}::default()", d.entity.name)
+                };
+                format!("            {}: {value},\n", ident(&d.name.name))
+            })
+            .collect();
+        out.push_str(&format!(
+            "/// The data of {name}, as its handlers see it.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct {struct_name} {{
+{fields}}}
+
+impl {struct_name} {{
+    /// The data when it opens: every record of a list, a new record otherwise.
+    pub fn load(db: &Db) -> Result<Self> {{
+        Ok({struct_name} {{
+{loads}        }})
+    }}
+}}
+
+"
+        ));
+
+        let mut handlers = Vec::new();
+        for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
+            let function = format!("{}__{}", super::names::snake(name), handler.name.name);
+            let mut emitter = Emitter {
+                project,
+                types,
+                decl: None,
+                window: Some(std::mem::take(&mut ctx)),
+                refs: vec![HashSet::new()],
+                errors: Vec::new(),
+            };
+            let mut body = String::new();
+            emitter.block(&handler.body, 1, &mut body);
+            ctx = emitter.window.take().unwrap_or_default();
+            if emitter.errors.is_empty() {
+                out.push_str(&format!(
+                    "pub fn {function}(db: &Db, w: &mut {struct_name}, ui: &mut Ui) -> Result<()> {{\n{body}    Ok(())\n}}\n\n"
+                ));
+                handlers.push((handler.name.name.clone(), function));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
+            }
+        }
+        owners.push(Owner {
+            name: name.clone(),
+            struct_name,
+            module: module.to_string(),
+            handlers,
+            is_app: app.is_some(),
+        });
+    }
+    if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
 }

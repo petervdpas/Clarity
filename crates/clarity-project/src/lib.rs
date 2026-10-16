@@ -101,7 +101,13 @@ pub struct Settings {
     pub name: String,
     pub stack: Stack,
     pub datasources: Vec<DataSource>,
+    /// Where the application is generated and built: a folder relative to
+    /// the project, or an absolute one.
+    pub out: String,
 }
+
+/// The output folder when the project file does not name one.
+pub const DEFAULT_OUT: &str = "out";
 
 /// The file's layout, which differs from `Settings` in where the name sits.
 #[derive(Deserialize)]
@@ -111,6 +117,22 @@ struct FileForm {
     stack: Stack,
     #[serde(default)]
     datasource: Vec<DataSource>,
+    #[serde(default)]
+    build: BuildSection,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BuildSection {
+    out: String,
+}
+
+impl Default for BuildSection {
+    fn default() -> Self {
+        BuildSection {
+            out: DEFAULT_OUT.to_string(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -125,6 +147,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         name: form.project.name,
         stack: form.stack,
         datasources: form.datasource,
+        out: form.build.out,
     })
 }
 
@@ -144,6 +167,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
             url: format!("data/{module}.db"),
             auth: None,
         }],
+        out: DEFAULT_OUT.to_string(),
     }
 }
 
@@ -153,6 +177,12 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     let mut problems = Vec::new();
     if settings.name.trim().is_empty() {
         problems.push("the project needs a name".to_string());
+    }
+    // Generation removes what it no longer produces, so the output folder
+    // can never be the project folder itself.
+    let out = settings.out.trim().trim_end_matches(['/', '\\']);
+    if out.is_empty() || out == "." {
+        problems.push("the output folder must be a folder of its own, like out".to_string());
     }
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
@@ -285,6 +315,14 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
         doc.remove("datasource");
     } else {
         doc.insert("datasource", Item::ArrayOfTables(sources));
+    }
+
+    // A file that never named an output folder keeps building into `out`
+    // without growing a [build] section.
+    let new_file = existing.is_none();
+    if new_file || settings.out != DEFAULT_OUT || doc.contains_key("build") {
+        let build = table(doc.as_table_mut(), "build")?;
+        set(build, "out", settings.out.as_str().into());
     }
     Ok(doc.to_string())
 }
@@ -508,6 +546,13 @@ fn auth_id(kind: AuthKind) -> &'static str {
         AuthKind::ApiKey => "api-key",
         AuthKind::Basic => "basic",
     }
+}
+
+
+/// The output folder of the project in `dir`: `out` relative to it, or an
+/// absolute path as it is.
+pub fn out_dir(dir: &Path, settings: &Settings) -> std::path::PathBuf {
+    dir.join(settings.out.trim())
 }
 
 #[cfg(test)]

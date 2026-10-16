@@ -4,6 +4,7 @@
 //! and copied into every generated project, so a project builds on its own.
 
 pub mod sql;
+pub mod ui;
 
 use std::fmt;
 use std::path::Path;

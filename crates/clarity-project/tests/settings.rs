@@ -51,6 +51,7 @@ fn shop() -> Settings {
                 ..source("payments", SourceKind::Rest, "https://api.example.com/v2")
             },
         ],
+        out: "out".into(),
     }
 }
 
@@ -158,6 +159,9 @@ targets = ["desktop"]
 name = "main"
 kind = "sqlite"
 url = "data/my_shop.db"
+
+[build]
+out = "out"
 "#
     );
     assert_eq!(parse(&text).unwrap(), starter("My shop", "my_shop"));
@@ -225,4 +229,28 @@ fn the_catalog_offers_every_backend_and_a_ui_for_each() {
     let csharp = catalog.backends.iter().find(|b| b.id == Backend::Csharp).unwrap();
     assert_eq!(csharp.uis, [Ui::Web, Ui::Avalonia]);
     assert_eq!(catalog.sources.len(), 5);
+}
+
+#[test]
+fn the_output_folder_defaults_to_out_and_can_be_set() {
+    // A file without [build] builds into `out`, and writing keeps it that way.
+    assert_eq!(parse(SHOP).unwrap().out, "out");
+    assert!(!write(Some(SHOP), &shop()).unwrap().contains("[build]"));
+    assert!(write(None, &starter("Shop", "shop")).unwrap().contains("[build]\nout = \"out\"\n"));
+
+    let mut elsewhere = shop();
+    elsewhere.out = "../builds/shop".into();
+    let text = write(Some(SHOP), &elsewhere).unwrap();
+    assert!(text.contains("[build]\nout = \"../builds/shop\"\n"), "{text}");
+    assert_eq!(parse(&text).unwrap(), elsewhere);
+}
+
+#[test]
+fn the_output_folder_is_never_the_project_itself() {
+    for out in ["", ".", "./", " "] {
+        let problems = problems_of(|s| s.out = out.into());
+        assert_eq!(problems, ["the output folder must be a folder of its own, like out"], "{out:?}");
+    }
+    assert!(problems_of(|s| s.out = "build/app".into()).is_empty());
+    assert!(problems_of(|s| s.out = "/home/me/builds/shop".into()).is_empty());
 }

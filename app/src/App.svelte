@@ -9,6 +9,8 @@
   import PageView from "./lib/PageView.svelte";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import RibbonButton from "./lib/RibbonButton.svelte";
+  import Splitter from "./lib/Splitter.svelte";
+  import { layout } from "./lib/layout.svelte";
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";
   import ModuleView from "./lib/ModuleView.svelte";
@@ -19,6 +21,7 @@
   import type { ProjectFile } from "./lib/generated/ProjectFile";
   import type { Settings } from "./lib/generated/Settings";
   import type { Stack } from "./lib/generated/Stack";
+  import type { BuildDone } from "./lib/generated/BuildDone";
   import type { Selected } from "./lib/selection";
   import type { Edit } from "./lib/generated/Edit";
   import type { RenameKind } from "./lib/generated/RenameKind";
@@ -73,6 +76,40 @@
   let newProjectError = $state<string | null>(null);
   /** Bumped when a settings change is refused, so the editor shows the file again. */
   let settingsRevision = $state(0);
+
+  /** How many lines of toolchain output the output panel keeps. */
+  const BUILD_LOG_LINES = 400;
+  let building = $state(false);
+  let running = $state(false);
+  let buildLog = $state<string[]>([]);
+  let buildDone = $state<BuildDone | null>(null);
+  let showOutput = $state(false);
+  let outputPre: HTMLElement | undefined = $state();
+
+  // The output follows the newest line.
+  $effect(() => {
+    if (buildLog.length > 0 && outputPre) outputPre.scrollTop = outputPre.scrollHeight;
+  });
+
+  /** Generates and builds the application; with `run`, starts it. */
+  async function buildApp(release: boolean, run: boolean) {
+    actionError = null;
+    buildLog = [];
+    buildDone = null;
+    showOutput = true;
+    building = true;
+    try {
+      await invoke("build_app", { release, run });
+    } catch (err) {
+      building = false;
+      buildDone = { ok: false, message: String(err), binary: null };
+    }
+  }
+
+  async function stopApp() {
+    await invoke("stop_app");
+    running = false;
+  }
 
   const current = $derived(stack.at(-1) ?? null);
   const app = $derived(preview ? findApp(preview) : null);
@@ -423,6 +460,14 @@
   onMount(() => {
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
     const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
+    const unlistenLine = listen<string>("build-line", (e) => {
+      buildLog = [...buildLog.slice(-(BUILD_LOG_LINES - 1)), e.payload];
+    });
+    const unlistenDone = listen<BuildDone>("build-done", (e) => {
+      building = false;
+      buildDone = e.payload;
+      running = e.payload.ok && e.payload.message === "running";
+    });
     invoke<string | null>("initial_spec_dir").then((dir) => {
       const start = dir ?? readLastDir();
       if (start) openProject(start);
@@ -430,6 +475,8 @@
     return () => {
       unlisten.then((stop) => stop());
       unlistenProject.then((stop) => stop());
+      unlistenLine.then((stop) => stop());
+      unlistenDone.then((stop) => stop());
     };
   });
 </script>
@@ -538,10 +585,30 @@
       {:else}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="play" label="Main window" disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
+            <RibbonButton icon="window" label="Main window" disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
             <RibbonButton icon="back" label="Back" disabled={stack.length < 2} onclick={() => (stack = stack.slice(0, -1))} />
           </div>
-          <div class="group-name">Run</div>
+          <div class="group-name">Preview</div>
+        </div>
+        <div class="group">
+          <div class="buttons">
+            <RibbonButton
+              icon="play"
+              label={building ? "Building..." : "Run"}
+              title="Generate the application, build it with its toolchain and start it"
+              disabled={!preview || building || errorCount > 0}
+              onclick={() => buildApp(false, true)}
+            />
+            <RibbonButton
+              icon="build"
+              label="Build"
+              title="Build a release program of the application"
+              disabled={!preview || building || errorCount > 0}
+              onclick={() => buildApp(true, false)}
+            />
+            <RibbonButton icon="stop" label="Stop" title="Close the running application" disabled={!running} onclick={stopApp} />
+          </div>
+          <div class="group-name">Application</div>
         </div>
         {#if stack.length > 1}
           <div class="breadcrumb">
@@ -561,7 +628,7 @@
     </div>
   </header>
 
-  <div class="shell">
+  <div class="shell" style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr)">
     <aside>
       {#if tab === "design" && designing}
         <div class="side-tabs" role="tablist">
@@ -651,74 +718,93 @@
         </section>
       {/if}
     </aside>
+    <Splitter axis="x" label="Width of the sidebar" onmove={(d) => layout.resize("sidebar", d)} />
 
-    <main>
-      {#if !preview}
-        <div class="placeholder">
-          <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
-        </div>
-      {:else if current?.kind === "settings" && projectFile && openDir}
-        <ProjectSettings project={projectFile} folder={openDir} revision={settingsRevision} onsave={saveSettings} oncreate={createProjectFile} />
-      {:else if entity && file}
-        <EntityEditor
-          {preview}
-          {entity}
-          module={file.module?.name ?? ""}
-          onedit={editData}
-          ondelete={deletePicked}
-          onrename={(newName) => renameData("entity", entity.name.name, newName)}
-        />
-      {:else if enumDecl && file}
-        <EnumEditor
-          decl={enumDecl}
-          module={file.module?.name ?? ""}
-          onedit={editData}
-          ondelete={deletePicked}
-          onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
-        />
-      {:else if moduleFile}
-        <ModuleView
-          {preview}
-          file={moduleFile}
-          onedit={editData}
-          onapply={async (edit) => applyPreview((await applyEdit(moduleFile, edit)).preview)}
-          onopen={(kind, name) => select({ kind, name })}
-        />
-      {:else if tab === "design" && openApp && appPage && file}
-        <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
-      {:else if tab === "design" && page && file}
-        <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
-      {:else if page}
-        <div class="window">
-          <div class="titlebar">
-            <span>{page.title ?? page.name.name}</span>
-            <code>{page.name.name}: {page.kind}</code>
+    <div class="work">
+      <main>
+        {#if !preview}
+          <div class="placeholder">
+            <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
           </div>
-          <FrameView
+        {:else if current?.kind === "settings" && projectFile && openDir}
+          <ProjectSettings project={projectFile} folder={openDir} revision={settingsRevision} onsave={saveSettings} oncreate={createProjectFile} />
+        {:else if entity && file}
+          <EntityEditor
             {preview}
-            {page}
-            frame={frameForPage(preview, page)}
-            data={{ ...appData, ...pageData(preview, page) }}
-            design={false}
-            onnavigate={navigate}
-          >
-            <div class="client">
-              <PageView {preview} {page} onnavigate={navigate} />
+            {entity}
+            module={file.module?.name ?? ""}
+            onedit={editData}
+            ondelete={deletePicked}
+            onrename={(newName) => renameData("entity", entity.name.name, newName)}
+          />
+        {:else if enumDecl && file}
+          <EnumEditor
+            decl={enumDecl}
+            module={file.module?.name ?? ""}
+            onedit={editData}
+            ondelete={deletePicked}
+            onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
+          />
+        {:else if moduleFile}
+          <ModuleView
+            {preview}
+            file={moduleFile}
+            onedit={editData}
+            onapply={async (edit) => applyPreview((await applyEdit(moduleFile, edit)).preview)}
+            onopen={(kind, name) => select({ kind, name })}
+          />
+        {:else if tab === "design" && openApp && appPage && file}
+          <PageDesigner {preview} page={appPage} app={openApp} {file} onapplied={applyPreview} />
+        {:else if tab === "design" && page && file}
+          <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
+        {:else if page}
+          <div class="window">
+            <div class="titlebar">
+              <span>{page.title ?? page.name.name}</span>
+              <code>{page.name.name}: {page.kind}</code>
             </div>
-          </FrameView>
-        </div>
-      {:else if openApp}
-        <div class="placeholder"><p>The app is designed on the Design tab; Preview runs its main window.</p></div>
-      {:else if current}
-        <div class="placeholder">
-          <p>Window <code>{current.name}</code> cannot be shown. See the problems list.</p>
-        </div>
-      {:else}
-        <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
+            <FrameView
+              {preview}
+              {page}
+              frame={frameForPage(preview, page)}
+              data={{ ...appData, ...pageData(preview, page) }}
+              design={false}
+              onnavigate={navigate}
+            >
+              <div class="client">
+                <PageView {preview} {page} onnavigate={navigate} />
+              </div>
+            </FrameView>
+          </div>
+        {:else if openApp}
+          <div class="placeholder"><p>The app is designed on the Design tab; Preview runs its main window.</p></div>
+        {:else if current}
+          <div class="placeholder">
+            <p>Window <code>{current.name}</code> cannot be shown. See the problems list.</p>
+          </div>
+        {:else}
+          <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
+        {/if}
+      </main>
+      {#if showOutput}
+        <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
+        <!-- The toolchain's output while the application is generated and built. -->
+        <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
+          <header>
+            <strong>Output</strong>
+            {#if building}
+              <span class="status">Building...</span>
+            {:else if buildDone}
+              <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? "Running" : buildDone.message) : "Failed: " + buildDone.message}</span>
+            {/if}
+            <button onclick={() => (showOutput = false)} title="Hide the output">&times;</button>
+          </header>
+          <pre bind:this={outputPre}>{buildLog.join("\n")}</pre>
+        </section>
       {/if}
-    </main>
-    <!-- The code behind panel slides out over the main area. -->
-    <div id="code-drawer" class="code-drawer"></div>
+      <!-- The code behind panel slides out over the main area. -->
+      <div id="code-drawer" class="code-drawer"></div>
+    </div>
   </div>
 </div>
 
@@ -764,14 +850,59 @@
 
   .shell {
     display: grid;
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     min-height: 0;
+  }
+
+  /* Everything right of the sidebar: the main area, the docked output below
+     it, and the code panel that slides out over it. */
+  .work {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .output-panel {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .output-panel header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .output-panel .status {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .output-panel .status.failed {
+    color: var(--error);
+  }
+
+  .output-panel pre {
+    flex: 1;
+    margin: 0;
+    padding: 8px 12px;
+    overflow: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: pre-wrap;
   }
 
   .code-drawer {
     position: absolute;
-    inset: 0 0 0 300px;
+    inset: 0;
     pointer-events: none;
     z-index: 20;
   }
@@ -1150,6 +1281,8 @@
   }
 
   main {
+    flex: 1;
+    min-height: 0;
     padding: 24px;
     overflow: auto;
     display: flex;
@@ -1191,16 +1324,19 @@
     color: var(--text-muted);
   }
 
+  /* The preview window fills the main area and resizes with it, like the
+     running application does. */
   .window {
     background: var(--panel);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
     overflow: hidden;
-    max-width: 1100px;
     width: 100%;
-    /* Full height; the main area scrolls. */
-    flex: none;
+    flex: 1;
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
   }
 
   .titlebar {
@@ -1223,5 +1359,10 @@
 
   .client {
     padding: 16px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
   }
 </style>

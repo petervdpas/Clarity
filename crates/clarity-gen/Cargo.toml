@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 clarity-spec.workspace = true
 clarity-project.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 clarity-runtime = { path = "../clarity-runtime" }

@@ -23,7 +23,7 @@ enum Command {
         /// The project folder, with clarity.toml and the .clarity files.
         #[arg(default_value = ".")]
         dir: PathBuf,
-        /// Where the application goes; `out` inside the project by default.
+        /// Where the application goes; the output folder in clarity.toml by default.
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -54,18 +54,12 @@ fn main() -> ExitCode {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
         },
-        Command::Gen { dir, out } => {
-            let out = out.unwrap_or_else(|| dir.join("out"));
-            generate(&dir, &out)
-        }
+        Command::Gen { dir, out } => generate(&dir, out.as_deref()),
     }
 }
 
-/// Folders inside `out/` that generation leaves alone: what the build
-/// tools put there.
-const OUT_KEEP: [&str; 3] = ["target", "data", "Cargo.lock"];
 
-fn generate(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
+fn generate(dir: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
     let project = match load(dir) {
         Ok(project) => project,
         Err(code) => return code,
@@ -77,6 +71,8 @@ fn generate(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
         }
         return ExitCode::FAILURE;
     };
+    let out = out.map_or_else(|| clarity_project::out_dir(dir, &settings), std::path::Path::to_path_buf);
+    let out = out.as_path();
     let files = match clarity_gen::generate(&project, &settings) {
         Ok(files) => files,
         Err(errors) => {
@@ -89,7 +85,7 @@ fn generate(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match clarity_gen::write_out(out, &files, &OUT_KEEP) {
+    match clarity_gen::write_out(out, &files, &clarity_gen::BUILD_OUTPUT) {
         Ok(written) => {
             eprintln!("{} file(s) in {}, {written} changed", files.len(), out.display());
             ExitCode::SUCCESS

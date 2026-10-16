@@ -162,3 +162,33 @@ fn contracts_and_text() {
     assert_eq!(NaiveDate::from_ymd_opt(2026, 1, 15).show(), "2026-01-15");
     assert_eq!(None::<NaiveDate>.show(), "");
 }
+
+#[test]
+fn a_reply_carries_the_state_messages_and_windows() {
+    use clarity_runtime::ui::{Level, Ui, WindowState, from_data, to_data, to_value};
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Form {
+        name: String,
+        rows: Vec<String>,
+    }
+
+    let mut state = WindowState::new("Form", to_data(&Form { name: "a".into(), rows: vec!["x".into(), "y".into()] }).unwrap());
+    state.selected.insert("grid".into(), 1);
+    let mut ui = Ui::from_state(&state);
+    let mut form: Form = from_data(state.data.clone()).unwrap();
+    assert!(ui.enabled("save"));
+    ui.set_enabled("save", false);
+    assert_eq!(ui.caption("save", "Save"), "Save");
+    assert_eq!(ui.selected("grid", &form.rows).unwrap(), "y");
+    assert!(ui.selected("other", &form.rows).is_err());
+    form.name = "b".into();
+    ui.message(Level::Warning, "careful".into());
+    ui.open("Other", vec![("record", to_value(&form.rows[0]).unwrap())]);
+    let reply = ui.reply("Form", to_data(&form).unwrap());
+    assert_eq!(reply.state.data["name"], "b");
+    assert_eq!(reply.state.parts["save"].enabled, Some(false));
+    assert_eq!(reply.messages[0].text, "careful");
+    assert_eq!(reply.open[0].with["record"], "x");
+    assert!(!reply.close);
+}

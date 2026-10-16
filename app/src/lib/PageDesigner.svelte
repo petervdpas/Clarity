@@ -5,6 +5,8 @@
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
   import CodePanel from "./CodePanel.svelte";
+  import Splitter from "./Splitter.svelte";
+  import { layout } from "./layout.svelte";
   import PartTile from "./PartTile.svelte";
   import { portal } from "./portal";
   import { applyEdit } from "./applyEdit";
@@ -289,7 +291,7 @@
 </div>
 </div>
 
-<div class="designer">
+<div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.sizes.properties}px">
   <div class="stage">
 
     <div class="window">
@@ -329,6 +331,7 @@
     </div>
   </div>
 
+  <Splitter axis="x" label="Width of the properties" onmove={(d) => layout.resize("properties", -d)} />
   <aside>
     <PageProperties {preview} {page} {app} onedit={edit} subject="window" />
     <PageProperties {preview} {page} {app} onedit={edit} subject="picked" />
@@ -365,9 +368,13 @@
 <style>
   .designer {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
+
     gap: 16px;
     align-items: start;
+  }
+
+  .designer > :global(.splitter) {
+    align-self: stretch;
   }
 
   .stage {

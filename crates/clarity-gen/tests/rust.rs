@@ -36,6 +36,27 @@ action approve(order: Order)
     effects db.write
     order.status = Approved
     save order
+
+page OrderForm: window
+    title \"Order\"
+    data order: Order
+    data orders: list<Order>
+    textbox at 1,1 span 4 bind order.number
+    table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: grid_opened
+    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked
+
+code OrderForm
+    handler approve_clicked
+        if not within_credit(order)
+            message warning \"Too much\"
+            approve_button.enabled = false
+            return
+        approve(order)
+        message \"Approved \" + order.number
+
+    handler grid_opened
+        open OrderForm with order = grid.selected
+        close
 ";
 
 fn shop() -> Settings {
@@ -60,12 +81,20 @@ fn writes_a_complete_cargo_project() {
         paths,
         [
             "Cargo.toml",
+            "build.rs",
             "clarity-runtime/Cargo.toml",
             "clarity-runtime/src/lib.rs",
             "clarity-runtime/src/sql.rs",
+            "clarity-runtime/src/ui.rs",
+            "icons/icon.png",
             "src/main.rs",
+            "src/model.json",
             "src/sales.rs",
             "src/schema.rs",
+            "tauri.conf.json",
+            "ui/index.html",
+            "ui/runtime.css",
+            "ui/runtime.js",
         ]
     );
     let cargo = file(&files, "Cargo.toml");
@@ -139,4 +168,28 @@ fn refuses_a_project_with_errors() {
     let project = load_sources([("sales.clarity", "module sales\n\nentity A\n    b: Nope\n")]);
     let errors = generate(&project, &shop()).unwrap_err();
     assert!(errors[0].contains("fix the errors"), "{errors:?}");
+}
+
+#[test]
+fn handlers_work_on_the_window_and_the_screen() {
+    let files = files();
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("pub struct OrderFormWindow {\n    pub order: Order,\n    pub orders: Vec<Order>,\n}"), "{sales}");
+    assert!(sales.contains("orders: db.all::<Order>()?,"), "{sales}");
+    assert!(
+        sales.contains("pub fn order_form__approve_clicked(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui) -> Result<()> {"),
+        "{sales}"
+    );
+    assert!(sales.contains("if !within_credit(db, &w.order)? {"), "{sales}");
+    assert!(sales.contains("ui.message(Level::Warning, String::from(\"Too much\"));"), "{sales}");
+    assert!(sales.contains("ui.set_enabled(\"approve_button\", false);"), "{sales}");
+    assert!(sales.contains("approve(db, &mut w.order)?;"), "{sales}");
+    assert!(sales.contains("ui.open(\"OrderForm\", vec![(\"order\", to_value(&ui.selected(\"grid\", &w.orders)?)?)]);"), "{sales}");
+    assert!(sales.contains("ui.close = true;"), "{sales}");
+
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("(\"OrderForm\", \"approve_clicked\") => {"), "{main}");
+    assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
+    assert!(main.contains("const DATABASE: &str = \"data/shop.db\";"), "{main}");
+    assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
 }

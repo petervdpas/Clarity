@@ -1,5 +1,5 @@
-//! Generates the shop example and builds and runs it with cargo. Slow (it
-//! compiles SQLite the first time), so it only runs when asked:
+//! Generates the shop example and builds it with cargo. Slow (it
+//! compiles SQLite and Tauri the first time), so it only runs when asked:
 //! `cargo test -p clarity-gen --test build -- --ignored`.
 
 use std::path::Path;
@@ -7,7 +7,7 @@ use std::process::Command;
 
 #[test]
 #[ignore]
-fn the_shop_example_builds_and_runs() {
+fn the_shop_example_builds() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let spec = root.join("examples/shop/spec");
     let project = clarity_spec::load_dir(&spec).unwrap();
@@ -29,12 +29,8 @@ fn the_shop_example_builds_and_runs() {
         .unwrap();
     assert!(status.success(), "the generated project does not build; it is in {}", out.display());
 
-    let output = Command::new(target.join("debug/shop")).current_dir(&out).output().unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
-    assert!(stdout.contains("Shop: database data/shop.db is ready (1 migration steps applied)"), "{stdout}");
-    assert!(out.join("data/shop.db").exists());
-
+    // The application opens a window, so it is built here, not started.
+    assert!(target.join("debug/shop").exists());
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -66,6 +62,10 @@ action approve(order: Order)
     effects db.write
     order.status = Approved
     save order
+
+page Orders: window
+    data orders: list<Order>
+    table name grid at 1,1 span 12 rows 4 bind orders columns number, total
 ";
 
 /// Uses the generated functions the way a handler will.
@@ -132,6 +132,7 @@ fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
     let file = |path: &str, text: &str| clarity_gen::OutFile {
         path: path.into(),
         text: text.into(),
+        bytes: None,
     };
     let first = [file("a.txt", "a"), file("src/b.txt", "b")];
     assert_eq!(clarity_gen::write_out(&dir, &first, &["target"]).unwrap(), 2);
@@ -143,5 +144,30 @@ fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
     assert!(!dir.join("src").exists(), "the stale folder is gone");
     assert!(dir.join("target/keep.txt").exists(), "kept folders stay");
     assert_eq!(std::fs::read_to_string(dir.join("c.txt")).unwrap(), "c");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn write_out_never_writes_into_a_folder_with_other_work() {
+    let dir = std::env::temp_dir().join(format!("clarity-foreign-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("thesis.txt"), "years of work").unwrap();
+    let files = [clarity_gen::OutFile {
+        path: "a.txt".into(),
+        text: "a".into(),
+        bytes: None,
+    }];
+    let err = clarity_gen::write_out(&dir, &files, &[]).unwrap_err();
+    assert!(err.to_string().contains("not made by Clarity"), "{err}");
+    assert_eq!(std::fs::read_to_string(dir.join("thesis.txt")).unwrap(), "years of work");
+    assert!(!dir.join("a.txt").exists());
+
+    // An empty folder, and Clarity's own output, are fine.
+    let empty = dir.join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    clarity_gen::write_out(&empty, &files, &[]).unwrap();
+    assert!(empty.join(clarity_gen::OUT_MARKER).exists());
+    clarity_gen::write_out(&empty, &files, &[]).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 }

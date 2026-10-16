@@ -4,7 +4,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import { pageDesigner } from "./pageDesigner.svelte";
-  import { GAP, ROW_HEIGHT, gridRows, overlaps, type PageData } from "./pages";
+  import { GAP, ROW_HEIGHT, gridRows, overlaps, widgetInfo, type PageData } from "./pages";
 
   let {
     preview,
@@ -31,6 +31,24 @@
   } = $props();
 
   const rows = $derived(fixedRows ?? gridRows(widgets, design ? 3 : 0, design ? 4 : 1));
+
+  // Fluid outside the designer: columns always share the width, and rows
+  // holding a part that grows (a table, a panel) share the extra height.
+  // The designer keeps every row at its fixed height, so placing stays exact.
+  const growing = $derived.by(() => {
+    const found = new Set<number>();
+    if (design || fixedRows !== null) return found;
+    for (const w of widgets) {
+      if (!widgetInfo(preview, w.props.kind).grows) continue;
+      for (let r = w.props.row; r < w.props.row + w.props.height; r++) found.add(r);
+    }
+    return found;
+  });
+  const rowTemplate = $derived(
+    growing.size === 0
+      ? `repeat(${rows}, ${ROW_HEIGHT}px)`
+      : Array.from({ length: rows }, (_, i) => (growing.has(i + 1) ? `minmax(${ROW_HEIGHT}px, 1fr)` : `${ROW_HEIGHT}px`)).join(" "),
+  );
   const ghost = $derived(pageDesigner.hover?.container === container ? pageDesigner.hover : null);
   // Shown in red while dragging when the drop would overlap a sibling; the
   // checker in Rust still decides when the edit is applied.
@@ -47,7 +65,8 @@
   data-grid={container}
   data-columns={columns}
   style:grid-template-columns="repeat({columns}, minmax(0, 1fr))"
-  style:grid-template-rows="repeat({rows}, {ROW_HEIGHT}px)"
+  class:fluid={growing.size > 0}
+  style:grid-template-rows={rowTemplate}
   style:gap="{GAP}px"
 >
   {#if design && pageDesigner.showGrid}
@@ -75,6 +94,12 @@
     display: grid;
     position: relative;
     min-width: 0;
+  }
+
+  .grid.fluid {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
   }
 
   .cell {

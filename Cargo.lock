@@ -472,12 +472,14 @@ dependencies = [
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
+ "serde_json",
 ]
 
 [[package]]
 name = "clarity-preview"
 version = "0.1.0"
 dependencies = [
+ "clarity-gen",
  "clarity-project",
  "clarity-spec",
  "notify",
@@ -507,6 +509,7 @@ dependencies = [
  "rusqlite",
  "rust_decimal",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

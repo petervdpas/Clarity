@@ -28,6 +28,11 @@ fieldTypes: Array<string>,
  */
 input: boolean, container: ContainerKind | null, clickable: boolean, 
 /**
+ * Whether the part takes extra height when the window grows (tables,
+ * lists, containers, canvases); other parts keep their row height.
+ */
+grows: boolean, 
+/**
  * Events a handler in the code behind can be wired to.
  */
 events: Array<Event>, properties: Array<WidgetProperty>, };

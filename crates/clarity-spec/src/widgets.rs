@@ -149,6 +149,9 @@ pub struct WidgetInfo {
     pub input: bool,
     pub container: Option<ContainerKind>,
     pub clickable: bool,
+    /// Whether the part takes extra height when the window grows (tables,
+    /// lists, containers, canvases); other parts keep their row height.
+    pub grows: bool,
     /// Events a handler in the code behind can be wired to.
     pub events: Vec<Event>,
     pub properties: Vec<WidgetProperty>,
@@ -410,6 +413,7 @@ pub fn info(kind: WidgetKind) -> WidgetInfo {
         input: e.input,
         container: e.container,
         clickable: e.clickable,
+        grows: grows(e.kind),
         events: e.events.to_vec(),
         properties: e.properties.to_vec(),
     }
@@ -643,6 +647,20 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         identifier("renderer name", renderer)?;
     }
     Ok(())
+}
+
+/// Parts that take extra height in a fluid window.
+fn grows(kind: WidgetKind) -> bool {
+    matches!(
+        kind,
+        WidgetKind::Panel
+            | WidgetKind::Tabs
+            | WidgetKind::Splitter
+            | WidgetKind::Table
+            | WidgetKind::List
+            | WidgetKind::Image
+            | WidgetKind::Canvas
+    )
 }
 
 pub fn is_identifier(text: &str) -> bool {

@@ -6,6 +6,8 @@
   import { displayValue, findEnum, findField, isNumeric } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, ROW_HEIGHT, boundField, widgetInfo, type PageData } from "./pages";
+  import type { Event as PartEvent } from "./generated/Event";
+  import { useLive } from "./live";
 
   let {
     preview,
@@ -32,8 +34,34 @@
   const collection = $derived(p.bind && !p.bind.includes(".") ? data[p.bind] : undefined);
   const activeTab = $derived(Math.min(pageDesigner.activeTabs[offset] ?? 0, Math.max(0, widget.pages.length - 1)));
 
-  function setValue(next: string | boolean) {
+  // In a running application: what the handlers set on this part.
+  const live = useLive();
+  const state = $derived(live && p.name ? live.parts[p.name] : undefined);
+  const hidden = $derived(state?.visible === false);
+  const disabled = $derived(state?.enabled === false);
+  const caption = $derived(state?.caption !== undefined && state.caption !== null ? state.caption : p.caption);
+  const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
+
+  function setValue(next: string | boolean | number | null) {
     if (bound) bound.record[bound.field.name.name] = next;
+  }
+
+  /** Runs the handler wired to `event`, in a running application. */
+  function fire(event: PartEvent) {
+    const handler = p.handlers.find((h) => h.event === event)?.handler;
+    if (live && handler && p.name && !design) live.event(p.name, event, handler);
+  }
+
+  function click() {
+    if (design) return;
+    if (p.handlers.some((h) => h.event === "click")) fire("click");
+    else if (p.onClick) onnavigate(p.onClick);
+  }
+
+  function selectRow(index: number) {
+    if (!live || !p.name || design) return;
+    live.select(p.name, index);
+    fire("select");
   }
 
   function pressMove(e: PointerEvent) {
@@ -73,6 +101,8 @@
   class:design
   class:selected={design && pageDesigner.selected === offset}
   class:lifted={pageDesigner.drag?.kind === "move" && pageDesigner.drag.item === offset}
+  class:hidden
+  class:disabled
   data-widget={offset}
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
@@ -81,24 +111,69 @@
 >
   <div class="content" class:inert={design && !info.container}>
     {#if p.kind === "label"}
-      <span class="label-text">{p.caption ?? (bound ? text : "")}{#if p.caption && bound}: <strong>{text}</strong>{/if}</span>
+      <span class="label-text" role="presentation" onclick={click}>{caption ?? (bound ? text : "")}{#if caption && bound}: <strong>{text}</strong>{/if}</span>
     {:else if p.kind === "textbox"}
-      <input type={bound?.field.type.kind === "email" ? "email" : "text"} value={text} placeholder={p.caption ?? ""} oninput={(e) => setValue(e.currentTarget.value)} />
+      <input
+        type={bound?.field.type.kind === "email" ? "email" : "text"}
+        value={text}
+        placeholder={caption ?? ""}
+        {disabled}
+        oninput={(e) => setValue(e.currentTarget.value)}
+        onchange={() => fire("change")}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      />
     {:else if p.kind === "number"}
-      <input class="numeric" inputmode="decimal" value={text} oninput={(e) => setValue(e.currentTarget.value)} />
+      <input
+        class="numeric"
+        inputmode="decimal"
+        value={text}
+        {disabled}
+        oninput={(e) => setValue(e.currentTarget.value)}
+        onchange={() => fire("change")}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      />
     {:else if p.kind === "date"}
-      <input type={bound?.field.type.kind === "dateTime" ? "datetime-local" : "date"} value={text} oninput={(e) => setValue(e.currentTarget.value)} />
+      <input
+        type={bound?.field.type.kind === "dateTime" ? "datetime-local" : "date"}
+        value={text}
+        {disabled}
+        oninput={(e) => setValue(e.currentTarget.value === "" ? null : e.currentTarget.value)}
+        onchange={() => fire("change")}
+      />
     {:else if p.kind === "checkbox"}
       <label class="check">
-        <input type="checkbox" checked={value === true} onchange={(e) => setValue(e.currentTarget.checked)} />
-        {p.caption ?? bound?.field.label ?? ""}
+        <input
+          type="checkbox"
+          checked={value === true}
+          {disabled}
+          onchange={(e) => {
+            setValue(e.currentTarget.checked);
+            fire("change");
+          }}
+        />
+        {caption ?? bound?.field.label ?? ""}
       </label>
     {:else if p.kind === "dropdown"}
-      <select value={text} onchange={(e) => setValue(e.currentTarget.value)}>
+      <select
+        value={text}
+        {disabled}
+        onchange={(e) => {
+          const chosen = e.currentTarget.value;
+          // A reference holds the id of the record it points at.
+          setValue(live && bound?.field.type.kind === "ref" ? (chosen === "" ? null : Number(chosen)) : chosen);
+          fire("change");
+        }}
+      >
         <option value=""></option>
         {#if bound?.field.type.kind === "enum"}
           {#each findEnum(preview, bound.field.type.name.name)?.variants ?? [] as v (v.name.name)}
             <option value={v.name.name}>{v.label}</option>
+          {/each}
+        {:else if bound?.field.type.kind === "ref" && live}
+          {#each live.refOptions(bound.field.type.entity.name) as option (option.id)}
+            <option value={String(option.id)}>{option.text}</option>
           {/each}
         {:else if bound?.field.type.kind === "ref"}
           {#each preview.displays[bound.field.type.entity.name] ?? [] as option (option)}
@@ -107,7 +182,7 @@
         {/if}
       </select>
     {:else if p.kind === "button"}
-      <button class="push" onclick={() => !design && p.onClick && onnavigate(p.onClick)}>{p.caption ?? ""}</button>
+      <button class="push" {disabled} onclick={click}>{caption ?? ""}</button>
     {:else if p.kind === "panel"}
       <fieldset>
         {#if p.caption}<legend>{p.caption}</legend>{/if}
@@ -151,7 +226,7 @@
           </thead>
           <tbody>
             {#each collection?.rows ?? [] as row, i (i)}
-              <tr>
+              <tr class:chosen={selectedRow === i} onclick={() => selectRow(i)} ondblclick={() => fire("open")}>
                 {#each p.columns as column (column)}
                   {@const field = collection ? findField(collection.entity, column) : undefined}
                   <td class:numeric={field ? isNumeric(field) : false}>{field ? displayValue(preview, field, row[column]) : ""}</td>
@@ -165,7 +240,7 @@
     {:else if p.kind === "list"}
       <ul class="list">
         {#each collection?.rows ?? [] as row, i (i)}
-          <li>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
+          <li class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
         {/each}
       </ul>
     {:else if p.kind === "image"}
@@ -190,6 +265,19 @@
 </div>
 
 <style>
+  .widget.hidden {
+    visibility: hidden;
+  }
+
+  .widget.disabled {
+    opacity: 0.55;
+  }
+
+  tr.chosen td,
+  li.chosen {
+    background: var(--accent-soft, rgb(80 140 255 / 0.18));
+  }
+
   .widget {
     position: relative;
     min-width: 0;

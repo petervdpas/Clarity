@@ -113,6 +113,18 @@
       </section>
 
       <section>
+        <h2>Output</h2>
+        <p class="muted">
+          Where Run and Build generate and compile the application: a folder in the project, like <code>out</code>, or a
+          full path elsewhere. Clarity replaces what is in it, so it only writes into an empty folder or one it made itself.
+        </p>
+        <label class="field">
+          <span>Output folder</span>
+          <input class="mono" value={settings.out} spellcheck="false" onchange={(e) => save({ out: e.currentTarget.value.trim() })} />
+        </label>
+      </section>
+
+      <section>
         <h2>Data sources</h2>
         <p class="muted">Where the data lives. Entities use the first source unless they name another. Secrets are never stored here: use env:NAME or keychain:NAME.</p>
         {#if settings.datasources.length > 0}

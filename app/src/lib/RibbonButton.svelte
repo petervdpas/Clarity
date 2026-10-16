@@ -48,6 +48,10 @@
       <path d="M5 6h14M5 10h10M5 14h14M5 18h8" />
     {:else if icon === "code"}
       <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />
+    {:else if icon === "build"}
+      <path d="M4 7l8-4 8 4v10l-8 4-8-4z" /><path d="M4 7l8 4 8-4M12 11v10" />
+    {:else if icon === "stop"}
+      <rect x="6" y="6" width="12" height="12" rx="1" />
     {:else if icon === "settings"}
       <circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
     {:else if icon === "check"}

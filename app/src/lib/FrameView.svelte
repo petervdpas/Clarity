@@ -14,6 +14,9 @@
   import type { ShownFrame } from "./frame";
   import { pageDesigner } from "./pageDesigner.svelte";
   import type { PageData } from "./pages";
+  import { useLive } from "./live";
+  import Splitter from "./Splitter.svelte";
+  import type { Side } from "./generated/Side";
 
   let {
     preview,
@@ -54,10 +57,27 @@
       if (editable) pick(e, command.span.start);
       return;
     }
-    if (command.props.onClick) {
+    if (command.props.handler && command.props.name && live) {
+      openMenu = null;
+      live.event(command.props.name, "click", command.props.handler);
+    } else if (command.props.onClick) {
       openMenu = null;
       onnavigate(command.props.onClick);
     }
+  }
+
+  // In a running application, commands report their clicks to the backend.
+  const live = useLive();
+
+  /** Sidebar widths the user dragged to, outside the designer; the design gives the start. */
+  let sidebarWidth = $state<Partial<Record<Side, number>>>({});
+  const SIDEBAR_MIN_PX = 120;
+
+  function resizeSidebar(shown: { value: Sidebar } | null, delta: number) {
+    if (!shown) return;
+    const s = shown.value;
+    const now = sidebarWidth[s.side] ?? s.width * SIDEBAR_COLUMN_PX;
+    sidebarWidth[s.side] = Math.min(window.innerWidth * 0.6, Math.max(SIDEBAR_MIN_PX, now + delta));
   }
 
   function containsPicked(command: Command): boolean {
@@ -134,7 +154,7 @@
     class="sidebar {s.side}"
     class:inherited={design && shown.inherited}
     class:picked={design && pageDesigner.selected === s.span.start}
-    style:width="{s.width * SIDEBAR_COLUMN_PX}px"
+    style:width="{sidebarWidth[s.side] ?? s.width * SIDEBAR_COLUMN_PX}px"
     role="presentation"
     onpointerdown={(e) => design && !shown.inherited && pick(e, s.span.start)}
   >
@@ -258,9 +278,15 @@
   {/if}
 
   <div class="middle">
-    {#if frame.left}{@render sidebar(frame.left)}{/if}
+    {#if frame.left}
+      {@render sidebar(frame.left)}
+      {#if !design}<Splitter axis="x" label="Width of the left sidebar" onmove={(d) => resizeSidebar(frame.left, d)} />{/if}
+    {/if}
     <div class="body">{@render children()}</div>
-    {#if frame.right}{@render sidebar(frame.right)}{/if}
+    {#if frame.right}
+      {#if !design}<Splitter axis="x" label="Width of the right sidebar" onmove={(d) => resizeSidebar(frame.right, -d)} />{/if}
+      {@render sidebar(frame.right)}
+    {/if}
   </div>
 
   {#if frame.footer}
@@ -318,6 +344,8 @@
     /* Fills a flex parent (the design canvas); a percentage height would
        resolve against the whole window, title bar included. */
     flex: 1;
+    /* May be smaller than its content: the window body scrolls instead. */
+    min-height: 0;
   }
 
   .inherited {
@@ -538,6 +566,10 @@
   .body {
     flex: 1;
     min-width: 0;
+    /* Passes the height on, so a fluid window fills it. */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .sidebar {

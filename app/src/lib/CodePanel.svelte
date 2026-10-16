@@ -8,6 +8,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy } from "svelte";
   import SourceEditor from "./SourceEditor.svelte";
+  import Splitter from "./Splitter.svelte";
+  import { layout } from "./layout.svelte";
   import { applyEdit } from "./applyEdit";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
@@ -81,7 +83,10 @@
   const reloadKey = $derived(file.path + "\n" + owner + "\n" + item + "\n" + file.version);
 </script>
 
-<div class="panel" role="dialog" aria-label="{owner} as Clarity text">
+<div class="panel" role="dialog" aria-label="{owner} as Clarity text" style:width="min({layout.sizes.codePanel}px, 90%)">
+  <div class="edge">
+    <Splitter axis="x" label="Width of the text panel" onmove={(d) => layout.resize("codePanel", -d)} />
+  </div>
   <header>
     <div class="tabs" role="tablist">
       {#each VIEWS as v (v.key)}
@@ -131,7 +136,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(640px, 60%);
+
     display: flex;
     flex-direction: column;
     background: var(--panel);
@@ -139,6 +144,14 @@
     box-shadow: -12px 0 32px rgb(0 0 0 / 0.35);
     pointer-events: auto;
     animation: slide-in 140ms ease-out;
+  }
+
+  .edge {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
   }
 
   @keyframes slide-in {

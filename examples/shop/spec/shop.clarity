@@ -1,0 +1,27 @@
+module shop
+
+use customers
+use sales
+use desk
+
+// The application frame: shared by every window that has no region of its own.
+app Shop
+    title "Shop"
+    main CustomerCard
+    menu
+        item "File"
+            item "Customer card" key "Ctrl+K" on click -> CustomerCard
+            separator
+            item "Quit" key "Ctrl+Q" on click -> quit
+        item "Customers"
+            item "All customers" on click -> CustomerBrowse
+            item "New customer" on click -> CustomerForm
+        item "Orders"
+            item "All orders" on click -> OrderBrowse
+    toolbar
+        button "Customers" icon "people" on click -> CustomerBrowse
+        button "Orders" icon "cart" on click -> OrderBrowse
+        separator
+        button "Card" icon "card" on click -> CustomerCard
+    footer
+        status "Ready"

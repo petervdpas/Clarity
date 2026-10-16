@@ -1,0 +1,15 @@
+[package]
+name = "clarity-cli"
+description = "The clarity command line tool"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "clarity"
+path = "src/main.rs"
+
+[dependencies]
+clarity-spec.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }

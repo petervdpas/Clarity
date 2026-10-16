@@ -1,0 +1,56 @@
+module customers
+
+enum CustomerKind
+    Private label "Private person"
+    Business
+
+entity Customer
+    name: text(80), required, label "Name"
+    email: email, unique, label "E-mail"
+    kind: CustomerKind, default Private
+    vat_number: text(14), help "Only for business customers"
+    credit_limit: money, min 0, default 0
+    active: bool, default true
+    since: date
+    notes: text, help "Internal notes, not shown to the customer"
+
+page CustomerBrowse: window
+    title "Customers"
+    data customers: list<Customer>
+
+    label "Name" at 1,1 span 2
+    textbox at 3,1 span 4
+    label "E-mail" at 7,1 span 2
+    textbox at 9,1 span 4
+    table at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active
+    button "New" at 9,10 span 2 on click -> CustomerForm
+    button "Open" at 11,10 span 2 on click -> CustomerForm
+
+page CustomerForm: window
+    title "Customer"
+    data customer: Customer
+
+    tabs at 1,1 span 12 rows 6
+        tab "General"
+            panel "Identity" at 1,1 span 12 rows 4
+                label "Name" at 1,1 span 3
+                textbox at 4,1 span 6 bind customer.name
+                label "Kind" at 1,2 span 3
+                dropdown at 4,2 span 4 bind customer.kind
+                label "E-mail" at 1,3 span 2
+                textbox at 3,3 span 4 bind customer.email
+                label "Since" at 7,3 span 2
+                date at 9,3 span 3 bind customer.since
+            label "Active" at 1,5 span 3
+            checkbox at 4,5 span 3 bind customer.active
+        tab "Finance"
+            panel "Credit" at 1,1 span 12 rows 3
+                label "Credit limit" at 1,1 span 3
+                number at 4,1 span 3 bind customer.credit_limit
+                label "Vat number" at 1,2 span 3
+                textbox at 4,2 span 4 bind customer.vat_number
+        tab "Notes"
+            label "Notes" at 1,1 span 3
+            textbox at 4,1 span 6 bind customer.notes
+    button "Save" at 9,8 span 2
+    button "Close" at 11,8 span 2

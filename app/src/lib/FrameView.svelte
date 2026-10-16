@@ -1,0 +1,623 @@
+<script lang="ts">
+  // The frame around a window: menu, toolbar and ribbon at the top, sidebars
+  // at the sides, the footer at the bottom, and the window body in between.
+  // In design mode the window's own regions can be picked; regions that come
+  // from the app are shown dimmed.
+
+  import type { Snippet } from "svelte";
+  import GridBox from "./GridBox.svelte";
+  import type { Command } from "./generated/Command";
+  import type { Dock } from "./generated/Dock";
+  import type { Page } from "./generated/Page";
+  import type { Preview } from "./generated/Preview";
+  import type { Sidebar } from "./generated/Sidebar";
+  import type { ShownFrame } from "./frame";
+  import { pageDesigner } from "./pageDesigner.svelte";
+  import type { PageData } from "./pages";
+
+  let {
+    preview,
+    page,
+    frame,
+    data,
+    design,
+    onnavigate,
+    children,
+  }: {
+    preview: Preview;
+    /** The page (or app) whose widgets the sidebars and footer belong to; null when nothing has a frame. */
+    page: Page | null;
+    frame: ShownFrame;
+    data: PageData;
+    design: boolean;
+    onnavigate: (target: string) => void;
+    children: Snippet;
+  } = $props();
+
+  const SIDEBAR_COLUMN_PX = 64;
+  const DOCKS: Dock[] = ["top", "left", "right", "bottom"];
+
+  /** The open top-level menu item. */
+  let openMenu = $state<number | null>(null);
+  let ribbonTab = $state(0);
+
+  const regionDrag = $derived(design && pageDesigner.drag?.kind === "region" ? pageDesigner.drag : null);
+
+  function pick(e: Event, id: number) {
+    e.stopPropagation();
+    pageDesigner.selected = id;
+  }
+
+  /** A click on a command: picks it while designing, runs it otherwise. */
+  function run(e: Event, command: Command, editable: boolean) {
+    if (design) {
+      if (editable) pick(e, command.span.start);
+      return;
+    }
+    if (command.props.onClick) {
+      openMenu = null;
+      onnavigate(command.props.onClick);
+    }
+  }
+
+  function containsPicked(command: Command): boolean {
+    const id = pageDesigner.selected;
+    return id !== null && (command.span.start === id || command.items.some(containsPicked));
+  }
+
+  function iconLetter(icon: string): string {
+    return icon.slice(0, 1).toUpperCase();
+  }
+
+  function onwindowpointerdown(e: PointerEvent) {
+    if (openMenu === null) return;
+    if (!(e.target instanceof Element) || !e.target.closest(".menubar")) openMenu = null;
+  }
+</script>
+
+<svelte:window onpointerdown={onwindowpointerdown} />
+
+{#snippet entries(items: Command[], editable: boolean)}
+  {#each items as item (item.span.start)}
+    {#if item.props.kind === "separator"}
+      <div
+        class="separator-line"
+        class:picked={design && pageDesigner.selected === item.span.start}
+        role="separator"
+        onpointerdown={(e) => design && editable && pick(e, item.span.start)}
+      ></div>
+    {:else}
+      <div class="entry" class:sub={item.items.length > 0} class:show={design && containsPicked(item)}>
+        <button
+          class:picked={design && pageDesigner.selected === item.span.start}
+          onpointerdown={(e) => design && run(e, item, editable)}
+          onclick={(e) => !design && run(e, item, editable)}
+        >
+          <span>{item.props.caption}</span>
+          {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
+          {#if item.items.length > 0}<span class="arrow">&rsaquo;</span>{/if}
+        </button>
+        {#if item.items.length > 0}
+          <div class="flyout">{@render entries(item.items, editable)}</div>
+        {/if}
+      </div>
+    {/if}
+  {/each}
+{/snippet}
+
+{#snippet button(item: Command, editable: boolean, large: boolean)}
+  {#if item.props.kind === "separator"}
+    <span
+      class="vsep"
+      class:picked={design && pageDesigner.selected === item.span.start}
+      role="separator"
+      onpointerdown={(e) => design && editable && pick(e, item.span.start)}
+    ></span>
+  {:else}
+    <button
+      class="tool"
+      class:large={large && item.props.large}
+      class:picked={design && pageDesigner.selected === item.span.start}
+      title={item.props.onClick ? `Opens ${item.props.onClick}` : undefined}
+      onpointerdown={(e) => design && run(e, item, editable)}
+      onclick={(e) => !design && run(e, item, editable)}
+    >
+      {#if item.props.icon}<span class="icon">{iconLetter(item.props.icon)}</span>{/if}
+      {#if item.props.caption}<span>{item.props.caption}</span>{/if}
+    </button>
+  {/if}
+{/snippet}
+
+{#snippet sidebar(shown: { value: Sidebar; inherited: boolean })}
+  {@const s = shown.value}
+  <div
+    class="sidebar {s.side}"
+    class:inherited={design && shown.inherited}
+    class:picked={design && pageDesigner.selected === s.span.start}
+    style:width="{s.width * SIDEBAR_COLUMN_PX}px"
+    role="presentation"
+    onpointerdown={(e) => design && !shown.inherited && pick(e, s.span.start)}
+  >
+    {#if design && shown.inherited}<span class="from">from app</span>{/if}
+    {#if page}
+    <GridBox
+      {preview}
+      {page}
+      {data}
+      design={design && !shown.inherited}
+      widgets={s.widgets}
+      columns={s.width}
+      container={s.span.start}
+      {onnavigate}
+    />
+    {/if}
+  </div>
+{/snippet}
+
+<div class="frame">
+  {#if frame.menu}
+    {@const shown = frame.menu}
+    {@const editable = !shown.inherited}
+    <div
+      class="menubar"
+      class:inherited={design && shown.inherited}
+      class:picked={design && pageDesigner.selected === shown.value.span.start}
+      role="menubar"
+      tabindex="-1"
+      onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
+    >
+      {#each shown.value.items as item (item.span.start)}
+        {#if item.props.kind === "separator"}
+          <span class="vsep"></span>
+        {:else}
+          {@const open = openMenu === item.span.start || (design && containsPicked(item) && item.items.length > 0)}
+          <div class="top">
+            <button
+              class:open
+              class:picked={design && pageDesigner.selected === item.span.start}
+              onpointerdown={(e) => {
+                if (design && editable) pick(e, item.span.start);
+              }}
+              onclick={(e) => {
+                if (item.items.length > 0) openMenu = openMenu === item.span.start ? null : item.span.start;
+                else run(e, item, editable);
+              }}>{item.props.caption}</button
+            >
+            {#if open && item.items.length > 0}
+              <div class="dropdown">{@render entries(item.items, editable)}</div>
+            {/if}
+          </div>
+        {/if}
+      {/each}
+      {#if design && shown.inherited}<span class="from">from app</span>{/if}
+    </div>
+  {/if}
+
+  {#if frame.toolbar}
+    {@const shown = frame.toolbar}
+    <div
+      class="toolbar"
+      class:inherited={design && shown.inherited}
+      class:picked={design && pageDesigner.selected === shown.value.span.start}
+      role="toolbar"
+      tabindex="-1"
+      onpointerdown={(e) => design && !shown.inherited && pick(e, shown.value.span.start)}
+    >
+      {#each shown.value.items as item (item.span.start)}
+        {@render button(item, !shown.inherited, false)}
+      {/each}
+      {#if design && shown.inherited}<span class="from">from app</span>{/if}
+    </div>
+  {/if}
+
+  {#if frame.ribbon}
+    {@const shown = frame.ribbon}
+    {@const editable = !shown.inherited}
+    {@const tabs = shown.value.tabs}
+    {@const active = tabs[Math.min(ribbonTab, tabs.length - 1)]}
+    <div
+      class="ribbon"
+      class:inherited={design && shown.inherited}
+      class:picked={design && pageDesigner.selected === shown.value.span.start}
+      role="presentation"
+      onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
+    >
+      <div class="ribbon-tabs">
+        {#each tabs as tab, i (tab.span.start)}
+          <button
+            class:active={tab === active}
+            class:picked={design && pageDesigner.selected === tab.span.start}
+            onpointerdown={(e) => {
+              ribbonTab = i;
+              if (design && editable) pick(e, tab.span.start);
+            }}>{tab.title}</button
+          >
+        {/each}
+        {#if design && shown.inherited}<span class="from">from app</span>{/if}
+      </div>
+      {#if active}
+        <div class="ribbon-body">
+          {#each active.groups as group (group.span.start)}
+            <div
+              class="ribbon-group"
+              class:picked={design && pageDesigner.selected === group.span.start}
+              role="group"
+              onpointerdown={(e) => design && editable && pick(e, group.span.start)}
+            >
+              <div class="ribbon-buttons">
+                {#each group.items as item (item.span.start)}
+                  {@render button(item, editable, true)}
+                {/each}
+              </div>
+              <div class="ribbon-title">{group.title}</div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <div class="middle">
+    {#if frame.left}{@render sidebar(frame.left)}{/if}
+    <div class="body">{@render children()}</div>
+    {#if frame.right}{@render sidebar(frame.right)}{/if}
+  </div>
+
+  {#if frame.footer}
+    {@const shown = frame.footer}
+    {@const f = shown.value}
+    <div
+      class="footer"
+      class:inherited={design && shown.inherited}
+      class:picked={design && pageDesigner.selected === f.span.start}
+      role="contentinfo"
+      onpointerdown={(e) => design && !shown.inherited && pick(e, f.span.start)}
+    >
+      {#if f.status !== null && f.statusSpan}
+        {@const statusId = f.statusSpan.start}
+        <span
+          class="status"
+          class:picked={design && pageDesigner.selected === statusId}
+          role="status"
+          onpointerdown={(e) => design && !shown.inherited && pick(e, statusId)}>{f.status}</span
+        >
+      {/if}
+      <div class="footer-grid">
+        {#if page}
+        <GridBox
+          {preview}
+          {page}
+          {data}
+          design={design && !shown.inherited}
+          widgets={f.widgets}
+          columns={f.columns}
+          container={f.span.start}
+          fixedRows={1}
+          {onnavigate}
+        />
+        {/if}
+      </div>
+      {#if design && shown.inherited}<span class="from">from app</span>{/if}
+    </div>
+  {/if}
+
+  {#if regionDrag}
+    {#each DOCKS.filter((d) => regionDrag.docks.includes(d)) as dock (dock)}
+      <div class="dock {dock}" class:active={pageDesigner.dock === dock} data-dock={dock}>
+        {regionDrag.label} here
+      </div>
+    {/each}
+  {/if}
+</div>
+
+<style>
+  .frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    /* Fills a flex parent (the design canvas); a percentage height would
+       resolve against the whole window, title bar included. */
+    flex: 1;
+  }
+
+  .inherited {
+    opacity: 0.55;
+    position: relative;
+  }
+
+  .from {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 6px;
+  }
+
+  .picked {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* Menu bar */
+
+  .menubar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .top {
+    position: relative;
+  }
+
+  .menubar button,
+  .entry button {
+    border: none;
+    background: transparent;
+    border-radius: var(--radius);
+    padding: 3px 10px;
+    font-size: 13px;
+  }
+
+  .menubar .top > button:hover,
+  .menubar .top > button.open {
+    background: var(--accent-soft);
+  }
+
+  .dropdown,
+  .flyout {
+    position: absolute;
+    z-index: 20;
+    min-width: 180px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+    padding: 4px;
+  }
+
+  .dropdown {
+    top: 100%;
+    left: 0;
+  }
+
+  .entry {
+    position: relative;
+  }
+
+  .entry > button {
+    display: flex;
+    width: 100%;
+    gap: 12px;
+    text-align: left;
+  }
+
+  .entry > button:hover {
+    background: var(--accent-soft);
+  }
+
+  .entry kbd {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .arrow {
+    margin-left: auto;
+  }
+
+  .flyout {
+    display: none;
+    top: -4px;
+    left: 100%;
+  }
+
+  .entry.sub:hover > .flyout,
+  .entry.show > .flyout {
+    display: block;
+  }
+
+  .separator-line {
+    border-top: 1px solid var(--border-strong);
+    margin: 4px 6px;
+    padding-top: 2px;
+  }
+
+  /* Toolbar and ribbon buttons */
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+
+  .tool.large {
+    flex-direction: column;
+    padding: 4px 10px;
+  }
+
+  .tool.large .icon {
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+  }
+
+  .icon {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    background: var(--accent-soft);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .vsep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border-strong);
+    margin: 2px 4px;
+  }
+
+  .ribbon {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ribbon-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px 0;
+    background: var(--panel-alt);
+  }
+
+  .ribbon-tabs button {
+    border: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: transparent;
+    padding: 3px 12px;
+    font-size: 12px;
+  }
+
+  .ribbon-tabs button.active {
+    background: var(--panel);
+  }
+
+  .ribbon-body {
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+    min-height: 70px;
+  }
+
+  .ribbon-group {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    padding: 0 6px;
+  }
+
+  .ribbon-buttons {
+    display: flex;
+    gap: 4px;
+    align-items: flex-start;
+    flex: 1;
+  }
+
+  .ribbon-title {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Sidebars, body, footer */
+
+  .middle {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sidebar {
+    flex: none;
+    padding: 8px;
+    background: var(--panel-alt);
+  }
+
+  .sidebar.left {
+    border-right: 1px solid var(--border);
+  }
+
+  .sidebar.right {
+    border-left: 1px solid var(--border);
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 8px;
+    border-top: 1px solid var(--border);
+    background: var(--panel-alt);
+    font-size: 12px;
+  }
+
+  .status {
+    flex: none;
+    color: var(--text-muted);
+    padding: 2px 4px;
+  }
+
+  .footer-grid {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Dock zones while a region is dragged */
+
+  .dock {
+    position: absolute;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--accent);
+    background: rgb(80 140 255 / 0.12);
+    color: var(--text);
+    font-size: 12px;
+    border-radius: var(--radius);
+  }
+
+  .dock.active {
+    background: rgb(80 140 255 / 0.35);
+  }
+
+  .dock.top {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+  }
+
+  .dock.bottom {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+  }
+
+  .dock.left {
+    top: 44px;
+    bottom: 44px;
+    left: 0;
+    width: 90px;
+  }
+
+  .dock.right {
+    top: 44px;
+    bottom: 44px;
+    right: 0;
+    width: 90px;
+  }
+</style>

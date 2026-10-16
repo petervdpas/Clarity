@@ -11,5 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 clarity-spec.workspace = true
+clarity-project.workspace = true
+clarity-gen = { path = "../clarity-gen" }
 serde_json.workspace = true
 clap = { version = "4", features = ["derive"] }

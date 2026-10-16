@@ -3,7 +3,7 @@
 //! reads `code` blocks and `check` resolves names and types against the
 //! window they belong to.
 
-pub(crate) mod check;
+pub mod check;
 pub(crate) mod parse;
 pub mod edit;
 

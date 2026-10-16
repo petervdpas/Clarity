@@ -18,6 +18,15 @@ enum Command {
         #[command(subcommand)]
         command: SpecCommand,
     },
+    /// Transpile a project into the stack its clarity.toml names, in out/.
+    Gen {
+        /// The project folder, with clarity.toml and the .clarity files.
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        /// Where the application goes; `out` inside the project by default.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -45,6 +54,50 @@ fn main() -> ExitCode {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
         },
+        Command::Gen { dir, out } => {
+            let out = out.unwrap_or_else(|| dir.join("out"));
+            generate(&dir, &out)
+        }
+    }
+}
+
+/// Folders inside `out/` that generation leaves alone: what the build
+/// tools put there.
+const OUT_KEEP: [&str; 3] = ["target", "data", "Cargo.lock"];
+
+fn generate(dir: &std::path::Path, out: &std::path::Path) -> ExitCode {
+    let project = match load(dir) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let file = clarity_project::load(dir);
+    let Some(settings) = file.settings.filter(|_| file.problems.is_empty()) else {
+        for problem in &file.problems {
+            eprintln!("clarity.toml: {problem}");
+        }
+        return ExitCode::FAILURE;
+    };
+    let files = match clarity_gen::generate(&project, &settings) {
+        Ok(files) => files,
+        Err(errors) => {
+            for diagnostic in project.diagnostics.iter().filter(|d| d.severity == Severity::Error) {
+                eprintln!("{diagnostic}");
+            }
+            for error in errors {
+                eprintln!("clarity: {error}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    match clarity_gen::write_out(out, &files, &OUT_KEEP) {
+        Ok(written) => {
+            eprintln!("{} file(s) in {}, {written} changed", files.len(), out.display());
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("clarity: cannot write {}: {err}", out.display());
+            ExitCode::FAILURE
+        }
     }
 }
 

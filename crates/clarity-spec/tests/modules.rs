@@ -230,3 +230,20 @@ code Desk
         .collect();
     assert!(errors.contains(&"unknown function 'approve'".to_string()), "{errors:?}");
 }
+
+#[test]
+fn records_types_and_names_for_generators() {
+    use clarity_spec::code::check::{NameKind, TypeInfo, types};
+    let (file, _) = parse(SALES, "sales.clarity");
+    let table = &types(std::slice::from_ref(&file))["sales.clarity"];
+    let approve = &file.functions[1];
+    let StmtKind::Assign { target, value } = &approve.body[0].kind else { panic!() };
+    assert_eq!(table.type_of(target), TypeInfo::Enum("OrderStatus".into()));
+    assert_eq!(table.name_of(value), Some(&NameKind::EnumValue("OrderStatus".into())));
+    let clarity_spec::code::ExprKind::Member { object, .. } = &target.kind else { panic!() };
+    assert_eq!(table.name_of(object), Some(&NameKind::Local));
+    assert_eq!(table.type_of(object), TypeInfo::Record("Order".into()));
+    let handler = &file.code[0].handlers[0];
+    let StmtKind::Message { text, .. } = &handler.body[1].kind else { panic!() };
+    assert_eq!(table.type_of(text), TypeInfo::Text);
+}

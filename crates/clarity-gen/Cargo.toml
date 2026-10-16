@@ -1,0 +1,13 @@
+[package]
+name = "clarity-gen"
+description = "Transpiles a Clarity project into a real application"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-spec.workspace = true
+clarity-project.workspace = true
+
+[dev-dependencies]
+clarity-runtime = { path = "../clarity-runtime" }

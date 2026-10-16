@@ -19,14 +19,98 @@ use crate::span::Span;
 use crate::widgets::{self, WidgetKind};
 
 pub(crate) fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
+    run(files).0
+}
+
+/// The type of every expression in every code block, function and action,
+/// and what each name refers to, keyed by file path. Generators read this
+/// instead of working types out again, so the checker stays the one place
+/// that decides them.
+pub fn types(files: &[SpecFile]) -> HashMap<String, FileTypes> {
+    run(files).1
+}
+
+fn run(files: &[SpecFile]) -> (Vec<Diagnostic>, HashMap<String, FileTypes>) {
     let mut diagnostics = Vec::new();
+    let mut types = HashMap::new();
     for (index, file) in files.iter().enumerate() {
         let env = Env::new(files, index);
-        let mut out = Vec::new();
+        let mut out = Output::default();
         check_file(&env, file, &mut out);
-        diagnostics.extend(out.into_iter().map(|d| d.in_file(&file.path)));
+        diagnostics.extend(out.diagnostics.into_iter().map(|d| d.in_file(&file.path)));
+        types.insert(file.path.clone(), out.types);
     }
-    diagnostics
+    (diagnostics, types)
+}
+
+/// A type as generators see it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeInfo {
+    Text,
+    Integer,
+    Decimal,
+    Money,
+    Bool,
+    Date,
+    DateTime,
+    Enum(String),
+    Record(String),
+    List(String),
+    Unknown,
+}
+
+/// What a name in code refers to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameKind {
+    /// A `let`, a `for` variable, a parameter or `result`.
+    Local,
+    /// The window's data.
+    Data,
+    /// A part of the window.
+    Part,
+    /// A value of this enum, written bare or qualified.
+    EnumValue(String),
+    /// The enum itself, in `CustomerKind.Business`.
+    EnumType,
+}
+
+/// Types and names of one file, keyed by the span (start, end) of each
+/// expression.
+#[derive(Debug, Default, Clone)]
+pub struct FileTypes {
+    pub types: HashMap<(u32, u32), TypeInfo>,
+    pub names: HashMap<(u32, u32), NameKind>,
+}
+
+impl FileTypes {
+    pub fn type_of(&self, expr: &Expr) -> TypeInfo {
+        self.types.get(&(expr.span.start, expr.span.end)).cloned().unwrap_or(TypeInfo::Unknown)
+    }
+
+    pub fn name_of(&self, expr: &Expr) -> Option<&NameKind> {
+        self.names.get(&(expr.span.start, expr.span.end))
+    }
+}
+
+/// What checking a file produces.
+#[derive(Default)]
+struct Output {
+    diagnostics: Vec<Diagnostic>,
+    types: FileTypes,
+}
+
+impl Output {
+    fn push(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
+    }
+
+    fn len(&self) -> usize {
+        self.diagnostics.len()
+    }
+
+    fn truncate(&mut self, len: usize) {
+        self.diagnostics.truncate(len);
+    }
 }
 
 /// What a file can see: its own module and the modules it uses.
@@ -139,6 +223,22 @@ enum Ty<'a> {
 }
 
 impl Ty<'_> {
+    fn info(&self) -> TypeInfo {
+        match self {
+            Ty::Text => TypeInfo::Text,
+            Ty::Integer => TypeInfo::Integer,
+            Ty::Decimal => TypeInfo::Decimal,
+            Ty::Money => TypeInfo::Money,
+            Ty::Bool => TypeInfo::Bool,
+            Ty::Date => TypeInfo::Date,
+            Ty::DateTime => TypeInfo::DateTime,
+            Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
+            Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
+            Ty::List(e) => TypeInfo::List(e.name.name.clone()),
+            Ty::Unknown => TypeInfo::Unknown,
+        }
+    }
+
     fn name(&self) -> String {
         match self {
             Ty::Text => "text".into(),
@@ -302,7 +402,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
     owners
 }
 
-fn check_file(env: &Env, file: &SpecFile, out: &mut Vec<Diagnostic>) {
+fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_functions(env, file, out);
     let owners = owners(file);
     let mut seen: Vec<&str> = Vec::new();
@@ -339,7 +439,7 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Vec<Diagnostic>) {
+fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
     for decl in owner.data {
         if owner.parts.contains_key(decl.name.name.as_str()) {
             out.push(Diagnostic::error(
@@ -364,7 +464,7 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Vec<Diagno
     }
 }
 
-fn check_handler(env: &Env, owner: &Owner, handler: &HandlerDecl, out: &mut Vec<Diagnostic>) {
+fn check_handler(env: &Env, owner: &Owner, handler: &HandlerDecl, out: &mut Output) {
     let mut checker = BodyChecker {
         env,
         owner: Some(owner),
@@ -379,7 +479,7 @@ fn check_handler(env: &Env, owner: &Owner, handler: &HandlerDecl, out: &mut Vec<
 
 /// Checks the functions and actions of a file: their names, effects,
 /// parameter types, conditions and bodies.
-fn check_functions(env: &Env, file: &SpecFile, out: &mut Vec<Diagnostic>) {
+fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
     for (i, decl) in file.functions.iter().enumerate() {
         let name = decl.name.name.as_str();
         let earlier = file.functions[..i].iter().any(|f| f.name.name == name)
@@ -471,7 +571,7 @@ struct BodyChecker<'e, 'a> {
     scopes: Vec<HashMap<String, Ty<'a>>>,
     /// A missing `effects db.write` is reported once per action.
     saves_reported: bool,
-    out: &'e mut Vec<Diagnostic>,
+    out: &'e mut Output,
 }
 
 /// What a name or path refers to.
@@ -724,21 +824,33 @@ impl<'a> BodyChecker<'_, 'a> {
     /// Resolves a name or member path. Reports and returns None when it
     /// does not resolve.
     fn place(&mut self, expr: &Expr) -> Option<Place<'a>> {
+        let place = self.resolve(expr);
+        if let Some(Place::Value { ty, .. }) = &place {
+            self.out.types.types.insert((expr.span.start, expr.span.end), ty.info());
+        }
+        place
+    }
+
+    fn resolve(&mut self, expr: &Expr) -> Option<Place<'a>> {
         match &expr.kind {
             ExprKind::Name { name } => {
                 if let Some(ty) = self.local(name) {
+                    self.name_is(expr, NameKind::Local);
                     return Some(Place::Value { ty, writable: Ok(()) });
                 }
                 if let Some(decl) = self.data(name) {
+                    self.name_is(expr, NameKind::Data);
                     return Some(Place::Value {
                         ty: self.env.data_type(decl),
                         writable: Ok(()),
                     });
                 }
                 if let Some((key, part)) = self.part(name) {
+                    self.name_is(expr, NameKind::Part);
                     return Some(Place::Part(part, key));
                 }
                 if let Some(decl) = self.env.enum_decl(name) {
+                    self.name_is(expr, NameKind::EnumType);
                     return Some(Place::Enum(decl));
                 }
                 self.error(format!("unknown name '{name}'"), expr.span);
@@ -749,6 +861,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 match self.place(object)? {
                     Place::Enum(decl) => {
                         if decl.variants.iter().any(|v| v.name.name == m) {
+                            self.name_is(expr, NameKind::EnumValue(decl.name.name.clone()));
                             Some(Place::Value {
                                 ty: Ty::Enum(decl),
                                 writable: Err(format!("{}.{m} is a value and cannot be set", decl.name.name)),
@@ -828,6 +941,16 @@ impl<'a> BodyChecker<'_, 'a> {
     /// The type of `expr`. `expected` lets a bare enum value (`Business`)
     /// find its enum.
     fn expr(&mut self, expr: &Expr, expected: Option<Ty<'a>>) -> Ty<'a> {
+        let ty = self.expr_type(expr, expected);
+        self.out.types.types.insert((expr.span.start, expr.span.end), ty.info());
+        ty
+    }
+
+    fn name_is(&mut self, expr: &Expr, kind: NameKind) {
+        self.out.types.names.insert((expr.span.start, expr.span.end), kind);
+    }
+
+    fn expr_type(&mut self, expr: &Expr, expected: Option<Ty<'a>>) -> Ty<'a> {
         match &expr.kind {
             ExprKind::Number { value } => {
                 if value.contains('.') {
@@ -843,6 +966,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     && !self.in_scope(name)
                 {
                     if decl.variants.iter().any(|v| v.name.name == *name) {
+                        self.name_is(expr, NameKind::EnumValue(decl.name.name.clone()));
                         return Ty::Enum(decl);
                     }
                     self.error(format!("{} has no value '{name}'", decl.name.name), expr.span);

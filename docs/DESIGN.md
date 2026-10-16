@@ -148,6 +148,16 @@ Clarity has migrations built in, for every source it owns. Its advantage over th
 
 Superseded by this: section 7.4 (persistence), which assumed SQLite first and PostgreSQL only with the web target.
 
+### 1.4 The Rust output (2026-10-16)
+
+`clarity gen` (and later Run and Build) writes the application into `out/`. Generation is deterministic: the same project gives the same files byte for byte, unchanged files are not rewritten, and files that are no longer generated are removed. `target/`, `data/` and `Cargo.lock` belong to the build and stay.
+
+- **Layout:** a Cargo project with one Rust module per Clarity module (`src/sales.rs`), `src/schema.rs` with the migration steps, `src/main.rs`, and the `clarity-runtime` crate copied in, so `out/` builds on its own.
+- **Records:** every entity is a struct with an `id` and a `Record` implementation; enums are Rust enums stored by name. Text is `String` (empty means no value), integer `i64`, decimal and money `Decimal`, date and datetime `Option<...>`, and a `ref` is the id of the record it points at. Reading `order.customer.credit_limit` loads the customer through the database. List fields are not generated yet; the generator says so.
+- **Storage:** SQLite, with the schema from the dictionary as migration step 1. Decimals and dates are stored as text, so nothing loses precision. A record that is still referred to cannot be deleted.
+- **Logic:** functions and actions become Rust functions that take the database and return a `Result`. `require` and `ensure` become runtime checks whose failure names the condition as written in Clarity. The emitter takes every type from the checker, so the checker is the only place types are decided.
+- **Window data until queries exist:** list data loads all records, single data starts as a new record, and `open Window with ...` passes records in.
+
 ## 2. Goals and non-goals
 
 ### Goals
@@ -1082,7 +1092,8 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | P1 | Projects: `clarity.toml` with backend, UI, targets and data sources (sections 1.2 and 1.3); New project asks for them and starts with one SQLite source; the Project tab shows and edits them. Opening and creating projects in the app is done | done |
 | L1 | The Clarity behavior language: handlers written in Clarity in `code` blocks, with typed access to a window's parts and data (sections 1.1 and 5.9); wiring an event writes an empty handler; the code panel in the designer checks while you type | core done; open: modules with shared functions and actions (L2) |
 | L2 | Backend modules in Clarity: functions and actions in modules, callable from handlers and each other, with `require`, `ensure` and `effects` (section 5.10); design as text with the designer following the text (section 5.9); modules show and edit their functions | done |
-| G1 | First stack: Rust emitter and runtime, Tauri shell, the web renderer as the frontend runtime, the `out/` folder kept in sync, Run and Build on the Preview tab | |
+| G1a | Rust backend: `clarity-gen` writes a Cargo project into `out/` (deterministic, kept in sync by `write_out`), with records and enums from the dictionary, the SQLite schema as the first migration, functions and actions as Rust with contract checks, and the `clarity-runtime` crate copied in; `clarity gen`; the generated shop builds and runs, and generated logic is tested | done |
+| G1b | Handlers and the event protocol, the web renderer as a standalone package, the Tauri shell, Run and Build on the Preview tab | next |
 | D1 | SQL data sources and migrations (section 1.3): SQLite first, then PostgreSQL, MySQL and SQL Server; entities placed per source; schema snapshot, pending changes, migration steps in Clarity with dialects per database, prompts for risky changes, data migrations, down steps, applying on Run and at startup; schema import for external databases and Take ownership | |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |
 | D3 | Copying data between databases when a source changes kind | |

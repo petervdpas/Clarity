@@ -94,6 +94,60 @@ Generation, checking and enforcement stay deterministic (section 2): the AI prop
 
 Superseded by this: the frontend framework choice (sections 7.2 and 11.4 where they assume Svelte, Vue or React output) and the stack milestones M2, M5, M7 and M10 in the roadmap.
 
+### 1.3 Data sources and migrations (2026-10-16)
+
+A project declares where its data lives. The project file lists one or more data sources, in order; the first is the default:
+
+```
+# clarity.toml
+[[datasource]]
+name = "main"
+kind = "postgres"           # sqlite, postgres, mysql, mssql, rest
+url = "env:SHOP_DB_URL"     # read from an environment variable or the OS keychain
+
+[[datasource]]
+name = "payments"
+kind = "rest"
+url = "https://api.example.com/v2"
+auth = { kind = "bearer", secret = "keychain:payments" }   # bearer, api-key, basic
+```
+
+`url` is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:` or `keychain:`), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
+
+**Which entity lives where.** The data dictionary says it, per module or per entity. Every entity uses the first source unless told otherwise, so a project with one source never mentions it. Windows do not know which source is behind an entity: they bind to the dictionary, and the dictionary supplies labels and validation for every source.
+
+**The Project tab.** The sidebar gets a Data sources section: add, edit and remove a source, and test its connection.
+
+**SQL sources** (SQLite, PostgreSQL, MySQL, Microsoft SQL Server) come in two kinds:
+
+- **Owned by Clarity.** The dictionary drives the schema: tables, keys, constraints and indexes, and migrations when the dictionary changes (below).
+- **External.** For a database that already exists, Clarity imports its schema into the dictionary, the way Clarion's dictionary import does. Imported entities are marked external and Clarity never changes their tables. "Take ownership" turns an external source into an owned one: its current schema becomes the baseline migration, and from then on Clarity migrates it.
+
+Each backend's transpile library maps every database onto that language's usual library: sqlx for Rust, `database/sql` for Go, EF Core or Dapper for C#. That is a matrix of backends and databases, so databases arrive one at a time, SQLite first.
+
+**REST and other web APIs.** Clarity does not own their schema. An entity maps onto endpoints (list, get, create, update, delete) with a field mapping, paging and the source's auth (bearer token, API key, basic). Importing an OpenAPI document creates the entities and the mappings in one step. What the API does not offer, the designer does not offer either: an entity whose API is read-only can be browsed but has no Save.
+
+**The UI never talks to a data source.** Not on the desktop and not on the web: every access goes through the generated backend, so credentials stay out of the frontend and the runtime library applies the dictionary's validation before anything is written.
+
+#### Migrations
+
+Clarity has migrations built in, for every source it owns. Its advantage over the usual migration tools: every dictionary change is a designer edit with a known intent. A renamed field is a rename, not a dropped column and an added one, so no data is lost by guessing.
+
+- **Snapshot and steps.** The project keeps `migrations/schema.lock`, the schema as last migrated, and `migrations/` with numbered steps. Both are committed with the project.
+- **Pending changes.** When the dictionary differs from the snapshot, the Project tab lists the pending changes: entity added, field added, field renamed (taken from the rename edit), type changed, field removed. **Create migration** turns them into the next step and updates the snapshot.
+- **Written in Clarity.** Steps do not depend on a database. Each database's transpile library turns them into its own SQL dialect, so one project can migrate SQLite on the desktop and PostgreSQL on a server.
+- **Risky changes need a decision** before the step is created:
+  - A field that becomes required asks for a default, or a Clarity expression that fills the existing rows.
+  - A narrowing type change (`text(80)` to `text(20)`, `decimal` to `integer`) shows how many rows in the dev database would not fit.
+  - Removing a field or an entity is marked destructive and needs confirmation.
+- **Data migrations.** A step can carry Clarity code that transforms rows, for example splitting `name` into `first_name` and `last_name`.
+- **Down steps.** A step gets a down step when it can be reversed, and is marked one-way when it cannot (a removed field).
+- **Applying.** Run on the Preview tab applies pending steps to the dev database first. The generated application checks its schema version at startup and applies what is missing; a command-line switch applies them separately, for server deployments where an administrator does it. Every step runs in a transaction where the database allows it.
+
+**Moving data between databases.** When a project switches a source from one database to another (SQLite to PostgreSQL, say), the dictionary describes both sides, so Clarity can generate a copy tool that moves the data. It comes after the rest.
+
+Superseded by this: section 7.4 (persistence), which assumed SQLite first and PostgreSQL only with the web target.
+
 ## 2. Goals and non-goals
 
 ### Goals
@@ -498,7 +552,7 @@ Because the action logic lives in hand-written modules behind generated interfac
 
 ### 7.4 Persistence
 
-The backend generator emits repository interfaces for entities and a storage adapter. v1 targets SQLite (fits desktop apps); PostgreSQL follows with the web target. Database schema changes are generated as migration files when the spec changes, and a human reviews them like any other change.
+The backend generator emits repository interfaces for entities and a storage adapter per data source. Data sources, the databases and web APIs they can be, and migrations are described in section 1.3.
 
 ### 7.5 Runtime libraries and UI binding
 
@@ -940,9 +994,12 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | S3c | Frame regions: `app` construct, menu, toolbar, ribbon, sidebar and footer docked around the grid (section 5.6) | done |
 | S3d | One designer: every window is designed in the page designer with the same Parts catalog (frame, basic input, containers, data, graphics), free placement and resizing, and a Data panel of what it binds to; form and browse become starter templates (section 1.1) | done |
 | S3e | Part names and events: each part gets a name and an Events list; wiring an event writes the handler name into the window, ready for code behind | done |
-| P1 | Projects: `clarity.toml` with backend, UI and targets (section 1.2); New project asks for them; the Project tab shows and edits them. Opening and creating projects in the app is done | next |
-| L1 | The Clarity behavior language: handlers and actions written in Clarity, with typed access to a window's parts and data (section 1.1) | |
+| P1 | Projects: `clarity.toml` with backend, UI, targets and data sources (sections 1.2 and 1.3); New project asks for them and starts with one SQLite source; the Project tab shows and edits them. Opening and creating projects in the app is done | done |
+| L1 | The Clarity behavior language: handlers and actions written in Clarity, with typed access to a window's parts and data (section 1.1) | next |
 | G1 | First stack: Rust emitter and runtime, Tauri shell, the web renderer as the frontend runtime, the `out/` folder kept in sync, Run and Build on the Preview tab | |
+| D1 | SQL data sources and migrations (section 1.3): SQLite first, then PostgreSQL, MySQL and SQL Server; entities placed per source; schema snapshot, pending changes, migration steps in Clarity with dialects per database, prompts for risky changes, data migrations, down steps, applying on Run and at startup; schema import for external databases and Take ownership | |
+| D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |
+| D3 | Copying data between databases when a source changes kind | |
 | G2 | C# with Avalonia: C# emitter and runtime, the Avalonia emitter (windows as AXAML with ViewModels), desktop first | |
 | G3 | Go: emitter, runtime, Wails shell | |
 | G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted | |
@@ -951,7 +1008,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | S4 | Graphics canvas (section 5.7): `bitmap` and `vector` field types, the standard canvas widget with view and edit modes, the `canvas` screen pattern, backend and frontend renderers | |
 | M0 | Workspace, `clarity.toml`, Rust pack, index, modularity rule, `clarity check`, severities | |
 | M1 | Rest of the spec language: actions, contracts, expression language, formatter | |
-| M2 | First stack end to end: Rust backend, Tauri shell, Svelte frontend, SQLite storage, `clarity gen --verify` | replaced by G1, apart from SQLite storage and `clarity gen --verify` |
+| M2 | First stack end to end: Rust backend, Tauri shell, Svelte frontend, SQLite storage, `clarity gen --verify` | replaced by G1 and D1, apart from `clarity gen --verify` |
 | M3 | TypeScript pack, TDD state machine, Claude Code hooks, protected rules file, shape-in-spec rule, directive integrity | |
 | M4 | Contracts to property tests and runtime checks, DRY, mutation testing for Rust and TypeScript, remaining screen patterns | |
 | M5 | Second stack to prove the generator split: Go + Wails + Vue | replaced by G2 and G3 |
@@ -959,7 +1016,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | M7 | Packs for C, C++, Python, C#, Ruby. Backend generators for C# and C++ | generators replaced by G2 and G4; packs remain for adopted projects |
 | M8 | LSP server (spec and rules), MCP server | |
 | M9 | Desktop app: control room, with the designer from S3 | |
-| M10 | Web target (HTTP adapters, fetch transport, PostgreSQL), C backend generator, React frontend, external packs, Haxe | web target and generators replaced by W1 and G4; PostgreSQL and external packs remain |
+| M10 | Web target (HTTP adapters, fetch transport, PostgreSQL), C backend generator, React frontend, external packs, Haxe | web target and generators replaced by W1 and G4, PostgreSQL by D1; external packs remain |
 
 ## 20. Open questions
 

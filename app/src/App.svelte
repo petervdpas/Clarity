@@ -13,6 +13,12 @@
   import EnumEditor from "./lib/EnumEditor.svelte";
   import ModuleView from "./lib/ModuleView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
+  import NewProjectDialog from "./lib/NewProjectDialog.svelte";
+  import ProjectSettings from "./lib/ProjectSettings.svelte";
+  import type { Catalog } from "./lib/generated/Catalog";
+  import type { ProjectFile } from "./lib/generated/ProjectFile";
+  import type { Settings } from "./lib/generated/Settings";
+  import type { Stack } from "./lib/generated/Stack";
   import type { Selected } from "./lib/selection";
   import type { Edit } from "./lib/generated/Edit";
   import type { RenameKind } from "./lib/generated/RenameKind";
@@ -60,6 +66,13 @@
   /** The file a new window goes into, while the New window dialog is open. */
   let newWindowIn = $state<SpecFile | null>(null);
   let newWindowError = $state<string | null>(null);
+  /** The project file, which the Project tab shows and edits. */
+  let projectFile = $state<ProjectFile | null>(null);
+  /** The folder and the choices, while the New project dialog is open. */
+  let newProjectIn = $state<{ folder: string; catalog: Catalog } | null>(null);
+  let newProjectError = $state<string | null>(null);
+  /** Bumped when a settings change is refused, so the editor shows the file again. */
+  let settingsRevision = $state(0);
 
   const current = $derived(stack.at(-1) ?? null);
   const app = $derived(preview ? findApp(preview) : null);
@@ -86,6 +99,17 @@
   const appData = $derived(preview && appPage ? pageData(preview, appPage) : {});
   const errors = $derived(preview?.project.diagnostics.filter((d) => d.severity === "error") ?? []);
   const warnings = $derived(preview?.project.diagnostics.filter((d) => d.severity === "warning") ?? []);
+  const projectProblems = $derived(projectFile?.problems ?? []);
+  const errorCount = $derived(errors.length + projectProblems.length);
+  const stackSummary = $derived.by(() => {
+    const settings = projectFile?.settings;
+    if (!projectFile || !settings) return "(no clarity.toml)";
+    const { catalog } = projectFile;
+    const backend = catalog.backends.find((b) => b.id === settings.stack.backend)?.label;
+    const ui = catalog.uis.find((u) => u.id === settings.stack.ui)?.label;
+    const targets = catalog.targets.filter((t) => settings.stack.targets.includes(t.id)).map((t) => t.label);
+    return `${backend}, ${ui}, ${targets.join(" and ")}`;
+  });
   const projectName = $derived(app?.title ?? app?.name.name ?? (openDir ? fileName(openDir) : ""));
 
   // Entering design mode shows the parts.
@@ -146,7 +170,46 @@
         return all.some((f) => f.enums.some((e) => e.name.name === o.name));
       case "module":
         return all.some((f) => (f.module?.name ?? "") === o.name);
+      case "settings":
+        return true;
     }
+  }
+
+  async function loadProjectFile() {
+    try {
+      projectFile = await invoke<ProjectFile>("project_file");
+    } catch {
+      projectFile = null;
+    }
+  }
+
+  async function saveSettings(settings: Settings) {
+    if (!projectFile) return;
+    actionError = null;
+    try {
+      projectFile = await invoke<ProjectFile>("save_settings", { version: projectFile.version, settings });
+    } catch (err) {
+      actionError = String(err);
+      // Show the file as it is, not the refused change.
+      settingsRevision++;
+      await loadProjectFile();
+    }
+    refreshHistory();
+  }
+
+  async function createProjectFile() {
+    actionError = null;
+    try {
+      projectFile = await invoke<ProjectFile>("create_project_file");
+    } catch (err) {
+      actionError = String(err);
+    }
+    refreshHistory();
+  }
+
+  function selectSettings() {
+    select({ kind: "settings", name: "" });
+    tab = "project";
   }
 
   function select(o: Open) {
@@ -211,6 +274,7 @@
       writeLastDir(trimmed);
       stack = [];
       applyPreview(result);
+      await loadProjectFile();
     } catch (err) {
       loadError = String(err);
     }
@@ -225,15 +289,26 @@
     const dir = await openFolder({ directory: true, title: "Choose an empty folder for the new project" });
     if (typeof dir !== "string") return;
     try {
-      const result = await invoke<Preview>("new_project", { path: dir });
-      loadError = null;
-      openDir = dir;
-      writeLastDir(dir);
-      stack = [];
-      applyPreview(result);
-      tab = "design";
+      newProjectError = null;
+      newProjectIn = { folder: dir, catalog: await invoke<Catalog>("stack_catalog") };
     } catch (err) {
       loadError = String(err);
+    }
+  }
+
+  async function createProject(folder: string, chosen: Stack) {
+    try {
+      const result = await invoke<Preview>("new_project", { path: folder, stack: chosen });
+      newProjectIn = null;
+      loadError = null;
+      openDir = folder;
+      writeLastDir(folder);
+      stack = [];
+      applyPreview(result);
+      await loadProjectFile();
+      tab = "design";
+    } catch (err) {
+      newProjectError = String(err);
     }
   }
 
@@ -298,6 +373,8 @@
     } catch (err) {
       actionError = String(err);
     }
+    // A change can be to the project file too.
+    await loadProjectFile();
   }
 
   /** Deletes the picked part, or the open window when nothing is picked. */
@@ -345,12 +422,14 @@
 
   onMount(() => {
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
+    const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
     invoke<string | null>("initial_spec_dir").then((dir) => {
       const start = dir ?? readLastDir();
       if (start) openProject(start);
     });
     return () => {
       unlisten.then((stop) => stop());
+      unlistenProject.then((stop) => stop());
     };
   });
 </script>
@@ -389,6 +468,7 @@
             <RibbonButton icon="new" label="New" title="Create a project in an empty folder" onclick={newProject} />
             <RibbonButton icon="open" label="Open" title="Open a project folder" onclick={chooseProject} />
             <RibbonButton icon="reload" label="Reload" disabled={!openDir} onclick={() => openDir && openProject(openDir)} />
+            <RibbonButton icon="settings" label="Settings" title="Stack and data sources" disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
           </div>
           <div class="group-name">Project</div>
         </div>
@@ -401,7 +481,7 @@
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="check" label={errors.length === 0 ? "No errors" : errors.length === 1 ? "1 error" : `${errors.length} errors`} disabled={!preview} onclick={() => openDir && openProject(openDir)} />
+            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} disabled={!preview} onclick={() => openDir && openProject(openDir)} />
           </div>
           <div class="group-name">Check</div>
         </div>
@@ -490,7 +570,15 @@
               <dt>Main window</dt>
               <dd>{app?.main?.name ?? "(none)"}</dd>
               <dt>Stack</dt>
-              <dd>Rust backend, Tauri, Svelte</dd>
+              <dd><button class="link" title="Open the project settings" onclick={selectSettings}>{stackSummary}</button></dd>
+              <dt>Data</dt>
+              <dd>
+                {#if projectFile?.settings}
+                  {projectFile.settings.datasources.map((s) => s.name).join(", ") || "(none)"}
+                {:else}
+                  -
+                {/if}
+              </dd>
             </dl>
           {:else}
             <p class="none">No project is open. Use New or Open in the ribbon.</p>
@@ -525,17 +613,23 @@
         <section class="diagnostics">
           <h2>
             Problems
-            <span class="count error">{errors.length}</span>
+            <span class="count error">{errorCount}</span>
             <span class="count warning">{warnings.length}</span>
           </h2>
           <ul>
+            {#each projectProblems as message, i (i)}
+              <li class="error">
+                <button class="link" onclick={selectSettings}><code>clarity.toml</code></button>
+                <span>{message}</span>
+              </li>
+            {/each}
             {#each preview.project.diagnostics as d, i (i)}
               <li class={d.severity}>
                 <code>{location(d)}</code>
                 <span>{d.message}</span>
               </li>
             {:else}
-              <li class="ok">No problems</li>
+              {#if projectProblems.length === 0}<li class="ok">No problems</li>{/if}
             {/each}
           </ul>
         </section>
@@ -547,6 +641,8 @@
         <div class="placeholder">
           <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
         </div>
+      {:else if current?.kind === "settings" && projectFile && openDir}
+        <ProjectSettings project={projectFile} folder={openDir} revision={settingsRevision} onsave={saveSettings} oncreate={createProjectFile} />
       {:else if entity && file}
         <EntityEditor
           {preview}
@@ -612,6 +708,16 @@
     error={newDataError}
     onsubmit={addData}
     oncancel={() => (newData = null)}
+  />
+{/if}
+
+{#if newProjectIn}
+  <NewProjectDialog
+    catalog={newProjectIn.catalog}
+    folder={newProjectIn.folder}
+    error={newProjectError}
+    onsubmit={(chosen) => newProjectIn && createProject(newProjectIn.folder, chosen)}
+    oncancel={() => (newProjectIn = null)}
   />
 {/if}
 
@@ -998,6 +1104,17 @@
     font-family: var(--mono);
     font-size: 11px;
     color: var(--text-muted);
+  }
+
+  button.link {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline dotted;
   }
 
   main {

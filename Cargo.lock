@@ -431,6 +431,7 @@ dependencies = [
 name = "clarity-preview"
 version = "0.1.0"
 dependencies = [
+ "clarity-project",
  "clarity-spec",
  "notify",
  "serde",
@@ -438,6 +439,16 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "ts-rs",
+]
+
+[[package]]
+name = "clarity-project"
+version = "0.1.0"
+dependencies = [
+ "clarity-spec",
+ "serde",
+ "toml_edit 0.25.17+spec-1.1.0",
  "ts-rs",
 ]
 
@@ -3755,8 +3766,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3641d5bbb5349a79e1020a242d251efbc546ad8048d133958323ce9c40a9c9c"
 dependencies = [
  "indexmap 2.14.2",
+ "serde_core",
+ "serde_spanned 1.1.2",
  "toml_datetime 1.1.2+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.4",
 ]
 

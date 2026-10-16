@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-cli", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-cli", "app/src-tauri"]
 
 [workspace.package]
 edition = "2024"
@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 clarity-spec = { path = "crates/clarity-spec" }
+clarity-project = { path = "crates/clarity-project" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = { version = "12", features = ["serde-json-impl"] }

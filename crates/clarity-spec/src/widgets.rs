@@ -645,7 +645,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn is_identifier(text: &str) -> bool {
+pub fn is_identifier(text: &str) -> bool {
     let mut chars = text.chars();
     chars
         .next()

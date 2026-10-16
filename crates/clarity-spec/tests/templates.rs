@@ -4,7 +4,7 @@ use clarity_spec::{Project, load_dir, load_dir_with};
 use std::path::PathBuf;
 
 fn example_dir() -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop/spec"))
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop"))
 }
 
 /// Adds a window from a template to desk.clarity and loads the project
@@ -107,4 +107,18 @@ fn templates_need_the_project_and_a_known_entity() {
             .0
             .contains("'Nope' is not an entity")
     );
+}
+
+#[test]
+fn a_browse_window_reloads_its_list_when_a_form_closes() {
+    let (text, after) = add_window(PageTemplate::Browse {
+        entity: "Order".into(),
+    });
+    assert!(text.contains("    data orders: list<Order>\n    on return: window_returned\n"), "{text}");
+    assert!(
+        text.ends_with("\ncode FreshWindow\n    handler window_returned\n        reload orders\n"),
+        "{text}"
+    );
+    let problems: Vec<_> = after.diagnostics.iter().map(|d| &d.message).collect();
+    assert!(problems.is_empty(), "{problems:?}");
 }

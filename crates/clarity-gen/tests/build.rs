@@ -9,9 +9,9 @@ use std::process::Command;
 #[ignore]
 fn the_shop_example_builds() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let spec = root.join("examples/shop/spec");
-    let project = clarity_spec::load_dir(&spec).unwrap();
-    let settings = clarity_project::load(&spec).settings.expect("the example has a clarity.toml");
+    let file = root.join("examples/shop.clarity");
+    let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
+    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
     let out = std::env::temp_dir().join(format!("clarity-gen-build-{}", std::process::id()));

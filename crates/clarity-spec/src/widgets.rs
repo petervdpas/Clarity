@@ -53,11 +53,24 @@ pub enum Event {
     Leave,
     /// A row or item is selected.
     Select,
-    /// A row or item is opened (double-click or Enter).
+    /// A row or item is opened (double-click or Enter); for a window, the
+    /// window has opened with its data loaded.
     Open,
     Pointer,
     Key,
+    /// A window is about to close.
+    Close,
+    /// A window is on top again, after a window it opened has closed.
+    Return,
+    /// The app starts, before its main window opens.
+    Start,
 }
+
+/// The events a window has, in the order the designer lists them.
+pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
+
+/// The events the app has.
+pub const APP_EVENTS: [Event; 1] = [Event::Start];
 
 impl Event {
     pub fn keyword(self) -> &'static str {
@@ -70,6 +83,9 @@ impl Event {
             Event::Open => "open",
             Event::Pointer => "pointer",
             Event::Key => "key",
+            Event::Close => "close",
+            Event::Return => "return",
+            Event::Start => "start",
         }
     }
 
@@ -83,6 +99,9 @@ impl Event {
             "open" => Some(Event::Open),
             "pointer" => Some(Event::Pointer),
             "key" => Some(Event::Key),
+            "close" => Some(Event::Close),
+            "return" => Some(Event::Return),
+            "start" => Some(Event::Start),
             _ => None,
         }
     }

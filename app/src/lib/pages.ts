@@ -41,6 +41,7 @@ export function appAsPage(app: App): Page {
     widgets: [],
     frame: app.frame,
     span: app.span,
+    handlers: app.handlers,
   };
 }
 
@@ -154,4 +155,17 @@ export function boundField(data: PageData, bind: string | null): { record: Row; 
 /** Copies props with changes; the designer always sends complete props. */
 export function withProps(props: WidgetProps, changes: Partial<WidgetProps>): WidgetProps {
   return { ...props, ...changes };
+}
+
+/**
+ * Whether a part takes extra height in a fluid window. Tables, lists,
+ * images and canvases do; a container (panel, tabs, splitter) only when
+ * something inside it does, so a panel of inputs keeps its height.
+ */
+export function widgetGrows(preview: Preview, widget: Widget): boolean {
+  const info = widgetInfo(preview, widget.props.kind);
+  if (!info.grows) return false;
+  if (info.container === null) return true;
+  const inside = [...widget.children, ...widget.pages.flatMap((p) => p.children)];
+  return inside.some((w) => widgetGrows(preview, w));
 }

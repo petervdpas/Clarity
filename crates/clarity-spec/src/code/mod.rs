@@ -83,6 +83,10 @@ pub enum StmtKind {
     Save {
         value: Expr,
     },
+    /// `reload customers`: loads a window's data again, as when it opened.
+    Reload {
+        data: Ident,
+    },
     Delete {
         value: Expr,
     },

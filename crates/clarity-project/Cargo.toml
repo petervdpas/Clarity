@@ -1,6 +1,6 @@
 [package]
 name = "clarity-project"
-description = "The Clarity project file: stack, targets and data sources"
+description = "The Clarity project file: stack, targets, output and data sources"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -9,4 +9,3 @@ license.workspace = true
 clarity-spec.workspace = true
 serde.workspace = true
 ts-rs.workspace = true
-toml_edit = { version = "0.25", features = ["serde"] }

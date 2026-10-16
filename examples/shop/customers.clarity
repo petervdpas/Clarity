@@ -17,14 +17,15 @@ entity Customer
 page CustomerBrowse: window
     title "Customers"
     data customers: list<Customer>
+    on return: window_returned
 
     label "Name" at 1,1 span 2
     textbox at 3,1 span 4
     label "E-mail" at 7,1 span 2
     textbox at 9,1 span 4
-    table at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active
+    table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active on open: open_clicked
     button "New" at 9,10 span 2 on click -> CustomerForm
-    button "Open" at 11,10 span 2 on click -> CustomerForm
+    button "Open" name open_button at 11,10 span 2 on click: open_clicked
 
 page CustomerForm: window
     title "Customer"
@@ -54,6 +55,14 @@ page CustomerForm: window
             textbox at 4,1 span 6 bind customer.notes
     button "Save" name save at 9,8 span 2 on click: save_clicked
     button "Close" name close_form at 11,8 span 2 on click: close_clicked
+
+code CustomerBrowse
+    handler window_returned
+        // A form opened from here may have saved a customer.
+        reload customers
+
+    handler open_clicked
+        open CustomerForm with customer = grid.selected
 
 code CustomerForm
     handler kind_changed

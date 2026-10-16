@@ -74,7 +74,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut files = vec![
         text("Cargo.toml", cargo_toml(&crate_name)),
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
-        text("tauri.conf.json", tauri_conf(&settings.name, &crate_name)),
+        text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name)),
         text("clarity-runtime/Cargo.toml", RUNTIME_CARGO.into()),
         text("src/model.json", model_json(project)),
     ];
@@ -266,6 +266,16 @@ fn main_rs(project: &Project, modules: &[String], owners: &[Owner], database: &s
             ));
         }
     }
+    // Windows by name; the app's start runs whatever window is given.
+    let events: String = owners
+        .iter()
+        .flat_map(|o| {
+            o.events.iter().map(move |(event, handler)| {
+                let window = if o.is_app { "_".to_string() } else { format!("{:?}", o.name) };
+                format!("        ({window}, {event:?}) => Some({handler:?}),\n")
+            })
+        })
+        .collect();
     let options: String = project
         .entities()
         .map(|e| {
@@ -296,14 +306,33 @@ const DATABASE: &str = {database:?};
 struct App(Mutex<Db>);
 
 /// A window's state when it opens, with `with` filled in.
-fn open(db: &Db, window: &str, with: Map<String, Value>) -> Result<WindowState> {{
+fn open(db: &Db, window: &str, with: Map<String, Value>) -> Result<Reply> {{
     let mut data = match window {{
 {opens}        _ => return Err(Error::Invalid(format!("there is no window {{window}}"))),
     }};
     data.extend(with);
     let state = WindowState::new(window, data);
     check(&state)?;
-    Ok(state)
+    on_event(db, state, "open")
+}}
+
+/// The handler of a window's or the app's own event, if it has one.
+fn event_handler(window: &str, event: &str) -> Option<&'static str> {{
+    match (window, event) {{
+{events}        _ => None,
+    }}
+}}
+
+/// Runs the handler of an own event (open, close, return, start), or
+/// returns the state as it is when there is none.
+fn on_event(db: &Db, state: WindowState, event: &str) -> Result<Reply> {{
+    match event_handler(&state.window, event) {{
+        Some(handler) => dispatch(db, state, handler),
+        None => {{
+            let data = state.data.clone();
+            Ok(Ui::from_state(&state).reply(&state.window, data))
+        }}
+    }}
 }}
 
 /// Fails when the data does not fit the window, such as a wrong `with`.
@@ -340,8 +369,26 @@ fn start() -> Value {{
 }}
 
 #[tauri::command]
-fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> std::result::Result<WindowState, String> {{
+fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> std::result::Result<Reply, String> {{
     locked(&app, |db| open(db, &window, with))
+}}
+
+/// Runs a window's `on close` before the screen closes it.
+#[tauri::command]
+fn close_window(app: tauri::State<App>, state: WindowState) -> std::result::Result<Reply, String> {{
+    locked(&app, |db| on_event(db, state, "close"))
+}}
+
+/// Runs a window's `on return` when it is on top again.
+#[tauri::command]
+fn return_to(app: tauri::State<App>, state: WindowState) -> std::result::Result<Reply, String> {{
+    locked(&app, |db| on_event(db, state, "return"))
+}}
+
+/// Runs the app's `on start`, before its main window opens.
+#[tauri::command]
+fn start_app(app: tauri::State<App>) -> std::result::Result<Reply, String> {{
+    locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start"))
 }}
 
 #[tauri::command]
@@ -364,7 +411,16 @@ fn main() {{
     db.migrate(schema::STEPS).expect("cannot bring the database up to date");
     tauri::Builder::default()
         .manage(App(Mutex::new(db)))
-        .invoke_handler(tauri::generate_handler![start, open_window, dispatch_event, ref_options, quit_app])
+        .invoke_handler(tauri::generate_handler![
+            start,
+            start_app,
+            open_window,
+            close_window,
+            return_to,
+            dispatch_event,
+            ref_options,
+            quit_app
+        ])
         .run(tauri::generate_context!())
         .expect("cannot start the application");
 }}

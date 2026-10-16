@@ -180,6 +180,8 @@ pub struct Page {
     pub widgets: Vec<Widget>,
     /// Regions of a window that override the app's.
     pub frame: Frame,
+    /// Handlers of the window's own events: open, close, return.
+    pub handlers: Vec<Handler>,
     pub span: Span,
 }
 
@@ -288,6 +290,8 @@ pub struct App {
     /// Data for widgets in the sidebars and the footer.
     pub data: Vec<DataDecl>,
     pub frame: Frame,
+    /// Handlers of the app's events: start.
+    pub handlers: Vec<Handler>,
     pub span: Span,
 }
 

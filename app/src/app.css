@@ -107,3 +107,59 @@ button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Forms: labels in a column on the left, fields on the right, all one
+   height, help text under its field. Settings pages and dialogs use it, so
+   every form in Clarity looks the same. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 440px);
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.form-grid > .form-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-grid > .form-help {
+  grid-column: 2;
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-grid select {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.form-grid input:not([type="checkbox"]),
+.form-grid select {
+  height: 30px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.form-grid .form-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.form-grid .form-inline > input {
+  flex: 1;
+}
+
+.form-grid .form-checks {
+  display: flex;
+  gap: 16px;
+}
+
+.form-grid .form-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

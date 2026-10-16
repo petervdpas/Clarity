@@ -35,18 +35,20 @@ pub struct BuildDone {
     pub binary: Option<String>,
 }
 
-/// Generates the project in `dir` into `dir/out`. Returns the out folder and
-/// the name of the program cargo will build.
-pub fn generate_out(dir: &Path) -> Result<(PathBuf, String), String> {
-    let project = clarity_spec::load_dir(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let file = clarity_project::load(dir);
-    let settings = match (file.settings, file.problems.first()) {
+/// Generates the project of the project file `file` into its output folder.
+/// Returns the output folder and the name of the program cargo will build.
+pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
+    let dir = clarity_project::module_dir(file);
+    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let loaded = clarity_project::load(file);
+    let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let settings = match (loaded.settings, loaded.problems.first()) {
         (Some(settings), None) => settings,
-        (_, Some(problem)) => return Err(format!("clarity.toml: {problem}")),
-        (None, None) => return Err("the project has no clarity.toml".to_string()),
+        (_, Some(problem)) => return Err(format!("{shown}: {problem}")),
+        (None, None) => return Err(format!("{shown} cannot be read")),
     };
     let files = clarity_gen::generate(&project, &settings).map_err(|errors| errors.join("; "))?;
-    let out = clarity_project::out_dir(dir, &settings);
+    let out = clarity_project::out_dir(file, &settings);
     clarity_gen::write_out(&out, &files, &clarity_gen::BUILD_OUTPUT).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
     Ok((out, clarity_gen::binary_name(&settings)))
 }
@@ -59,12 +61,12 @@ fn program(out: &Path, name: &str, release: bool) -> PathBuf {
 
 /// Generates, builds and (with `run`) starts the open project. Returns at
 /// once; progress arrives as events.
-pub fn start(app: AppHandle, dir: PathBuf, release: bool, run: bool) -> Result<(), String> {
+pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<(), String> {
     let state = app.state::<BuildState>();
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
-    let (out, name) = match generate_out(&dir) {
+    let (out, name) = match generate_out(&file) {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -145,18 +147,20 @@ mod tests {
 
     #[test]
     fn generates_the_example_into_out() {
-        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/shop/spec");
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         let dir = std::env::temp_dir().join(format!("clarity-run-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for entry in std::fs::read_dir(&example).unwrap() {
+        std::fs::create_dir_all(dir.join("shop")).unwrap();
+        std::fs::copy(examples.join("shop.clarity"), dir.join("shop.clarity")).unwrap();
+        for entry in std::fs::read_dir(examples.join("shop")).unwrap() {
             let path = entry.unwrap().path();
             if path.is_file() {
-                std::fs::copy(&path, dir.join(path.file_name().unwrap())).unwrap();
+                std::fs::copy(&path, dir.join("shop").join(path.file_name().unwrap())).unwrap();
             }
         }
-        let (out, name) = generate_out(&dir).unwrap();
+        let (out, name) = generate_out(&dir.join("shop.clarity")).unwrap();
         assert_eq!(name, "shop");
+        assert_eq!(out, dir.join("shop/out"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());
         assert_eq!(program(&out, &name, true), out.join("target/release/shop"));

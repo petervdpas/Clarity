@@ -6,9 +6,17 @@ import type { Stack } from "./Stack";
  * The settings of a project, as the Project tab shows them. The first data
  * source is the default one.
  */
-export type Settings = { name: string, stack: Stack, datasources: Array<DataSource>, 
+export type Settings = { 
+/**
+ * The project's name, a Clarity name such as `Shop`; also the program's.
+ */
+name: string, 
+/**
+ * The name people see, when it differs from the one derived from `name`.
+ */
+title: string | null, stack: Stack, datasources: Array<DataSource>, 
 /**
  * Where the application is generated and built: a folder relative to
- * the project, or an absolute one.
+ * the project's folder, or an absolute one.
  */
 out: string, };

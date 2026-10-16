@@ -30,7 +30,7 @@ entity Note
 
 #[test]
 fn example_project_is_clean() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop/spec");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop");
     let project = load_dir(std::path::Path::new(dir)).unwrap();
     assert_eq!(project.files.len(), 4);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

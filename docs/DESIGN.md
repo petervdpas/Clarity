@@ -39,17 +39,11 @@ Superseded by this: the form and browse screen kinds (section 5.5 and later ment
 
 ### 1.2 Projects, stacks and output (2026-10-16)
 
-A Clarity project is a folder with its `.clarity` files and one project file. The project file names the stack the application is transpiled into:
+A Clarity project is one file, `<name>.clarity`, with a folder of the same name next to it that holds the modules (the project file is described at the end of this section). The project file names the stack the application is transpiled into:
 
 ```
-# clarity.toml
-[project]
-name = "Shop"
-
-[stack]
-backend = "csharp"          # rust, go, csharp, c, cpp
-ui = "avalonia"             # web, or a native toolkit for the backend
-targets = ["desktop"]       # desktop, web, or both
+project Shop
+    stack csharp avalonia desktop   // backend (rust, go, csharp, c, cpp), UI (web or a toolkit), targets (desktop, web)
 ```
 
 **Backends.** Five backend languages: Rust, Go, C#, C and C++. Each needs one transpile library, made of three parts:
@@ -94,7 +88,7 @@ Generation, checking and enforcement stay deterministic (section 2): the AI prop
 
 Superseded by this: the frontend framework choice (sections 7.2 and 11.4 where they assume Svelte, Vue or React output) and the stack milestones M2, M5, M7 and M10 in the roadmap.
 
-**The project file (decided 2026-10-16, replaces `clarity.toml`).** A project is one file, `<name>.clarity`, which is what you open, with a folder of the same name next to it that holds the modules, the output and the data. The settings are written in Clarity, so the whole project is one language:
+**The project file (2026-10-16).** A project is one file, `<name>.clarity`, which is what you open, with a folder of the same name next to it that holds the modules, the output and the data. The settings are written in Clarity, so the whole project is one language:
 
 ```
 examples/
@@ -115,27 +109,22 @@ project Shop
         auth bearer "keychain:payments"
 ```
 
-The rules of `clarity.toml` stay as they are (strict checking, secrets only as `env:` or `keychain:` references, the output folder never the project folder); only the syntax moves into Clarity, and the Project tab edits the `project` block like any other declaration. Until P2 is built, projects still use `clarity.toml` in the module folder.
+The settings are `title` (optional; the name people see, derived from the project name when left out), `stack` (backend, UI, then one or more targets, read by position), `output` (default `out`, relative to the project's folder) and one `datasource` line per data source, with an indented `auth` line for web APIs. Reading is strict: an unknown setting or value is an error that names the line and the accepted words. The Project tab edits the settings and writes only the lines whose value changed, so comments and blank lines written by hand stay. This replaces the earlier `clarity.toml`.
 
 ### 1.3 Data sources and migrations (2026-10-16)
 
 A project declares where its data lives. The project file lists one or more data sources, in order; the first is the default:
 
 ```
-# clarity.toml
-[[datasource]]
-name = "main"
-kind = "postgres"           # sqlite, postgres, mysql, mssql, rest
-url = "env:SHOP_DB_URL"     # read from an environment variable or the OS keychain
-
-[[datasource]]
-name = "payments"
-kind = "rest"
-url = "https://api.example.com/v2"
-auth = { kind = "bearer", secret = "keychain:payments" }   # bearer, api-key, basic
+project Shop
+    stack rust web desktop
+    // sqlite, postgres, mysql, mssql or rest; secrets only as env: or keychain: references
+    datasource main postgres "env:SHOP_DB_URL"
+    datasource payments rest "https://api.example.com/v2"
+        auth bearer "keychain:payments"   // bearer, api_key or basic
 ```
 
-`url` is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:` or `keychain:`), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
+The text after the kind is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:` or `keychain:`), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
 
 **Which entity lives where.** The data dictionary says it, per module or per entity. Every entity uses the first source unless told otherwise, so a project with one source never mentions it. Windows do not know which source is behind an entity: they bind to the dictionary, and the dictionary supplies labels and validation for every source.
 
@@ -182,8 +171,8 @@ Superseded by this: section 7.4 (persistence), which assumed SQLite first and Po
 - **Window data until queries exist:** list data loads all records, single data starts as a new record, and `open Window with ...` passes records in.
 - **The binding.** The renderer and the backend are bound three ways, all declared in Clarity: data (`bind customer.name`: the window's data goes to the parts, and what the user types goes back with the next event), events (`on click: save_clicked`: the screen reports the event, the backend runs the handler) and properties (`save.enabled = ...`: the reply carries part properties to the screen). Each window becomes a Rust struct of its data; each handler a function on it with a `Ui` for messages, windows to open and `close`. The frontend is the designer's renderer, built once (`npm run build:runtime`) and copied into `out/ui`; the shell is Tauri. For a native toolkit (G2) the same Clarity becomes that toolkit's own bindings.
 - **Run and Build** on the Preview tab generate `out/`, run cargo there with its output in an Output panel, and start the program (Run) or build a release (Build); Stop ends it. Cargo's `target`, Tauri's `gen`, the lock file and the application's `data` are left alone by generation.
-- **The output folder** is set in `clarity.toml` (`[build] out = "out"`, the default): a folder in the project or a full path elsewhere, never the project folder itself. Because generation removes what it no longer produces, Clarity writes only into an empty folder or one that carries its `.clarity-out` marker.
-- **Fluid display.** Windows always resize with the screen, on the web and the desktop alike. The columns share the width; rows that hold a part that grows (a table, a list, a panel, tabs, a splitter, an image or a canvas) share the extra height, and the other rows keep their height, so inputs never stretch. A window smaller than its design scrolls. The designer keeps every row at its fixed height, so placing parts stays exact. A native toolkit gets the same rule from its own layout: in Avalonia, rows of growing parts become `*` rows. Sidebars in a running application have a splitter on their inner edge; the designed width is where they start.
+- **The output folder** is set in the project file (`output "out"`, the default): a folder in the project's folder or a full path elsewhere, never the project folder itself. Because generation removes what it no longer produces, Clarity writes only into an empty folder or one that carries its `.clarity-out` marker.
+- **Fluid display.** Windows always resize with the screen, on the web and the desktop alike. The columns share the width; rows that hold a part that grows (a table, a list, an image or a canvas, or a panel, tabs or a splitter that holds one) share the extra height, and the other rows keep their height, so inputs never stretch. A window smaller than its design scrolls. The designer keeps every row at its fixed height, so placing parts stays exact. A native toolkit gets the same rule from its own layout: in Avalonia, rows of growing parts become `*` rows. Sidebars in a running application have a splitter on their inner edge; the designed width is where they start.
 
 ## 2. Goals and non-goals
 
@@ -243,7 +232,7 @@ The spec language describes what an application consists of, not how it behaves.
 
 ### 5.1 Files and modules
 
-Spec files have the extension `.clarity` and live in `spec/`. Each file starts with the module it belongs to; the module must exist in `clarity.toml`.
+Spec files have the extension `.clarity` and live in the project's folder, next to the project file (section 1.2). Each file starts with the module it belongs to; the module must exist in `clarity.toml`.
 
 ```
 module sales
@@ -518,6 +507,29 @@ code CustomerForm
 | `open Window [with name = expr, ...]` | open a window, filling its data by name |
 | `close` | close this window |
 | `save expr` / `delete expr` | store or remove a record in its data source (section 1.3) |
+| `reload data` | read the window's data again from its source: a list loads all its records, a record loads again by its id (a new record stays as it is) |
+
+**Window and app events.** Besides its parts, a window has events of its own, written as setting lines in the `page` block, and the app has one in the `app` block:
+
+| Event | When |
+|---|---|
+| `on open: handler` | the window has opened and its data is loaded |
+| `on close: handler` | the window is about to close |
+| `on return: handler` | a window this one opened has closed, and this one is on top again |
+| `on start: handler` (app) | the application starts, before its main window opens |
+
+```
+page CustomerBrowse: window
+    data customers: list<Customer>
+    on return: window_returned
+    table name grid at 1,1 span 12 rows 8 bind customers columns name, credit_limit
+
+code CustomerBrowse
+    handler window_returned
+        reload customers
+```
+
+This is how a list refreshes after a form that edits one of its records: in code, not in a setting. The browse template writes exactly this, so a new browse window refreshes from the start; delete the line or the handler to change it. In the designer, the window section of the properties lists the events with Wire, Code and a remove button, the same as for parts; the app's events are in the same place when the app is selected. A window or app handler counts as wired.
 
 **Expressions:** literals (`12`, `9.95`, `"text"`, `true`, `false`), paths (`customer.name`, `orders.selected.total`), enum values, `not`, unary `-`, `* /`, `+ -` (`+` also joins text), comparisons `== != < <= > >=`, `and`, `or`, `x in [a, b]`, parentheses and `count(list)`.
 
@@ -1117,12 +1129,12 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | S3d | One designer: every window is designed in the page designer with the same Parts catalog (frame, basic input, containers, data, graphics), free placement and resizing, and a Data panel of what it binds to; form and browse become starter templates (section 1.1) | done |
 | S3e | Part names and events: each part gets a name and an Events list; wiring an event writes the handler name into the window, ready for code behind | done |
 | P1 | Projects: `clarity.toml` with backend, UI, targets and data sources (sections 1.2 and 1.3); New project asks for them and starts with one SQLite source; the Project tab shows and edits them. Opening and creating projects in the app is done | done |
-| P2 | The project as one file: `<name>.clarity` with a `project` block (stack, output, data sources) replacing `clarity.toml`, and the modules in a folder of the same name next to it (section 1.2). Open and New work on the project file; the shop example moves to `examples/shop.clarity` with `examples/shop/`, its app module renamed so it does not clash with the project file | next |
+| P2 | The project as one file: `<name>.clarity` with a `project` block (stack, output, data sources) replacing `clarity.toml`, and the modules in a folder of the same name next to it (section 1.2). Open and New work on the project file; the shop example moves to `examples/shop.clarity` with `examples/shop/`, its app module renamed so it does not clash with the project file | done |
 | L1 | The Clarity behavior language: handlers written in Clarity in `code` blocks, with typed access to a window's parts and data (sections 1.1 and 5.9); wiring an event writes an empty handler; the code panel in the designer checks while you type | core done; open: modules with shared functions and actions (L2) |
 | L2 | Backend modules in Clarity: functions and actions in modules, callable from handlers and each other, with `require`, `ensure` and `effects` (section 5.10); design as text with the designer following the text (section 5.9); modules show and edit their functions | done |
 | G1a | Rust backend: `clarity-gen` writes a Cargo project into `out/` (deterministic, kept in sync by `write_out`), with records and enums from the dictionary, the SQLite schema as the first migration, functions and actions as Rust with contract checks, and the `clarity-runtime` crate copied in; `clarity gen`; the generated shop builds and runs, and generated logic is tested | done |
 | G1b | Handlers and the event protocol, the web renderer as a standalone package, the Tauri shell, Run and Build on the Preview tab | done |
-| E1 | Events beyond parts: window `on open`, `on close` and `on return` (back from a window it opened, to refresh), app `on start`; data events (before and after save) follow with D1 | |
+| E1 | Events beyond parts: window `on open`, `on close` and `on return` (back from a window it opened, to refresh), app `on start`; data events (before and after save) follow with D1 | done (section 5.9): window and app events, `reload`, Events in the designer, the browse template refreshes on return; data events stay with D1 |
 | C1 | Command-line applications: `targets = ["cli"]`; `command` declarations with typed arguments and options, written in Clarity like handlers; `print`, `ask` and `exit`; generated as a program without a window, over the same records and actions; needs queries (`find ... where`) from D1 | |
 | D1 | SQL data sources and migrations (section 1.3): SQLite first, then PostgreSQL, MySQL and SQL Server; entities placed per source; schema snapshot, pending changes, migration steps in Clarity with dialects per database, prompts for risky changes, data migrations, down steps, applying on Run and at startup; schema import for external databases and Take ownership | |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |

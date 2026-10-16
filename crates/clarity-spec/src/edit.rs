@@ -25,7 +25,8 @@ use crate::parser::{
 };
 use crate::templates::{self, PageTemplate};
 use crate::widgets::{
-    self, ContainerKind, WidgetKind, is_identifier, new_props, validate_props, widget_line,
+    self, APP_EVENTS, ContainerKind, Event, WINDOW_EVENTS, WidgetKind, is_identifier, new_props, validate_props,
+    widget_line,
 };
 
 /// Indentation added for a new nesting level when no sibling shows the
@@ -109,6 +110,13 @@ pub enum Edit {
     AddApp { name: String },
     /// Set the main window of an app.
     SetMain { app: u32, main: String },
+    /// Wire one of a window's or the app's own events (open, close, return,
+    /// start) to a handler, or unwire it with None.
+    SetOwnerEvent {
+        owner: u32,
+        event: Event,
+        handler: Option<String>,
+    },
     /// Dock a region (with starter content) to a page or app.
     AddRegion {
         owner: u32,
@@ -774,6 +782,7 @@ impl Doc {
             Edit::SetUses { uses } => self.set_uses(uses),
             Edit::AddApp { name } => self.add_app(name),
             Edit::SetMain { app, main } => self.set_main(*app, main),
+            Edit::SetOwnerEvent { owner, event, handler } => self.set_owner_event(*owner, *event, handler.as_deref()),
             Edit::AddRegion {
                 owner,
                 region,
@@ -1105,15 +1114,20 @@ impl Doc {
         }
         self.check_new_name(name)?;
         let text = templates::page_from_template(project, name, template).map_err(EditError)?;
-        let mut node = self.adopt(&text)?;
-        node.leading.push(Trivia {
-            indent: 0,
-            raw_indent: None,
-            text: String::new(),
-        });
-        let id = node.id;
-        self.nodes.push(node);
-        Ok(Some(id))
+        let code = templates::code_from_template(project, name, template).map_err(EditError)?;
+        let mut id = None;
+        for text in std::iter::once(text).chain(code) {
+            let mut node = self.adopt(&text)?;
+            node.leading.push(Trivia {
+                indent: 0,
+                raw_indent: None,
+                text: String::new(),
+            });
+            // The window is what the designer selects; its code follows it.
+            id = id.or(Some(node.id));
+            self.nodes.push(node);
+        }
+        Ok(id)
     }
 
 
@@ -1214,6 +1228,47 @@ impl Doc {
             }
         }
         Ok(Some(app))
+    }
+
+    fn set_owner_event(&mut self, owner: u32, event: Event, handler: Option<&str>) -> EditResult<Option<u32>> {
+        let (path, kind) = self.find(owner, "a window or the app", |k| matches!(k, Kind::Page | Kind::App))?;
+        let allowed: &[Event] = if kind == Kind::App { &APP_EVENTS } else { &WINDOW_EVENTS };
+        if !allowed.contains(&event) {
+            return fail(if kind == Kind::App {
+                format!("the app has the event start, not {}", event.keyword())
+            } else {
+                format!("a window has the events open, close and return, not {}", event.keyword())
+            });
+        }
+        let handler = handler.map(str::trim).filter(|h| !h.is_empty());
+        if let Some(h) = handler
+            && !is_identifier(h)
+        {
+            return fail(format!("'{h}' is not a valid handler name"));
+        }
+        let existing = self.node(&path).children.iter().position(|c| {
+            starts_with_keyword(&c.tokens, "on", Some(TokenKind::Ident))
+                && c.tokens.get(1).is_some_and(|t| t.text == event.keyword())
+        });
+        let text = handler.map(|h| format!("on {}: {h}", event.keyword()));
+        match (existing, text) {
+            (Some(index), None) => {
+                self.node_mut(&path).children.remove(index);
+            }
+            (Some(index), Some(_)) => {
+                if let Some(h) = handler {
+                    replace_token(&mut self.node_mut(&path).children[index], 3, h);
+                }
+            }
+            (None, None) => {}
+            (None, Some(text)) => {
+                let indent = self.node(&path).child_indent();
+                let line = self.fresh_node(indent, text);
+                let index = self.owner_settings_end(&path, kind);
+                self.node_mut(&path).children.insert(index, line);
+            }
+        }
+        Ok(Some(owner))
     }
 
     /// Index after the settings of a page or app.

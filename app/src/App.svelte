@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { ask, open as openFolder } from "@tauri-apps/plugin-dialog";
+  import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import FrameView from "./lib/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
@@ -36,7 +36,7 @@
   import { findApp, frameForPage } from "./lib/frame";
   import { appAsPage, findPage, pageData } from "./lib/pages";
 
-  const LAST_DIR_KEY = "clarity.preview.lastDir";
+  const LAST_PROJECT_KEY = "clarity.lastProject";
 
   /** What is open. Following a button in the preview pushes a window. */
   type Open = Selected;
@@ -58,7 +58,7 @@
     { key: "settings", name: "Settings" },
   ];
 
-  let openDir = $state<string | null>(null);
+  let openFile = $state<string | null>(null);
   let preview = $state<Preview | null>(null);
   let loadError = $state<string | null>(null);
   let stack = $state<Open[]>([]);
@@ -140,31 +140,31 @@
   const errorCount = $derived(errors.length + projectProblems.length);
   const stackSummary = $derived.by(() => {
     const settings = projectFile?.settings;
-    if (!projectFile || !settings) return "(no clarity.toml)";
+    if (!projectFile || !settings) return "(the project file cannot be read)";
     const { catalog } = projectFile;
     const backend = catalog.backends.find((b) => b.id === settings.stack.backend)?.label;
     const ui = catalog.uis.find((u) => u.id === settings.stack.ui)?.label;
     const targets = catalog.targets.filter((t) => settings.stack.targets.includes(t.id)).map((t) => t.label);
     return `${backend}, ${ui}, ${targets.join(" and ")}`;
   });
-  const projectName = $derived(app?.title ?? app?.name.name ?? (openDir ? fileName(openDir) : ""));
+  const projectName = $derived(app?.title ?? app?.name.name ?? (openFile ? fileName(openFile) : ""));
 
   // Entering design mode shows the parts.
   $effect.pre(() => {
     if (designing) designSide = "parts";
   });
 
-  function readLastDir(): string | null {
+  function readLastProject(): string | null {
     try {
-      return localStorage.getItem(LAST_DIR_KEY);
+      return localStorage.getItem(LAST_PROJECT_KEY);
     } catch {
       return null;
     }
   }
 
-  function writeLastDir(dir: string) {
+  function writeLastProject(dir: string) {
     try {
-      localStorage.setItem(LAST_DIR_KEY, dir);
+      localStorage.setItem(LAST_PROJECT_KEY, dir);
     } catch {
       // Remembering the project is a convenience only.
     }
@@ -234,16 +234,6 @@
     refreshHistory();
   }
 
-  async function createProjectFile() {
-    actionError = null;
-    try {
-      projectFile = await invoke<ProjectFile>("create_project_file");
-    } catch (err) {
-      actionError = String(err);
-    }
-    refreshHistory();
-  }
-
   function selectSettings() {
     select({ kind: "settings", name: "" });
     tab = "project";
@@ -301,14 +291,17 @@
     }
   }
 
-  async function openProject(dir: string) {
-    const trimmed = dir.trim();
+  /** Project files are .clarity files, like the modules in their folder. */
+  const PROJECT_FILTER = [{ name: "Clarity project", extensions: ["clarity"] }];
+
+  async function openProject(path: string) {
+    const trimmed = path.trim();
     if (!trimmed) return;
     try {
-      const result = await invoke<Preview>("open_spec_dir", { path: trimmed });
+      const result = await invoke<Preview>("open_project", { path: trimmed });
       loadError = null;
-      openDir = trimmed;
-      writeLastDir(trimmed);
+      openFile = trimmed;
+      writeLastProject(trimmed);
       stack = [];
       applyPreview(result);
       await loadProjectFile();
@@ -318,28 +311,33 @@
   }
 
   async function chooseProject() {
-    const dir = await openFolder({ directory: true, title: "Open a Clarity project" });
-    if (typeof dir === "string") openProject(dir);
+    const file = await openDialog({ title: "Open a Clarity project", filters: PROJECT_FILTER });
+    if (typeof file === "string") openProject(file);
   }
 
   async function newProject() {
-    const dir = await openFolder({ directory: true, title: "Choose an empty folder for the new project" });
-    if (typeof dir !== "string") return;
+    const chosen = await saveDialog({
+      title: "New project: its file, with a folder of the same name next to it",
+      defaultPath: "project.clarity",
+      filters: PROJECT_FILTER,
+    });
+    if (typeof chosen !== "string") return;
+    const file = chosen.endsWith(".clarity") ? chosen : chosen + ".clarity";
     try {
       newProjectError = null;
-      newProjectIn = { folder: dir, catalog: await invoke<Catalog>("stack_catalog") };
+      newProjectIn = { folder: file, catalog: await invoke<Catalog>("stack_catalog") };
     } catch (err) {
       loadError = String(err);
     }
   }
 
-  async function createProject(folder: string, chosen: Stack) {
+  async function createProject(file: string, chosen: Stack) {
     try {
-      const result = await invoke<Preview>("new_project", { path: folder, stack: chosen });
+      const result = await invoke<Preview>("new_project", { path: file, stack: chosen });
       newProjectIn = null;
       loadError = null;
-      openDir = folder;
-      writeLastDir(folder);
+      openFile = file;
+      writeLastProject(file);
       stack = [];
       applyPreview(result);
       await loadProjectFile();
@@ -468,8 +466,8 @@
       buildDone = e.payload;
       running = e.payload.ok && e.payload.message === "running";
     });
-    invoke<string | null>("initial_spec_dir").then((dir) => {
-      const start = dir ?? readLastDir();
+    invoke<string | null>("initial_project").then((dir) => {
+      const start = dir ?? readLastProject();
       if (start) openProject(start);
     });
     return () => {
@@ -512,9 +510,9 @@
       {#if tab === "project"}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="new" label="New" title="Create a project in an empty folder" onclick={newProject} />
-            <RibbonButton icon="open" label="Open" title="Open a project folder" onclick={chooseProject} />
-            <RibbonButton icon="reload" label="Reload" disabled={!openDir} onclick={() => openDir && openProject(openDir)} />
+            <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" onclick={newProject} />
+            <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" onclick={chooseProject} />
+            <RibbonButton icon="reload" label="Reload" disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
             <RibbonButton icon="settings" label="Settings" title="Stack and data sources" disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
           </div>
           <div class="group-name">Project</div>
@@ -528,7 +526,7 @@
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} disabled={!preview} onclick={() => openDir && openProject(openDir)} />
+            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} disabled={!preview} onclick={() => openFile && openProject(openFile)} />
           </div>
           <div class="group-name">Check</div>
         </div>
@@ -648,8 +646,8 @@
             <dl>
               <dt>Name</dt>
               <dd>{projectName}</dd>
-              <dt>Folder</dt>
-              <dd class="path" title={openDir}>{openDir}</dd>
+              <dt>File</dt>
+              <dd class="path" title={openFile}>{openFile}</dd>
               <dt>Main window</dt>
               <dd>{app?.main?.name ?? "(none)"}</dd>
               <dt>Stack</dt>
@@ -702,7 +700,7 @@
           <ul>
             {#each projectProblems as message, i (i)}
               <li class="error">
-                <button class="link" onclick={selectSettings}><code>clarity.toml</code></button>
+                <button class="link" onclick={selectSettings}><code>{openFile ? fileName(openFile) : "project"}</code></button>
                 <span>{message}</span>
               </li>
             {/each}
@@ -726,8 +724,8 @@
           <div class="placeholder">
             <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
           </div>
-        {:else if current?.kind === "settings" && projectFile && openDir}
-          <ProjectSettings project={projectFile} folder={openDir} revision={settingsRevision} onsave={saveSettings} oncreate={createProjectFile} />
+        {:else if current?.kind === "settings" && projectFile && openFile}
+          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} />
         {:else if entity && file}
           <EntityEditor
             {preview}

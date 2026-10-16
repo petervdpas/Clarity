@@ -1,6 +1,7 @@
 <script lang="ts">
   // Backend, UI and targets of a project, with the choices the Rust
-  // catalog offers. Used by the New project dialog and the settings.
+  // catalog offers, as rows of a .form-grid. Used by the New project dialog
+  // and the settings.
 
   import type { Backend } from "./generated/Backend";
   import type { Catalog } from "./generated/Catalog";
@@ -37,63 +38,21 @@
   }
 </script>
 
-<div class="stack">
-  <label>
-    <span>Backend</span>
-    <select value={stack.backend} onchange={(e) => setBackend(e.currentTarget.value as Backend)}>
-      {#each catalog.backends as b (b.id)}<option value={b.id}>{b.label}</option>{/each}
-    </select>
-  </label>
-  <label>
-    <span>UI</span>
-    <select value={stack.ui} onchange={(e) => onchange({ ...stack, ui: e.currentTarget.value as Ui })}>
-      {#each uis as u (u)}<option value={u}>{uiLabel(u)}</option>{/each}
-    </select>
-  </label>
-  <fieldset>
-    <legend>Targets</legend>
-    {#each catalog.targets as t (t.id)}
-      <label class="check">
-        <input type="checkbox" checked={stack.targets.includes(t.id)} onchange={(e) => toggleTarget(t.id, e.currentTarget.checked)} />
-        {t.label}
-      </label>
-    {/each}
-  </fieldset>
+<!-- The rows go into the surrounding .form-grid. -->
+<span class="form-label">Backend</span>
+<select value={stack.backend} onchange={(e) => setBackend(e.currentTarget.value as Backend)} aria-label="Backend">
+  {#each catalog.backends as b (b.id)}<option value={b.id}>{b.label}</option>{/each}
+</select>
+<span class="form-label">UI</span>
+<select value={stack.ui} onchange={(e) => onchange({ ...stack, ui: e.currentTarget.value as Ui })} aria-label="UI">
+  {#each uis as u (u)}<option value={u}>{uiLabel(u)}</option>{/each}
+</select>
+<span class="form-label">Targets</span>
+<div class="form-checks" role="group" aria-label="Targets">
+  {#each catalog.targets as t (t.id)}
+    <label>
+      <input type="checkbox" checked={stack.targets.includes(t.id)} onchange={(e) => toggleTarget(t.id, e.currentTarget.checked)} />
+      {t.label}
+    </label>
+  {/each}
 </div>
-
-<style>
-  .stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  label,
-  fieldset {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  fieldset {
-    flex-direction: row;
-    gap: 14px;
-    border: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  legend {
-    padding: 0;
-    margin-bottom: 3px;
-  }
-
-  label.check {
-    flex-direction: row;
-    align-items: center;
-    gap: 5px;
-    color: var(--text);
-  }
-</style>

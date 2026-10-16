@@ -385,6 +385,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
+        owner.wired.extend(page.handlers.iter().map(|h| (h.handler.as_str(), page.span)));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
         owners.push(owner);
@@ -396,6 +397,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
+        owner.wired.extend(app.handlers.iter().map(|h| (h.handler.as_str(), app.span)));
         collect_frame(&app.frame, &mut owner);
         owners.push(owner);
     }
@@ -695,6 +697,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.call(call, true);
             }
             StmtKind::Close => self.ui_only("close", stmt.span),
+            StmtKind::Reload { data } => {
+                self.ui_only("reload", stmt.span);
+                if self.decl.is_none() && self.data(&data.name).is_none() {
+                    let owner = self.owner.map(|o| o.name).unwrap_or("");
+                    self.error(format!("{owner} has no data '{}'", data.name), data.span);
+                }
+            }
             StmtKind::Message { text, .. } => {
                 self.ui_only("message", stmt.span);
                 let ty = self.expr(text, None);

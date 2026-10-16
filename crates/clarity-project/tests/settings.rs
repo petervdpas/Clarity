@@ -1,27 +1,18 @@
+use std::path::Path;
+
 use clarity_project::{
-    Auth, AuthKind, Backend, DataSource, PROJECT_FILE, Settings, SourceKind, Stack, Target, Ui, catalog, load, parse,
-    starter, validate, write,
+    Auth, AuthKind, Backend, DataSource, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir,
+    parse, starter, title, validate, write,
 };
 
-const SHOP: &str = r#"# The shop example.
-[project]
-name = "Shop"
+const SHOP: &str = r#"// The shop example.
+project Shop
+    stack csharp avalonia desktop   // C# with Avalonia
+    datasource main postgres "env:SHOP_DB_URL"
 
-[stack]
-backend = "csharp"   # C# with Avalonia
-ui = "avalonia"
-targets = ["desktop"]
-
-[[datasource]]
-name = "main"
-kind = "postgres"
-url = "env:SHOP_DB_URL"
-
-[[datasource]]
-name = "payments"   # the payment provider
-kind = "rest"
-url = "https://api.example.com/v2"
-auth = { kind = "bearer", secret = "keychain:payments" }
+    // The payment provider.
+    datasource payments rest "https://api.example.com/v2"
+        auth bearer "keychain:payments"
 "#;
 
 fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
@@ -36,6 +27,7 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
 fn shop() -> Settings {
     Settings {
         name: "Shop".into(),
+        title: None,
         stack: Stack {
             backend: Backend::Csharp,
             ui: Ui::Avalonia,
@@ -61,15 +53,42 @@ fn reads_a_project_file() {
 }
 
 #[test]
-fn names_the_expected_values_for_an_unknown_one() {
-    let err = parse(&SHOP.replace("\"csharp\"", "\"java\"")).unwrap_err();
-    assert!(err.contains("java") && err.contains("csharp"), "{err}");
+fn reads_a_title_and_several_targets() {
+    let text = SHOP.replace("    stack csharp avalonia desktop", "    title \"The shop\"\n    stack csharp web desktop web");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.title.as_deref(), Some("The shop"));
+    assert_eq!(settings.stack.ui, Ui::Web);
+    assert_eq!(settings.stack.targets, [Target::Desktop, Target::Web]);
+    assert_eq!(title(&settings), "The shop");
+    assert_eq!(title(&shop()), "Shop");
 }
 
 #[test]
-fn refuses_unknown_keys() {
-    let err = parse(&SHOP.replace("ui = ", "frontend = \"svelte\"\nui = ")).unwrap_err();
-    assert!(err.contains("frontend"), "{err}");
+fn names_the_expected_values_for_an_unknown_one() {
+    let err = parse(&SHOP.replace("stack csharp", "stack java")).unwrap_err();
+    assert_eq!(err, "line 3: unknown backend 'java'; the backends are rust, go, csharp, c and cpp");
+    let err = parse(&SHOP.replace("rest \"https", "graphql \"https")).unwrap_err();
+    assert_eq!(err, "line 7: unknown data source kind 'graphql'; the kinds are sqlite, postgres, mysql, mssql and rest");
+}
+
+#[test]
+fn refuses_unknown_settings_and_a_wrong_shape() {
+    let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output and datasource");
+    assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
+    assert_eq!(
+        parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
+        "the project needs a 'stack' line, like: stack rust web desktop"
+    );
+    assert_eq!(
+        parse(&SHOP.replace("    datasource main", "    stack rust web desktop\n    datasource main")).unwrap_err(),
+        "line 4: 'stack' is set twice"
+    );
+    assert_eq!(
+        parse(&SHOP.replace("        auth bearer", "    auth bearer")).unwrap_err(),
+        "line 8: 'auth' belongs under a datasource line, indented"
+    );
+    assert!(parse("project Shop\n    stack rust web\n").unwrap_err().contains("at least one target"));
 }
 
 #[test]
@@ -93,10 +112,16 @@ fn a_native_toolkit_needs_its_backend() {
 #[test]
 fn needs_a_name_and_a_target() {
     let problems = problems_of(|s| {
-        s.name = " ".into();
+        s.name = "My shop".into();
         s.stack.targets.clear();
     });
-    assert_eq!(problems, ["the project needs a name", "the project needs at least one target"]);
+    assert_eq!(
+        problems,
+        [
+            "'My shop' is not a valid project name; use a name like MyShop, and a title for the text people see",
+            "the project needs at least one target"
+        ]
+    );
     let problems = problems_of(|s| s.stack.targets = vec![Target::Web, Target::Web]);
     assert_eq!(problems, ["the target web is listed twice"]);
 }
@@ -144,27 +169,16 @@ fn each_kind_checks_its_location() {
 
 #[test]
 fn writes_a_new_project_file() {
-    let text = write(None, &starter("My shop", "my_shop")).unwrap();
+    let text = write(None, &starter("MyShop", "my_shop")).unwrap();
     assert_eq!(
         text,
-        r#"[project]
-name = "My shop"
-
-[stack]
-backend = "rust"
-ui = "web"
-targets = ["desktop"]
-
-[[datasource]]
-name = "main"
-kind = "sqlite"
-url = "data/my_shop.db"
-
-[build]
-out = "out"
-"#
+        "project MyShop
+    stack rust web desktop
+    output \"out\"
+    datasource main sqlite \"data/my_shop.db\"
+"
     );
-    assert_eq!(parse(&text).unwrap(), starter("My shop", "my_shop"));
+    assert_eq!(parse(&text).unwrap(), starter("MyShop", "my_shop"));
 }
 
 #[test]
@@ -173,11 +187,12 @@ fn writing_keeps_comments_and_untouched_lines() {
     let mut changed = shop();
     changed.stack.targets.push(Target::Web);
     changed.datasources[0].url = "env:SHOP_DATABASE".into();
+    changed.title = Some("The \"best\" shop".into());
     let text = write(Some(SHOP), &changed).unwrap();
-    assert!(text.starts_with("# The shop example.\n"), "{text}");
-    assert!(text.contains("backend = \"csharp\"   # C# with Avalonia"), "{text}");
-    assert!(text.contains("name = \"payments\"   # the payment provider"), "{text}");
-    assert!(text.contains("targets = [\"desktop\", \"web\"]"), "{text}");
+    assert!(text.starts_with("// The shop example.\nproject Shop\n    title \"The \\\"best\\\" shop\"\n"), "{text}");
+    assert!(text.contains("    stack csharp avalonia desktop web\n"), "{text}");
+    assert!(text.contains("    // The payment provider.\n    datasource payments rest"), "{text}");
+    assert!(text.contains("    datasource main postgres \"env:SHOP_DATABASE\"\n"), "{text}");
     assert_eq!(parse(&text).unwrap(), changed);
 }
 
@@ -189,7 +204,7 @@ fn removes_reorders_and_adds_data_sources() {
     changed.datasources.push(source("archive", SourceKind::Sqlite, "data/archive.db"));
     let text = write(Some(SHOP), &changed).unwrap();
     assert_eq!(parse(&text).unwrap(), changed);
-    assert!(text.contains("name = \"payments\"   # the payment provider"), "{text}");
+    assert!(text.contains("    // The payment provider.\n    datasource payments rest"), "{text}");
     assert!(!text.contains("auth"), "{text}");
 
     changed.datasources.clear();
@@ -199,22 +214,56 @@ fn removes_reorders_and_adds_data_sources() {
 }
 
 #[test]
-fn loads_the_project_file_of_a_folder() {
+fn the_output_folder_defaults_to_out_and_can_be_set() {
+    // A file without an output line builds into `out`, and writing keeps it that way.
+    assert_eq!(parse(SHOP).unwrap().out, "out");
+    assert!(!write(Some(SHOP), &shop()).unwrap().contains("output"));
+
+    let mut elsewhere = shop();
+    elsewhere.out = "../builds/shop".into();
+    let text = write(Some(SHOP), &elsewhere).unwrap();
+    assert!(text.contains("    output \"../builds/shop\"\n"), "{text}");
+    assert_eq!(parse(&text).unwrap(), elsewhere);
+}
+
+#[test]
+fn the_output_folder_is_never_the_project_itself() {
+    for out in ["", ".", "./", " "] {
+        let problems = problems_of(|s| s.out = out.into());
+        assert_eq!(problems, ["the output folder must be a folder of its own, like out"], "{out:?}");
+    }
+    assert!(problems_of(|s| s.out = "build/app".into()).is_empty());
+    assert!(problems_of(|s| s.out = "/home/me/builds/shop".into()).is_empty());
+}
+
+#[test]
+fn the_modules_and_output_live_in_the_folder_next_to_the_file() {
+    let file = Path::new("/work/examples/shop.clarity");
+    assert_eq!(module_dir(file), Path::new("/work/examples/shop"));
+    assert_eq!(out_dir(file, &shop()), Path::new("/work/examples/shop/out"));
+    let mut absolute = shop();
+    absolute.out = "/builds/shop".into();
+    assert_eq!(out_dir(file, &absolute), Path::new("/builds/shop"));
+}
+
+#[test]
+fn loads_a_project_file() {
     let dir = std::env::temp_dir().join(format!("clarity-project-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("shop.clarity");
 
-    let missing = load(&dir);
+    let missing = load(&file);
     assert_eq!(missing.settings, None);
-    assert_eq!(missing.problems, ["the project has no clarity.toml; create it on the Project tab"]);
+    assert!(missing.problems[0].starts_with("cannot read"), "{:?}", missing.problems);
 
-    std::fs::write(dir.join(PROJECT_FILE), SHOP).unwrap();
-    let found = load(&dir);
+    std::fs::write(&file, SHOP).unwrap();
+    let found = load(&file);
     assert_eq!(found.settings, Some(shop()));
     assert!(found.problems.is_empty());
     assert!(!found.version.is_empty());
 
-    std::fs::write(dir.join(PROJECT_FILE), "[stack\n").unwrap();
-    let broken = load(&dir);
+    std::fs::write(&file, "project Shop\n    stak rust\n").unwrap();
+    let broken = load(&file);
     assert_eq!(broken.settings, None);
     assert_eq!(broken.problems.len(), 1);
 
@@ -232,25 +281,13 @@ fn the_catalog_offers_every_backend_and_a_ui_for_each() {
 }
 
 #[test]
-fn the_output_folder_defaults_to_out_and_can_be_set() {
-    // A file without [build] builds into `out`, and writing keeps it that way.
-    assert_eq!(parse(SHOP).unwrap().out, "out");
-    assert!(!write(Some(SHOP), &shop()).unwrap().contains("[build]"));
-    assert!(write(None, &starter("Shop", "shop")).unwrap().contains("[build]\nout = \"out\"\n"));
-
-    let mut elsewhere = shop();
-    elsewhere.out = "../builds/shop".into();
-    let text = write(Some(SHOP), &elsewhere).unwrap();
-    assert!(text.contains("[build]\nout = \"../builds/shop\"\n"), "{text}");
-    assert_eq!(parse(&text).unwrap(), elsewhere);
-}
-
-#[test]
-fn the_output_folder_is_never_the_project_itself() {
-    for out in ["", ".", "./", " "] {
-        let problems = problems_of(|s| s.out = out.into());
-        assert_eq!(problems, ["the output folder must be a folder of its own, like out"], "{out:?}");
-    }
-    assert!(problems_of(|s| s.out = "build/app".into()).is_empty());
-    assert!(problems_of(|s| s.out = "/home/me/builds/shop".into()).is_empty());
+fn picked_paths_inside_the_project_folder_become_relative() {
+    use clarity_project::project_path;
+    let file = Path::new("/work/examples/shop.clarity");
+    assert_eq!(project_path(file, Path::new("/work/examples/shop/out")), "out");
+    assert_eq!(project_path(file, Path::new("/work/examples/shop/data/shop.db")), "data/shop.db");
+    assert_eq!(project_path(file, Path::new("/builds/shop")), "/builds/shop");
+    // The project folder itself stays a full path; validation then refuses it as output.
+    assert_eq!(project_path(file, Path::new("/work/examples/shop")), "/work/examples/shop");
+    assert_eq!(project_path(file, Path::new("/work/examples/shopping/x")), "/work/examples/shopping/x");
 }

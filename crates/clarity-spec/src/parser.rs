@@ -18,7 +18,7 @@ use crate::model::{
     Toolbar, Widget, WidgetPage, WidgetProps, default_label,
 };
 use crate::span::Span;
-use crate::widgets::{self, BindTarget, ContainerKind, Event, WidgetKind, WidgetProperty};
+use crate::widgets::{self, APP_EVENTS, BindTarget, ContainerKind, Event, WINDOW_EVENTS, WidgetKind, WidgetProperty};
 
 pub(crate) type ParseResult<T> = Result<T, Diagnostic>;
 
@@ -575,6 +575,7 @@ pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "grid", Some(TokenKind::Number))
+        || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
 }
 
 fn parse_page(
@@ -609,6 +610,7 @@ fn parse_page(
         columns: DEFAULT_PAGE_COLUMNS,
         widgets: Vec::new(),
         frame: Frame::default(),
+        handlers: Vec::new(),
         span: node.span(),
     };
     let mut grid_seen = false;
@@ -628,6 +630,33 @@ fn parse_page(
     Ok(page)
 }
 
+/// `on open: window_opened`: one of the owner's own events and its handler.
+fn parse_owner_event(
+    cursor: &mut Cursor,
+    handlers: &mut Vec<Handler>,
+    allowed: &[Event],
+    refused: impl Fn(&str) -> String,
+    owner: &str,
+) -> ParseResult<()> {
+    let word = cursor.expect_ident("an event")?;
+    let event = Event::by_keyword(&word.name)
+        .filter(|e| allowed.contains(e))
+        .ok_or_else(|| Diagnostic::error(refused(&word.name), word.span))?;
+    cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on open: window_opened'")?;
+    let handler = cursor.expect_ident("a handler name")?;
+    if handlers.iter().any(|h| h.event == event) {
+        return Err(Diagnostic::error(
+            format!("{owner} already has 'on {}'", event.keyword()),
+            word.span,
+        ));
+    }
+    handlers.push(Handler {
+        event,
+        handler: handler.name,
+    });
+    Ok(())
+}
+
 fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> ParseResult<()> {
     no_children(node)?;
     let mut cursor = Cursor::new(node.line);
@@ -641,6 +670,16 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
         }
         "data" => {
             page.data.push(parse_data(&mut cursor, node.line.span)?);
+        }
+        "on" => {
+            let owner = page.name.name.clone();
+            parse_owner_event(
+                &mut cursor,
+                &mut page.handlers,
+                &WINDOW_EVENTS,
+                |e| format!("a window has the events open, close and return, not {e}"),
+                &owner,
+            )?;
         }
         _ => {
             // grid N columns
@@ -687,6 +726,7 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
 pub(crate) fn is_app_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
         || starts_with_keyword(tokens, "main", Some(TokenKind::Ident))
+        || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
 }
 
@@ -711,6 +751,7 @@ fn parse_app(
         main: None,
         data: Vec::new(),
         frame: Frame::default(),
+        handlers: Vec::new(),
         span: node.span(),
     };
     for child in &node.children {
@@ -747,6 +788,16 @@ fn parse_app_setting(node: &Node, app: &mut App) -> ParseResult<()> {
                 return Err(Diagnostic::error("duplicate 'main'", node.line.span));
             }
             app.main = Some(cursor.expect_ident("the main window")?);
+        }
+        "on" => {
+            let owner = app.name.name.clone();
+            parse_owner_event(
+                &mut cursor,
+                &mut app.handlers,
+                &APP_EVENTS,
+                |e| format!("the app has the event start, not {e}"),
+                &owner,
+            )?;
         }
         _ => app.data.push(parse_data(&mut cursor, node.line.span)?),
     }

@@ -4,7 +4,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import { pageDesigner } from "./pageDesigner.svelte";
-  import { GAP, ROW_HEIGHT, gridRows, overlaps, widgetInfo, type PageData } from "./pages";
+  import { GAP, ROW_HEIGHT, gridRows, overlaps, widgetGrows, type PageData } from "./pages";
 
   let {
     preview,
@@ -39,7 +39,7 @@
     const found = new Set<number>();
     if (design || fixedRows !== null) return found;
     for (const w of widgets) {
-      if (!widgetInfo(preview, w.props.kind).grows) continue;
+      if (!widgetGrows(preview, w)) continue;
       for (let r = w.props.row; r < w.props.row + w.props.height; r++) found.add(r);
     }
     return found;

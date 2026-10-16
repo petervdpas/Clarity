@@ -253,6 +253,19 @@ impl Emitter<'_> {
                 out.push_str(&format!("{pad}ui.open({:?}, vec![{}]);\n", window.name, args.join(", ")));
             }
             StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
+            StmtKind::Reload { data } => {
+                let found = self.window.as_ref().and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name).cloned());
+                match found {
+                    Some((name, entity, true)) => {
+                        out.push_str(&format!("{pad}w.{} = db.all::<{entity}>()?;\n", ident(&name)));
+                    }
+                    Some((name, entity, false)) => {
+                        let field = format!("w.{}", ident(&name));
+                        out.push_str(&format!("{pad}if {field}.id != 0 {{\n{pad}    {field} = db.get::<{entity}>({field}.id)?;\n{pad}}}\n"));
+                    }
+                    None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
+                }
+            }
         }
     }
 
@@ -477,6 +490,8 @@ pub struct PartInfo {
 #[derive(Debug, Default)]
 pub struct WindowCtx {
     pub parts: HashMap<String, PartInfo>,
+    /// The window's data: name, entity and whether it is a list.
+    pub data: Vec<(String, String, bool)>,
 }
 
 impl WindowCtx {
@@ -544,6 +559,8 @@ pub struct Owner {
     /// Handlers by Clarity name, with their Rust function names.
     pub handlers: Vec<(String, String)>,
     pub is_app: bool,
+    /// Its own events (open, close, return, start) with their handlers.
+    pub events: Vec<(&'static str, String)>,
 }
 
 /// The struct and handlers of every window and the app in `file`.
@@ -561,13 +578,17 @@ pub fn emit_windows(
     for (name, data, page, app) in pages.chain(apps) {
         let struct_name = if app.is_some() { format!("{name}App") } else { format!("{name}Window") };
         let mut ctx = WindowCtx::default();
+        let mut events = Vec::new();
         if let Some(page) = page {
             ctx.widgets(&page.widgets);
             ctx.frame(&page.frame);
+            events.extend(page.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
         if let Some(app) = app {
             ctx.frame(&app.frame);
+            events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
+        ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
 
         let fields: String = data
             .iter()
@@ -633,6 +654,7 @@ impl {struct_name} {{
             module: module.to_string(),
             handlers,
             is_app: app.is_some(),
+            events,
         });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }

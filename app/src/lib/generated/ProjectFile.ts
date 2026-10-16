@@ -3,14 +3,18 @@ import type { Catalog } from "./Catalog";
 import type { Settings } from "./Settings";
 
 /**
- * What the project folder's `clarity.toml` holds, for the Project tab.
+ * What a project file holds, for the Project tab.
  */
 export type ProjectFile = { 
 /**
- * None when the file is missing or cannot be read.
+ * None when the file cannot be read.
  */
 settings: Settings | null, 
 /**
  * The version of the file text, to refuse saving over a newer file.
  */
-version: string, problems: Array<string>, catalog: Catalog, };
+version: string, 
+/**
+ * The name people see (see `title`); empty when the file cannot be read.
+ */
+title: string, problems: Array<string>, catalog: Catalog, };

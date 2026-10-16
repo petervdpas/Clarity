@@ -18,12 +18,11 @@ enum Command {
         #[command(subcommand)]
         command: SpecCommand,
     },
-    /// Transpile a project into the stack its clarity.toml names, in out/.
+    /// Transpile a project into the stack its project file names.
     Gen {
-        /// The project folder, with clarity.toml and the .clarity files.
-        #[arg(default_value = ".")]
-        dir: PathBuf,
-        /// Where the application goes; the output folder in clarity.toml by default.
+        /// The project file, like shop.clarity; its modules are in shop/.
+        project: PathBuf,
+        /// Where the application goes; the project's output folder by default.
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -31,15 +30,14 @@ enum Command {
 
 #[derive(Subcommand)]
 enum SpecCommand {
-    /// Parse and check all spec files in a directory.
+    /// Parse and check the modules of a project.
     Check {
-        /// Directory with .clarity files.
-        #[arg(default_value = "spec")]
+        /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
     /// Print the checked model as JSON.
     Model {
-        #[arg(default_value = "spec")]
+        /// The project file, or the folder with its modules.
         dir: PathBuf,
         /// Include sample rows per entity, as used by the preview.
         #[arg(long)]
@@ -54,24 +52,28 @@ fn main() -> ExitCode {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
         },
-        Command::Gen { dir, out } => generate(&dir, out.as_deref()),
+        Command::Gen { project, out } => generate(&project, out.as_deref()),
     }
 }
 
 
-fn generate(dir: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
-    let project = match load(dir) {
+fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
+    if !project_file.is_file() {
+        eprintln!("clarity: {} is not a project file; give one like shop.clarity", project_file.display());
+        return ExitCode::from(2);
+    }
+    let project = match load(project_file) {
         Ok(project) => project,
         Err(code) => return code,
     };
-    let file = clarity_project::load(dir);
+    let file = clarity_project::load(project_file);
     let Some(settings) = file.settings.filter(|_| file.problems.is_empty()) else {
         for problem in &file.problems {
-            eprintln!("clarity.toml: {problem}");
+            eprintln!("{}: {problem}", project_file.display());
         }
         return ExitCode::FAILURE;
     };
-    let out = out.map_or_else(|| clarity_project::out_dir(dir, &settings), std::path::Path::to_path_buf);
+    let out = out.map_or_else(|| clarity_project::out_dir(project_file, &settings), std::path::Path::to_path_buf);
     let out = out.as_path();
     let files = match clarity_gen::generate(&project, &settings) {
         Ok(files) => files,
@@ -97,8 +99,10 @@ fn generate(dir: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
     }
 }
 
-fn load(dir: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
-    clarity_spec::load_dir(dir).map_err(|err| {
+/// Loads the modules of a project, given its project file or its folder.
+fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
+    let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
+    clarity_spec::load_dir(&dir).map_err(|err| {
         eprintln!("clarity: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })

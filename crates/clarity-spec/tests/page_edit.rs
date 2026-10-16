@@ -382,7 +382,7 @@ fn renames_pages_and_widget_tabs() {
 
 #[test]
 fn edits_keep_the_example_page_valid() {
-    let source = include_str!("../../../examples/shop/spec/desk.clarity");
+    let source = include_str!("../../../examples/shop/desk.clarity");
     let mut props = new_props(WidgetKind::Number, 8, 3);
     props.bind = Some("customer.credit_limit".into());
     props.width = 2;
@@ -394,8 +394,8 @@ fn edits_keep_the_example_page_valid() {
             props,
         },
     );
-    let customers = include_str!("../../../examples/shop/spec/customers.clarity");
-    let sales = include_str!("../../../examples/shop/spec/sales.clarity");
+    let customers = include_str!("../../../examples/shop/customers.clarity");
+    let sales = include_str!("../../../examples/shop/sales.clarity");
     let project = clarity_spec::load_sources([
         ("customers.clarity", customers),
         ("sales.clarity", sales),
@@ -491,9 +491,9 @@ fn no_op_edit_round_trips_exactly() {
         PAGE,
         "module m\r\npage P: window\r\n    title \"T\"\r\n    label \"A\" at 1,1 // c\r\n",
         "module m\n\n\n   \npage P: window\n\t\n    title \"T\"",
-        include_str!("../../../examples/shop/spec/desk.clarity"),
-        include_str!("../../../examples/shop/spec/customers.clarity"),
-        include_str!("../../../examples/shop/spec/sales.clarity"),
+        include_str!("../../../examples/shop/desk.clarity"),
+        include_str!("../../../examples/shop/customers.clarity"),
+        include_str!("../../../examples/shop/sales.clarity"),
     ];
     // Every edit rewrites the whole file from the line tree, so an edit that
     // changes nothing must give back the input byte for byte.

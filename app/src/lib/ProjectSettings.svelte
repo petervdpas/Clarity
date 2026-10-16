@@ -1,8 +1,10 @@
 <script lang="ts">
-  // The project settings from clarity.toml: name, stack and data sources.
+  // The project settings from the project file: name, stack, output and data sources.
   // Every change is saved at once; the Rust backend checks it and refuses
   // settings with problems, with the reason.
 
+  import { invoke } from "@tauri-apps/api/core";
+  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import StackFields from "./StackFields.svelte";
   import type { AuthKind } from "./generated/AuthKind";
   import type { DataSource } from "./generated/DataSource";
@@ -12,20 +14,20 @@
 
   let {
     project,
-    folder,
+    file,
     onsave,
-    oncreate,
     revision,
   }: {
     project: ProjectFile;
-    folder: string;
+    /** The project file. */
+    file: string;
     onsave: (settings: Settings) => void;
-    oncreate: () => void;
     /** Changes when a save was refused, so the inputs show the file again. */
     revision: number;
   } = $props();
 
   const catalog = $derived(project.catalog);
+  const fileName = $derived(file.split(/[\\/]/).at(-1) ?? file);
 
   function sourceInfo(kind: SourceKind) {
     return catalog.sources.find((s) => s.id === kind);
@@ -49,6 +51,30 @@
   function setAuth(i: number, source: DataSource, kind: AuthKind | "") {
     const auth = kind === "" ? null : { kind, secret: source.auth?.secret ?? "keychain:" + source.name };
     saveSource(i, { auth });
+  }
+
+  /** A picked path as the project file stores it: relative inside the project's folder. */
+  async function stored(picked: string): Promise<string> {
+    return invoke<string>("project_path", { picked });
+  }
+
+  async function browseOutput() {
+    const picked = await openDialog({
+      directory: true,
+      title: "Output folder: where Run and Build put the application",
+      defaultPath: await invoke<string>("project_folder"),
+    });
+    if (typeof picked === "string") save({ out: await stored(picked) });
+  }
+
+  /** A SQLite file may not exist yet, so this asks where it goes, like a save. */
+  async function browseDatabase(i: number) {
+    const picked = await saveDialog({
+      title: "Database file",
+      defaultPath: (await invoke<string>("project_folder")) + "/data/app.db",
+      filters: [{ name: "SQLite database", extensions: ["db", "sqlite", "sqlite3"] }],
+    });
+    if (typeof picked === "string") saveSource(i, { url: await stored(picked) });
   }
 
   function move(i: number, delta: number) {
@@ -79,7 +105,7 @@
 <div class="editor">
   <header>
     <h1>Project settings</h1>
-    <span class="muted mono path" title={folder + "/clarity.toml"}>{folder}/clarity.toml</span>
+    <span class="file" title={file}>{fileName}</span>
   </header>
 
   {#if project.problems.length > 0}
@@ -89,44 +115,65 @@
   {/if}
 
   {#if !project.settings}
-    {#if project.version === ""}
-      <p>This project has no project file yet. It says what the project is transpiled into and where its data lives.</p>
-      <div><button class="primary" onclick={oncreate}>Create clarity.toml</button></div>
-    {:else}
-      <p>The project file cannot be read. Fix it in a text editor; this view follows the file as it changes.</p>
-    {/if}
+    <p>The project file cannot be read. Fix it in a text editor; this view follows the file as it changes.</p>
   {:else}
     {@const settings = project.settings}
     {#key revision}
       <section>
         <h2>Project</h2>
-        <label class="field">
-          <span>Name</span>
-          <input value={settings.name} onchange={(e) => save({ name: e.currentTarget.value.trim() })} />
-        </label>
+        <div class="form-grid">
+          <label class="form-label" for="project-name">Name</label>
+          <input
+            id="project-name"
+            class="mono"
+            value={settings.name}
+            spellcheck="false"
+            onchange={(e) => save({ name: e.currentTarget.value.trim() })}
+          />
+          <p class="form-help">A Clarity name, like MyShop; also the program's name.</p>
+          <label class="form-label" for="project-title">Title</label>
+          <input
+            id="project-title"
+            value={settings.title ?? ""}
+            placeholder={project.title}
+            onchange={(e) => save({ title: e.currentTarget.value.trim() || null })}
+          />
+          <p class="form-help">Shown in the window title. Empty follows the name.</p>
+        </div>
       </section>
 
       <section>
         <h2>Stack</h2>
-        <p class="muted">What the project is transpiled into.</p>
-        <StackFields {catalog} stack={settings.stack} onchange={(stack) => save({ stack })} />
+        <p class="intro">What the project is transpiled into.</p>
+        <div class="form-grid">
+          <StackFields {catalog} stack={settings.stack} onchange={(stack) => save({ stack })} />
+        </div>
       </section>
 
       <section>
         <h2>Output</h2>
-        <p class="muted">
-          Where Run and Build generate and compile the application: a folder in the project, like <code>out</code>, or a
-          full path elsewhere. Clarity replaces what is in it, so it only writes into an empty folder or one it made itself.
-        </p>
-        <label class="field">
-          <span>Output folder</span>
-          <input class="mono" value={settings.out} spellcheck="false" onchange={(e) => save({ out: e.currentTarget.value.trim() })} />
-        </label>
+        <div class="form-grid">
+          <label class="form-label" for="output-folder">Output folder</label>
+          <div class="form-inline">
+            <input
+              id="output-folder"
+              class="mono"
+              value={settings.out}
+              spellcheck="false"
+              onchange={(e) => save({ out: e.currentTarget.value.trim() })}
+            />
+            <button onclick={browseOutput} title="Choose the output folder">Browse...</button>
+          </div>
+          <p class="form-help">
+            Where Run and Build put the application, inside the project's folder or elsewhere. Clarity replaces its
+            contents, so it only writes into an empty folder or one it made.
+          </p>
+        </div>
       </section>
 
       <section>
         <h2>Data sources</h2>
-        <p class="muted">Where the data lives. Entities use the first source unless they name another. Secrets are never stored here: use env:NAME or keychain:NAME.</p>
+        <p class="intro">Where the data lives; entities use the first one unless they name another. Secrets stay out of the file: write <code>env:NAME</code> or <code>keychain:NAME</code>.</p>
         {#if settings.datasources.length > 0}
           <div class="table-wrap">
             <table>
@@ -150,13 +197,18 @@
                       </select>
                     </td>
                     <td>
-                      <input
-                        class="mono"
-                        value={source.url}
-                        title={info?.urlLabel}
-                        placeholder={info?.urlExample}
-                        onchange={(e) => saveSource(i, { url: e.currentTarget.value.trim() })}
-                      />
+                      <div class="with-browse">
+                        <input
+                          class="mono"
+                          value={source.url}
+                          title={info?.urlLabel}
+                          placeholder={info?.urlExample}
+                          onchange={(e) => saveSource(i, { url: e.currentTarget.value.trim() })}
+                        />
+                        {#if source.kind === "sqlite"}
+                          <button onclick={() => browseDatabase(i)} title="Choose the database file">Browse...</button>
+                        {/if}
+                      </div>
                     </td>
                     <td>
                       {#if info?.hasAuth}
@@ -205,14 +257,15 @@
   .editor {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    max-width: 1000px;
+    gap: 14px;
+    max-width: 900px;
   }
 
   header {
     display: flex;
     align-items: baseline;
     gap: 12px;
+    min-width: 0;
   }
 
   h1 {
@@ -221,31 +274,50 @@
     white-space: nowrap;
   }
 
-  h2 {
-    margin: 0 0 6px;
-    font-size: 13px;
+  .file {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
+  /* Each group of settings is a card, like the module view. */
   section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px 16px;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
   }
 
   p {
     margin: 0;
   }
 
+  .intro {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .intro code {
+    font-family: var(--mono);
+  }
+
   .muted {
     color: var(--text-muted);
     font-size: 12px;
-  }
-
-  .path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
   }
 
   .mono {
@@ -262,18 +334,21 @@
     font-size: 12px;
   }
 
-  .field {
+  .with-browse {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 12px;
-    color: var(--text-muted);
-    max-width: 320px;
+    gap: 6px;
   }
 
-  section :global(.stack) {
-    max-width: 320px;
+  .with-browse input {
+    flex: 1;
+    min-width: 0;
   }
+
+  .with-browse button {
+    flex: none;
+    white-space: nowrap;
+  }
+
 
   .table-wrap {
     overflow: auto;
@@ -300,6 +375,29 @@
   td {
     padding: 3px 4px;
     border-bottom: 1px solid var(--border);
+  }
+
+  /* One height for every field, as in the form grid. */
+  td input,
+  td select,
+  .add input,
+  .add select {
+    height: 30px;
+    box-sizing: border-box;
+  }
+
+  td select,
+  .add select {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  td select {
+    width: 100%;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
   }
 
   td input {

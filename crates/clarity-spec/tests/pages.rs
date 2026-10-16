@@ -65,7 +65,7 @@ fn all_widgets(widgets: &[Widget]) -> Vec<&Widget> {
 
 #[test]
 fn example_page_is_clean() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop/spec");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop");
     let project = clarity_spec::load_dir(std::path::Path::new(dir)).unwrap();
     let page = project
         .pages()
@@ -130,7 +130,7 @@ page P: dialog
 
 #[test]
 fn widget_lines_round_trip() {
-    let source = include_str!("../../../examples/shop/spec/desk.clarity");
+    let source = include_str!("../../../examples/shop/desk.clarity");
     let (file, _) = parse(source, "desk.clarity");
     for widget in all_widgets(&file.pages[0].widgets) {
         let line = widget_line(&widget.props);

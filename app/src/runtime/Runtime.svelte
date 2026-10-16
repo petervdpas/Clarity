@@ -70,18 +70,46 @@
     messages = messages.filter((m) => m.id !== id);
   }
 
+  /** Shows what a handler asked for: messages, and windows to open. */
+  async function follow(reply: Reply) {
+    reply.messages.forEach(say);
+    // Data may have changed: reference lists load again when needed.
+    options = {};
+    for (const request of reply.open) await open(request.window, request.with);
+  }
+
+  /** Opens a window; the backend loads its data and runs its `on open`. */
   async function open(window: string, withData: Record<string, unknown> = {}) {
     try {
-      const state = await invoke<WindowState>("open_window", { window, with: withData });
-      stack = [...stack, state];
+      const reply = await invoke<Reply>("open_window", { window, with: withData });
+      stack = [...stack, reply.state];
+      if (reply.close) return close();
+      await follow(reply);
     } catch (err) {
       say({ level: "error", text: String(err) });
     }
   }
 
+  /** Closes the top window after its `on close`, then runs `on return` on the one below. */
   async function close() {
-    stack = stack.slice(0, -1);
-    if (stack.length === 0) await invoke("quit_app");
+    const top = stack.at(-1);
+    if (!top) return;
+    try {
+      const closing = await invoke<Reply>("close_window", { state: $state.snapshot(top) });
+      closing.messages.forEach(say);
+      stack = stack.slice(0, -1);
+      const below = stack.at(-1);
+      if (!below) {
+        await invoke("quit_app");
+        return;
+      }
+      const back = await invoke<Reply>("return_to", { state: $state.snapshot(below) });
+      stack[stack.length - 1] = back.state;
+      if (back.close) return close();
+      await follow(back);
+    } catch (err) {
+      say({ level: "error", text: String(err) });
+    }
   }
 
   /** Runs a handler on the current window and applies the reply. */
@@ -92,11 +120,13 @@
     try {
       const reply = await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler });
       stack[index] = reply.state;
-      reply.messages.forEach(say);
-      // Data may have changed: reference lists load again when needed.
-      options = {};
-      if (reply.close) await close();
-      for (const request of reply.open) await open(request.window, request.with);
+      if (reply.close) {
+        reply.messages.forEach(say);
+        await close();
+        for (const request of reply.open) await open(request.window, request.with);
+      } else {
+        await follow(reply);
+      }
     } catch (err) {
       say({ level: "error", text: String(err) });
     } finally {
@@ -138,9 +168,17 @@
     },
   });
 
-  invoke<{ model: Preview; main: string }>("start").then((start) => {
+  // The app's `on start` runs before its main window opens; windows it opens
+  // come on top of the main window.
+  invoke<{ model: Preview; main: string }>("start").then(async (start) => {
     model = start.model;
-    open(start.main);
+    try {
+      const started = await invoke<Reply>("start_app");
+      await open(start.main);
+      await follow(started);
+    } catch (err) {
+      say({ level: "error", text: String(err) });
+    }
   });
 </script>
 

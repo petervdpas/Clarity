@@ -190,11 +190,27 @@ fn browse_page(
     lines.push(button("New", grid - 3, buttons));
     lines.push(button("Open", grid - 1, buttons));
     format!(
-        "page {name}: window\n    title {}\n    data {data}: list<{}>\n\n{}",
+        "page {name}: window\n    title {}\n    data {data}: list<{}>\n    on return: {RETURN_HANDLER}\n\n{}",
         quote(title),
         entity.name.name,
         body(&lines)
     )
+}
+
+/// The handler a browse window gets for its `on return` event.
+const RETURN_HANDLER: &str = "window_returned";
+
+/// The code behind a template starts with, if any: a browse window reloads
+/// its list when a window it opened (a form) has closed.
+pub fn code_from_template(project: &Project, name: &str, template: &PageTemplate) -> Result<Option<String>, String> {
+    match template {
+        PageTemplate::Browse { entity } => {
+            let entity = find_entity(project, entity)?;
+            let data = plural(&data_name(&entity.name.name));
+            Ok(Some(format!("code {name}\n    handler {RETURN_HANDLER}\n        reload {data}")))
+        }
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]

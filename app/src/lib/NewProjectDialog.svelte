@@ -38,7 +38,9 @@
   <form class="dialog" onsubmit={submit}>
     <h2>New project</h2>
     <p class="folder" title={folder}>{folder}</p>
-    <StackFields {catalog} {stack} onchange={(next) => (stack = next)} />
+    <div class="form-grid compact">
+      <StackFields {catalog} {stack} onchange={(next) => (stack = next)} />
+    </div>
     <p class="note">The project starts with one SQLite database. Data sources and the stack can be changed later on the Project tab.</p>
     {#if error}<p class="error">{error}</p>{/if}
     <div class="buttons">
@@ -56,6 +58,10 @@
     display: grid;
     place-items: center;
     z-index: 50;
+  }
+
+  .compact {
+    grid-template-columns: 80px minmax(0, 1fr);
   }
 
   .dialog {

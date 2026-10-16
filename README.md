@@ -2,17 +2,21 @@
 
 A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. See [docs/DESIGN.md](docs/DESIGN.md).
 
-Current state: the spec language for data and windows (S1), the live preview (S2), one designer for every window, with all parts on a snap grid and starter templates (S3, S3b, S3d), the application frame with menus, toolbars, ribbons, sidebars and footers (S3c), and names and events for every part (S3e).
+Current state: the designer for windows and the application frame, with every part on a fluid snap grid (S1 to S3e); projects as one file with their settings (P1, P2); handlers in the code behind and functions and actions in modules, written in Clarity (L1, L2); and the Rust generator, which turns a project into a Tauri desktop application with SQLite that Clarity builds and runs (G1). See the roadmap in docs/DESIGN.md.
 
 ## Layout
 
 ```
-crates/clarity-spec/   spec lexer, parser, checker, neutral model, sample data, structural edits
-crates/clarity-cli/    the `clarity` command
-app/                   Clarity: Tauri 2 + Svelte 5
-  src-tauri/           Rust side: loads, watches and edits spec files
-  src/lib/generated/   TypeScript types generated from the Rust model (do not edit)
-examples/shop/spec/    example spec with customers and orders
+crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
+crates/clarity-project/  the project file: stack, output and data sources
+crates/clarity-gen/      the transpiler: a project as a Rust and Tauri application
+crates/clarity-runtime/  the library generated applications use (copied into each)
+crates/clarity-cli/      the `clarity` command
+app/                     Clarity: Tauri 2 + Svelte 5
+  src-tauri/             Rust side: loads, watches and edits projects; Run and Build
+  src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
+examples/shop.clarity    example project: customers and orders
+examples/shop/           its modules
 ```
 
 ## Requirements
@@ -23,16 +27,22 @@ examples/shop/spec/    example spec with customers and orders
 
 ## Commands
 
-Check a spec directory:
+Check a project:
 
 ```sh
-cargo run -p clarity-cli -- spec check examples/shop/spec
+cargo run -p clarity-cli -- spec check examples/shop.clarity
 ```
 
 Print the checked model as JSON, optionally with the preview's sample rows:
 
 ```sh
-cargo run -p clarity-cli -- spec model examples/shop/spec --samples
+cargo run -p clarity-cli -- spec model examples/shop.clarity --samples
+```
+
+Generate the application into the project's output folder (`examples/shop/out`), which `cargo build` there turns into a program:
+
+```sh
+cargo run -p clarity-cli -- gen examples/shop.clarity
 ```
 
 Run the tests. This also regenerates the TypeScript bindings in `app/src/lib/generated/`:
@@ -44,15 +54,15 @@ cargo test
 Start the app from the project root (it installs the npm packages on first run):
 
 ```sh
-cp -r examples/shop/spec /tmp/shop-spec   # the designer edits files in place
-./dev.sh /tmp/shop-spec
+mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the designer edits files in place
+./dev.sh /tmp/try/shop.clarity
 ```
 
-Without a folder, `./dev.sh` opens the folder used last time, or you enter one in the sidebar. Edit the `.clarity` files in any editor; the preview reloads on every save.
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it. Without a file, `./dev.sh` opens the project used last time. Edit the `.clarity` files in any editor; the preview reloads on every save.
 
 Clarity has a ribbon with three tabs, and the left sidebar follows the tab:
 
-- **Project:** New project (in an empty folder), Open, Reload, New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
+- **Project:** New project (choose where its file goes; the folder next to it is made too), Open (a `.clarity` project file), Reload, Settings (name, title, stack, output folder, data sources), New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
 - **Design:** Undo and Redo (also Ctrl+Z and Ctrl+Y), Delete (the picked part, or the window itself when nothing is picked), New window and the snap grid. Every change is written to the project files at once; the Save button shows that. The sidebar has the project tree, the parts, a tree of the open window and the design settings. The right column shows the window's own properties and, below them, what is picked.
 - **Preview:** run the main window or any other window, and go back after following a button.
 
@@ -64,7 +74,7 @@ Every window is designed the same way:
 - Every part has a name (new parts get one like `button1`) and an Events list. **Wire** connects an event to a handler named after the part and the event, such as `on click: save_click`; the handlers will be written in Clarity in the window's code behind.
 - "+ New window" in the Project tab starts a window blank, as a form for an entity, or as a browse for an entity. The templates produce ordinary windows that you then design like any other.
 
-For the application frame (an `app` block, see `examples/shop/spec/shop.clarity`):
+For the application frame (an `app` block, see `examples/shop/shop.clarity`):
 
 - Pick the app in the Project tab to design the menu, toolbar, ribbon, sidebars and footer that every window shows. A window page can have its own regions, which replace the app's; the app's regions show dimmed in its designer.
 - Drag Menu, Toolbar, Ribbon, Sidebar or Footer from the Frame parts onto an edge of the window; the edges that accept it light up.

@@ -1,5 +1,5 @@
 //! Transpiles a checked Clarity project into a real application for the
-//! stack its `clarity.toml` names (docs/DESIGN.md section 1.2). Generation is
+//! stack its project file names (docs/DESIGN.md section 1.2). Generation is
 //! deterministic: the same project always gives the same files, byte for
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 

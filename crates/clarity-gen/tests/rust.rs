@@ -41,6 +41,7 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
+    on return: window_returned
     textbox at 1,1 span 4 bind order.number
     table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: grid_opened
     button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked
@@ -53,6 +54,10 @@ code OrderForm
             return
         approve(order)
         message \"Approved \" + order.number
+
+    handler window_returned
+        reload orders
+        reload order
 
     handler grid_opened
         open OrderForm with order = grid.selected
@@ -192,4 +197,16 @@ fn handlers_work_on_the_window_and_the_screen() {
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
     assert!(main.contains("const DATABASE: &str = \"data/shop.db\";"), "{main}");
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
+}
+
+#[test]
+fn window_events_and_reload_reach_the_backend() {
+    let files = files();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"window_returned\"),"), "{main}");
+    assert!(main.contains("fn close_window("), "{main}");
+    assert!(main.contains("on_event(db, state, \"open\")"), "{main}");
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("    w.orders = db.all::<Order>()?;\n"), "{sales}");
+    assert!(sales.contains("    if w.order.id != 0 {\n        w.order = db.get::<Order>(w.order.id)?;\n    }\n"), "{sales}");
 }

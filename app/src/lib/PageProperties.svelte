@@ -67,6 +67,24 @@
   /** Whose code behind the handlers go into. */
   const owner = $derived(app ? app.name.name : page.name.name);
 
+  // The window's (or app's) own events, as the backend lists them.
+  const ownerEvents = $derived(app ? preview.appEvents : preview.windowEvents);
+  const ownerHandlers = $derived(app ? app.handlers : page.handlers);
+
+  /** The handler name Wire suggests for each own event. */
+  const OWNER_HANDLERS: Partial<Record<PartEvent, string>> = {
+    open: "window_opened",
+    close: "window_closed",
+    return: "window_returned",
+    start: "app_started",
+  };
+
+  /** Wires one of the window's or app's own events, or unwires it with `null`. */
+  function setOwnerHandler(event: PartEvent, handler: string | null) {
+    const target = app ? app.span.start : page.span.start;
+    wire({ op: "setOwnerEvent", owner: target, event, handler }, handler);
+  }
+
   function update(changes: Partial<WidgetProps>) {
     if (!location || !p) return;
     onedit({ op: "updateWidget", item: location.widget.span.start, container: null, props: withProps(p, changes) });
@@ -336,6 +354,28 @@
         <label class="inline"><input type="checkbox" bind:checked={dataList} /> list</label>
         <button class="small" onclick={addData} disabled={!dataName.trim() || !dataEntity}>Add</button>
       </div>
+    </fieldset>
+
+    <fieldset class="checks">
+      <legend>Events</legend>
+      {#each ownerEvents as ev (ev)}
+        {@const handler = ownerHandlers.find((h) => h.event === ev)?.handler ?? ""}
+        <div class="event-row">
+          <span class="event-name">{ev}</span>
+          <input value={handler} placeholder="handler" onchange={(e) => setOwnerHandler(ev, textOf(e))} />
+          {#if handler}
+            <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+            <button class="small" title="Unwire" onclick={() => setOwnerHandler(ev, null)}>&times;</button>
+          {:else}
+            <button class="small" title="Wire a handler for this event" onclick={() => setOwnerHandler(ev, OWNER_HANDLERS[ev] ?? null)}
+              >Wire</button
+            >
+          {/if}
+        </div>
+      {/each}
+      <p class="hint">
+        {app ? "Start runs once, before the main window opens." : "Open runs when the window has its data, close before it closes, return when a window it opened has closed: the place to reload a list."}
+      </p>
     </fieldset>
   {/if}
 </section>

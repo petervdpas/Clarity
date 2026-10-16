@@ -4,4 +4,4 @@
  * Something that happens to a part, which a handler in the code behind
  * can respond to.
  */
-export type Event = "click" | "change" | "enter" | "leave" | "select" | "open" | "pointer" | "key";
+export type Event = "click" | "change" | "enter" | "leave" | "select" | "open" | "pointer" | "key" | "close" | "return" | "start";

@@ -1,0 +1,5 @@
+// The shop example: customers, orders and a desk window, in four modules
+// in the shop folder next to this file.
+project Shop
+    stack rust web desktop
+    datasource main sqlite "data/shop.db"

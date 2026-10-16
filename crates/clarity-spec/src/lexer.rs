@@ -266,7 +266,7 @@ fn lex_string(text: &str, start: usize) -> Result<(String, usize), String> {
 }
 
 /// Writes `text` as a string literal that `lex_string` reads back unchanged.
-pub(crate) fn quote(text: &str) -> String {
+pub fn quote(text: &str) -> String {
     let escaped = text
         .replace('\\', "\\\\")
         .replace('"', "\\\"")

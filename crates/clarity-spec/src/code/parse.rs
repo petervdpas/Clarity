@@ -206,7 +206,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 9] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete"];
+const STATEMENT_WORDS: [&str; 10] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -307,6 +307,12 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             cursor.next();
             StmtKind::Save {
                 value: parse_expr(&mut cursor)?,
+            }
+        }
+        Some("reload") => {
+            cursor.next();
+            StmtKind::Reload {
+                data: cursor.expect_ident("the name of the window's data")?,
             }
         }
         Some("delete") => {

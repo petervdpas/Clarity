@@ -27,11 +27,18 @@ const PROJECT_UPDATED: &str = "project-updated";
 /// this window are handled as one reload.
 const DEBOUNCE: Duration = Duration::from_millis(150);
 
+/// The open project: its file, the folder with its modules next to it, and
+/// the watcher. Dropping the watcher stops watching and ends the reload
+/// thread.
+struct OpenProject {
+    file: PathBuf,
+    dir: PathBuf,
+    _watcher: notify::RecommendedWatcher,
+}
+
 #[derive(Default)]
 struct WatchState {
-    /// The open spec directory and its watcher. Dropping the watcher stops
-    /// watching and ends the reload thread.
-    open: Mutex<Option<(PathBuf, notify::RecommendedWatcher)>>,
+    open: Mutex<Option<OpenProject>>,
 }
 
 /// One file's text before and after a change. A file that did not exist
@@ -80,36 +87,40 @@ fn is_spec_file(path: &Path) -> bool {
         .is_some_and(|ext| ext == clarity_spec::SPEC_EXTENSION)
 }
 
-fn is_project_file(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == clarity_project::PROJECT_FILE)
-}
-
-/// True for events that change a spec file or the project file. Access
-/// events are ignored: reloading reads the files, and reacting to those
-/// reads would reload in an endless loop.
-fn changes_project(event: &notify::Event) -> bool {
+/// True for events that change a module of `dir` or the project file.
+/// Access events are ignored: reloading reads the files, and reacting to
+/// those reads would reload in an endless loop.
+fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
     use notify::EventKind;
     matches!(
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    ) && event.paths.iter().any(|p| is_spec_file(p) || is_project_file(p))
+    ) && event
+        .paths
+        .iter()
+        .any(|p| p == file || (p.parent() == Some(dir) && is_spec_file(p)))
 }
 
-fn watch(dir: &Path, app: AppHandle) -> Result<notify::RecommendedWatcher, String> {
+/// Watches the module folder, and the folder holding the project file (a
+/// save replaces the file, so the file itself cannot be watched).
+fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedWatcher, String> {
     let (tx, rx) = mpsc::channel::<()>();
+    let (watched_file, watched_dir) = (file.to_path_buf(), dir.to_path_buf());
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         if let Ok(event) = event
-            && changes_project(&event)
+            && changes_project(&event, &watched_file, &watched_dir)
         {
             let _ = tx.send(());
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    watcher
-        .watch(dir, RecursiveMode::NonRecursive)
-        .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
+    for folder in [dir, file.parent().unwrap_or(dir)] {
+        watcher
+            .watch(folder, RecursiveMode::NonRecursive)
+            .map_err(|err| format!("cannot watch {}: {err}", folder.display()))?;
+    }
 
-    let dir = dir.to_path_buf();
+    let (file, dir) = (file.to_path_buf(), dir.to_path_buf());
     std::thread::spawn(move || {
         // Ends when the watcher (and with it the sender) is dropped.
         while rx.recv().is_ok() {
@@ -117,34 +128,52 @@ fn watch(dir: &Path, app: AppHandle) -> Result<notify::RecommendedWatcher, Strin
             if let Ok(preview) = load(&dir) {
                 let _ = app.emit(PREVIEW_UPDATED, preview);
             }
-            let _ = app.emit(PROJECT_UPDATED, clarity_project::load(&dir));
+            let _ = app.emit(PROJECT_UPDATED, clarity_project::load(&file));
         }
     });
 
     Ok(watcher)
 }
 
-/// Loads a spec directory and starts watching it, replacing any previous watch.
+/// Opens a project file and starts watching it and its modules, replacing
+/// any previous project.
 #[tauri::command]
-fn open_spec_dir(
+fn open_project(
     path: String,
     app: AppHandle,
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<Preview, String> {
-    open_dir(&path, app, &state, &history)
+    open_file(&path, app, &state, &history)
 }
 
-fn open_dir(path: &str, app: AppHandle, state: &WatchState, history: &HistoryState) -> Result<Preview, String> {
-    let dir = PathBuf::from(path)
+/// The project file at `path`, with the folder of its modules.
+fn project_paths(path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let file = PathBuf::from(path)
         .canonicalize()
         .map_err(|err| format!("cannot open {path}: {err}"))?;
-    if !dir.is_dir() {
-        return Err(format!("{} is not a directory", dir.display()));
+    if file.is_dir() || !is_spec_file(&file) {
+        return Err(format!(
+            "{} is not a project file; open the .clarity file next to the project's folder",
+            file.display()
+        ));
     }
+    let dir = clarity_project::module_dir(&file);
+    if !dir.is_dir() {
+        return Err(format!("the folder {} with the project's modules is missing", dir.display()));
+    }
+    Ok((file, dir))
+}
+
+fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistoryState) -> Result<Preview, String> {
+    let (file, dir) = project_paths(path)?;
     let preview = load(&dir)?;
-    let watcher = watch(&dir, app)?;
-    *state.open.lock().map_err(|_| "watch state is poisoned")? = Some((dir, watcher));
+    let watcher = watch(&file, &dir, app)?;
+    *state.open.lock().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
+        file,
+        dir,
+        _watcher: watcher,
+    });
     // Undo works within one project.
     *history.0.lock().map_err(|_| "history is poisoned")? = History::default();
     Ok(preview)
@@ -271,7 +300,7 @@ fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> 
 /// starts it. Progress arrives as `build-line` and `build-done` events.
 #[tauri::command]
 fn build_app(release: bool, run: bool, app: AppHandle, state: State<WatchState>) -> Result<(), String> {
-    build::start(app, open_dir_of(&state)?, release, run)
+    build::start(app, project_file_of(&state)?, release, run)
 }
 
 /// Ends the application Run started.
@@ -349,13 +378,23 @@ fn rename(
     load(&dir)
 }
 
+/// The folder with the open project's modules.
 fn open_dir_of(state: &WatchState) -> Result<PathBuf, String> {
+    open_project_of(state).map(|(_, dir)| dir)
+}
+
+/// The open project's file.
+fn project_file_of(state: &WatchState) -> Result<PathBuf, String> {
+    open_project_of(state).map(|(file, _)| file)
+}
+
+fn open_project_of(state: &WatchState) -> Result<(PathBuf, PathBuf), String> {
     state
         .open
         .lock()
         .map_err(|_| "watch state is poisoned")?
         .as_ref()
-        .map(|(dir, _)| dir.clone())
+        .map(|o| (o.file.clone(), o.dir.clone()))
         .ok_or_else(|| "no project is open".to_string())
 }
 
@@ -430,10 +469,23 @@ fn history_counts(history: State<HistoryState>) -> Result<HistoryCounts, String>
     })
 }
 
-/// The project file of the open project, for the Project tab.
+/// The open project's file, for the Project tab.
 #[tauri::command]
 fn project_file(state: State<WatchState>) -> Result<ProjectFile, String> {
-    Ok(clarity_project::load(&open_dir_of(&state)?))
+    Ok(clarity_project::load(&project_file_of(&state)?))
+}
+
+/// The folder with the open project's modules, where file dialogs start.
+#[tauri::command]
+fn project_folder(state: State<WatchState>) -> Result<String, String> {
+    Ok(open_dir_of(&state)?.display().to_string())
+}
+
+/// A path picked in a file dialog as the project file stores it: relative
+/// to the project's folder when it is inside it.
+#[tauri::command]
+fn project_path(picked: String, state: State<WatchState>) -> Result<String, String> {
+    Ok(clarity_project::project_path(&project_file_of(&state)?, Path::new(&picked)))
 }
 
 /// What a project can choose: backends, UIs, targets and data sources.
@@ -442,40 +494,8 @@ fn stack_catalog() -> Catalog {
     clarity_project::catalog()
 }
 
-/// Writes the starter project file into the open project when it has
-/// none, named after the folder like a new project.
-#[tauri::command]
-fn create_project_file(state: State<WatchState>, history: State<HistoryState>) -> Result<ProjectFile, String> {
-    let dir = open_dir_of(&state)?;
-    let change = starter_change(&dir)?;
-    write_atomically(&change.file, &change.after)?;
-    record(&history, vec![change])?;
-    Ok(clarity_project::load(&dir))
-}
-
-fn starter_change(dir: &Path) -> Result<FileChange, String> {
-    let file = dir.join(clarity_project::PROJECT_FILE);
-    if file.exists() {
-        return Err(format!("the project already has a {}", clarity_project::PROJECT_FILE));
-    }
-    let (module, app_name) = project_names(&folder_name(dir));
-    let settings = clarity_project::starter(&clarity_spec::model::default_label(&app_name), &module);
-    Ok(FileChange {
-        file,
-        before: None,
-        after: clarity_project::write(None, &settings)?,
-    })
-}
-
-fn folder_name(dir: &Path) -> String {
-    dir.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "app".to_string())
-}
-
 /// Saves the project settings. `version` is the file version the Project
-/// tab saw (empty when there was no file); settings with problems are
-/// refused, with the first one.
+/// tab saw; settings with problems are refused, with the first one.
 #[tauri::command]
 fn save_settings(
     version: String,
@@ -483,48 +503,40 @@ fn save_settings(
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<ProjectFile, String> {
-    let dir = open_dir_of(&state)?;
-    let change = settings_change(&dir, &version, &settings)?;
+    let file = project_file_of(&state)?;
+    let change = settings_change(&file, &version, &settings)?;
     if let Some(change) = change {
         write_atomically(&change.file, &change.after)?;
         record(&history, vec![change])?;
     }
-    Ok(clarity_project::load(&dir))
+    Ok(clarity_project::load(&file))
 }
 
-/// The change that saving `settings` makes to the project file, or None
-/// when the file already says the same.
-fn settings_change(dir: &Path, version: &str, settings: &Settings) -> Result<Option<FileChange>, String> {
+/// The change that saving `settings` makes to the project file `file`, or
+/// None when the file already says the same.
+fn settings_change(file: &Path, version: &str, settings: &Settings) -> Result<Option<FileChange>, String> {
     if let Some(problem) = clarity_project::validate(settings).into_iter().next() {
         return Err(problem);
     }
-    let file = dir.join(clarity_project::PROJECT_FILE);
-    let before = match std::fs::read_to_string(&file) {
-        Ok(text) => Some(text),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
-        Err(err) => return Err(format!("cannot read {}: {err}", file.display())),
-    };
-    let current = before.as_deref().map(clarity_spec::content_version).unwrap_or_default();
-    if current != version {
-        return Err(format!(
-            "{} changed on disk since it was loaded; the view has been refreshed, try again",
-            clarity_project::PROJECT_FILE
-        ));
+    let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let before = std::fs::read_to_string(file).map_err(|err| format!("cannot read {shown}: {err}"))?;
+    if clarity_spec::content_version(&before) != version {
+        return Err(format!("{shown} changed on disk since it was loaded; the view has been refreshed, try again"));
     }
-    let after = clarity_project::write(before.as_deref(), settings)?;
-    if before.as_deref() == Some(after.as_str()) {
+    let after = clarity_project::write(Some(&before), settings)?;
+    if before == after {
         return Ok(None);
     }
     Ok(Some(FileChange {
-        file,
-        before,
+        file: file.to_path_buf(),
+        before: Some(before),
         after,
     }))
 }
 
-/// Creates a project in a new or empty folder with the chosen stack: the
-/// project file and one spec file with an app and its main window. Then
-/// opens it.
+/// Creates a project with the chosen stack: the project file at `path`
+/// (like `shop.clarity`) and the folder next to it with a first module, an
+/// app and its main window. Then opens it.
 #[tauri::command]
 fn new_project(
     path: String,
@@ -533,41 +545,46 @@ fn new_project(
     state: State<WatchState>,
     history: State<HistoryState>,
 ) -> Result<Preview, String> {
-    write_new_project(Path::new(&path), stack)?;
-    open_dir(&path, app, &state, &history)
+    let file = write_new_project(Path::new(&path), stack)?;
+    open_file(&file.display().to_string(), app, &state, &history)
 }
 
 /// What a new project keeps out of version control: the generated application.
 const GITIGNORE: &str = "# Generated by Clarity, and the build tools' output; rebuilt from the .clarity files.\nout/\n";
 
-/// Writes the files of a new project into `dir`, which must not hold a
-/// project yet.
-fn write_new_project(dir: &Path, stack: Stack) -> Result<PathBuf, String> {
-    let shown = dir.display();
-    std::fs::create_dir_all(dir).map_err(|err| format!("cannot create {shown}: {err}"))?;
-    let specs = clarity_spec::spec_files(dir).map_err(|err| format!("cannot read {shown}: {err}"))?;
-    if !specs.is_empty() || dir.join(clarity_project::PROJECT_FILE).exists() {
-        return Err(format!("{shown} already holds a Clarity project; open it instead"));
+/// Writes a new project: the project file (with `.clarity` added when it is
+/// missing) and its folder, which must not exist yet or be empty. Returns
+/// the project file.
+fn write_new_project(path: &Path, stack: Stack) -> Result<PathBuf, String> {
+    let file = if is_spec_file(path) { path.to_path_buf() } else { path.with_extension(clarity_spec::SPEC_EXTENSION) };
+    let dir = clarity_project::module_dir(&file);
+    if file.exists() {
+        return Err(format!("{} already exists; open it instead", file.display()));
     }
-    let (module, app_name) = project_names(&folder_name(dir));
-    let title = clarity_spec::model::default_label(&app_name);
+    let occupied = std::fs::read_dir(&dir).map(|mut entries| entries.next().is_some()).unwrap_or(false);
+    if occupied {
+        return Err(format!("the folder {} is not empty; choose another name", dir.display()));
+    }
+    let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let (module, app_name) = project_names(&stem);
     let settings = Settings {
         stack,
-        ..clarity_project::starter(&title, &module)
+        ..clarity_project::starter(&app_name, &module)
     };
     // Check before writing anything, so a refused stack leaves no files.
     if let Some(problem) = clarity_project::validate(&settings).into_iter().next() {
         return Err(problem);
     }
     let project = clarity_project::write(None, &settings)?;
-    let text = format!(
+    let title = clarity_project::title(&settings);
+    let module_text = format!(
         "module {module}\n\napp {app_name}\n    title \"{title}\"\n    main Main\n\npage Main: window\n    title \"Main\"\n"
     );
-    let file = dir.join(format!("{module}.clarity"));
-    std::fs::write(dir.join(clarity_project::PROJECT_FILE), project)
-        .map_err(|err| format!("cannot write the project: {err}"))?;
-    std::fs::write(&file, text).map_err(|err| format!("cannot write the project: {err}"))?;
-    std::fs::write(dir.join(".gitignore"), GITIGNORE).map_err(|err| format!("cannot write the project: {err}"))?;
+    let failed = |err: std::io::Error| format!("cannot write the project: {err}");
+    std::fs::create_dir_all(&dir).map_err(failed)?;
+    std::fs::write(dir.join(format!("{module}.clarity")), module_text).map_err(failed)?;
+    std::fs::write(dir.join(".gitignore"), GITIGNORE).map_err(failed)?;
+    std::fs::write(&file, project).map_err(failed)?;
     Ok(file)
 }
 
@@ -607,18 +624,18 @@ fn write_atomically(file: &Path, text: &str) -> Result<(), String> {
     })
 }
 
-/// The spec directory given on the command line or in CLARITY_SPEC_DIR.
+/// The project file given on the command line or in CLARITY_PROJECT.
 #[tauri::command]
-fn initial_spec_dir() -> Option<String> {
+fn initial_project() -> Option<String> {
     let dir = std::env::args()
         .nth(1)
         .filter(|arg| !arg.starts_with('-'))
-        .or_else(|| std::env::var("CLARITY_SPEC_DIR").ok())?;
+        .or_else(|| std::env::var("CLARITY_PROJECT").ok())?;
     let start = std::env::var_os("INIT_CWD").map(PathBuf::from);
     Some(resolve_dir(&dir, start.as_deref()))
 }
 
-/// A relative directory is taken from where the command was typed: npm
+/// A relative path is taken from where the command was typed: npm
 /// passes that directory in INIT_CWD, while the app itself runs elsewhere.
 fn resolve_dir(dir: &str, start: Option<&Path>) -> String {
     let path = Path::new(dir);
@@ -635,8 +652,8 @@ pub fn run() {
         .manage(HistoryState::default())
         .manage(build::BuildState::default())
         .invoke_handler(tauri::generate_handler![
-            open_spec_dir,
-            initial_spec_dir,
+            open_project,
+            initial_project,
             apply_edit,
             undo_edit,
             redo_edit,
@@ -645,7 +662,8 @@ pub fn run() {
             project_file,
             save_settings,
             stack_catalog,
-            create_project_file,
+            project_folder,
+            project_path,
             code_text,
             check_code,
             decl_text,
@@ -666,23 +684,33 @@ mod tests {
     use clarity_project::{Backend, Target, Ui};
 
     #[test]
-    fn a_new_project_checks_clean_and_is_not_written_twice() {
-        let dir = std::env::temp_dir().join(format!("clarity-new-{}", std::process::id())).join("my-shop");
-        let _ = std::fs::remove_dir_all(&dir);
-        let file = write_new_project(&dir, csharp()).unwrap();
-        assert_eq!(file.file_name().unwrap(), "my_shop.clarity");
+    fn a_new_project_is_a_file_with_its_folder() {
+        let base = std::env::temp_dir().join(format!("clarity-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // The extension is added when the dialog leaves it out.
+        let file = write_new_project(&base.join("my-shop"), csharp()).unwrap();
+        assert_eq!(file, base.join("my-shop.clarity"));
+        let dir = base.join("my-shop");
+        assert!(dir.join("my_shop.clarity").exists());
         let project = clarity_spec::load_dir(&dir).unwrap();
         assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
         assert_eq!(project.apps().next().unwrap().name.name, "MyShop");
-        let settings = clarity_project::load(&dir);
-        assert!(settings.problems.is_empty(), "{:?}", settings.problems);
-        let settings = settings.settings.unwrap();
-        assert_eq!(settings.name, "My shop");
+        let loaded = clarity_project::load(&file);
+        assert!(loaded.problems.is_empty(), "{:?}", loaded.problems);
+        let settings = loaded.settings.unwrap();
+        assert_eq!(settings.name, "MyShop");
+        assert_eq!(clarity_project::title(&settings), "My shop");
         assert_eq!(settings.stack, csharp());
         assert_eq!(settings.datasources[0].url, "data/my_shop.db");
         assert!(std::fs::read_to_string(dir.join(".gitignore")).unwrap().contains("out/"));
-        assert!(write_new_project(&dir, csharp()).unwrap_err().contains("already holds"));
-        std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+        assert!(write_new_project(&file, csharp()).unwrap_err().contains("already exists"));
+
+        // A folder that already holds something is not taken over.
+        std::fs::create_dir_all(base.join("taken")).unwrap();
+        std::fs::write(base.join("taken/notes.txt"), "mine").unwrap();
+        assert!(write_new_project(&base.join("taken.clarity"), csharp()).unwrap_err().contains("not empty"));
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     fn csharp() -> Stack {
@@ -695,59 +723,56 @@ mod tests {
 
     #[test]
     fn a_refused_stack_writes_no_files() {
-        let dir = std::env::temp_dir().join(format!("clarity-refused-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let base = std::env::temp_dir().join(format!("clarity-refused-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
         let stack = Stack {
             backend: Backend::Go,
             ..csharp()
         };
-        assert!(write_new_project(&dir, stack).unwrap_err().contains("Avalonia"));
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(write_new_project(&base.join("shop.clarity"), stack).unwrap_err().contains("Avalonia"));
+        assert_eq!(std::fs::read_dir(&base).unwrap().count(), 0);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn opening_needs_a_project_file_with_its_folder() {
+        let base = std::env::temp_dir().join(format!("clarity-open-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let file = write_new_project(&base.join("shop.clarity"), csharp()).unwrap();
+        let (found, dir) = project_paths(&file.display().to_string()).unwrap();
+        assert_eq!((found, dir), (file.canonicalize().unwrap(), base.canonicalize().unwrap().join("shop")));
+        assert!(project_paths(&base.join("shop").display().to_string()).unwrap_err().contains("not a project file"));
+        std::fs::remove_dir_all(base.join("shop")).unwrap();
+        assert!(project_paths(&file.display().to_string()).unwrap_err().contains("is missing"));
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
     fn saving_settings_checks_them_and_the_file_version() {
-        let dir = std::env::temp_dir().join(format!("clarity-settings-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut settings = clarity_project::starter("Shop", "shop");
+        let base = std::env::temp_dir().join(format!("clarity-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let file = write_new_project(&base.join("shop.clarity"), clarity_project::starter("Shop", "shop").stack).unwrap();
+        let mut settings = clarity_project::load(&file).settings.unwrap();
+        let version = clarity_project::load(&file).version;
 
-        // No file yet: the version is empty, and saving creates the file.
-        let change = settings_change(&dir, "", &settings).unwrap().unwrap();
-        assert_eq!(change.before, None);
-        std::fs::write(&change.file, &change.after).unwrap();
-        let version = clarity_project::load(&dir).version;
-
-        assert!(settings_change(&dir, &version, &settings).unwrap().is_none(), "nothing changed");
-        assert!(settings_change(&dir, "stale", &settings).unwrap_err().contains("changed on disk"));
+        assert!(settings_change(&file, &version, &settings).unwrap().is_none(), "nothing changed");
+        assert!(settings_change(&file, "stale", &settings).unwrap_err().contains("changed on disk"));
 
         settings.stack.ui = Ui::Avalonia;
-        assert!(settings_change(&dir, &version, &settings).unwrap_err().contains("C#"));
+        assert!(settings_change(&file, &version, &settings).unwrap_err().contains("C#"));
 
         settings.stack = csharp();
-        let change = settings_change(&dir, &version, &settings).unwrap().unwrap();
-        assert!(change.after.contains("backend = \"csharp\""));
+        let change = settings_change(&file, &version, &settings).unwrap().unwrap();
+        assert!(change.after.contains("    stack csharp avalonia desktop\n"), "{}", change.after);
         assert!(change.before.is_some());
-        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
-    fn creates_the_starter_project_file_only_when_missing() {
-        let dir = std::env::temp_dir().join(format!("clarity-starter-{}", std::process::id())).join("order-desk");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let change = starter_change(&dir).unwrap();
-        let settings = clarity_project::parse(&change.after).unwrap();
-        assert_eq!(settings.name, "Order desk");
-        assert_eq!(settings.datasources[0].url, "data/order_desk.db");
-        std::fs::write(&change.file, &change.after).unwrap();
-        assert!(starter_change(&dir).unwrap_err().contains("already has"));
-        std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
-    }
-
-    #[test]
-    fn names_a_project_after_its_folder() {
+    fn names_a_project_after_its_file() {
         assert_eq!(project_names("my-shop"), ("my_shop".into(), "MyShop".into()));
         assert_eq!(project_names("Shop"), ("shop".into(), "Shop".into()));
         assert_eq!(project_names("2026 plan"), ("app_2026_plan".into(), "App2026Plan".into()));
@@ -755,46 +780,39 @@ mod tests {
     }
 
     #[test]
-    fn relative_spec_dirs_start_where_the_command_was_typed() {
+    fn relative_paths_start_where_the_command_was_typed() {
         let start = Path::new("/home/me/project");
-        assert_eq!(resolve_dir("examples/shop/spec", Some(start)), "/home/me/project/examples/shop/spec");
-        assert_eq!(resolve_dir("/tmp/spec", Some(start)), "/tmp/spec");
-        assert_eq!(resolve_dir("spec", None), "spec");
+        assert_eq!(resolve_dir("examples/shop.clarity", Some(start)), "/home/me/project/examples/shop.clarity");
+        assert_eq!(resolve_dir("/tmp/shop.clarity", Some(start)), "/tmp/shop.clarity");
+        assert_eq!(resolve_dir("shop.clarity", None), "shop.clarity");
     }
 
     fn event(kind: EventKind, path: &str) -> Event {
         Event::new(kind).add_path(PathBuf::from(path))
     }
 
+    const FILE: &str = "/p/shop.clarity";
+    const DIR: &str = "/p/shop";
+
+    fn changes(kind: EventKind, path: &str) -> bool {
+        changes_project(&event(kind, path), Path::new(FILE), Path::new(DIR))
+    }
+
     #[test]
-    fn reacts_to_changes_of_spec_files() {
-        assert!(changes_project(&event(
-            EventKind::Modify(ModifyKind::Any),
-            "/s/a.clarity"
-        )));
-        assert!(changes_project(&event(
-            EventKind::Create(CreateKind::File),
-            "/s/a.clarity"
-        )));
-        assert!(changes_project(&event(
-            EventKind::Modify(ModifyKind::Name(RenameMode::To)),
-            "/s/a.clarity"
-        )));
+    fn reacts_to_changes_of_modules_and_the_project_file() {
+        assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/a.clarity"));
+        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/a.clarity"));
+        assert!(changes(EventKind::Modify(ModifyKind::Name(RenameMode::To)), "/p/shop/a.clarity"));
+        assert!(changes(EventKind::Modify(ModifyKind::Name(RenameMode::To)), FILE));
     }
 
     #[test]
     fn ignores_reads_and_other_files() {
-        assert!(!changes_project(&event(
-            EventKind::Access(AccessKind::Any),
-            "/s/a.clarity"
-        )));
-        assert!(!changes_project(&event(
-            EventKind::Modify(ModifyKind::Any),
-            "/s/a.clarity.tmp"
-        )));
-        assert!(!changes_project(&event(
-            EventKind::Modify(ModifyKind::Any),
-            "/s/notes.txt"
-        )));
+        assert!(!changes(EventKind::Access(AccessKind::Any), "/p/shop/a.clarity"));
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/shop/a.clarity.tmp"));
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/shop/notes.txt"));
+        // Other projects next to this one, and generated files, are not this project.
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/other.clarity"));
+        assert!(!changes(EventKind::Modify(ModifyKind::Any), "/p/shop/out/src/x.clarity"));
     }
 }

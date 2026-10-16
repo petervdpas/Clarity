@@ -117,6 +117,13 @@ pub struct Preview {
     pub frame: Vec<frame::RegionInfo>,
     /// Click targets that are not windows (`quit`, `close`).
     pub commands: Vec<String>,
+    /// The events a window has, and the events the app has.
+    #[serde(rename = "windowEvents")]
+    #[ts(rename = "windowEvents")]
+    pub window_events: Vec<widgets::Event>,
+    #[serde(rename = "appEvents")]
+    #[ts(rename = "appEvents")]
+    pub app_events: Vec<widgets::Event>,
 }
 
 impl Preview {
@@ -133,6 +140,8 @@ impl Preview {
                 .iter()
                 .map(|c| c.to_string())
                 .collect(),
+            window_events: widgets::WINDOW_EVENTS.to_vec(),
+            app_events: widgets::APP_EVENTS.to_vec(),
         }
     }
 }

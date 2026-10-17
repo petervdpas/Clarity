@@ -6,6 +6,7 @@ import type { EnumDecl } from "./generated/EnumDecl";
 import type { Field } from "./generated/Field";
 import type { Preview } from "./generated/Preview";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
+import { formatValue, userLocale, type FieldFormat, type Formats } from "./format";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -21,6 +22,31 @@ export function findField(entity: Entity, name: string): Field | undefined {
   return entity.fields.find((f) => f.name.name === name);
 }
 
+/** Where values are shown: the locale of the person looking, and the
+ *  project's currency. */
+export function formatsOf(preview: Preview): Formats {
+  const { language, currency } = preview.project.locale;
+  const system = typeof navigator === "undefined" ? undefined : navigator.languages;
+  return { locale: userLocale(system, language), currency };
+}
+
+/** How a field's values are formatted, for the types that have formats. */
+export function fieldFormat(field: Field): FieldFormat | null {
+  const t = field.type;
+  const format = field.modifiers.format;
+  switch (t.kind) {
+    case "integer":
+    case "money":
+    case "date":
+    case "dateTime":
+      return { kind: t.kind, format };
+    case "decimal":
+      return { kind: "decimal", scale: t.scale, format };
+    default:
+      return null;
+  }
+}
+
 /** The text a table cell or list item shows for a value. */
 export function displayValue(preview: Preview, field: Field, value: JsonValue | undefined): string {
   if (value === null || value === undefined) return "";
@@ -34,8 +60,13 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
     }
     case "list":
       return `${value} item(s)`;
-    default:
+    default: {
+      const format = fieldFormat(field);
+      if (format && (typeof value === "string" || typeof value === "number") && value !== "") {
+        return formatValue(format, value, formatsOf(preview));
+      }
       return String(value);
+    }
   }
 }
 

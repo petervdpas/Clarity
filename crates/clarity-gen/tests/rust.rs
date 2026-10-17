@@ -453,3 +453,13 @@ code Order
     // Only the entity with events gets hooks.
     assert_eq!(sales.matches("const EVENTS").count(), 1, "{sales}");
 }
+
+#[test]
+fn the_renderer_gets_the_language_and_currency() {
+    let mut project = load_sources([("sales.clarity", SALES)]);
+    project.locale.language = Some("nl-NL".into());
+    project.locale.currency = Some("EUR".into());
+    let files = generate(&project, &shop()).unwrap();
+    let model = file(&files, "src/model.json");
+    assert!(model.contains("\"locale\":{\"language\":\"nl-NL\",\"currency\":\"EUR\"}"), "{model}");
+}

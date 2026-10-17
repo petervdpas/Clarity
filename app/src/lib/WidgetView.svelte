@@ -4,7 +4,8 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
-  import { displayValue, findEnum, findField, isNumeric } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric } from "./model";
+  import { editText, parseNumber } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
@@ -39,13 +40,13 @@
 
   // In a running application: what the handlers set on this part.
   const live = useLive();
-  const state = $derived(live && p.name ? live.parts[p.name] : undefined);
-  const hidden = $derived(state?.visible === false);
-  const disabled = $derived(state?.enabled === false);
-  const caption = $derived(state?.caption !== undefined && state.caption !== null ? state.caption : p.caption);
+  const partState = $derived(live && p.name ? live.parts[p.name] : undefined);
+  const hidden = $derived(partState?.visible === false);
+  const disabled = $derived(partState?.enabled === false);
+  const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? partState.caption : p.caption);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
-  const readonly = $derived(state?.readonly ?? p.readonly);
-  const error = $derived(state?.error ? state.error : null);
+  const readonly = $derived(partState?.readonly ?? p.readonly);
+  const error = $derived(partState?.error ? partState.error : null);
 
   // Labels and help texts belong to the input named in `for`.
   const target = $derived(findPart(page, p.for));
@@ -91,10 +92,33 @@
 
   // A bound input shows its field; an unbound text input keeps its own text,
   // which the running application sends with the next event.
-  const shown = $derived(bound || !p.name ? text : (state?.text ?? ""));
+  const shown = $derived(bound || !p.name ? text : (partState?.text ?? ""));
 
   function setValue(next: string | boolean | number | null) {
     if (bound) bound.record[bound.field.name.name] = next;
+  }
+
+  // A number input shows its value in the locale, and reads what is typed
+  // in the locale too. While typing, the text stays as typed; text that is
+  // no number keeps the last value and marks the input.
+  const numberFormat = $derived(bound ? fieldFormat(bound.field) : null);
+  let typing = $state<string | null>(null);
+  const numberText = $derived.by(() => {
+    if (typing !== null) return typing;
+    if (!numberFormat || (typeof value !== "string" && typeof value !== "number") || value === "") return text;
+    return editText(numberFormat, value, formatsOf(preview));
+  });
+  const badNumber = $derived(
+    typing !== null && typing.trim() !== "" && numberFormat !== null && parseNumber(numberFormat, typing, formatsOf(preview)) === null,
+  );
+
+  function typeNumber(next: string) {
+    typing = next;
+    if (!numberFormat) return setValue(next);
+    // A number field always has a value; cleared, it is zero.
+    if (next.trim() === "") return setValue(numberFormat.kind === "integer" ? 0 : "0");
+    const read = parseNumber(numberFormat, next, formatsOf(preview));
+    if (read !== null) setValue(read);
   }
 
   function setText(next: string) {
@@ -219,17 +243,21 @@
         {id}
         class="numeric"
         inputmode="decimal"
-        value={text}
+        value={numberText}
         placeholder={p.placeholder ?? undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
-        aria-invalid={error !== null}
+        aria-invalid={error !== null || badNumber}
+        title={badNumber ? "Not a number" : undefined}
         {disabled}
         {readonly}
-        oninput={(e) => setValue(e.currentTarget.value)}
+        oninput={(e) => typeNumber(e.currentTarget.value)}
         onchange={() => fire("change")}
         onfocus={() => fire("enter")}
-        onblur={() => fire("leave")}
+        onblur={() => {
+          if (!badNumber) typing = null;
+          fire("leave");
+        }}
         onkeydown={submitOnEnter}
       />
     {:else if p.kind === "date"}

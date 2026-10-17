@@ -177,6 +177,34 @@
       </section>
 
       <section>
+        <h2>Language and formats</h2>
+        <p class="intro">Dates, numbers and money show the way the person using the application writes them, on every stack.</p>
+        <div class="form-grid">
+          <label class="form-label" for="project-language">Language</label>
+          <input
+            id="project-language"
+            class="mono"
+            value={settings.language ?? ""}
+            placeholder="en"
+            spellcheck="false"
+            onchange={(e) => save({ language: e.currentTarget.value.trim() || null })}
+          />
+          <p class="form-help">The language the project's texts are written in, like en or nl-NL. Formats use it where the system names no locale.</p>
+          <label class="form-label" for="project-currency">Currency</label>
+          <input
+            id="project-currency"
+            class="mono"
+            value={settings.currency ?? ""}
+            placeholder="EUR"
+            maxlength="3"
+            spellcheck="false"
+            onchange={(e) => save({ currency: e.currentTarget.value.trim().toUpperCase() || null })}
+          />
+          <p class="form-help">The currency of money fields, as its code: EUR, USD, GBP. Empty shows amounts without a currency sign.</p>
+        </div>
+      </section>
+
+      <section>
         <h2>Output</h2>
         <div class="form-grid">
           <label class="form-label" for="output-folder">Output folder</label>

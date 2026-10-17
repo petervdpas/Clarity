@@ -109,6 +109,14 @@ pub struct Settings {
     pub title: Option<String>,
     pub stack: Stack,
     pub datasources: Vec<DataSource>,
+    /// The language the project's texts are written in, as a language tag
+    /// (`en`, `nl-NL`). Formats follow the locale of the person using the
+    /// application; this one where the system gives none.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// The currency of `money` fields, as its ISO 4217 code (`EUR`).
+    #[serde(default)]
+    pub currency: Option<String>,
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
@@ -187,6 +195,8 @@ pub fn starter(name: &str, module: &str) -> Settings {
             external: false,
             readonly: false,
         }],
+        language: None,
+        currency: None,
         out: DEFAULT_OUT.to_string(),
     }
 }
@@ -261,6 +271,40 @@ pub fn load(path: &Path) -> ProjectFile {
     }
 }
 
+/// Why `tag` is not a language tag Clarity takes: a language of two or
+/// three lowercase letters, optionally a script (`Latn`) and a region (`NL`
+/// or `419`), joined by hyphens: `en`, `nl-NL`, `sr-Latn-RS`.
+pub fn language_problem(tag: &str) -> Option<String> {
+    let mut parts = tag.split('-');
+    let language = parts.next().unwrap_or("");
+    let lower = |s: &str, n: std::ops::RangeInclusive<usize>| n.contains(&s.len()) && s.chars().all(|c| c.is_ascii_lowercase());
+    let mut fits = lower(language, 2..=3);
+    let rest: Vec<&str> = parts.collect();
+    let (script, region) = match rest.as_slice() {
+        [] => (None, None),
+        [one] if one.len() == 4 => (Some(*one), None),
+        [one] => (None, Some(*one)),
+        [script, region] => (Some(*script), Some(*region)),
+        _ => (None, None),
+    };
+    fits &= rest.len() <= 2 && (rest.len() < 2 || script.is_some_and(|s| s.len() == 4));
+    if let Some(script) = script {
+        let mut chars = script.chars();
+        fits &= chars.next().is_some_and(|c| c.is_ascii_uppercase()) && chars.all(|c| c.is_ascii_lowercase());
+    }
+    if let Some(region) = region {
+        fits &= (region.len() == 2 && region.chars().all(|c| c.is_ascii_uppercase()))
+            || (region.len() == 3 && region.chars().all(|c| c.is_ascii_digit()));
+    }
+    (!fits).then(|| format!("'{tag}' is not a language tag; write one like en, nl or nl-NL"))
+}
+
+/// Why `code` is not a currency code: three uppercase letters (`EUR`, `USD`).
+pub fn currency_problem(code: &str) -> Option<String> {
+    let fits = code.len() == 3 && code.chars().all(|c| c.is_ascii_uppercase());
+    (!fits).then(|| format!("'{code}' is not a currency code; write its ISO code, like EUR or USD"))
+}
+
 /// Everything wrong with the settings, in reading order. Empty when they
 /// can be saved.
 pub fn validate(settings: &Settings) -> Vec<String> {
@@ -277,6 +321,8 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     if out.is_empty() || out == "." {
         problems.push("the output folder must be a folder of its own, like out".to_string());
     }
+    problems.extend(settings.language.as_deref().and_then(language_problem));
+    problems.extend(settings.currency.as_deref().and_then(currency_problem));
     let stack = &settings.stack;
     let backend = backend_info(stack.backend);
     if !backend.uis.contains(&stack.ui) {
@@ -493,6 +539,7 @@ pub fn sources_of(dir: &Path) -> Vec<clarity_spec::SourceRef> {
 pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
     let mut project = clarity_spec::load_dir_in(dir, &sources_of(dir))?;
     check_external(dir, &mut project);
+    set_locale(dir, &mut project);
     Ok(project)
 }
 
@@ -500,6 +547,7 @@ pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
 pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
     let mut project = clarity_spec::load_dir_with_in(dir, Some((path, text)), &sources_of(dir))?;
     check_external(dir, &mut project);
+    set_locale(dir, &mut project);
     Ok(project)
 }
 
@@ -509,6 +557,18 @@ pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
     let path = Path::new(&source.url);
     let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
     std::path::absolute(&joined).unwrap_or(joined)
+}
+
+/// Hands the project file's language and currency to the project, for
+/// showing values.
+fn set_locale(dir: &Path, project: &mut clarity_spec::Project) {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    if let Some(settings) = load(&file).settings {
+        project.locale = clarity_spec::model::Locale {
+            language: settings.language,
+            currency: settings.currency,
+        };
+    }
 }
 
 /// Compares the entities of each external SQLite source with its tables.

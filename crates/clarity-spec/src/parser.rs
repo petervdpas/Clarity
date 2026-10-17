@@ -568,7 +568,7 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         ),
         "format" => set(
             &mut modifiers.format,
-            cursor.expect_string("a format string")?,
+            cursor.expect_ident("a format name, such as short or plain")?.name,
             duplicate,
         ),
         "column" => set(

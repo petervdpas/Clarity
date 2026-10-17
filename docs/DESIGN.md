@@ -181,7 +181,7 @@ An application made with Clarity is shipped to people who read another language,
 
 **Formats (I1a).** How values look depends on the locale, not on the developer.
 
-- The project names its base language and, for money, its currency: `language en` and `currency EUR` in the project file.
+- The project names its base language and, for money, its currency: `language "en"` and `currency EUR` in the project file.
 - Dates, times, numbers and money are shown and entered in the locale of the person using the application: `17-10-2026` or `10/17/2026`, `1.250,50` or `1,250.50`, `€ 1.250,50`. The locale comes from the system, and the application can offer a choice.
 - A field's `format` (accepted today, not used yet) picks a format by name rather than by pattern: `format short`, `format long`, `format percent`. Named formats stay the same across stacks and locales; a pattern does not.
 - Money shows its currency's decimals, so `0.0000` from a server database reads `€ 0,00`.
@@ -1255,7 +1255,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator; containers that share the column lines of the grid around them (as CSS subgrid does), so a label and an input in a panel line up with those outside it, and a label column for forms | |
 | U1c | Data parts: tree, tree table, pager, search bar, lookup (a reference picked from a searchable list), chart; combo box, slider, spin box, color, file and tags inputs | |
 | U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | |
-| I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | |
+| I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | done for the web renderer (LANGUAGE.md section 4, Formats): `language "tag"` and `currency CODE` checked and on the Project tab, `format` a name checked per type (catalog in `clarity_spec::formats`, a Format column in the entity editor), the renderer formats and reads values with `Intl` (`app/src/lib/format.ts`), the shared cases in `conformance/formats.json` (`npm test`); Avalonia meets the same cases with G2; open: date inputs follow the system's locale through the browser's own date picker |
 | I1b | Text with slots (section 1.5): `"Saved {customer.name}"` in messages, refusals and captions, slots checked as expressions and shown in the locale's format | |
 | I1c | Translations (section 1.5): text collected from the whole project, translation files per language and module, slots kept, missing translations listed, a Translations table on the Project tab, a language choice for the canvas and Preview, switching language in the running application | |
 | T1 | Themes (section 1.5): a `theme` with named colors per light and dark mode, font, size, radius and named styles; `style` on parts; a theme editor with a live sample; CSS variables for the web renderer, resources for Avalonia | |

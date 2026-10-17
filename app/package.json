@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:runtime": "vite build --config vite.runtime.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts",
     "tauri": "tauri"
   },
   "dependencies": {

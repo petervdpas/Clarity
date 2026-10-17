@@ -16,6 +16,16 @@ name: string,
  */
 title: string | null, stack: Stack, datasources: Array<DataSource>, 
 /**
+ * The language the project's texts are written in, as a language tag
+ * (`en`, `nl-NL`). Formats follow the locale of the person using the
+ * application; this one where the system gives none.
+ */
+language: string | null, 
+/**
+ * The currency of `money` fields, as its ISO 4217 code (`EUR`).
+ */
+currency: string | null, 
+/**
  * Where the application is generated and built: a folder relative to
  * the project's folder, or an absolute one.
  */

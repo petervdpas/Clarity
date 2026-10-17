@@ -2,4 +2,6 @@
 // in the shop folder next to this file.
 project Shop
     stack rust web desktop
+    language "en"
+    currency EUR
     datasource main sqlite "data/shop.db"

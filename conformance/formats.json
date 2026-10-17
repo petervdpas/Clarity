@@ -1,0 +1,868 @@
+{
+  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. reads: typed text as the value to store, or null when it is not one.",
+  "shows": [
+    {
+      "what": "integer",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "value": 1234567,
+      "shows": "1,234,567"
+    },
+    {
+      "what": "integer plain",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer",
+        "format": "plain"
+      },
+      "value": 2026,
+      "shows": "2026"
+    },
+    {
+      "what": "decimal(10,2)",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "value": "-1250.5",
+      "shows": "-1,250.50"
+    },
+    {
+      "what": "decimal plain",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 3,
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1250.500"
+    },
+    {
+      "what": "decimal percent",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "value": "0.1234",
+      "shows": "12.34%"
+    },
+    {
+      "what": "money",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "1250.5",
+      "shows": "€1,250.50"
+    },
+    {
+      "what": "money from a server",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "0.0000",
+      "shows": "€0.00"
+    },
+    {
+      "what": "money plain",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "money",
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1,250.50"
+    },
+    {
+      "what": "date",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-10-17",
+      "shows": "10/17/2026"
+    },
+    {
+      "what": "date long",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "long"
+      },
+      "value": "2026-10-17",
+      "shows": "October 17, 2026"
+    },
+    {
+      "what": "date iso",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "iso"
+      },
+      "value": "2026-10-17",
+      "shows": "2026-10-17"
+    },
+    {
+      "what": "datetime",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "10/17/2026 9:30 AM"
+    },
+    {
+      "what": "datetime long",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "long"
+      },
+      "value": "2026-10-17T21:05:00",
+      "shows": "October 17, 2026 9:05 PM"
+    },
+    {
+      "what": "datetime iso",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "iso"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026-10-17 09:30"
+    },
+    {
+      "what": "integer",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "value": 1234567,
+      "shows": "1.234.567"
+    },
+    {
+      "what": "integer plain",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer",
+        "format": "plain"
+      },
+      "value": 2026,
+      "shows": "2026"
+    },
+    {
+      "what": "decimal(10,2)",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "value": "-1250.5",
+      "shows": "-1.250,50"
+    },
+    {
+      "what": "decimal plain",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 3,
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1250,500"
+    },
+    {
+      "what": "decimal percent",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "value": "0.1234",
+      "shows": "12,34%"
+    },
+    {
+      "what": "money",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "1250.5",
+      "shows": "€\u00a01.250,50"
+    },
+    {
+      "what": "money from a server",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "0.0000",
+      "shows": "€\u00a00,00"
+    },
+    {
+      "what": "money plain",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money",
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1.250,50"
+    },
+    {
+      "what": "date",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-10-17",
+      "shows": "17-10-2026"
+    },
+    {
+      "what": "date long",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "long"
+      },
+      "value": "2026-10-17",
+      "shows": "17 oktober 2026"
+    },
+    {
+      "what": "date iso",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "iso"
+      },
+      "value": "2026-10-17",
+      "shows": "2026-10-17"
+    },
+    {
+      "what": "datetime",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "17-10-2026 09:30"
+    },
+    {
+      "what": "datetime long",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "long"
+      },
+      "value": "2026-10-17T21:05:00",
+      "shows": "17 oktober 2026 21:05"
+    },
+    {
+      "what": "datetime iso",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "iso"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026-10-17 09:30"
+    },
+    {
+      "what": "integer",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "value": 1234567,
+      "shows": "1.234.567"
+    },
+    {
+      "what": "integer plain",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer",
+        "format": "plain"
+      },
+      "value": 2026,
+      "shows": "2026"
+    },
+    {
+      "what": "decimal(10,2)",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "value": "-1250.5",
+      "shows": "-1.250,50"
+    },
+    {
+      "what": "decimal plain",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 3,
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1250,500"
+    },
+    {
+      "what": "decimal percent",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "value": "0.1234",
+      "shows": "12,34\u00a0%"
+    },
+    {
+      "what": "money",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "1250.5",
+      "shows": "1.250,50\u00a0€"
+    },
+    {
+      "what": "money from a server",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "0.0000",
+      "shows": "0,00\u00a0€"
+    },
+    {
+      "what": "money plain",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "money",
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1.250,50"
+    },
+    {
+      "what": "date",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-10-17",
+      "shows": "17.10.2026"
+    },
+    {
+      "what": "date long",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "long"
+      },
+      "value": "2026-10-17",
+      "shows": "17. Oktober 2026"
+    },
+    {
+      "what": "date iso",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "iso"
+      },
+      "value": "2026-10-17",
+      "shows": "2026-10-17"
+    },
+    {
+      "what": "datetime",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "17.10.2026 09:30"
+    },
+    {
+      "what": "datetime long",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "long"
+      },
+      "value": "2026-10-17T21:05:00",
+      "shows": "17. Oktober 2026 21:05"
+    },
+    {
+      "what": "datetime iso",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "iso"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026-10-17 09:30"
+    },
+    {
+      "what": "integer",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "value": 1234567,
+      "shows": "1\u202f234\u202f567"
+    },
+    {
+      "what": "integer plain",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer",
+        "format": "plain"
+      },
+      "value": 2026,
+      "shows": "2026"
+    },
+    {
+      "what": "decimal(10,2)",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "value": "-1250.5",
+      "shows": "-1\u202f250,50"
+    },
+    {
+      "what": "decimal plain",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 3,
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1250,500"
+    },
+    {
+      "what": "decimal percent",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "value": "0.1234",
+      "shows": "12,34\u00a0%"
+    },
+    {
+      "what": "money",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "1250.5",
+      "shows": "1\u202f250,50\u00a0€"
+    },
+    {
+      "what": "money from a server",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "0.0000",
+      "shows": "0,00\u00a0€"
+    },
+    {
+      "what": "money plain",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "money",
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1\u202f250,50"
+    },
+    {
+      "what": "date",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-10-17",
+      "shows": "17/10/2026"
+    },
+    {
+      "what": "date long",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "long"
+      },
+      "value": "2026-10-17",
+      "shows": "17 octobre 2026"
+    },
+    {
+      "what": "date iso",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "date",
+        "format": "iso"
+      },
+      "value": "2026-10-17",
+      "shows": "2026-10-17"
+    },
+    {
+      "what": "datetime",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "17/10/2026 09:30"
+    },
+    {
+      "what": "datetime long",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "long"
+      },
+      "value": "2026-10-17T21:05:00",
+      "shows": "17 octobre 2026 21:05"
+    },
+    {
+      "what": "datetime iso",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime",
+        "format": "iso"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026-10-17 09:30"
+    },
+    {
+      "what": "integer",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "integer"
+      },
+      "value": 1234567,
+      "shows": "1,234,567"
+    },
+    {
+      "what": "integer plain",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "integer",
+        "format": "plain"
+      },
+      "value": 2026,
+      "shows": "2026"
+    },
+    {
+      "what": "decimal(10,2)",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "value": "-1250.5",
+      "shows": "-1,250.50"
+    },
+    {
+      "what": "decimal plain",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "decimal",
+        "scale": 3,
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1250.500"
+    },
+    {
+      "what": "decimal percent",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "value": "0.1234",
+      "shows": "12.34%"
+    },
+    {
+      "what": "money",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "money"
+      },
+      "value": "1250.5",
+      "shows": "￥1,251"
+    },
+    {
+      "what": "money from a server",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "money"
+      },
+      "value": "0.0000",
+      "shows": "￥0"
+    },
+    {
+      "what": "money plain",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "money",
+        "format": "plain"
+      },
+      "value": "1250.5",
+      "shows": "1,251"
+    },
+    {
+      "what": "date",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-10-17",
+      "shows": "2026/10/17"
+    },
+    {
+      "what": "date long",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "date",
+        "format": "long"
+      },
+      "value": "2026-10-17",
+      "shows": "2026年10月17日"
+    },
+    {
+      "what": "date iso",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "date",
+        "format": "iso"
+      },
+      "value": "2026-10-17",
+      "shows": "2026-10-17"
+    },
+    {
+      "what": "datetime",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026/10/17 09:30"
+    },
+    {
+      "what": "datetime long",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "dateTime",
+        "format": "long"
+      },
+      "value": "2026-10-17T21:05:00",
+      "shows": "2026年10月17日 21:05"
+    },
+    {
+      "what": "datetime iso",
+      "locale": "ja-JP",
+      "currency": "JPY",
+      "field": {
+        "kind": "dateTime",
+        "format": "iso"
+      },
+      "value": "2026-10-17T09:30:00",
+      "shows": "2026-10-17 09:30"
+    }
+  ],
+  "reads": [
+    {
+      "what": "money with groups",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "typed": "1.250,50",
+      "value": "1250.5"
+    },
+    {
+      "what": "money with its sign",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "typed": "€ 12,5",
+      "value": "12.5"
+    },
+    {
+      "what": "money with groups",
+      "locale": "en-US",
+      "currency": "USD",
+      "field": {
+        "kind": "money"
+      },
+      "typed": "$1,250.50",
+      "value": "1250.5"
+    },
+    {
+      "what": "decimal with spaces",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "typed": "1 250,5",
+      "value": "1250.5"
+    },
+    {
+      "what": "percent",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 4,
+        "format": "percent"
+      },
+      "typed": "12,34 %",
+      "value": "0.1234"
+    },
+    {
+      "what": "negative decimal",
+      "locale": "en-US",
+      "currency": null,
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "typed": "-0.5",
+      "value": "-0.5"
+    },
+    {
+      "what": "integer with groups",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "typed": "1.234",
+      "value": 1234
+    },
+    {
+      "what": "integer with a fraction",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "integer"
+      },
+      "typed": "1,5",
+      "value": null
+    },
+    {
+      "what": "not a number",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "typed": "abc",
+      "value": null
+    },
+    {
+      "what": "a point is a group separator in Dutch",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "decimal",
+        "scale": 2
+      },
+      "typed": "1.5",
+      "value": "15"
+    }
+  ]
+}

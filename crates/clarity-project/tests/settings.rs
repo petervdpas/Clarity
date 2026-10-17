@@ -8,6 +8,8 @@ use clarity_project::{
 const SHOP: &str = r#"// The shop example.
 project Shop
     stack csharp avalonia desktop   // C# with Avalonia
+    language "nl-NL"
+    currency EUR
     datasource main postgres "env:SHOP_DB_URL"
 
     // The payment provider.
@@ -45,6 +47,8 @@ fn shop() -> Settings {
                 ..source("payments", SourceKind::Rest, "https://api.example.com/v2")
             },
         ],
+        language: Some("nl-NL".into()),
+        currency: Some("EUR".into()),
         out: "out".into(),
     }
 }
@@ -70,13 +74,13 @@ fn names_the_expected_values_for_an_unknown_one() {
     let err = parse(&SHOP.replace("stack csharp", "stack java")).unwrap_err();
     assert_eq!(err, "line 3: unknown backend 'java'; the backends are rust, go, csharp, c and cpp");
     let err = parse(&SHOP.replace("rest \"https", "graphql \"https")).unwrap_err();
-    assert_eq!(err, "line 7: unknown data source kind 'graphql'; the kinds are sqlite, postgres, mysql, mssql and rest");
+    assert_eq!(err, "line 9: unknown data source kind 'graphql'; the kinds are sqlite, postgres, mysql, mssql and rest");
 }
 
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output and datasource");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency and datasource");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -84,11 +88,11 @@ fn refuses_unknown_settings_and_a_wrong_shape() {
     );
     assert_eq!(
         parse(&SHOP.replace("    datasource main", "    stack rust web desktop\n    datasource main")).unwrap_err(),
-        "line 4: 'stack' is set twice"
+        "line 6: 'stack' is set twice"
     );
     assert_eq!(
         parse(&SHOP.replace("        auth bearer", "    auth bearer")).unwrap_err(),
-        "line 8: 'auth' belongs under a datasource line, indented"
+        "line 10: 'auth' belongs under a datasource line, indented"
     );
     assert!(parse("project Shop\n    stack rust web\n").unwrap_err().contains("at least one target"));
 }
@@ -331,4 +335,50 @@ fn a_data_source_can_be_external_and_read_only() {
     let mut web = settings.clone();
     web.datasources[1].kind = SourceKind::Rest;
     assert!(validate(&web).iter().any(|p| p.contains("a web API is always external")), "{:?}", validate(&web));
+}
+
+#[test]
+fn reads_and_checks_the_language_and_currency() {
+    let settings = parse(SHOP).unwrap();
+    assert_eq!(settings.language.as_deref(), Some("nl-NL"));
+    assert_eq!(settings.currency.as_deref(), Some("EUR"));
+    assert_eq!(
+        parse(&SHOP.replace("\"nl-NL\"", "\"Dutch\"")).unwrap_err(),
+        "line 4: 'Dutch' is not a language tag; write one like en, nl or nl-NL"
+    );
+    assert_eq!(
+        parse(&SHOP.replace("currency EUR", "currency euro")).unwrap_err(),
+        "line 5: 'euro' is not a currency code; write its ISO code, like EUR or USD"
+    );
+    for tag in ["en", "nl-NL", "sr-Latn-RS", "es-419"] {
+        assert!(clarity_project::language_problem(tag).is_none(), "{tag}");
+    }
+    for tag in ["EN", "nl_NL", "nl-nl", "e", "nl-NL-x"] {
+        assert!(clarity_project::language_problem(tag).is_some(), "{tag}");
+    }
+    let problems = problems_of(|s| s.currency = Some("eur".into()));
+    assert_eq!(problems, ["'eur' is not a currency code; write its ISO code, like EUR or USD"]);
+}
+
+#[test]
+fn writes_the_language_and_currency_after_the_output() {
+    let mut settings = starter("Shop", "shop");
+    settings.language = Some("en-GB".into());
+    settings.currency = Some("GBP".into());
+    let text = write(None, &settings).unwrap();
+    assert!(text.contains("    output \"out\"\n    language \"en-GB\"\n    currency GBP\n    datasource main"), "{text}");
+    assert_eq!(parse(&text).unwrap(), settings);
+}
+
+#[test]
+fn loading_hands_the_language_and_currency_to_the_project() {
+    let root = std::env::temp_dir().join(format!("clarity-locale-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("shop")).unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust web desktop\n    language \"nl-NL\"\n    currency EUR\n").unwrap();
+    std::fs::write(root.join("shop/shop.clarity"), "module shop\n").unwrap();
+    let project = clarity_project::load_modules(&root.join("shop")).unwrap();
+    assert_eq!(project.locale.language.as_deref(), Some("nl-NL"));
+    assert_eq!(project.locale.currency.as_deref(), Some("EUR"));
+    std::fs::remove_dir_all(&root).unwrap();
 }

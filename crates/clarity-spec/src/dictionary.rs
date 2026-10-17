@@ -67,6 +67,9 @@ pub fn field_line(spec: &FieldSpec) -> String {
             parts.push(word.to_string());
         }
     }
+    if let Some(format) = &m.format {
+        parts.push(format!("format {format}"));
+    }
     for (value, word) in [(&m.min, "min"), (&m.max, "max"), (&m.default, "default")] {
         if let Some(value) = value {
             parts.push(format!("{word} {}", literal_text(value)));
@@ -76,7 +79,6 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (&m.pattern, "pattern"),
         (&m.label, "label"),
         (&m.help, "help"),
-        (&m.format, "format"),
         (&m.column, "column"),
     ] {
         if let Some(value) = value {

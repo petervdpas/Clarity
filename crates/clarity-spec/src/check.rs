@@ -866,6 +866,9 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
+        if let Some(problem) = m.format.as_deref().and_then(|f| crate::formats::problem(&field.ty, name, f)) {
+            self.error(file, problem, field.span);
+        }
         if m.computed && m.default.is_some() {
             self.error(
                 file,

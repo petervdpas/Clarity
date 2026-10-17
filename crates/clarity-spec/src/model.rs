@@ -496,6 +496,9 @@ pub struct Project {
     #[serde(skip)]
     #[ts(skip)]
     pub sources: Vec<crate::SourceRef>,
+    /// The project's language and currency, for showing values (section
+    /// 1.5 of the design). Default when the project was loaded without them.
+    pub locale: Locale,
 }
 
 impl Project {
@@ -602,4 +605,16 @@ mod tests {
         assert_eq!(default_label(""), "");
         assert_eq!(default_label("CustomerSheet"), "Customer sheet");
     }
+}
+
+/// The language and currency a project names in its project file. Values
+/// are shown in the locale of the person using the application; the
+/// language is the one to use where the system gives none.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Locale {
+    /// A language tag such as `en` or `nl-NL`.
+    pub language: Option<String>,
+    /// The ISO 4217 code of the currency of `money` fields, such as `EUR`.
+    pub currency: Option<String>,
 }

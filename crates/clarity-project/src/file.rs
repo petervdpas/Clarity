@@ -22,7 +22,8 @@ use std::collections::HashMap;
 use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 
 use crate::{
-    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, SOURCE_KINDS, Settings, Stack, TARGETS, UIS, auth_word,
+    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, SOURCE_KINDS, Settings, Stack, TARGETS, UIS, auth_word, currency_problem,
+    language_problem,
     backend_word, source_word, target_word, ui_word,
 };
 
@@ -97,6 +98,8 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut title = None;
     let mut stack = None;
     let mut out = None;
+    let mut language = None;
+    let mut currency = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let setting_indent = entries.get(1).map(|e| e.indent).unwrap_or(4);
     for entry in &entries[1..] {
@@ -138,6 +141,22 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "output" => {
                 once(out.is_some())?;
                 out = Some(string(line, a.first(), "the output folder")?);
+            }
+            "language" => {
+                once(language.is_some())?;
+                let tag = string(line, a.first(), "the language")?;
+                if let Some(problem) = language_problem(&tag) {
+                    return Err(format!("line {line}: {problem}"));
+                }
+                language = Some(tag);
+            }
+            "currency" => {
+                once(currency.is_some())?;
+                let code = a.first().and_then(|t| word(t)).unwrap_or("");
+                if let Some(problem) = currency_problem(code) {
+                    return Err(format!("line {line}: {problem}"));
+                }
+                currency = Some(code.to_string());
             }
             "stack" => {
                 once(stack.is_some())?;
@@ -201,7 +220,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, stack, output and datasource"
+                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency and datasource"
                 ));
             }
         }
@@ -214,6 +233,8 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         title,
         stack,
         datasources,
+        language,
+        currency,
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
     })
 }
@@ -291,6 +312,12 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     // without growing an output line.
     if existing.is_none() || settings.out != DEFAULT_OUT || kept.contains_key("output") {
         lines.push(("output".into(), 1, format!("output {}", quote(&settings.out))));
+    }
+    if let Some(language) = &settings.language {
+        lines.push(("language".into(), 1, format!("language {}", quote(language))));
+    }
+    if let Some(currency) = &settings.currency {
+        lines.push(("currency".into(), 1, format!("currency {currency}")));
     }
     for source in &settings.datasources {
         lines.push((

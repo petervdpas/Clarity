@@ -58,6 +58,8 @@ project Shop
     title "Shop"
     stack rust web desktop
     output "out"
+    language "en"
+    currency EUR
     datasource main sqlite "data/shop.db"
     datasource payments rest "https://api.example.com/v2"
         auth bearer "env:PAYMENTS_TOKEN"
@@ -68,6 +70,8 @@ project Shop
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
 | `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
+| `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
+| `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
@@ -179,12 +183,35 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
 | `label "text"` | The label people see, instead of the derived one. |
 | `help "text"` | A help text, shown next to the field's input in windows. |
-| `format "text"` | How the value is shown. Accepted, but not used by the generated application yet. |
+| `format name` | How the value is shown, by name; see [Formats](#formats). |
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
 | `column "Name"` | The existing column the field is stored in, for an entity of an external database. |
 
 Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
+
+### Formats
+
+Dates, times, numbers and money show the way the person using the application writes them: the locale comes from their system (or, where it names none, the project's `language`). The value stored is the same in every locale.
+
+| Type | Shown by default | `format` |
+|---|---|---|
+| `integer` | with thousands separators: `1,234,567`, `1.234.567` | `plain`: without them, for codes and years |
+| `decimal(p, s)` | with `s` decimals: `-1,250.50`, `-1.250,50` | `plain`: without thousands separators; `percent`: `0.25` shows `25%` |
+| `money` | with the project's currency and its decimals: `€1,250.50`, `€ 1.250,50`, `1.250,50 €` | `plain`: the amount without the currency |
+| `date` | in digits: `10/17/2026`, `17-10-2026`, `17.10.2026` | `short` (the default), `long`: `17 October 2026`, `iso`: `2026-10-17` everywhere |
+| `datetime` | the date and the time: `10/17/2026 9:30 AM`, `17-10-2026 09:30` | `short`, `long`, `iso` as for dates |
+
+```
+entity Invoice
+    issued: date, format long
+    rate: decimal(5, 4), format percent
+    year: integer, format plain
+```
+
+- A number input reads what is typed in the same locale: in Dutch `1.250,50` is 1250.5 and a point is a thousands separator. The currency sign, the percent sign and thousands separators may be typed or left out. Text that is no number marks the input and keeps the last value.
+- Every stack shows the same thing: the cases in `conformance/formats.json` are what each renderer must show and read.
+- Text joined with `+` in code (`"Saved " + customer.since`) does not follow the locale yet; text with slots comes with I1b in the roadmap.
 
 ### Migrations
 
@@ -861,7 +888,7 @@ A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` 
 ```
 project-file  = "project" Name
                     setting*
-setting       = "title" String | "stack" word word word+ | "output" String
+setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word
               | "datasource" name kind String ["external"] ["readonly"]
                     ["auth" kind String]
 
@@ -879,7 +906,7 @@ entity        = "entity" Name
 type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "money" | "bool"
               | "date" | "datetime" | "email" | "url" | "id" | Enum | "ref" Entity | "list" "<" Entity ">"
 modifier      = "required" | "unique" | "owned" | "computed"
-              | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "format" | "column") String
+              | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "column") String | "format" name
 
 page          = "page" Name ":" ("window" | "dialog" | "view")
                     (page-setting | region | part)*

@@ -120,6 +120,7 @@
           <th title="No two records have the same value">Unique</th>
           <th>Label</th>
           <th>Default</th>
+          <th title="How values are shown, in every locale">Format</th>
           <th>Help</th>
           <th></th>
         </tr>
@@ -127,6 +128,7 @@
       <tbody>
         {#each entity.fields as field, i (field.span.start)}
           {@const m = field.modifiers}
+          {@const formats = preview.formats[field.type.kind] ?? []}
           <tr>
             <td><input class="mono" value={field.name.name} onchange={(e) => update(field, { name: e.currentTarget.value.trim() })} /></td>
             <td>
@@ -150,6 +152,14 @@
                 value={literalText(m.default)}
                 onchange={(e) => update(field, { modifiers: { default: literalOf(e.currentTarget.value) } })}
               />
+            </td>
+            <td>
+              {#if formats.length > 0}
+                <select value={m.format ?? ""} onchange={(e) => update(field, { modifiers: { format: e.currentTarget.value || null } })}>
+                  <option value="">default</option>
+                  {#each formats as f (f.name)}<option value={f.name} title={f.shows}>{f.name}</option>{/each}
+                </select>
+              {/if}
             </td>
             <td><input value={m.help ?? ""} onchange={(e) => update(field, { modifiers: { help: textOf(e) } })} /></td>
             <td class="actions">

@@ -5,6 +5,7 @@ pub mod code;
 pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
+pub mod formats;
 pub mod frame;
 pub mod lexer;
 pub mod migrate;
@@ -54,6 +55,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagnostics,
         migrations: None,
         sources: Vec::new(),
+        locale: model::Locale::default(),
     }
 }
 
@@ -244,6 +246,8 @@ pub struct Preview {
     #[serde(rename = "appEvents")]
     #[ts(rename = "appEvents")]
     pub app_events: Vec<widgets::Event>,
+    /// The named formats of each field type, by the type's kind.
+    pub formats: BTreeMap<&'static str, &'static [formats::FormatInfo]>,
 }
 
 impl Preview {
@@ -262,6 +266,7 @@ impl Preview {
                 .collect(),
             window_events: widgets::WINDOW_EVENTS.to_vec(),
             app_events: widgets::APP_EVENTS.to_vec(),
+            formats: formats::catalog(),
         }
     }
 }

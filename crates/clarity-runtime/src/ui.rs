@@ -26,6 +26,10 @@ pub struct PartState {
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<bool>,
+    /// What an unbound text input holds; the screen sends it with each
+    /// event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -145,6 +149,15 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().readonly = Some(value);
     }
 
+    /// The text of an unbound text input.
+    pub fn text(&self, part: &str) -> String {
+        self.parts.get(part).and_then(|p| p.text.clone()).unwrap_or_default()
+    }
+
+    pub fn set_text(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().text = Some(value);
+    }
+
     /// The selected record of a table or list showing `rows`.
     pub fn selected<R: Clone>(&self, part: &str, rows: &[R]) -> Result<R> {
         self.selected
@@ -210,6 +223,17 @@ pub struct RefOption {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unbound_inputs_carry_their_text() {
+        let mut state = WindowState::new("Customers", Map::new());
+        state.parts.insert("name_filter".into(), PartState { text: Some("Ada".into()), ..PartState::default() });
+        let mut ui = Ui::from_state(&state);
+        assert_eq!(ui.text("name_filter"), "Ada");
+        assert_eq!(ui.text("other"), "");
+        ui.set_text("name_filter", String::new());
+        assert_eq!(ui.reply("Customers", Map::new()).state.parts["name_filter"].text.as_deref(), Some(""));
+    }
 
     #[test]
     fn inputs_keep_their_design_until_a_handler_sets_them() {

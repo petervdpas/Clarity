@@ -155,6 +155,9 @@
     select(part: string, row: number) {
       if (current) current.selected[part] = row;
     },
+    setText(part: string, text: string) {
+      if (current) current.parts[part] = { ...current.parts[part], text };
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {

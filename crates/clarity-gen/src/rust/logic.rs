@@ -8,7 +8,8 @@ use std::collections::{HashMap, HashSet};
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
+    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TypeRef, TypeRefKind,
+    UnaryOp,
 };
 use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
 
@@ -293,6 +294,7 @@ impl Emitter<'_> {
             "visible" => "visible",
             "enabled" => "enabled",
             "caption" => "caption",
+            "text" => "text",
             "error" => "error",
             "readonly" => "readonly",
             "selected" => "selected",
@@ -418,7 +420,142 @@ impl Emitter<'_> {
                     .collect();
                 format!("[{}].contains(&{v})", opts.join(", "))
             }
+            ExprKind::Call { function, args } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
+                if !args.is_empty() {
+                    self.errors.push(format!("handler '{}' takes no arguments", function.name));
+                }
+                let prefix = self.window.as_ref().map(|w| w.prefix.clone()).unwrap_or_default();
+                format!("{prefix}__{}(db, w, ui)?", function.name)
+            }
             ExprKind::Call { function, args } => self.call(&function.name, args),
+            ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
+        }
+    }
+
+    /// `find c in Entity where ... order by ...` as a database query. The
+    /// condition becomes a `Cond` tree; the runtime writes the SQL.
+    fn find(&mut self, var: &str, entity: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut query = "Query::new()".to_string();
+        if let Some(filter) = filter {
+            let cond = self.cond(filter, var, entity);
+            query.push_str(&format!(".filter({cond})"));
+        }
+        for key in order {
+            let numeric = self.field_type(entity, &key.field.name).is_some_and(|t| is_stored_number(&t));
+            let method = if numeric { "order_number" } else { "order" };
+            query.push_str(&format!(".{method}({:?}, {})", key.field.name, key.descending));
+        }
+        format!("db.find::<{entity}>(&{query})?")
+    }
+
+    fn field_type(&self, entity: &str, field: &str) -> Option<FieldType> {
+        self.project.entity(entity).and_then(|e| e.field(field)).map(|f| f.ty.clone())
+    }
+
+    /// A query condition as a `Cond`. The checker made sure each
+    /// comparison has a field of `var` on one side and a value on the other.
+    fn cond(&mut self, expr: &Expr, var: &str, entity: &str) -> String {
+        let field_of = |e: &Expr| match &e.kind {
+            ExprKind::Member { object, member } if matches!(&object.kind, ExprKind::Name { name } if name == var) => {
+                Some(member.name.clone())
+            }
+            _ => None,
+        };
+        match &expr.kind {
+            ExprKind::Binary { op: BinaryOp::And, left, right } => {
+                format!("{}.and({})", self.cond(left, var, entity), self.cond(right, var, entity))
+            }
+            ExprKind::Binary { op: BinaryOp::Or, left, right } => {
+                format!("{}.or({})", self.cond(left, var, entity), self.cond(right, var, entity))
+            }
+            ExprKind::Unary { op: UnaryOp::Not, operand } => format!("{}.negated()", self.cond(operand, var, entity)),
+            ExprKind::Binary { op, left, right } => {
+                // The field on the left: `5 < c.x` is `c.x > 5`.
+                let (column, value, op) = match (field_of(left), field_of(right)) {
+                    (Some(column), _) => (column, right, *op),
+                    (None, Some(column)) => (column, left, flipped(*op)),
+                    (None, None) => {
+                        self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
+                        return String::new();
+                    }
+                };
+                let Some(ty) = self.field_type(entity, &column) else {
+                    self.errors.push(format!("{entity} has no field '{column}'"));
+                    return String::new();
+                };
+                if op == BinaryOp::Contains {
+                    return format!("Cond::contains({column:?}, &{})", self.text_ref(value));
+                }
+                let constructor = if is_stored_number(&ty) { "number" } else { "compare" };
+                let value = self.sql_value(&ty, value);
+                format!("Cond::{constructor}({column:?}, Op::{}, {value})", op_name(op))
+            }
+            ExprKind::In { value, options } => {
+                let Some(column) = field_of(value) else {
+                    self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
+                    return String::new();
+                };
+                let Some(ty) = self.field_type(entity, &column) else {
+                    self.errors.push(format!("{entity} has no field '{column}'"));
+                    return String::new();
+                };
+                let constructor = if is_stored_number(&ty) { "one_of_numbers" } else { "one_of" };
+                let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
+                format!("Cond::{constructor}({column:?}, vec![{}])", values.join(", "))
+            }
+            _ => match field_of(expr) {
+                Some(column) => format!("Cond::is_true({column:?})"),
+                None => {
+                    self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
+                    String::new()
+                }
+            },
+        }
+    }
+
+    /// Text to borrow: a name or field is read in place, anything else is
+    /// computed.
+    fn text_ref(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Name { .. } | ExprKind::Member { .. } if self.part_property(expr).is_none() => self.place(expr),
+            _ => self.value(expr),
+        }
+    }
+
+    /// A value compared with a field of type `ty`, as the database stores it.
+    fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
+        let from = self.types.type_of(value);
+        match ty {
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url => format!("sql::text(&{})", self.value(value)),
+            FieldType::Integer | FieldType::Id => format!("sql::integer({})", self.value(value)),
+            FieldType::Decimal { .. } | FieldType::Money => {
+                format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))
+            }
+            FieldType::Bool => format!("sql::boolean({})", self.value(value)),
+            FieldType::Date => format!("sql::date({})", self.value(value)),
+            FieldType::DateTime => format!("sql::date_time({})", self.value(value)),
+            FieldType::Enum { .. } => format!("sql::name(&{})", self.value(value)),
+            FieldType::Ref { .. } => {
+                // A reference field holds the id already; a record has its own.
+                let stored_ref = match &value.kind {
+                    ExprKind::Member { object, member } => match self.types.type_of(object) {
+                        TypeInfo::Record(owner) => {
+                            matches!(self.field_type(&owner, &member.name), Some(FieldType::Ref { .. }))
+                                .then(|| format!("{}.{}", self.object(object), ident(&member.name)))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                match stored_ref {
+                    Some(id) => format!("sql::reference({id})"),
+                    None => format!("sql::reference(Some({}.id))", self.object(value)),
+                }
+            }
+            FieldType::List { .. } => {
+                self.errors.push("a list field cannot be compared in a query".into());
+                String::new()
+            }
         }
     }
 
@@ -431,6 +568,7 @@ impl Emitter<'_> {
             other => other.symbol(),
         };
         match op {
+            BinaryOp::Contains => format!("contains(&{}, &{})", self.text_ref(left), self.text_ref(right)),
             BinaryOp::Add if *result == TypeInfo::Text => {
                 format!("[{}.show(), {}.show()].concat()", self.value(left), self.value(right))
             }
@@ -494,6 +632,9 @@ pub struct PartInfo {
 /// The parts of the window or app a handler belongs to, by name.
 #[derive(Debug, Default)]
 pub struct WindowCtx {
+    /// The start of its handlers' Rust names: `order_form` in
+    /// `order_form__save_clicked`.
+    pub prefix: String,
     pub parts: HashMap<String, PartInfo>,
     /// The window's data: name, entity and whether it is a list.
     pub data: Vec<(String, String, bool)>,
@@ -584,7 +725,10 @@ pub fn emit_windows(
     let apps = file.apps.iter().map(|a| (&a.name.name, &a.data, None, Some(a)));
     for (name, data, page, app) in pages.chain(apps) {
         let struct_name = if app.is_some() { format!("{name}App") } else { format!("{name}Window") };
-        let mut ctx = WindowCtx::default();
+        let mut ctx = WindowCtx {
+            prefix: super::names::snake(name),
+            ..WindowCtx::default()
+        };
         let mut events = Vec::new();
         if let Some(page) = page {
             ctx.widgets(&page.widgets);
@@ -665,4 +809,32 @@ impl {struct_name} {{
         });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
+}
+
+/// Decimals and money: stored as text, compared and ordered as numbers.
+fn is_stored_number(ty: &FieldType) -> bool {
+    matches!(ty, FieldType::Decimal { .. } | FieldType::Money)
+}
+
+/// The same comparison with its sides swapped.
+fn flipped(op: BinaryOp) -> BinaryOp {
+    match op {
+        BinaryOp::Lt => BinaryOp::Gt,
+        BinaryOp::LtEq => BinaryOp::GtEq,
+        BinaryOp::Gt => BinaryOp::Lt,
+        BinaryOp::GtEq => BinaryOp::LtEq,
+        other => other,
+    }
+}
+
+/// The runtime's name for a comparison.
+fn op_name(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Eq => "Eq",
+        BinaryOp::NotEq => "NotEq",
+        BinaryOp::Lt => "Lt",
+        BinaryOp::LtEq => "LtEq",
+        BinaryOp::Gt => "Gt",
+        _ => "GtEq",
+    }
 }

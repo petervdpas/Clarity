@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use clarity_runtime::{Db, Decimal, Error, Id, NaiveDate, Record, Show, SqlValue, require, sql};
+use clarity_runtime::{Cond, Db, Decimal, Error, Id, NaiveDate, Op, Query, Record, Show, SqlValue, require, sql};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum CustomerKind {
@@ -191,4 +191,108 @@ fn a_reply_carries_the_state_messages_and_windows() {
     assert_eq!(reply.messages[0].text, "careful");
     assert_eq!(reply.open[0].with["record"], "x");
     assert!(!reply.close);
+}
+
+fn customer(name: &str, kind: CustomerKind, limit: &str, active: bool) -> Customer {
+    Customer {
+        name: name.into(),
+        kind,
+        credit_limit: limit.parse().unwrap(),
+        active,
+        ..Customer::default()
+    }
+}
+
+/// Ada (Business, 1250.50), Grace (Private, 99.5) and Linus (Business, 900,
+/// inactive), stored in that order.
+fn three() -> (Db, Vec<Customer>) {
+    let db = db();
+    let mut all = vec![
+        customer("Ada Lovelace", CustomerKind::Business, "1250.50", true),
+        customer("Grace Hopper", CustomerKind::Private, "99.5", true),
+        customer("Linus", CustomerKind::Business, "900", false),
+    ];
+    for c in &mut all {
+        db.save(c).unwrap();
+    }
+    (db, all)
+}
+
+fn names(found: &[Customer]) -> Vec<&str> {
+    found.iter().map(|c| c.name.as_str()).collect()
+}
+
+#[test]
+fn finds_records_by_a_condition() {
+    let (db, _) = three();
+    let business = Query::new().filter(Cond::compare("kind", Op::Eq, sql::name(&CustomerKind::Business)));
+    assert_eq!(names(&db.find::<Customer>(&business).unwrap()), ["Ada Lovelace", "Linus"]);
+
+    // Contains ignores case.
+    let named = Query::new().filter(Cond::contains("name", "HOP"));
+    assert_eq!(names(&db.find::<Customer>(&named).unwrap()), ["Grace Hopper"]);
+
+    // Decimals compare as numbers: 99.5 is less than 900, though "99.5" sorts after "900".
+    let big = Query::new().filter(Cond::number("credit_limit", Op::Gt, sql::decimal("900".parse().unwrap())));
+    assert_eq!(names(&db.find::<Customer>(&big).unwrap()), ["Ada Lovelace"]);
+
+    let active_business = Query::new().filter(
+        Cond::is_true("active").and(Cond::one_of("kind", vec![sql::name(&CustomerKind::Business)])),
+    );
+    assert_eq!(names(&db.find::<Customer>(&active_business).unwrap()), ["Ada Lovelace"]);
+
+    let inactive_or_private = Query::new().filter(
+        Cond::is_true("active").negated().or(Cond::compare("kind", Op::Eq, sql::name(&CustomerKind::Private))),
+    );
+    assert_eq!(names(&db.find::<Customer>(&inactive_or_private).unwrap()), ["Grace Hopper", "Linus"]);
+}
+
+#[test]
+fn finds_records_by_a_reference() {
+    let (db, all) = three();
+    let mut referred = customer("Referred", CustomerKind::Private, "0", true);
+    referred.referred_by = Some(all[0].id);
+    db.save(&mut referred).unwrap();
+    let query = Query::new().filter(Cond::compare("referred_by", Op::Eq, sql::reference(Some(all[0].id))));
+    assert_eq!(names(&db.find::<Customer>(&query).unwrap()), ["Referred"]);
+}
+
+#[test]
+fn orders_what_it_finds() {
+    let (db, _) = three();
+    let by_limit = Query::new().order_number("credit_limit", true);
+    assert_eq!(names(&db.find::<Customer>(&by_limit).unwrap()), ["Ada Lovelace", "Linus", "Grace Hopper"]);
+    let by_kind_then_name = Query::new().order("kind", false).order("name", true);
+    assert_eq!(
+        names(&db.find::<Customer>(&by_kind_then_name).unwrap()),
+        ["Linus", "Ada Lovelace", "Grace Hopper"]
+    );
+    // Without an order, records come in the order they were stored.
+    assert_eq!(names(&db.find::<Customer>(&Query::new()).unwrap()), ["Ada Lovelace", "Grace Hopper", "Linus"]);
+}
+
+#[test]
+fn contains_treats_wildcards_as_text() {
+    let db = db();
+    let mut odd = customer("100% sure_thing", CustomerKind::Private, "0", true);
+    db.save(&mut odd).unwrap();
+    let mut plain = customer("100 sure things", CustomerKind::Private, "0", true);
+    db.save(&mut plain).unwrap();
+    let query = Query::new().filter(Cond::contains("name", "0% sure_"));
+    assert_eq!(names(&db.find::<Customer>(&query).unwrap()), ["100% sure_thing"]);
+    assert!(clarity_runtime::contains("Ada Lovelace", "LOVE"));
+    assert!(!clarity_runtime::contains("Ada", "Grace"));
+}
+
+#[test]
+fn a_query_is_sql_with_parameters() {
+    let query = Query::new()
+        .filter(Cond::contains("name", "a").and(Cond::number("credit_limit", Op::LtEq, sql::integer(5)).negated()))
+        .order("name", true);
+    let (sql, params) = query.sql("customer", "\"id\", \"name\"");
+    assert_eq!(
+        sql,
+        "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '\\' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC, \"id\""
+    );
+    assert_eq!(params, [sql::text("%a%"), sql::integer(5)]);
 }

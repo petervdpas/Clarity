@@ -7,7 +7,8 @@ use ts_rs::TS;
 
 use crate::lexer::quote;
 use crate::model::{DEFAULT_PAGE_COLUMNS, Entity, Field, FieldType, Project, WidgetProps, default_label};
-use crate::widgets::{self, WidgetKind, new_props, widget_line};
+use crate::model::Handler;
+use crate::widgets::{self, Event, WidgetKind, new_props, widget_line};
 
 /// What a new window starts with.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
@@ -51,13 +52,7 @@ pub fn page_from_template(
                 .take(BROWSE_COLUMNS)
                 .map(|f| f.name.name.as_str())
                 .collect();
-            let filter: Vec<&str> = entity
-                .fields
-                .iter()
-                .find(|f| f.ty.is_textual())
-                .map(|f| vec![f.name.name.as_str()])
-                .unwrap_or_default();
-            Ok(browse_page(name, &title, entity, &columns, &filter))
+            Ok(browse_page(name, &title, entity, &columns))
         }
     }
 }
@@ -205,33 +200,37 @@ fn form_page(name: &str, title: &str, entity: &Entity) -> String {
     )
 }
 
-fn browse_page(
-    name: &str,
-    title: &str,
-    entity: &Entity,
-    columns: &[&str],
-    filter: &[&str],
-) -> String {
+/// The field a browse window filters on: the first text field.
+fn browse_filter(entity: &Entity) -> Option<&Field> {
+    entity.fields.iter().find(|f| f.ty.is_textual())
+}
+
+/// The handler that runs when the filter changes.
+const FILTER_HANDLER: &str = "filter_changed";
+
+fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> String {
     let data = plural(&data_name(&entity.name.name));
     let grid = DEFAULT_PAGE_COLUMNS;
     let mut lines = Vec::new();
-    // Filters, two to a row: a label and an input that the code behind reads.
-    let mut row = 1;
-    let mut placed = 0;
-    for field in filter.iter().filter_map(|f| entity.field(f)) {
-        let col = 1 + (placed % 2) * 6;
-        row = 1 + placed / 2;
-        let mut caption = new_props(WidgetKind::Label, col, row);
+    // The filter: a label and a text box whose handler finds the records.
+    let filter = browse_filter(entity);
+    if let Some(field) = filter {
+        let input_name = format!("{}_filter", field.name.name);
+        let mut caption = new_props(WidgetKind::Label, 1, 1);
         caption.caption = Some(field.label.clone());
         caption.width = 2;
+        caption.for_part = Some(input_name.clone());
         lines.push(widget_line(&caption));
-        let mut input = new_props(WidgetKind::Textbox, col + 2, row);
+        let mut input = new_props(WidgetKind::Textbox, 3, 1);
         input.width = 4;
-        input.name = Some(format!("{}_filter", field.name.name));
+        input.name = Some(input_name);
+        input.handlers.push(Handler {
+            event: Event::Change,
+            handler: FILTER_HANDLER.to_string(),
+        });
         lines.push(widget_line(&input));
-        placed += 1;
     }
-    let table_row = if placed > 0 { row + 1 } else { 1 };
+    let table_row = if filter.is_some() { 2 } else { 1 };
     let mut table = new_props(WidgetKind::Table, 1, table_row);
     table.width = grid;
     table.height = TABLE_ROWS;
@@ -253,14 +252,26 @@ fn browse_page(
 /// The handler a browse window gets for its `on return` event.
 const RETURN_HANDLER: &str = "window_returned";
 
-/// The code behind a template starts with, if any: a browse window reloads
-/// its list when a window it opened (a form) has closed.
+/// The code behind a template starts with, if any. A browse window finds
+/// its records with the filter when it changes, and again when a window it
+/// opened (a form) has closed; without a filter it reloads its list.
 pub fn code_from_template(project: &Project, name: &str, template: &PageTemplate) -> Result<Option<String>, String> {
     match template {
         PageTemplate::Browse { entity } => {
             let entity = find_entity(project, entity)?;
             let data = plural(&data_name(&entity.name.name));
-            Ok(Some(format!("code {name}\n    handler {RETURN_HANDLER}\n        reload {data}")))
+            let returned = format!(
+                "code {name}\n    handler {RETURN_HANDLER}\n        // A window opened from here may have changed the records.\n"
+            );
+            let Some(field) = browse_filter(entity) else {
+                return Ok(Some(format!("{returned}        reload {data}")));
+            };
+            let var: String = data.chars().take(1).collect();
+            let field = &field.name.name;
+            Ok(Some(format!(
+                "{returned}        {FILTER_HANDLER}()\n\n    handler {FILTER_HANDLER}\n        {data} = find {var} in {} where {var}.{field} contains {field}_filter.text order by {var}.{field}",
+                entity.name.name
+            )))
         }
         _ => Ok(None),
     }

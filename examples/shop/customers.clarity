@@ -20,9 +20,9 @@ page CustomerBrowse: window
     on return: window_returned
 
     label "Name" at 1,1 span 2 for name_filter
-    textbox name name_filter at 3,1 span 4 placeholder "Part of the name"
+    textbox name name_filter at 3,1 span 4 placeholder "Part of the name" on change: filter_changed
     label "E-mail" at 7,1 span 2 for email_filter
-    textbox name email_filter at 9,1 span 4
+    textbox name email_filter at 9,1 span 4 on change: filter_changed
     table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active on open: open_clicked
     button "New" at 9,10 span 2 on click -> CustomerForm
     button "Open" name open_button at 11,10 span 2 on click: open_clicked
@@ -63,7 +63,10 @@ page CustomerForm: window
 code CustomerBrowse
     handler window_returned
         // A form opened from here may have saved a customer.
-        reload customers
+        filter_changed()
+
+    handler filter_changed
+        customers = find c in Customer where c.name contains name_filter.text and c.email contains email_filter.text order by c.name
 
     handler open_clicked
         open CustomerForm with customer = grid.selected

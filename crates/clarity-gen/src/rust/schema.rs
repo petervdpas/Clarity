@@ -44,7 +44,8 @@ fn column(project: &Project, field: &Field) -> String {
         (FieldType::Ref { entity }, _) => format!("{name} INTEGER REFERENCES {} (\"id\")", quoted(&table(&entity.name))),
         (FieldType::List { .. }, _) => unreachable!("list fields are not stored in the table"),
     };
-    if field.modifiers.unique {
+    // Unique text gets an index instead (see `unique_text`).
+    if field.modifiers.unique && !field.ty.is_textual() {
         column.push_str(" UNIQUE");
     }
     column
@@ -60,6 +61,9 @@ pub fn emit(project: &Project) -> String {
             quoted(&table(&entity.name.name)),
             columns.join(",\n    ")
         ));
+        for field in stored(entity).filter(|f| f.modifiers.unique && f.ty.is_textual()) {
+            step.push_str(&unique_text(&table(&entity.name.name), &field.name.name));
+        }
     }
     format!(
         "{HEADER}
@@ -70,5 +74,17 @@ pub const STEPS: &[&str] = &[
     r#\"{step}\"#,
 ];
 "
+    )
+}
+
+/// Empty text is no value, so a unique text field is unique among the
+/// records that fill it in: an index that leaves empty text out.
+fn unique_text(table: &str, column: &str) -> String {
+    format!(
+        "CREATE UNIQUE INDEX {} ON {} ({}) WHERE {} != '';\n",
+        quoted(&format!("{table}_{column}_unique")),
+        quoted(table),
+        quoted(column),
+        quoted(column)
     )
 }

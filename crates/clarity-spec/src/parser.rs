@@ -147,6 +147,11 @@ impl<'a> Cursor<'a> {
         self.tokens.get(self.pos)
     }
 
+    /// The token `ahead` places after the next one.
+    pub(crate) fn peek_at(&self, ahead: usize) -> Option<&'a Token> {
+        self.tokens.get(self.pos + ahead)
+    }
+
     pub(crate) fn peek_kind(&self) -> Option<TokenKind> {
         self.peek().map(|t| t.kind)
     }

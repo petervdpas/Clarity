@@ -17,6 +17,8 @@ export type PartState = {
   /** A message at an input; empty when there is none. */
   error?: string | null;
   readonly?: boolean;
+  /** What an unbound text input holds. */
+  text?: string | null;
 };
 
 export interface Live {
@@ -27,6 +29,8 @@ export interface Live {
   /** A part's event, wired to `handler`. */
   event(part: string, event: PartEvent, handler: string): void;
   select(part: string, row: number): void;
+  /** Keeps what the user typed in an unbound text input, for the next event. */
+  setText(part: string, text: string): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
 }

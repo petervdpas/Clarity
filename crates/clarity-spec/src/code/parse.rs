@@ -2,8 +2,8 @@
 //! by indentation) and expressions (precedence climbing on one line).
 
 use super::{
-    Arg, BinaryOp, Branch, CodeBlock, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, Param, Stmt,
-    StmtKind, TypeRef, TypeRefKind, UnaryOp,
+    Arg, BinaryOp, Branch, CodeBlock, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
+    Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{Token, TokenKind};
@@ -427,6 +427,10 @@ fn comparison_op(kind: TokenKind) -> Option<BinaryOp> {
 
 fn parse_comparison(cursor: &mut Cursor) -> ParseResult<Expr> {
     let left = parse_additive(cursor)?;
+    if cursor.eat_keyword("contains") {
+        let right = parse_additive(cursor)?;
+        return Ok(binary(BinaryOp::Contains, left, right));
+    }
     if let Some(op) = cursor.peek_kind().and_then(comparison_op) {
         cursor.next();
         let right = parse_additive(cursor)?;
@@ -538,7 +542,7 @@ fn parse_postfix(cursor: &mut Cursor) -> ParseResult<Expr> {
     Ok(expr)
 }
 
-const RESERVED: [&str; 4] = ["and", "or", "not", "in"];
+const RESERVED: [&str; 5] = ["and", "or", "not", "in", "contains"];
 
 fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
     let Some(token) = cursor.peek() else {
@@ -554,6 +558,9 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "true" || token.text == "false" => ExprKind::Bool {
             value: token.text == "true",
         },
+        TokenKind::Ident if token.text == "find" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
+            return parse_find(cursor);
+        }
         TokenKind::Ident if !RESERVED.contains(&token.text.as_str()) => {
             cursor.next();
             if cursor.eat(TokenKind::LParen) {
@@ -598,5 +605,47 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
     Ok(Expr {
         kind,
         span: token.span,
+    })
+}
+
+/// `find c in Customer [where condition] [order by c.field [desc], ...]`
+fn parse_find(cursor: &mut Cursor) -> ParseResult<Expr> {
+    let start = cursor.next().map(|t| t.span).unwrap_or_else(|| cursor.end_span());
+    let var = cursor.expect_ident("a name for each record")?;
+    if !cursor.eat_keyword("in") {
+        return Err(cursor.error_here("expected 'in' and an entity"));
+    }
+    let entity = cursor.expect_ident("an entity")?;
+    let mut end = entity.span;
+    let filter = if cursor.eat_keyword("where") {
+        let condition = parse_expr(cursor)?;
+        end = condition.span;
+        Some(Box::new(condition))
+    } else {
+        None
+    };
+    let mut order = Vec::new();
+    if cursor.eat_keyword("order") {
+        if !cursor.eat_keyword("by") {
+            return Err(cursor.error_here("expected 'by', as in 'order by c.name'"));
+        }
+        loop {
+            let key_var = cursor.expect_ident("a field, as in 'c.name'")?;
+            cursor.expect(TokenKind::Dot, "'.' and a field, as in 'c.name'")?;
+            let field = cursor.expect_ident("a field")?;
+            end = field.span;
+            let descending = cursor.peek().is_some_and(|t| t.text == "desc");
+            if descending {
+                end = cursor.next().map(|t| t.span).unwrap_or(end);
+            }
+            order.push(OrderKey { var: key_var, field, descending });
+            if !cursor.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+    }
+    Ok(Expr {
+        span: join(start, end),
+        kind: ExprKind::Find { var, entity, filter, order },
     })
 }

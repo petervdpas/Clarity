@@ -2,6 +2,7 @@
 import type { BinaryOp } from "./BinaryOp";
 import type { Expr } from "./Expr";
 import type { Ident } from "./Ident";
+import type { OrderKey } from "./OrderKey";
 import type { UnaryOp } from "./UnaryOp";
 
-export type ExprKind = { "kind": "number", value: string, } | { "kind": "str", value: string, } | { "kind": "bool", value: boolean, } | { "kind": "name", name: string, } | { "kind": "member", object: Expr, member: Ident, } | { "kind": "unary", op: UnaryOp, operand: Expr, } | { "kind": "binary", op: BinaryOp, left: Expr, right: Expr, } | { "kind": "in", value: Expr, options: Array<Expr>, } | { "kind": "call", function: Ident, args: Array<Expr>, };
+export type ExprKind = { "kind": "number", value: string, } | { "kind": "str", value: string, } | { "kind": "bool", value: boolean, } | { "kind": "name", name: string, } | { "kind": "member", object: Expr, member: Ident, } | { "kind": "unary", op: UnaryOp, operand: Expr, } | { "kind": "binary", op: BinaryOp, left: Expr, right: Expr, } | { "kind": "in", value: Expr, options: Array<Expr>, } | { "kind": "call", function: Ident, args: Array<Expr>, } | { "kind": "find", var: Ident, entity: Ident, filter: Expr | null, order: Array<OrderKey>, };

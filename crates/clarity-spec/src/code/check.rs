@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 
 use super::{
-    BinaryOp, CodeBlock, EFFECTS, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, Stmt, StmtKind, TypeRef,
-    TypeRefKind, UnaryOp,
+    BinaryOp, CodeBlock, EFFECTS, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
+    TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
 use crate::model::{
@@ -72,6 +72,8 @@ pub enum NameKind {
     EnumValue(String),
     /// The enum itself, in `CustomerKind.Business`.
     EnumType,
+    /// A call that runs another handler of the same window or app.
+    Handler,
 }
 
 /// Types and names of one file, keyed by the span (start, end) of each
@@ -470,14 +472,15 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
                 handler.name.span,
             ));
         }
-        check_handler(env, owner, handler, out);
+        check_handler(env, owner, &block.handlers, handler, out);
     }
 }
 
-fn check_handler(env: &Env, owner: &Owner, handler: &HandlerDecl, out: &mut Output) {
+fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &HandlerDecl, out: &mut Output) {
     let mut checker = BodyChecker {
         env,
         owner: Some(owner),
+        handlers,
         decl: None,
         returns: None,
         scopes: vec![HashMap::new()],
@@ -531,6 +534,7 @@ fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
         let mut checker = BodyChecker {
             env,
             owner: None,
+            handlers: &[],
             decl: Some(decl),
             returns,
             scopes: vec![scope],
@@ -575,6 +579,8 @@ struct BodyChecker<'e, 'a> {
     env: &'e Env<'a>,
     /// The window or app of a handler; functions and actions have none.
     owner: Option<&'e Owner<'a>>,
+    /// The handlers of the same window or app, which a handler can run.
+    handlers: &'e [HandlerDecl],
     /// The function or action being checked; None for a handler.
     decl: Option<&'e FunctionDecl>,
     returns: Option<Ty<'a>>,
@@ -888,6 +894,14 @@ impl<'a> BodyChecker<'_, 'a> {
                             None
                         }
                     }
+                    Place::Part(Part::Widget(props), name) if m == "text" && props.bind.is_some() && has_text(props) => {
+                        let bind = props.bind.as_deref().unwrap_or_default();
+                        self.error(
+                            format!("{} '{name}' is bound to {bind}; use {bind}", widgets::keyword(props.kind)),
+                            member.span,
+                        );
+                        None
+                    }
                     Place::Part(part, name) => match self.property(part, name, m) {
                         Some(place) => Some(place),
                         None => {
@@ -915,6 +929,7 @@ impl<'a> BodyChecker<'_, 'a> {
             "caption" if part.has_caption() => value(Ty::Text),
             "error" if part.is_input() => value(Ty::Text),
             "readonly" if part.is_input() => value(Ty::Bool),
+            "text" if matches!(part, Part::Widget(props) if has_text(props)) => value(Ty::Text),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List) {
@@ -1019,6 +1034,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Bool
             }
             ExprKind::Call { .. } => self.call(expr, false).unwrap_or(Ty::Unknown),
+            ExprKind::Find { var, entity, filter, order } => self.find(var, entity, filter.as_deref(), order),
         }
     }
 
@@ -1036,6 +1052,21 @@ impl<'a> BodyChecker<'_, 'a> {
                 _ => self.error("'count' takes one list", expr.span),
             }
             return Some(Ty::Integer);
+        }
+        // A handler runs another handler of its window by name.
+        if self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name) {
+            self.name_is(expr, NameKind::Handler);
+            let name = &function.name;
+            for arg in args {
+                self.expr(arg, None);
+            }
+            if !args.is_empty() {
+                self.error(format!("handler '{name}' takes no arguments"), expr.span);
+            }
+            if !statement {
+                self.error(format!("handler '{name}' does not return a value"), expr.span);
+            }
+            return None;
         }
         let Some(callee) = self.env.function(&function.name) else {
             for arg in args {
@@ -1119,6 +1150,119 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+    /// `find c in Customer where ... order by ...`: a list of the entity.
+    /// `c` is a local of the condition and the order only.
+    fn find(&mut self, var: &Ident, entity: &Ident, filter: Option<&Expr>, order: &[OrderKey]) -> Ty<'a> {
+        let Some(decl) = self.env.entity(&entity.name) else {
+            self.error(format!("unknown entity '{}'", entity.name), entity.span);
+            return Ty::Unknown;
+        };
+        self.scopes.push(HashMap::new());
+        self.define(var, Ty::Record(decl));
+        if let Some(filter) = filter {
+            self.query_condition(filter, &var.name);
+        }
+        for key in order {
+            if key.var.name != var.name {
+                self.error(
+                    format!("order by a field of {0}, as in '{0}.name'", var.name),
+                    key.var.span,
+                );
+                continue;
+            }
+            match decl.field(&key.field.name) {
+                None => self.error(
+                    format!("{} has no field '{}'", decl.name.name, key.field.name),
+                    key.field.span,
+                ),
+                Some(field) if matches!(field.ty, FieldType::List { .. }) => self.error(
+                    format!("cannot order by '{}', a list", key.field.name),
+                    key.field.span,
+                ),
+                Some(_) => {}
+            }
+        }
+        self.scopes.pop();
+        Ty::List(decl)
+    }
+
+    /// A query condition: `and`, `or` and `not` of comparisons between a
+    /// field of the record and a value, `contains`, `in`, and bool fields.
+    /// Each becomes a condition the database evaluates.
+    fn query_condition(&mut self, expr: &Expr, var: &str) {
+        let general = format!("a query compares a field of {var} with a value, as in '{var}.name == x'");
+        match &expr.kind {
+            ExprKind::Binary { op: BinaryOp::And | BinaryOp::Or, left, right } => {
+                self.query_condition(left, var);
+                self.query_condition(right, var);
+            }
+            ExprKind::Unary { op: UnaryOp::Not, operand } => self.query_condition(operand, var),
+            ExprKind::Binary { op, left, right } if is_comparison(*op) => {
+                let sides = (self.query_field(left, var), self.query_field(right, var));
+                let (field, value) = match sides {
+                    (Some(Ok(())), None) => (left, right),
+                    (None, Some(Ok(()))) => (right, left),
+                    (Some(Err(message)), _) | (_, Some(Err(message))) => return self.error(message, expr.span),
+                    _ => return self.error(general, expr.span),
+                };
+                let field_ty = self.expr(field, None);
+                // A reference is compared with a record of its entity.
+                if let Ty::Record(entity) = field_ty
+                    && matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+                {
+                    let value_ty = self.expr(value, Some(field_ty));
+                    if !matches!(value_ty, Ty::Unknown) && !Ty::Record(entity).same(&value_ty) {
+                        self.error(
+                            format!("cannot compare {} with {}", field_ty.name(), value_ty.name()),
+                            expr.span,
+                        );
+                    }
+                } else {
+                    // The usual rules, with the field on the left.
+                    self.binary(*op, field, value);
+                }
+                self.out.types.types.insert((expr.span.start, expr.span.end), TypeInfo::Bool);
+            }
+            ExprKind::In { value, options } => {
+                match self.query_field(value, var) {
+                    Some(Ok(())) => {}
+                    Some(Err(message)) => return self.error(message, expr.span),
+                    None => return self.error(general, expr.span),
+                }
+                if options.iter().any(|o| self.query_field(o, var).is_some()) {
+                    return self.error(general, expr.span);
+                }
+                self.expr(expr, Some(Ty::Bool));
+            }
+            _ => match self.query_field(expr, var) {
+                Some(Ok(())) => self.condition(expr),
+                Some(Err(message)) => self.error(message, expr.span),
+                None => self.error(general, expr.span),
+            },
+        }
+    }
+
+    /// Whether `expr` uses the query's record: `None` when it does not,
+    /// `Ok` when it is one of its fields (`c.name`), and the reason when it
+    /// uses the record some other way.
+    fn query_field(&self, expr: &Expr, var: &str) -> Option<Result<(), String>> {
+        if !mentions(expr, var) {
+            return None;
+        }
+        let ExprKind::Member { object, .. } = &expr.kind else {
+            return Some(Err(format!(
+                "a query compares a field of {var} with a value, as in '{var}.name == x'"
+            )));
+        };
+        match &object.kind {
+            ExprKind::Name { name } if name == var => Some(Ok(())),
+            _ => Some(Err(format!(
+                "a query compares a field of {var} itself; '{}' goes through a reference",
+                path_text(expr)
+            ))),
+        }
+    }
+
     fn in_scope(&self, name: &str) -> bool {
         self.local(name).is_some() || self.data(name).is_some() || self.part(name).is_some()
     }
@@ -1164,6 +1308,18 @@ impl<'a> BodyChecker<'_, 'a> {
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr) -> Ty<'a> {
         let symbol = op.symbol();
         match op {
+            BinaryOp::Contains => {
+                let l = self.expr(left, None);
+                let r = self.expr(right, None);
+                let text = |t: &Ty| t.is_unknown() || matches!(t, Ty::Text);
+                if !(text(&l) && text(&r)) {
+                    self.error(
+                        format!("'contains' needs text, not {} and {}", l.name(), r.name()),
+                        join(left.span, right.span),
+                    );
+                }
+                Ty::Bool
+            }
             BinaryOp::And | BinaryOp::Or => {
                 for side in [left, right] {
                     let ty = self.expr(side, Some(Ty::Bool));
@@ -1225,4 +1381,49 @@ fn article(word: &str) -> &'static str {
         Some(c) if "aeiouAEIOU".contains(c) => "an",
         _ => "a",
     }
+}
+
+/// `==`, `!=`, `<`, `<=`, `>`, `>=` and `contains`.
+fn is_comparison(op: BinaryOp) -> bool {
+    matches!(
+        op,
+        BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::LtEq
+            | BinaryOp::Gt
+            | BinaryOp::GtEq
+            | BinaryOp::Contains
+    )
+}
+
+/// Whether `expr` uses the name `var` anywhere.
+fn mentions(expr: &Expr, var: &str) -> bool {
+    match &expr.kind {
+        ExprKind::Name { name } => name == var,
+        ExprKind::Member { object, .. } => mentions(object, var),
+        ExprKind::Unary { operand, .. } => mentions(operand, var),
+        ExprKind::Binary { left, right, .. } => mentions(left, var) || mentions(right, var),
+        ExprKind::In { value, options } => mentions(value, var) || options.iter().any(|o| mentions(o, var)),
+        ExprKind::Call { args, .. } => args.iter().any(|a| mentions(a, var)),
+        // An inner query has its own record name.
+        ExprKind::Find { var: inner, filter, .. } => {
+            inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
+        }
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } => false,
+    }
+}
+
+/// A member path as written: `o.customer.name`.
+fn path_text(expr: &Expr) -> String {
+    match &expr.kind {
+        ExprKind::Name { name } => name.clone(),
+        ExprKind::Member { object, member } => format!("{}.{}", path_text(object), member.name),
+        _ => "...".to_string(),
+    }
+}
+
+/// Text inputs that hold their own text when they are not bound.
+fn has_text(props: &WidgetProps) -> bool {
+    matches!(props.kind, WidgetKind::Textbox | WidgetKind::Memo | WidgetKind::Password)
 }

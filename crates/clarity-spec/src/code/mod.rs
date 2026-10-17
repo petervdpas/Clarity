@@ -174,6 +174,25 @@ pub enum ExprKind {
         function: Ident,
         args: Vec<Expr>,
     },
+    /// `find c in Customer where c.active order by c.name`: the records of
+    /// an entity that meet the condition, in order. `var` names the record
+    /// inside the condition and the order.
+    Find {
+        var: Ident,
+        entity: Ident,
+        filter: Option<Box<Expr>>,
+        order: Vec<OrderKey>,
+    },
+}
+
+/// `c.name` or `c.name desc` in `order by`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct OrderKey {
+    /// The record name before the dot, as written.
+    pub var: Ident,
+    pub field: Ident,
+    pub descending: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -200,6 +219,8 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    /// `text contains part`, ignoring case.
+    Contains,
 }
 
 impl BinaryOp {
@@ -217,6 +238,7 @@ impl BinaryOp {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::Contains => "contains",
         }
     }
 }

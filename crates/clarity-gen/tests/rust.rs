@@ -30,6 +30,9 @@ function doubled(n: integer) -> money
         return 0
     return x + 0.5
 
+function big_orders(limit: money) -> list<Order>
+    return find o in Order where o.total >= limit and o.status in [Pending, Approved] order by o.total desc, o.number
+
 action approve(order: Order)
     require order.status == Pending
     require within_credit(order)
@@ -46,6 +49,7 @@ page OrderForm: window
         textbox name number_input at 1,1 span 4 bind order.number readonly
     table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: grid_opened
     button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked
+    textbox name number_filter at 1,7 span 4 on change: filter_changed
 
 code OrderForm
     handler approve_clicked
@@ -59,6 +63,12 @@ code OrderForm
     handler window_returned
         reload orders
         reload order
+        filter_changed()
+
+    handler filter_changed
+        orders = find o in Order where o.number contains number_filter.text and not (o.customer == order.customer) order by o.number
+        if order.number contains \"ORD\"
+            number_filter.text = \"\"
 
     handler order_submitted
         number_input.error = \"Check the number\"
@@ -94,6 +104,7 @@ fn writes_a_complete_cargo_project() {
             "build.rs",
             "clarity-runtime/Cargo.toml",
             "clarity-runtime/src/lib.rs",
+            "clarity-runtime/src/query.rs",
             "clarity-runtime/src/sql.rs",
             "clarity-runtime/src/ui.rs",
             "icons/icon.png",
@@ -137,7 +148,12 @@ fn the_schema_is_the_first_migration() {
     let files = files();
     let schema = file(&files, "src/schema.rs");
     assert!(schema.contains("CREATE TABLE \"order\" ("), "{schema}");
-    assert!(schema.contains("\"number\" TEXT NOT NULL DEFAULT '' UNIQUE"), "{schema}");
+    // Empty text is no value, so unique text is unique among filled values.
+    assert!(schema.contains("\"number\" TEXT NOT NULL DEFAULT '',\n"), "{schema}");
+    assert!(
+        schema.contains("CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';"),
+        "{schema}"
+    );
     assert!(schema.contains("\"customer\" INTEGER REFERENCES \"customer\" (\"id\")"), "{schema}");
     assert!(schema.contains("\"credit_limit\" TEXT NOT NULL DEFAULT '100'"), "{schema}");
     assert!(schema.contains("pub const STEPS: &[&str] = &["), "{schema}");
@@ -230,4 +246,37 @@ fn window_events_and_reload_reach_the_backend() {
     let sales = file(&files, "src/sales.rs");
     assert!(sales.contains("    w.orders = db.all::<Order>()?;\n"), "{sales}");
     assert!(sales.contains("    if w.order.id != 0 {\n        w.order = db.get::<Order>(w.order.id)?;\n    }\n"), "{sales}");
+}
+
+#[test]
+fn queries_become_database_queries() {
+    let files = files();
+    let sales = file(&files, "src/sales.rs");
+    assert!(
+        sales.contains(
+            "return Ok(db.find::<Order>(&Query::new().filter(Cond::number(\"total\", Op::GtEq, sql::decimal(limit)).and(Cond::one_of(\"status\", vec![sql::name(&OrderStatus::Pending), sql::name(&OrderStatus::Approved)]))).order_number(\"total\", true).order(\"number\", false))?);"
+        ),
+        "{sales}"
+    );
+    assert!(
+        sales.contains(
+            "w.orders = db.find::<Order>(&Query::new().filter(Cond::contains(\"number\", &ui.text(\"number_filter\")).and(Cond::compare(\"customer\", Op::Eq, sql::reference(w.order.customer)).negated())).order(\"number\", false))?;"
+        ),
+        "{sales}"
+    );
+    assert!(sales.contains("if contains(&w.order.number, &String::from(\"ORD\")) {"), "{sales}");
+    assert!(sales.contains("ui.set_text(\"number_filter\", String::from(\"\"));"), "{sales}");
+    // A handler runs another handler of its window.
+    assert!(sales.contains("    order_form__filter_changed(db, w, ui)?;\n"), "{sales}");
+}
+
+#[test]
+fn every_runtime_source_file_is_copied() {
+    let files = files();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../clarity-runtime/src");
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        let path = format!("clarity-runtime/src/{name}");
+        assert!(files.iter().any(|f| f.path == path), "{path} is not copied into generated projects");
+    }
 }

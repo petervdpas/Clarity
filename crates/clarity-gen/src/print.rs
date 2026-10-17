@@ -23,5 +23,19 @@ pub fn expr(e: &Expr) -> String {
             function.name,
             args.iter().map(expr).collect::<Vec<_>>().join(", ")
         ),
+        ExprKind::Find { var, entity, filter, order } => {
+            let mut text = format!("find {} in {}", var.name, entity.name);
+            if let Some(filter) = filter {
+                text.push_str(&format!(" where {}", expr(filter)));
+            }
+            if !order.is_empty() {
+                let keys: Vec<String> = order
+                    .iter()
+                    .map(|k| format!("{}.{}{}", k.var.name, k.field.name, if k.descending { " desc" } else { "" }))
+                    .collect();
+                text.push_str(&format!(" order by {}", keys.join(", ")));
+            }
+            text
+        }
     }
 }

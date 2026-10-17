@@ -45,7 +45,7 @@ entity Customer
     credit_limit: money, default 100
 
 entity Order
-    number: text(12)
+    number: text(12), unique
     status: OrderStatus
     customer: ref Customer
     total: money
@@ -55,6 +55,12 @@ function within_credit(order: Order) -> bool
 
 function label(order: Order) -> text
     return \"Order \" + order.number + \" for \" + order.customer.name
+
+function orders_of(customer: Customer) -> list<Order>
+    return find o in Order where o.customer == customer and o.total > 50 order by o.total desc
+
+function named(part: text) -> list<Customer>
+    return find c in Customer where c.name contains part order by c.name
 
 action approve(order: Order)
     require order.status == Pending
@@ -96,6 +102,18 @@ fn approves_within_the_credit_limit() {
     assert_eq!(approve(&db, &mut order), Err(Error::Contract("order.status == Pending".into())));
     let mut big = Order { customer: Some(ada.id), total: Decimal::new(500, 0), ..Order::default() };
     assert_eq!(approve(&db, &mut big), Err(Error::Contract("within_credit(order)".into())));
+
+    // Queries: the orders of a customer over 50, biggest first.
+    let mut grace = Customer { name: "Grace".into(), ..Customer::default() };
+    db.save(&mut grace).unwrap();
+    for (customer, total) in [(ada.id, 2000), (ada.id, 120000), (grace.id, 90000)] {
+        let mut o = Order { customer: Some(customer), total: Decimal::new(total, 2), ..Order::default() };
+        db.save(&mut o).unwrap();
+    }
+    let totals: Vec<String> = orders_of(&db, &ada).unwrap().iter().map(|o| o.total.to_string()).collect();
+    assert_eq!(totals, ["1200.00", "99.50"]);
+    let names: Vec<String> = named(&db, String::from("RAC")).unwrap().into_iter().map(|c| c.name).collect();
+    assert_eq!(names, ["Grace"]);
 }
 "#;
 

@@ -89,8 +89,17 @@
     click();
   }
 
+  // A bound input shows its field; an unbound text input keeps its own text,
+  // which the running application sends with the next event.
+  const shown = $derived(bound || !p.name ? text : (state?.text ?? ""));
+
   function setValue(next: string | boolean | number | null) {
     if (bound) bound.record[bound.field.name.name] = next;
+  }
+
+  function setText(next: string) {
+    if (bound) setValue(next);
+    else if (live && p.name && !design) live.setText(p.name, next);
   }
 
   /** Runs the handler wired to `event`, in a running application. */
@@ -177,14 +186,14 @@
       <input
         {id}
         type={p.kind === "password" ? "password" : bound?.field.type.kind === "email" ? "email" : "text"}
-        value={text}
+        value={shown}
         placeholder={p.placeholder ?? undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
         aria-invalid={error !== null}
         {disabled}
         {readonly}
-        oninput={(e) => setValue(e.currentTarget.value)}
+        oninput={(e) => setText(e.currentTarget.value)}
         onchange={() => fire("change")}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
@@ -193,14 +202,14 @@
     {:else if p.kind === "memo"}
       <textarea
         {id}
-        value={text}
+        value={shown}
         placeholder={p.placeholder ?? undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
         aria-invalid={error !== null}
         {disabled}
         {readonly}
-        oninput={(e) => setValue(e.currentTarget.value)}
+        oninput={(e) => setText(e.currentTarget.value)}
         onchange={() => fire("change")}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}

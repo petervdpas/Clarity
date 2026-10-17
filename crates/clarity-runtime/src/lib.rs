@@ -3,6 +3,7 @@
 //! SQLite, apply migrations and check contracts. It is written by hand once
 //! and copied into every generated project, so a project builds on its own.
 
+pub mod query;
 pub mod sql;
 pub mod ui;
 
@@ -10,6 +11,7 @@ use std::fmt;
 use std::path::Path;
 
 pub use chrono::{NaiveDate, NaiveDateTime};
+pub use query::{Cond, Op, Query, contains};
 pub use rusqlite::types::Value as SqlValue;
 pub use rust_decimal::Decimal;
 
@@ -210,9 +212,18 @@ impl Db {
     }
 
     fn select<R: Record>(&self, filter: &str, params: &[SqlValue]) -> Result<Vec<R>> {
-        let columns = R::COLUMNS.iter().map(|c| quoted(c)).collect::<Vec<_>>().join(", ");
-        let sql = format!("SELECT \"id\", {columns} FROM {}{filter}", quoted(R::TABLE));
-        let mut statement = self.conn.prepare(&sql)?;
+        let sql = format!("SELECT {} FROM {}{filter}", select_columns::<R>(), quoted(R::TABLE));
+        self.read(&sql, params)
+    }
+
+    /// The records a query finds, in its order.
+    pub fn find<R: Record>(&self, query: &Query) -> Result<Vec<R>> {
+        let (sql, params) = query.sql(R::TABLE, &select_columns::<R>());
+        self.read(&sql, &params)
+    }
+
+    fn read<R: Record>(&self, sql: &str, params: &[SqlValue]) -> Result<Vec<R>> {
+        let mut statement = self.conn.prepare(sql)?;
         let mut rows = statement.query(rusqlite::params_from_iter(params))?;
         let mut records = Vec::new();
         while let Some(row) = rows.next()? {
@@ -249,4 +260,12 @@ impl Db {
 /// A table or column name as SQL needs it, so names like `order` work.
 pub fn quoted(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// `"id"` and the stored columns of a record, for SELECT.
+fn select_columns<R: Record>() -> String {
+    std::iter::once("\"id\"".to_string())
+        .chain(R::COLUMNS.iter().map(|c| quoted(c)))
+        .collect::<Vec<_>>()
+        .join(", ")
 }

@@ -154,7 +154,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | Modifier | Meaning |
 |---|---|
 | `required` | The field must have a value. Windows mark its label. |
-| `unique` | No two records have the same value. |
+| `unique` | No two records have the same value. Empty text counts as no value, so several records can leave a unique text field empty. |
 | `min value`, `max value` | The lowest and highest value allowed. |
 | `pattern "regex"` | Text must match the regular expression. |
 | `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
@@ -476,6 +476,7 @@ A name that is both data and a part in the same window is an error.
 | `caption` | labels, help texts, headings, buttons, commands | text | yes |
 | `error` | inputs | text | yes; `""` clears it |
 | `readonly` | inputs | bool | yes |
+| `text` | text boxes, memos and password inputs that are not bound | text: what the user typed | yes |
 | `selected` | tables, lists | the record of the selected row | no |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
@@ -524,6 +525,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
 | `for item in list` | Runs the block once per item of a list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
+| `handler_name()` | Runs another handler of the same window or app. | handlers |
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
 | `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. | handlers |
@@ -548,10 +550,33 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `a + b`, `a - b` | addition and subtraction; `+` also joins text |
 | `a == b`, `a != b`, `a < b`, `a <= b`, `a > b`, `a >= b` | comparison |
 | `x in [a, b, c]` | whether `x` equals one of the values |
+| `a contains b` | whether text `a` contains text `b`, ignoring case |
+| `find c in Entity where ... order by ...` | the records that meet a condition; see [Queries](#queries) |
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
-From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons and `in`, `not`, `and`, `or`.
+From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
+
+### Queries
+
+`find` reads the records of an entity that meet a condition, in an order. The result is a list, used like any other: assign it to a window's list data, loop over it with `for`, count it, or return it.
+
+```
+code Customers
+    handler filter_changed
+        customers = find c in Customer where c.name contains name_filter.text and c.active order by c.name
+
+    handler card_opened
+        orders = find o in Order where o.customer == customer and o.total > 100 order by o.total desc
+```
+
+- `find c in Customer` names each record `c`. The name exists only inside the query, so `c.name` is never confused with a part or local that is also called `name`.
+- `where` is optional. Without it, `find` reads every record.
+- The condition combines, with `and`, `or`, `not` and parentheses, comparisons between a field of the record and a value: `c.name == x`, `c.total > 100`, `c.name contains x`, `c.kind in [Private, Business]`. A bool field stands on its own: `c.active`, `not c.active`. A reference field is compared with a record: `o.customer == customer`.
+- The value side can be anything that does not use the record: a literal, a local, the window's data, a part property.
+- Only the record's own fields can be compared. `o.customer.name` goes through a reference and is not allowed yet.
+- `order by` takes one or more fields, each optionally followed by `desc`. Without it, records come in the order they were stored.
+- The database does the work: the condition becomes a query with parameters, so values never become part of the SQL text.
 
 ### Types
 
@@ -572,7 +597,7 @@ An integer is accepted where a decimal is expected. Nothing else converts by its
 
 ## 11. A complete example
 
-A project file and one module: a customer list that opens a form, and the form that saves a customer.
+A project file and one module: a customer list with a filter that opens a form, and the form that saves a customer.
 
 `shop.clarity`:
 
@@ -605,9 +630,11 @@ page CustomerBrowse: window
     data customers: list<Customer>
     on return: window_returned
 
-    table name grid at 1,1 span 12 rows 8 bind customers columns name, kind on open: open_clicked
-    button "New" at 9,9 span 2 on click -> CustomerForm
-    button "Open" name open_button at 11,9 span 2 on click: open_clicked
+    label "Name" at 1,1 span 2 for name_filter
+    textbox name name_filter at 3,1 span 4 placeholder "Part of the name" on change: filter_changed
+    table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: open_clicked
+    button "New" at 9,10 span 2 on click -> CustomerForm
+    button "Open" name open_button at 11,10 span 2 on click: open_clicked
 
 page CustomerForm: window
     title "Customer"
@@ -630,7 +657,10 @@ page CustomerForm: window
 code CustomerBrowse
     handler window_returned
         // The form may have saved a customer.
-        reload customers
+        filter_changed()
+
+    handler filter_changed
+        customers = find c in Customer where c.name contains name_filter.text order by c.name
 
     handler open_clicked
         open CustomerForm with customer = grid.selected
@@ -707,4 +737,7 @@ code          = "code" Name
 function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" type-ref]
                     ("require" expr | "ensure" expr | "effects" effect ("," effect)*)*
                     statement*
+
+find          = "find" name "in" Entity ["where" condition]
+                ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
 ```

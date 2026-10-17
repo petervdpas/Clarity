@@ -87,7 +87,9 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
     let page = &text[text.find("page FreshWindow").unwrap()..];
     assert!(page.contains("    data customers: list<Customer>\n"), "{page}");
     assert!(
-        page.contains("    label \"Name\" at 1,1 span 2\n    textbox name name_filter at 3,1 span 4\n"),
+        page.contains(
+            "    label \"Name\" at 1,1 span 2 for name_filter\n    textbox name name_filter at 3,1 span 4 on change: filter_changed\n"
+        ),
         "{page}"
     );
     assert!(
@@ -127,13 +129,15 @@ fn templates_need_the_project_and_a_known_entity() {
 }
 
 #[test]
-fn a_browse_window_reloads_its_list_when_a_form_closes() {
+fn a_browse_window_filters_and_refreshes_when_a_form_closes() {
     let (text, after) = add_window(PageTemplate::Browse {
         entity: "Order".into(),
     });
     assert!(text.contains("    data orders: list<Order>\n    on return: window_returned\n"), "{text}");
     assert!(
-        text.ends_with("\ncode FreshWindow\n    handler window_returned\n        reload orders\n"),
+        text.ends_with(
+            "\ncode FreshWindow\n    handler window_returned\n        // A window opened from here may have changed the records.\n        filter_changed()\n\n    handler filter_changed\n        orders = find o in Order where o.number contains number_filter.text order by o.number\n"
+        ),
         "{text}"
     );
     let problems: Vec<_> = after.diagnostics.iter().map(|d| &d.message).collect();

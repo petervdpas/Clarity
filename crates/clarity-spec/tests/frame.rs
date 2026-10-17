@@ -203,3 +203,49 @@ fn commands_have_names_and_click_handlers() {
     let clash = app.replace("item \"Quit\"", "item \"Quit\" name new_customer");
     assert!(errors(&clash).iter().any(|e| e.contains("duplicate part name 'new_customer'")));
 }
+
+/// A window shows the app's regions, each of its own replacing the app's of
+/// the same kind (a sidebar, of the same side); a dialog shows none.
+#[test]
+fn a_window_shows_its_own_regions_before_the_apps() {
+    let pages = "module p
+page Plain: window
+    title \"Plain\"
+page Own: window
+    toolbar
+        button \"Mine\" on click -> Plain
+    sidebar right span 2
+page Ask: dialog
+    title \"Ask\"
+";
+    let app = "module shop
+use p
+
+app Shop
+    main Plain
+    menu
+        item \"File\"
+    toolbar
+        button \"Theirs\" on click -> Plain
+    sidebar left span 3
+    footer
+        status \"Ready\"
+";
+    let project = load_sources([("p.clarity", pages), ("shop.clarity", app)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let app = project.apps().next();
+    let page = |name: &str| project.pages().find(|p| p.name.name == name).unwrap();
+
+    let plain = clarity_spec::frame::shown(app, page("Plain"));
+    assert!(plain.menu.is_some() && plain.footer.is_some() && plain.left.is_some() && plain.right.is_none());
+    assert_eq!(plain.toolbar.unwrap().items[0].props.caption.as_deref(), Some("Theirs"));
+
+    let own = clarity_spec::frame::shown(app, page("Own"));
+    assert_eq!(own.toolbar.unwrap().items[0].props.caption.as_deref(), Some("Mine"));
+    assert_eq!(own.left.map(|s| s.width), Some(3));
+    assert_eq!(own.right.map(|s| s.width), Some(2));
+    assert!(own.menu.is_some());
+
+    let ask = clarity_spec::frame::shown(app, page("Ask"));
+    assert!(ask.menu.is_none() && ask.toolbar.is_none() && ask.footer.is_none() && ask.left.is_none());
+}

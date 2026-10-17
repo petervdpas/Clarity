@@ -4,12 +4,13 @@ use clarity_spec::Project;
 use clarity_spec::code::{DataEvent, record_name};
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
-use super::names::{field_type, pascal, property, string};
+use super::names::{backing, field_type, pascal, property, string};
 
-pub fn emit(project: &Project, file: &SpecFile) -> String {
+/// The enums and records of `file`, in the application's `namespace`.
+pub fn emit(project: &Project, file: &SpecFile, namespace: &str) -> String {
     let mut out = String::new();
     for decl in &file.enums {
-        out.push_str(&enum_decl(decl));
+        out.push_str(&enum_decl(decl, namespace));
     }
     for entity in &file.entities {
         out.push_str(&record(project, entity));
@@ -18,13 +19,18 @@ pub fn emit(project: &Project, file: &SpecFile) -> String {
 }
 
 /// An enum, and its labels for text: `Labels.Of(status)`.
-fn enum_decl(decl: &EnumDecl) -> String {
+fn enum_decl(decl: &EnumDecl, namespace: &str) -> String {
     let name = &decl.name.name;
     let values: String = decl.variants.iter().map(|v| format!("    {},\n", v.name.name)).collect();
     let labels: String = decl
         .variants
         .iter()
         .map(|v| format!("        {name}.{} => {},\n", v.name.name, string(&v.label)))
+        .collect();
+    let choices: String = decl
+        .variants
+        .iter()
+        .map(|v| format!("        new(global::{namespace}.{name}.{}, {}),\n", v.name.name, string(&v.label)))
         .collect();
     format!(
         "public enum {name}
@@ -37,6 +43,13 @@ public static partial class Labels
     {{
 {labels}        _ => \"\",
     }};
+}}
+
+public static partial class Choices
+{{
+    public static readonly Choice[] {name} =
+    [
+{choices}    ];
 }}
 
 "
@@ -92,8 +105,11 @@ fn record(project: &Project, entity: &Entity) -> String {
         .fields
         .iter()
         .map(|f| {
-            let init = initial(f).map(|v| format!(" = {v};")).unwrap_or_default();
-            format!("    public {} {} {{ get; set; }}{init}\n", field_type(&f.ty), property(name, &f.name.name))
+            let ty = field_type(&f.ty);
+            let prop = property(name, &f.name.name);
+            let field = backing(&f.name.name);
+            let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+            format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty} {field}{init};\n")
         })
         .collect();
     let to_values = stored(entity).map(|f| to_sql(name, f)).collect::<Vec<_>>().join(", ");
@@ -126,7 +142,7 @@ fn record(project: &Project, entity: &Entity) -> String {
         }
     }
     format!(
-        "public sealed partial class {name} : IRecord<{name}>
+        "public sealed partial class {name} : ObservableObject, IRecord<{name}>
 {{
     public static string SourceName => {source};
     public static string TableName => {table};

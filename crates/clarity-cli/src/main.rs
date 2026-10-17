@@ -146,7 +146,7 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
             return ExitCode::FAILURE;
         }
     };
-    match clarity_gen::write_out(out, &files, &clarity_gen::BUILD_OUTPUT) {
+    match clarity_gen::write_out(out, &files, clarity_gen::build_output(settings.stack.backend)) {
         Ok(written) => {
             eprintln!("{} file(s) in {}, {written} changed", files.len(), out.display());
             ExitCode::SUCCESS

@@ -1,18 +1,21 @@
-//! Functions, actions and data events as static methods of `Logic`. Types
-//! come from the checker's table, so the emitter never decides a type on
-//! its own: it only chooses how to write it in C#. C# widens integers to
-//! decimals by itself, and records are objects, so a record goes into an
-//! action as it is and the action changes it in place.
+//! Functions, actions and data events as static methods of `Logic`, and
+//! handlers as methods of a window's ViewModel. Types come from the
+//! checker's table, so the emitter never decides a type on its own: it only
+//! chooses how to write it in C#. C# widens integers to decimals by itself,
+//! and records are objects, so a record goes into an action as it is and the
+//! action changes it in place.
+
+use std::collections::HashMap;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp,
-    path_text, template,
+    BinaryOp, Expr, ExprKind, FunctionDecl, HandlerDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind,
+    UnaryOp, path_text, template,
 };
 use clarity_spec::model::FieldType;
 
-use super::names::{camel, pascal, property, string, value_type};
+use super::names::{camel, member, pascal, property, string, value_type};
 use crate::print;
 
 /// The methods of `file`'s functions, actions and data events.
@@ -27,12 +30,7 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
         .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
         .collect();
     for decl in file.functions.iter().chain(&events) {
-        let mut emitter = Emitter {
-            project,
-            types,
-            decl,
-            errors: Vec::new(),
-        };
+        let mut emitter = Emitter::new(project, types, Some(decl), None);
         let code = emitter.function();
         if emitter.errors.is_empty() {
             out.push_str(&code);
@@ -47,6 +45,32 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
         return Ok(out);
     }
     Ok(format!("public static partial class Logic\n{{\n{}}}\n\n", out.trim_end_matches('\n').to_string() + "\n"))
+}
+
+/// What a handler may read of a part.
+#[derive(Debug, Clone, Default)]
+pub struct PartInfo {
+    /// The data a table or list shows, for its selected row.
+    pub bind: Option<String>,
+}
+
+/// The window or app a handler belongs to.
+#[derive(Debug, Clone, Default)]
+pub struct WindowCtx {
+    pub parts: HashMap<String, PartInfo>,
+    /// The window's data: name, entity and whether it is a list.
+    pub data: Vec<(String, String, bool)>,
+}
+
+/// The body of a handler, as the method `On{Name}` of the ViewModel.
+pub fn handler(project: &Project, types: &FileTypes, ctx: &WindowCtx, decl: &HandlerDecl) -> Result<String, Vec<String>> {
+    let mut emitter = Emitter::new(project, types, None, Some(ctx));
+    let mut body = String::new();
+    emitter.block(&decl.body, 2, &mut body);
+    if !emitter.errors.is_empty() {
+        return Err(emitter.errors);
+    }
+    Ok(format!("    void On{}()\n    {{\n{body}    }}\n", pascal(&decl.name.name)))
 }
 
 /// What a `TypeRef` names, as a checker type.
@@ -97,21 +121,50 @@ fn op_name(op: BinaryOp) -> &'static str {
     }
 }
 
+/// A part property a handler reads or sets, as its `PartState` property.
+fn part_property(property: &str) -> Option<&'static str> {
+    Some(match property {
+        "visible" => "IsVisible",
+        "enabled" => "IsEnabled",
+        "readonly" => "IsReadOnly",
+        "caption" => "Caption",
+        "text" => "Text",
+        "error" => "Error",
+        "selected" => "SelectedItem",
+        _ => return None,
+    })
+}
+
 struct Emitter<'a> {
     project: &'a Project,
     types: &'a FileTypes,
-    /// The function, action or data event being written.
-    decl: &'a FunctionDecl,
+    /// The function, action or data event being written; None for a handler.
+    decl: Option<&'a FunctionDecl>,
+    /// The window of a handler.
+    window: Option<&'a WindowCtx>,
+    /// The database: a parameter of `Logic`, a property of a ViewModel.
+    db: &'static str,
     errors: Vec<String>,
 }
 
-impl Emitter<'_> {
+impl<'a> Emitter<'a> {
+    fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
+        Emitter {
+            project,
+            types,
+            decl,
+            window,
+            db: if window.is_some() { "Db" } else { "db" },
+            errors: Vec::new(),
+        }
+    }
+
     fn returns(&self) -> Option<TypeInfo> {
-        self.decl.returns.as_ref().map(|r| type_ref_info(self.project, r))
+        self.decl.and_then(|d| d.returns.as_ref()).map(|r| type_ref_info(self.project, r))
     }
 
     fn function(&mut self) -> String {
-        let decl = self.decl;
+        let decl = self.decl.expect("a function or action");
         let mut params = vec!["Db db".to_string()];
         for param in &decl.params {
             let info = type_ref_info(self.project, &param.ty);
@@ -157,6 +210,7 @@ impl Emitter<'_> {
 
     fn stmt(&mut self, stmt: &Stmt, depth: usize, out: &mut String) {
         let pad = "    ".repeat(depth);
+        let db = self.db;
         match &stmt.kind {
             StmtKind::Let { name, ty, value } => {
                 let value = self.value(value);
@@ -167,6 +221,11 @@ impl Emitter<'_> {
                 out.push_str(&format!("{pad}{ty} {} = {value};\n", camel(&name.name)));
             }
             StmtKind::Assign { target, value } => {
+                if let Some((part, property)) = self.part_property(target) {
+                    let value = if matches!(property, "Caption" | "Error") { self.shown_string(value) } else { self.value(value) };
+                    out.push_str(&format!("{pad}{part}.{property} = {value};\n"));
+                    return;
+                }
                 let place = self.place(target);
                 let value = self.value(value);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
@@ -203,25 +262,51 @@ impl Emitter<'_> {
             }
             StmtKind::Save { value } => {
                 let record = self.value(value);
-                out.push_str(&format!("{pad}db.Save({record});\n"));
+                out.push_str(&format!("{pad}{db}.Save({record});\n"));
             }
             StmtKind::Delete { value } => {
                 let record = self.value(value);
-                out.push_str(&format!("{pad}db.Delete({record});\n"));
+                out.push_str(&format!("{pad}{db}.Delete({record});\n"));
             }
             StmtKind::Refuse { text } => {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}throw new RefusedException({text});\n"));
             }
-            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } => {
+            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
+            }
+            StmtKind::Message { level, text } => {
+                let level = match level {
+                    MessageLevel::Info => "Info",
+                    MessageLevel::Warning => "Warning",
+                    MessageLevel::Error => "Error",
+                };
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}Say(Level.{level}, {text});\n"));
+            }
+            StmtKind::Open { window, with } => {
+                let args: Vec<String> = with.iter().map(|arg| format!("{} = {}", pascal(&arg.name.name), self.value(&arg.value))).collect();
+                let init = if args.is_empty() { String::new() } else { format!(" {{ {} }}", args.join(", ")) };
+                out.push_str(&format!("{pad}Open(new {}ViewModel({db}){init});\n", window.name));
+            }
+            StmtKind::Close => out.push_str(&format!("{pad}Close();\n")),
+            StmtKind::Reload { data } => {
+                let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
+                match found {
+                    Some((name, entity, true)) => out.push_str(&format!("{pad}{} = {db}.All<{entity}>();\n", member(&name))),
+                    Some((name, entity, false)) => {
+                        let prop = member(&name);
+                        out.push_str(&format!("{pad}if ({prop}.Id != 0)\n{pad}    {prop} = {db}.Get<{entity}>({prop}.Id);\n"));
+                    }
+                    None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
+                }
             }
         }
     }
 
-    /// Text the screen shows (a message, a refusal, a caption, an error) as
-    /// a runtime `Text`: the text as written with a typed value per slot,
-    /// so the screen fills the slots in the person's format.
+    /// Text the screen shows (a message, a refusal) as a runtime `Text`: the
+    /// text as written with a typed value per slot, so the screen fills the
+    /// slots in the person's format.
     fn shown(&mut self, expr: &Expr) -> String {
         match &expr.kind {
             ExprKind::Str { value } => format!("Text.Plain({})", string(value)),
@@ -239,6 +324,14 @@ impl Emitter<'_> {
                 let value = self.value(expr);
                 format!("Text.Plain({})", self.show(value, &self.types.type_of(expr)))
             }
+        }
+    }
+
+    /// Shown text as a string, for a part's caption or error.
+    fn shown_string(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Str { value } => string(value),
+            _ => format!("{}.Show()", self.shown(expr)),
         }
     }
 
@@ -281,7 +374,7 @@ impl Emitter<'_> {
     }
 
     /// The dictionary field a member path such as `order.total` reads.
-    fn field_of(&self, expr: &Expr) -> Option<&clarity_spec::model::Field> {
+    fn field_of(&self, expr: &Expr) -> Option<&'a clarity_spec::model::Field> {
         let ExprKind::Member { object, member } = &expr.kind else { return None };
         let TypeInfo::Record(entity) = self.types.type_of(object) else { return None };
         self.project.entity(&entity)?.field(&member.name)
@@ -297,29 +390,65 @@ impl Emitter<'_> {
         self.project.entity(entity).map_or_else(|| field.to_string(), |e| e.column_of(field).to_string())
     }
 
+    /// A part property such as `grid.selected` or `name_input.error`: the
+    /// part's `PartState` and its property, when `expr` is one.
+    fn part_property(&self, expr: &Expr) -> Option<(String, &'static str)> {
+        let ExprKind::Member { object, member: prop } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        Some((member(name), part_property(&prop.name)?))
+    }
+
+    /// Reading a part property in a handler; the selected row is a record.
+    fn read_part(&mut self, expr: &Expr) -> String {
+        let (part, property) = self.part_property(expr).unwrap_or_default();
+        if property != "SelectedItem" {
+            return format!("{part}.{property}");
+        }
+        let ExprKind::Member { object, .. } = &expr.kind else { return String::new() };
+        let ExprKind::Name { name } = &object.kind else { return String::new() };
+        let entity = self
+            .window
+            .and_then(|w| w.parts.get(name))
+            .and_then(|p| p.bind.as_ref())
+            .and_then(|bind| self.window.and_then(|w| w.data.iter().find(|(n, _, _)| n == bind)))
+            .map(|(_, entity, _)| entity.clone());
+        match entity {
+            Some(entity) => format!("Selected<{entity}>({part})"),
+            None => {
+                self.errors.push(format!("'{name}' is not bound to a list"));
+                String::new()
+            }
+        }
+    }
+
     /// An expression as a place: what can be assigned.
     fn place(&mut self, expr: &Expr) -> String {
+        let db = self.db;
         match &expr.kind {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) => camel(name),
+                Some(NameKind::Data) if self.window.is_some() => member(name),
                 Some(NameKind::EnumValue(e)) => format!("{e}.{name}"),
                 _ => {
-                    self.errors.push(format!("'{name}' belongs to a window; windows are generated for C# next"));
+                    self.errors.push(format!("'{name}' is a part; use one of its properties"));
                     String::new()
                 }
             },
-            ExprKind::Member { object, member } => {
+            ExprKind::Member { object, member: field } => {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
-                    return format!("{e}.{}", member.name);
+                    return format!("{e}.{}", field.name);
                 }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
-                    self.errors.push(format!("'{}' belongs to a window; windows are generated for C# next", print::expr(expr)));
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
                 };
                 let object = self.place(object);
-                let prop = property(&entity, &member.name);
-                match self.field_type(&entity, &member.name) {
-                    Some(FieldType::Ref { entity: target }) => format!("db.Load<{}>({object}.{prop})", target.name),
+                let prop = property(&entity, &field.name);
+                match self.field_type(&entity, &field.name) {
+                    Some(FieldType::Ref { entity: target }) => format!("{db}.Load<{}>({object}.{prop})", target.name),
                     Some(FieldType::List { .. }) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
@@ -344,6 +473,7 @@ impl Emitter<'_> {
                 String::new()
             }
             ExprKind::Bool { value } => value.to_string(),
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
@@ -359,9 +489,11 @@ impl Emitter<'_> {
                 let opts: Vec<String> = options.iter().map(|o| self.value(o)).collect();
                 format!("new {}[] {{ {} }}.Contains({v})", value_type(&common), opts.join(", "))
             }
-            ExprKind::Call { function, .. } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
-                self.errors.push(format!("handler '{}' belongs to a window; windows are generated for C# next", function.name));
-                String::new()
+            ExprKind::Call { function, args } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
+                if !args.is_empty() {
+                    self.errors.push(format!("handler '{}' takes no arguments", function.name));
+                }
+                format!("On{}()", pascal(&function.name))
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
@@ -396,9 +528,11 @@ impl Emitter<'_> {
             self.errors.push(format!("unknown function '{name}'"));
             return String::new();
         }
-        let mut code = vec!["db".to_string()];
+        let mut code = vec![self.db.to_string()];
         code.extend(args.iter().map(|a| self.value(a)));
-        format!("{}({})", pascal(name), code.join(", "))
+        // A ViewModel reaches the functions through `Logic`.
+        let owner = if self.window.is_some() { "Logic." } else { "" };
+        format!("{owner}{}({})", pascal(name), code.join(", "))
     }
 
     /// `find c in Entity where ... order by ...` as a database query. The
@@ -414,7 +548,7 @@ impl Emitter<'_> {
             let method = if numeric { "OrderNumber" } else { "Order" };
             query.push_str(&format!(".{method}({}, {})", string(&self.column(entity, &key.field.name)), key.descending));
         }
-        format!("db.Find<{entity}>({query})")
+        format!("{}.Find<{entity}>({query})", self.db)
     }
 
     /// A query condition as a `Cond`. The checker made sure each comparison

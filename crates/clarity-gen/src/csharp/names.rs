@@ -77,6 +77,39 @@ pub fn property(entity: &str, field: &str) -> String {
     if name == entity || RECORD_MEMBERS.contains(&name.as_str()) { format!("{name}_") } else { name }
 }
 
+/// Members every window's ViewModel has, which data or a part cannot be called.
+const VIEW_MODEL_MEMBERS: [&str; 26] = [
+    "Db", "Title", "IsDialog", "Messages", "Say", "Handle", "Open", "Close", "Opened", "Closing", "Returned", "OnOpen", "OnClose", "OnReturn",
+    "QuitApplication", "Selected", "OpenRequested", "CloseRequested", "PropertyChanged", "PropertyChanging",
+    "OnPropertyChanged", "OnPropertyChanging", "SetProperty", "Equals", "GetHashCode", "ToString",
+];
+
+/// Window data or a part as a member of the window's ViewModel: `orders`
+/// as `Orders`, never a member every ViewModel has.
+pub fn member(name: &str) -> String {
+    let name = pascal(name);
+    if VIEW_MODEL_MEMBERS.contains(&name.as_str()) { format!("{name}_") } else { name }
+}
+
+/// A part as a control's `x:Name` in AXAML: `number_input` as `numberInput`.
+/// Camel case never meets a member of the window, which are all Pascal case.
+pub fn control(name: &str) -> String {
+    let local = camel(name);
+    match local.strip_prefix('@') {
+        Some(keyword) => format!("{keyword}Part"),
+        None => local,
+    }
+}
+
+/// The private field behind a property: `credit_limit` as `_creditLimit`,
+/// never a keyword.
+pub fn backing(name: &str) -> String {
+    let pascal = pascal(name);
+    let mut chars = pascal.chars();
+    let first: String = chars.next().map(|c| c.to_lowercase().collect()).unwrap_or_default();
+    format!("_{first}{}", chars.as_str())
+}
+
 /// The C# type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
@@ -146,6 +179,10 @@ mod tests {
         assert_eq!(property("Order", "order"), "Order_");
         assert_eq!(property("Order", "key_column"), "KeyColumn_");
         assert_eq!(property("Order", "event"), "Event");
+        assert_eq!(backing("credit_limit"), "_creditLimit");
+        assert_eq!(backing("event"), "_event");
+        assert_eq!(member("orders"), "Orders");
+        assert_eq!(member("messages"), "Messages_");
     }
 
     #[test]

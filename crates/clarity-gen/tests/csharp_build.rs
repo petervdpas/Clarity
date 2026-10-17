@@ -1,7 +1,8 @@
-//! Generates the shop example as C# and builds it with `dotnet build`, then
-//! runs it: without windows yet (G2a), the program opens its database,
-//! applies the migration steps and stops. Slow (NuGet and the compiler), so
-//! it only runs when asked: `cargo test -p clarity-gen --test csharp_build -- --ignored`.
+//! Generates the shop example as C# with Avalonia and builds it with
+//! `dotnet build` (the AXAML compiler checks every binding), then runs it with
+//! `--check`: the program opens its database, applies the migration steps and
+//! stops before showing a window. Slow (NuGet and the compiler), so it only
+//! runs when asked: `cargo test -p clarity-gen --test csharp_build -- --ignored`.
 
 use std::path::Path;
 use std::process::Command;
@@ -36,7 +37,7 @@ fn the_shop_example_builds_and_runs_in_csharp() {
         String::from_utf8_lossy(&built.stdout)
     );
 
-    let ran = Command::new("dotnet").args(["run", "--no-build"]).current_dir(&out).output().unwrap();
+    let ran = Command::new("dotnet").args(["run", "--no-build", "--", "--check"]).current_dir(&out).output().unwrap();
     let said = String::from_utf8_lossy(&ran.stdout);
     assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
     assert!(said.contains("Shop: the databases are ready."), "{said}");

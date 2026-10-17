@@ -155,10 +155,19 @@ pub fn binary_name(settings: &Settings) -> String {
     rust::crate_name(settings)
 }
 
-/// What the build tools put in `out/`, which `write_out` leaves alone:
-/// cargo's `target` and lock file, Tauri's `gen`, and the application's
-/// `data` (its database while it runs from `out/`).
-pub const BUILD_OUTPUT: [&str; 4] = ["target", "data", "gen", "Cargo.lock"];
+/// What the build tools of `backend` put in `out/`, which `write_out`
+/// leaves alone, and the application's `data` (its database while it runs
+/// from `out/`). Everything else in `out/` is the generated project, so
+/// the build output of another stack goes when a project changes stack.
+pub fn build_output(backend: Backend) -> &'static [&'static str] {
+    match backend {
+        // cargo's `target` and lock file, and Tauri's `gen`.
+        Backend::Rust => &["target", "data", "gen", "Cargo.lock"],
+        // dotnet's `bin` and `obj`.
+        Backend::Csharp => &["bin", "obj", "data"],
+        Backend::Go | Backend::C | Backend::Cpp => &["data"],
+    }
+}
 
 /// The file that marks a folder as Clarity's output. `write_out` only
 /// removes files in folders that have it.

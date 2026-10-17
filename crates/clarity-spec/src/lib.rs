@@ -9,6 +9,7 @@ pub mod formats;
 pub mod themes;
 pub mod translations;
 pub mod frame;
+pub mod layout;
 pub mod lexer;
 pub mod migrate;
 pub mod model;

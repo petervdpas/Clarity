@@ -94,6 +94,13 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
     assert_eq!(
         paths,
         [
+            "App.axaml",
+            "App.axaml.cs",
+            "Clarity.Avalonia/Bindings.cs",
+            "Clarity.Avalonia/Messages.cs",
+            "Clarity.Avalonia/PartState.cs",
+            "Clarity.Avalonia/Shell.cs",
+            "Clarity.Avalonia/WindowViewModel.cs",
             "Clarity.Runtime/Db.cs",
             "Clarity.Runtime/Dialect.cs",
             "Clarity.Runtime/Errors.cs",
@@ -107,6 +114,11 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Sales.cs",
             "Schema.cs",
             "Shop.csproj",
+            "Shown.cs",
+            "Views.cs",
+            "Windows/OrderFormView.axaml",
+            "Windows/OrderFormView.axaml.cs",
+            "Windows/OrderFormViewModel.cs",
         ]
     );
     let project = file(&files, "Shop.csproj");
@@ -131,14 +143,14 @@ fn enums_and_entities_become_csharp_types() {
     has(sales, "namespace Shop;");
     has(sales, "public enum OrderStatus\n{\n    Pending,\n    Approved,\n}");
     has(sales, "        OrderStatus.Approved => \"Approved by sales\",");
-    has(sales, "public sealed partial class Customer : IRecord<Customer>\n{");
+    has(sales, "public sealed partial class Customer : ObservableObject, IRecord<Customer>\n{");
     has(sales, "    public static string TableName => \"customer\";");
     has(sales, "    public static IReadOnlyList<string> ColumnNames { get; } = [\"name\", \"credit_limit\", \"active\", \"since\"];");
-    has(sales, "    public decimal CreditLimit { get; set; } = 100m;");
-    has(sales, "    public bool Active { get; set; } = true;");
-    has(sales, "    public DateOnly? Since { get; set; }");
-    has(sales, "    public long? Customer { get; set; }");
-    has(sales, "    public OrderStatus Status { get; set; }");
+    has(sales, "    public decimal CreditLimit { get => _creditLimit; set => SetProperty(ref _creditLimit, value); }\n    decimal _creditLimit = 100m;");
+    has(sales, "    bool _active = true;");
+    has(sales, "    public DateOnly? Since { get => _since; set => SetProperty(ref _since, value); }\n    DateOnly? _since;");
+    has(sales, "    public long? Customer { get => _customer; set => SetProperty(ref _customer, value); }");
+    has(sales, "    public OrderStatus Status { get => _status; set => SetProperty(ref _status, value); }");
     has(sales, "    public object?[] ToValues() => [Number, Sql.Name(Status), Customer, Total, Event];");
     has(sales, "        CreditLimit = Sql.GetDecimal(\"credit_limit\", values[1]),");
     has(sales, "        Status = Sql.GetName<OrderStatus>(\"status\", values[1]),");
@@ -208,7 +220,7 @@ fn queries_text_and_loops() {
     has(sales, "if ((Texts.Contains(other.Number, \"X\") || ((long)all.Count > 3L)))");
     has(sales, "shown = (shown + \"!\");");
     // A field named like a C# keyword is still a property.
-    has(sales, "    public string Event { get; set; } = \"\";");
+    has(sales, "    public string Event { get => _event; set => SetProperty(ref _event, value); }\n    string _event = \"\";");
 }
 
 #[test]

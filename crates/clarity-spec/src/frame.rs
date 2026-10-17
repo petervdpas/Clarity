@@ -296,3 +296,34 @@ mod tests {
         assert!(validate_command(&new_command(CommandKind::Item, None)).is_err());
     }
 }
+
+/// The regions a window shows: its own, and the app's where it has none of
+/// that kind (for sidebars, of that side). Dialogs show no frame.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ShownFrame<'a> {
+    pub menu: Option<&'a crate::model::Menu>,
+    pub toolbar: Option<&'a crate::model::Toolbar>,
+    pub ribbon: Option<&'a crate::model::Ribbon>,
+    pub left: Option<&'a crate::model::Sidebar>,
+    pub right: Option<&'a crate::model::Sidebar>,
+    pub footer: Option<&'a crate::model::Footer>,
+}
+
+/// The frame `page` shows in `app`. The web renderer has the same rule
+/// (`shownFrame` in app/src/lib/frame.ts).
+pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Page) -> ShownFrame<'a> {
+    if page.kind == crate::model::PageKind::Dialog {
+        return ShownFrame::default();
+    }
+    let own = &page.frame;
+    let theirs = app.map(|a| &a.frame);
+    let side = |frame: Option<&'a crate::model::Frame>, side: Side| frame.and_then(|f| f.sidebars.iter().find(|s| s.side == side));
+    ShownFrame {
+        menu: own.menu.as_ref().or(theirs.and_then(|f| f.menu.as_ref())),
+        toolbar: own.toolbar.as_ref().or(theirs.and_then(|f| f.toolbar.as_ref())),
+        ribbon: own.ribbon.as_ref().or(theirs.and_then(|f| f.ribbon.as_ref())),
+        left: side(Some(own), Side::Left).or(side(theirs, Side::Left)),
+        right: side(Some(own), Side::Right).or(side(theirs, Side::Right)),
+        footer: own.footer.as_ref().or(theirs.and_then(|f| f.footer.as_ref())),
+    }
+}

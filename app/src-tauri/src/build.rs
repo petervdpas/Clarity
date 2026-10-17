@@ -50,7 +50,7 @@ pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
     let built = clarity_project::build_settings(&dir, &settings);
     let files = clarity_gen::generate(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
-    clarity_gen::write_out(&out, &files, &clarity_gen::BUILD_OUTPUT).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
+    clarity_gen::write_out(&out, &files, clarity_gen::build_output(settings.stack.backend)).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
     Ok((out, clarity_gen::binary_name(&settings)))
 }
 

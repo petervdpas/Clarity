@@ -274,3 +274,36 @@ fn write_out_never_writes_into_a_folder_with_other_work() {
     clarity_gen::write_out(&empty, &files, &[]).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The output folder holds one stack's project: switching a project from
+/// Rust to C# leaves none of Rust's build output behind, and C#'s own
+/// build output and the application's data stay between generations.
+#[test]
+fn the_output_folder_holds_only_the_current_stacks_project() {
+    use clarity_project::Backend;
+    let dir = std::env::temp_dir().join(format!("clarity-switch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let file = |path: &str| clarity_gen::OutFile {
+        path: path.into(),
+        text: "x".into(),
+        bytes: None,
+    };
+    clarity_gen::write_out(&dir, &[file("Cargo.toml"), file("src/main.rs")], clarity_gen::build_output(Backend::Rust)).unwrap();
+    for built in ["target/debug/shop", "gen/schemas/x.json", "Cargo.lock", "data/shop.db"] {
+        std::fs::create_dir_all(dir.join(built).parent().unwrap()).unwrap();
+        std::fs::write(dir.join(built), "built").unwrap();
+    }
+
+    clarity_gen::write_out(&dir, &[file("Shop.csproj"), file("Program.cs")], clarity_gen::build_output(Backend::Csharp)).unwrap();
+    for gone in ["target", "gen", "Cargo.lock", "Cargo.toml", "src"] {
+        assert!(!dir.join(gone).exists(), "{gone} is Rust's and should be gone");
+    }
+    assert!(dir.join("data/shop.db").exists(), "the application's data stays");
+
+    std::fs::create_dir_all(dir.join("bin/Debug")).unwrap();
+    std::fs::create_dir_all(dir.join("obj")).unwrap();
+    std::fs::write(dir.join("bin/Debug/Shop.dll"), "built").unwrap();
+    clarity_gen::write_out(&dir, &[file("Shop.csproj"), file("Program.cs")], clarity_gen::build_output(Backend::Csharp)).unwrap();
+    assert!(dir.join("bin/Debug/Shop.dll").exists(), "C#'s build output stays");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

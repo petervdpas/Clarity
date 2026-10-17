@@ -195,7 +195,7 @@ fn refuses_backends_that_are_not_generated_yet() {
     let mut settings = shop();
     settings.stack.backend = Backend::Go;
     let errors = generate(&project, &settings).unwrap_err();
-    assert_eq!(errors, ["the Go backend is not generated yet; Rust is"]);
+    assert_eq!(errors, ["the Go backend is not generated yet; Rust and C# are"]);
 }
 
 #[test]

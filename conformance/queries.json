@@ -1,0 +1,239 @@
+{
+  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), oneOf and oneOfNumbers (column, values), isTrue (a column), and, or (two conditions), not (one). A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
+  "cases": [
+    {
+      "name": "every record, in the order stored",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": {},
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" ORDER BY \"id\"", "params": [] },
+        "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" ORDER BY \"id\"", "params": [] },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` ORDER BY `id`", "params": [] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] ORDER BY [id]", "params": [] }
+      }
+    },
+    {
+      "name": "a mapped table and key",
+      "table": "Klant",
+      "key": "KlantId",
+      "columns": ["Naam"],
+      "query": {},
+      "expect": {
+        "sqlite": { "sql": "SELECT \"KlantId\", \"Naam\" FROM \"Klant\" ORDER BY \"KlantId\"", "params": [] },
+        "postgres": { "sql": "SELECT \"KlantId\", \"Naam\" FROM \"Klant\" ORDER BY \"KlantId\"", "params": [] },
+        "mysql": { "sql": "SELECT `KlantId`, `Naam` FROM `Klant` ORDER BY `KlantId`", "params": [] },
+        "mssql": { "sql": "SELECT [KlantId], [Naam] FROM [Klant] ORDER BY [KlantId]", "params": [] }
+      }
+    },
+    {
+      "name": "text equals",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "compare": { "column": "name", "op": "Eq", "value": { "text": "Ada" } } } },
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"name\" = ?1 ORDER BY \"id\"", "params": [{ "text": "Ada" }] },
+        "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"name\" = $1 ORDER BY \"id\"", "params": [{ "text": "Ada" }] },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE `name` = ? ORDER BY `id`", "params": [{ "text": "Ada" }] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE [name] = @P1 ORDER BY [id]", "params": [{ "text": "Ada" }] }
+      }
+    },
+    {
+      "name": "a decimal is compared as a number",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "number": { "column": "credit_limit", "op": "Gt", "value": { "decimal": "100.50" } } } },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE CAST(\"credit_limit\" AS REAL) > CAST(?1 AS REAL) ORDER BY \"id\"",
+          "params": [{ "decimal": "100.50" }]
+        },
+        "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"credit_limit\" > $1 ORDER BY \"id\"", "params": [{ "decimal": "100.50" }] },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE `credit_limit` > ? ORDER BY `id`", "params": [{ "decimal": "100.50" }] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE [credit_limit] > @P1 ORDER BY [id]", "params": [{ "decimal": "100.50" }] }
+      }
+    },
+    {
+      "name": "contains ignores case and escapes wildcards",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "contains": { "column": "name", "text": "a_b%" } } },
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"name\" LIKE ?1 ESCAPE '!' ORDER BY \"id\"", "params": [{ "text": "%a!_b!%%" }] },
+        "postgres": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE LOWER(\"name\") LIKE LOWER($1) ESCAPE '!' ORDER BY \"id\"",
+          "params": [{ "text": "%a!_b!%%" }]
+        },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE LOWER(`name`) LIKE LOWER(?) ESCAPE '!' ORDER BY `id`", "params": [{ "text": "%a!_b!%%" }] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE LOWER([name]) LIKE LOWER(@P1) ESCAPE '!' ORDER BY [id]", "params": [{ "text": "%a!_b!%%" }] }
+      }
+    },
+    {
+      "name": "SQL Server also escapes a bracket",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "contains": { "column": "name", "text": "[x" } } },
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"name\" LIKE ?1 ESCAPE '!' ORDER BY \"id\"", "params": [{ "text": "%[x%" }] },
+        "postgres": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE LOWER(\"name\") LIKE LOWER($1) ESCAPE '!' ORDER BY \"id\"",
+          "params": [{ "text": "%[x%" }]
+        },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE LOWER(`name`) LIKE LOWER(?) ESCAPE '!' ORDER BY `id`", "params": [{ "text": "%[x%" }] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE LOWER([name]) LIKE LOWER(@P1) ESCAPE '!' ORDER BY [id]", "params": [{ "text": "%![x%" }] }
+      }
+    },
+    {
+      "name": "one of several names",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "oneOf": { "column": "kind", "values": [{ "text": "business" }, { "text": "private" }] } } },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"kind\" IN (?1, ?2) ORDER BY \"id\"",
+          "params": [{ "text": "business" }, { "text": "private" }]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"kind\" IN ($1, $2) ORDER BY \"id\"",
+          "params": [{ "text": "business" }, { "text": "private" }]
+        },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE `kind` IN (?, ?) ORDER BY `id`", "params": [{ "text": "business" }, { "text": "private" }] },
+        "mssql": {
+          "sql": "SELECT [id], [name] FROM [customer] WHERE [kind] IN (@P1, @P2) ORDER BY [id]",
+          "params": [{ "text": "business" }, { "text": "private" }]
+        }
+      }
+    },
+    {
+      "name": "one of several numbers",
+      "table": "order",
+      "key": "id",
+      "columns": ["number"],
+      "query": { "filter": { "oneOfNumbers": { "column": "total", "values": [{ "decimal": "10" }, { "decimal": "2.5" }] } } },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"number\" FROM \"order\" WHERE CAST(\"total\" AS REAL) IN (CAST(?1 AS REAL), CAST(?2 AS REAL)) ORDER BY \"id\"",
+          "params": [{ "decimal": "10" }, { "decimal": "2.5" }]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"number\" FROM \"order\" WHERE \"total\" IN ($1, $2) ORDER BY \"id\"",
+          "params": [{ "decimal": "10" }, { "decimal": "2.5" }]
+        },
+        "mysql": { "sql": "SELECT `id`, `number` FROM `order` WHERE `total` IN (?, ?) ORDER BY `id`", "params": [{ "decimal": "10" }, { "decimal": "2.5" }] },
+        "mssql": {
+          "sql": "SELECT [id], [number] FROM [order] WHERE [total] IN (@P1, @P2) ORDER BY [id]",
+          "params": [{ "decimal": "10" }, { "decimal": "2.5" }]
+        }
+      }
+    },
+    {
+      "name": "a bool that is true",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": { "filter": { "isTrue": "active" } },
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"active\" = 1 ORDER BY \"id\"", "params": [] },
+        "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"active\" = TRUE ORDER BY \"id\"", "params": [] },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE `active` = 1 ORDER BY `id`", "params": [] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE [active] = 1 ORDER BY [id]", "params": [] }
+      }
+    },
+    {
+      "name": "and, or and not nest in parentheses",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": {
+        "filter": {
+          "or": [
+            { "and": [{ "compare": { "column": "name", "op": "Eq", "value": { "text": "Ada" } } }, { "isTrue": "active" }] },
+            { "not": { "number": { "column": "credit_limit", "op": "LtEq", "value": { "decimal": "0" } } } }
+          ]
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE ((\"name\" = ?1 AND \"active\" = 1) OR NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"id\"",
+          "params": [{ "text": "Ada" }, { "decimal": "0" }]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE ((\"name\" = $1 AND \"active\" = TRUE) OR NOT (\"credit_limit\" <= $2)) ORDER BY \"id\"",
+          "params": [{ "text": "Ada" }, { "decimal": "0" }]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `name` FROM `customer` WHERE ((`name` = ? AND `active` = 1) OR NOT (`credit_limit` <= ?)) ORDER BY `id`",
+          "params": [{ "text": "Ada" }, { "decimal": "0" }]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [name] FROM [customer] WHERE (([name] = @P1 AND [active] = 1) OR NOT ([credit_limit] <= @P2)) ORDER BY [id]",
+          "params": [{ "text": "Ada" }, { "decimal": "0" }]
+        }
+      }
+    },
+    {
+      "name": "dates, references and the other comparisons",
+      "table": "order",
+      "key": "id",
+      "columns": ["number"],
+      "query": {
+        "filter": {
+          "and": [
+            { "compare": { "column": "ordered_on", "op": "GtEq", "value": { "date": "2026-01-02" } } },
+            {
+              "and": [
+                { "compare": { "column": "customer", "op": "NotEq", "value": { "integer": 7 } } },
+                { "compare": { "column": "paid", "op": "Lt", "value": { "bool": true } } }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"number\" FROM \"order\" WHERE (\"ordered_on\" >= ?1 AND (\"customer\" != ?2 AND \"paid\" < ?3)) ORDER BY \"id\"",
+          "params": [{ "date": "2026-01-02" }, { "integer": 7 }, { "bool": true }]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"number\" FROM \"order\" WHERE (\"ordered_on\" >= $1 AND (\"customer\" != $2 AND \"paid\" < $3)) ORDER BY \"id\"",
+          "params": [{ "date": "2026-01-02" }, { "integer": 7 }, { "bool": true }]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `number` FROM `order` WHERE (`ordered_on` >= ? AND (`customer` != ? AND `paid` < ?)) ORDER BY `id`",
+          "params": [{ "date": "2026-01-02" }, { "integer": 7 }, { "bool": true }]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [number] FROM [order] WHERE ([ordered_on] >= @P1 AND ([customer] != @P2 AND [paid] < @P3)) ORDER BY [id]",
+          "params": [{ "date": "2026-01-02" }, { "integer": 7 }, { "bool": true }]
+        }
+      }
+    },
+    {
+      "name": "an order, numbers sorted as numbers, the key last",
+      "table": "customer",
+      "key": "id",
+      "columns": ["name"],
+      "query": {
+        "order": [
+          { "column": "name", "descending": true, "numeric": false },
+          { "column": "credit_limit", "descending": false, "numeric": true }
+        ]
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"name\" FROM \"customer\" ORDER BY \"name\" DESC, CAST(\"credit_limit\" AS REAL), \"id\"",
+          "params": []
+        },
+        "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" ORDER BY \"name\" DESC, \"credit_limit\", \"id\"", "params": [] },
+        "mysql": { "sql": "SELECT `id`, `name` FROM `customer` ORDER BY `name` DESC, `credit_limit`, `id`", "params": [] },
+        "mssql": { "sql": "SELECT [id], [name] FROM [customer] ORDER BY [name] DESC, [credit_limit], [id]", "params": [] }
+      }
+    }
+  ]
+}

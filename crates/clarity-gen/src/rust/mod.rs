@@ -3,11 +3,9 @@
 //! and handlers, the Clarity runtime copied in, and the web renderer as the
 //! frontend, so `out/` builds on its own.
 
-mod ddl;
 mod logic;
 mod model;
 mod names;
-mod schema;
 
 use clarity_project::Settings;
 use clarity_spec::code::check;
@@ -15,7 +13,8 @@ use clarity_spec::model::{FieldType, Project};
 use clarity_spec::Preview;
 
 use crate::OutFile;
-use ddl::Sql;
+use crate::ddl::Sql;
+use crate::schema;
 use logic::Owner;
 use names::{ident, snake};
 
@@ -64,36 +63,7 @@ const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_paren
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let crate_name = crate_name(settings);
-    if settings.datasources.is_empty() {
-        return Err(vec!["the project needs a data source to store its records".to_string()]);
-    }
-    // A database for every data source that holds entities.
-    let mut databases: Vec<(String, Sql, String)> = Vec::new();
-    for source in &settings.datasources {
-        if project.entities_in(&source.name).next().is_none() {
-            continue;
-        }
-        let Some(sql) = Sql::of(source.kind) else {
-            return Err(vec![format!(
-                "data source '{}' is a web API; the Rust backend stores records in SQL databases only for now",
-                source.name
-            )]);
-        };
-        if source.url.starts_with("keychain:") {
-            return Err(vec![format!(
-                "data source '{}': a generated application reads its connection from 'env:NAME' for now, not from the keychain",
-                source.name
-            )]);
-        }
-        databases.push((source.name.clone(), sql, source.url.clone()));
-    }
-    // Steps only for the databases Clarity owns; external ones are opened as
-    // they are.
-    let owned: Vec<(String, Sql)> = databases
-        .iter()
-        .filter(|(name, _, _)| settings.datasources.iter().any(|s| s.name == *name && !s.external))
-        .map(|(name, sql, _)| (name.clone(), *sql))
-        .collect();
+    let (databases, owned) = crate::databases(project, settings, "Rust")?;
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     features.sort();
     features.dedup();
@@ -165,7 +135,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !errors.is_empty() {
         return Err(errors);
     }
-    files.push(text("src/schema.rs", schema::emit(project, &owned)?));
+    files.push(text("src/schema.rs", schema_rs(project, &owned)?));
     files.push(text("src/main.rs", main_rs(project, &modules, &owners, &databases, &main_window)));
     Ok(files)
 }
@@ -513,4 +483,46 @@ pub fn migration_sql(project: &Project, source: &str, kind: clarity_project::Sou
         return Err(vec![format!("data source '{source}' is not a SQL database")]);
     };
     schema::steps(project, source, sql)
+}
+
+/// SQL as a Rust string literal that needs no escapes.
+fn raw(text: &str) -> String {
+    let mut hashes = "#".to_string();
+    while text.contains(&format!("\"{hashes}")) {
+        hashes.push('#');
+    }
+    format!("r{hashes}\"{text}\"{hashes}")
+}
+
+/// The steps of every database of the application, as SQL per data source.
+fn schema_rs(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec<String>> {
+    let mut out = format!(
+        "{HEADER}
+/// The migration steps per data source, in order, each a list of
+/// statements. Each database remembers how many steps it has applied, and
+/// applies the rest when the application starts.
+pub const SOURCES: &[(&str, &[&[&str]])] = &[
+"
+    );
+    let mut errors = Vec::new();
+    for (source, sql) in sources {
+        let steps = match schema::steps(project, source, *sql) {
+            Ok(steps) => steps,
+            Err(mut problems) => {
+                errors.append(&mut problems);
+                continue;
+            }
+        };
+        out.push_str(&format!("    ({source:?}, &[\n"));
+        for (i, (title, statements)) in steps.iter().enumerate() {
+            out.push_str(&format!("        // {}: {title}\n        &[\n", i + 1));
+            for statement in statements {
+                out.push_str(&format!("            {},\n", raw(statement)));
+            }
+            out.push_str("        ],\n");
+        }
+        out.push_str("    ]),\n");
+    }
+    out.push_str("];\n");
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
 }

@@ -3,8 +3,11 @@
 //! deterministic: the same project always gives the same files, byte for
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
+mod csharp;
+mod ddl;
 mod print;
 mod rust;
+mod schema;
 mod web;
 
 pub use rust::migration_sql;
@@ -12,6 +15,45 @@ pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 
 use clarity_project::{Backend, Settings};
 use clarity_spec::Project;
+
+use ddl::Sql;
+
+/// The databases of an application and the ones Clarity owns.
+type Databases = (Vec<(String, Sql, String)>, Vec<(String, Sql)>);
+
+/// The database of every data source that holds entities, with its kind and
+/// where it is, and the ones Clarity owns (and so migrates); external ones
+/// are opened as they are. `backend` names the backend in messages.
+fn databases(project: &Project, settings: &Settings, backend: &str) -> Result<Databases, Vec<String>> {
+    if settings.datasources.is_empty() {
+        return Err(vec!["the project needs a data source to store its records".to_string()]);
+    }
+    let mut databases: Vec<(String, Sql, String)> = Vec::new();
+    for source in &settings.datasources {
+        if project.entities_in(&source.name).next().is_none() {
+            continue;
+        }
+        let Some(sql) = Sql::of(source.kind) else {
+            return Err(vec![format!(
+                "data source '{}' is a web API; the {backend} backend stores records in SQL databases only for now",
+                source.name
+            )]);
+        };
+        if source.url.starts_with("keychain:") {
+            return Err(vec![format!(
+                "data source '{}': a generated application reads its connection from 'env:NAME' for now, not from the keychain",
+                source.name
+            )]);
+        }
+        databases.push((source.name.clone(), sql, source.url.clone()));
+    }
+    let owned = databases
+        .iter()
+        .filter(|(name, _, _)| settings.datasources.iter().any(|s| s.name == *name && !s.external))
+        .map(|(name, sql, _)| (name.clone(), *sql))
+        .collect();
+    Ok((databases, owned))
+}
 
 /// One generated file, by its path inside `out/`. Most are text; a few, like
 /// icons, are bytes.
@@ -31,6 +73,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
+        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,
+        Backend::Csharp => {
+            return Err(vec!["C# with the web renderer is not generated yet; C# uses Avalonia".to_string()]);
+        }
         other => {
             let name = match other {
                 Backend::Go => "Go",
@@ -39,7 +85,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
                 Backend::Cpp => "C++",
                 Backend::Rust => "Rust",
             };
-            return Err(vec![format!("the {name} backend is not generated yet; Rust is")]);
+            return Err(vec![format!("the {name} backend is not generated yet; Rust and C# are")]);
         }
     };
     files.sort_by(|a, b| a.path.cmp(&b.path));

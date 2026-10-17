@@ -1,3 +1,7 @@
 /target
 node_modules/
 /app/dist
+
+# Build output of the C# runtime and its tests.
+bin/
+obj/

@@ -8,9 +8,7 @@ use clarity_spec::Project;
 use clarity_spec::migrate::{self, Column, Op, Schema, Table};
 use clarity_spec::model::FieldType;
 
-use super::HEADER;
-use super::ddl::Sql;
-use super::names::table;
+use crate::ddl::Sql;
 
 /// Writes SQL for the steps, with what the schema is before each change.
 struct Writer<'a> {
@@ -384,44 +382,7 @@ pub fn steps(project: &Project, source: &str, sql: Sql) -> Result<Vec<(String, V
     if writer.errors.is_empty() { Ok(out) } else { Err(writer.errors) }
 }
 
-/// SQL as a Rust string literal that needs no escapes.
-fn raw(text: &str) -> String {
-    let mut hashes = "#".to_string();
-    while text.contains(&format!("\"{hashes}")) {
-        hashes.push('#');
-    }
-    format!("r{hashes}\"{text}\"{hashes}")
-}
-
-/// The steps of every database of the application, as SQL per data source.
-pub fn emit(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec<String>> {
-    let mut out = format!(
-        "{HEADER}
-/// The migration steps per data source, in order, each a list of
-/// statements. Each database remembers how many steps it has applied, and
-/// applies the rest when the application starts.
-pub const SOURCES: &[(&str, &[&[&str]])] = &[
-"
-    );
-    let mut errors = Vec::new();
-    for (source, sql) in sources {
-        let steps = match steps(project, source, *sql) {
-            Ok(steps) => steps,
-            Err(mut problems) => {
-                errors.append(&mut problems);
-                continue;
-            }
-        };
-        out.push_str(&format!("    ({source:?}, &[\n"));
-        for (i, (title, statements)) in steps.iter().enumerate() {
-            out.push_str(&format!("        // {}: {title}\n        &[\n", i + 1));
-            for statement in statements {
-                out.push_str(&format!("            {},\n", raw(statement)));
-            }
-            out.push_str("        ],\n");
-        }
-        out.push_str("    ]),\n");
-    }
-    out.push_str("];\n");
-    if errors.is_empty() { Ok(out) } else { Err(errors) }
+/// The table an entity is stored in.
+fn table(entity: &str) -> String {
+    clarity_spec::model::snake_case(entity)
 }

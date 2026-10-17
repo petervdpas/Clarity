@@ -29,11 +29,6 @@ pub fn ident(name: &str) -> String {
 pub fn snake(name: &str) -> String {
     clarity_spec::model::snake_case(name)
 }
-/// The table an entity is stored in.
-pub fn table(entity: &str) -> String {
-    snake(entity)
-}
-
 /// The Rust type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {

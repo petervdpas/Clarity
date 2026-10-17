@@ -1,7 +1,10 @@
 // What a handler can change about a part while the window is open, and what
 // the window binds to: shown, enabled, read-only, its caption, an error, the
-// text of an unbound input and the selected row of a table or list.
+// text of an unbound input and the selected row of a table or list. Captions,
+// errors and help are kept as written and shown translated, their slots in
+// the person's format (Locale).
 
+using Clarity.Runtime;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Clarity.Avalonia;
@@ -20,8 +23,20 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     public bool IsReadOnly { get => readOnly_; set => SetProperty(ref readOnly_, value); }
     bool readOnly_ = readOnly;
 
-    public string Caption { get => caption_; set => SetProperty(ref caption_, value); }
-    string caption_ = caption ?? "";
+    /// <summary>The caption as the design or a handler wrote it.</summary>
+    public Text CaptionText
+    {
+        get => caption_;
+        set
+        {
+            caption_ = value;
+            OnPropertyChanged(nameof(Caption));
+        }
+    }
+    Text caption_ = Clarity.Runtime.Text.Plain(caption ?? "");
+
+    /// <summary>The caption as shown.</summary>
+    public string Caption => Locale.Show(CaptionText);
 
     /// <summary>The text an unbound input holds.</summary>
     public string Text { get => text; set => SetProperty(ref text, value); }
@@ -31,25 +46,27 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     public object? SelectedItem { get => selected; set => SetProperty(ref selected, value); }
     object? selected;
 
-    /// <summary>What is wrong with the input; empty when nothing is.</summary>
-    public string Error
+    /// <summary>What is wrong with the input, as a handler wrote it; empty when nothing is.</summary>
+    public Text ErrorText
     {
         get => error;
         set
         {
-            if (SetProperty(ref error, value))
-            {
-                OnPropertyChanged(nameof(HasError));
-                OnPropertyChanged(nameof(Shown));
-            }
+            error = value;
+            OnPropertyChanged(nameof(Error));
+            OnPropertyChanged(nameof(HasError));
+            OnPropertyChanged(nameof(Shown));
         }
     }
-    string error = "";
+    Text error = Clarity.Runtime.Text.Plain("");
+
+    /// <summary>What is wrong with the input, as shown.</summary>
+    public string Error => Locale.Show(ErrorText);
 
     /// <summary>The help text of the input, shown while there is no error.</summary>
-    public string Help { get; } = help;
+    public string Help => Locale.Translate(help);
 
-    public bool HasError => Error != "";
+    public bool HasError => ErrorText.Template != "";
 
     /// <summary>What the help text under an input shows: its error, or its help.</summary>
     public string Shown => HasError ? Error : Help;

@@ -5,6 +5,7 @@
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
 use clarity_spec::load_sources;
+use clarity_spec::model::Locale;
 
 const SHOP: &str = "module shop
 
@@ -22,6 +23,7 @@ entity Order
     total: money
     ordered_on: date
     paid: bool
+    discount: decimal(6, 4), format percent
 
 function within_credit(order: Order) -> bool
     return order.total < 1000
@@ -35,6 +37,10 @@ app Shop
             item \"Another order\" on click -> OrderForm in new window
             separator
             item \"Quit\" on click -> quit
+            item \"Language\" on click -> language
+            item \"Theme\" on click -> theme
+    toolbar
+        button \"Look\" on click -> theme
     footer
         status \"Ready\"
 
@@ -135,7 +141,9 @@ fn records_tell_the_window_when_they_change() {
     has(shop, "public sealed partial class Order : ObservableObject, IRecord<Order>");
     has(shop, "    public decimal Total { get => _total; set => SetProperty(ref _total, value); }\n    decimal _total;");
     has(shop, "    public string Number { get => _number; set => SetProperty(ref _number, value); }\n    string _number = \"\";");
-    has(shop, "public static partial class Choices\n{\n    public static readonly Choice[] OrderStatus =\n    [\n        new(global::Shop.OrderStatus.Pending, \"Pending\"),\n        new(global::Shop.OrderStatus.Approved, \"Approved by sales\"),\n    ];");
+    // Labels and choices read their texts each time, so they follow the language.
+    has(shop, "public static partial class Choices\n{\n    public static Choice[] OrderStatus =>\n    [\n        new(global::Shop.OrderStatus.Pending, Texts.Pending),\n        new(global::Shop.OrderStatus.Approved, Texts.ApprovedBySales),\n    ];");
+    has(shop, "        OrderStatus.Approved => Texts.ApprovedBySales,");
 }
 
 #[test]
@@ -154,26 +162,29 @@ fn the_grid_has_fixed_rows_and_rows_that_grow() {
 fn parts_bind_to_the_data_and_to_their_state() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<TextBlock Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\" Text=\"Number *\" />");
+    // Every text through the application's Texts, so it shows in the language chosen.
+    has(window, "<TextBlock Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{x:Static local:Texts.Number}\" /><Run Text=\" *\" /></TextBlock>");
     has(
         window,
-        "<TextBox x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Text=\"{Binding Order.Number}\" PlaceholderText=\"ORD-1\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
+        "<TextBox x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Text=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.ORD1}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
     );
     has(window, "<TextBlock Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
-    has(window, "<TextBox Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Classes=\"number\" Text=\"{Binding Order.Total}\" />");
-    has(window, "<CheckBox Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"Paid\" IsChecked=\"{Binding Order.Paid}\" />");
+    has(window, "<TextBox Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Classes=\"number\" Text=\"{Binding Order.Total, Converter={x:Static local:Edit.OrderTotal}}\" />");
+    has(window, "<CheckBox Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\" />");
     // The caption beside the switch, as on the web, so it fits its row.
-    has(window, "<ToggleSwitch Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"Rush\" OffContent=\"Rush\" IsChecked=\"{Binding Order.Paid}\" />");
+    has(window, "<ToggleSwitch Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\" />");
     has(window, "ItemsSource=\"{x:Static local:Choices.OrderStatus}\" DisplayMemberBinding=\"{Binding Label, x:DataType=c:Choice}\" SelectedValueBinding=\"{Binding Value, x:DataType=c:Choice}\" SelectedValue=\"{Binding Order.Status}\"");
     has(window, "ItemsSource=\"{Binding CustomerChoices}\"");
     has(window, "SelectedDate=\"{Binding Order.OrderedOn, Converter={x:Static c:Converters.Date}}\"");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
     has(window, "<DataGrid x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
-    has(window, "<DataGridTextColumn Header=\"Status\" Binding=\"{Binding Status, Converter={x:Static local:Shown.Converter}}\" x:DataType=\"local:Order\" />");
+    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Status}\" Binding=\"{Binding Status, Converter={x:Static local:Shown.Converter}}\" x:DataType=\"local:Order\" />");
+    // A value with a format shows in the person's format.
+    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Total}\" Binding=\"{Binding Total, Converter={x:Static local:Shown.OrderTotal}}\" x:DataType=\"local:Order\" />");
     has(window, "<TextBox x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Text=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
-    has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"New\" Command=\"{Binding OpenOrderFormCommand}\" />");
-    has(window, "<TabItem Header=\"Notes\">");
+    has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{x:Static local:Texts.New}\" Command=\"{Binding OpenOrderFormCommand}\" />");
+    has(window, "<TabItem Header=\"{x:Static local:Texts.Notes}\">");
     has(window, "<TextBox Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Text=\"{Binding Order.Number}\" />");
 }
 
@@ -182,12 +193,12 @@ fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
     has(window, "<Menu DockPanel.Dock=\"Top\">\n");
-    has(window, "<MenuItem Header=\"Orders\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding OpenOrderFormCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.Orders}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding OpenOrderFormCommand}\" />");
     has(window, "<Separator />");
-    has(window, "<MenuItem Header=\"Quit\" Command=\"{Binding QuitCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.Quit}\" Command=\"{Binding QuitCommand}\" />");
     // A window opens in a desktop window of its own only where the design says so.
-    has(window, "<MenuItem Header=\"Another order\" Command=\"{Binding OpenOrderFormInNewWindowCommand}\" />");
-    has(window, "<TextBlock Classes=\"status\" Text=\"Ready\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrder}\" Command=\"{Binding OpenOrderFormInNewWindowCommand}\" />");
+    has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.Ready}\" />");
 }
 
 #[test]
@@ -195,7 +206,7 @@ fn handlers_are_viewmodel_methods() {
     let files = files();
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "public sealed partial class OrderFormViewModel : WindowViewModel");
-    has(vm, "    public override string Title => \"Order\";");
+    has(vm, "    public override string Title => Texts.Order;");
     has(vm, "    public Order Order { get => _order; set => SetProperty(ref _order, value); }\n    Order _order = new();");
     has(vm, "    public List<Order> Orders { get => _orders; set => SetProperty(ref _orders, value); }");
     has(vm, "    public PartState NumberInput { get; } = new(\"number_input\");");
@@ -215,7 +226,7 @@ fn handlers_are_viewmodel_methods() {
         }
         Order.Status = OrderStatus.Approved;
         Db.Save(Order);
-        NumberInput.Error = \"\";
+        NumberInput.ErrorText = Text.Plain(\"\");
         Say(Level.Info, Text.Plain(\"Approved\"));
         OnFilterChanged();
     }",
@@ -252,4 +263,90 @@ fn the_application_has_one_desktop_window() {
         assert!(!derives && !f.text.contains("new Window") && !f.text.contains("<Window "), "{} makes a window", f.path);
     }
     has(file(&files, "Windows/OrderFormView.axaml"), "<UserControl ");
+}
+
+const NL: &str = "translation nl
+    \"Order\" \"Bestelling\"
+    \"Approved by sales\" \"Goedgekeurd door verkoop\"
+    \"Order {order.number} is too large\" \"Bestelling {order.number} is te groot\"
+";
+
+fn translated() -> Vec<OutFile> {
+    let mut project = load_sources([("shop.clarity", SHOP)]);
+    clarity_spec::translations::attach(&mut project, [("translations/nl.clarity", NL)]);
+    project.locale = Locale {
+        language: Some("en".into()),
+        currency: Some("EUR".into()),
+    };
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    generate(&project, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"))
+}
+
+/// Texts as Visual Studio keeps them (DESIGN 1.5): a .resx file per language
+/// and a typed accessor, found by what a text says as written.
+#[test]
+fn texts_are_resx_files_with_a_typed_accessor() {
+    let files = translated();
+    let base = file(&files, "Texts.resx");
+    has(base, "<resheader name=\"resmimetype\">\n    <value>text/microsoft-resx</value>\n  </resheader>");
+    has(base, "  <data name=\"ApprovedBySales\" xml:space=\"preserve\">\n    <value>Approved by sales</value>\n    <comment>enum OrderStatus</comment>\n  </data>");
+    has(base, "  <data name=\"OrderOrderNumberIsTooLarge\" xml:space=\"preserve\">\n    <value>Order {order.number} is too large</value>");
+    let nl = file(&files, "Texts.nl.resx");
+    has(nl, "  <data name=\"Order\" xml:space=\"preserve\">\n    <value>Bestelling</value>");
+    has(nl, "    <value>Bestelling {order.number} is te groot</value>");
+    // A text without a translation falls back to the base file.
+    assert!(!nl.contains("name=\"Paid\""), "{nl}");
+
+    let texts = file(&files, "Texts.cs");
+    has(texts, "public static class Texts");
+    has(texts, "    static readonly ResourceManager Resources = new(\"Shop.Texts\", typeof(Texts).Assembly);");
+    has(texts, "    public const string? BaseLanguage = \"en\";");
+    has(texts, "    public static readonly string[] Languages = [\"nl\"];");
+    has(texts, "        [\"Order {order.number} is too large\"] = \"OrderOrderNumberIsTooLarge\",");
+    has(texts, "    /// <summary>Approved by sales</summary>\n    public static string ApprovedBySales => Locale.Translate(\"Approved by sales\");");
+    // The renderer's own words are texts too.
+    has(texts, "    public static string Yes => Locale.Translate(\"Yes\");");
+}
+
+#[test]
+fn the_application_starts_in_the_language_and_theme_kept() {
+    let files = translated();
+    let app = file(&files, "App.axaml.cs");
+    has(
+        app,
+        "            Remembered.Use(\"Shop\");
+            Locale.Start(Texts.BaseLanguage, Texts.Languages, \"EUR\", Texts.In, Labels.Named);
+            Themes.Start(AppThemes.Offered);
+            var db = Program.OpenDatabases();",
+    );
+    // Without a currency, money has no sign.
+    let plain = self::files();
+    has(file(&plain, "App.axaml.cs"), "Locale.Start(Texts.BaseLanguage, Texts.Languages, null, Texts.In, Labels.Named);");
+    has(file(&plain, "Texts.cs"), "    public static readonly string[] Languages = [];");
+}
+
+#[test]
+fn values_show_and_read_in_the_persons_format() {
+    let files = files();
+    let shown = file(&files, "Shown.cs");
+    has(shown, "    public static readonly FormatConverter OrderTotal = new(new FieldFormat(FormatKind.Money));");
+    has(shown, "    public static readonly FormatConverter OrderOrderedOn = new(new FieldFormat(FormatKind.Date));");
+    has(shown, "    public static readonly FormatConverter OrderDiscount = new(new FieldFormat(FormatKind.Decimal, 4, \"percent\"));");
+    has(shown, "public static class Edit\n{");
+    has(shown, "    public static readonly EditConverter OrderTotal = new(new FieldFormat(FormatKind.Money));");
+    // An enum value in text with slots shows its label.
+    has(shown, "        \"OrderStatus\" => Enum.TryParse<OrderStatus>(value, out var v) ? Of(v) : value,");
+}
+
+/// The click targets `language` and `theme` pick in place (one window): a
+/// submenu on a menu item, a flyout under a button.
+#[test]
+fn the_language_and_theme_targets_pick_in_place() {
+    let files = files();
+    let window = file(&files, "Windows/OrderFormView.axaml");
+    has(window, "<MenuItem x:Name=\"picker1\" Header=\"{x:Static local:Texts.Language}\" />");
+    has(window, "<MenuItem x:Name=\"picker2\" Header=\"{x:Static local:Texts.Theme}\" />");
+    has(window, "<Button x:Name=\"picker3\" Content=\"{x:Static local:Texts.Look}\" />");
+    let code = file(&files, "Windows/OrderFormView.axaml.cs");
+    has(code, "        Pickers.Language(picker1);\n        Pickers.Theme(picker2);\n        Pickers.Theme(picker3);\n");
 }

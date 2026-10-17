@@ -172,6 +172,11 @@ fn the_example_translation_fits_the_example() {
         .collect();
     assert!(in_translations.is_empty(), "{in_translations:#?}");
     assert_eq!(project.translations["nl"]["Customers"], "Klanten");
+    // The example shows the whole application in Dutch.
+    let table = clarity_spec::translations::table(&project);
+    let nl = table.languages.iter().position(|l| l == "nl").unwrap();
+    let untranslated: Vec<&str> = table.rows.iter().filter(|r| r.translations[nl].is_none()).map(|r| r.text.as_str()).collect();
+    assert!(untranslated.is_empty(), "not in nl.clarity: {untranslated:?}");
 }
 
 #[test]

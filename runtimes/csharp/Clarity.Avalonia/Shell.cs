@@ -6,7 +6,8 @@
 // marked `in new window` gets a shell of its own (closing its last window
 // closes it and tells the window that opened it), and a dialog gets a window.
 // Messages belong to the shell, so a message said just before closing stays
-// on screen.
+// on screen. When the language changes, every window's view is made again,
+// so its texts and values show in the new language.
 
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
@@ -18,6 +19,7 @@ public sealed class Shell : Window
     readonly Func<WindowViewModel, Control> view;
     readonly Stack<(WindowViewModel Model, Control View)> stack = new();
     readonly ContentControl content = new();
+    readonly MessageList messages;
     readonly TimeSpan infoDuration;
     bool closing;
 
@@ -40,13 +42,18 @@ public sealed class Shell : Window
 
     readonly List<WindowViewModel> dialogs = [];
 
+    /// <summary>The desktop window of each open dialog.</summary>
+    readonly Dictionary<WindowViewModel, Window> dialogWindows = [];
+
     Shell(Func<WindowViewModel, Control> view, TimeSpan infoDuration)
     {
         this.view = view;
         this.infoDuration = infoDuration;
         Width = 1100;
         Height = 760;
-        Content = new Panel { Children = { content, new MessageList { Messages = Messages, InfoDuration = infoDuration } } };
+        messages = new MessageList { Messages = Messages, InfoDuration = infoDuration };
+        Content = new Panel { Children = { content, messages } };
+        Locale.Changed += Refresh;
         Closing += (_, _) =>
         {
             if (closing)
@@ -56,6 +63,7 @@ public sealed class Shell : Window
         };
         Closed += (_, _) =>
         {
+            Locale.Changed -= Refresh;
             desktops.Remove(this);
             // The window that opened this desktop window is told, so it can reload its data.
             if (opener is { } back && desktops.Any(d => d.Windows.Contains(back)))
@@ -113,6 +121,26 @@ public sealed class Shell : Window
         Title = model.Title;
     }
 
+    /// <summary>Makes every window's view again, as in another language.</summary>
+    void Refresh()
+    {
+        var models = stack.Select(s => s.Model).Reverse().ToList();
+        stack.Clear();
+        foreach (var model in models)
+            stack.Push((model, view(model)));
+        if (stack.Count > 0)
+            ShowTop();
+        messages.Rebuild();
+        foreach (var (model, window) in dialogWindows)
+        {
+            window.Title = model.Title;
+            window.Content = DialogContent(model);
+        }
+    }
+
+    Panel DialogContent(WindowViewModel model) =>
+        new() { Children = { view(model), new MessageList { Messages = Messages, InfoDuration = infoDuration } } };
+
     void Open(WindowViewModel other, WindowViewModel opener)
     {
         if (!other.IsDialog)
@@ -125,7 +153,7 @@ public sealed class Shell : Window
         var dialog = new Window
         {
             Title = other.Title,
-            Content = new Panel { Children = { view(other), new MessageList { Messages = Messages, InfoDuration = infoDuration } } },
+            Content = DialogContent(other),
             SizeToContent = SizeToContent.WidthAndHeight,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -137,6 +165,7 @@ public sealed class Shell : Window
                 return;
             done = true;
             dialogs.Remove(other);
+            dialogWindows.Remove(other);
             other.Closing();
             // The window below it is told: the one that opened it, if it is still open.
             (Windows.Contains(opener) ? opener : Windows.LastOrDefault())?.Returned();
@@ -148,6 +177,7 @@ public sealed class Shell : Window
         };
         dialog.Closing += (_, _) => Finish();
         dialogs.Add(other);
+        dialogWindows[other] = dialog;
         _ = dialog.ShowDialog(this);
         other.Opened();
     }

@@ -2,11 +2,12 @@
 //! renderer writes them in TypeScript, the generators read them here, and
 //! this test keeps the two equal.
 
-use clarity_spec::layout::{CONTENT_PADDING, GAP, MESSAGE_MS, ROW_HEIGHT, SIDEBAR_COLUMN};
+use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, SIDEBAR_COLUMN};
 
 const PAGES_TS: &str = include_str!("../../../app/src/lib/pages.ts");
 const RUNTIME_SVELTE: &str = include_str!("../../../app/src/runtime/Runtime.svelte");
 const FRAME_VIEW: &str = include_str!("../../../app/src/lib/FrameView.svelte");
+const RENDER_CSS: &str = include_str!("../../../app/src/render.css");
 
 /// The number a `const NAME = 123;` line in `source` gives.
 fn constant(source: &str, name: &str) -> u32 {
@@ -26,4 +27,11 @@ fn the_web_renderer_uses_the_shared_values() {
     // The space around a running window's grid, written in its CSS.
     let client = RUNTIME_SVELTE.split("  .client {").nth(1).expect("the .client rule");
     assert!(client.split('}').next().unwrap().contains(&format!("padding: {CONTENT_PADDING}px;")), "{client}");
+}
+
+#[test]
+fn the_web_renderer_pads_parts_by_the_shared_multiples() {
+    // Beside the text of a button and of an input: a multiple of the theme's padding.
+    assert!(RENDER_CSS.contains(&format!("padding: var(--padding) calc(var(--padding) * {BUTTON_SIDES});")), "button");
+    assert!(RENDER_CSS.contains(&format!("padding: var(--padding) calc(var(--padding) * {INPUT_SIDES});")), "input");
 }

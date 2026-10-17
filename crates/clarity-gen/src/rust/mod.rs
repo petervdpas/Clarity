@@ -452,6 +452,12 @@ fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>>
 fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
 }}
+
+/// A desktop window takes the title of the Clarity window it shows.
+#[tauri::command]
+fn set_title(window: tauri::WebviewWindow, title: String) {{
+    let _ = window.set_title(&title);
+}}
 {apart_code}
 fn main() {{
     let mut db = Db::connect(DATABASES).expect("cannot open the databases");
@@ -468,6 +474,7 @@ fn main() {{
             return_to,
             dispatch_event,
             ref_options,{apart_commands}
+            set_title,
             quit_app
         ])
         .run(tauri::generate_context!())

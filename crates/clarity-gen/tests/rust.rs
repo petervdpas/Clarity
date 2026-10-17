@@ -236,6 +236,18 @@ fn handlers_work_on_the_window_and_the_screen() {
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
 }
 
+/// Every desktop window carries the title of the Clarity window it shows,
+/// as on Avalonia; the renderer sets it when the window changes.
+#[test]
+fn a_desktop_window_takes_the_title_of_its_window() {
+    let files = files();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("fn set_title(window: tauri::WebviewWindow, title: String) {\n    let _ = window.set_title(&title);\n}"), "{main}");
+    assert!(main.contains("            set_title,\n"), "{main}");
+    let runtime = include_str!("../../../app/src/runtime/Runtime.svelte");
+    assert!(runtime.contains("invoke(\"set_title\", { title })"), "the renderer sets the title");
+}
+
 #[test]
 fn handlers_set_errors_and_readonly_on_inputs() {
     let files = files();

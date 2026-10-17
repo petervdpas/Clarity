@@ -64,7 +64,10 @@
   });
 
   $effect(() => {
-    document.title = page?.title && model ? tr(model, page.title) : (page?.name.name ?? "");
+    const title = page?.title && model ? tr(model, page.title) : (page?.name.name ?? "");
+    document.title = title;
+    // The desktop window shows it too; the designer's Preview has no such command.
+    invoke("set_title", { title }).catch(() => {});
   });
 
   function say(message: Message) {

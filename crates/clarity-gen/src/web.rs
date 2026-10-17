@@ -38,7 +38,7 @@ const SIZE_VARIABLES: [(&str, &str); 3] = [("text", "--font-size"), ("small", "-
 const RADIUS_VARIABLES: [(&str, &str); 3] = [("input", "--radius-input"), ("button", "--radius-button"), ("panel", "--radius-panel")];
 
 /// Font families CSS knows by name, which are never quoted.
-const GENERIC_FONTS: [&str; 8] = [
+pub(crate) const GENERIC_FONTS: [&str; 8] = [
     "system-ui",
     "-apple-system",
     "sans-serif",

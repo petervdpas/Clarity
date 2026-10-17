@@ -14,11 +14,14 @@ use clarity_project::{Backend, Ui};
 fn the_shop_example_builds_and_runs_in_csharp() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join("examples/shop.clarity");
-    let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
+    // As Run loads it: with the project file's language, currency and themes.
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    assert!(!project.themes.is_empty() && !project.translations.is_empty(), "the example has themes and translations");
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
     let files = clarity_gen::generate(&project, &settings).unwrap();
+    assert!(files.iter().any(|f| f.path == "Texts.nl.resx"));
 
     let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -43,5 +46,7 @@ fn the_shop_example_builds_and_runs_in_csharp() {
     assert!(said.contains("Shop: the databases are ready."), "{said}");
     // The database the project file names, with every step applied.
     assert!(out.join("data/shop.db").exists());
+    // The Dutch texts as a satellite assembly, as .NET looks for them.
+    assert!(out.join("bin/Debug/net10.0/nl/Shop.resources.dll").exists());
     std::fs::remove_dir_all(&out).unwrap();
 }

@@ -6,7 +6,7 @@
 //! rows; each part binds to the window's data and, when it has a name, to
 //! its `PartState`; handlers become ViewModel methods, run as commands.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 
 use clarity_spec::Project;
@@ -20,21 +20,26 @@ use clarity_spec::widgets;
 use super::HEADER;
 use super::logic::{self, PartInfo, WindowCtx};
 use super::names::{backing, control, member, pascal, property, string};
+use super::texts::{Texts, plain_attr};
+use super::themes::style_class;
 use crate::OutFile;
 
-/// The built-in click targets that are no window: `quit` and `close` work;
-/// `language` and `theme` come with translations and themes for C#.
+/// The built-in click targets that are no window: `quit` ends the
+/// application, `close` closes the window, `language` and `theme` pick in
+/// place (the runtime's `Pickers`).
 const QUIT: &str = "quit";
 const CLOSE: &str = "close";
+const LANGUAGE: &str = "language";
+const THEME: &str = "theme";
 
 /// The width of a dialog's view, in pixels; its window fits it.
 const DIALOG_WIDTH: u32 = 560;
 
 /// The AXAML, code-behind and ViewModel of `page`.
-pub fn emit(project: &Project, page: &Page, types: &FileTypes, namespace: &str) -> Result<Vec<OutFile>, Vec<String>> {
+pub fn emit(project: &Project, page: &Page, types: &FileTypes, namespace: &str, texts: &Texts) -> Result<Vec<OutFile>, Vec<String>> {
     let app = project.apps().next();
     let frame = shown(app, page);
-    let window = Window::new(project, page, app, frame);
+    let window = Window::new(project, page, app, frame, texts);
     let name = &page.name.name;
     let view_model = window.view_model(types, namespace)?;
     Ok(vec![
@@ -52,15 +57,26 @@ fn text(path: &str, body: String) -> OutFile {
     }
 }
 
-/// Text as an AXAML attribute value: escaped, and a leading brace kept as text.
+/// Text as an AXAML attribute value that is no text of the project (a key).
 fn attr(text: &str) -> String {
-    let escaped = text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
-    if escaped.starts_with('{') { format!("{{}}{escaped}") } else { escaped }
+    plain_attr(text)
 }
 
-/// A menu or button caption: `_` marks an access key in Avalonia.
-fn caption(text: &str) -> String {
-    attr(&text.replace('_', "__"))
+/// `axaml` with `class` added to the classes of its first element.
+fn with_class(axaml: &str, class: &str) -> String {
+    let start = axaml.find('<').unwrap_or(0);
+    let end = axaml.find('>').unwrap_or(axaml.len());
+    let head = &axaml[start..end];
+    match head.find(" Classes=\"") {
+        Some(at) => {
+            let insert = start + at + " Classes=\"".len();
+            format!("{}{class} {}", &axaml[..insert], &axaml[insert..])
+        }
+        None => {
+            let name_end = start + head.find([' ', '/', '>']).unwrap_or(head.len());
+            format!("{} Classes=\"{class}\"{}", &axaml[..name_end], &axaml[name_end..])
+        }
+    }
 }
 
 /// Every part of a list of parts, nested ones included.
@@ -117,10 +133,18 @@ struct Window<'a> {
     /// Every part the window shows: its grid, nested parts, the sidebars and the footer.
     parts: Vec<&'a Widget>,
     commands: Vec<&'a Command>,
+    texts: &'a Texts,
+    /// The control of each command that picks the language or theme, by the
+    /// command's address: `picker1`.
+    pickers: HashMap<usize, String>,
+}
+
+fn address(command: &Command) -> usize {
+    std::ptr::from_ref(command) as usize
 }
 
 impl<'a> Window<'a> {
-    fn new(project: &'a Project, page: &'a Page, app: Option<&'a App>, frame: ShownFrame<'a>) -> Self {
+    fn new(project: &'a Project, page: &'a Page, app: Option<&'a App>, frame: ShownFrame<'a>, texts: &'a Texts) -> Self {
         let mut data: Vec<(String, String, bool)> = Vec::new();
         for d in page.data.iter().chain(app.map(|a| a.data.as_slice()).unwrap_or_default()) {
             if !data.iter().any(|(n, _, _)| *n == d.name.name) {
@@ -146,6 +170,12 @@ impl<'a> Window<'a> {
                 commands.extend(all_commands(&group.items));
             }
         }
+        let pickers = commands
+            .iter()
+            .filter(|c| matches!(c.props.on_click.as_deref(), Some(LANGUAGE | THEME)))
+            .enumerate()
+            .map(|(i, c)| (address(c), format!("picker{}", i + 1)))
+            .collect();
         Window {
             project,
             page,
@@ -154,6 +184,23 @@ impl<'a> Window<'a> {
             data,
             parts,
             commands,
+            texts,
+            pickers,
+        }
+    }
+
+    /// A text of the project as an attribute value, in the language shown.
+    fn text(&self, text: &str) -> String {
+        self.texts.attr(text)
+    }
+
+    /// A value of a field with a format, shown in the person's format, else as the runtime shows it.
+    fn shown_converter(&self, entity: &Entity, field: &str) -> String {
+        match entity.field(field).map(|f| &f.ty) {
+            Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Date | FieldType::DateTime) => {
+                format!("local:Shown.{}{}", entity.name.name, pascal(field))
+            }
+            _ => "local:Shown.Converter".to_string(),
         }
     }
 
@@ -237,14 +284,14 @@ impl<'a> Window<'a> {
         if let Some(ribbon) = self.frame.ribbon {
             out.push_str("      <TabControl DockPanel.Dock=\"Top\" Classes=\"ribbon\">\n");
             for tab in &ribbon.tabs {
-                let _ = writeln!(out, "        <TabItem Header=\"{}\">", caption(&tab.title));
+                let _ = writeln!(out, "        <TabItem Header=\"{}\">", self.text(&tab.title));
                 out.push_str("          <StackPanel Orientation=\"Horizontal\" Spacing=\"16\">\n");
                 for group in &tab.groups {
                     out.push_str("            <StackPanel Spacing=\"4\">\n              <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">\n");
                     for item in &group.items {
                         self.button(item, 8, &mut out);
                     }
-                    let _ = writeln!(out, "              </StackPanel>\n              <TextBlock Classes=\"group\" Text=\"{}\" />\n            </StackPanel>", attr(&group.title));
+                    let _ = writeln!(out, "              </StackPanel>\n              <TextBlock Classes=\"group\" Text=\"{}\" />\n            </StackPanel>", self.text(&group.title));
                 }
                 out.push_str("          </StackPanel>\n        </TabItem>\n");
             }
@@ -260,7 +307,7 @@ impl<'a> Window<'a> {
         if let Some(footer) = self.frame.footer {
             out.push_str("      <Border DockPanel.Dock=\"Bottom\" Classes=\"footer\">\n        <DockPanel>\n");
             if let Some(status) = &footer.status {
-                let _ = writeln!(out, "          <TextBlock Classes=\"status\" Text=\"{}\" />", attr(status));
+                let _ = writeln!(out, "          <TextBlock Classes=\"status\" Text=\"{}\" />", self.text(status));
             }
             self.grid(&footer.widgets, footer.columns, Some(1), false, 5, &mut out);
             out.push_str("        </DockPanel>\n      </Border>\n");
@@ -307,7 +354,7 @@ impl<'a> Window<'a> {
             let _ = writeln!(out, "{pad}<Separator />");
             return;
         }
-        let header = caption(item.props.caption.as_deref().unwrap_or_default());
+        let header = self.text(item.props.caption.as_deref().unwrap_or_default());
         if !item.items.is_empty() {
             let _ = writeln!(out, "{pad}<MenuItem Header=\"{header}\">");
             for child in &item.items {
@@ -316,7 +363,10 @@ impl<'a> Window<'a> {
             let _ = writeln!(out, "{pad}</MenuItem>");
             return;
         }
-        let mut attrs = format!("Header=\"{header}\"");
+        let mut attrs = match self.pickers.get(&address(item)) {
+            Some(picker) => format!("x:Name=\"{picker}\" Header=\"{header}\""),
+            None => format!("Header=\"{header}\""),
+        };
         if let Some(key) = &item.props.shortcut {
             let _ = write!(attrs, " InputGesture=\"{key}\" HotKey=\"{key}\"", key = attr(key));
         }
@@ -333,7 +383,11 @@ impl<'a> Window<'a> {
             let _ = writeln!(out, "{pad}<Separator Classes=\"vertical\" />");
             return;
         }
-        let mut attrs = format!("Content=\"{}\"", caption(item.props.caption.as_deref().unwrap_or_default()));
+        let content = self.text(item.props.caption.as_deref().unwrap_or_default());
+        let mut attrs = match self.pickers.get(&address(item)) {
+            Some(picker) => format!("x:Name=\"{picker}\" Content=\"{content}\""),
+            None => format!("Content=\"{content}\""),
+        };
         if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
@@ -380,7 +434,17 @@ impl<'a> Window<'a> {
         out
     }
 
+    /// A part, with the class of its style, whose values come from the theme shown.
     fn widget(&self, widget: &Widget, depth: usize, out: &mut String) {
+        let mut own = String::new();
+        self.part_axaml(widget, depth, &mut own);
+        match widget.props.style.as_deref() {
+            Some(style) => out.push_str(&with_class(&own, &style_class(style))),
+            None => out.push_str(&own),
+        }
+    }
+
+    fn part_axaml(&self, widget: &Widget, depth: usize, out: &mut String) {
         let pad = "  ".repeat(depth);
         let p = &widget.props;
         let mut at = String::new();
@@ -399,7 +463,7 @@ impl<'a> Window<'a> {
         let plain_state = named.map(|n| Self::state(n, false)).unwrap_or_default();
         let mut extra = String::new();
         if let Some(tip) = &p.tooltip {
-            let _ = write!(extra, " ToolTip.Tip=\"{}\"", attr(tip));
+            let _ = write!(extra, " ToolTip.Tip=\"{}\"", self.text(tip));
         }
         if let Some(order) = p.tab_order {
             let _ = write!(extra, " TabIndex=\"{order}\"");
@@ -418,10 +482,14 @@ impl<'a> Window<'a> {
                     .is_some_and(|(_, f)| f.modifiers.required);
                 let text = match named {
                     Some(n) => format!("{{Binding {}.Caption}}", member(n)),
-                    None if required => attr(&format!("{caption_text} *")),
-                    None => attr(&caption_text),
+                    None => self.text(&caption_text),
                 };
-                let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"label\" Text=\"{text}\"{extra} />");
+                if required && named.is_none() {
+                    // The mark of a required input stays beside the translated label.
+                    let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"label\"{extra}><Run Text=\"{text}\" /><Run Text=\" *\" /></TextBlock>");
+                } else {
+                    let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"label\" Text=\"{text}\"{extra} />");
+                }
             }
             WidgetKind::Help => {
                 let target = p.for_part.as_deref().filter(|t| self.part(t).is_some_and(|w| w.props.name.is_some()));
@@ -434,15 +502,21 @@ impl<'a> Window<'a> {
                         );
                     }
                     None => {
-                        let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"help\" Text=\"{}\"{extra} />", attr(&caption_text));
+                        let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"help\" Text=\"{}\"{extra} />", self.text(&caption_text));
                     }
                 }
             }
             WidgetKind::Heading => {
-                let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"heading\" Text=\"{}\"{plain_state}{extra} />", attr(&caption_text));
+                let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"heading\" Text=\"{}\"{plain_state}{extra} />", self.text(&caption_text));
             }
             WidgetKind::Text => {
-                let text = bound.as_deref().map(shown).unwrap_or_default();
+                let text = match (bound.as_deref(), p.bind.as_deref().and_then(|b| self.bound_field(b))) {
+                    (Some(path), Some((entity, field))) => {
+                        format!("{{Binding {path}, Converter={{x:Static {}}}}}", self.shown_converter(entity, &field.name.name))
+                    }
+                    (Some(path), None) => shown(path),
+                    _ => String::new(),
+                };
                 let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"value\" Text=\"{text}\"{plain_state}{extra} />");
             }
             WidgetKind::Textbox | WidgetKind::Password | WidgetKind::Memo | WidgetKind::Number => {
@@ -452,21 +526,30 @@ impl<'a> Window<'a> {
                     WidgetKind::Password => " PasswordChar=\"*\"",
                     _ => "",
                 };
-                let value = match (&bound, named) {
-                    (Some(path), _) => format!(" Text=\"{{Binding {path}}}\""),
-                    (None, Some(n)) => format!(" Text=\"{{Binding {}.Text}}\"", member(n)),
-                    (None, None) => String::new(),
+                let number = p
+                    .bind
+                    .as_deref()
+                    .and_then(|b| self.bound_field(b))
+                    .filter(|(_, f)| matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money));
+                let value = match (&bound, named, number) {
+                    // A number reads and shows in the person's format.
+                    (Some(path), _, Some((entity, field))) => {
+                        format!(" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}}}\"", entity.name.name, pascal(&field.name.name))
+                    }
+                    (Some(path), _, None) => format!(" Text=\"{{Binding {path}}}\""),
+                    (None, Some(n), _) => format!(" Text=\"{{Binding {}.Text}}\"", member(n)),
+                    (None, None, _) => String::new(),
                 };
-                let placeholder = p.placeholder.as_deref().map(|t| format!(" PlaceholderText=\"{}\"", attr(t))).unwrap_or_default();
+                let placeholder = p.placeholder.as_deref().map(|t| format!(" PlaceholderText=\"{}\"", self.text(t))).unwrap_or_default();
                 let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
                 let _ = writeln!(out, "{pad}<TextBox {at}{class}{value}{placeholder}{read_only}{text_state}{extra} />");
             }
             WidgetKind::Checkbox | WidgetKind::Switch => {
                 // A switch's Content is a header above it; its caption goes beside it, as on the web.
                 let (control, label) = if p.kind == WidgetKind::Switch {
-                    ("ToggleSwitch", format!("OnContent=\"{text}\" OffContent=\"{text}\"", text = attr(&caption_text)))
+                    ("ToggleSwitch", format!("OnContent=\"{text}\" OffContent=\"{text}\"", text = self.text(&caption_text)))
                 } else {
-                    ("CheckBox", format!("Content=\"{}\"", attr(&caption_text)))
+                    ("CheckBox", format!("Content=\"{}\"", self.text(&caption_text)))
                 };
                 let value = bound.as_deref().map(|b| format!(" IsChecked=\"{{Binding {b}}}\"")).unwrap_or_default();
                 let read_only = if p.readonly { " IsEnabled=\"False\"" } else { "" };
@@ -496,7 +579,7 @@ impl<'a> Window<'a> {
                         let _ = writeln!(
                             out,
                             "{pad}  <RadioButton Content=\"{}\" IsChecked=\"{{Binding {path}, Converter={{x:Static c:Converters.Equal}}, ConverterParameter={{x:Static local:{}.{}}}}}\" />",
-                            attr(&variant.label),
+                            self.text(&variant.label),
                             name.name,
                             variant.name.name
                         );
@@ -516,7 +599,7 @@ impl<'a> Window<'a> {
             WidgetKind::Button => {
                 let content = match named {
                     Some(n) => format!("{{Binding {}.Caption}}", member(n)),
-                    None => caption(&caption_text),
+                    None => self.text(&caption_text),
                 };
                 let mut attrs = format!("Content=\"{content}\"");
                 if let Some(command) = self.click_command(Self::handler(widget, Event::Click), p.on_click.as_deref(), p.new_window) {
@@ -537,7 +620,7 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}<Border {at} Classes=\"{}\"{plain_state}{extra}>", if p.kind == WidgetKind::Form { "form" } else { "panel" });
                 let _ = writeln!(out, "{pad}  <DockPanel>");
                 if let Some(title) = &p.caption {
-                    let _ = writeln!(out, "{pad}    <TextBlock DockPanel.Dock=\"Top\" Classes=\"legend\" Text=\"{}\" />", attr(title));
+                    let _ = writeln!(out, "{pad}    <TextBlock DockPanel.Dock=\"Top\" Classes=\"legend\" Text=\"{}\" />", self.text(title));
                 }
                 self.grid(&widget.children, p.width, None, false, depth + 2, out);
                 let _ = writeln!(out, "{pad}  </DockPanel>\n{pad}</Border>");
@@ -545,7 +628,7 @@ impl<'a> Window<'a> {
             WidgetKind::Tabs => {
                 let _ = writeln!(out, "{pad}<TabControl {at}{plain_state}{extra}>");
                 for tab in &widget.pages {
-                    let _ = writeln!(out, "{pad}  <TabItem Header=\"{}\">", caption(tab.title.as_deref().unwrap_or_default()));
+                    let _ = writeln!(out, "{pad}  <TabItem Header=\"{}\">", self.text(tab.title.as_deref().unwrap_or_default()));
                     self.grid(&tab.children, p.width, None, false, depth + 2, out);
                     let _ = writeln!(out, "{pad}  </TabItem>");
                 }
@@ -583,9 +666,9 @@ impl<'a> Window<'a> {
                         let path = property(&entity.name.name, column);
                         let _ = writeln!(
                             out,
-                            "{pad}    <DataGridTextColumn Header=\"{}\" Binding=\"{}\" x:DataType=\"local:{}\" />",
-                            attr(&field.label),
-                            shown(&path),
+                            "{pad}    <DataGridTextColumn Header=\"{}\" Binding=\"{{Binding {path}, Converter={{x:Static {}}}}}\" x:DataType=\"local:{}\" />",
+                            self.text(&field.label),
+                            self.shown_converter(entity, &field.name.name),
                             entity.name.name
                         );
                     }
@@ -604,7 +687,12 @@ impl<'a> Window<'a> {
                         if i > 0 {
                             let _ = writeln!(out, "{pad}        <TextBlock Text=\"|\" />");
                         }
-                        let _ = writeln!(out, "{pad}        <TextBlock Text=\"{}\" />", shown(&property(&entity.name.name, field)));
+                        let _ = writeln!(
+                            out,
+                            "{pad}        <TextBlock Text=\"{{Binding {}, Converter={{x:Static {}}}}}\" />",
+                            property(&entity.name.name, field),
+                            self.shown_converter(entity, field)
+                        );
                     }
                     let _ = writeln!(out, "{pad}      </StackPanel>\n{pad}    </DataTemplate>\n{pad}  </ListBox.ItemTemplate>");
                 }
@@ -655,7 +743,14 @@ impl<'a> Window<'a> {
 
     fn code_behind(&self, namespace: &str) -> String {
         let name = &self.page.name.name;
-        let wiring: String = self.wiring().iter().map(|l| format!("        {l}\n")).collect();
+        let mut wiring: String = self.wiring().iter().map(|l| format!("        {l}\n")).collect();
+        // The language and theme pickers, in the order of the frame.
+        for command in &self.commands {
+            if let Some(picker) = self.pickers.get(&address(command)) {
+                let kind = if command.props.on_click.as_deref() == Some(LANGUAGE) { "Language" } else { "Theme" };
+                let _ = writeln!(wiring, "        Pickers.{kind}({picker});");
+            }
+        }
         format!(
             "{HEADER}
 using Avalonia.Controls;
@@ -831,7 +926,7 @@ public partial class {name}View : UserControl
             return Err(errors);
         }
         let title = self.page.title.clone().unwrap_or_else(|| name.clone());
-        let mut identity = format!("    public override string Title => {};\n", string(&title));
+        let mut identity = format!("    public override string Title => {};\n", self.texts.code(&title));
         if self.page.kind == PageKind::Dialog {
             identity.push_str("\n    public override bool IsDialog => true;\n");
         }
@@ -863,9 +958,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_style_class_joins_the_classes_of_a_part() {
+        assert_eq!(with_class("  <Button x:Name=\"save\" />\n", "primary"), "  <Button Classes=\"primary\" x:Name=\"save\" />\n");
+        assert_eq!(with_class("<TextBlock Classes=\"label\" Text=\"a\" />", "loud"), "<TextBlock Classes=\"loud label\" Text=\"a\" />");
+    }
+
+    #[test]
     fn attributes() {
         assert_eq!(attr("Tom & \"Jerry\""), "Tom &amp; &quot;Jerry&quot;");
         assert_eq!(attr("{not a binding}"), "{}{not a binding}");
-        assert_eq!(caption("Save_all"), "Save__all");
     }
 }

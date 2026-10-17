@@ -83,7 +83,7 @@ public class WindowTests
         Assert.Equal("Your full name", part.Shown);
         var changed = new List<string?>();
         part.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
-        part.Error = "Name is required";
+        part.ErrorText = Text.Plain("Name is required");
         Assert.Equal("Name is required", part.Shown);
         Assert.True(part.HasError);
         Assert.Contains(nameof(PartState.Shown), changed);
@@ -197,15 +197,26 @@ public class BindingTests
     }
 
     [AvaloniaFact]
-    public void ValuesShowAsTextWithEnumLabels()
+    public void ValuesShowInThePersonsFormatWithEnumLabels()
     {
-        var shown = new ShownConverter(v => v is Kind k ? (k == Kind.Private ? "Private person" : "Business") : null);
-        var culture = System.Globalization.CultureInfo.InvariantCulture;
-        Assert.Equal("Private person", shown.Convert(Kind.Private, typeof(string), null, culture));
-        Assert.Equal("1250.50", shown.Convert(1250.50m, typeof(string), null, culture));
-        Assert.Equal("2026-10-17", shown.Convert(new DateOnly(2026, 10, 17), typeof(string), null, culture));
-        Assert.Equal("yes", shown.Convert(true, typeof(string), null, culture));
-        Assert.Equal("", shown.Convert(null, typeof(string), null, culture));
+        Locale.Start("en", [], "EUR", (_, _) => null, (_, v) => v, new System.Globalization.CultureInfo("en-US"));
+        try
+        {
+            var shown = new ShownConverter(v => v is Kind k ? (k == Kind.Private ? "Private person" : "Business") : null);
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            Assert.Equal("Private person", shown.Convert(Kind.Private, typeof(string), null, culture));
+            // Without a field's scale a decimal keeps its own digits.
+            Assert.Equal("1,250.5", shown.Convert(1250.50m, typeof(string), null, culture));
+            Assert.Equal("10/17/2026", shown.Convert(new DateOnly(2026, 10, 17), typeof(string), null, culture));
+            Assert.Equal("Yes", shown.Convert(true, typeof(string), null, culture));
+            Assert.Equal("", shown.Convert(null, typeof(string), null, culture));
+            var money = new ShownConverter(_ => null, new FieldFormat(FormatKind.Money));
+            Assert.Equal("€1,250.50", money.Convert(1250.5m, typeof(string), null, culture));
+        }
+        finally
+        {
+            Locale.Reset();
+        }
     }
 
     [AvaloniaFact]

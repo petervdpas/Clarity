@@ -5,12 +5,13 @@ use clarity_spec::code::{DataEvent, record_name};
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
 use super::names::{backing, field_type, pascal, property, string};
+use super::texts::Texts;
 
 /// The enums and records of `file`, in the application's `namespace`.
-pub fn emit(project: &Project, file: &SpecFile, namespace: &str) -> String {
+pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts) -> String {
     let mut out = String::new();
     for decl in &file.enums {
-        out.push_str(&enum_decl(decl, namespace));
+        out.push_str(&enum_decl(decl, namespace, texts));
     }
     for entity in &file.entities {
         out.push_str(&record(project, entity));
@@ -18,19 +19,20 @@ pub fn emit(project: &Project, file: &SpecFile, namespace: &str) -> String {
     out
 }
 
-/// An enum, and its labels for text: `Labels.Of(status)`.
-fn enum_decl(decl: &EnumDecl, namespace: &str) -> String {
+/// An enum, and its labels for text: `Labels.Of(status)`, in the language
+/// shown; the choices of a dropdown are made each time, so they follow it.
+fn enum_decl(decl: &EnumDecl, namespace: &str, texts: &Texts) -> String {
     let name = &decl.name.name;
     let values: String = decl.variants.iter().map(|v| format!("    {},\n", v.name.name)).collect();
     let labels: String = decl
         .variants
         .iter()
-        .map(|v| format!("        {name}.{} => {},\n", v.name.name, string(&v.label)))
+        .map(|v| format!("        {name}.{} => {},\n", v.name.name, texts.code(&v.label)))
         .collect();
     let choices: String = decl
         .variants
         .iter()
-        .map(|v| format!("        new(global::{namespace}.{name}.{}, {}),\n", v.name.name, string(&v.label)))
+        .map(|v| format!("        new(global::{namespace}.{name}.{}, {}),\n", v.name.name, texts.code(&v.label)))
         .collect();
     format!(
         "public enum {name}
@@ -47,7 +49,7 @@ public static partial class Labels
 
 public static partial class Choices
 {{
-    public static readonly Choice[] {name} =
+    public static Choice[] {name} =>
     [
 {choices}    ];
 }}

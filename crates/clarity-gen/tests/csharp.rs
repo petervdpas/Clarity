@@ -96,14 +96,21 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
         [
             "App.axaml",
             "App.axaml.cs",
+            "AppThemes.cs",
             "Clarity.Avalonia/Bindings.cs",
+            "Clarity.Avalonia/Locale.cs",
             "Clarity.Avalonia/Messages.cs",
             "Clarity.Avalonia/PartState.cs",
+            "Clarity.Avalonia/Pickers.cs",
+            "Clarity.Avalonia/Remembered.cs",
             "Clarity.Avalonia/Shell.cs",
+            "Clarity.Avalonia/Themes.cs",
             "Clarity.Avalonia/WindowViewModel.cs",
             "Clarity.Runtime/Db.cs",
             "Clarity.Runtime/Dialect.cs",
             "Clarity.Runtime/Errors.cs",
+            "Clarity.Runtime/Formats.cs",
+            "Clarity.Runtime/Languages.cs",
             "Clarity.Runtime/Query.cs",
             "Clarity.Runtime/Record.cs",
             "Clarity.Runtime/Sql.cs",
@@ -115,6 +122,9 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Schema.cs",
             "Shop.csproj",
             "Shown.cs",
+            "Texts.cs",
+            "Texts.resx",
+            "Themes/Clarity.axaml",
             "Views.cs",
             "Windows/OrderFormView.axaml",
             "Windows/OrderFormView.axaml.cs",
@@ -142,7 +152,7 @@ fn enums_and_entities_become_csharp_types() {
     let sales = file(&files, "Sales.cs");
     has(sales, "namespace Shop;");
     has(sales, "public enum OrderStatus\n{\n    Pending,\n    Approved,\n}");
-    has(sales, "        OrderStatus.Approved => \"Approved by sales\",");
+    has(sales, "        OrderStatus.Approved => Texts.ApprovedBySales,");
     has(sales, "public sealed partial class Customer : ObservableObject, IRecord<Customer>\n{");
     has(sales, "    public static string TableName => \"customer\";");
     has(sales, "    public static IReadOnlyList<string> ColumnNames { get; } = [\"name\", \"credit_limit\", \"active\", \"since\"];");
@@ -250,4 +260,20 @@ fn csharp_needs_avalonia_or_the_web_renderer() {
     let mut settings = settings();
     settings.stack.backend = Backend::Go;
     assert_eq!(generate(&project, &settings).unwrap_err(), ["the Go backend is not generated yet; Rust and C# are"]);
+}
+
+/// A runtime file added later must reach generated projects too.
+#[test]
+fn every_csharp_runtime_source_file_is_copied() {
+    let files = files();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
+    for library in ["Clarity.Runtime", "Clarity.Avalonia"] {
+        for entry in std::fs::read_dir(root.join(library)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "cs") {
+                let name = format!("{library}/{}", path.file_name().unwrap().to_string_lossy());
+                assert!(files.iter().any(|f| f.path == name), "{name} is not copied");
+            }
+        }
+    }
 }

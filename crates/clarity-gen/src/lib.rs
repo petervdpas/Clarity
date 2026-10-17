@@ -10,6 +10,7 @@ mod rust;
 mod schema;
 mod web;
 
+pub use csharp::avalonia_theme;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 
@@ -150,9 +151,53 @@ fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile]
     Ok(())
 }
 
-/// The name of the program `cargo` builds from the generated project.
-pub fn binary_name(settings: &Settings) -> String {
-    rust::crate_name(settings)
+/// How the build tools of a stack build its generated project in `out/`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Toolchain {
+    /// The command, such as `cargo`.
+    pub tool: &'static str,
+    pub args: Vec<String>,
+    /// Environment the tool needs for plain line output.
+    pub env: Vec<(&'static str, &'static str)>,
+    /// The program the build makes, relative to `out/`.
+    pub program: std::path::PathBuf,
+    /// What to say when the tool cannot be started.
+    pub missing: &'static str,
+}
+
+/// The build of the project `settings` describes, as a debug or (with
+/// `release`) a release program; `None` for a stack Clarity cannot generate yet.
+pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
+    let exe = |path: String| std::path::PathBuf::from(if cfg!(windows) { format!("{path}.exe") } else { path });
+    match settings.stack.backend {
+        Backend::Rust => {
+            let mut args = vec!["build".to_string(), "--color".to_string(), "never".to_string()];
+            if release {
+                args.push("--release".to_string());
+            }
+            let profile = if release { "release" } else { "debug" };
+            Some(Toolchain {
+                tool: "cargo",
+                args,
+                // No progress bars, which only make sense in a terminal.
+                env: vec![("CARGO_TERM_PROGRESS_WHEN", "never")],
+                program: exe(format!("target/{profile}/{}", rust::crate_name(settings))),
+                missing: "is Rust installed?",
+            })
+        }
+        Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => {
+            let configuration = if release { "Release" } else { "Debug" };
+            Some(Toolchain {
+                tool: "dotnet",
+                // `-tl:off`: plain lines, not the terminal logger.
+                args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
+                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
+                program: exe(format!("bin/{configuration}/{}/{}", csharp::TARGET_FRAMEWORK, csharp::project_name(settings))),
+                missing: "is the .NET SDK installed?",
+            })
+        }
+        _ => None,
+    }
 }
 
 /// What the build tools of `backend` put in `out/`, which `write_out`

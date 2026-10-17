@@ -222,8 +222,14 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Assign { target, value } => {
                 if let Some((part, property)) = self.part_property(target) {
-                    let value = if matches!(property, "Caption" | "Error") { self.shown_string(value) } else { self.value(value) };
-                    out.push_str(&format!("{pad}{part}.{property} = {value};\n"));
+                    // A caption or error is kept as written with its slots, and shown in the language and format of the person.
+                    if matches!(property, "Caption" | "Error") {
+                        let value = self.shown(value);
+                        out.push_str(&format!("{pad}{part}.{property}Text = {value};\n"));
+                    } else {
+                        let value = self.value(value);
+                        out.push_str(&format!("{pad}{part}.{property} = {value};\n"));
+                    }
                     return;
                 }
                 let place = self.place(target);
@@ -324,14 +330,6 @@ impl<'a> Emitter<'a> {
                 let value = self.value(expr);
                 format!("Text.Plain({})", self.show(value, &self.types.type_of(expr)))
             }
-        }
-    }
-
-    /// Shown text as a string, for a part's caption or error.
-    fn shown_string(&mut self, expr: &Expr) -> String {
-        match &expr.kind {
-            ExprKind::Str { value } => string(value),
-            _ => format!("{}.Show()", self.shown(expr)),
         }
     }
 

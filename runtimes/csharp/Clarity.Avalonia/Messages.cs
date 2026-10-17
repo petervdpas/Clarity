@@ -20,8 +20,8 @@ public enum Level
 
 public sealed record Message(Level Level, Text Text)
 {
-    /// <summary>The text with its slots filled.</summary>
-    public string Shown => Text.Show();
+    /// <summary>The text translated, its slots filled in the person's format.</summary>
+    public string Shown => Locale.Show(Text);
 }
 
 /// <summary>The messages of a window, as buttons that dismiss them.</summary>
@@ -73,7 +73,8 @@ public sealed class MessageList : StackPanel
 
     public void Dismiss(Message message) => Messages?.Remove(message);
 
-    void Rebuild()
+    /// <summary>Shows the messages again, as in another language.</summary>
+    public void Rebuild()
     {
         Children.Clear();
         foreach (var message in Messages ?? [])
@@ -81,7 +82,7 @@ public sealed class MessageList : StackPanel
             var button = new Button { Content = message.Shown, HorizontalAlignment = HorizontalAlignment.Stretch };
             button.Classes.Add("message");
             button.Classes.Add(message.Level.ToString().ToLowerInvariant());
-            ToolTip.SetTip(button, "Dismiss");
+            ToolTip.SetTip(button, Locale.Translate("Dismiss"));
             button.Click += (_, _) => Dismiss(message);
             Children.Add(button);
         }

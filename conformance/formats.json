@@ -606,6 +606,46 @@
       "shows": "2026-10-17 09:30"
     },
     {
+      "what": "date early in the year",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-01-05",
+      "shows": "01/05/2026"
+    },
+    {
+      "what": "datetime early in the day",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "dateTime"
+      },
+      "value": "2026-01-05T09:05:00",
+      "shows": "01/05/2026 9:05 AM"
+    },
+    {
+      "what": "date early in the year",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "date"
+      },
+      "value": "2026-01-05",
+      "shows": "05-01-2026"
+    },
+    {
+      "what": "negative money",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "money"
+      },
+      "value": "-1250.5",
+      "shows": "€\u00a0-1.250,50"
+    },
+    {
       "what": "integer",
       "locale": "ja-JP",
       "currency": "JPY",

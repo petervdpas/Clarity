@@ -72,6 +72,15 @@ public sealed record Text(string Template)
         return this;
     }
 
+    /// <summary>The same values in another text, such as its translation.</summary>
+    public Text WithTemplate(string template)
+    {
+        var other = new Text(template);
+        foreach (var (path, value) in Values)
+            other.Values[path] = value;
+        return other;
+    }
+
     /// <summary>
     /// The text with its slots filled plainly, without a person's format: for
     /// logs, and for code that reads a caption back.

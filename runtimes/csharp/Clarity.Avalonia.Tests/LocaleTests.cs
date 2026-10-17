@@ -1,0 +1,220 @@
+// Languages, formats and themes while the application runs: the language
+// picked or chosen, texts translated and filled, views rebuilt when the
+// language changes, the pickers of the `language` and `theme` click targets,
+// and choices kept for the next start.
+
+using System.Globalization;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Clarity.Avalonia;
+using Clarity.Runtime;
+using Xunit;
+
+namespace Clarity.Avalonia.Tests;
+
+/// A window whose title is a text of the project.
+sealed class TitledViewModel(Db db) : WindowViewModel(db)
+{
+    public override string Title => Locale.Translate("Customers");
+}
+
+public sealed class LocaleTests : IDisposable
+{
+    static readonly Dictionary<string, string> Dutch = new()
+    {
+        ["Customers"] = "Klanten",
+        ["Save"] = "Opslaan",
+        ["Saved {customer.name} on {when}"] = "{customer.name} opgeslagen op {when}",
+        ["Yes"] = "Ja",
+        ["Business"] = "Zakelijk",
+        ["Name is required"] = "Naam is verplicht",
+        ["The full name"] = "De volledige naam",
+    };
+
+    readonly string folder = Directory.CreateTempSubdirectory("clarity-locale-").FullName;
+
+    public LocaleTests()
+    {
+        Remembered.Folder = folder;
+        Start(new CultureInfo("en-US"));
+    }
+
+    public void Dispose()
+    {
+        Locale.Reset();
+        Themes.Reset();
+        Remembered.Folder = null;
+        Directory.Delete(folder, recursive: true);
+    }
+
+    static void Start(CultureInfo system) => Locale.Start(
+        baseLanguage: "en",
+        available: ["nl"],
+        currency: "EUR",
+        lookup: (text, language) => language.Name == "nl" && Dutch.TryGetValue(text, out var t) ? t : null,
+        label: (enumName, value) => enumName == "Kind" && value == "Business" ? Locale.Translate("Business") : value,
+        system: system);
+
+    [AvaloniaFact]
+    public void TheSystemLocalePicksTheLanguageAndFormats()
+    {
+        Assert.Equal("Customers", Locale.Translate("Customers"));
+        Assert.Equal("en", Locale.Current);
+        Start(new CultureInfo("nl-BE"));
+        Assert.Equal("Klanten", Locale.Translate("Customers"));
+        Assert.Equal("nl", Locale.Current);
+        Assert.Equal("nl-BE", Locale.Formats.Culture.Name);
+        Assert.Equal("Unknown", Locale.Translate("Unknown"));
+    }
+
+    [AvaloniaFact]
+    public void TextIsTranslatedThenFilledInThePersonsFormat()
+    {
+        Start(new CultureInfo("nl-NL"));
+        var saved = new Text("Saved {customer.name} on {when}")
+            .With("customer.name", Slot.OfText("Ada"))
+            .With("when", Slot.OfDate(new DateOnly(2026, 10, 17), "long"));
+        Assert.Equal("Ada opgeslagen op 17 oktober 2026", Locale.Show(saved));
+        Assert.Equal("Zakelijk, Ja", Locale.Show(new Text("{k}, {b}").With("k", new Slot(SlotKind.Enum, "Business", EnumName: "Kind")).With("b", Slot.OfBoolean(true))));
+        Assert.Equal("Ada opgeslagen op 17 oktober 2026", new Message(Level.Info, saved).Shown);
+    }
+
+    [AvaloniaFact]
+    public void AChosenLanguageShowsItsTextsAndFormatsAndIsKept()
+    {
+        var changed = 0;
+        Locale.Changed += Count;
+        void Count() => changed++;
+        try
+        {
+            Locale.Choose("nl");
+        }
+        finally
+        {
+            Locale.Changed -= Count;
+        }
+        Assert.Equal(1, changed);
+        Assert.Equal("Klanten", Locale.Translate("Customers"));
+        Assert.Equal("nl", Locale.Formats.Culture.Name);
+        Assert.Equal("nl", CultureInfo.CurrentUICulture.Name);
+        // The next start keeps the choice, whatever the system says.
+        Start(new CultureInfo("en-US"));
+        Assert.Equal("Klanten", Locale.Translate("Customers"));
+        // Choosing the base language shows the texts as written, in the system's formats.
+        Locale.Choose("en");
+        Assert.Equal("Customers", Locale.Translate("Customers"));
+        Assert.Equal("en-US", Locale.Formats.Culture.Name);
+        Start(new CultureInfo("nl-NL"));
+        Assert.Equal("Customers", Locale.Translate("Customers"));
+    }
+
+    [AvaloniaFact]
+    public void PartsShowTheirTextsTranslated()
+    {
+        var save = new PartState("save", caption: "Save", help: "The full name");
+        Locale.Choose("nl");
+        Assert.Equal("Opslaan", save.Caption);
+        Assert.Equal("De volledige naam", save.Shown);
+        save.ErrorText = Text.Plain("Name is required");
+        Assert.True(save.HasError);
+        Assert.Equal("Naam is verplicht", save.Error);
+        Assert.Equal("Naam is verplicht", save.Shown);
+        save.CaptionText = new Text("Save {n}").With("n", Slot.OfInteger(1234, null));
+        Assert.Equal("Save 1.234", save.Caption);
+        save.ErrorText = Text.Plain("");
+        Assert.False(save.HasError);
+    }
+
+    [AvaloniaFact]
+    public void ALanguageChangeRebuildsTheViewsOfEveryWindow()
+    {
+        using var db = Db.Memory();
+        var built = 0;
+        var shell = Shell.Start(new TitledViewModel(db), vm =>
+        {
+            built++;
+            return new ContentControl { DataContext = vm };
+        });
+        Assert.Equal(1, built);
+        Assert.Equal("Customers", shell.Title);
+        Locale.Choose("nl");
+        Assert.Equal(2, built);
+        Assert.Equal("Klanten", shell.Title);
+        shell.Close();
+        // A closed shell no longer listens.
+        Locale.Choose("en");
+        Assert.Equal(2, built);
+    }
+
+    [AvaloniaFact]
+    public void TheLanguagePickerOffersEachLanguageByItsOwnName()
+    {
+        var button = new Button();
+        Pickers.Language(button);
+        var items = ((MenuFlyout)button.Flyout!).Items.Cast<MenuItem>().ToList();
+        Assert.Equal(["English", "Nederlands"], items.Select(i => (string)i.Header!));
+        Assert.True(items[0].IsChecked);
+        Assert.False(items[1].IsChecked);
+
+        var menu = new MenuItem();
+        Pickers.Language(menu);
+        var nl = menu.Items.Cast<MenuItem>().Last();
+        nl.Command!.Execute(null);
+        Assert.Equal("nl", Locale.Current);
+        Assert.True(Remembered.Get("language") == "nl");
+    }
+
+    static ResourceDictionary Accent(string color) => new() { ["ClarityAccent"] = new SolidColorBrush(Color.Parse(color)) };
+
+    [AvaloniaFact]
+    public void AThemeChoiceSwapsItsResourcesAndIsKept()
+    {
+        Themes.Start([
+            new Theme("Shop", "Shop", ThemeVariant.Default, () => Accent("#2f6fdf")),
+            new Theme("Night", "Night", ThemeVariant.Dark, () => Accent("#5b8cff")),
+        ]);
+        var app = Application.Current!;
+        Assert.Equal("Shop", Themes.Current);
+        Assert.Equal(Color.Parse("#2f6fdf"), ((SolidColorBrush)app.FindResource("ClarityAccent")!).Color);
+
+        var button = new Button();
+        Pickers.Theme(button);
+        var items = ((MenuFlyout)button.Flyout!).Items.Cast<MenuItem>().ToList();
+        Assert.Equal(["Shop", "Night"], items.Select(i => (string)i.Header!));
+        items[1].Command!.Execute(null);
+        Assert.Equal("Night", Themes.Current);
+        Assert.Equal(ThemeVariant.Dark, app.RequestedThemeVariant);
+        Assert.Equal(Color.Parse("#5b8cff"), ((SolidColorBrush)app.FindResource("ClarityAccent")!).Color);
+        Assert.Equal("Night", Remembered.Get("theme"));
+
+        // The next start keeps it; a theme the application no longer offers falls back to the first.
+        Themes.Start([new Theme("Shop", "Shop", ThemeVariant.Default, () => Accent("#2f6fdf")), new Theme("Night", "Night", ThemeVariant.Dark, () => Accent("#5b8cff"))]);
+        Assert.Equal("Night", Themes.Current);
+        Themes.Start([new Theme("Shop", "Shop", ThemeVariant.Light, () => Accent("#2f6fdf"))]);
+        Assert.Equal("Shop", Themes.Current);
+        Assert.Equal(ThemeVariant.Light, app.RequestedThemeVariant);
+    }
+
+    [AvaloniaFact]
+    public void ValuesShowAndReadInThePersonsFormat()
+    {
+        Locale.Choose("nl");
+        var money = new FormatConverter(new FieldFormat(FormatKind.Money));
+        Assert.Equal("€ 1.250,50", money.Convert(1250.5m, typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal("", money.Convert(null, typeof(string), null, CultureInfo.InvariantCulture));
+
+        var edit = new EditConverter(new FieldFormat(FormatKind.Money));
+        Assert.Equal("1.250,50", edit.Convert(1250.5m, typeof(string), null, CultureInfo.InvariantCulture));
+        Assert.Equal(1250.5m, edit.ConvertBack("1.250,50", typeof(decimal), null, CultureInfo.InvariantCulture));
+        Assert.Null(edit.ConvertBack("", typeof(decimal?), null, CultureInfo.InvariantCulture));
+        var wrong = Assert.IsType<BindingNotification>(edit.ConvertBack("abc", typeof(decimal), null, CultureInfo.InvariantCulture));
+        Assert.Equal(BindingErrorType.DataValidationError, wrong.ErrorType);
+
+        var count = new EditConverter(new FieldFormat(FormatKind.Integer));
+        Assert.Equal(1234L, count.ConvertBack("1.234", typeof(long), null, CultureInfo.InvariantCulture));
+    }
+}

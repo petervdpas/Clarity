@@ -1,5 +1,5 @@
 //! Run and Build: the open project is generated into its `out/` folder and
-//! compiled with the stack's own toolchain (cargo for Rust). Run starts the
+//! compiled with the stack's own toolchain (cargo for Rust, dotnet for C#). Run starts the
 //! application; Build makes a release program. The toolchain's output is
 //! sent to the frontend line by line.
 
@@ -36,8 +36,9 @@ pub struct BuildDone {
 }
 
 /// Generates the project of the project file `file` into its output folder.
-/// Returns the output folder and the name of the program cargo will build.
-pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
+/// Returns the output folder and how its stack builds it, as a debug or
+/// (with `release`) a release program.
+pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen::Toolchain), String> {
     let dir = clarity_project::module_dir(file);
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let loaded = clarity_project::load(file);
@@ -49,15 +50,16 @@ pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
     };
     let built = clarity_project::build_settings(&dir, &settings);
     let files = clarity_gen::generate(&project, &built).map_err(|errors| errors.join("; "))?;
+    let toolchain = clarity_gen::toolchain(&settings, release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
     let out = clarity_project::out_dir(file, &settings);
     clarity_gen::write_out(&out, &files, clarity_gen::build_output(settings.stack.backend)).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
-    Ok((out, clarity_gen::binary_name(&settings)))
+    Ok((out, toolchain))
 }
 
-fn program(out: &Path, name: &str, release: bool) -> PathBuf {
-    let profile = if release { "release" } else { "debug" };
-    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
-    out.join("target").join(profile).join(file)
+fn send_lines(app: &AppHandle, from: impl std::io::Read) {
+    for line in BufReader::new(from).lines().map_while(Result::ok) {
+        let _ = app.emit(BUILD_LINE, line);
+    }
 }
 
 /// Generates, builds and (with `run`) starts the open project. Returns at
@@ -67,7 +69,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
-    let (out, name) = match generate_out(&file) {
+    let (out, toolchain) = match generate_out(&file, release) {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -75,45 +77,48 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
         }
     };
     std::thread::spawn(move || {
-        let done = build(&app, &out, &name, release, run);
+        let done = build(&app, &out, &toolchain, run);
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
         let _ = app.emit(BUILD_DONE, done);
     });
     Ok(())
 }
 
-fn build(app: &AppHandle, out: &Path, name: &str, release: bool, run: bool) -> BuildDone {
+fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool) -> BuildDone {
     let failed = |message: String| BuildDone {
         ok: false,
         message,
         binary: None,
     };
-    let mut command = Command::new("cargo");
-    // Plain lines: no colors and no progress bars, which only make sense in a terminal.
+    let mut command = Command::new(toolchain.tool);
     command
-        .args(["build", "--color", "never"])
-        .env("CARGO_TERM_PROGRESS_WHEN", "never")
+        .args(&toolchain.args)
+        .envs(toolchain.env.iter().copied())
         .current_dir(out)
-        .stdout(Stdio::null())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if release {
-        command.arg("--release");
-    }
     let mut child = match command.spawn() {
         Ok(child) => child,
-        Err(err) => return failed(format!("cannot start cargo: {err}; is Rust installed?")),
+        Err(err) => return failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing)),
     };
+    // cargo reports on stderr, dotnet on stdout: both go to the output.
+    let stdout = child.stdout.take().map(|stdout| {
+        let app = app.clone();
+        std::thread::spawn(move || send_lines(&app, stdout))
+    });
     if let Some(stderr) = child.stderr.take() {
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            let _ = app.emit(BUILD_LINE, line);
-        }
+        send_lines(app, stderr);
+    }
+    if let Some(reader) = stdout {
+        let _ = reader.join();
     }
     match child.wait() {
         Ok(status) if status.success() => {}
         Ok(_) => return failed("the build failed; see the output".to_string()),
-        Err(err) => return failed(format!("cargo stopped: {err}")),
+        Err(err) => return failed(format!("{} stopped: {err}", toolchain.tool)),
     }
-    let binary = program(out, name, release);
+    let binary = out.join(&toolchain.program);
     if run {
         stop(app);
         match Command::new(&binary).current_dir(out).spawn() {
@@ -146,15 +151,16 @@ pub fn stop(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn generates_the_example_into_out() {
+    /// A copy of the example, its stack line replaced by `stack`.
+    fn example(name: &str, stack: &str) -> PathBuf {
         let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
-        let dir = std::env::temp_dir().join(format!("clarity-run-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clarity-run-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("shop")).unwrap();
-        std::fs::copy(examples.join("shop.clarity"), dir.join("shop.clarity")).unwrap();
+        let text = std::fs::read_to_string(examples.join("shop.clarity")).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("shop.clarity"), text.replace("stack rust web desktop", stack)).unwrap();
         // The modules and the migration steps.
-        for folder in ["shop", "shop/migrations/main"] {
+        for folder in ["shop", "shop/migrations/main", "shop/translations"] {
             std::fs::create_dir_all(dir.join(folder)).unwrap();
             for entry in std::fs::read_dir(examples.join(folder)).unwrap() {
                 let path = entry.unwrap().path();
@@ -163,12 +169,29 @@ mod tests {
                 }
             }
         }
-        let (out, name) = generate_out(&dir.join("shop.clarity")).unwrap();
-        assert_eq!(name, "shop");
+        dir
+    }
+
+    #[test]
+    fn generates_the_example_into_out() {
+        let dir = example("rust", "stack rust web desktop");
+        let (out, toolchain) = generate_out(&dir.join("shop.clarity"), true).unwrap();
         assert_eq!(out, dir.join("shop/out"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());
-        assert_eq!(program(&out, &name, true), out.join("target/release/shop"));
+        assert_eq!(toolchain.tool, "cargo");
+        assert_eq!(out.join(&toolchain.program), out.join(if cfg!(windows) { "target/release/shop.exe" } else { "target/release/shop" }));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_csharp_project_is_generated_for_dotnet() {
+        let dir = example("csharp", "stack csharp avalonia desktop");
+        let (out, toolchain) = generate_out(&dir.join("shop.clarity"), false).unwrap();
+        assert!(out.join("Shop.csproj").exists());
+        assert!(!out.join("Cargo.toml").exists());
+        assert_eq!(toolchain.tool, "dotnet");
+        assert!(toolchain.program.starts_with("bin/Debug"), "{}", toolchain.program.display());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

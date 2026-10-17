@@ -9,6 +9,9 @@ import type { JsonValue } from "./generated/serde_json/JsonValue";
 import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
 import { languageChoice } from "./i18n.svelte";
 import { pickLanguage, translate, translateText } from "./translate";
+import { isDark } from "./theme";
+import type { ThemeDecl } from "./generated/ThemeDecl";
+import { scheme } from "./scheme.svelte";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -130,4 +133,22 @@ export function shownText(preview: Preview, text: ShownText): string {
 export function errorText(err: unknown): ShownText {
   if (typeof err === "object" && err !== null && "text" in err && "values" in err) return err as ShownText;
   return String(err);
+}
+
+/** The theme the project file names, as declared; null when it names none. */
+export function themeOf(preview: Preview): ThemeDecl | null {
+  const name = preview.project.theme;
+  return (name && preview.project.files.flatMap((f) => f.themes).find((t) => t.name.name === name)) || null;
+}
+
+/** What puts a theme on an area (a running window, the designer's canvas):
+ *  the theme's class, whose CSS the generator writes, and light or dark. */
+export function themeArea(theme: ThemeDecl | null): { scheme: string | undefined; class: string | undefined } {
+  if (!theme) return { scheme: undefined, class: undefined };
+  return { scheme: isDark(theme.mode, scheme.dark) ? "dark" : "light", class: theme.class };
+}
+
+/** The style names of the project's theme, for the designer. */
+export function themeStyles(preview: Preview): string[] {
+  return themeOf(preview)?.styles.map((s) => s.name.name) ?? [];
 }

@@ -4,7 +4,8 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, themeOf, tr } from "./model";
+  import { styleClass } from "./theme";
   import { editText, parseNumber } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
@@ -47,6 +48,9 @@
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
   const readonly = $derived(partState?.readonly ?? p.readonly);
   const error = $derived(partState?.error ? shownText(preview, partState.error) || null : null);
+  // The class of the part's style in the project's theme: on a button the button
+  // itself, on other parts their content.
+  const partClass = $derived(styleClass(themeOf(preview), p.style));
 
   // Labels and help texts belong to the input named in `for`.
   const target = $derived(findPart(page, p.for));
@@ -197,7 +201,7 @@
   onpointerdown={pressMove}
   role="presentation"
 >
-  <div class="content" class:inert={design && !info.container}>
+  <div class="content {p.kind === 'button' ? '' : (partClass ?? '')}" class:inert={design && !info.container}>
     {#if p.kind === "label"}
       <label class="label-text" for={p.for ? partId(p.for) : undefined}
         >{caption ?? ""}{#if targetField?.modifiers.required}<span class="required" title="Required">*</span>{/if}</label
@@ -351,7 +355,7 @@
         {/if}
       </select>
     {:else if p.kind === "button"}
-      <button {id} class="push" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+      <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
         >{caption ?? ""}</button
       >
     {:else if p.kind === "panel" || p.kind === "form"}

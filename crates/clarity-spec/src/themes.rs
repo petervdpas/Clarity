@@ -26,6 +26,7 @@ const STYLE_PARTS: [&str; 3] = ["background", "text", "border"];
 
 pub(crate) fn parse_theme(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> ThemeDecl {
     let mut theme = ThemeDecl {
+        class: class_name("theme", &name.name),
         name,
         mode: None,
         colors: Vec::new(),
@@ -93,6 +94,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
         "style" => {
             let name = cursor.expect_ident("a style name")?;
             let mut style = ThemeStyle {
+                class: class_name("style", &name.name),
                 name,
                 background: None,
                 text: None,
@@ -252,4 +254,88 @@ pub fn use_theme(project: &mut Project, theme: Option<&str>) {
         }
     }
     project.diagnostics.extend(found);
+}
+
+/// A style's colors as resolved: `#rrggbb`, `none` for a border, or
+/// `@role` for a role the theme leaves to the renderer.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ResolvedStyle {
+    pub background: Option<String>,
+    pub text: Option<String>,
+    pub border: Option<String>,
+}
+
+/// A theme for light or dark mode: what every stack shows, whatever its
+/// means (conformance/themes.json).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Resolved {
+    pub dark: bool,
+    pub colors: std::collections::BTreeMap<String, String>,
+    pub font: Option<String>,
+    pub size: Option<u32>,
+    pub radius: Option<u32>,
+    pub styles: std::collections::BTreeMap<String, ResolvedStyle>,
+}
+
+/// `#abc` as `#aabbcc`, lowercase.
+pub fn full_hex(color: &str) -> String {
+    let digits = color.trim_start_matches('#').to_ascii_lowercase();
+    if digits.len() == 3 {
+        format!("#{}", digits.chars().flat_map(|d| [d, d]).collect::<String>())
+    } else {
+        format!("#{digits}")
+    }
+}
+
+/// Whether `theme` shows dark when the system is `system_dark`: a theme
+/// with mode light or dark keeps to it.
+pub fn is_dark(theme: &ThemeDecl, system_dark: bool) -> bool {
+    match theme.mode {
+        Some(ThemeMode::Dark) => true,
+        Some(ThemeMode::Light) => false,
+        Some(ThemeMode::System) | None => system_dark,
+    }
+}
+
+/// `theme` for light or dark mode, when the system is `system_dark`.
+pub fn resolve(theme: &ThemeDecl, system_dark: bool) -> Resolved {
+    let dark = is_dark(theme, system_dark);
+    let colors: std::collections::BTreeMap<String, String> = theme
+        .colors
+        .iter()
+        .map(|c| (c.name.name.clone(), full_hex(c.dark.as_deref().filter(|_| dark).unwrap_or(&c.light))))
+        .collect();
+    let value = |written: &Option<String>| -> Option<String> {
+        let written = written.as_deref()?;
+        Some(match written {
+            "none" => "none".to_string(),
+            hex if hex.starts_with('#') => full_hex(hex),
+            name => colors.get(name).cloned().unwrap_or_else(|| format!("@{name}")),
+        })
+    };
+    let styles = theme
+        .styles
+        .iter()
+        .map(|s| {
+            let style = ResolvedStyle {
+                background: value(&s.background),
+                text: value(&s.text),
+                border: value(&s.border),
+            };
+            (s.name.name.clone(), style)
+        })
+        .collect();
+    Resolved {
+        dark,
+        colors,
+        font: theme.font.clone(),
+        size: theme.size,
+        radius: theme.radius,
+        styles,
+    }
+}
+
+/// A class name for a theme or style: `theme-night-owl`, `style-primary`.
+fn class_name(kind: &str, name: &str) -> String {
+    format!("{kind}-{}", crate::model::snake_case(name).replace('_', "-"))
 }

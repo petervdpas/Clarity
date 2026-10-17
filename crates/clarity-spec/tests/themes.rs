@@ -81,3 +81,62 @@ fn a_part_picks_a_style_of_the_projects_theme() {
     ]);
     assert_eq!(errors(&project(WINDOW, Some("Plain"))), ["the project file names theme Plain, which no module declares"]);
 }
+
+/// A theme as the conformance cases write it, as the parser would give it.
+fn theme_of(input: &serde_json::Value) -> clarity_spec::model::ThemeDecl {
+    use clarity_spec::model::{Ident, ThemeColor, ThemeDecl, ThemeStyle};
+    let ident = |v: &serde_json::Value| Ident { name: v.as_str().unwrap().to_string(), span: Default::default() };
+    let text = |v: &serde_json::Value| v.as_str().map(str::to_string);
+    ThemeDecl {
+        name: Ident { name: "Case".into(), span: Default::default() },
+        class: "theme-case".into(),
+        mode: match input["mode"].as_str() {
+            Some("light") => Some(ThemeMode::Light),
+            Some("dark") => Some(ThemeMode::Dark),
+            Some("system") => Some(ThemeMode::System),
+            _ => None,
+        },
+        colors: input["colors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| ThemeColor { name: ident(&c["name"]), light: text(&c["light"]).unwrap(), dark: text(&c["dark"]), span: Default::default() })
+            .collect(),
+        font: text(&input["font"]),
+        size: input["size"].as_u64().map(|n| n as u32),
+        radius: input["radius"].as_u64().map(|n| n as u32),
+        styles: input["styles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| ThemeStyle {
+                class: format!("style-{}", s["name"].as_str().unwrap()),
+                name: ident(&s["name"]),
+                background: text(&s["background"]),
+                text: text(&s["text"]),
+                border: text(&s["border"]),
+                span: Default::default(),
+            })
+            .collect(),
+        span: Default::default(),
+    }
+}
+
+#[test]
+fn a_theme_resolves_as_the_conformance_cases_say() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../../../conformance/themes.json")).unwrap();
+    for case in cases["resolves"].as_array().unwrap() {
+        let resolved = themes::resolve(&theme_of(&case["theme"]), case["dark"].as_bool().unwrap());
+        assert_eq!(serde_json::to_value(&resolved).unwrap(), case["gives"], "{}", case["what"]);
+    }
+}
+
+#[test]
+fn a_theme_and_its_styles_carry_their_class_names() {
+    let project = project(&format!("{THEME}\ntheme NightOwl\n    mode dark\n"), None);
+    let themes = &project.files[0].themes;
+    assert_eq!(themes[0].class, "theme-shop");
+    assert_eq!(themes[0].styles[0].class, "style-primary");
+    assert_eq!(themes[1].class, "theme-night-owl");
+}

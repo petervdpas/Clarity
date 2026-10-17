@@ -3,6 +3,9 @@
 import { mount } from "svelte";
 import Runtime from "./Runtime.svelte";
 import "../app.css";
+import { followSystemScheme } from "../lib/scheme.svelte";
+
+followSystemScheme();
 
 const target = document.getElementById("app");
 if (!target) throw new Error("missing #app element");

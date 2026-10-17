@@ -57,7 +57,7 @@ page CustomerForm: window
                 label "Notes" at 1,1 span 3 for notes
                 memo name notes at 4,1 span 9 rows 4 bind customer.notes
                 help at 4,5 span 9 for notes
-    button "Save" name save at 9,9 span 2 tooltip "Save and close (Ctrl+S)" key "Ctrl+S" default on click: save_clicked
+    button "Save" name save at 9,9 span 2 tooltip "Save and close (Ctrl+S)" style primary key "Ctrl+S" default on click: save_clicked
     button "Close" name close_form at 11,9 span 2 cancel on click: close_clicked
 
 code CustomerBrowse

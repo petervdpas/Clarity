@@ -9,7 +9,11 @@ import type { ThemeStyle } from "./ThemeStyle";
  * `theme Shop`: named values for how an application looks, which each
  * stack maps onto its own means (design section 1.5, T1).
  */
-export type ThemeDecl = { name: Ident, mode: ThemeMode | null, colors: Array<ThemeColor>, font: string | null, 
+export type ThemeDecl = { name: Ident, 
+/**
+ * The class an application holds to use the theme: `theme-night-owl`.
+ */
+class: string, mode: ThemeMode | null, colors: Array<ThemeColor>, font: string | null, 
 /**
  * The text size, in pixels.
  */

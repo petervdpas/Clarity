@@ -26,3 +26,10 @@ app Shop
         button "Card" icon "card" on click -> CustomerCard
     footer
         status "Ready"
+
+// How the shop looks. The project file names it with: theme Shop
+theme Shop
+    mode system
+    color accent "#1f6f5c" dark "#4fb393"
+    radius 4
+    style primary background accent, text "#ffffff", border accent

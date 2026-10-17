@@ -535,3 +535,16 @@ fn removes_a_whole_window() {
     assert!(!text.contains("page Card"), "{text}");
     assert!(text.contains("page Other: dialog"), "{text}");
 }
+
+#[test]
+fn a_part_keeps_the_style_it_is_given() {
+    let mut props = new_props(WidgetKind::Textbox, 3, 2);
+    props.caption = None;
+    props.style = Some("loud".into());
+    let (text, _) = edit(PAGE, Edit::UpdateWidget { item: at(PAGE, "textbox"), container: None, props });
+    assert!(text.contains("    textbox at 3,2 span 4 style loud"), "{text}");
+    let (file, diagnostics) = parse(&text, "p.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let textbox = file.pages[0].widgets.iter().find(|w| w.props.kind == WidgetKind::Textbox).unwrap();
+    assert_eq!(textbox.props.style.as_deref(), Some("loud"));
+}

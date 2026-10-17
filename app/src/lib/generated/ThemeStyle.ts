@@ -6,4 +6,8 @@ import type { Span } from "./Span";
  * `style primary background accent, text "#ffffff"`: a color is a color
  * of the theme by name, or written as `"#rrggbb"`; a border can be `none`.
  */
-export type ThemeStyle = { name: Ident, background: string | null, text: string | null, border: string | null, span: Span, };
+export type ThemeStyle = { name: Ident, 
+/**
+ * The class a part holds to take the style: `style-primary`.
+ */
+class: string, background: string | null, text: string | null, border: string | null, span: Span, };

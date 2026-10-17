@@ -10,7 +10,7 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState } from "../lib/live";
-  import { errorText, shownText, tr, type Row } from "../lib/model";
+  import { errorText, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
@@ -183,6 +183,8 @@
   let choosingLanguage = $state(false);
   const base = $derived(model?.project.locale.language ?? "en");
   const languages = $derived(model ? languagesOf(base, Object.keys(model.project.translations)) : []);
+  // The project's theme on the whole application.
+  const area = $derived(themeArea(model ? themeOf(model) : null));
 
   function remember(preview: Preview) {
     try {
@@ -218,7 +220,7 @@
   });
 </script>
 
-<div class="runtime" class:busy>
+<div class="runtime {area.class ?? ''}" class:busy data-scheme={area.scheme}>
   {#if model && page && current}
     {#key stack.length}
       <FrameView preview={model} {page} frame={frameForPage(model, page)} {data} design={false} onnavigate={navigate}>

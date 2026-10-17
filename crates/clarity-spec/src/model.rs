@@ -634,6 +634,8 @@ pub struct Locale {
 #[ts(export)]
 pub struct ThemeDecl {
     pub name: Ident,
+    /// The class an application holds to use the theme: `theme-night-owl`.
+    pub class: String,
     pub mode: Option<ThemeMode>,
     pub colors: Vec<ThemeColor>,
     pub font: Option<String>,
@@ -672,6 +674,8 @@ pub struct ThemeColor {
 #[ts(export)]
 pub struct ThemeStyle {
     pub name: Ident,
+    /// The class a part holds to take the style: `style-primary`.
+    pub class: String,
     pub background: Option<String>,
     pub text: Option<String>,
     pub border: Option<String>,

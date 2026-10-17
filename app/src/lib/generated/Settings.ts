@@ -26,6 +26,11 @@ language: string | null,
  */
 currency: string | null, 
 /**
+ * The theme the application uses, by name (`theme Shop`); without one,
+ * it looks as Clarity does.
+ */
+theme: string | null, 
+/**
  * Where the application is generated and built: a folder relative to
  * the project's folder, or an absolute one.
  */

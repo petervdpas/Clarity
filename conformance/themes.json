@@ -1,0 +1,138 @@
+{
+  "about": "How a theme resolves (DESIGN section 1.5, T1): its colors for light or dark mode, and the colors of each style. A color is \"#rrggbb\" as written, or \"@role\" for a role the theme does not set, which keeps the renderer's own color. clarity_spec::themes::resolve gives these, and each stack is written from it: the web renderer as a CSS file per theme (clarity_gen::theme_css), Avalonia as resources. dark says whether the theme shows dark for the system's choice, which the web renderer checks too.",
+  "resolves": [
+    {
+      "what": "light mode with a role set and a color of its own",
+      "dark": false,
+      "theme": {
+        "mode": "system",
+        "colors": [
+          {
+            "name": "accent",
+            "light": "#2f6fdf",
+            "dark": "#5b8cff"
+          },
+          {
+            "name": "brand",
+            "light": "#f5c400",
+            "dark": null
+          }
+        ],
+        "font": "Inter",
+        "size": 14,
+        "radius": 6,
+        "styles": [
+          {
+            "name": "primary",
+            "background": "accent",
+            "text": "#fff",
+            "border": null
+          },
+          {
+            "name": "loud",
+            "background": "brand",
+            "text": "text",
+            "border": "none"
+          }
+        ]
+      },
+      "gives": {
+        "dark": false,
+        "colors": {
+          "accent": "#2f6fdf",
+          "brand": "#f5c400"
+        },
+        "font": "Inter",
+        "size": 14,
+        "radius": 6,
+        "styles": {
+          "primary": {
+            "background": "#2f6fdf",
+            "text": "#ffffff",
+            "border": null
+          },
+          "loud": {
+            "background": "#f5c400",
+            "text": "@text",
+            "border": "none"
+          }
+        }
+      }
+    },
+    {
+      "what": "dark mode takes the dark values, and a color without one keeps its light value",
+      "dark": true,
+      "theme": {
+        "mode": "system",
+        "colors": [
+          {
+            "name": "accent",
+            "light": "#2f6fdf",
+            "dark": "#5b8cff"
+          },
+          {
+            "name": "brand",
+            "light": "#f5c400",
+            "dark": null
+          }
+        ],
+        "font": null,
+        "size": null,
+        "radius": null,
+        "styles": [
+          {
+            "name": "primary",
+            "background": "accent",
+            "text": null,
+            "border": "brand"
+          }
+        ]
+      },
+      "gives": {
+        "dark": true,
+        "colors": {
+          "accent": "#5b8cff",
+          "brand": "#f5c400"
+        },
+        "font": null,
+        "size": null,
+        "radius": null,
+        "styles": {
+          "primary": {
+            "background": "#5b8cff",
+            "text": null,
+            "border": "#f5c400"
+          }
+        }
+      }
+    },
+    {
+      "what": "a light theme stays light on a dark system",
+      "dark": true,
+      "theme": {
+        "mode": "light",
+        "colors": [
+          {
+            "name": "background",
+            "light": "#ffffff",
+            "dark": "#000000"
+          }
+        ],
+        "font": null,
+        "size": null,
+        "radius": null,
+        "styles": []
+      },
+      "gives": {
+        "dark": false,
+        "colors": {
+          "background": "#ffffff"
+        },
+        "font": null,
+        "size": null,
+        "radius": null,
+        "styles": {}
+      }
+    }
+  ]
+}

@@ -110,6 +110,19 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text("src/model.json", model_json(project)),
     ];
     files.extend(RUNTIME_FILES.iter().chain(&UI_FILES).map(|(path, body)| text(path, (*body).into())));
+    // A CSS file per theme, linked from the page so the application can
+    // hold the class of the theme it uses.
+    let themes: Vec<&clarity_spec::model::ThemeDecl> = project.files.iter().flat_map(|f| &f.themes).collect();
+    let links: String = themes
+        .iter()
+        .map(|t| format!("    <link rel=\"stylesheet\" href=\"./{}\">\n", crate::web::theme_file(t)))
+        .collect();
+    for theme in &themes {
+        files.push(text(&format!("ui/{}", crate::web::theme_file(theme)), crate::web::theme_css(theme)));
+    }
+    if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
+        index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
+    }
     files.push(OutFile {
         path: "icons/icon.png".into(),
         text: String::new(),

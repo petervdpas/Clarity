@@ -8,6 +8,7 @@
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
   import type { DataEvent } from "./generated/DataEvent";
+  import ThemeSample from "./ThemeSample.svelte";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
 
@@ -62,6 +63,21 @@
   }
 
   /** Writes the entity's code block with a first event and opens it. */
+  /** The theme open in the editor, by name. */
+  let openTheme = $state<string | null>(null);
+  const themeDecl = $derived(file.themes.find((t) => t.name.name === openTheme) ?? null);
+
+
+  /** Adds a theme with a free name and opens it. */
+  async function addTheme() {
+    const taken = new Set(preview.project.files.flatMap((f) => f.themes.map((t) => t.name.name)));
+    let name = "Theme";
+    for (let n = 2; taken.has(name); n++) name = "Theme" + n;
+    const text = `theme ${name}\n    mode system\n    color accent "#2f6fdf" dark "#6fa3f2"\n    radius 6\n    style primary background accent, text "#ffffff"\n`;
+    await onapply({ op: "appendDecl", text });
+    openTheme = name;
+  }
+
   async function addEvents(entity: string) {
     const text = `code ${entity}\n    before save\n        // Runs before a record is stored; refuse "text" stops the save.\n        return\n`;
     await onapply({ op: "appendDecl", text });
@@ -154,6 +170,37 @@
           onclose={() => (openFunction = null)}
         />
       </div>
+    {/if}
+  </section>
+
+  <section>
+    <h3>Themes</h3>
+    <p class="muted">
+      How the application looks: colors for light and dark mode, a font, a size, a corner radius, and named styles that parts pick with
+      <code>style</code>. The project file names the theme its application uses{preview.project.theme ? `: ${preview.project.theme}` : ""}.
+    </p>
+    <ul>
+      {#each file.themes as t (t.name.name)}
+        <li>
+          <button class:active={openTheme === t.name.name} onclick={() => (openTheme = t.name.name)}>
+            <span class="kind">theme</span>{t.name.name}{#if preview.project.theme === t.name.name}<span class="muted">in use</span>{/if}
+          </button>
+        </li>
+      {/each}
+    </ul>
+    <div class="buttons"><button onclick={addTheme}>New theme</button></div>
+    {#if themeDecl}
+      {@const item = themeDecl.span.start}
+      <div class="function-editor">
+        <SourceEditor
+          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+          save={(text) => onapply({ op: "replaceDecl", item, text })}
+          reloadKey={file.path + "\n" + item + "\n" + file.version}
+          onclose={() => (openTheme = null)}
+        />
+      </div>
+      <ThemeSample theme={themeDecl} />
     {/if}
   </section>
 

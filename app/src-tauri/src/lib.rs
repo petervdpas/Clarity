@@ -3,6 +3,7 @@
 
 mod build;
 mod external;
+mod themes;
 mod translations;
 mod migrations;
 
@@ -688,7 +689,8 @@ pub fn run() {
             external::take_ownership,
             translations::translation_table,
             translations::set_translation,
-            translations::add_language
+            translations::add_language,
+            themes::theme_styles
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

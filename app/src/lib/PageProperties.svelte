@@ -9,7 +9,7 @@
   import type { Surface } from "./generated/Surface";
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
-  import { describeType } from "./model";
+  import { describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
 
@@ -31,6 +31,8 @@
 
   const selected = $derived(pageDesigner.selected);
   const location = $derived(selected === null ? null : locateWidget(preview, page, selected));
+  /** The styles a part can take: those of the project's theme. */
+  const styles = $derived(themeStyles(preview));
   const inner = $derived(selected === null || location ? null : locateInnerPage(page, selected));
   const p = $derived(location?.widget.props ?? null);
   const frameElement = $derived(selected === null || location || inner ? null : findFrameElement(page.frame, selected));
@@ -264,6 +266,18 @@
     <label class="prop">
       <span>Tooltip</span>
       <input value={p.tooltip ?? ""} placeholder="shown when the pointer rests on it" onchange={(e) => update({ tooltip: textOf(e) })} />
+    </label>
+    <label class="prop">
+      <span>Style</span>
+      {#if styles.length > 0 || p.style}
+        <select value={p.style ?? ""} onchange={(e) => update({ style: e.currentTarget.value || null })}>
+          <option value="">none</option>
+          {#each styles as s (s)}<option value={s}>{s}</option>{/each}
+          {#if p.style && !styles.includes(p.style)}<option value={p.style}>{p.style} (not in the theme)</option>{/if}
+        </select>
+      {:else}
+        <span class="muted">Name a theme with styles in the project file to style parts.</span>
+      {/if}
     </label>
     {#if info.properties.includes("tabOrder")}
       <label class="prop">

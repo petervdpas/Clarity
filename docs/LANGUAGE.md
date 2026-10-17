@@ -73,6 +73,7 @@ project Shop
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
 | `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
+| `theme Name` | no | The theme the application uses, declared in a module (see [Themes](#themes)). Without it, the application looks as Clarity does, and parts cannot have a `style`. |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
@@ -416,6 +417,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts `button1`, `textbox2` and so on; templates name inputs after their field. |
 | `at col,row`, `span n`, `rows n` | Place and size on the grid; see [the grid](#the-grid). |
 | `tooltip "text"` | Shown when the pointer rests on the part. |
+| `style name` | A style of the project's theme: its background, text and border colors. See [Themes](#themes). |
 | `on event: handler` | Runs `handler` in the window's code behind when `event` happens. Each event is wired at most once per part. |
 
 ### The catalog
@@ -608,6 +610,33 @@ Menu items and toolbar and ribbon buttons are commands. Their properties:
 | `on click: handler` | all | Runs a handler. |
 
 An item with a submenu opens the submenu, so it has no `on click` of its own.
+
+### Themes
+
+A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as CSS variables, Avalonia as resources and styles. It is declared in a module and named in the project file with `theme Shop`.
+
+```
+theme Shop
+    mode system
+    color accent "#1f6f5c" dark "#4fb393"
+    color brand "#f5c400"
+    font "Inter"
+    size 14
+    radius 4
+    style primary background accent, text "#ffffff", border accent
+    style quiet border none
+```
+
+| Line | Meaning |
+|---|---|
+| `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
+| `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. |
+| `font "Name"`, `size n`, `radius n` | The font, the text size and the corner radius of inputs, buttons and panels, in pixels. |
+| `style name part color, ...` | A named style for parts. The parts are `background`, `text` and `border`; a color is one of the theme's colors by name or written out, and a border can be `none`. |
+
+- The colors `background`, `panel`, `text`, `muted`, `border`, `accent`, `error` and `warning` are the ones the application itself uses; a theme sets those it wants to change, and the others keep Clarity's own. Other names are colors of the theme, for its styles.
+- A part picks a style with `style primary`; a style the theme does not have is an error. On a button the style colors the button; on other parts, their area.
+- The generator writes each theme as a CSS file of its own, `ui/themes/shop.css`, linked from the application's page. The application holds the theme's class (`theme-shop`), and a part with a style holds its class (`style-primary`), as a web developer would write it. The designer uses the same CSS for its canvas, and the Module view shows a sample window for the theme being written.
 
 ## 8. Code behind
 
@@ -930,7 +959,7 @@ A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` 
 ```
 project-file  = "project" Name
                     setting*
-setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word
+setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word | "theme" Name
               | "datasource" name kind String ["external"] ["readonly"]
                     ["auth" kind String]
 
@@ -938,7 +967,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | page | app | code | function | action
+declaration   = enum | entity | page | app | theme | code | function | action
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -957,7 +986,7 @@ page-setting  = "title" String | "data" name ":" (Entity | "list" "<" Entity ">"
 part          = kind [String] property*
                     (part | "tab" String | "pane")*        // containers only
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
-              | "for" name | "placeholder" String | "tooltip" String | "readonly" | "taborder" n
+              | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
               | "columns" names | "show" names | "source" String | "surface" word | "renderer" Name
               | "on" event ":" handler | "on" "click" "->" Target
@@ -981,6 +1010,10 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
 
+theme         = "theme" Name
+                    ("mode" ("light" | "dark" | "system") | "color" name String ["dark" String]
+                    | "font" String | "size" n | "radius" n
+                    | "style" name ("background" | "text" | "border") (name | String) ("," ...)*)*
 translation   = "translation" language
                     (String String)*
 migration     = "migration" String ["baseline"]

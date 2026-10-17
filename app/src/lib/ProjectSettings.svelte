@@ -38,6 +38,8 @@
   const catalog = $derived(project.catalog);
   /** The SQL data sources Clarity owns: each has its own migration steps. */
   const databases = $derived(project.settings?.datasources.filter((s) => s.kind !== "rest" && !s.external) ?? []);
+  /** The themes the project's modules declare. */
+  const themes = $derived(preview.project.files.flatMap((f) => f.themes.map((t) => t.name.name)));
   const fileName = $derived(file.split(/[\\/]/).at(-1) ?? file);
 
   function sourceInfo(kind: SourceKind) {
@@ -178,7 +180,7 @@
       </section>
 
       <section>
-        <h2>Language and formats</h2>
+        <h2>Language, formats and theme</h2>
         <p class="intro">Dates, numbers and money show the way the person using the application writes them, on every stack.</p>
         <div class="form-grid">
           <label class="form-label" for="project-language">Language</label>
@@ -202,6 +204,12 @@
             onchange={(e) => save({ currency: e.currentTarget.value.trim().toUpperCase() || null })}
           />
           <p class="form-help">The currency of money fields, as its code: EUR, USD, GBP. Empty shows amounts without a currency sign.</p>
+          <label class="form-label" for="project-theme">Theme</label>
+          <select id="project-theme" value={settings.theme ?? ""} onchange={(e) => save({ theme: e.currentTarget.value || null })}>
+            <option value="">Clarity's own</option>
+            {#each themes as theme (theme)}<option value={theme}>{theme}</option>{/each}
+          </select>
+          <p class="form-help">How the application looks. Themes are declared in a module; the Module view writes and previews them.</p>
         </div>
       </section>
 

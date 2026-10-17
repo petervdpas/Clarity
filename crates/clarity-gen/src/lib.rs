@@ -5,8 +5,10 @@
 
 mod print;
 mod rust;
+mod web;
 
 pub use rust::migration_sql;
+pub use web::{theme_css, theme_file};
 
 use clarity_project::{Backend, Settings};
 use clarity_spec::Project;

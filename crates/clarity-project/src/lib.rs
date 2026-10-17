@@ -117,6 +117,10 @@ pub struct Settings {
     /// The currency of `money` fields, as its ISO 4217 code (`EUR`).
     #[serde(default)]
     pub currency: Option<String>,
+    /// The theme the application uses, by name (`theme Shop`); without one,
+    /// it looks as Clarity does.
+    #[serde(default)]
+    pub theme: Option<String>,
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
@@ -197,6 +201,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         }],
         language: None,
         currency: None,
+        theme: None,
         out: DEFAULT_OUT.to_string(),
     }
 }
@@ -513,7 +518,7 @@ pub fn sources_of(dir: &Path) -> Vec<clarity_spec::SourceRef> {
 pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
     let mut project = clarity_spec::load_dir_in(dir, &sources_of(dir))?;
     check_external(dir, &mut project);
-    set_locale(dir, &mut project);
+    hand_over(dir, &mut project);
     Ok(project)
 }
 
@@ -521,7 +526,7 @@ pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
 pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
     let mut project = clarity_spec::load_dir_with_in(dir, Some((path, text)), &sources_of(dir))?;
     check_external(dir, &mut project);
-    set_locale(dir, &mut project);
+    hand_over(dir, &mut project);
     Ok(project)
 }
 
@@ -533,16 +538,20 @@ pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
     std::path::absolute(&joined).unwrap_or(joined)
 }
 
-/// Hands the project file's language and currency to the project, for
-/// showing values.
-fn set_locale(dir: &Path, project: &mut clarity_spec::Project) {
+/// Hands the project file's language, currency and theme to the project,
+/// for showing values and for its look; a part's `style` is checked
+/// against that theme.
+fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
-    if let Some(settings) = load(&file).settings {
+    let settings = load(&file).settings;
+    let theme = settings.as_ref().and_then(|s| s.theme.clone());
+    if let Some(settings) = settings {
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
             currency: settings.currency,
         };
     }
+    clarity_spec::themes::use_theme(project, theme.as_deref());
 }
 
 /// Compares the entities of each external SQLite source with its tables.

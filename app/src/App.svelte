@@ -35,6 +35,8 @@
   import { pageDesigner } from "./lib/pageDesigner.svelte";
   import { findApp, frameForPage } from "./lib/frame";
   import { appAsPage, findPage, pageData } from "./lib/pages";
+  import { themeArea, themeOf } from "./lib/model";
+  import ThemeStyles from "./lib/ThemeStyles.svelte";
 
   const LAST_PROJECT_KEY = "clarity.lastProject";
 
@@ -481,6 +483,8 @@
 
 <svelte:window {onkeydown} />
 
+{#if preview}<ThemeStyles {preview} />{/if}
+
 {#snippet tree(full: boolean)}
   {#if preview}
     <ProjectTree
@@ -756,7 +760,7 @@
         {:else if tab === "design" && page && file}
           <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
         {:else if page}
-          <div class="window">
+          <div class="window {themeArea(themeOf(preview)).class ?? ''}" data-scheme={themeArea(themeOf(preview)).scheme}>
             <div class="titlebar">
               <span>{page.title ?? page.name.name}</span>
               <code>{page.name.name}: {page.kind}</code>

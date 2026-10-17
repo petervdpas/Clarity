@@ -21,7 +21,7 @@
   import type { SpecFile } from "./generated/SpecFile";
   import type { WidgetInfo } from "./generated/WidgetInfo";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
-  import { describeType } from "./model";
+  import { describeType, themeArea, themeOf } from "./model";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesigner.svelte";
   import { appAsPage, findPage, locateInnerPage, locateWidget, pageData, widgetForField, widgetInfo, withProps } from "./pages";
 
@@ -54,6 +54,8 @@
   // While the Design text is being typed, the designer shows the project as
   // that text would make it.
   const preview = $derived(pageDesigner.draft ?? savedPreview);
+  // The canvas shows the project's theme, as the application will.
+  const area = $derived(themeArea(themeOf(preview)));
   const page = $derived.by(() => {
     const draft = pageDesigner.draft;
     if (!draft) return savedPage;
@@ -287,7 +289,7 @@
 <div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.sizes.properties}px">
   <div class="stage">
 
-    <div class="window">
+    <div class="window {area.class ?? ''}" data-scheme={area.scheme}>
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}

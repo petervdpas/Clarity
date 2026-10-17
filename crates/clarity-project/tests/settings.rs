@@ -49,6 +49,7 @@ fn shop() -> Settings {
         ],
         language: Some("nl-NL".into()),
         currency: Some("EUR".into()),
+        theme: None,
         out: "out".into(),
     }
 }
@@ -80,7 +81,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency and datasource");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme and datasource");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -381,4 +382,29 @@ fn loading_hands_the_language_and_currency_to_the_project() {
     assert_eq!(project.locale.language.as_deref(), Some("nl-NL"));
     assert_eq!(project.locale.currency.as_deref(), Some("EUR"));
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn the_project_file_names_its_theme() {
+    let text = SHOP.replace("    currency EUR\n", "    currency EUR\n    theme Shop\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.theme.as_deref(), Some("Shop"));
+    let written = write(Some(&text), &settings).unwrap();
+    assert_eq!(written, text);
+    let mut fresh = starter("Shop", "shop");
+    fresh.theme = Some("Dark".into());
+    assert!(write(None, &fresh).unwrap().contains("    output \"out\"\n    theme Dark\n"), "{}", write(None, &fresh).unwrap());
+}
+
+#[test]
+fn loading_hands_the_theme_to_the_project() {
+    let root = std::env::temp_dir().join(format!("clarity-theme-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("shop")).unwrap();
+    std::fs::write(root.join("shop.clarity"), "project Shop\n    stack rust web desktop\n    theme Plain\n").unwrap();
+    std::fs::write(root.join("shop/shop.clarity"), "module shop\n\ntheme Plain\n    radius 2\n").unwrap();
+    let project = clarity_project::load_modules(&root.join("shop")).unwrap();
+    std::fs::remove_dir_all(&root).unwrap();
+    assert_eq!(project.theme.as_deref(), Some("Plain"));
+    assert!(project.diagnostics.iter().all(|d| !d.message.contains("theme")), "{:#?}", project.diagnostics);
 }

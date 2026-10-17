@@ -289,7 +289,7 @@
 <div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.sizes.properties}px">
   <div class="stage">
 
-    <div class="window {area.class ?? ''}" data-scheme={area.scheme}>
+    <div class="window {area.class}" data-scheme={area.scheme}>
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}

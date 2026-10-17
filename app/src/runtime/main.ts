@@ -2,7 +2,7 @@
 // as the designer's preview, bound to the generated backend.
 import { mount } from "svelte";
 import Runtime from "./Runtime.svelte";
-import "../app.css";
+import "../render.css";
 import { followSystemScheme } from "../lib/scheme.svelte";
 
 followSystemScheme();

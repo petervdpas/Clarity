@@ -1,6 +1,7 @@
 import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
+import "./render.css";
 import { followSystemScheme } from "./lib/scheme.svelte";
 
 followSystemScheme();

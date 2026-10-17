@@ -47,8 +47,9 @@
 
   .picker {
     background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow);
     padding: 8px;
     display: flex;
     flex-direction: column;

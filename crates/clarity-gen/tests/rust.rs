@@ -122,6 +122,7 @@ fn writes_a_complete_cargo_project() {
             "ui/index.html",
             "ui/runtime.css",
             "ui/runtime.js",
+            "ui/themes/clarity.css",
         ]
     );
     let cargo = file(&files, "Cargo.toml");

@@ -1,0 +1,61 @@
+// Clarity's own look: every value a theme can set. Every theme starts from
+// it; one that sets fewer values keeps these for the rest. "New theme" in
+// the Module view starts from a copy of it.
+module clarity
+
+theme Clarity
+    title "Clarity"
+    mode system
+
+    // The window and its panels.
+    color background "#eef0f3" dark "#15181e"
+    color panel "#ffffff" dark "#1d2129"
+    color raised "#f6f7f9" dark "#232832"
+    color frame "#ffffff" dark "#1d2129"
+    color frame_text "#1d2330" dark "#e6e9ef"
+
+    // Text and lines.
+    color text "#1d2330" dark "#e6e9ef"
+    color muted "#5d6677" dark "#9aa3b5"
+    color border "#d5d9e0" dark "#2f3542"
+    color strong_border "#b7bec9" dark "#434b5c"
+
+    // The accent, for what is chosen, active or important.
+    color accent "#1f5fbf" dark "#6fa3f2"
+    color accent_soft "#e3ecfa" dark "#233552"
+    color on_accent "#ffffff" dark "#0d1525"
+    color selection "#d6e4fb" dark "#2b4166"
+    color focus "#1f5fbf" dark "#6fa3f2"
+    color input "#ffffff" dark "#1d2129"
+
+    // What went wrong, what needs care, and what went well.
+    color error "#c4312b" dark "#f0736c"
+    color error_soft "#fbe9e8" dark "#3a1f1f"
+    color warning "#9a6700" dark "#e3b341"
+    color warning_soft "#fff4d6" dark "#3a3020"
+    color success "#1a7f37" dark "#3fb950"
+    color success_soft "#e6f4ea" dark "#1f3326"
+
+    font "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    font heading "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    font mono "ui-monospace, JetBrains Mono, Cascadia Code, Menlo, monospace"
+    size 14
+    size small 12
+    size heading 18
+    radius input 6
+    radius button 6
+    radius panel 6
+    padding 4
+    border 1
+    shadow raised
+
+    part button background raised, text text, border strong_border
+    part button hover border accent
+    part button pressed background accent_soft
+    part input background input, text text, border strong_border
+    part input focus border focus
+    part header background raised, text muted, weight bold
+    part tab background raised, text muted, border border
+    part tab hover text text
+    part menu background panel, text text, border border
+    part menu hover background accent_soft

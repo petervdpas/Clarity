@@ -760,7 +760,7 @@
         {:else if tab === "design" && page && file}
           <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
         {:else if page}
-          <div class="window {themeArea(themeOf(preview)).class ?? ''}" data-scheme={themeArea(themeOf(preview)).scheme}>
+          <div class="window {themeArea(themeOf(preview)).class}" data-scheme={themeArea(themeOf(preview)).scheme}>
             <div class="titlebar">
               <span>{page.title ?? page.name.name}</span>
               <code>{page.name.name}: {page.kind}</code>

@@ -375,8 +375,9 @@
     align-items: center;
     gap: 2px;
     padding: 2px 6px;
-    background: var(--panel-alt);
-    border-bottom: 1px solid var(--border);
+    background: var(--frame);
+    color: var(--frame-text);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .top {
@@ -387,14 +388,15 @@
   .entry button {
     border: none;
     background: transparent;
-    border-radius: var(--radius);
-    padding: 3px 10px;
-    font-size: 13px;
+    color: inherit;
+    border-radius: var(--radius-button);
+    padding: calc(var(--padding) - 1px) calc(var(--padding) * 2.5);
+    font-size: var(--font-size);
   }
 
   .menubar .top > button:hover,
   .menubar .top > button.open {
-    background: var(--accent-soft);
+    background: var(--menu-hover-bg, var(--accent-soft));
   }
 
   .dropdown,
@@ -402,10 +404,11 @@
     position: absolute;
     z-index: 20;
     min-width: 180px;
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+    background: var(--menu-bg);
+    color: var(--menu-text);
+    border: var(--border-width) solid var(--menu-border);
+    border-radius: var(--menu-radius, var(--radius-panel));
+    box-shadow: var(--shadow);
     padding: 4px;
   }
 
@@ -426,13 +429,14 @@
   }
 
   .entry > button:hover {
-    background: var(--accent-soft);
+    background: var(--menu-hover-bg, var(--accent-soft));
+    color: var(--menu-hover-text, inherit);
   }
 
   .entry kbd {
     margin-left: auto;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--font-size-small);
     color: var(--text-muted);
   }
 
@@ -452,7 +456,7 @@
   }
 
   .separator-line {
-    border-top: 1px solid var(--border-strong);
+    border-top: var(--border-width) solid var(--border-strong);
     margin: 4px 6px;
     padding-top: 2px;
   }
@@ -464,15 +468,17 @@
     align-items: center;
     gap: 4px;
     padding: 4px 6px;
-    border-bottom: 1px solid var(--border);
+    background: var(--frame);
+    color: var(--frame-text);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .tool {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 8px;
-    font-size: 12px;
+    padding: calc(var(--padding) - 1px) calc(var(--padding) * 2);
+    font-size: var(--font-size-small);
   }
 
   .tool.large {
@@ -505,7 +511,7 @@
   }
 
   .ribbon {
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
   }
 
   .ribbon-tabs {
@@ -513,15 +519,17 @@
     align-items: center;
     gap: 2px;
     padding: 2px 6px 0;
-    background: var(--panel-alt);
+    background: var(--frame);
+    color: var(--frame-text);
   }
 
   .ribbon-tabs button {
     border: none;
-    border-radius: var(--radius) var(--radius) 0 0;
+    border-radius: var(--radius-button) var(--radius-button) 0 0;
     background: transparent;
-    padding: 3px 12px;
-    font-size: 12px;
+    color: inherit;
+    padding: calc(var(--padding) - 1px) calc(var(--padding) * 3);
+    font-size: var(--font-size-small);
   }
 
   .ribbon-tabs button.active {
@@ -538,7 +546,7 @@
   .ribbon-group {
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border);
+    border-right: var(--border-width) solid var(--border);
     padding: 0 6px;
   }
 
@@ -551,7 +559,7 @@
 
   .ribbon-title {
     text-align: center;
-    font-size: 11px;
+    font-size: var(--font-size-small);
     color: var(--text-muted);
     margin-top: 4px;
   }
@@ -575,16 +583,17 @@
 
   .sidebar {
     flex: none;
-    padding: 8px;
-    background: var(--panel-alt);
+    padding: calc(var(--padding) * 2);
+    background: var(--frame);
+    color: var(--frame-text);
   }
 
   .sidebar.left {
-    border-right: 1px solid var(--border);
+    border-right: var(--border-width) solid var(--border);
   }
 
   .sidebar.right {
-    border-left: 1px solid var(--border);
+    border-left: var(--border-width) solid var(--border);
   }
 
   .footer {
@@ -592,9 +601,10 @@
     align-items: center;
     gap: 10px;
     padding: 2px 8px;
-    border-top: 1px solid var(--border);
-    background: var(--panel-alt);
-    font-size: 12px;
+    border-top: var(--border-width) solid var(--border);
+    background: var(--frame);
+    color: var(--frame-text);
+    font-size: var(--font-size-small);
   }
 
   .status {

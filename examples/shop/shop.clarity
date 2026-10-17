@@ -50,5 +50,17 @@ theme Day
     color background "#f4f6f9"
     color panel "#ffffff"
     color accent "#1f5fbf"
-    radius 6
-    style primary background accent, text "#ffffff", border accent
+    color accent_soft "#e4edfb"
+    font heading "Georgia, serif"
+    size heading 20
+    radius input 3
+    radius button 14
+    radius panel 10
+    padding 5
+    shadow flat
+    part button background panel, border accent, text accent
+    part button hover background accent_soft
+    part input focus border accent
+    part header background accent_soft, text accent
+    part tab background background, text muted
+    style primary background accent, text on_accent, border accent, weight bold

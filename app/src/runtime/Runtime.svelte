@@ -240,7 +240,7 @@
   });
 </script>
 
-<div class="runtime {area.class ?? ''}" class:busy data-scheme={area.scheme}>
+<div class="runtime {area.class}" class:busy data-scheme={area.scheme}>
   {#if model && page && current}
     {#key stack.length}
       <FrameView preview={model} {page} frame={frameForPage(model, page)} {data} design={false} onnavigate={navigate}>
@@ -288,6 +288,14 @@
 </div>
 
 <style>
+  /* The application fills its window; its look is the theme's (render.css). */
+  :global(html),
+  :global(body),
+  :global(#app) {
+    margin: 0;
+    height: 100%;
+  }
+
   .runtime {
     height: 100vh;
     display: flex;
@@ -331,15 +339,15 @@
   .message {
     text-align: left;
     padding: 10px 14px;
-    border-radius: 6px;
-    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-panel);
+    border: var(--border-width) solid var(--border-strong);
     background: var(--panel);
     color: var(--text);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+    box-shadow: var(--shadow);
   }
 
   .message.warning {
-    border-color: var(--warning, #d9a400);
+    border-color: var(--warning);
   }
 
   .message.error {

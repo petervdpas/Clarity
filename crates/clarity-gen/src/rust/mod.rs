@@ -117,10 +117,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         .iter()
         .filter_map(|name| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *name))
         .collect();
-    let links: String = themes
-        .iter()
+    // Clarity's own theme first: the base the project's themes change.
+    let base = clarity_spec::themes::built_in();
+    let links: String = std::iter::once(&base)
+        .chain(themes.iter().copied())
         .map(|t| format!("    <link rel=\"stylesheet\" href=\"./{}\">\n", crate::web::theme_file(t)))
         .collect();
+    files.push(text(&format!("ui/{}", crate::web::theme_file(&base)), crate::web::base_css()));
     for theme in &themes {
         files.push(text(&format!("ui/{}", crate::web::theme_file(theme)), crate::web::theme_css(theme)));
     }

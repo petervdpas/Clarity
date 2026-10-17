@@ -6,10 +6,19 @@ use tauri::State;
 
 use super::{WatchState, open_project_of};
 
-/// Every theme of the open project as CSS, one file after the other.
+/// Clarity's own theme and every theme of the open project as CSS.
 #[tauri::command]
 pub fn theme_styles(state: State<WatchState>) -> Result<String, String> {
     let (_, dir) = open_project_of(&state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    Ok(project.files.iter().flat_map(|f| &f.themes).map(clarity_gen::theme_css).collect::<Vec<_>>().join("\n"))
+    let themes = project.files.iter().flat_map(|f| &f.themes).map(clarity_gen::theme_css);
+    // Clarity's own theme first: the base the others change.
+    Ok(std::iter::once(clarity_gen::base_css()).chain(themes).collect::<Vec<_>>().join("\n"))
+}
+
+/// The text of a new theme called `name`: a copy of Clarity's own, so every
+/// value a theme can set is there. With `Clarity` it is Clarity's own theme.
+#[tauri::command]
+pub fn theme_starter(name: String) -> String {
+    clarity_spec::themes::starter(name.trim())
 }

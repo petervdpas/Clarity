@@ -690,7 +690,8 @@ pub fn run() {
             translations::translation_table,
             translations::set_translation,
             translations::add_language,
-            themes::theme_styles
+            themes::theme_styles,
+            themes::theme_starter
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

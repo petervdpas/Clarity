@@ -3,6 +3,7 @@ import type { Event } from "./Event";
 import type { FormatInfo } from "./FormatInfo";
 import type { Project } from "./Project";
 import type { RegionInfo } from "./RegionInfo";
+import type { ThemeDecl } from "./ThemeDecl";
 import type { WidgetInfo } from "./WidgetInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
 
@@ -26,4 +27,8 @@ windowEvents: Array<Event>, appEvents: Array<Event>,
 /**
  * The named formats of each field type, by the type's kind.
  */
-formats: { [key in string]: Array<FormatInfo> }, };
+formats: { [key in string]: Array<FormatInfo> }, 
+/**
+ * Clarity's own theme, which every theme starts from.
+ */
+baseTheme: ThemeDecl, };

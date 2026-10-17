@@ -613,7 +613,9 @@ An item with a submenu opens the submenu, so it has no `on click` of its own.
 
 ### Themes
 
-A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as CSS variables, Avalonia as resources and styles. It is declared in a module, and the project file names the themes the application offers: `theme Shop Night`, the first one the one it starts with.
+A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as a CSS file of variables, Avalonia as resources and styles. It is declared in a module, and the project file names the themes the application offers: `theme Shop Night`, the first one the one it starts with.
+
+Every theme starts from Clarity's own, the built-in `theme Clarity`, which sets every value below; a theme sets only what it changes, and the rest stays Clarity's. The Module view shows Clarity's own theme, and "New theme" starts from a full copy of it.
 
 ```
 theme Shop
@@ -621,9 +623,17 @@ theme Shop
     color accent "#1f6f5c" dark "#4fb393"
     color brand "#f5c400"
     font "Inter"
+    font heading "Georgia, serif"
     size 14
+    size heading 20
     radius 4
-    style primary background accent, text "#ffffff", border accent
+    radius button 12
+    padding 5
+    shadow flat
+    part button background panel, border accent, text accent
+    part button hover background accent_soft
+    part header background accent_soft, text accent
+    style primary background accent, text on_accent, weight bold
     style quiet border none
 ```
 
@@ -632,12 +642,32 @@ theme Shop
 | `title "Night owl"` | The name people see when they choose the theme; without it, one derived from the name (`NightOwl` reads "Night owl"). It is translated like every other text. |
 | `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
 | `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. |
-| `font "Name"`, `size n`, `radius n` | The font, the text size and the corner radius of inputs, buttons and panels, in pixels. |
-| `style name part color, ...` | A named style for parts. The parts are `background`, `text` and `border`; a color is one of the theme's colors by name or written out, and a border can be `none`. |
+| `font "Families"`, `font heading ...`, `font mono ...` | The fonts of text, headings and code, as a list of families: `"Inter, sans-serif"`. |
+| `size n`, `size small n`, `size heading n` | Text sizes in pixels: the text, small text (help, captions) and headings. |
+| `radius n`, `radius input n`, `radius button n`, `radius panel n` | Corner radii in pixels: of everything, or of one kind. |
+| `padding n`, `border n` | The space inside inputs and buttons, and the width of borders, in pixels. |
+| `shadow none`, `shadow flat`, `shadow raised` | The shadow under menus, popups and messages. |
+| `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab` or `menu`; with `hover`, `pressed` or `focus`, in that state. |
+| `style name look` | A named style that parts pick with `style name`. |
 
-- The colors `background`, `panel`, `text`, `muted`, `border`, `accent`, `error` and `warning` are the ones the application itself uses; a theme sets those it wants to change, and the others keep Clarity's own. Other names are colors of the theme, for its styles.
+A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas.
+
+The colors a theme can set by role, which the application itself uses:
+
+| Role | Used for |
+|---|---|
+| `background`, `panel`, `raised` | the window, panels and inputs, raised surfaces such as buttons and table headers |
+| `frame`, `frame_text` | the menu bar, toolbar, sidebars and footer |
+| `text`, `muted` | text, and quieter text such as help and labels |
+| `border`, `strong_border` | lines between things, and the borders of inputs and buttons |
+| `accent`, `accent_soft`, `on_accent` | what is chosen, active or important, a soft tint of it, and text on it |
+| `selection`, `focus`, `input` | a chosen row, the focus ring, the inside of inputs |
+| `error`, `warning`, `success` and their `_soft` tints | what went wrong, what needs care, what went well |
+
+Other names are colors of the theme's own, for its parts and styles.
+
 - A part picks a style with `style primary`. Every theme the application offers must have that style, so switching themes never drops one; a theme that misses it is an error.
-- The generator writes each theme as a CSS file of its own, `ui/themes/shop.css`, linked from the application's page. The application holds the theme's class (`theme-shop`), and a part with a style holds its class (`style-primary`), as a web developer would write it. The designer uses the same CSS for its canvas, and the Module view shows a sample window for the theme being written.
+- The generator writes Clarity's own theme as `ui/themes/clarity.css` and each offered theme as a CSS file of its own, `ui/themes/shop.css`, linked from the application's page after it. The application holds the theme's class (`theme-shop`), and a part with a style holds its class (`style-primary`), as a web developer would write it. The application's own CSS reads only these values. The designer uses the same CSS for its canvas, and the Module view shows a sample window for the theme being written.
 - An application that offers several themes lets people switch with `on click -> theme`: a menu item or button that lists the themes by their titles, switches at once and remembers the choice for the next start. The Project tab chooses the themes the application offers and the one it starts with, and can show the designer's canvas in any of them.
 
 ## 8. Code behind
@@ -1014,8 +1044,11 @@ find          = "find" name "in" Entity ["where" condition]
 
 theme         = "theme" Name
                     ("title" String | "mode" ("light" | "dark" | "system") | "color" name String ["dark" String]
-                    | "font" String | "size" n | "radius" n
-                    | "style" name ("background" | "text" | "border") (name | String) ("," ...)*)*
+                    | "font" [role] String | "size" [role] n | "radius" [kind] n | "padding" n | "border" n
+                    | "shadow" ("none" | "flat" | "raised")
+                    | "part" kind [state] look | "style" name look)*
+look          = ("background" | "text" | "border") (name | String) | "radius" n | "weight" ("bold" | "normal")
+                    ("," look)*
 translation   = "translation" language
                     (String String)*
 migration     = "migration" String ["baseline"]

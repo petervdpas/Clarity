@@ -276,6 +276,10 @@ pub struct Preview {
     pub app_events: Vec<widgets::Event>,
     /// The named formats of each field type, by the type's kind.
     pub formats: BTreeMap<&'static str, &'static [formats::FormatInfo]>,
+    /// Clarity's own theme, which every theme starts from.
+    #[serde(rename = "baseTheme")]
+    #[ts(rename = "baseTheme")]
+    pub base_theme: model::ThemeDecl,
 }
 
 impl Preview {
@@ -295,6 +299,7 @@ impl Preview {
             window_events: widgets::WINDOW_EVENTS.to_vec(),
             app_events: widgets::APP_EVENTS.to_vec(),
             formats: formats::catalog(),
+            base_theme: themes::built_in(),
         }
     }
 }

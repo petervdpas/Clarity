@@ -643,11 +643,24 @@ pub struct ThemeDecl {
     pub title: Option<String>,
     pub mode: Option<ThemeMode>,
     pub colors: Vec<ThemeColor>,
-    pub font: Option<String>,
-    /// The text size, in pixels.
-    pub size: Option<u32>,
-    /// The corner radius of inputs, buttons and panels, in pixels.
-    pub radius: Option<u32>,
+    /// `font "Inter"`, `font heading "Georgia"`, `font mono "..."`: the
+    /// family per role; a line without a role is `text`.
+    pub fonts: Vec<ThemeValue>,
+    /// `size 14`, `size small 12`, `size heading 18`: text sizes in pixels
+    /// per role; a line without a role is `text`.
+    pub sizes: Vec<ThemeValue>,
+    /// `radius 6`, `radius input 4`: corner radii in pixels per kind of
+    /// part; a line without a kind is `all`.
+    pub radii: Vec<ThemeValue>,
+    /// The space inside inputs and buttons, in pixels.
+    pub padding: Option<u32>,
+    /// The width of borders, in pixels.
+    pub border: Option<u32>,
+    /// The shadow under menus, popups and dialogs.
+    pub shadow: Option<Shadow>,
+    /// How a kind of part looks, in a state or by default:
+    /// `part button hover background accent_soft`.
+    pub parts: Vec<ThemePart>,
     pub styles: Vec<ThemeStyle>,
     pub span: Span,
 }
@@ -681,8 +694,55 @@ pub struct ThemeStyle {
     pub name: Ident,
     /// The class a part holds to take the style: `style-primary`.
     pub class: String,
+    pub look: Look,
+    pub span: Span,
+}
+
+/// What a style or a part look sets. A color is a color of the theme by
+/// name, or written as `"#rrggbb"`; a border can be `none`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Look {
     pub background: Option<String>,
     pub text: Option<String>,
     pub border: Option<String>,
+    pub radius: Option<u32>,
+    pub weight: Option<Weight>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Weight {
+    Normal,
+    Bold,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Shadow {
+    None,
+    Flat,
+    Raised,
+}
+
+/// A value of a theme by role: `font heading "Georgia"`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ThemeValue {
+    pub role: String,
+    pub value: String,
+    pub span: Span,
+}
+
+/// `part button hover background accent_soft`: how a kind of part looks in
+/// a state, or by default without one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ThemePart {
+    pub kind: String,
+    pub state: Option<String>,
+    pub look: Look,
     pub span: Span,
 }

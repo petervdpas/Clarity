@@ -1,40 +1,12 @@
 {
-  "about": "How a theme resolves (DESIGN section 1.5, T1): its colors for light or dark mode, and the colors of each style. A color is \"#rrggbb\" as written, or \"@role\" for a role the theme does not set, which keeps the renderer's own color. clarity_spec::themes::resolve gives these, and each stack is written from it: the web renderer as a CSS file per theme (clarity_gen::theme_css), Avalonia as resources. dark says whether the theme shows dark for the system's choice, which the web renderer checks too.",
+  "about": "How a theme resolves (DESIGN section 1.5, T1): what it sets, for light or dark mode. A color is \"#rrggbb\" as written, or \"@role\" for a role the theme does not set, which keeps the value of Clarity's own theme. Parts are keyed by kind, or kind:state. clarity_spec::themes::resolve gives these, and each stack is written from it: the web renderer as a CSS file per theme (clarity_gen::theme_css), Avalonia as resources. mode and dark say whether the theme shows dark for the system's choice, which the web renderer checks too.",
   "resolves": [
     {
-      "what": "light mode with a role set and a color of its own",
+      "what": "light mode with a color of its own, a font, a size, a radius and styles",
       "dark": false,
       "theme": {
         "mode": "system",
-        "colors": [
-          {
-            "name": "accent",
-            "light": "#2f6fdf",
-            "dark": "#5b8cff"
-          },
-          {
-            "name": "brand",
-            "light": "#f5c400",
-            "dark": null
-          }
-        ],
-        "font": "Inter",
-        "size": 14,
-        "radius": 6,
-        "styles": [
-          {
-            "name": "primary",
-            "background": "accent",
-            "text": "#fff",
-            "border": null
-          },
-          {
-            "name": "loud",
-            "background": "brand",
-            "text": "text",
-            "border": "none"
-          }
-        ]
+        "source": "theme Case\n    mode system\n    color accent \"#2f6fdf\" dark \"#5b8cff\"\n    color brand \"#f5c400\"\n    font \"Inter\"\n    size 14\n    radius 6\n    style primary background accent, text \"#fff\"\n    style loud background brand, text text, border none\n"
       },
       "gives": {
         "dark": false,
@@ -42,51 +14,43 @@
           "accent": "#2f6fdf",
           "brand": "#f5c400"
         },
-        "font": "Inter",
-        "size": 14,
-        "radius": 6,
+        "fonts": {
+          "text": "Inter"
+        },
+        "sizes": {
+          "text": 14
+        },
+        "radii": {
+          "all": 6
+        },
+        "padding": null,
+        "border": null,
+        "shadow": null,
+        "parts": {},
         "styles": {
-          "primary": {
-            "background": "#2f6fdf",
-            "text": "#ffffff",
-            "border": null
-          },
           "loud": {
             "background": "#f5c400",
             "text": "@text",
-            "border": "none"
+            "border": "none",
+            "radius": null,
+            "weight": null
+          },
+          "primary": {
+            "background": "#2f6fdf",
+            "text": "#ffffff",
+            "border": null,
+            "radius": null,
+            "weight": null
           }
         }
       }
     },
     {
-      "what": "dark mode takes the dark values, and a color without one keeps its light value",
+      "what": "dark mode, with a part in a state, roles, spacing, a shadow and a bold style",
       "dark": true,
       "theme": {
         "mode": "system",
-        "colors": [
-          {
-            "name": "accent",
-            "light": "#2f6fdf",
-            "dark": "#5b8cff"
-          },
-          {
-            "name": "brand",
-            "light": "#f5c400",
-            "dark": null
-          }
-        ],
-        "font": null,
-        "size": null,
-        "radius": null,
-        "styles": [
-          {
-            "name": "primary",
-            "background": "accent",
-            "text": null,
-            "border": "brand"
-          }
-        ]
+        "source": "theme Case\n    mode system\n    color accent \"#2f6fdf\" dark \"#5b8cff\"\n    color brand \"#f5c400\"\n    size small 11\n    radius input 3\n    padding 6\n    border 2\n    shadow flat\n    part button hover background accent_soft, radius 4\n    style primary background accent, border brand, weight bold\n"
       },
       "gives": {
         "dark": true,
@@ -94,14 +58,32 @@
           "accent": "#5b8cff",
           "brand": "#f5c400"
         },
-        "font": null,
-        "size": null,
-        "radius": null,
+        "fonts": {},
+        "sizes": {
+          "small": 11
+        },
+        "radii": {
+          "input": 3
+        },
+        "padding": 6,
+        "border": 2,
+        "shadow": "flat",
+        "parts": {
+          "button:hover": {
+            "background": "@accent_soft",
+            "text": null,
+            "border": null,
+            "radius": 4,
+            "weight": null
+          }
+        },
         "styles": {
           "primary": {
             "background": "#5b8cff",
             "text": null,
-            "border": "#f5c400"
+            "border": "#f5c400",
+            "radius": null,
+            "weight": "bold"
           }
         }
       }
@@ -111,26 +93,20 @@
       "dark": true,
       "theme": {
         "mode": "light",
-        "colors": [
-          {
-            "name": "background",
-            "light": "#ffffff",
-            "dark": "#000000"
-          }
-        ],
-        "font": null,
-        "size": null,
-        "radius": null,
-        "styles": []
+        "source": "theme Case\n    mode light\n    color background \"#ffffff\" dark \"#000000\"\n"
       },
       "gives": {
         "dark": false,
         "colors": {
           "background": "#ffffff"
         },
-        "font": null,
-        "size": null,
-        "radius": null,
+        "fonts": {},
+        "sizes": {},
+        "radii": {},
+        "padding": null,
+        "border": null,
+        "shadow": null,
+        "parts": {},
         "styles": {}
       }
     }

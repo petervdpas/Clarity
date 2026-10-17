@@ -1,0 +1,74 @@
+/* The application's root look (design section 1.5, T1): how its elements
+   are drawn, reading theme values only. The values come from Clarity's own
+   theme (themes/clarity.css, generated from the built-in `theme Clarity`)
+   and the project's theme on top of it. Everything is scoped to
+   .clarity-app, so the designer's own look (app.css) never mixes in. */
+
+.clarity-app,
+.clarity-app *,
+.clarity-app *::before,
+.clarity-app *::after {
+  box-sizing: border-box;
+}
+
+.clarity-app button {
+  font: inherit;
+  font-weight: var(--button-weight, inherit);
+  color: var(--button-text);
+  background: var(--button-bg);
+  border: var(--border-width) solid var(--button-border);
+  border-radius: var(--button-radius, var(--radius-button));
+  padding: var(--padding) calc(var(--padding) * 3);
+  cursor: pointer;
+}
+
+.clarity-app button:hover:not(:disabled) {
+  color: var(--button-hover-text, var(--button-text));
+  background: var(--button-hover-bg, var(--button-bg));
+  border-color: var(--button-hover-border, var(--button-border));
+}
+
+.clarity-app button:active:not(:disabled) {
+  color: var(--button-pressed-text, var(--button-hover-text, var(--button-text)));
+  background: var(--button-pressed-bg, var(--button-bg));
+  border-color: var(--button-pressed-border, var(--button-hover-border, var(--button-border)));
+}
+
+.clarity-app button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.clarity-app input,
+.clarity-app select,
+.clarity-app textarea {
+  font: inherit;
+  font-weight: var(--input-weight, inherit);
+  color: var(--input-text);
+  background: var(--input-bg);
+  border: var(--border-width) solid var(--input-border);
+  border-radius: var(--input-radius, var(--radius-input));
+  padding: var(--padding) calc(var(--padding) * 2);
+  accent-color: var(--accent);
+  min-width: 0;
+}
+
+.clarity-app input:hover:not(:disabled),
+.clarity-app select:hover:not(:disabled),
+.clarity-app textarea:hover:not(:disabled) {
+  border-color: var(--input-hover-border, var(--input-border));
+}
+
+.clarity-app input:focus,
+.clarity-app select:focus,
+.clarity-app textarea:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+  border-color: var(--input-focus-border, var(--input-border));
+  background: var(--input-focus-bg, var(--input-bg));
+}
+
+.clarity-app button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+}

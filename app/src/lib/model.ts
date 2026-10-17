@@ -150,9 +150,10 @@ export function offeredThemes(preview: Preview): ThemeDecl[] {
 
 /** What puts a theme on an area (a running window, the designer's canvas):
  *  the theme's class, whose CSS the generator writes, and light or dark. */
-export function themeArea(theme: ThemeDecl | null): { scheme: string | undefined; class: string | undefined } {
-  if (!theme) return { scheme: undefined, class: undefined };
-  return { scheme: isDark(theme.mode, scheme.dark) ? "dark" : "light", class: theme.class };
+export function themeArea(theme: ThemeDecl | null): { scheme: string; class: string } {
+  // Without a project theme, Clarity's own follows the system.
+  const dark = isDark(theme?.mode ?? "system", scheme.dark);
+  return { scheme: dark ? "dark" : "light", class: ["clarity-app", theme?.class].filter(Boolean).join(" ") };
 }
 
 /** The style names of the project's theme, for the designer. */

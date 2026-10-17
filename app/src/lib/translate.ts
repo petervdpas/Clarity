@@ -33,3 +33,29 @@ export function translateText(text: ShownText, table: Table | undefined): ShownT
   if (typeof text === "string") return translate(text, table);
   return { text: translate(text.text, table), values: text.values };
 }
+
+/** The languages an application can switch between: the one its texts are
+ *  written in first, then those it has translations for. */
+export function languagesOf(base: string | null, available: readonly string[]): string[] {
+  const written = base ?? "en";
+  return [written, ...available.filter((a) => a !== written).sort()];
+}
+
+/** A language named in itself, as people look for it: `nl` is Nederlands. */
+export function languageName(tag: string): string {
+  try {
+    const name = new Intl.DisplayNames([tag], { type: "language" }).of(tag) ?? tag;
+    return name.charAt(0).toLocaleUpperCase(tag) + name.slice(1);
+  } catch {
+    return tag;
+  }
+}
+
+/** A language chosen in an earlier run, as the choice to show: null for
+ *  the texts as written, undefined to follow the locale when the project
+ *  no longer has that language. */
+export function rememberedChoice(stored: string | null, base: string | null, available: readonly string[]): string | null | undefined {
+  if (!stored) return undefined;
+  if (stored === (base ?? "en")) return null;
+  return available.includes(stored) ? stored : undefined;
+}

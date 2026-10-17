@@ -17,4 +17,8 @@ locale: Locale,
  * The project's translations per language: each text a person sees,
  * as written, with its translation (design section 1.5, I1c).
  */
-translations: { [key in string]: { [key in string]: string } }, };
+translations: { [key in string]: { [key in string]: string } }, 
+/**
+ * The theme the project file names, if any (design section 1.5, T1).
+ */
+theme: string | null, };

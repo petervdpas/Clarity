@@ -12,6 +12,7 @@ app Shop
         item "File"
             item "Customer card" key "Ctrl+K" on click -> CustomerCard
             separator
+            item "Language" on click -> language
             item "Quit" key "Ctrl+Q" on click -> quit
         item "Customers"
             item "All customers" on click -> CustomerBrowse

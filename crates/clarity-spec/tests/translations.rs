@@ -173,3 +173,11 @@ fn the_example_translation_fits_the_example() {
     assert!(in_translations.is_empty(), "{in_translations:#?}");
     assert_eq!(project.translations["nl"]["Customers"], "Klanten");
 }
+
+#[test]
+fn a_menu_item_can_switch_the_language() {
+    let text = SHOP.replace("            item \"Quit\" on click -> quit", "            item \"Language\" on click -> language\n            item \"Quit\" on click -> quit");
+    let project = load_sources([("shop.clarity", text.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    assert!(clarity_spec::Preview::new(project).commands.contains(&"language".to_string()));
+}

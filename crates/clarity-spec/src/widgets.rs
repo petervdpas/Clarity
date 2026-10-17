@@ -570,6 +570,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         for_part: None,
         placeholder: None,
         tooltip: None,
+        style: None,
         readonly: false,
         tab_order: None,
         shortcut: None,
@@ -623,6 +624,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(tooltip) = &props.tooltip {
         parts.push(format!("tooltip {}", quote(tooltip)));
+    }
+    if let Some(style) = &props.style {
+        parts.push(format!("style {style}"));
     }
     if props.readonly {
         parts.push("readonly".to_string());

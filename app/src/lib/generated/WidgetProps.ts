@@ -47,6 +47,10 @@ placeholder: string | null,
  */
 tooltip: string | null, 
 /**
+ * A named style of the project's theme: `style primary`.
+ */
+style: string | null, 
+/**
  * An input that shows its value but cannot be changed.
  */
 readonly: boolean, 

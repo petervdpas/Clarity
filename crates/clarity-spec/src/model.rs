@@ -33,6 +33,8 @@ pub struct SpecFile {
     pub entities: Vec<Entity>,
     pub pages: Vec<Page>,
     pub apps: Vec<App>,
+    /// Themes: named colors, a font and named styles for parts.
+    pub themes: Vec<ThemeDecl>,
     /// Code behind: one block per window or app, with its handlers.
     pub code: Vec<crate::code::CodeBlock>,
     /// Functions and actions declared in this module.
@@ -282,6 +284,8 @@ pub struct WidgetProps {
     pub placeholder: Option<String>,
     /// Text shown when the pointer rests on the part.
     pub tooltip: Option<String>,
+    /// A named style of the project's theme: `style primary`.
+    pub style: Option<String>,
     /// An input that shows its value but cannot be changed.
     pub readonly: bool,
     /// Position in the keyboard order; parts without one follow in reading
@@ -502,6 +506,8 @@ pub struct Project {
     /// The project's translations per language: each text a person sees,
     /// as written, with its translation (design section 1.5, I1c).
     pub translations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    /// The theme the project file names, if any (design section 1.5, T1).
+    pub theme: Option<String>,
 }
 
 impl Project {
@@ -620,4 +626,54 @@ pub struct Locale {
     pub language: Option<String>,
     /// The ISO 4217 code of the currency of `money` fields, such as `EUR`.
     pub currency: Option<String>,
+}
+
+/// `theme Shop`: named values for how an application looks, which each
+/// stack maps onto its own means (design section 1.5, T1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ThemeDecl {
+    pub name: Ident,
+    pub mode: Option<ThemeMode>,
+    pub colors: Vec<ThemeColor>,
+    pub font: Option<String>,
+    /// The text size, in pixels.
+    pub size: Option<u32>,
+    /// The corner radius of inputs, buttons and panels, in pixels.
+    pub radius: Option<u32>,
+    pub styles: Vec<ThemeStyle>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ThemeMode {
+    Light,
+    Dark,
+    /// Follows the system's light or dark mode.
+    System,
+}
+
+/// `color accent "#2f6fdf" dark "#5b8cff"`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ThemeColor {
+    pub name: Ident,
+    pub light: String,
+    /// The value in dark mode, when it differs.
+    pub dark: Option<String>,
+    pub span: Span,
+}
+
+/// `style primary background accent, text "#ffffff"`: a color is a color
+/// of the theme by name, or written as `"#rrggbb"`; a border can be `none`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ThemeStyle {
+    pub name: Ident,
+    pub background: Option<String>,
+    pub text: Option<String>,
+    pub border: Option<String>,
+    pub span: Span,
 }

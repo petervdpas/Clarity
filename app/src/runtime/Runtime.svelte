@@ -11,6 +11,8 @@
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState } from "../lib/live";
   import { errorText, shownText, tr, type Row } from "../lib/model";
+  import { languageChoice } from "../lib/i18n.svelte";
+  import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
   import { findPage, type PageData } from "../lib/pages";
 
@@ -140,6 +142,7 @@
   function navigate(target: string) {
     if (target === "close") close();
     else if (target === "quit") invoke("quit_app");
+    else if (target === "language") choosingLanguage = true;
     else open(target);
   }
 
@@ -174,10 +177,37 @@
     },
   });
 
+  // The language the person chose with a `language` click target, kept for
+  // the next start.
+  const LANGUAGE_KEY = "clarity-language";
+  let choosingLanguage = $state(false);
+  const base = $derived(model?.project.locale.language ?? "en");
+  const languages = $derived(model ? languagesOf(base, Object.keys(model.project.translations)) : []);
+
+  function remember(preview: Preview) {
+    try {
+      const stored = localStorage.getItem(LANGUAGE_KEY);
+      languageChoice.language = rememberedChoice(stored, preview.project.locale.language, Object.keys(preview.project.translations));
+    } catch {
+      // Without storage the application follows the locale.
+    }
+  }
+
+  function chooseLanguage(language: string) {
+    languageChoice.language = language === base ? null : language;
+    choosingLanguage = false;
+    try {
+      localStorage.setItem(LANGUAGE_KEY, language);
+    } catch {
+      // The choice holds for this run.
+    }
+  }
+
   // The app's `on start` runs before its main window opens; windows it opens
   // come on top of the main window.
   invoke<{ model: Preview; main: string }>("start").then(async (start) => {
     model = start.model;
+    remember(start.model);
     try {
       const started = await invoke<Reply>("start_app");
       await open(start.main);
@@ -208,6 +238,27 @@
     {/key}
   {:else if model && current}
     <p class="missing">This application has no window {current.window}.</p>
+  {/if}
+
+  {#if choosingLanguage}
+    <div class="language-backdrop" role="presentation" onclick={() => (choosingLanguage = false)}>
+      <div
+        class="language-picker"
+        role="dialog"
+        aria-label="Language"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.key === "Escape" && (choosingLanguage = false)}
+      >
+        {#each languages as language (language)}
+          <button
+            class:current={(languageChoice.language ?? base) === language}
+            onclick={() => chooseLanguage(language)}
+            lang={language}>{languageName(language)}</button
+          >
+        {/each}
+      </div>
+    </div>
   {/if}
 
   <div class="messages" aria-live="polite">
@@ -245,6 +296,30 @@
   .missing {
     padding: 24px;
     color: var(--error);
+  }
+
+  .language-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 0.25);
+    display: grid;
+    place-items: center;
+    z-index: 20;
+  }
+
+  .language-picker {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 200px;
+  }
+
+  .language-picker button.current {
+    border-color: var(--accent);
   }
 
   .messages {

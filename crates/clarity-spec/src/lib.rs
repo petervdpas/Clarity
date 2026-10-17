@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
 pub mod formats;
+pub mod themes;
 pub mod translations;
 pub mod frame;
 pub mod lexer;
@@ -51,12 +52,14 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagnostics.extend(file_diagnostics);
     }
     diagnostics.extend(check::check(&files));
+    diagnostics.extend(files.iter().flat_map(themes::check_decls));
     Project {
         files,
         diagnostics,
         migrations: None,
         sources: Vec::new(),
         locale: model::Locale::default(),
+        theme: None,
         translations: BTreeMap::new(),
     }
 }

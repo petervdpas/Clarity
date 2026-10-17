@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickLanguage, translate, translateText } from "./translate.ts";
+import { languageName, languagesOf, pickLanguage, rememberedChoice, translate, translateText } from "./translate.ts";
 
 type Pick = { what: string; locale: string; available: string[]; base: string | null; picks: string | null };
 const cases: { picks: Pick[] } = JSON.parse(readFileSync(new URL("../../../conformance/translations.json", import.meta.url), "utf8"));
@@ -25,4 +25,20 @@ test("text with slots is translated by its text as written, keeping its values",
   const values = { "customer.name": { kind: "text" as const, value: "Ada" } };
   assert.deepEqual(translateText({ text: "Saved {customer.name}", values }, nl), { text: "{customer.name} opgeslagen", values });
   assert.equal(translateText("Customer card", { "Customer card": "Klantkaart" }), "Klantkaart");
+});
+
+test("the language switch offers the base language first, each by its own name", () => {
+  assert.deepEqual(languagesOf("en", ["nl", "de"]), ["en", "de", "nl"]);
+  assert.deepEqual(languagesOf(null, ["en", "nl"]), ["en", "nl"]);
+  assert.equal(languageName("nl"), "Nederlands");
+  assert.equal(languageName("de"), "Deutsch");
+});
+
+test("a remembered choice applies while its language is there", () => {
+  assert.equal(rememberedChoice("nl", "en", ["nl"]), "nl");
+  // The base language shows the texts as written.
+  assert.equal(rememberedChoice("en", "en", ["nl"]), null);
+  // A language the project no longer has falls back to the locale.
+  assert.equal(rememberedChoice("fr", "en", ["nl"]), undefined);
+  assert.equal(rememberedChoice(null, "en", ["nl"]), undefined);
 });

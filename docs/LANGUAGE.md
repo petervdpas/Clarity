@@ -99,6 +99,7 @@ translation nl
 - A translation keeps the slots of its text and may move them; a slot missing or added is an error.
 - A text without a translation shows as written, so a language can grow text by text. The Project tab lists every text with a column per language, says how many each misses, and writes what is typed into the files. `Yes` and `No`, which the screen shows for bools, can be translated too.
 - The application shows the translation for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, and the project's own language shows as written. The designer can show the canvas and Preview in any of the project's languages.
+- A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
 
 ## 3. Modules
 
@@ -518,7 +519,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window and `quit` ends the application. A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window, `quit` ends the application, and `language` lets the person choose the language the application shows (see [Translations](#translations)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -603,7 +604,7 @@ Menu items and toolbar and ribbon buttons are commands. Their properties:
 | `icon "name"` | all | An icon. |
 | `key "Ctrl+N"` | menu items | The key for it, shown in the menu. |
 | `large` | ribbon buttons | A large button. |
-| `on click -> Target` | all | Opens a window, or `close` or `quit`. |
+| `on click -> Target` | all | Opens a window, or `close`, `quit` or `language`. |
 | `on click: handler` | all | Runs a handler. |
 
 An item with a submenu opens the submenu, so it has no `on click` of its own.

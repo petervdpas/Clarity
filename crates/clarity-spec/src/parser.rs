@@ -36,6 +36,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         entities: Vec::new(),
         pages: Vec::new(),
         apps: Vec::new(),
+        themes: Vec::new(),
         code: Vec::new(),
         functions: Vec::new(),
     };
@@ -338,6 +339,12 @@ fn parse_top_level(
             };
             file.functions.push(crate::code::parse::parse_function(node, kind, diagnostics)?);
         }
+        Some("theme") => {
+            cursor.next();
+            let name = cursor.expect_ident("a theme name")?;
+            cursor.expect_end()?;
+            file.themes.push(crate::themes::parse_theme(node, name, diagnostics));
+        }
         Some("code") => {
             cursor.next();
             let name = cursor.expect_ident("the name of a window or the app")?;
@@ -346,7 +353,7 @@ fn parse_top_level(
         }
         _ => {
             return Err(cursor.error_here(
-                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'code', 'function' or 'action'",
+                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function' or 'action'",
             ));
         }
     }
@@ -1233,6 +1240,7 @@ fn parse_widget_props(
         for_part: None,
         placeholder: None,
         tooltip: None,
+        style: None,
         readonly: false,
         tab_order: None,
         shortcut: None,
@@ -1392,6 +1400,7 @@ fn parse_widget_props(
                 props.placeholder = Some(cursor.expect_string("a placeholder text")?);
             }
             "tooltip" => props.tooltip = Some(cursor.expect_string("a tooltip text")?),
+            "style" => props.style = Some(cursor.expect_ident("a style of the project's theme")?.name),
             "readonly" => {
                 applies(WidgetProperty::Readonly)?;
                 props.readonly = true;

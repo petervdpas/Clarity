@@ -6,6 +6,7 @@ import type { EnumDecl } from "./EnumDecl";
 import type { FunctionDecl } from "./FunctionDecl";
 import type { Ident } from "./Ident";
 import type { Page } from "./Page";
+import type { ThemeDecl } from "./ThemeDecl";
 
 export type SpecFile = { path: string, 
 /**
@@ -18,6 +19,10 @@ version: string, module: Ident | null, uses: Array<Ident>,
  * project's first data source when there is none.
  */
 source: Ident | null, enums: Array<EnumDecl>, entities: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
+/**
+ * Themes: named colors, a font and named styles for parts.
+ */
+themes: Array<ThemeDecl>, 
 /**
  * Code behind: one block per window or app, with its handlers.
  */

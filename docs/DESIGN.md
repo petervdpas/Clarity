@@ -56,7 +56,7 @@ project Shop
 |---|---|---|
 | Rust | Tauri | an HTTP server in Rust |
 | Go | Wails | net/http |
-| C# | WebView2 or Photino | ASP.NET |
+| C# | WebView2 or Photino; Avalonia when it renders natively | ASP.NET |
 | C, C++ | the webview C library | a small embedded HTTP server |
 
 **UI.** The UI is either the web renderer or a native toolkit:
@@ -177,7 +177,7 @@ Superseded by this: section 7.4 (persistence), which assumed SQLite first and Po
 
 ### 1.5 Languages, formats and themes (2026-10-17)
 
-An application made with Clarity is shipped to people who read another language, write dates another way and expect their own house style. All three are part of the project, written once and carried to every stack. Nothing here may depend on a browser: the C# stack draws with Avalonia, so a theme is not CSS and a translation is not a JavaScript library's file. Each stack's runtime maps the same project onto its own means.
+An application made with Clarity is shipped to people who read another language, write dates another way and expect their own house style. All three are part of the project, written once and carried to every stack. Nothing here may depend on a browser: the C# stack draws with Avalonia, so a theme is not CSS and a translation is not a JavaScript library's file. How each stack gets it is under "Every stack, in its own idiom" below.
 
 **Formats (I1a).** How values look depends on the locale, not on the developer.
 
@@ -233,6 +233,23 @@ theme Shop
 - The project file names the theme its application uses; a project without one gets Clarity's own, the look the renderer has today, which already follows the system's light or dark mode.
 - The web renderer turns a theme into CSS variables, and Avalonia into resources and styles. The designer draws with the same renderer as the application, so the canvas shows the theme as it will ship.
 - The designer gets a theme editor with a live preview of a sample window.
+
+**Every stack, in its own idiom.** All of this is the transpiler's job: the project says what, and each stack gets it the way a developer of that stack would write it. There are two renderers, and each feature is done only when both have it:
+
+- **The web renderer**, for Rust with Tauri, Go with Wails, C and C++ with webview, C# with a webview, and the web target.
+- **Avalonia**, for C#, the second stack after Rust: on the desktop, and in the browser through WebAssembly.
+
+| | Web renderer | C# with Avalonia |
+|---|---|---|
+| Formats | `Intl.DateTimeFormat` and `Intl.NumberFormat` (with the currency) in the renderer, which also reads what is typed back into typed values | `CultureInfo`: formatted ViewModel properties and binding converters that format and parse with the culture |
+| Text with slots | the backend sends a message as its key and typed slot values; the renderer fills the slots in the locale's format | the ViewModel fills the slots with `string.Format` and the culture |
+| Translations | generated literal key maps per language in the UI bundle, switched while the application runs | a `.resx` file per language with a generated typed accessor class, as Visual Studio makes them, switched through `CultureInfo.CurrentUICulture` |
+| Themes | CSS custom properties per light and dark mode; a style is a class on the part | a `ResourceDictionary` with `ThemeVariant` Light and Dark; a style is an Avalonia style class (`Classes="danger"`) |
+
+- **Backends send keys, not sentences.** A message or refusal made in a handler leaves the backend as its key and its slot values, typed. The renderer translates and formats it, so formatting lives once per renderer instead of once per backend language. In Avalonia the ViewModel does the same in the same process.
+- **The designer** draws with the web renderer for every stack. For Avalonia it shows the theme and texts faithfully but not pixel for pixel, as it already does for layout; Run shows the real window.
+- **One answer on every stack.** The platforms take their locale data from different places (`Intl` from the browser's ICU, .NET from ICU or Windows), so the same named format can differ in small ways. A conformance test runs one sample project through every generator and compares the shown texts, formatted values and theme values with one expected set. Where platforms disagree on a named format, Clarity pins it with its own pattern for that locale, so a project looks the same whatever stack it ships on.
+- **Every row counts per stack.** I1a to I1c and T1 are done when every stack that exists at that time has them; a stack added later (G2 first) brings them along as part of its own row.
 
 **Order.** Formats first, since they fix visible gaps (dates as raw text, money with four decimals). Then text with slots, since it changes the language and is cheapest to settle while little code is written the old way. Then translations, which build on both. Themes stand apart and can come at any point; they mostly touch the renderer.
 
@@ -764,7 +781,7 @@ A stack is a backend language, a desktop shell (determined by the backend), a fr
 |---|---|
 | Rust | Tauri |
 | Go | Wails |
-| C# | WebView2 / Photino |
+| C# | Avalonia, its usual UI (section 1.2), or WebView2 / Photino with the web renderer |
 | C++ | webview (webview/webview) or Saucer |
 | C | webview (webview/webview) |
 
@@ -1251,7 +1268,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | D1e | External databases: `external` and `readonly` on a data source; `table`, `key` and `column` mapping; the runtime and generator using the mapped names; Import (Project tab and `clarity import`); comparing the dictionary with the live tables on every load; new crate `clarity-db` | done for SQLite (LANGUAGE.md section 4), Take ownership included: a baseline step that creates only what is missing, mapped names kept in the migration history with `map table`, `map key` and `map column` steps; open: keys that are not one integer column, Import, checking and baselines for PostgreSQL, MySQL and SQL Server |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |
 | D3 | Copying data between databases when a source changes kind | |
-| G2 | C# with Avalonia: C# emitter and runtime, the Avalonia emitter (windows as AXAML with ViewModels), desktop first | |
+| G2 | C# with Avalonia: C# emitter and runtime, the Avalonia emitter (windows as AXAML with ViewModels), desktop first; with the formats, translations and themes done by then (section 1.5): `CultureInfo` formats and converters, `.resx` with a typed accessor, theme resource dictionaries and style classes, and the conformance test passing | |
 | G3 | Go: emitter, runtime, Wails shell | |
 | G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted | |
 | W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |

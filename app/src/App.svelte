@@ -725,7 +725,7 @@
             <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
-          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} />
+          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} />
         {:else if entity && file}
           <EntityEditor
             {preview}

@@ -156,11 +156,28 @@ impl Db {
     }
 
     /// Applies the steps that are not applied yet, each in a transaction.
+    /// References are not enforced while a step runs, since a step may build
+    /// a table again that others refer to; they are checked before the step
+    /// is kept.
     pub fn migrate(&mut self, steps: &[&str]) -> Result<usize> {
         let done = self.schema_version()?;
+        self.conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+        let applied = self.apply_steps(steps, done);
+        self.conn.execute_batch("PRAGMA foreign_keys = ON")?;
+        applied
+    }
+
+    fn apply_steps(&mut self, steps: &[&str], done: usize) -> Result<usize> {
         for (i, step) in steps.iter().enumerate().skip(done) {
             let tx = self.conn.transaction()?;
             tx.execute_batch(step)?;
+            let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
+            if broken > 0 {
+                return Err(Error::Storage(format!(
+                    "migration step {} leaves {broken} reference(s) to records that do not exist",
+                    i + 1
+                )));
+            }
             tx.execute("INSERT INTO clarity_schema (version) VALUES (?1)", [i as i64 + 1])?;
             tx.commit()?;
         }

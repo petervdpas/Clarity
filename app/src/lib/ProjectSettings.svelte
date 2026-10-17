@@ -5,7 +5,9 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import MigrationPanel from "./MigrationPanel.svelte";
   import StackFields from "./StackFields.svelte";
+  import type { Preview } from "./generated/Preview";
   import type { AuthKind } from "./generated/AuthKind";
   import type { DataSource } from "./generated/DataSource";
   import type { ProjectFile } from "./generated/ProjectFile";
@@ -17,6 +19,8 @@
     file,
     onsave,
     revision,
+    preview,
+    onapplied,
   }: {
     project: ProjectFile;
     /** The project file. */
@@ -24,6 +28,9 @@
     onsave: (settings: Settings) => void;
     /** Changes when a save was refused, so the inputs show the file again. */
     revision: number;
+    /** The loaded project, for its migrations. */
+    preview: Preview;
+    onapplied: (preview: Preview) => void;
   } = $props();
 
   const catalog = $derived(project.catalog);
@@ -249,6 +256,8 @@
           <button type="submit" disabled={!newName.trim()}>Add data source</button>
         </form>
       </section>
+
+      <MigrationPanel {preview} {onapplied} />
     {/key}
   {/if}
 </div>
@@ -284,7 +293,8 @@
   }
 
   /* Each group of settings is a card, like the module view. */
-  section {
+  /* Sections of child components, such as the migrations, look the same. */
+  .editor :global(section) {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -294,7 +304,7 @@
     padding: 12px 16px 16px;
   }
 
-  h2 {
+  .editor :global(h2) {
     margin: 0;
     font-size: 12px;
     text-transform: uppercase;
@@ -302,16 +312,16 @@
     color: var(--text-muted);
   }
 
-  p {
+  .editor :global(p) {
     margin: 0;
   }
 
-  .intro {
+  .editor :global(.intro) {
     font-size: 12px;
     color: var(--text-muted);
   }
 
-  .intro code {
+  .editor :global(.intro code) {
     font-family: var(--mono);
   }
 

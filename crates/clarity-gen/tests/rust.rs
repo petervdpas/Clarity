@@ -280,3 +280,56 @@ fn every_runtime_source_file_is_copied() {
         assert!(files.iter().any(|f| f.path == path), "{path} is not copied into generated projects");
     }
 }
+
+/// SALES as it was: a `limit`, an integer total, a note, no unique number.
+const FIRST_STEP: &str = "migration \"First\"
+    add entity Customer
+        name: text(80)
+        limit: money, default 100
+        active: bool, default true
+        since: date
+    add entity Order
+        number: text(12)
+        status: OrderStatus
+        customer: ref Customer
+        total: integer
+        note: text
+";
+
+const SECOND_STEP: &str = "migration \"Tidy up\"
+    rename field Customer.limit to credit_limit
+    change field Order.total: money
+    remove field Order.note
+    add unique Order.number
+";
+
+#[test]
+fn every_migration_step_becomes_sql() {
+    let project = clarity_spec::load_with_migrations(
+        [("sales.clarity", SALES)],
+        [("0001.clarity", FIRST_STEP), ("0002.clarity", SECOND_STEP)],
+    );
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let schema = file(&files, "src/schema.rs");
+    assert!(schema.contains("    // 1: First\n    r#\"CREATE TABLE \"customer\" ("), "{schema}");
+    assert!(schema.contains("    // 2: Tidy up\n"), "{schema}");
+    assert!(schema.contains("ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";"), "{schema}");
+    // SQLite changes a column's type by building the table again.
+    assert!(schema.contains("CREATE TABLE \"order__new\" ("), "{schema}");
+    assert!(schema.contains("COALESCE(CAST(\"total\" AS TEXT), '0')"), "{schema}");
+    assert!(schema.contains("DROP TABLE \"order\";\nALTER TABLE \"order__new\" RENAME TO \"order\";"), "{schema}");
+    assert!(
+        schema.contains("CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';"),
+        "{schema}"
+    );
+}
+
+#[test]
+fn changes_without_a_step_are_not_generated() {
+    let project = clarity_spec::load_with_migrations([("sales.clarity", SALES)], [("0001.clarity", FIRST_STEP)]);
+    let errors = generate(&project, &shop()).unwrap_err();
+    assert!(errors[0].contains("not in a migration yet"), "{errors:?}");
+    assert!(errors[0].contains("rename") || errors[0].contains("remove field Customer.limit"), "{errors:?}");
+    assert!(errors[0].contains("clarity migrate"), "{errors:?}");
+}

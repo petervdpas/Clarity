@@ -74,6 +74,33 @@ page Orders: window
     table name grid at 1,1 span 12 rows 4 bind orders columns number, total
 ";
 
+/// SALES as two steps: the first had a `limit`, an integer total and a note.
+const STEPS: [(&str, &str); 2] = [
+    (
+        "0001.clarity",
+        "migration \"First\"
+    add entity Customer
+        name: text(80)
+        limit: money, default 100
+    add entity Order
+        number: text(12)
+        status: OrderStatus
+        customer: ref Customer
+        total: integer
+        note: text
+",
+    ),
+    (
+        "0002.clarity",
+        "migration \"Tidy up\"
+    rename field Customer.limit to credit_limit
+    change field Order.total: money
+    remove field Order.note
+    add unique Order.number
+",
+    ),
+];
+
 /// Uses the generated functions the way a handler will.
 const LOGIC_TEST: &str = r#"
 #[path = "../src/sales.rs"]
@@ -120,7 +147,9 @@ fn approves_within_the_credit_limit() {
 #[test]
 #[ignore]
 fn generated_logic_runs() {
-    let project = clarity_spec::load_sources([("sales.clarity", SALES)]);
+    // The database is built by the two steps, so the SQL of a rename, a
+    // rebuild and a unique index runs on SQLite.
+    let project = clarity_spec::load_with_migrations([("sales.clarity", SALES)], STEPS);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = clarity_gen::generate(&project, &clarity_project::starter("Sales", "sales")).unwrap();
     let out = std::env::temp_dir().join(format!("clarity-gen-logic-{}", std::process::id()));

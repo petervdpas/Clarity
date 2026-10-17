@@ -1,0 +1,19 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Customers and orders"
+    add entity Customer
+        name: text(80)
+        email: email, unique
+        kind: CustomerKind, default Private
+        vat_number: text(14)
+        credit_limit: money, default 0
+        active: bool, default true
+        since: date
+        notes: text
+    add entity Order
+        number: text(12), unique
+        customer: ref Customer
+        status: OrderStatus, default Pending
+        ordered_on: date
+        total: money
+        remarks: text(200)

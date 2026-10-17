@@ -44,6 +44,8 @@ shop.clarity           the project file: open this one
 shop/
     customers.clarity  modules
     sales.clarity
+    migrations/        the steps that bring a database to the dictionary
+        0001.clarity
     out/               the generated application
     data/
 ```
@@ -165,6 +167,37 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
 
 Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
+
+### Migrations
+
+A database follows the dictionary through migration steps. Each step is a file in the `migrations` folder of the project, numbered in the order the steps run: `0001.clarity`, `0002.clarity`. A step holds one `migration` block with a title and its changes:
+
+```
+migration "Phone and VAT"
+    rename field Customer.vat_number to vat
+    add field Customer.phone: text(20)
+    change field Order.number: text(20)
+    add unique Customer.email
+```
+
+| Change | Does |
+|---|---|
+| `add entity Name` with field lines below it | creates the records of an entity |
+| `remove entity Name` | removes an entity and its records |
+| `rename entity Old to New` | renames an entity; its records stay |
+| `add field Entity.name: type, modifiers` | adds a field; existing records get its `default`, or the empty value of its type |
+| `remove field Entity.name` | removes a field and its values |
+| `rename field Entity.old to new` | renames a field; its values stay |
+| `change field Entity.name: type` | changes a field's type, converting the values |
+| `add unique Entity.name`, `remove unique Entity.name` | makes a field unique, or not |
+
+Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone.
+
+- **Replaying the steps** in order gives the schema as last migrated. Each step must fit the schema the steps before it made; one that renames a field that does not exist is an error.
+- **Pending changes** are what the dictionary has and the steps do not. The checker reports them as warnings on the entity, and the generator refuses to write the application until a step covers them.
+- **Writing a step.** The Project tab lists the pending changes and writes them as the next step; `clarity migrate shop.clarity` does the same from the command line. Clarity proposes a rename when a field disappears and a field of the same type appears in the same entity, or an entity disappears and one with mostly the same fields appears. You confirm it or take it as a removal and an addition. Changes that can lose data (removing, changing a type) need a confirmation.
+- **Running.** The generated application applies the steps its database does not have yet when it starts, each in a transaction, and checks the references between records before a step is kept.
+- **A step that ran never changes.** To undo it, write a new step.
 
 ## 5. Windows
 
@@ -740,4 +773,12 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
+
+migration     = "migration" String
+                    (("add" "entity" Entity
+                        field*)
+                    | "remove" "entity" Entity | "rename" "entity" Entity "to" Name
+                    | "add" "field" Entity "." field | "remove" "field" Entity "." name
+                    | "rename" "field" Entity "." name "to" name | "change" "field" Entity "." name ":" type
+                    | ("add" | "remove") "unique" Entity "." name)*
 ```

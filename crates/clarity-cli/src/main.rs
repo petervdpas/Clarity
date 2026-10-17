@@ -26,6 +26,24 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Write the changes in the data dictionary that no migration covers
+    /// yet as the next step in the project's migrations folder.
+    Migrate {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// Only list the pending changes.
+        #[arg(long)]
+        check: bool,
+        /// The title of the step; "Step N" by default.
+        #[arg(long)]
+        title: Option<String>,
+        /// Treat proposed renames as a removal and an addition.
+        #[arg(long)]
+        no_renames: bool,
+        /// Write the step even when changes can lose data.
+        #[arg(long)]
+        allow_data_loss: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -53,6 +71,13 @@ fn main() -> ExitCode {
             SpecCommand::Model { dir, samples } => model(&dir, samples),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
+        Command::Migrate {
+            project,
+            check,
+            title,
+            no_renames,
+            allow_data_loss,
+        } => migrate(&project, check, title, no_renames, allow_data_loss),
     }
 }
 
@@ -154,6 +179,58 @@ fn model(dir: &std::path::Path, samples: bool) -> ExitCode {
         }
         Err(err) => {
             eprintln!("clarity: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, no_renames: bool, allow_data_loss: bool) -> ExitCode {
+    use clarity_spec::migrate;
+    let project = match load(project_file) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
+    if !errors.is_empty() {
+        for diagnostic in errors {
+            eprintln!("{diagnostic}");
+        }
+        eprintln!("clarity: fix the errors before migrating");
+        return ExitCode::FAILURE;
+    }
+    let renames = if no_renames { Vec::new() } else { migrate::proposed_renames(&project) };
+    let ops = migrate::pending(&project, &renames);
+    if ops.is_empty() {
+        eprintln!("The migrations cover the data dictionary; nothing to migrate.");
+        return ExitCode::SUCCESS;
+    }
+    eprintln!("Changes not in a migration yet:");
+    for op in &ops {
+        let mark = if op.loses_data() { "  (can lose data)" } else { "" };
+        for (i, line) in migrate::op_text(op).lines().enumerate() {
+            eprintln!("  {line}{}", if i == 0 { mark } else { "" });
+        }
+    }
+    if !renames.is_empty() {
+        eprintln!("Renames are proposed; use --no-renames to remove and add instead.");
+    }
+    if check {
+        return ExitCode::SUCCESS;
+    }
+    if ops.iter().any(migrate::Op::loses_data) && !allow_data_loss {
+        eprintln!("clarity: some changes can lose data; check them and run again with --allow-data-loss");
+        return ExitCode::FAILURE;
+    }
+    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
+    let count = project.migrations.as_ref().map_or(0, Vec::len);
+    let title = title.unwrap_or_else(|| format!("Step {}", count + 1));
+    match clarity_spec::write_step(&dir, &title, &ops) {
+        Ok(path) => {
+            eprintln!("Wrote {}", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("clarity: cannot write the step: {err}");
             ExitCode::FAILURE
         }
     }

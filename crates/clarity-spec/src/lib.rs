@@ -7,6 +7,7 @@ pub mod dictionary;
 pub mod edit;
 pub mod frame;
 pub mod lexer;
+pub mod migrate;
 pub mod model;
 pub mod parser;
 pub mod rename;
@@ -48,7 +49,44 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagnostics.extend(file_diagnostics);
     }
     diagnostics.extend(check::check(&files));
-    Project { files, diagnostics }
+    Project {
+        files,
+        diagnostics,
+        migrations: None,
+    }
+}
+
+/// Like `load_sources`, with the migration steps given as (path, text) in
+/// order, checked against the dictionary.
+pub fn load_with_migrations<'a>(
+    sources: impl IntoIterator<Item = (&'a str, &'a str)>,
+    migrations: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Project {
+    let mut project = load_sources(sources);
+    let mut steps = Vec::new();
+    for (path, text) in migrations {
+        let (migration, diagnostics) = migrate::parse(text, path);
+        project.diagnostics.extend(diagnostics);
+        steps.push(migration);
+    }
+    project.migrations = Some(steps);
+    migrate::check(&mut project);
+    project
+}
+
+/// The folder of migration steps in a project's folder.
+pub const MIGRATIONS_DIR: &str = "migrations";
+
+/// The step files of the project in `dir`, in order, as (path, text).
+pub fn migration_sources(dir: &Path) -> std::io::Result<Vec<(String, String)>> {
+    let folder = dir.join(MIGRATIONS_DIR);
+    if !folder.is_dir() {
+        return Ok(Vec::new());
+    }
+    spec_files(&folder)?
+        .into_iter()
+        .map(|path| Ok((path.display().to_string(), std::fs::read_to_string(&path)?)))
+        .collect()
 }
 
 /// Loads every `.clarity` file in `dir` (not recursive), sorted by name.
@@ -58,8 +96,10 @@ pub fn load_dir(dir: &Path) -> std::io::Result<Project> {
     for path in &paths {
         sources.push((path.display().to_string(), std::fs::read_to_string(path)?));
     }
-    Ok(load_sources(
+    let steps = migration_sources(dir)?;
+    Ok(load_with_migrations(
         sources.iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
     ))
 }
 
@@ -85,8 +125,10 @@ pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Pro
         };
         sources.push((p.display().to_string(), content));
     }
-    Ok(load_sources(
+    let steps = migration_sources(dir)?;
+    Ok(load_with_migrations(
         sources.iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
     ))
 }
 
@@ -144,4 +186,21 @@ impl Preview {
             app_events: widgets::APP_EVENTS.to_vec(),
         }
     }
+}
+
+/// Writes `ops` as the next step in the `migrations` folder of the
+/// project's module folder `dir`, and returns its path.
+pub fn write_step(dir: &Path, title: &str, ops: &[migrate::Op]) -> std::io::Result<PathBuf> {
+    if ops.is_empty() {
+        return Err(std::io::Error::other("there are no changes to migrate"));
+    }
+    let folder = dir.join(MIGRATIONS_DIR);
+    std::fs::create_dir_all(&folder)?;
+    let existing: Vec<String> = spec_files(&folder)?
+        .iter()
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    let path = folder.join(migrate::next_file_name(&existing));
+    std::fs::write(&path, migrate::step_text(title, ops))?;
+    Ok(path)
 }

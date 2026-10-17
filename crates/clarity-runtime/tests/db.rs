@@ -296,3 +296,44 @@ fn a_query_is_sql_with_parameters() {
     );
     assert_eq!(params, [sql::text("%a%"), sql::integer(5)]);
 }
+
+/// The table built again, as a step that changes a column does it.
+const REBUILD: &str = "CREATE TABLE customer__new (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    credit_limit TEXT NOT NULL,
+    active INTEGER NOT NULL,
+    since TEXT,
+    referred_by INTEGER REFERENCES customer (id)
+);
+INSERT INTO customer__new (id, name, kind, credit_limit, active, since, referred_by)
+    SELECT id, name, kind, credit_limit, active, since, referred_by FROM customer;
+DROP TABLE customer;
+ALTER TABLE customer__new RENAME TO customer;";
+
+#[test]
+fn a_step_can_build_a_referenced_table_again() {
+    let mut db = db();
+    let mut ada = ada();
+    db.save(&mut ada).unwrap();
+    let mut grace = customer("Grace Hopper", CustomerKind::Private, "0", true);
+    grace.referred_by = Some(ada.id);
+    db.save(&mut grace).unwrap();
+
+    assert_eq!(db.migrate(&[STEPS[0], REBUILD]).unwrap(), 1);
+    assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, Some(ada.id));
+    // References are checked again after the step.
+    assert_eq!(db.delete(&ada), Err(Error::InUse { table: "customer", id: ada.id }));
+}
+
+#[test]
+fn a_step_that_breaks_references_changes_nothing() {
+    let mut db = db();
+    let mut grace = customer("Grace Hopper", CustomerKind::Private, "0", true);
+    db.save(&mut grace).unwrap();
+    let dangling = "UPDATE customer SET referred_by = 99;";
+    assert!(db.migrate(&[STEPS[0], dangling]).is_err());
+    assert_eq!(db.schema_version().unwrap(), 1);
+    assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, None);
+}

@@ -458,6 +458,11 @@ pub struct CommandProps {
 pub struct Project {
     pub files: Vec<SpecFile>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The steps in the project's `migrations` folder, in order. None when
+    /// the project was loaded without its folder (sources given in memory).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub migrations: Option<Vec<crate::migrate::Migration>>,
 }
 
 impl Project {

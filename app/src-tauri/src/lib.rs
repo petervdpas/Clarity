@@ -2,6 +2,7 @@
 //! and their history; the frontend only renders the `Preview` it receives.
 
 mod build;
+mod migrations;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -33,7 +34,7 @@ const DEBOUNCE: Duration = Duration::from_millis(150);
 struct OpenProject {
     file: PathBuf,
     dir: PathBuf,
-    _watcher: notify::RecommendedWatcher,
+    watcher: notify::RecommendedWatcher,
 }
 
 #[derive(Default)]
@@ -95,10 +96,11 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
     matches!(
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    ) && event
-        .paths
-        .iter()
-        .any(|p| p == file || (p.parent() == Some(dir) && is_spec_file(p)))
+    ) && event.paths.iter().any(|p| {
+        let folder = p.parent();
+        p == file
+            || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
+    })
 }
 
 /// Watches the module folder, and the folder holding the project file (a
@@ -114,7 +116,13 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    for folder in [dir, file.parent().unwrap_or(dir)] {
+    // The migration steps too, once the project has them.
+    let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
+    let mut folders = vec![dir, file.parent().unwrap_or(dir)];
+    if steps.is_dir() {
+        folders.push(&steps);
+    }
+    for folder in folders {
         watcher
             .watch(folder, RecursiveMode::NonRecursive)
             .map_err(|err| format!("cannot watch {}: {err}", folder.display()))?;
@@ -172,7 +180,7 @@ fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistorySt
     *state.open.lock().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
         file,
         dir,
-        _watcher: watcher,
+        watcher,
     });
     // Undo works within one project.
     *history.0.lock().map_err(|_| "history is poisoned")? = History::default();
@@ -670,7 +678,9 @@ pub fn run() {
             try_decl,
             build_app,
             stop_app,
-            rename
+            rename,
+            migrations::pending_migration,
+            migrations::create_migration
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");
@@ -804,6 +814,8 @@ mod tests {
         assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/a.clarity"));
         assert!(changes(EventKind::Modify(ModifyKind::Name(RenameMode::To)), "/p/shop/a.clarity"));
         assert!(changes(EventKind::Modify(ModifyKind::Name(RenameMode::To)), FILE));
+        // Migration steps belong to the project too.
+        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/migrations/0002.clarity"));
     }
 
     #[test]

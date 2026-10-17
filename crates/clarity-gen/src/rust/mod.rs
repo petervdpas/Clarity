@@ -115,7 +115,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !errors.is_empty() {
         return Err(errors);
     }
-    files.push(text("src/schema.rs", schema::emit(project)));
+    files.push(text("src/schema.rs", schema::emit(project)?));
     files.push(text("src/main.rs", main_rs(project, &modules, &owners, &database, &main_window)));
     Ok(files)
 }

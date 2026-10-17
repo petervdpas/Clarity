@@ -61,6 +61,16 @@ fn every_snippet_parses() {
 }
 
 #[test]
+fn every_migration_snippet_parses() {
+    let steps: Vec<String> = blocks().into_iter().filter(|b| b.starts_with("migration ")).collect();
+    assert!(!steps.is_empty(), "the reference shows a migration step");
+    for step in steps {
+        let (_, diagnostics) = clarity_spec::migrate::parse(&step, "0001.clarity");
+        assert!(diagnostics.is_empty(), "{diagnostics:#?} in\n{step}");
+    }
+}
+
+#[test]
 fn the_complete_example_checks_clean() {
     let example = blocks()
         .into_iter()

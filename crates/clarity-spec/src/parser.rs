@@ -75,7 +75,7 @@ impl Node<'_> {
     }
 }
 
-fn build_tree<'a>(lines: &'a [Line], diagnostics: &mut Vec<Diagnostic>) -> Vec<Node<'a>> {
+pub(crate) fn build_tree<'a>(lines: &'a [Line], diagnostics: &mut Vec<Diagnostic>) -> Vec<Node<'a>> {
     if let Some(first) = lines.first()
         && first.indent != 0
     {
@@ -403,12 +403,17 @@ fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
 fn parse_field(node: &Node) -> ParseResult<Field> {
     no_children(node)?;
     let mut cursor = Cursor::new(node.line);
+    parse_field_at(&mut cursor, node.line.span)
+}
+
+/// `name: type, modifiers` from the cursor to the end of the line.
+pub(crate) fn parse_field_at(cursor: &mut Cursor, span: Span) -> ParseResult<Field> {
     let name = cursor.expect_ident("a field name")?;
     cursor.expect(TokenKind::Colon, "':' after the field name")?;
-    let ty = parse_type(&mut cursor)?;
+    let ty = parse_type(cursor)?;
     let mut modifiers = Modifiers::default();
     while cursor.eat(TokenKind::Comma) {
-        parse_modifier(&mut cursor, &mut modifiers)?;
+        parse_modifier(cursor, &mut modifiers)?;
     }
     cursor.expect_end()?;
     let label = modifiers
@@ -421,11 +426,11 @@ fn parse_field(node: &Node) -> ParseResult<Field> {
         ty,
         modifiers,
         label,
-        span: node.line.span,
+        span,
     })
 }
 
-fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
+pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
     let ident = cursor.expect_ident("a type")?;
     let ty = match ident.name.as_str() {
         "text" => {

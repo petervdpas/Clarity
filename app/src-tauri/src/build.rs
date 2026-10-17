@@ -152,10 +152,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("shop")).unwrap();
         std::fs::copy(examples.join("shop.clarity"), dir.join("shop.clarity")).unwrap();
-        for entry in std::fs::read_dir(examples.join("shop")).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_file() {
-                std::fs::copy(&path, dir.join("shop").join(path.file_name().unwrap())).unwrap();
+        // The modules and the migration steps.
+        for folder in ["shop", "shop/migrations"] {
+            std::fs::create_dir_all(dir.join(folder)).unwrap();
+            for entry in std::fs::read_dir(examples.join(folder)).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_file() {
+                    std::fs::copy(&path, dir.join(folder).join(path.file_name().unwrap())).unwrap();
+                }
             }
         }
         let (out, name) = generate_out(&dir.join("shop.clarity")).unwrap();

@@ -172,13 +172,18 @@ export type Slot = {
  *  (design section 1.5, I1b). */
 export type ShownText = string | { text: string; values: Record<string, Slot> };
 
-function slotText(slot: Slot | undefined, f: Formats, label: (enumName: string, value: string) => string): string {
+function slotText(
+  slot: Slot | undefined,
+  f: Formats,
+  label: (enumName: string, value: string) => string,
+  word: (text: string) => string,
+): string {
   if (!slot || slot.value === null) return "";
   switch (slot.kind) {
     case "text":
       return String(slot.value);
     case "bool":
-      return slot.value ? "Yes" : "No";
+      return word(slot.value ? "Yes" : "No");
     case "enum":
       return label(slot.enum ?? "", String(slot.value));
     default:
@@ -188,8 +193,14 @@ function slotText(slot: Slot | undefined, f: Formats, label: (enumName: string, 
 
 /** Text as shown: each slot filled with its value in the locale, `{{` and
  *  `}}` as braces. Plain text arrives ready and is shown as it is.
- *  `label` gives the label of an enum value. */
-export function fillText(text: ShownText, f: Formats, label: (enumName: string, value: string) => string): string {
+ *  `label` gives the label of an enum value, `word` the renderer's own
+ *  words (Yes, No) in the language shown. */
+export function fillText(
+  text: ShownText,
+  f: Formats,
+  label: (enumName: string, value: string) => string,
+  word: (text: string) => string = (t) => t,
+): string {
   if (typeof text === "string") return text;
   const t = text.text;
   let out = "";
@@ -200,7 +211,7 @@ export function fillText(text: ShownText, f: Formats, label: (enumName: string, 
       i += 2;
     } else if (t[i] === "{" && t.indexOf("}", i) > i) {
       const end = t.indexOf("}", i);
-      out += slotText(text.values[t.slice(i + 1, end)], f, label);
+      out += slotText(text.values[t.slice(i + 1, end)], f, label, word);
       i = end + 1;
     } else {
       out += t[i];

@@ -499,6 +499,9 @@ pub struct Project {
     /// The project's language and currency, for showing values (section
     /// 1.5 of the design). Default when the project was loaded without them.
     pub locale: Locale,
+    /// The project's translations per language: each text a person sees,
+    /// as written, with its translation (design section 1.5, I1c).
+    pub translations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
 }
 
 impl Project {

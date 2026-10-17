@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
 pub mod formats;
+pub mod translations;
 pub mod frame;
 pub mod lexer;
 pub mod migrate;
@@ -56,6 +57,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         migrations: None,
         sources: Vec::new(),
         locale: model::Locale::default(),
+        translations: BTreeMap::new(),
     }
 }
 
@@ -186,11 +188,34 @@ pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[
         files.push((p.display().to_string(), content));
     }
     let steps = migration_sources(dir)?;
-    Ok(load_in(
+    let mut project = load_in(
         files.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         sources,
-    ))
+    );
+    let translations = translation_sources(dir, replaced)?;
+    translations::attach(&mut project, translations.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    Ok(project)
+}
+
+/// The translation files of the project in `dir`, as (path, text): one
+/// per language, `translations/nl.clarity`. `replaced` stands in for the
+/// file it names, as it does for the modules.
+pub fn translation_sources(dir: &Path, replaced: Option<(&Path, &str)>) -> std::io::Result<Vec<(String, String)>> {
+    let folder = dir.join(translations::TRANSLATIONS_DIR);
+    if !folder.is_dir() {
+        return Ok(Vec::new());
+    }
+    spec_files(&folder)?
+        .into_iter()
+        .map(|p| {
+            let text = match replaced {
+                Some((path, text)) if p == path => text.to_string(),
+                _ => std::fs::read_to_string(&p)?,
+            };
+            Ok((p.display().to_string(), text))
+        })
+        .collect()
 }
 
 /// `load_dir_in` for a project whose only data source is `main`.

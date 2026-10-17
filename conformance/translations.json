@@ -1,0 +1,11 @@
+{
+  "about": "Which translation a renderer uses (DESIGN section 1.5, I1c): the person's locale, the languages the project has translation files for, and the project's base language. picks is the file's language, or null for the texts as written. Every renderer must pick the same.",
+  "picks": [
+    { "what": "the exact language", "locale": "nl-NL", "available": ["nl-NL", "nl", "de"], "base": "en", "picks": "nl-NL" },
+    { "what": "the language without its region", "locale": "nl-BE", "available": ["nl", "de"], "base": "en", "picks": "nl" },
+    { "what": "a region of a language without its own file", "locale": "de-AT", "available": ["de-DE"], "base": "en", "picks": "de-DE" },
+    { "what": "the base language is shown as written", "locale": "en-GB", "available": ["nl", "en"], "base": "en", "picks": null },
+    { "what": "a language nobody translated", "locale": "fr-FR", "available": ["nl"], "base": "en", "picks": null },
+    { "what": "no base language named means English", "locale": "en-US", "available": ["nl"], "base": null, "picks": null }
+  ]
+}

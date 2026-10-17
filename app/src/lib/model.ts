@@ -7,6 +7,8 @@ import type { Field } from "./generated/Field";
 import type { Preview } from "./generated/Preview";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
 import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
+import { languageChoice } from "./i18n.svelte";
+import { pickLanguage, translate, translateText } from "./translate";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -26,8 +28,25 @@ export function findField(entity: Entity, name: string): Field | undefined {
  *  project's currency. */
 export function formatsOf(preview: Preview): Formats {
   const { language, currency } = preview.project.locale;
+  // A language chosen in the designer shows its formats too.
+  if (languageChoice.language) return { locale: languageChoice.language, currency };
   const system = typeof navigator === "undefined" ? undefined : navigator.languages;
   return { locale: userLocale(system, language), currency };
+}
+
+/** The translations to show texts in: the designer's choice, or those for
+ *  the person's locale; undefined shows the texts as written. */
+export function translationsOf(preview: Preview): Record<string, string> | undefined {
+  const all = preview.project.translations;
+  const chosen = languageChoice.language;
+  const language =
+    chosen !== undefined ? chosen : pickLanguage(formatsOf(preview).locale, Object.keys(all), preview.project.locale.language);
+  return language ? all[language] : undefined;
+}
+
+/** A text of the project as the person reads it: translated, or as written. */
+export function tr(preview: Preview, text: string): string {
+  return translate(text, translationsOf(preview));
 }
 
 /** How a field's values are formatted, for the types that have formats. */
@@ -52,11 +71,11 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
   if (value === null || value === undefined) return "";
   switch (field.type.kind) {
     case "bool":
-      return value ? "Yes" : "No";
+      return tr(preview, value ? "Yes" : "No");
     case "enum": {
       const decl = findEnum(preview, field.type.name.name);
       const variant = decl?.variants.find((v) => v.name.name === value);
-      return variant?.label ?? String(value);
+      return variant ? tr(preview, variant.label) : String(value);
     }
     case "list":
       return `${value} item(s)`;
@@ -98,10 +117,12 @@ export function describeType(field: Field): string {
 /** Text from the backend as shown: its slots filled in the person's
  *  format, an enum value by its label. */
 export function shownText(preview: Preview, text: ShownText): string {
-  return fillText(text, formatsOf(preview), (enumName, value) => {
+  const table = translationsOf(preview);
+  const label = (enumName: string, value: string) => {
     const variant = findEnum(preview, enumName)?.variants.find((v) => v.name.name === value);
-    return variant?.label ?? value;
-  });
+    return variant ? translate(variant.label, table) : value;
+  };
+  return fillText(translateText(text, table), formatsOf(preview), label, (word) => translate(word, table));
 }
 
 /** What went wrong in the backend, as text to show: a refusal arrives as

@@ -80,6 +80,26 @@ Each setting appears once, except `datasource`. An unknown setting or value is a
 
 Today the Rust backend with the web UI is generated; the other stacks are on the roadmap in DESIGN.md.
 
+### Translations
+
+Every text a person sees is in the project already: labels (written or derived from a name), help texts, titles, captions, placeholders, tooltips, tab titles, enum labels, menu items, the status text, messages, refusals, and the captions and errors code sets. Clarity collects them, so nobody marks a text for translation. The project's `language` is the language they are written in.
+
+A file per language, in the `translations` folder of the module folder, gives them in that language:
+
+```
+// shop/translations/nl.clarity
+translation nl
+    "Customer card" "Klantkaart"
+    "Saved {customer.name}" "{customer.name} opgeslagen"
+    "Yes" "Ja"
+```
+
+- The file's name is its language: `nl.clarity` says `translation nl`, `nl-BE.clarity` says `translation nl-BE`.
+- A text is found by what it says, for the whole project. When a text changes, its translation no longer applies: the checker warns that the old line is no longer shown anywhere, and the new text shows as written until it has a translation.
+- A translation keeps the slots of its text and may move them; a slot missing or added is an error.
+- A text without a translation shows as written, so a language can grow text by text. The Project tab lists every text with a column per language, says how many each misses, and writes what is typed into the files. `Yes` and `No`, which the screen shows for bools, can be translated too.
+- The application shows the translation for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, and the project's own language shows as written. The designer can show the canvas and Preview in any of the project's languages.
+
 ## 3. Modules
 
 Every other `.clarity` file in the project folder is a module. It starts with `module`, then the modules it uses, then its declarations:
@@ -960,6 +980,8 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
 
+translation   = "translation" language
+                    (String String)*
 migration     = "migration" String ["baseline"]
                     (("add" "entity" Entity
                         field*)

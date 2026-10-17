@@ -3,6 +3,7 @@
 
 mod build;
 mod external;
+mod translations;
 mod migrations;
 
 use std::path::{Path, PathBuf};
@@ -684,7 +685,10 @@ pub fn run() {
             migrations::create_migration,
             external::source_tables,
             external::import_tables,
-            external::take_ownership
+            external::take_ownership,
+            translations::translation_table,
+            translations::set_translation,
+            translations::add_language
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

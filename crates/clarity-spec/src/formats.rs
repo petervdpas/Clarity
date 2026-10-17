@@ -73,3 +73,31 @@ pub fn problem(ty: &FieldType, field: &str, name: &str) -> Option<String> {
         Some((last, rest)) => format!("unknown format '{name}' for field '{field}'; it can be {} or {last}", rest.join(", ")),
     })
 }
+
+/// Why `tag` is not a language tag Clarity takes: a language of two or
+/// three lowercase letters, optionally a script (`Latn`) and a region (`NL`
+/// or `419`), joined by hyphens: `en`, `nl-NL`, `sr-Latn-RS`.
+pub fn language_problem(tag: &str) -> Option<String> {
+    let mut parts = tag.split('-');
+    let language = parts.next().unwrap_or("");
+    let lower = |s: &str, n: std::ops::RangeInclusive<usize>| n.contains(&s.len()) && s.chars().all(|c| c.is_ascii_lowercase());
+    let mut fits = lower(language, 2..=3);
+    let rest: Vec<&str> = parts.collect();
+    let (script, region) = match rest.as_slice() {
+        [] => (None, None),
+        [one] if one.len() == 4 => (Some(*one), None),
+        [one] => (None, Some(*one)),
+        [script, region] => (Some(*script), Some(*region)),
+        _ => (None, None),
+    };
+    fits &= rest.len() <= 2 && (rest.len() < 2 || script.is_some_and(|s| s.len() == 4));
+    if let Some(script) = script {
+        let mut chars = script.chars();
+        fits &= chars.next().is_some_and(|c| c.is_ascii_uppercase()) && chars.all(|c| c.is_ascii_lowercase());
+    }
+    if let Some(region) = region {
+        fits &= (region.len() == 2 && region.chars().all(|c| c.is_ascii_uppercase()))
+            || (region.len() == 3 && region.chars().all(|c| c.is_ascii_digit()));
+    }
+    (!fits).then(|| format!("'{tag}' is not a language tag; write one like en, nl or nl-NL"))
+}

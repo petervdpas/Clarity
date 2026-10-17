@@ -7,6 +7,7 @@
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import ImportPanel from "./ImportPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
+  import TranslationsPanel from "./TranslationsPanel.svelte";
   import StackFields from "./StackFields.svelte";
   import type { Preview } from "./generated/Preview";
   import type { AuthKind } from "./generated/AuthKind";
@@ -344,6 +345,8 @@
       {#each databases as db (db.name)}
         <MigrationPanel source={db.name} named={databases.length > 1} {preview} {onapplied} />
       {/each}
+
+      <TranslationsPanel {preview} {onapplied} />
     {/key}
   {/if}
 </div>

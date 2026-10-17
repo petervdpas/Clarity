@@ -10,7 +10,7 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState } from "../lib/live";
-  import { errorText, shownText, type Row } from "../lib/model";
+  import { errorText, shownText, tr, type Row } from "../lib/model";
   import type { ShownText } from "../lib/format";
   import { findPage, type PageData } from "../lib/pages";
 
@@ -59,7 +59,7 @@
   });
 
   $effect(() => {
-    document.title = page?.title ?? page?.name.name ?? "";
+    document.title = page?.title && model ? tr(model, page.title) : (page?.name.name ?? "");
   });
 
   function say(message: Message) {

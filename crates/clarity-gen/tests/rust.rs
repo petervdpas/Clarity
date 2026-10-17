@@ -507,3 +507,12 @@ fn a_refusal_reaches_the_screen_with_its_slots() {
     assert!(main.contains("Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),"), "{main}");
     assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {"), "{main}");
 }
+
+#[test]
+fn the_application_carries_its_translations() {
+    let mut project = load_sources([("sales.clarity", SALES)]);
+    project.translations.insert("nl".into(), [("Order".to_string(), "Bestelling".to_string())].into());
+    let files = generate(&project, &shop()).unwrap();
+    let model = file(&files, "src/model.json");
+    assert!(model.contains("\"translations\":{\"nl\":{\"Order\":\"Bestelling\"}}"), "{model}");
+}

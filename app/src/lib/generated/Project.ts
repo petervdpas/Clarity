@@ -12,4 +12,9 @@ export type Project = { files: Array<SpecFile>, diagnostics: Array<Diagnostic>,
  * The project's language and currency, for showing values (section
  * 1.5 of the design). Default when the project was loaded without them.
  */
-locale: Locale, };
+locale: Locale, 
+/**
+ * The project's translations per language: each text a person sees,
+ * as written, with its translation (design section 1.5, I1c).
+ */
+translations: { [key in string]: { [key in string]: string } }, };

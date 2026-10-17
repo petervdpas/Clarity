@@ -4,7 +4,7 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, tr } from "./model";
   import { editText, parseNumber } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
@@ -43,7 +43,7 @@
   const partState = $derived(live && p.name ? live.parts[p.name] : undefined);
   const hidden = $derived(partState?.visible === false);
   const disabled = $derived(partState?.enabled === false);
-  const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? shownText(preview, partState.caption) : p.caption);
+  const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? shownText(preview, partState.caption) : p.caption !== null ? tr(preview, p.caption) : null);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
   const readonly = $derived(partState?.readonly ?? p.readonly);
   const error = $derived(partState?.error ? shownText(preview, partState.error) || null : null);
@@ -175,7 +175,8 @@
   }
 
   function columnLabel(name: string): string {
-    return (collection && findField(collection.entity, name)?.label) ?? name;
+    const label = collection && findField(collection.entity, name)?.label;
+    return label ? tr(preview, label) : name;
   }
 </script>
 
@@ -190,7 +191,7 @@
   class:disabled
   class:invalid={error !== null}
   data-widget={offset}
-  title={error ?? p.tooltip ?? undefined}
+  title={error ?? (p.tooltip ? tr(preview, p.tooltip) : undefined)}
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
   onpointerdown={pressMove}
@@ -203,7 +204,7 @@
       >
     {:else if p.kind === "help"}
       <span class="help-text" class:error={targetError !== null} id={p.for ? helpId(p.for) : undefined} aria-live="polite"
-        >{targetError ?? caption ?? targetField?.modifiers.help ?? ""}</span
+        >{targetError ?? caption ?? (targetField?.modifiers.help ? tr(preview, targetField.modifiers.help) : "")}</span
       >
     {:else if p.kind === "heading"}
       <h2 class="heading-text">{caption ?? ""}</h2>
@@ -214,7 +215,7 @@
         {id}
         type={p.kind === "password" ? "password" : bound?.field.type.kind === "email" ? "email" : "text"}
         value={shown}
-        placeholder={p.placeholder ?? undefined}
+        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
         aria-invalid={error !== null}
@@ -230,7 +231,7 @@
       <textarea
         {id}
         value={shown}
-        placeholder={p.placeholder ?? undefined}
+        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
         aria-invalid={error !== null}
@@ -247,7 +248,7 @@
         class="numeric"
         inputmode="decimal"
         value={numberText}
-        placeholder={p.placeholder ?? undefined}
+        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
         tabindex={p.tabOrder ?? undefined}
         aria-describedby={describedBy}
         aria-invalid={error !== null || badNumber}
@@ -314,7 +315,7 @@
                   fire("change");
                 }}
               />
-              {v.label}
+              {tr(preview, v.label)}
             </label>
           {/each}
         {/if}
@@ -337,7 +338,7 @@
         <option value=""></option>
         {#if bound?.field.type.kind === "enum"}
           {#each findEnum(preview, bound.field.type.name.name)?.variants ?? [] as v (v.name.name)}
-            <option value={v.name.name}>{v.label}</option>
+            <option value={v.name.name}>{tr(preview, v.label)}</option>
           {/each}
         {:else if bound?.field.type.kind === "ref" && live}
           {#each live.refOptions(bound.field.type.entity.name) as option (option.id)}
@@ -366,7 +367,7 @@
               class:active={index === activeTab}
               class:selected={design && pageDesigner.selected === tab.span.start}
               data-tab-switch="{offset}:{index}"
-              onpointerdown={(e) => pressTab(e, index, tab.span.start)}>{tab.title}</button
+              onpointerdown={(e) => pressTab(e, index, tab.span.start)}>{tab.title ? tr(preview, tab.title) : tab.title}</button
             >
           {/each}
         </div>

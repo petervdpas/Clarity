@@ -14,6 +14,7 @@
   import type { ShownFrame } from "./frame";
   import { pageDesigner } from "./pageDesigner.svelte";
   import type { PageData } from "./pages";
+  import { tr } from "./model";
   import { useLive } from "./live";
   import Splitter from "./Splitter.svelte";
   import type { Side } from "./generated/Side";
@@ -113,7 +114,7 @@
           onpointerdown={(e) => design && run(e, item, editable)}
           onclick={(e) => !design && run(e, item, editable)}
         >
-          <span>{item.props.caption}</span>
+          <span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>
           {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
           {#if item.items.length > 0}<span class="arrow">&rsaquo;</span>{/if}
         </button>
@@ -143,7 +144,7 @@
       onclick={(e) => !design && run(e, item, editable)}
     >
       {#if item.props.icon}<span class="icon">{iconLetter(item.props.icon)}</span>{/if}
-      {#if item.props.caption}<span>{item.props.caption}</span>{/if}
+      {#if item.props.caption}<span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>{/if}
     </button>
   {/if}
 {/snippet}
@@ -201,7 +202,7 @@
               onclick={(e) => {
                 if (item.items.length > 0) openMenu = openMenu === item.span.start ? null : item.span.start;
                 else run(e, item, editable);
-              }}>{item.props.caption}</button
+              }}>{item.props.caption ? tr(preview, item.props.caption) : ""}</button
             >
             {#if open && item.items.length > 0}
               <div class="dropdown">{@render entries(item.items, editable)}</div>
@@ -250,7 +251,7 @@
             onpointerdown={(e) => {
               ribbonTab = i;
               if (design && editable) pick(e, tab.span.start);
-            }}>{tab.title}</button
+            }}>{tr(preview, tab.title)}</button
           >
         {/each}
         {#if design && shown.inherited}<span class="from">from app</span>{/if}
@@ -269,7 +270,7 @@
                   {@render button(item, editable, true)}
                 {/each}
               </div>
-              <div class="ribbon-title">{group.title}</div>
+              <div class="ribbon-title">{tr(preview, group.title)}</div>
             </div>
           {/each}
         </div>
@@ -305,7 +306,7 @@
           class="status"
           class:picked={design && pageDesigner.selected === statusId}
           role="status"
-          onpointerdown={(e) => design && !shown.inherited && pick(e, statusId)}>{f.status}</span
+          onpointerdown={(e) => design && !shown.inherited && pick(e, statusId)}>{tr(preview, f.status)}</span
         >
       {/if}
       <div class="footer-grid">

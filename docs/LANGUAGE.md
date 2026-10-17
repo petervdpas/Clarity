@@ -68,7 +68,7 @@ project Shop
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
 | `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
-| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application) and a connection string or URL for the others. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
+| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
 Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
@@ -217,8 +217,50 @@ Fields in a step are written as in an entity. Only what is stored counts: the ty
 - **Replaying the steps** in order gives the schema as last migrated. Each step must fit the schema the steps before it made; one that renames a field that does not exist is an error.
 - **Pending changes** are what the dictionary has and the steps do not. The checker reports them as warnings on the entity, and the generator refuses to write the application until a step covers them.
 - **Writing a step.** The Project tab lists the pending changes and writes them as the next step; `clarity migrate shop.clarity` does the same from the command line. Clarity proposes a rename when a field disappears and a field of the same type appears in the same entity, or an entity disappears and one with mostly the same fields appears. You confirm it or take it as a removal and an addition. Changes that can lose data (removing, changing a type) need a confirmation.
-- **Running.** The generated application applies the steps its database does not have yet when it starts, each in a transaction, and checks the references between records before a step is kept.
+- **Running.** The generated application applies the steps its database does not have yet when it starts, each in a transaction where the database allows it (see Databases below). On SQLite, which does not enforce references while it builds a table again, it checks the references between records before a step is kept.
 - **A step that ran never changes.** To undo it, write a new step.
+
+### Databases
+
+The same entities and steps work on every SQL database. The generated application carries a driver for each kind of database its data sources are, and writes each step in that database's own SQL.
+
+```
+datasource main postgres "env:SHOP_DATABASE"
+```
+
+| Kind | Where the database is | Example |
+|---|---|---|
+| `sqlite` | a file, relative to the project's folder | `"data/shop.db"` |
+| `postgres` | a connection string or URL | `host=db.example.com user=shop dbname=shop`, `postgresql://shop@db.example.com/shop` |
+| `mysql` | a URL | `mysql://shop@db.example.com:3306/shop` |
+| `mssql` | an ADO.NET connection string | `server=tcp:db.example.com,1433;database=shop;user=shop;TrustServerCertificate=true` |
+
+A connection that needs a password is written as `"env:NAME"`: the generated application reads it from that environment variable when it starts, so the password is never in the project. The `keychain:` form is for web APIs only for now.
+
+How fields are stored:
+
+| Type | SQLite | PostgreSQL | MySQL | SQL Server |
+|---|---|---|---|---|
+| `text(n)` | TEXT | VARCHAR(n) | VARCHAR(n); TEXT above 768 | NVARCHAR(n); NVARCHAR(MAX) above 4000 |
+| `text`, `url` | TEXT | TEXT | TEXT | NVARCHAR(MAX) |
+| `email` | TEXT | VARCHAR(320) | VARCHAR(320) | NVARCHAR(320) |
+| `integer`, `id`, `ref` | INTEGER | BIGINT | BIGINT | BIGINT |
+| `decimal(p, s)` | TEXT | NUMERIC(p,s) | DECIMAL(p,s) | DECIMAL(p,s) |
+| `money` | TEXT | NUMERIC(19,4) | DECIMAL(19,4) | DECIMAL(19,4) |
+| `bool` | INTEGER | BOOLEAN | BOOLEAN | BIT |
+| `date` | TEXT | DATE | DATE | DATE |
+| `datetime` | TEXT | TIMESTAMP | DATETIME | DATETIME2 |
+| an enum | TEXT | TEXT | VARCHAR(100) | NVARCHAR(100) |
+
+SQLite keeps decimals and dates as text, so no precision is lost. The key is an integer the database counts up, and a `ref` field gets a foreign key when its entity is in the same database.
+
+What differs between the databases:
+
+- **Unique text.** MySQL and SQL Server index text up to a length (768 and 850 characters), so a `unique` text field there needs a maximum length that fits, such as `text(200)`; the generator says which field. Empty text is never a duplicate: SQLite, PostgreSQL and SQL Server leave it out of the index, MySQL indexes it as no value.
+- **Changing a type.** SQLite builds the table again; the others add a column of the new type, copy the values over converted, and drop the old one. Empty text that becomes a number or a date gets the field's default.
+- **A failed step.** SQLite, PostgreSQL and SQL Server undo the whole step. MySQL cannot undo changes to tables, so it keeps the statements of the step that ran before the failure; the error says how many.
+- **Comparing text.** `==` and `contains` follow the database: MySQL and SQL Server usually ignore case in `==` too, and sort text by their own rules.
+- **Baseline steps**, Import and the check of external tables are for SQLite only for now. An external PostgreSQL, MySQL or SQL Server database can be mapped by hand and is read and written as it is.
 
 ### External databases
 

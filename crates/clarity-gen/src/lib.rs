@@ -6,6 +6,8 @@
 mod print;
 mod rust;
 
+pub use rust::migration_sql;
+
 use clarity_project::{Backend, Settings};
 use clarity_spec::Project;
 

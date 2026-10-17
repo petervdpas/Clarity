@@ -1,9 +1,10 @@
 //! Queries: which records of an entity to read, and in which order.
 //! Generated code builds a `Query` from Clarity's `find`; this module turns
-//! it into SQL with parameters. The SQL dialect lives here only, so another
-//! database is another way of writing the same query.
+//! it into SQL with parameters, in the dialect of the database the records
+//! are in.
 
-use crate::{SqlValue, quoted};
+use crate::SqlValue;
+use crate::dialect::Dialect;
 
 /// A comparison between a column and a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,11 +116,11 @@ impl Cond {
         Cond::Not(Box::new(self))
     }
 
-    fn sql(&self, params: &mut Vec<SqlValue>) -> String {
+    fn sql(&self, dialect: Dialect, params: &mut Vec<SqlValue>) -> String {
         let mut param = |value: SqlValue, numeric: bool| {
             params.push(value);
-            let mark = format!("?{}", params.len());
-            if numeric { format!("CAST({mark} AS REAL)") } else { mark }
+            let mark = dialect.mark(params.len());
+            if numeric { dialect.number(mark) } else { mark }
         };
         match self {
             Cond::Compare {
@@ -127,10 +128,15 @@ impl Cond {
                 op,
                 value,
                 numeric,
-            } => format!("{} {} {}", column_sql(column, *numeric), op.sql(), param(value.clone(), *numeric)),
+            } => format!(
+                "{} {} {}",
+                column_sql(dialect, column, *numeric),
+                op.sql(),
+                param(value.clone(), *numeric)
+            ),
             Cond::Contains { column, text } => {
-                let pattern = format!("%{}%", escape_like(text));
-                format!("{} LIKE {} ESCAPE '\\'", quoted(column), param(SqlValue::Text(pattern), false))
+                let pattern = format!("%{}%", dialect.escape_like(text));
+                dialect.contains(column, &param(SqlValue::Text(pattern), false))
             }
             Cond::OneOf {
                 column,
@@ -138,35 +144,23 @@ impl Cond {
                 numeric,
             } => {
                 let marks: Vec<String> = values.iter().map(|v| param(v.clone(), *numeric)).collect();
-                format!("{} IN ({})", column_sql(column, *numeric), marks.join(", "))
+                format!("{} IN ({})", column_sql(dialect, column, *numeric), marks.join(", "))
             }
-            Cond::IsTrue { column } => format!("{} = 1", quoted(column)),
-            Cond::And(left, right) => format!("({} AND {})", left.sql(params), right.sql(params)),
-            Cond::Or(left, right) => format!("({} OR {})", left.sql(params), right.sql(params)),
-            Cond::Not(inner) => format!("NOT ({})", inner.sql(params)),
+            Cond::IsTrue { column } => dialect.is_true(column),
+            Cond::And(left, right) => format!("({} AND {})", left.sql(dialect, params), right.sql(dialect, params)),
+            Cond::Or(left, right) => format!("({} OR {})", left.sql(dialect, params), right.sql(dialect, params)),
+            Cond::Not(inner) => format!("NOT ({})", inner.sql(dialect, params)),
         }
     }
 }
 
 /// A column as a comparison reads it.
-fn column_sql(column: &str, numeric: bool) -> String {
+fn column_sql(dialect: Dialect, column: &str, numeric: bool) -> String {
     if numeric {
-        format!("CAST({} AS REAL)", quoted(column))
+        dialect.number(dialect.quote(column))
     } else {
-        quoted(column)
+        dialect.quote(column)
     }
-}
-
-/// Text for LIKE in which `%` and `_` are themselves, not wildcards.
-fn escape_like(text: &str) -> String {
-    let mut out = String::new();
-    for c in text.chars() {
-        if matches!(c, '\\' | '%' | '_') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// The records to read: a condition and an order. Without an order,
@@ -198,24 +192,25 @@ impl Query {
         self
     }
 
-    /// The SELECT statement for `table`, reading `columns`, and its
-    /// parameters. Records that sort the same come in the order of `key`.
-    pub fn sql(&self, table: &str, key: &str, columns: &str) -> (String, Vec<SqlValue>) {
+    /// The SELECT statement for `table` in `dialect`, reading `columns`,
+    /// and its parameters. Records that sort the same come in the order of
+    /// `key`.
+    pub fn sql(&self, dialect: Dialect, table: &str, key: &str, columns: &str) -> (String, Vec<SqlValue>) {
         let mut params = Vec::new();
-        let mut sql = format!("SELECT {columns} FROM {}", quoted(table));
+        let mut sql = format!("SELECT {columns} FROM {}", dialect.quote(table));
         if let Some(filter) = &self.filter {
             sql.push_str(" WHERE ");
-            sql.push_str(&filter.sql(&mut params));
+            sql.push_str(&filter.sql(dialect, &mut params));
         }
         let mut keys: Vec<String> = self
             .order
             .iter()
             .map(|(column, descending, numeric)| {
                 let direction = if *descending { " DESC" } else { "" };
-                format!("{}{direction}", column_sql(column, *numeric))
+                format!("{}{direction}", column_sql(dialect, column, *numeric))
             })
             .collect();
-        keys.push(quoted(key));
+        keys.push(dialect.quote(key));
         sql.push_str(" ORDER BY ");
         sql.push_str(&keys.join(", "));
         (sql, params)

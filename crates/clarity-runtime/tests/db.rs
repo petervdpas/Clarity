@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use clarity_runtime::{Cond, Db, Decimal, Error, Id, NaiveDate, Op, Query, Record, Show, SqlValue, require, sql};
+use clarity_runtime::{Cond, Db, Dialect, Decimal, Error, Id, NaiveDate, Op, Query, Record, Show, SqlValue, require, sql};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum CustomerKind {
@@ -79,7 +79,7 @@ impl Record for Customer {
     }
 }
 
-const STEPS: [&str; 1] = ["CREATE TABLE customer (
+const CUSTOMERS: &str = "CREATE TABLE customer (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     kind TEXT NOT NULL,
@@ -87,7 +87,8 @@ const STEPS: [&str; 1] = ["CREATE TABLE customer (
     active INTEGER NOT NULL,
     since TEXT,
     referred_by INTEGER REFERENCES customer (id)
-);"];
+);";
+const STEPS: [&[&str]; 1] = [&[CUSTOMERS]];
 
 fn db() -> Db {
     let mut db = Db::memory().unwrap();
@@ -141,7 +142,7 @@ fn applies_each_migration_step_once() {
     let mut db = db();
     assert_eq!(db.schema_version().unwrap(), 1);
     assert_eq!(db.migrate(&STEPS).unwrap(), 0);
-    let more = [STEPS[0], "ALTER TABLE customer ADD COLUMN notes TEXT;"];
+    let more = [STEPS[0], &["ALTER TABLE customer ADD COLUMN notes TEXT;"]];
     assert_eq!(db.migrate(&more).unwrap(), 1);
     assert_eq!(db.schema_version().unwrap(), 2);
 }
@@ -149,7 +150,7 @@ fn applies_each_migration_step_once() {
 #[test]
 fn a_failed_step_changes_nothing() {
     let mut db = db();
-    let broken = [STEPS[0], "ALTER TABLE customer ADD COLUMN a TEXT; THIS IS NOT SQL;"];
+    let broken = [STEPS[0], &["ALTER TABLE customer ADD COLUMN a TEXT; THIS IS NOT SQL;"]];
     assert!(db.migrate(&broken).is_err());
     assert_eq!(db.schema_version().unwrap(), 1);
 }
@@ -289,10 +290,10 @@ fn a_query_is_sql_with_parameters() {
     let query = Query::new()
         .filter(Cond::contains("name", "a").and(Cond::number("credit_limit", Op::LtEq, sql::integer(5)).negated()))
         .order("name", true);
-    let (sql, params) = query.sql("customer", "id", "\"id\", \"name\"");
+    let (sql, params) = query.sql(Dialect::Sqlite, "customer", "id", "\"id\", \"name\"");
     assert_eq!(
         sql,
-        "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '\\' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC, \"id\""
+        "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '!' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC, \"id\""
     );
     assert_eq!(params, [sql::text("%a%"), sql::integer(5)]);
 }
@@ -321,7 +322,7 @@ fn a_step_can_build_a_referenced_table_again() {
     grace.referred_by = Some(ada.id);
     db.save(&mut grace).unwrap();
 
-    assert_eq!(db.migrate(&[STEPS[0], REBUILD]).unwrap(), 1);
+    assert_eq!(db.migrate(&[STEPS[0], &[REBUILD]]).unwrap(), 1);
     assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, Some(ada.id));
     // References are checked again after the step.
     assert_eq!(db.delete(&ada), Err(Error::InUse { table: "customer", id: ada.id }));
@@ -333,7 +334,7 @@ fn a_step_that_breaks_references_changes_nothing() {
     let mut grace = customer("Grace Hopper", CustomerKind::Private, "0", true);
     db.save(&mut grace).unwrap();
     let dangling = "UPDATE customer SET referred_by = 99;";
-    assert!(db.migrate(&[STEPS[0], dangling]).is_err());
+    assert!(db.migrate(&[STEPS[0], &[dangling]]).is_err());
     assert_eq!(db.schema_version().unwrap(), 1);
     assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, None);
 }
@@ -378,10 +379,10 @@ fn each_record_lives_in_its_own_data_source() {
     let _ = std::fs::remove_dir_all(&dir);
     let main = dir.join("main.db");
     let erp = dir.join("erp.db");
-    let mut db = Db::open_sources(&[("main", main.as_path()), ("erp", erp.as_path())]).unwrap();
+    let mut db = Db::connect(&[("main", Dialect::Sqlite, main.to_str().unwrap()), ("erp", Dialect::Sqlite, erp.to_str().unwrap())]).unwrap();
     db.migrate_source("main", &STEPS).unwrap();
     // A reference to another database is a plain id: no foreign key.
-    db.migrate_source("erp", &["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"])
+    db.migrate_source("erp", &[&["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"]])
         .unwrap();
 
     let mut ada = ada();
@@ -393,7 +394,7 @@ fn each_record_lives_in_its_own_data_source() {
     // Each table is in its own file.
     let only_main = Db::open(&main).unwrap();
     assert_eq!(only_main.all::<Customer>().unwrap().len(), 1);
-    let db = Db::open_sources(&[("main", main.as_path()), ("erp", erp.as_path())]).unwrap();
+    let db = Db::connect(&[("main", Dialect::Sqlite, main.to_str().unwrap()), ("erp", Dialect::Sqlite, erp.to_str().unwrap())]).unwrap();
     assert_eq!(db.all::<Invoice>().unwrap(), [invoice]);
     assert_eq!(db.load::<Customer>(db.get::<Invoice>(1).unwrap().customer).unwrap().name, "Ada Lovelace");
     std::fs::remove_dir_all(&dir).unwrap();
@@ -435,7 +436,7 @@ impl Record for Legacy {
 #[test]
 fn a_record_can_live_in_an_existing_table() {
     let mut db = Db::memory().unwrap();
-    db.migrate(&["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"])
+    db.migrate(&[&["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]])
         .unwrap();
     let mut first = Legacy { number: "INV-1".into(), ..Legacy::default() };
     db.save(&mut first).unwrap();

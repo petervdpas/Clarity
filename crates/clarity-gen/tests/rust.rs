@@ -103,9 +103,15 @@ fn writes_a_complete_cargo_project() {
             "Cargo.toml",
             "build.rs",
             "clarity-runtime/Cargo.toml",
+            "clarity-runtime/src/dialect.rs",
             "clarity-runtime/src/lib.rs",
+            "clarity-runtime/src/mssql.rs",
+            "clarity-runtime/src/mysql.rs",
+            "clarity-runtime/src/postgres.rs",
             "clarity-runtime/src/query.rs",
             "clarity-runtime/src/sql.rs",
+            "clarity-runtime/src/sqlite.rs",
+            "clarity-runtime/src/store.rs",
             "clarity-runtime/src/ui.rs",
             "icons/icon.png",
             "src/main.rs",
@@ -120,7 +126,9 @@ fn writes_a_complete_cargo_project() {
     );
     let cargo = file(&files, "Cargo.toml");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
-    assert!(cargo.contains("clarity-runtime = { path = \"clarity-runtime\" }"), "{cargo}");
+    assert!(cargo.contains("clarity-runtime = { path = \"clarity-runtime\", default-features = false, features = [\"sqlite\"] }"), "{cargo}");
+    let runtime = file(&files, "clarity-runtime/Cargo.toml");
+    assert!(runtime.contains("edition = \"2024\"") && !runtime.contains("workspace"), "{runtime}");
     assert!(file(&files, "src/main.rs").contains("mod sales;"));
 }
 
@@ -156,7 +164,7 @@ fn the_schema_is_the_first_migration() {
     );
     assert!(schema.contains("\"customer\" INTEGER REFERENCES \"customer\" (\"id\")"), "{schema}");
     assert!(schema.contains("\"credit_limit\" TEXT NOT NULL DEFAULT '100'"), "{schema}");
-    assert!(schema.contains("pub const SOURCES: &[(&str, &[&str])] = &[\n    (\"main\", &[\n"), "{schema}");
+    assert!(schema.contains("pub const SOURCES: &[(&str, &[&[&str]])] = &[\n    (\"main\", &[\n"), "{schema}");
 }
 
 #[test]
@@ -216,7 +224,7 @@ fn handlers_work_on_the_window_and_the_screen() {
     let main = file(&files, "src/main.rs");
     assert!(main.contains("(\"OrderForm\", \"approve_clicked\") => {"), "{main}");
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
-    assert!(main.contains("const DATABASES: &[(&str, &str)] = &[(\"main\", \"data/shop.db\")];"), "{main}");
+    assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\")];"), "{main}");
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
 }
 
@@ -312,13 +320,13 @@ fn every_migration_step_becomes_sql() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let schema = file(&files, "src/schema.rs");
-    assert!(schema.contains("        // 1: First\n        r#\"CREATE TABLE \"customer\" ("), "{schema}");
+    assert!(schema.contains("        // 1: First\n        &[\n            r#\"CREATE TABLE \"customer\" ("), "{schema}");
     assert!(schema.contains("        // 2: Tidy up\n"), "{schema}");
     assert!(schema.contains("ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";"), "{schema}");
     // SQLite changes a column's type by building the table again.
     assert!(schema.contains("CREATE TABLE \"order__new\" ("), "{schema}");
     assert!(schema.contains("COALESCE(CAST(\"total\" AS TEXT), '0')"), "{schema}");
-    assert!(schema.contains("DROP TABLE \"order\";\nALTER TABLE \"order__new\" RENAME TO \"order\";"), "{schema}");
+    assert!(schema.contains("DROP TABLE \"order\";\"#,\n            r#\"ALTER TABLE \"order__new\" RENAME TO \"order\";"), "{schema}");
     assert!(
         schema.contains("CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';"),
         "{schema}"
@@ -355,7 +363,7 @@ fn each_data_source_gets_its_own_database() {
     project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp")];
     let files = generate(&project, &settings).unwrap();
     let main = file(&files, "src/main.rs");
-    assert!(main.contains("const DATABASES: &[(&str, &str)] = &[(\"main\", \"data/shop.db\"), (\"erp\", \"data/erp.db\")];"), "{main}");
+    assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\"), (\"erp\", Dialect::Sqlite, \"data/erp.db\")];"), "{main}");
     let erp_rs = file(&files, "src/erp.rs");
     assert!(erp_rs.contains("const SOURCE: &'static str = \"erp\";"), "{erp_rs}");
     let schema = file(&files, "src/schema.rs");
@@ -382,7 +390,7 @@ fn an_external_source_is_opened_but_never_migrated() {
     });
     let files = generate(&project, &settings).unwrap();
     let main = file(&files, "src/main.rs");
-    assert!(main.contains("(\"erp\", \"legacy/erp.db\")"), "{main}");
+    assert!(main.contains("(\"erp\", Dialect::Sqlite, \"legacy/erp.db\")"), "{main}");
     let schema = file(&files, "src/schema.rs");
     assert!(!schema.contains("(\"erp\""), "{schema}");
     assert!(!schema.contains("tblInvoice"), "{schema}");

@@ -5,6 +5,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use clarity_project::SourceKind;
+
 #[test]
 #[ignore]
 fn the_shop_example_builds() {
@@ -32,6 +34,42 @@ fn the_shop_example_builds() {
     // The application opens a window, so it is built here, not started.
     assert!(target.join("debug/shop").exists());
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The shop example on each server database: the generated project turns
+/// on that database's driver in the runtime and still builds.
+#[test]
+#[ignore]
+fn the_shop_example_builds_for_every_database() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let file = root.join("examples/shop.clarity");
+    let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
+    let target = root.join("target/generated");
+    for (kind, feature) in [
+        (SourceKind::Postgres, "\"postgres\""),
+        (SourceKind::Mysql, "\"mysql\""),
+        (SourceKind::Mssql, "\"mssql\""),
+    ] {
+        let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+        settings.datasources[0].kind = kind;
+        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        let files = clarity_gen::generate(&project, &settings).unwrap();
+        let cargo = files.iter().find(|f| f.path == "Cargo.toml").unwrap();
+        assert!(cargo.text.contains(&format!("features = [{feature}]")), "{}", cargo.text);
+
+        let out = std::env::temp_dir().join(format!("clarity-gen-build-{feature}-{}", std::process::id()).replace('"', ""));
+        let _ = std::fs::remove_dir_all(&out);
+        std::fs::create_dir_all(&out).unwrap();
+        clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+        let status = Command::new("cargo")
+            .args(["build", "--quiet"])
+            .current_dir(&out)
+            .env("CARGO_TARGET_DIR", &target)
+            .status()
+            .unwrap();
+        assert!(status.success(), "the generated project does not build; it is in {}", out.display());
+        std::fs::remove_dir_all(&out).unwrap();
+    }
 }
 
 const SALES: &str = "module sales

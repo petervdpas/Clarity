@@ -59,7 +59,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         migrations: None,
         sources: Vec::new(),
         locale: model::Locale::default(),
-        theme: None,
+        themes: Vec::new(),
         translations: BTreeMap::new(),
     }
 }

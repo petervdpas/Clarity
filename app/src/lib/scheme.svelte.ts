@@ -14,3 +14,8 @@ export function followSystemScheme() {
   apply();
   media.addEventListener("change", apply);
 }
+
+/** The theme a person chose among those the application offers; undefined
+ *  shows the one it starts with. The designer sets it to show its canvas
+ *  in another theme. */
+export const themeChoice = $state<{ theme: string | undefined }>({ theme: undefined });

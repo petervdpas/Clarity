@@ -141,7 +141,7 @@ pub fn side_keyword(side: Side) -> &'static str {
 }
 
 /// Click targets that are not windows.
-pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language"];
+pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme"];
 
 pub fn command_keyword(kind: CommandKind) -> &'static str {
     match kind {

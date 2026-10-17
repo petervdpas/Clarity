@@ -161,6 +161,9 @@ pub fn texts(project: &Project) -> Vec<Used> {
                 texts.add(&variant.label, &place);
             }
         }
+        for theme in &file.themes {
+            texts.add(&theme.label, &format!("theme {}", theme.name.name));
+        }
         for app in &file.apps {
             let place = format!("app {}", app.name.name);
             texts.some(&app.title, &place);

@@ -521,9 +521,9 @@ fn the_application_carries_its_translations() {
 fn the_application_carries_its_theme() {
     let text = SALES.to_string() + "\ntheme Shop\n    color accent \"#1f6f5c\"\n    style primary background accent\n";
     let mut project = load_sources([("sales.clarity", text.as_str())]);
-    clarity_spec::themes::use_theme(&mut project, Some("Shop"));
+    clarity_spec::themes::use_themes(&mut project, &["Shop"]);
     let files = generate(&project, &shop()).unwrap();
     let model = file(&files, "src/model.json");
-    assert!(model.contains("\"theme\":\"Shop\""), "{model}");
+    assert!(model.contains("\"themes\":[\"Shop\"]"), "{model}");
     assert!(model.contains("\"light\":\"#1f6f5c\""), "{model}");
 }

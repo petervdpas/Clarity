@@ -8,6 +8,7 @@
   import ImportPanel from "./ImportPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
   import TranslationsPanel from "./TranslationsPanel.svelte";
+  import { themeChoice } from "./scheme.svelte";
   import StackFields from "./StackFields.svelte";
   import type { Preview } from "./generated/Preview";
   import type { AuthKind } from "./generated/AuthKind";
@@ -40,6 +41,18 @@
   const databases = $derived(project.settings?.datasources.filter((s) => s.kind !== "rest" && !s.external) ?? []);
   /** The themes the project's modules declare. */
   const themes = $derived(preview.project.files.flatMap((f) => f.themes.map((t) => t.name.name)));
+
+  /** Offers theme `name` in the application, or stops offering it. */
+  function setOffered(name: string, on: boolean) {
+    if (!project.settings) return;
+    const current = project.settings.themes;
+    save({ themes: on ? [...current, name] : current.filter((t) => t !== name) });
+  }
+
+  /** Makes theme `name` the one the application starts with. */
+  function setFirst(name: string) {
+    if (project.settings) save({ themes: [name, ...project.settings.themes.filter((t) => t !== name)] });
+  }
   const fileName = $derived(file.split(/[\\/]/).at(-1) ?? file);
 
   function sourceInfo(kind: SourceKind) {
@@ -204,12 +217,35 @@
             onchange={(e) => save({ currency: e.currentTarget.value.trim().toUpperCase() || null })}
           />
           <p class="form-help">The currency of money fields, as its code: EUR, USD, GBP. Empty shows amounts without a currency sign.</p>
-          <label class="form-label" for="project-theme">Theme</label>
-          <select id="project-theme" value={settings.theme ?? ""} onchange={(e) => save({ theme: e.currentTarget.value || null })}>
-            <option value="">Clarity's own</option>
-            {#each themes as theme (theme)}<option value={theme}>{theme}</option>{/each}
-          </select>
-          <p class="form-help">How the application looks. Themes are declared in a module; the Module view writes and previews them.</p>
+          <span class="form-label">Themes</span>
+          <div class="themes">
+            {#each themes as theme (theme)}
+              {@const offered = settings.themes.includes(theme)}
+              <div class="theme-row">
+                <label><input type="checkbox" checked={offered} onchange={(e) => setOffered(theme, e.currentTarget.checked)} /> {theme}</label>
+                {#if offered}
+                  <label class="muted">
+                    <input type="radio" name="first-theme" checked={settings.themes[0] === theme} onchange={() => setFirst(theme)} /> starts with it
+                  </label>
+                {/if}
+              </div>
+            {:else}
+              <span class="muted">No module declares a theme yet; the Module view writes them.</span>
+            {/each}
+            {#if settings.themes.length > 1}
+              <label>
+                Show the designer in
+                <select value={themeChoice.theme ?? ""} onchange={(e) => (themeChoice.theme = e.currentTarget.value || undefined)}>
+                  <option value="">the one it starts with</option>
+                  {#each settings.themes as theme (theme)}<option value={theme}>{theme}</option>{/each}
+                </select>
+              </label>
+            {/if}
+          </div>
+          <p class="form-help">
+            The themes the application offers; people switch between them with a click target <code>theme</code>. Without any, it looks as
+            Clarity does.
+          </p>
         </div>
       </section>
 
@@ -467,6 +503,18 @@
   .mono {
     font-family: var(--mono);
     font-size: 12px;
+  }
+
+  .themes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .theme-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
   }
 
   .problems {

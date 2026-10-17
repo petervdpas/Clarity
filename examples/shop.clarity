@@ -4,5 +4,5 @@ project Shop
     stack rust web desktop
     language "en"
     currency EUR
-    theme Shop
+    theme Shop Night Day
     datasource main sqlite "data/shop.db"

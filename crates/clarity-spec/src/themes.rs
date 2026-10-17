@@ -28,6 +28,8 @@ pub(crate) fn parse_theme(node: &Node, name: Ident, diagnostics: &mut Vec<Diagno
     let mut theme = ThemeDecl {
         class: class_name("theme", &name.name),
         name,
+        label: String::new(),
+        title: None,
         mode: None,
         colors: Vec::new(),
         font: None,
@@ -41,6 +43,7 @@ pub(crate) fn parse_theme(node: &Node, name: Ident, diagnostics: &mut Vec<Diagno
             diagnostics.push(diag);
         }
     }
+    theme.label = theme.title.clone().unwrap_or_else(|| crate::model::default_label(&theme.name.name));
     theme
 }
 
@@ -88,6 +91,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
                 span: node.line.span,
             });
         }
+        "title" => theme.title = Some(cursor.expect_string("the name people see")?),
         "font" => theme.font = Some(cursor.expect_string("a font name")?),
         "size" => theme.size = Some(number(&mut cursor, "the text size")?),
         "radius" => theme.radius = Some(number(&mut cursor, "the corner radius")?),
@@ -130,7 +134,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
         }
         other => {
             return Err(Diagnostic::error(
-                format!("unknown theme setting '{other}'; a theme has mode, color, font, size, radius and style"),
+                format!("unknown theme setting '{other}'; a theme has title, mode, color, font, size, radius and style"),
                 node.line.span,
             ));
         }
@@ -219,17 +223,22 @@ fn styled(widgets: &[Widget], out: &mut Vec<(String, crate::span::Span)>) {
     }
 }
 
-/// Sets the theme the project file names (`theme Shop`), and checks that
-/// it is declared and that every part's style is one of its styles.
-pub fn use_theme(project: &mut Project, theme: Option<&str>) {
-    project.theme = theme.map(str::to_string);
+/// Sets the themes the project file offers (`theme Shop Night`), the first
+/// being the one the application starts with, and checks that each is
+/// declared and has every style a part uses, so switching themes never
+/// drops one.
+pub fn use_themes(project: &mut Project, offered: &[&str]) {
+    project.themes = offered.iter().map(|t| t.to_string()).collect();
     let mut found = Vec::new();
-    let declared = theme.and_then(|t| project.files.iter().flat_map(|f| &f.themes).find(|d| d.name.name == t));
-    if let (Some(name), None) = (theme, declared) {
-        found.push(Diagnostic::error(
-            format!("the project file names theme {name}, which no module declares"),
-            crate::span::Span::default(),
-        ));
+    let mut declared = Vec::new();
+    for name in offered {
+        match project.files.iter().flat_map(|f| &f.themes).find(|d| d.name.name == *name) {
+            Some(decl) => declared.push(decl),
+            None => found.push(Diagnostic::error(
+                format!("the project file names theme {name}, which no module declares"),
+                crate::span::Span::default(),
+            )),
+        }
     }
     for file in &project.files {
         let mut uses = Vec::new();
@@ -237,20 +246,22 @@ pub fn use_theme(project: &mut Project, theme: Option<&str>) {
             styled(&page.widgets, &mut uses);
         }
         for (style, span) in uses {
-            let message = match (theme, declared) {
-                (None, _) => format!(
-                    "style '{style}' comes from the project's theme; name it in the project file, like: theme {}",
-                    project.files.iter().flat_map(|f| &f.themes).next().map_or("Shop", |t| t.name.name.as_str())
-                ),
-                (Some(_), Some(decl)) if decl.styles.iter().any(|s| s.name.name == style) => continue,
-                (Some(_), Some(decl)) => {
-                    let names: Vec<String> = decl.styles.iter().map(|s| s.name.name.clone()).collect();
-                    format!("theme {} has no style '{style}'; its styles are {}", decl.name.name, listed(&names))
-                }
-                // The missing theme is reported once, above.
-                (Some(_), None) => continue,
-            };
-            found.push(Diagnostic::error(message, span).in_file(&file.path));
+            if offered.is_empty() {
+                let example = project.files.iter().flat_map(|f| &f.themes).next().map_or("Shop", |t| t.name.name.as_str());
+                found.push(
+                    Diagnostic::error(
+                        format!("style '{style}' comes from the project's theme; name it in the project file, like: theme {example}"),
+                        span,
+                    )
+                    .in_file(&file.path),
+                );
+                continue;
+            }
+            for decl in declared.iter().filter(|d| !d.styles.iter().any(|s| s.name.name == style)) {
+                let names: Vec<String> = decl.styles.iter().map(|s| s.name.name.clone()).collect();
+                let has = if names.is_empty() { "it has no styles".to_string() } else { format!("its styles are {}", listed(&names)) };
+                found.push(Diagnostic::error(format!("theme {} has no style '{style}'; {has}", decl.name.name), span).in_file(&file.path));
+            }
         }
     }
     project.diagnostics.extend(found);

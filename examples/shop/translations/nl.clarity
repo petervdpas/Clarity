@@ -1,6 +1,7 @@
 // The shop in Dutch. Texts without a line here show as written.
 translation nl
     "Customers" "Klanten"
+    "Shop" "Winkel"
     "Customer" "Klant"
     "Customer card" "Klantkaart"
     "Orders" "Bestellingen"
@@ -8,6 +9,9 @@ translation nl
     "File" "Bestand"
     "Quit" "Afsluiten"
     "Language" "Taal"
+    "Theme" "Thema"
+    "Night" "Nacht"
+    "Day" "Dag"
     "All customers" "Alle klanten"
     "All orders" "Alle bestellingen"
     "New customer" "Nieuwe klant"

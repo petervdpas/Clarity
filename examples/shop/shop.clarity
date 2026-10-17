@@ -13,6 +13,7 @@ app Shop
             item "Customer card" key "Ctrl+K" on click -> CustomerCard
             separator
             item "Language" on click -> language
+            item "Theme" on click -> theme
             item "Quit" key "Ctrl+Q" on click -> quit
         item "Customers"
             item "All customers" on click -> CustomerBrowse
@@ -32,4 +33,22 @@ theme Shop
     mode system
     color accent "#1f6f5c" dark "#4fb393"
     radius 4
+    style primary background accent, text "#ffffff", border accent
+
+// A second look for the shop: always dark, with a warmer accent.
+theme Night
+    title "Night"
+    mode dark
+    color accent "#e0a030"
+    radius 8
+    style primary background accent, text "#1a1a1a", border accent
+
+// A bright look for daytime: always light, with a blue accent.
+theme Day
+    title "Day"
+    mode light
+    color background "#f4f6f9"
+    color panel "#ffffff"
+    color accent "#1f5fbf"
+    radius 6
     style primary background accent, text "#ffffff", border accent

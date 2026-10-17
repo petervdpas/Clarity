@@ -10,7 +10,9 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState } from "../lib/live";
-  import { errorText, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import { errorText, offeredThemes, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import ChoicePicker from "../lib/ChoicePicker.svelte";
+  import { themeChoice } from "../lib/scheme.svelte";
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
@@ -142,7 +144,8 @@
   function navigate(target: string) {
     if (target === "close") close();
     else if (target === "quit") invoke("quit_app");
-    else if (target === "language") choosingLanguage = true;
+    else if (target === "language") choosing = "language";
+    else if (target === "theme") choosing = "theme";
     else open(target);
   }
 
@@ -177,32 +180,49 @@
     },
   });
 
-  // The language the person chose with a `language` click target, kept for
-  // the next start.
+  // The language and theme the person chose with the `language` and `theme`
+  // click targets, kept for the next start.
   const LANGUAGE_KEY = "clarity-language";
-  let choosingLanguage = $state(false);
+  const THEME_KEY = "clarity-theme";
+  let choosing = $state<"language" | "theme" | null>(null);
   const base = $derived(model?.project.locale.language ?? "en");
   const languages = $derived(model ? languagesOf(base, Object.keys(model.project.translations)) : []);
-  // The project's theme on the whole application.
+  // The theme shown, on the whole application.
   const area = $derived(themeArea(model ? themeOf(model) : null));
 
-  function remember(preview: Preview) {
+  function stored(key: string): string | null {
     try {
-      const stored = localStorage.getItem(LANGUAGE_KEY);
-      languageChoice.language = rememberedChoice(stored, preview.project.locale.language, Object.keys(preview.project.translations));
+      return localStorage.getItem(key);
     } catch {
-      // Without storage the application follows the locale.
+      // Without storage the application starts as designed.
+      return null;
     }
+  }
+
+  function store(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // The choice holds for this run.
+    }
+  }
+
+  function remember(preview: Preview) {
+    languageChoice.language = rememberedChoice(stored(LANGUAGE_KEY), preview.project.locale.language, Object.keys(preview.project.translations));
+    // pickTheme falls back to the first theme when this one is gone.
+    themeChoice.theme = stored(THEME_KEY) ?? undefined;
   }
 
   function chooseLanguage(language: string) {
     languageChoice.language = language === base ? null : language;
-    choosingLanguage = false;
-    try {
-      localStorage.setItem(LANGUAGE_KEY, language);
-    } catch {
-      // The choice holds for this run.
-    }
+    choosing = null;
+    store(LANGUAGE_KEY, language);
+  }
+
+  function chooseTheme(theme: string) {
+    themeChoice.theme = theme;
+    choosing = null;
+    store(THEME_KEY, theme);
   }
 
   // The app's `on start` runs before its main window opens; windows it opens
@@ -242,25 +262,22 @@
     <p class="missing">This application has no window {current.window}.</p>
   {/if}
 
-  {#if choosingLanguage}
-    <div class="language-backdrop" role="presentation" onclick={() => (choosingLanguage = false)}>
-      <div
-        class="language-picker"
-        role="dialog"
-        aria-label="Language"
-        tabindex="-1"
-        onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => e.key === "Escape" && (choosingLanguage = false)}
-      >
-        {#each languages as language (language)}
-          <button
-            class:current={(languageChoice.language ?? base) === language}
-            onclick={() => chooseLanguage(language)}
-            lang={language}>{languageName(language)}</button
-          >
-        {/each}
-      </div>
-    </div>
+  {#if choosing === "language"}
+    <ChoicePicker
+      title="Language"
+      choices={languages.map((l) => ({ value: l, label: languageName(l), lang: l }))}
+      current={languageChoice.language ?? base}
+      onchoose={chooseLanguage}
+      onclose={() => (choosing = null)}
+    />
+  {:else if choosing === "theme" && model}
+    <ChoicePicker
+      title="Theme"
+      choices={offeredThemes(model).map((t) => ({ value: t.name.name, label: tr(model!, t.label) }))}
+      current={themeOf(model)?.name.name}
+      onchoose={chooseTheme}
+      onclose={() => (choosing = null)}
+    />
   {/if}
 
   <div class="messages" aria-live="polite">
@@ -298,30 +315,6 @@
   .missing {
     padding: 24px;
     color: var(--error);
-  }
-
-  .language-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.25);
-    display: grid;
-    place-items: center;
-    z-index: 20;
-  }
-
-  .language-picker {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 200px;
-  }
-
-  .language-picker button.current {
-    border-color: var(--accent);
   }
 
   .messages {

@@ -100,7 +100,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut out = None;
     let mut language = None;
     let mut currency = None;
-    let mut theme = None;
+    let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let setting_indent = entries.get(1).map(|e| e.indent).unwrap_or(4);
     for entry in &entries[1..] {
@@ -160,11 +160,12 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                 currency = Some(code.to_string());
             }
             "theme" => {
-                once(theme.is_some())?;
-                let Some(name) = a.first().and_then(|t| word(t)) else {
-                    return Err(format!("line {line}: write the theme's name, like: theme Shop"));
-                };
-                theme = Some(name.to_string());
+                once(themes.is_some())?;
+                let names: Vec<String> = a.iter().filter_map(|t| word(t)).map(str::to_string).collect();
+                if names.is_empty() || names.len() != a.len() {
+                    return Err(format!("line {line}: write the names of the themes, the first one the application starts with, like: theme Shop Night"));
+                }
+                themes = Some(names);
             }
             "stack" => {
                 once(stack.is_some())?;
@@ -243,7 +244,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         datasources,
         language,
         currency,
-        theme,
+        themes: themes.unwrap_or_default(),
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
     })
 }
@@ -328,8 +329,8 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     if let Some(currency) = &settings.currency {
         lines.push(("currency".into(), 1, format!("currency {currency}")));
     }
-    if let Some(theme) = &settings.theme {
-        lines.push(("theme".into(), 1, format!("theme {theme}")));
+    if !settings.themes.is_empty() {
+        lines.push(("theme".into(), 1, format!("theme {}", settings.themes.join(" "))));
     }
     for source in &settings.datasources {
         lines.push((

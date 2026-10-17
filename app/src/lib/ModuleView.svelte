@@ -177,13 +177,14 @@
     <h3>Themes</h3>
     <p class="muted">
       How the application looks: colors for light and dark mode, a font, a size, a corner radius, and named styles that parts pick with
-      <code>style</code>. The project file names the theme its application uses{preview.project.theme ? `: ${preview.project.theme}` : ""}.
+      <code>style</code>. The project file names the themes its application offers, the first one the one it starts with; the Project tab
+      chooses them.
     </p>
     <ul>
       {#each file.themes as t (t.name.name)}
         <li>
           <button class:active={openTheme === t.name.name} onclick={() => (openTheme = t.name.name)}>
-            <span class="kind">theme</span>{t.name.name}{#if preview.project.theme === t.name.name}<span class="muted">in use</span>{/if}
+            <span class="kind">theme</span>{t.name.name}{#if preview.project.themes.includes(t.name.name)}<span class="muted">{preview.project.themes[0] === t.name.name ? "offered, the first" : "offered"}</span>{/if}
           </button>
         </li>
       {/each}

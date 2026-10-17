@@ -49,7 +49,7 @@ fn shop() -> Settings {
         ],
         language: Some("nl-NL".into()),
         currency: Some("EUR".into()),
-        theme: None,
+        themes: Vec::new(),
         out: "out".into(),
     }
 }
@@ -386,13 +386,13 @@ fn loading_hands_the_language_and_currency_to_the_project() {
 
 #[test]
 fn the_project_file_names_its_theme() {
-    let text = SHOP.replace("    currency EUR\n", "    currency EUR\n    theme Shop\n");
+    let text = SHOP.replace("    currency EUR\n", "    currency EUR\n    theme Shop NightOwl\n");
     let settings = parse(&text).unwrap();
-    assert_eq!(settings.theme.as_deref(), Some("Shop"));
+    assert_eq!(settings.themes, ["Shop", "NightOwl"]);
     let written = write(Some(&text), &settings).unwrap();
     assert_eq!(written, text);
     let mut fresh = starter("Shop", "shop");
-    fresh.theme = Some("Dark".into());
+    fresh.themes = vec!["Dark".into()];
     assert!(write(None, &fresh).unwrap().contains("    output \"out\"\n    theme Dark\n"), "{}", write(None, &fresh).unwrap());
 }
 
@@ -405,6 +405,6 @@ fn loading_hands_the_theme_to_the_project() {
     std::fs::write(root.join("shop/shop.clarity"), "module shop\n\ntheme Plain\n    radius 2\n").unwrap();
     let project = clarity_project::load_modules(&root.join("shop")).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
-    assert_eq!(project.theme.as_deref(), Some("Plain"));
+    assert_eq!(project.themes, ["Plain"]);
     assert!(project.diagnostics.iter().all(|d| !d.message.contains("theme")), "{:#?}", project.diagnostics);
 }

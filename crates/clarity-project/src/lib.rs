@@ -117,10 +117,11 @@ pub struct Settings {
     /// The currency of `money` fields, as its ISO 4217 code (`EUR`).
     #[serde(default)]
     pub currency: Option<String>,
-    /// The theme the application uses, by name (`theme Shop`); without one,
+    /// The themes the application offers, by name (`theme Shop Night`), the
+    /// first being the one it starts with; without any,
     /// it looks as Clarity does.
     #[serde(default)]
-    pub theme: Option<String>,
+    pub themes: Vec<String>,
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
@@ -201,7 +202,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         }],
         language: None,
         currency: None,
-        theme: None,
+        themes: Vec::new(),
         out: DEFAULT_OUT.to_string(),
     }
 }
@@ -544,14 +545,14 @@ pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
 fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
     let settings = load(&file).settings;
-    let theme = settings.as_ref().and_then(|s| s.theme.clone());
+    let themes = settings.as_ref().map(|s| s.themes.clone()).unwrap_or_default();
     if let Some(settings) = settings {
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
             currency: settings.currency,
         };
     }
-    clarity_spec::themes::use_theme(project, theme.as_deref());
+    clarity_spec::themes::use_themes(project, &themes.iter().map(String::as_str).collect::<Vec<_>>());
 }
 
 /// Compares the entities of each external SQLite source with its tables.

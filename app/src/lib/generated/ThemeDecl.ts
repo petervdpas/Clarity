@@ -13,7 +13,12 @@ export type ThemeDecl = { name: Ident,
 /**
  * The class an application holds to use the theme: `theme-night-owl`.
  */
-class: string, mode: ThemeMode | null, colors: Array<ThemeColor>, font: string | null, 
+class: string, 
+/**
+ * The name people see when they choose a theme: its `title`, or one
+ * derived from its name.
+ */
+label: string, title: string | null, mode: ThemeMode | null, colors: Array<ThemeColor>, font: string | null, 
 /**
  * The text size, in pixels.
  */

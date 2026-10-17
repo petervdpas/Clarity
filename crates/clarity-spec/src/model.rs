@@ -506,8 +506,9 @@ pub struct Project {
     /// The project's translations per language: each text a person sees,
     /// as written, with its translation (design section 1.5, I1c).
     pub translations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
-    /// The theme the project file names, if any (design section 1.5, T1).
-    pub theme: Option<String>,
+    /// The themes the application offers, the first being the one it starts
+    /// with; empty when the project file names none (design section 1.5, T1).
+    pub themes: Vec<String>,
 }
 
 impl Project {
@@ -636,6 +637,10 @@ pub struct ThemeDecl {
     pub name: Ident,
     /// The class an application holds to use the theme: `theme-night-owl`.
     pub class: String,
+    /// The name people see when they choose a theme: its `title`, or one
+    /// derived from its name.
+    pub label: String,
+    pub title: Option<String>,
     pub mode: Option<ThemeMode>,
     pub colors: Vec<ThemeColor>,
     pub font: Option<String>,

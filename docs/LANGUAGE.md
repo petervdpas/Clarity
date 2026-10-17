@@ -73,7 +73,7 @@ project Shop
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
 | `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
-| `theme Name` | no | The theme the application uses, declared in a module (see [Themes](#themes)). Without it, the application looks as Clarity does, and parts cannot have a `style`. |
+| `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
@@ -521,7 +521,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window, `quit` ends the application, and `language` lets the person choose the language the application shows (see [Translations](#translations)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window, `quit` ends the application, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -606,14 +606,14 @@ Menu items and toolbar and ribbon buttons are commands. Their properties:
 | `icon "name"` | all | An icon. |
 | `key "Ctrl+N"` | menu items | The key for it, shown in the menu. |
 | `large` | ribbon buttons | A large button. |
-| `on click -> Target` | all | Opens a window, or `close`, `quit` or `language`. |
+| `on click -> Target` | all | Opens a window, or `close`, `quit`, `language` or `theme`. |
 | `on click: handler` | all | Runs a handler. |
 
 An item with a submenu opens the submenu, so it has no `on click` of its own.
 
 ### Themes
 
-A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as CSS variables, Avalonia as resources and styles. It is declared in a module and named in the project file with `theme Shop`.
+A theme says how the application looks, as named values rather than a style sheet, so every stack can carry it: the web renderer as CSS variables, Avalonia as resources and styles. It is declared in a module, and the project file names the themes the application offers: `theme Shop Night`, the first one the one it starts with.
 
 ```
 theme Shop
@@ -629,14 +629,16 @@ theme Shop
 
 | Line | Meaning |
 |---|---|
+| `title "Night owl"` | The name people see when they choose the theme; without it, one derived from the name (`NightOwl` reads "Night owl"). It is translated like every other text. |
 | `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
 | `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. |
 | `font "Name"`, `size n`, `radius n` | The font, the text size and the corner radius of inputs, buttons and panels, in pixels. |
 | `style name part color, ...` | A named style for parts. The parts are `background`, `text` and `border`; a color is one of the theme's colors by name or written out, and a border can be `none`. |
 
 - The colors `background`, `panel`, `text`, `muted`, `border`, `accent`, `error` and `warning` are the ones the application itself uses; a theme sets those it wants to change, and the others keep Clarity's own. Other names are colors of the theme, for its styles.
-- A part picks a style with `style primary`; a style the theme does not have is an error. On a button the style colors the button; on other parts, their area.
+- A part picks a style with `style primary`. Every theme the application offers must have that style, so switching themes never drops one; a theme that misses it is an error.
 - The generator writes each theme as a CSS file of its own, `ui/themes/shop.css`, linked from the application's page. The application holds the theme's class (`theme-shop`), and a part with a style holds its class (`style-primary`), as a web developer would write it. The designer uses the same CSS for its canvas, and the Module view shows a sample window for the theme being written.
+- An application that offers several themes lets people switch with `on click -> theme`: a menu item or button that lists the themes by their titles, switches at once and remembers the choice for the next start. The Project tab chooses the themes the application offers and the one it starts with, and can show the designer's canvas in any of them.
 
 ## 8. Code behind
 
@@ -959,7 +961,7 @@ A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` 
 ```
 project-file  = "project" Name
                     setting*
-setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word | "theme" Name
+setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word | "theme" Name+
               | "datasource" name kind String ["external"] ["readonly"]
                     ["auth" kind String]
 
@@ -1011,7 +1013,7 @@ find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
 
 theme         = "theme" Name
-                    ("mode" ("light" | "dark" | "system") | "color" name String ["dark" String]
+                    ("title" String | "mode" ("light" | "dark" | "system") | "color" name String ["dark" String]
                     | "font" String | "size" n | "radius" n
                     | "style" name ("background" | "text" | "border") (name | String) ("," ...)*)*
 translation   = "translation" language

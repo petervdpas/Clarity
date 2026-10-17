@@ -19,6 +19,7 @@ locale: Locale,
  */
 translations: { [key in string]: { [key in string]: string } }, 
 /**
- * The theme the project file names, if any (design section 1.5, T1).
+ * The themes the application offers, the first being the one it starts
+ * with; empty when the project file names none (design section 1.5, T1).
  */
-theme: string | null, };
+themes: Array<string>, };

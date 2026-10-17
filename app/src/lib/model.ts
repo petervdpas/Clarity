@@ -9,9 +9,9 @@ import type { JsonValue } from "./generated/serde_json/JsonValue";
 import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
 import { languageChoice } from "./i18n.svelte";
 import { pickLanguage, translate, translateText } from "./translate";
-import { isDark } from "./theme";
+import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
-import { scheme } from "./scheme.svelte";
+import { scheme, themeChoice } from "./scheme.svelte";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -135,10 +135,17 @@ export function errorText(err: unknown): ShownText {
   return String(err);
 }
 
-/** The theme the project file names, as declared; null when it names none. */
+/** The theme shown: the one chosen among those the application offers, or
+ *  the one it starts with; null when the project file names none. */
 export function themeOf(preview: Preview): ThemeDecl | null {
-  const name = preview.project.theme;
+  const name = pickTheme(preview.project.themes, themeChoice.theme);
   return (name && preview.project.files.flatMap((f) => f.themes).find((t) => t.name.name === name)) || null;
+}
+
+/** The themes the application offers, as declared, in its order. */
+export function offeredThemes(preview: Preview): ThemeDecl[] {
+  const all = preview.project.files.flatMap((f) => f.themes);
+  return preview.project.themes.map((name) => all.find((t) => t.name.name === name)).filter((t): t is ThemeDecl => !!t);
 }
 
 /** What puts a theme on an area (a running window, the designer's canvas):

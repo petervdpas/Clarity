@@ -342,6 +342,26 @@
     }
   }
 
+  /** When Check last ran, shown in the problems list; flashing while new. */
+  let checkedAt = $state<string | null>(null);
+  let checkFlash = $state(false);
+
+  /** Reads every file again and checks the project, keeping what is open
+      and the undo history. The designer checks after every edit and when
+      a file changes on disk; Check is for being sure. */
+  async function checkProject() {
+    try {
+      applyPreview(await invoke<Preview>("check_project"));
+      await loadProjectFile();
+      loadError = null;
+      checkedAt = new Date().toLocaleTimeString();
+      checkFlash = false;
+      requestAnimationFrame(() => (checkFlash = true));
+    } catch (err) {
+      loadError = String(err);
+    }
+  }
+
   async function chooseProject() {
     const file = await openDialog({ title: "Open a Clarity project", filters: PROJECT_FILTER });
     if (typeof file === "string") openProject(file);
@@ -561,7 +581,7 @@
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} disabled={!preview} onclick={() => openFile && openProject(openFile)} />
+            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" disabled={!preview} onclick={checkProject} />
           </div>
           <div class="group-name">Check</div>
         </div>
@@ -701,12 +721,12 @@
           {/if}
         </section>
         {#if preview}
-          <section class="side-section">
+          <section class="side-section fill">
             {@render tree(true)}
           </section>
         {/if}
       {:else if tab === "design" && (!designing || designSide === "elements")}
-        <section class="side-section">
+        <section class="side-section fill">
           {@render tree(true)}
         </section>
       {:else if tab === "design" && designSide === "settings"}
@@ -719,18 +739,19 @@
           <p class="none">Every change is written to the project files at once; Undo and Redo in the ribbon take changes back.</p>
         </section>
       {:else if tab === "preview"}
-        <section class="side-section">
+        <section class="side-section fill">
           <h2>Run a window</h2>
           {@render tree(false)}
         </section>
       {/if}
 
       {#if preview}
-        <section class="diagnostics">
+        <section class="diagnostics" class:flash={checkFlash} onanimationend={() => (checkFlash = false)}>
           <h2>
             Problems
             <span class="count error">{errorCount}</span>
             <span class="count warning">{warnings.length}</span>
+            {#if checkedAt}<span class="checked">checked the project and {preview.project.files.length} modules at {checkedAt}</span>{/if}
           </h2>
           <ul>
             {#each projectProblems as message, i (i)}
@@ -760,7 +781,7 @@
             <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
-          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} />
+          <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
         {:else if entity && file}
           <EntityEditor
             {preview}
@@ -1033,9 +1054,16 @@
   /* Sidebar sections */
 
   .side-section {
+    flex: none;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     overflow: auto;
+  }
+
+  /* The tree takes the room the other sections leave, and scrolls in it. */
+  .side-section.fill {
+    flex: 1 1 0;
+    min-height: 0;
   }
 
   .side-section h2 {
@@ -1238,6 +1266,24 @@
     color: var(--text-muted);
     padding: 2px 6px;
     font-size: 12px;
+  }
+
+  .diagnostics.flash {
+    animation: checked 1.2s ease-out;
+  }
+
+  @keyframes checked {
+    from {
+      background: var(--accent-soft);
+    }
+  }
+
+  .checked {
+    margin-left: auto;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
   }
 
   .diagnostics {

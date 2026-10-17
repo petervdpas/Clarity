@@ -158,6 +158,14 @@ fn open_project(
     open_file(&path, app, &state, &history)
 }
 
+/// Reads the open project from disk again and checks it, keeping the undo
+/// history (opening the project again would start a new one).
+#[tauri::command]
+fn check_project(state: State<WatchState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    load(&dir)
+}
+
 /// The project file at `path`, with the folder of its modules.
 fn project_paths(path: &str) -> Result<(PathBuf, PathBuf), String> {
     let file = PathBuf::from(path)
@@ -664,6 +672,7 @@ pub fn run() {
         .manage(build::BuildState::default())
         .invoke_handler(tauri::generate_handler![
             open_project,
+            check_project,
             initial_project,
             apply_edit,
             undo_edit,

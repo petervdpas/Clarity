@@ -24,6 +24,7 @@
     revision,
     preview,
     onapplied,
+    onopentheme,
   }: {
     project: ProjectFile;
     /** The project file. */
@@ -34,6 +35,8 @@
     /** The loaded project, for its migrations. */
     preview: Preview;
     onapplied: (preview: Preview) => void;
+    /** Opens a theme in its own view, where it is written. */
+    onopentheme: (name: string) => void;
   } = $props();
 
   const catalog = $derived(project.catalog);
@@ -227,7 +230,10 @@
                   <label class="muted">
                     <input type="radio" name="first-theme" checked={settings.themes[0] === theme} onchange={() => setFirst(theme)} /> starts with it
                   </label>
+                {:else}
+                  <span></span>
                 {/if}
+                <button class="edit-theme" title="Open the theme, to change how it looks" onclick={() => onopentheme(theme)}>Edit</button>
               </div>
             {:else}
               <span class="muted">No module declares a theme yet; New theme under Themes in the project tree starts one.</span>
@@ -512,9 +518,19 @@
 
   .theme-row {
     display: grid;
-    grid-template-columns: 140px auto;
+    grid-template-columns: 140px 130px auto;
     gap: 16px;
     align-items: center;
+  }
+
+  .edit-theme {
+    justify-self: start;
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: 12px;
+    color: var(--accent);
+    cursor: pointer;
   }
 
   .theme-row label {

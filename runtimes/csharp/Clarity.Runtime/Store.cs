@@ -1,6 +1,10 @@
 // The connection to one database, behind the same few calls for every kind:
 // run a statement, insert and get the new key, read rows, and apply a
-// migration step. SQLite comes first; the server databases follow (G2d).
+// migration step. SQLite is always there; a generated project holds the
+// server drivers it uses (CLARITY_POSTGRES, CLARITY_MYSQL, CLARITY_MSSQL)
+// and their packages only.
+
+using System.Data.Common;
 
 namespace Clarity.Runtime;
 
@@ -51,6 +55,29 @@ internal static class Store
     internal static IDriver Open(Dialect dialect, string at) => dialect switch
     {
         Dialect.Sqlite => SqliteDriver.Open(Location(at)),
+#if CLARITY_POSTGRES
+        Dialect.Postgres => PostgresDriver.Open(Location(at)),
+#endif
+#if CLARITY_MYSQL
+        Dialect.Mysql => MysqlDriver.Open(Location(at)),
+#endif
+#if CLARITY_MSSQL
+        Dialect.Mssql => MssqlDriver.Open(Location(at)),
+#endif
         _ => throw new StorageException($"this application was built without {dialect.Label()}"),
     };
+
+    /// <summary>Opens a server connection; what goes wrong reads as a storage failure.</summary>
+    internal static void Connect(DbConnection conn, Dialect dialect)
+    {
+        try
+        {
+            conn.Open();
+        }
+        catch (Exception e) when (e is DbException or InvalidOperationException or ArgumentException)
+        {
+            conn.Dispose();
+            throw new StorageException($"cannot connect to {dialect.Label()}: {e.Message}", e);
+        }
+    }
 }

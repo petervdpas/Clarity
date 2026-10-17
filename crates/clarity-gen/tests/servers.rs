@@ -375,3 +375,26 @@ fn unique_text_needs_a_length_where_the_database_asks_for_one() {
     );
     assert!(clarity_gen::migration_sql(&project, "main", SourceKind::Mssql).is_err());
 }
+
+/// The steps of the scenario above per database, kept in
+/// conformance/migrations.json for the C# runtime's server tests, so both
+/// runtimes run the same SQL. `CLARITY_WRITE_CONFORMANCE=1` writes the file
+/// again after a change to the SQL writer.
+#[test]
+fn the_shared_migration_steps_are_current() {
+    let mut databases = serde_json::Map::new();
+    for (name, kind) in [("sqlite", SourceKind::Sqlite), ("postgres", SourceKind::Postgres), ("mysql", SourceKind::Mysql), ("mssql", SourceKind::Mssql)] {
+        databases.insert(name.to_string(), serde_json::json!(steps(kind)));
+    }
+    let cases = serde_json::json!({
+        "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. The Rust runtime runs them from the generator; the C# runtime's tests read them here (Clarity.Runtime.Tests/ServerTests.cs).",
+        "steps": databases,
+    });
+    let text = serde_json::to_string_pretty(&cases).unwrap() + "\n";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/migrations.json");
+    if std::env::var_os("CLARITY_WRITE_CONFORMANCE").is_some() {
+        std::fs::write(&path, &text).unwrap();
+    }
+    let kept = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(kept == text, "conformance/migrations.json is out of date; run this test with CLARITY_WRITE_CONFORMANCE=1");
+}

@@ -1,0 +1,145 @@
+{
+  "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. The Rust runtime runs them from the generator; the C# runtime's tests read them here (Clarity.Runtime.Tests/ServerTests.cs).",
+  "steps": {
+    "mssql": [
+      [
+        "CREATE TABLE [customer] (\n    [id] BIGINT IDENTITY(1,1) PRIMARY KEY,\n    [name] NVARCHAR(80) NOT NULL DEFAULT N'',\n    [email] NVARCHAR(320) NOT NULL DEFAULT N'',\n    [kind] NVARCHAR(100) NOT NULL DEFAULT N'Private',\n    [limit] DECIMAL(19,4) NOT NULL DEFAULT 100,\n    [active] BIT NOT NULL DEFAULT 1,\n    [since] DATE,\n    [notes] NVARCHAR(MAX) NOT NULL DEFAULT N''\n);",
+        "CREATE UNIQUE INDEX [customer_name_unique] ON [customer] ([name]) WHERE [name] <> N'';",
+        "CREATE TABLE [order] (\n    [id] BIGINT IDENTITY(1,1) PRIMARY KEY,\n    [number] NVARCHAR(12) NOT NULL DEFAULT N'',\n    [customer] BIGINT,\n    [total] BIGINT NOT NULL DEFAULT 0,\n    [placed] DATETIME2,\n    [paid] BIT NOT NULL DEFAULT 0,\n    [code] NVARCHAR(MAX) NOT NULL DEFAULT N''\n);",
+        "ALTER TABLE [order] ADD FOREIGN KEY ([customer]) REFERENCES [customer] ([id]);"
+      ],
+      [
+        "EXEC sp_rename N'[customer].[limit]', N'credit_limit', 'COLUMN';",
+        "EXEC sp_rename N'[customer].[notes]', N'remarks', 'COLUMN';",
+        "EXEC sp_rename N'[customer].[active]', N'vip', 'COLUMN';",
+        "DECLARE @sql nvarchar(max) = N'';\nSELECT @sql += N'ALTER TABLE [customer] DROP CONSTRAINT ' + QUOTENAME(d.name) + N';' FROM sys.default_constraints d\n    WHERE d.parent_object_id = OBJECT_ID(N'[customer]') AND d.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[customer]'), N'since', 'ColumnId');\nEXEC sp_executesql @sql;",
+        "ALTER TABLE [customer] DROP COLUMN [since];",
+        "ALTER TABLE [customer] ADD [phone] NVARCHAR(20) NOT NULL DEFAULT N'';",
+        "CREATE UNIQUE INDEX [customer_email_unique] ON [customer] ([email]) WHERE [email] <> N'';",
+        "ALTER TABLE [order] ADD [total__new] DECIMAL(19,4) NOT NULL DEFAULT 0;",
+        "UPDATE [order] SET [total__new] = COALESCE(CAST([total] AS DECIMAL(19,4)), 0);",
+        "DECLARE @sql nvarchar(max) = N'';\nSELECT @sql += N'ALTER TABLE [order] DROP CONSTRAINT ' + QUOTENAME(d.name) + N';' FROM sys.default_constraints d\n    WHERE d.parent_object_id = OBJECT_ID(N'[order]') AND d.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[order]'), N'total', 'ColumnId');\nEXEC sp_executesql @sql;",
+        "ALTER TABLE [order] DROP COLUMN [total];",
+        "EXEC sp_rename N'[order].[total__new]', N'total', 'COLUMN';",
+        "CREATE UNIQUE INDEX [order_number_unique] ON [order] ([number]) WHERE [number] <> N'';",
+        "ALTER TABLE [order] ADD [paid__new] BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE [order] SET [paid__new] = COALESCE(CAST([paid] AS BIGINT), 0);",
+        "DECLARE @sql nvarchar(max) = N'';\nSELECT @sql += N'ALTER TABLE [order] DROP CONSTRAINT ' + QUOTENAME(d.name) + N';' FROM sys.default_constraints d\n    WHERE d.parent_object_id = OBJECT_ID(N'[order]') AND d.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[order]'), N'paid', 'ColumnId');\nEXEC sp_executesql @sql;",
+        "ALTER TABLE [order] DROP COLUMN [paid];",
+        "EXEC sp_rename N'[order].[paid__new]', N'paid', 'COLUMN';",
+        "ALTER TABLE [order] ADD [code__new] BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE [order] SET [code__new] = COALESCE(CAST(NULLIF([code], '') AS BIGINT), 0);",
+        "DECLARE @sql nvarchar(max) = N'';\nSELECT @sql += N'ALTER TABLE [order] DROP CONSTRAINT ' + QUOTENAME(d.name) + N';' FROM sys.default_constraints d\n    WHERE d.parent_object_id = OBJECT_ID(N'[order]') AND d.parent_column_id = COLUMNPROPERTY(OBJECT_ID(N'[order]'), N'code', 'ColumnId');\nEXEC sp_executesql @sql;",
+        "ALTER TABLE [order] DROP COLUMN [code];",
+        "EXEC sp_rename N'[order].[code__new]', N'code', 'COLUMN';",
+        "DROP INDEX IF EXISTS [order_number_unique] ON [order];",
+        "EXEC sp_rename N'[order]', N'purchase';",
+        "CREATE UNIQUE INDEX [purchase_number_unique] ON [purchase] ([number]) WHERE [number] <> N'';"
+      ]
+    ],
+    "mysql": [
+      [
+        "CREATE TABLE `customer` (\n    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,\n    `name` VARCHAR(80) NOT NULL DEFAULT '',\n    `email` VARCHAR(320) NOT NULL DEFAULT '',\n    `kind` VARCHAR(100) NOT NULL DEFAULT 'Private',\n    `limit` DECIMAL(19,4) NOT NULL DEFAULT 100,\n    `active` BOOLEAN NOT NULL DEFAULT TRUE,\n    `since` DATE,\n    `notes` TEXT NOT NULL DEFAULT ('')\n);",
+        "CREATE UNIQUE INDEX `customer_name_unique` ON `customer` ((NULLIF(`name`, '')));",
+        "CREATE TABLE `order` (\n    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,\n    `number` VARCHAR(12) NOT NULL DEFAULT '',\n    `customer` BIGINT,\n    `total` BIGINT NOT NULL DEFAULT 0,\n    `placed` DATETIME,\n    `paid` BOOLEAN NOT NULL DEFAULT FALSE,\n    `code` TEXT NOT NULL DEFAULT ('')\n);",
+        "ALTER TABLE `order` ADD FOREIGN KEY (`customer`) REFERENCES `customer` (`id`);"
+      ],
+      [
+        "ALTER TABLE `customer` RENAME COLUMN `limit` TO `credit_limit`;",
+        "ALTER TABLE `customer` RENAME COLUMN `notes` TO `remarks`;",
+        "ALTER TABLE `customer` RENAME COLUMN `active` TO `vip`;",
+        "ALTER TABLE `customer` DROP COLUMN `since`;",
+        "ALTER TABLE `customer` ADD COLUMN `phone` VARCHAR(20) NOT NULL DEFAULT '';",
+        "CREATE UNIQUE INDEX `customer_email_unique` ON `customer` ((NULLIF(`email`, '')));",
+        "ALTER TABLE `order` ADD COLUMN `total__new` DECIMAL(19,4) NOT NULL DEFAULT 0;",
+        "UPDATE `order` SET `total__new` = COALESCE(`total`, 0);",
+        "ALTER TABLE `order` DROP COLUMN `total`;",
+        "ALTER TABLE `order` RENAME COLUMN `total__new` TO `total`;",
+        "CREATE UNIQUE INDEX `order_number_unique` ON `order` ((NULLIF(`number`, '')));",
+        "ALTER TABLE `order` ADD COLUMN `paid__new` BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE `order` SET `paid__new` = COALESCE(`paid`, 0);",
+        "ALTER TABLE `order` DROP COLUMN `paid`;",
+        "ALTER TABLE `order` RENAME COLUMN `paid__new` TO `paid`;",
+        "ALTER TABLE `order` ADD COLUMN `code__new` BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE `order` SET `code__new` = COALESCE(NULLIF(`code`, ''), 0);",
+        "ALTER TABLE `order` DROP COLUMN `code`;",
+        "ALTER TABLE `order` RENAME COLUMN `code__new` TO `code`;",
+        "DROP INDEX `order_number_unique` ON `order`;",
+        "RENAME TABLE `order` TO `purchase`;",
+        "CREATE UNIQUE INDEX `purchase_number_unique` ON `purchase` ((NULLIF(`number`, '')));"
+      ]
+    ],
+    "postgres": [
+      [
+        "CREATE TABLE \"customer\" (\n    \"id\" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n    \"name\" VARCHAR(80) NOT NULL DEFAULT '',\n    \"email\" VARCHAR(320) NOT NULL DEFAULT '',\n    \"kind\" TEXT NOT NULL DEFAULT 'Private',\n    \"limit\" NUMERIC(19,4) NOT NULL DEFAULT 100,\n    \"active\" BOOLEAN NOT NULL DEFAULT TRUE,\n    \"since\" DATE,\n    \"notes\" TEXT NOT NULL DEFAULT ''\n);",
+        "CREATE UNIQUE INDEX \"customer_name_unique\" ON \"customer\" (\"name\") WHERE \"name\" != '';",
+        "CREATE TABLE \"order\" (\n    \"id\" BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n    \"number\" VARCHAR(12) NOT NULL DEFAULT '',\n    \"customer\" BIGINT,\n    \"total\" BIGINT NOT NULL DEFAULT 0,\n    \"placed\" TIMESTAMP,\n    \"paid\" BOOLEAN NOT NULL DEFAULT FALSE,\n    \"code\" TEXT NOT NULL DEFAULT ''\n);",
+        "ALTER TABLE \"order\" ADD FOREIGN KEY (\"customer\") REFERENCES \"customer\" (\"id\");"
+      ],
+      [
+        "ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";",
+        "ALTER TABLE \"customer\" RENAME COLUMN \"notes\" TO \"remarks\";",
+        "ALTER TABLE \"customer\" RENAME COLUMN \"active\" TO \"vip\";",
+        "ALTER TABLE \"customer\" DROP COLUMN \"since\";",
+        "ALTER TABLE \"customer\" ADD COLUMN \"phone\" VARCHAR(20) NOT NULL DEFAULT '';",
+        "CREATE UNIQUE INDEX \"customer_email_unique\" ON \"customer\" (\"email\") WHERE \"email\" != '';",
+        "ALTER TABLE \"order\" ADD COLUMN \"total__new\" NUMERIC(19,4) NOT NULL DEFAULT 0;",
+        "UPDATE \"order\" SET \"total__new\" = COALESCE(CAST(\"total\" AS NUMERIC(19,4)), 0);",
+        "ALTER TABLE \"order\" DROP COLUMN \"total\";",
+        "ALTER TABLE \"order\" RENAME COLUMN \"total__new\" TO \"total\";",
+        "CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';",
+        "ALTER TABLE \"order\" ADD COLUMN \"paid__new\" BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE \"order\" SET \"paid__new\" = COALESCE(CASE WHEN \"paid\" THEN 1 ELSE 0 END, 0);",
+        "ALTER TABLE \"order\" DROP COLUMN \"paid\";",
+        "ALTER TABLE \"order\" RENAME COLUMN \"paid__new\" TO \"paid\";",
+        "ALTER TABLE \"order\" ADD COLUMN \"code__new\" BIGINT NOT NULL DEFAULT 0;",
+        "UPDATE \"order\" SET \"code__new\" = COALESCE(CAST(NULLIF(\"code\", '') AS BIGINT), 0);",
+        "ALTER TABLE \"order\" DROP COLUMN \"code\";",
+        "ALTER TABLE \"order\" RENAME COLUMN \"code__new\" TO \"code\";",
+        "DROP INDEX IF EXISTS \"order_number_unique\";",
+        "ALTER TABLE \"order\" RENAME TO \"purchase\";",
+        "CREATE UNIQUE INDEX \"purchase_number_unique\" ON \"purchase\" (\"number\") WHERE \"number\" != '';"
+      ]
+    ],
+    "sqlite": [
+      [
+        "CREATE TABLE \"customer\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"name\" TEXT NOT NULL DEFAULT '',\n    \"email\" TEXT NOT NULL DEFAULT '',\n    \"kind\" TEXT NOT NULL DEFAULT 'Private',\n    \"limit\" TEXT NOT NULL DEFAULT '100',\n    \"active\" INTEGER NOT NULL DEFAULT 1,\n    \"since\" TEXT,\n    \"notes\" TEXT NOT NULL DEFAULT ''\n);",
+        "CREATE UNIQUE INDEX \"customer_name_unique\" ON \"customer\" (\"name\") WHERE \"name\" != '';",
+        "CREATE TABLE \"order\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"number\" TEXT NOT NULL DEFAULT '',\n    \"customer\" INTEGER REFERENCES \"customer\" (\"id\"),\n    \"total\" INTEGER NOT NULL DEFAULT 0,\n    \"placed\" TEXT,\n    \"paid\" INTEGER NOT NULL DEFAULT 0,\n    \"code\" TEXT NOT NULL DEFAULT ''\n);"
+      ],
+      [
+        "ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";",
+        "ALTER TABLE \"customer\" RENAME COLUMN \"notes\" TO \"remarks\";",
+        "ALTER TABLE \"customer\" RENAME COLUMN \"active\" TO \"vip\";",
+        "DROP INDEX IF EXISTS \"customer_name_unique\";",
+        "CREATE TABLE \"customer__new\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"name\" TEXT NOT NULL DEFAULT '',\n    \"email\" TEXT NOT NULL DEFAULT '',\n    \"kind\" TEXT NOT NULL DEFAULT 'Private',\n    \"credit_limit\" TEXT NOT NULL DEFAULT '100',\n    \"vip\" INTEGER NOT NULL DEFAULT 1,\n    \"remarks\" TEXT NOT NULL DEFAULT ''\n);",
+        "INSERT INTO \"customer__new\" (\"id\", \"name\", \"email\", \"kind\", \"credit_limit\", \"vip\", \"remarks\") SELECT \"id\", COALESCE(\"name\", ''), COALESCE(\"email\", ''), COALESCE(\"kind\", 'Private'), COALESCE(\"credit_limit\", '100'), COALESCE(\"vip\", 1), COALESCE(\"remarks\", '') FROM \"customer\";",
+        "DROP TABLE \"customer\";",
+        "ALTER TABLE \"customer__new\" RENAME TO \"customer\";",
+        "CREATE UNIQUE INDEX \"customer_name_unique\" ON \"customer\" (\"name\") WHERE \"name\" != '';",
+        "ALTER TABLE \"customer\" ADD COLUMN \"phone\" TEXT NOT NULL DEFAULT '';",
+        "CREATE UNIQUE INDEX \"customer_email_unique\" ON \"customer\" (\"email\") WHERE \"email\" != '';",
+        "CREATE TABLE \"order__new\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"number\" TEXT NOT NULL DEFAULT '',\n    \"customer\" INTEGER REFERENCES \"customer\" (\"id\"),\n    \"total\" TEXT NOT NULL DEFAULT '0',\n    \"placed\" TEXT,\n    \"paid\" INTEGER NOT NULL DEFAULT 0,\n    \"code\" TEXT NOT NULL DEFAULT ''\n);",
+        "INSERT INTO \"order__new\" (\"id\", \"number\", \"customer\", \"total\", \"placed\", \"paid\", \"code\") SELECT \"id\", COALESCE(\"number\", ''), \"customer\", COALESCE(CAST(\"total\" AS TEXT), '0'), \"placed\", COALESCE(\"paid\", 0), COALESCE(\"code\", '') FROM \"order\";",
+        "DROP TABLE \"order\";",
+        "ALTER TABLE \"order__new\" RENAME TO \"order\";",
+        "CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';",
+        "DROP INDEX IF EXISTS \"order_number_unique\";",
+        "CREATE TABLE \"order__new\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"number\" TEXT NOT NULL DEFAULT '',\n    \"customer\" INTEGER REFERENCES \"customer\" (\"id\"),\n    \"total\" TEXT NOT NULL DEFAULT '0',\n    \"placed\" TEXT,\n    \"paid\" INTEGER NOT NULL DEFAULT 0,\n    \"code\" TEXT NOT NULL DEFAULT ''\n);",
+        "INSERT INTO \"order__new\" (\"id\", \"number\", \"customer\", \"total\", \"placed\", \"paid\", \"code\") SELECT \"id\", COALESCE(\"number\", ''), \"customer\", COALESCE(\"total\", '0'), \"placed\", COALESCE(\"paid\", 0), COALESCE(\"code\", '') FROM \"order\";",
+        "DROP TABLE \"order\";",
+        "ALTER TABLE \"order__new\" RENAME TO \"order\";",
+        "CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';",
+        "DROP INDEX IF EXISTS \"order_number_unique\";",
+        "CREATE TABLE \"order__new\" (\n    \"id\" INTEGER PRIMARY KEY,\n    \"number\" TEXT NOT NULL DEFAULT '',\n    \"customer\" INTEGER REFERENCES \"customer\" (\"id\"),\n    \"total\" TEXT NOT NULL DEFAULT '0',\n    \"placed\" TEXT,\n    \"paid\" INTEGER NOT NULL DEFAULT 0,\n    \"code\" INTEGER NOT NULL DEFAULT 0\n);",
+        "INSERT INTO \"order__new\" (\"id\", \"number\", \"customer\", \"total\", \"placed\", \"paid\", \"code\") SELECT \"id\", COALESCE(\"number\", ''), \"customer\", COALESCE(\"total\", '0'), \"placed\", COALESCE(\"paid\", 0), COALESCE(CAST(\"code\" AS INTEGER), 0) FROM \"order\";",
+        "DROP TABLE \"order\";",
+        "ALTER TABLE \"order__new\" RENAME TO \"order\";",
+        "CREATE UNIQUE INDEX \"order_number_unique\" ON \"order\" (\"number\") WHERE \"number\" != '';",
+        "DROP INDEX IF EXISTS \"order_number_unique\";",
+        "ALTER TABLE \"order\" RENAME TO \"purchase\";",
+        "CREATE UNIQUE INDEX \"purchase_number_unique\" ON \"purchase\" (\"number\") WHERE \"number\" != '';"
+      ]
+    ]
+  }
+}

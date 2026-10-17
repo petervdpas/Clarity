@@ -2,7 +2,7 @@
 //! events as C#, over the C# runtime copied into the project.
 
 use clarity_gen::{OutFile, generate};
-use clarity_project::{Backend, Settings, Ui, starter};
+use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
 use clarity_spec::load_sources;
 
 const SALES: &str = "module sales
@@ -111,6 +111,7 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Clarity.Runtime/Errors.cs",
             "Clarity.Runtime/Formats.cs",
             "Clarity.Runtime/Languages.cs",
+            "Clarity.Runtime/Locations.cs",
             "Clarity.Runtime/Query.cs",
             "Clarity.Runtime/Record.cs",
             "Clarity.Runtime/Sql.cs",
@@ -270,10 +271,81 @@ fn every_csharp_runtime_source_file_is_copied() {
     for library in ["Clarity.Runtime", "Clarity.Avalonia"] {
         for entry in std::fs::read_dir(root.join(library)).unwrap() {
             let path = entry.unwrap().path();
-            if path.extension().is_some_and(|e| e == "cs") {
-                let name = format!("{library}/{}", path.file_name().unwrap().to_string_lossy());
+            let file = path.file_name().unwrap().to_string_lossy().to_string();
+            // A server driver goes only where a data source uses it (tested below).
+            let driver = ["ServerDriver.cs", "PostgresDriver.cs", "MysqlDriver.cs", "MssqlDriver.cs"].contains(&file.as_str());
+            if path.extension().is_some_and(|e| e == "cs") && !driver {
+                let name = format!("{library}/{file}");
                 assert!(files.iter().any(|f| f.path == name), "{name} is not copied");
             }
         }
     }
+}
+
+/// A project holds the drivers of the databases its data sources are, with
+/// their packages, and no others (as the Rust output enables cargo features).
+#[test]
+fn a_project_gets_the_drivers_of_its_databases_only() {
+    let project = load_sources([("sales.clarity", SALES)]);
+    let plain = generate(&project, &settings()).unwrap();
+    let csproj = file(&plain, "Shop.csproj");
+    assert!(!csproj.contains("Npgsql") && !csproj.contains("DefineConstants"), "{csproj}");
+    assert!(!plain.iter().any(|f| f.path.ends_with("Driver.cs") && !f.path.ends_with("SqliteDriver.cs")));
+
+    for (kind, constant, package, driver) in [
+        (SourceKind::Postgres, "CLARITY_POSTGRES", "Include=\"Npgsql\"", "PostgresDriver.cs"),
+        (SourceKind::Mysql, "CLARITY_MYSQL", "Include=\"MySqlConnector\"", "MysqlDriver.cs"),
+        (SourceKind::Mssql, "CLARITY_MSSQL", "Include=\"Microsoft.Data.SqlClient\"", "MssqlDriver.cs"),
+    ] {
+        let mut settings = settings();
+        settings.datasources[0].kind = kind;
+        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        let files = generate(&project, &settings).unwrap();
+        let csproj = file(&files, "Shop.csproj");
+        has(csproj, &format!("<DefineConstants>$(DefineConstants);{constant}</DefineConstants>"));
+        has(csproj, package);
+        let others = ["Include=\"Npgsql\"", "Include=\"MySqlConnector\"", "Include=\"Microsoft.Data.SqlClient\""];
+        assert_eq!(others.iter().filter(|p| csproj.contains(*p)).count(), 1, "{csproj}");
+        assert!(files.iter().any(|f| f.path == format!("Clarity.Runtime/{driver}")));
+        assert_eq!(files.iter().filter(|f| f.path.ends_with("Driver.cs")).count(), 3, "SQLite, the server's own and their base");
+        has(file(&files, "Program.cs"), "\"env:SHOP_DATABASE\")];");
+    }
+    // SQL Server's package comes with the fix of its vulnerable dependency.
+    let mut settings = settings();
+    settings.datasources[0].kind = SourceKind::Mssql;
+    has(file(&generate(&project, &settings).unwrap(), "Shop.csproj"), "Include=\"System.Security.Cryptography.Pkcs\"");
+}
+
+/// An external source (D1e) on C#: opened with its own driver but never
+/// migrated, its records read and written by its own table, key and column
+/// names, with a read-only one on a server database.
+#[test]
+fn an_external_source_keeps_its_names_and_is_never_migrated() {
+    use clarity_project::DataSource;
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
+    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    project.sources = vec![SourceRef::sql("main"), SourceRef { readonly: true, ..SourceRef::sql("erp").external() }];
+    let mut settings = settings();
+    settings.datasources.push(DataSource {
+        name: "erp".into(),
+        kind: SourceKind::Mssql,
+        url: "env:ERP_DATABASE".into(),
+        auth: None,
+        external: true,
+        readonly: true,
+    });
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Program.cs"), "(\"erp\", Dialect.Mssql, \"env:ERP_DATABASE\")");
+    let schema = file(&files, "Schema.cs");
+    assert!(!schema.contains("(\"erp\"") && !schema.contains("tblInvoice"), "{schema}");
+    let erp_cs = file(&files, "Erp.cs");
+    has(erp_cs, "    public static string SourceName => \"erp\";");
+    has(erp_cs, "    public static string TableName => \"tblInvoice\";");
+    has(erp_cs, "    public static string KeyColumn => \"InvoiceID\";");
+    has(erp_cs, "[\"InvNo\", \"total\"]");
+    has(erp_cs, "Cond.Contains(\"InvNo\", \"INV\")");
+    has(erp_cs, ".Order(\"InvNo\", false)");
+    // Its database's driver comes along, though Clarity owns no table there.
+    has(file(&files, "Shop.csproj"), "<DefineConstants>$(DefineConstants);CLARITY_MSSQL</DefineConstants>");
 }

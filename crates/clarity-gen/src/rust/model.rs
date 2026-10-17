@@ -3,7 +3,7 @@
 use clarity_spec::Project;
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
-use super::names::{decimal, field_type, ident, table};
+use super::names::{decimal, field_type, ident};
 
 pub fn emit(project: &Project, file: &SpecFile) -> String {
     let mut out = String::new();
@@ -115,7 +115,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     }
     out.push_str("        }\n    }\n}\n\n");
 
-    let columns = stored(entity).map(|f| format!("{:?}", f.name.name)).collect::<Vec<_>>().join(", ");
+    let columns = stored(entity).map(|f| format!("{:?}", entity.column_of(&f.name.name))).collect::<Vec<_>>().join(", ");
     let to_values: String = stored(entity).map(|f| format!("            {},\n", to_sql(f))).collect();
     let from_values: String = stored(entity)
         .enumerate()
@@ -136,7 +136,9 @@ fn record(project: &Project, entity: &Entity) -> String {
         .collect();
     out.push_str(&format!(
         "impl Record for {name} {{
+    const SOURCE: &'static str = {source:?};
     const TABLE: &'static str = {table:?};
+    const KEY: &'static str = {key:?};
     const COLUMNS: &'static [&'static str] = &[{columns}];
 
     fn id(&self) -> Id {{
@@ -160,7 +162,9 @@ fn record(project: &Project, entity: &Entity) -> String {
 }}
 
 ",
-        table = table(name)
+        table = entity.table_name(),
+        key = entity.key_column(),
+        source = project.source_of(name).unwrap_or_default()
     ));
     out
 }

@@ -49,6 +49,8 @@ fn storage(column: &Column, enum_first: impl Fn(&str) -> Option<String>) -> (&'s
 /// Writes SQL for the steps, with what the schema is before each change.
 struct Writer<'a> {
     project: &'a Project,
+    /// The data source whose database the steps build.
+    source: &'a str,
     schema: Schema,
 }
 
@@ -61,7 +63,11 @@ impl Writer<'_> {
         let (ty, default) = storage(column, |e| self.enum_first(e));
         let name = quoted(&column.name);
         match (&column.ty, default) {
-            (FieldType::Ref { entity }, _) => format!("{name} INTEGER REFERENCES {} (\"id\")", quoted(&table(&entity.name))),
+            // A reference into another database is a plain id.
+            (FieldType::Ref { entity }, _) if self.project.source_of(&entity.name).is_none_or(|s| s == self.source) => {
+                format!("{name} INTEGER REFERENCES {} (\"id\")", quoted(&table(&entity.name)))
+            }
+            (FieldType::Ref { .. }, _) => format!("{name} INTEGER"),
             (_, Some(default)) => format!("{name} {ty} NOT NULL DEFAULT {default}"),
             (_, None) => format!("{name} {ty}"),
         }
@@ -212,40 +218,59 @@ fn drop_unique(entity: &str, column: &str) -> String {
     format!("DROP INDEX IF EXISTS {};\n", index_name(entity, column))
 }
 
-/// The steps as SQL, or why they cannot be written yet.
-pub fn emit(project: &Project) -> Result<String, Vec<String>> {
-    let steps: Vec<(String, Vec<Op>)> = match &project.migrations {
-        None => vec![("the schema from the data dictionary".to_string(), migrate::pending(project, &[]))],
-        Some(migrations) => {
-            let pending = migrate::pending(project, &migrate::proposed_renames(project));
-            if !pending.is_empty() {
-                let changes: Vec<String> = pending.iter().map(|op| migrate::op_text(op).lines().next().unwrap_or_default().to_string()).collect();
-                return Err(vec![format!(
-                    "the data dictionary has changes that are not in a migration yet ({}); create the next step in the Project tab or with 'clarity migrate'",
-                    changes.join("; ")
-                )]);
-            }
-            migrations
-                .iter()
-                .map(|m| (m.title.clone(), m.ops.iter().map(|(op, _)| op.clone()).collect()))
-                .collect()
-        }
+/// The steps of `source` as SQL, or why they cannot be written yet.
+fn source_steps(project: &Project, source: &str) -> Result<Vec<(String, Vec<Op>)>, String> {
+    let Some(migrations) = &project.migrations else {
+        return Ok(vec![("the schema from the data dictionary".to_string(), migrate::pending(project, source, &[]))]);
     };
-    let mut writer = Writer {
-        project,
-        schema: Schema::default(),
-    };
+    let pending = migrate::pending(project, source, &migrate::proposed_renames(project, source));
+    if !pending.is_empty() {
+        let changes: Vec<String> = pending.iter().map(|op| migrate::op_text(op).lines().next().unwrap_or_default().to_string()).collect();
+        return Err(format!(
+            "the data dictionary has changes that are not in a migration yet ({}); create the next step in the Project tab or with 'clarity migrate'",
+            changes.join("; ")
+        ));
+    }
+    Ok(migrations
+        .get(source)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|m| (m.title.clone(), m.ops.iter().map(|(op, _)| op.clone()).collect()))
+        .collect())
+}
+
+/// The steps of every database of the application, as SQL per data source.
+pub fn emit(project: &Project, sources: &[String]) -> Result<String, Vec<String>> {
     let mut out = format!(
         "{HEADER}
-/// The migration steps, in order. The database remembers how many it has
-/// applied, and applies the rest when the application starts.
-pub const STEPS: &[&str] = &[
+/// The migration steps per data source, in order. Each database remembers
+/// how many it has applied, and applies the rest when the application
+/// starts.
+pub const SOURCES: &[(&str, &[&str])] = &[
 "
     );
-    for (i, (title, ops)) in steps.iter().enumerate() {
-        let sql: String = ops.iter().map(|op| writer.step(op)).collect();
-        out.push_str(&format!("    // {}: {title}\n    r#\"{sql}\"#,\n", i + 1));
+    let mut errors = Vec::new();
+    for source in sources {
+        let steps = match source_steps(project, source) {
+            Ok(steps) => steps,
+            Err(error) => {
+                errors.push(error);
+                continue;
+            }
+        };
+        let mut writer = Writer {
+            project,
+            source,
+            schema: Schema::default(),
+        };
+        out.push_str(&format!("    ({source:?}, &[\n"));
+        for (i, (title, ops)) in steps.iter().enumerate() {
+            let sql: String = ops.iter().map(|op| writer.step(op)).collect();
+            out.push_str(&format!("        // {}: {title}\n        r#\"{sql}\"#,\n", i + 1));
+        }
+        out.push_str("    ]),\n");
     }
     out.push_str("];\n");
-    Ok(out)
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
 }

@@ -4,6 +4,10 @@ import type { Rename } from "./Rename";
 
 export type PendingMigration = { 
 /**
+ * The data source whose steps these are.
+ */
+source: string, 
+/**
  * The changes, with the renames that were given taken as renames.
  */
 changes: Array<PendingChange>, 

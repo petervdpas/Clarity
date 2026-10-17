@@ -89,6 +89,13 @@ pub struct DataSource {
     pub url: String,
     #[serde(default)]
     pub auth: Option<Auth>,
+    /// A database Clarity does not own: it reads and writes its records,
+    /// but never changes its schema.
+    #[serde(default)]
+    pub external: bool,
+    /// Records are read, never saved or deleted.
+    #[serde(default)]
+    pub readonly: bool,
 }
 
 /// The settings of a project, as the Project tab shows them. The first data
@@ -177,6 +184,8 @@ pub fn starter(name: &str, module: &str) -> Settings {
             kind: SourceKind::Sqlite,
             url: format!("data/{module}.db"),
             auth: None,
+            external: false,
+            readonly: false,
         }],
         out: DEFAULT_OUT.to_string(),
     }
@@ -294,6 +303,12 @@ pub fn validate(settings: &Settings) -> Vec<String> {
         }
         if let Some(problem) = source_problem(source) {
             problems.push(format!("data source '{}': {problem}", source.name));
+        }
+        if source.kind == SourceKind::Rest && source.external {
+            problems.push(format!(
+                "data source '{}': a web API is always external; leave out 'external'",
+                source.name
+            ));
         }
     }
     problems
@@ -449,3 +464,164 @@ pub fn catalog() -> Catalog {
     }
 }
 
+
+/// The data sources of `settings`, as the checker needs them.
+pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
+    settings
+        .datasources
+        .iter()
+        .map(|s| match s.kind {
+            SourceKind::Rest => clarity_spec::SourceRef::web(&s.name),
+            _ => clarity_spec::SourceRef {
+                external: s.external,
+                readonly: s.readonly,
+                ..clarity_spec::SourceRef::sql(&s.name)
+            },
+        })
+        .collect()
+}
+
+/// The data sources of the project whose modules are in `dir`, read from
+/// the project file next to it; none when it cannot be read.
+pub fn sources_of(dir: &Path) -> Vec<clarity_spec::SourceRef> {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    load(&file).settings.as_ref().map(source_refs).unwrap_or_default()
+}
+
+/// Loads the modules in `dir` with their migration steps, checked against
+/// the project's data sources and the tables of its external databases.
+pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
+    let mut project = clarity_spec::load_dir_in(dir, &sources_of(dir))?;
+    check_external(dir, &mut project);
+    Ok(project)
+}
+
+/// Like `load_modules`, with `text` in place of the file at `path`.
+pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
+    let mut project = clarity_spec::load_dir_with_in(dir, Some((path, text)), &sources_of(dir))?;
+    check_external(dir, &mut project);
+    Ok(project)
+}
+
+/// The file of an SQLite data source: a relative location is in the
+/// project's folder `dir`, like the output folder.
+pub fn sqlite_path(dir: &Path, source: &DataSource) -> PathBuf {
+    let path = Path::new(&source.url);
+    let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
+    std::path::absolute(&joined).unwrap_or(joined)
+}
+
+/// Compares the entities of each external SQLite source with its tables.
+/// A database that cannot be read is a warning: its tables are not checked.
+fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    let Some(settings) = load(&file).settings else { return };
+    for source in settings.datasources.iter().filter(|s| s.external && s.kind == SourceKind::Sqlite) {
+        if project.entities_in(&source.name).next().is_none() {
+            continue;
+        }
+        match clarity_db::read_sqlite(&sqlite_path(dir, source)) {
+            Ok(schema) => {
+                let found = clarity_db::drift(project, &source.name, &schema);
+                project.diagnostics.extend(found);
+            }
+            Err(reason) => project.diagnostics.push(
+                clarity_spec::Diagnostic::warning(
+                    format!("data source {}: {reason}; its tables were not checked", source.name),
+                    clarity_spec::Span::default(),
+                )
+                .in_file(&file.display().to_string()),
+            ),
+        }
+    }
+}
+
+/// The settings a generated application is built with. An external SQLite
+/// file already exists somewhere on this machine, so a relative location
+/// becomes the full path from the project's folder `dir`. Owned databases
+/// keep their location: the application creates them where it runs.
+pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
+    let mut built = settings.clone();
+    for source in built.datasources.iter_mut().filter(|s| s.external && s.kind == SourceKind::Sqlite) {
+        source.url = sqlite_path(dir, source).display().to_string();
+    }
+    built
+}
+
+/// A table of an external database, for the Import list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct SourceTable {
+    pub name: String,
+    pub columns: usize,
+    /// Why the table cannot be imported, if it cannot.
+    #[serde(rename = "notImportable")]
+    #[ts(rename = "notImportable")]
+    pub not_importable: Option<String>,
+}
+
+/// An import that was written: the module file and the tables left out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportDone {
+    pub path: PathBuf,
+    pub text: String,
+    pub skipped: Vec<(String, String)>,
+}
+
+/// The live schema of external data source `source` of the project whose
+/// modules are in `dir`.
+fn external_schema(dir: &Path, source: &str) -> Result<clarity_db::LiveSchema, String> {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    let settings = load(&file).settings.ok_or_else(|| format!("{} cannot be read", file.display()))?;
+    let found = settings
+        .datasources
+        .iter()
+        .find(|s| s.name == source)
+        .ok_or_else(|| format!("the project has no data source {source}"))?;
+    if !found.external {
+        return Err(format!("data source {source} is not external; Clarity makes its tables from the dictionary"));
+    }
+    if found.kind != SourceKind::Sqlite {
+        return Err(format!("data source {source} is {}; importing is for SQLite only for now", source_word(found.kind)));
+    }
+    clarity_db::read_sqlite(&sqlite_path(dir, found))
+}
+
+/// The tables of external data source `source`, and which can be imported.
+pub fn source_tables(dir: &Path, source: &str) -> Result<Vec<SourceTable>, String> {
+    let schema = external_schema(dir, source)?;
+    Ok(schema
+        .tables
+        .iter()
+        .map(|t| SourceTable {
+            name: t.name.clone(),
+            columns: t.columns.len(),
+            not_importable: clarity_db::not_importable(t),
+        })
+        .collect())
+}
+
+/// Writes `tables` of external data source `source` as module `module`,
+/// in a new file next to the other modules.
+pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String]) -> Result<ImportDone, String> {
+    if !is_identifier(module) {
+        return Err(format!("'{module}' is not a valid module name"));
+    }
+    let path = dir.join(format!("{module}.{}", clarity_spec::SPEC_EXTENSION));
+    if path.exists() {
+        return Err(format!("there is already a module file {}; choose another module name", path.display()));
+    }
+    let schema = external_schema(dir, source)?;
+    let project = load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    if project.files.iter().any(|f| f.module.as_ref().is_some_and(|m| m.name == module)) {
+        return Err(format!("there is already a module {module}; choose another name"));
+    }
+    let taken: Vec<String> = project.entities().map(|e| e.name.name.clone()).collect();
+    let imported = clarity_db::import(&schema, tables, module, source, &taken);
+    std::fs::write(&path, &imported.text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+    Ok(ImportDone {
+        path,
+        text: imported.text,
+        skipped: imported.skipped,
+    })
+}

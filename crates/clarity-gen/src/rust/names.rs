@@ -27,27 +27,8 @@ pub fn ident(name: &str) -> String {
 
 /// `CustomerKind` and `My shop` as `customer_kind` and `my_shop`.
 pub fn snake(name: &str) -> String {
-    let mut out = String::new();
-    for (i, c) in name.chars().enumerate() {
-        if c.is_ascii_uppercase() {
-            if i > 0 && !out.ends_with('_') {
-                out.push('_');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else if c.is_ascii_alphanumeric() {
-            out.push(c);
-        } else if !out.ends_with('_') && !out.is_empty() {
-            out.push('_');
-        }
-    }
-    let out = out.trim_end_matches('_').to_string();
-    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
-        format!("app_{out}")
-    } else {
-        out
-    }
+    clarity_spec::model::snake_case(name)
 }
-
 /// The table an entity is stored in.
 pub fn table(entity: &str) -> String {
     snake(entity)

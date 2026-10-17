@@ -66,8 +66,12 @@ pub fn ensure(holds: bool, what: &str) -> Result<()> {
 
 /// A record of an entity, as generated code describes it.
 pub trait Record: Sized + Clone {
+    /// The data source the records live in; empty for the default one.
+    const SOURCE: &'static str = "";
     /// The table the records are stored in.
     const TABLE: &'static str;
+    /// The integer column that identifies a record.
+    const KEY: &'static str = "id";
     /// The stored columns, without `id`, in the order of `to_values`.
     const COLUMNS: &'static [&'static str];
     fn id(&self) -> Id;
@@ -124,64 +128,80 @@ impl Show for Option<NaiveDateTime> {
     }
 }
 
-/// The database of an application: one SQLite file.
+/// The databases of an application: one SQLite file per data source.
 pub struct Db {
-    conn: rusqlite::Connection,
+    /// By data source name; the first is the default.
+    sources: Vec<(String, rusqlite::Connection)>,
+}
+
+fn open_file(path: &Path) -> Result<rusqlite::Connection> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|err| Error::Storage(err.to_string()))?;
+    }
+    Ok(rusqlite::Connection::open(path)?)
 }
 
 impl Db {
+    /// One database, used for every record.
     pub fn open(path: &Path) -> Result<Db> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|err| Error::Storage(err.to_string()))?;
-        }
         Ok(Db {
-            conn: rusqlite::Connection::open(path)?,
+            sources: vec![(String::new(), open_file(path)?)],
         })
+    }
+
+    /// A database per data source, by name.
+    pub fn open_sources(sources: &[(&str, &Path)]) -> Result<Db> {
+        let sources = sources
+            .iter()
+            .map(|(name, path)| Ok((name.to_string(), open_file(path)?)))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Db { sources })
     }
 
     /// A database that lives in memory, for tests.
     pub fn memory() -> Result<Db> {
         Ok(Db {
-            conn: rusqlite::Connection::open_in_memory()?,
+            sources: vec![(String::new(), rusqlite::Connection::open_in_memory()?)],
         })
     }
 
-    /// The number of migration steps applied so far.
-    pub fn schema_version(&self) -> Result<usize> {
-        self.conn
-            .execute_batch("CREATE TABLE IF NOT EXISTS clarity_schema (version INTEGER NOT NULL)")?;
-        let version: Option<i64> =
-            self.conn.query_row("SELECT MAX(version) FROM clarity_schema", [], |row| row.get(0))?;
-        Ok(version.unwrap_or(0) as usize)
-    }
-
-    /// Applies the steps that are not applied yet, each in a transaction.
-    /// References are not enforced while a step runs, since a step may build
-    /// a table again that others refer to; they are checked before the step
-    /// is kept.
-    pub fn migrate(&mut self, steps: &[&str]) -> Result<usize> {
-        let done = self.schema_version()?;
-        self.conn.execute_batch("PRAGMA foreign_keys = OFF")?;
-        let applied = self.apply_steps(steps, done);
-        self.conn.execute_batch("PRAGMA foreign_keys = ON")?;
-        applied
-    }
-
-    fn apply_steps(&mut self, steps: &[&str], done: usize) -> Result<usize> {
-        for (i, step) in steps.iter().enumerate().skip(done) {
-            let tx = self.conn.transaction()?;
-            tx.execute_batch(step)?;
-            let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
-            if broken > 0 {
-                return Err(Error::Storage(format!(
-                    "migration step {} leaves {broken} reference(s) to records that do not exist",
-                    i + 1
-                )));
-            }
-            tx.execute("INSERT INTO clarity_schema (version) VALUES (?1)", [i as i64 + 1])?;
-            tx.commit()?;
+    /// The database of `source`. With one database, every record is in it.
+    fn conn(&self, source: &str) -> Result<&rusqlite::Connection> {
+        match self.sources.as_slice() {
+            [(_, only)] => Ok(only),
+            all => all
+                .iter()
+                .find(|(name, _)| source.is_empty() || name == source)
+                .map(|(_, conn)| conn)
+                .ok_or_else(|| Error::Storage(format!("there is no data source '{source}'"))),
         }
-        Ok(steps.len().saturating_sub(done))
+    }
+
+    fn conn_mut(&mut self, source: &str) -> Result<&mut rusqlite::Connection> {
+        let single = self.sources.len() == 1;
+        self.sources
+            .iter_mut()
+            .find(|(name, _)| single || source.is_empty() || name == source)
+            .map(|(_, conn)| conn)
+            .ok_or_else(|| Error::Storage(format!("there is no data source '{source}'")))
+    }
+
+    /// The number of migration steps applied so far to the default database.
+    pub fn schema_version(&self) -> Result<usize> {
+        schema_version(self.conn("")?)
+    }
+
+    /// `migrate_source` for the default database.
+    pub fn migrate(&mut self, steps: &[&str]) -> Result<usize> {
+        migrate(self.conn_mut("")?, steps)
+    }
+
+    /// Applies the steps of `source` that its database has not had yet,
+    /// each in a transaction. References are not enforced while a step
+    /// runs, since a step may build a table again that others refer to;
+    /// they are checked before the step is kept.
+    pub fn migrate_source(&mut self, source: &str, steps: &[&str]) -> Result<usize> {
+        migrate(self.conn_mut(source)?, steps)
     }
 
     /// Inserts a new record (and gives it its id) or updates a stored one.
@@ -191,8 +211,8 @@ impl Db {
             let columns = R::COLUMNS.iter().map(|c| quoted(c)).collect::<Vec<_>>().join(", ");
             let marks = (1..=values.len()).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
             let sql = format!("INSERT INTO {} ({columns}) VALUES ({marks})", quoted(R::TABLE));
-            self.conn.execute(&sql, rusqlite::params_from_iter(values))?;
-            record.set_id(self.conn.last_insert_rowid());
+            self.conn(R::SOURCE)?.execute(&sql, rusqlite::params_from_iter(values))?;
+            record.set_id(self.conn(R::SOURCE)?.last_insert_rowid());
         } else {
             let sets = R::COLUMNS
                 .iter()
@@ -200,10 +220,10 @@ impl Db {
                 .map(|(i, c)| format!("{} = ?{}", quoted(c), i + 1))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let sql = format!("UPDATE {} SET {sets} WHERE \"id\" = ?{}", quoted(R::TABLE), values.len() + 1);
+            let sql = format!("UPDATE {} SET {sets} WHERE {} = ?{}", quoted(R::TABLE), quoted(R::KEY), values.len() + 1);
             let mut params = values;
             params.push(SqlValue::Integer(record.id()));
-            let changed = self.conn.execute(&sql, rusqlite::params_from_iter(params))?;
+            let changed = self.conn(R::SOURCE)?.execute(&sql, rusqlite::params_from_iter(params))?;
             if changed == 0 {
                 return Err(Error::NotFound {
                     table: R::TABLE,
@@ -215,8 +235,8 @@ impl Db {
     }
 
     pub fn delete<R: Record>(&self, record: &R) -> Result<()> {
-        let sql = format!("DELETE FROM {} WHERE \"id\" = ?1", quoted(R::TABLE));
-        match self.conn.execute(&sql, [record.id()]) {
+        let sql = format!("DELETE FROM {} WHERE {} = ?1", quoted(R::TABLE), quoted(R::KEY));
+        match self.conn(R::SOURCE)?.execute(&sql, [record.id()]) {
             Ok(_) => Ok(()),
             Err(rusqlite::Error::SqliteFailure(err, _)) if err.code == rusqlite::ErrorCode::ConstraintViolation => {
                 Err(Error::InUse {
@@ -235,12 +255,12 @@ impl Db {
 
     /// The records a query finds, in its order.
     pub fn find<R: Record>(&self, query: &Query) -> Result<Vec<R>> {
-        let (sql, params) = query.sql(R::TABLE, &select_columns::<R>());
+        let (sql, params) = query.sql(R::TABLE, R::KEY, &select_columns::<R>());
         self.read(&sql, &params)
     }
 
     fn read<R: Record>(&self, sql: &str, params: &[SqlValue]) -> Result<Vec<R>> {
-        let mut statement = self.conn.prepare(sql)?;
+        let mut statement = self.conn(R::SOURCE)?.prepare(sql)?;
         let mut rows = statement.query(rusqlite::params_from_iter(params))?;
         let mut records = Vec::new();
         while let Some(row) = rows.next()? {
@@ -253,11 +273,11 @@ impl Db {
 
     /// Every stored record of an entity, in the order they were stored.
     pub fn all<R: Record>(&self) -> Result<Vec<R>> {
-        self.select(" ORDER BY \"id\"", &[])
+        self.select(&format!(" ORDER BY {}", quoted(R::KEY)), &[])
     }
 
     pub fn get<R: Record>(&self, id: Id) -> Result<R> {
-        self.select::<R>(" WHERE \"id\" = ?1", &[SqlValue::Integer(id)])?
+        self.select::<R>(&format!(" WHERE {} = ?1", quoted(R::KEY)), &[SqlValue::Integer(id)])?
             .pop()
             .ok_or(Error::NotFound {
                 table: R::TABLE,
@@ -281,8 +301,39 @@ pub fn quoted(name: &str) -> String {
 
 /// `"id"` and the stored columns of a record, for SELECT.
 fn select_columns<R: Record>() -> String {
-    std::iter::once("\"id\"".to_string())
+    std::iter::once(quoted(R::KEY))
         .chain(R::COLUMNS.iter().map(|c| quoted(c)))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn schema_version(conn: &rusqlite::Connection) -> Result<usize> {
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS clarity_schema (version INTEGER NOT NULL)")?;
+    let version: Option<i64> = conn.query_row("SELECT MAX(version) FROM clarity_schema", [], |row| row.get(0))?;
+    Ok(version.unwrap_or(0) as usize)
+}
+
+fn migrate(conn: &mut rusqlite::Connection, steps: &[&str]) -> Result<usize> {
+    let done = schema_version(conn)?;
+    conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+    let applied = apply_steps(conn, steps, done);
+    conn.execute_batch("PRAGMA foreign_keys = ON")?;
+    applied
+}
+
+fn apply_steps(conn: &mut rusqlite::Connection, steps: &[&str], done: usize) -> Result<usize> {
+    for (i, step) in steps.iter().enumerate().skip(done) {
+        let tx = conn.transaction()?;
+        tx.execute_batch(step)?;
+        let broken: i64 = tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| row.get(0))?;
+        if broken > 0 {
+            return Err(Error::Storage(format!(
+                "migration step {} leaves {broken} reference(s) to records that do not exist",
+                i + 1
+            )));
+        }
+        tx.execute("INSERT INTO clarity_schema (version) VALUES (?1)", [i as i64 + 1])?;
+        tx.commit()?;
+    }
+    Ok(steps.len().saturating_sub(done))
 }

@@ -31,6 +31,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         version: crate::content_version(source),
         module: None,
         uses: Vec::new(),
+        source: None,
         enums: Vec::new(),
         entities: Vec::new(),
         pages: Vec::new(),
@@ -299,6 +300,16 @@ fn parse_top_level(
             no_children(node)?;
             file.uses.push(name);
         }
+        Some("source") => {
+            cursor.next();
+            let name = cursor.expect_ident("a data source of the project")?;
+            cursor.expect_end()?;
+            no_children(node)?;
+            if file.source.is_some() {
+                return Err(Diagnostic::error("a module has one 'source'", node.line.span));
+            }
+            file.source = Some(name);
+        }
         Some("enum") => {
             cursor.next();
             let name = cursor.expect_ident("an enum name")?;
@@ -335,7 +346,7 @@ fn parse_top_level(
         }
         _ => {
             return Err(cursor.error_here(
-                "expected 'module', 'use', 'enum', 'entity', 'page', 'app', 'code', 'function' or 'action'",
+                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'code', 'function' or 'action'",
             ));
         }
     }
@@ -381,7 +392,32 @@ fn parse_variant(node: &Node) -> ParseResult<EnumVariant> {
 
 fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
+    let (mut table, mut key) = (None, None);
     for child in &node.children {
+        // `table "tblInvoice"` and `key "InvoiceID"` map the entity onto an
+        // existing table; field lines have a colon after the name.
+        let setting = match first_word(child) {
+            Some(word @ ("table" | "key")) if child.line.tokens.get(1).is_some_and(|t| t.kind == TokenKind::Str) => Some(word),
+            _ => None,
+        };
+        if let Some(word) = setting {
+            let mut cursor = Cursor::new(child.line);
+            cursor.next();
+            let result = cursor.expect_string("a name").and_then(|value| {
+                cursor.expect_end()?;
+                no_children(child)?;
+                let slot = if word == "table" { &mut table } else { &mut key };
+                if slot.is_some() {
+                    return Err(Diagnostic::error(format!("duplicate '{word}'"), child.line.span));
+                }
+                *slot = Some(value);
+                Ok(())
+            });
+            if let Err(diag) = result {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
         match parse_field(child) {
             Ok(field) => fields.push(field),
             Err(diag) => diagnostics.push(diag),
@@ -396,6 +432,8 @@ fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
     Entity {
         name,
         fields,
+        table,
+        key,
         span: node.span(),
     }
 }
@@ -531,6 +569,11 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "format" => set(
             &mut modifiers.format,
             cursor.expect_string("a format string")?,
+            duplicate,
+        ),
+        "column" => set(
+            &mut modifiers.column,
+            cursor.expect_string("a column name")?,
             duplicate,
         ),
         other => Err(Diagnostic::error(

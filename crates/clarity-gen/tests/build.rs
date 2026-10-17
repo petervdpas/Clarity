@@ -114,7 +114,7 @@ use sales::*;
 #[test]
 fn approves_within_the_credit_limit() {
     let mut db = Db::memory().unwrap();
-    db.migrate(schema::STEPS).unwrap();
+    db.migrate(schema::SOURCES[0].1).unwrap();
     let mut ada = Customer { name: "Ada".into(), ..Customer::default() };
     db.save(&mut ada).unwrap();
     assert_eq!(ada.credit_limit, Decimal::new(100, 0));

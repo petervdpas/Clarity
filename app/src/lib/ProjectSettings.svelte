@@ -5,6 +5,7 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import ImportPanel from "./ImportPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
   import StackFields from "./StackFields.svelte";
   import type { Preview } from "./generated/Preview";
@@ -34,6 +35,8 @@
   } = $props();
 
   const catalog = $derived(project.catalog);
+  /** The SQL data sources Clarity owns: each has its own migration steps. */
+  const databases = $derived(project.settings?.datasources.filter((s) => s.kind !== "rest" && !s.external) ?? []);
   const fileName = $derived(file.split(/[\\/]/).at(-1) ?? file);
 
   function sourceInfo(kind: SourceKind) {
@@ -96,6 +99,9 @@
     if (project.settings) save({ datasources: project.settings.datasources.filter((_, j) => j !== i) });
   }
 
+  /** The external data source being imported from, if any. */
+  let importing = $state<string | null>(null);
+
   let newName = $state("");
   let newKind = $state<SourceKind>("sqlite");
 
@@ -103,7 +109,7 @@
     e.preventDefault();
     const name = newName.trim();
     if (!name || !project.settings) return;
-    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null };
+    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false };
     save({ datasources: [...project.settings.datasources, source] });
     newName = "";
   }
@@ -190,6 +196,7 @@
                   <th>Kind</th>
                   <th>Location</th>
                   <th>Auth</th>
+                  <th>Access</th>
                   <th></th>
                 </tr>
               </thead>
@@ -237,7 +244,26 @@
                         <span class="muted">-</span>
                       {/if}
                     </td>
+                    <td>
+                      {#if source.kind === "rest"}
+                        <span class="muted">external</span>
+                      {:else}
+                        <div class="flags">
+                          <label title="A database Clarity does not own: it never changes its tables">
+                            <input type="checkbox" checked={source.external} onchange={(e) => saveSource(i, { external: e.currentTarget.checked })} />
+                            External
+                          </label>
+                          <label title="Records are read, never saved or deleted">
+                            <input type="checkbox" checked={source.readonly} onchange={(e) => saveSource(i, { readonly: e.currentTarget.checked })} />
+                            Read-only
+                          </label>
+                        </div>
+                      {/if}
+                    </td>
                     <td class="actions">
+                      {#if source.external && source.kind === "sqlite"}
+                        <button title="Import tables of this database as entities" onclick={() => (importing = source.name)}>Import...</button>
+                      {/if}
                       <button title="Move up" disabled={i === 0} onclick={() => move(i, -1)}>&uarr;</button>
                       <button title="Move down" disabled={i === settings.datasources.length - 1} onclick={() => move(i, 1)}>&darr;</button>
                       <button class="danger" title="Remove the data source" onclick={() => remove(i)}>&times;</button>
@@ -255,14 +281,38 @@
           </select>
           <button type="submit" disabled={!newName.trim()}>Add data source</button>
         </form>
+        {#if importing}
+          <ImportPanel source={importing} {onapplied} onclose={() => (importing = null)} />
+        {/if}
       </section>
 
-      <MigrationPanel {preview} {onapplied} />
+      {#each databases as db (db.name)}
+        <MigrationPanel source={db.name} named={databases.length > 1} {preview} {onapplied} />
+      {/each}
     {/key}
   {/if}
 </div>
 
 <style>
+  .flags {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .flags label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  td .flags input {
+    width: auto;
+    height: auto;
+  }
+
   .editor {
     display: flex;
     flex-direction: column;

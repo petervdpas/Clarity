@@ -50,6 +50,9 @@ pub fn get_text(column: &str, value: &SqlValue) -> Result<String> {
     match value {
         SqlValue::Text(s) => Ok(s.clone()),
         SqlValue::Null => Ok(String::new()),
+        // Databases written by other programs may hold numbers in text columns.
+        SqlValue::Integer(n) => Ok(n.to_string()),
+        SqlValue::Real(r) => Ok(r.to_string()),
         other => Err(invalid(column, other)),
     }
 }
@@ -79,7 +82,8 @@ pub fn get_boolean(column: &str, value: &SqlValue) -> Result<bool> {
 pub fn get_date(column: &str, value: &SqlValue) -> Result<Option<NaiveDate>> {
     match value {
         SqlValue::Null => Ok(None),
-        SqlValue::Text(s) => NaiveDate::parse_from_str(s, DATE).map(Some).map_err(|_| invalid(column, value)),
+        // A date can be written with a time of day after it.
+        SqlValue::Text(s) => NaiveDate::parse_from_str(s.get(..10).unwrap_or(s), DATE).map(Some).map_err(|_| invalid(column, value)),
         other => Err(invalid(column, other)),
     }
 }
@@ -87,7 +91,11 @@ pub fn get_date(column: &str, value: &SqlValue) -> Result<Option<NaiveDate>> {
 pub fn get_date_time(column: &str, value: &SqlValue) -> Result<Option<NaiveDateTime>> {
     match value {
         SqlValue::Null => Ok(None),
-        SqlValue::Text(s) => NaiveDateTime::parse_from_str(s, DATE_TIME).map(Some).map_err(|_| invalid(column, value)),
+        SqlValue::Text(s) => [DATE_TIME, "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"]
+            .iter()
+            .find_map(|format| NaiveDateTime::parse_from_str(s, format).ok())
+            .map(Some)
+            .ok_or_else(|| invalid(column, value)),
         other => Err(invalid(column, other)),
     }
 }

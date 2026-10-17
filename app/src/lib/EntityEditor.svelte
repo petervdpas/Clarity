@@ -90,6 +90,7 @@
       label: null,
       help: null,
       format: null,
+      column: null,
     };
     onedit({ op: "addField", entity: entity.span.start, spec: { name, typeText: newType.trim() || "text", modifiers } });
     newName = "";

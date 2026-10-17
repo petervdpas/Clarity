@@ -9,9 +9,15 @@
   import type { Rename } from "./generated/Rename";
 
   let {
+    source,
+    named,
     preview,
     onapplied,
   }: {
+    /** The data source whose steps these are. */
+    source: string;
+    /** Whether to name the source: the project has more than one database. */
+    named: boolean;
     /** The loaded project; the changes are read again when it changes. */
     preview: Preview;
     onapplied: (preview: Preview) => void;
@@ -44,7 +50,7 @@
 
   async function refresh(renames: Rename[] | null) {
     try {
-      pending = await invoke<PendingMigration>("pending_migration", { renames });
+      pending = await invoke<PendingMigration>("pending_migration", { source, renames });
       error = null;
     } catch (err) {
       error = String(err);
@@ -74,7 +80,7 @@
     busy = true;
     try {
       const name = title.trim() || `Step ${next}`;
-      onapplied(await invoke<Preview>("create_migration", { title: name, renames: accepted() }));
+      onapplied(await invoke<Preview>("create_migration", { source, title: name, renames: accepted() }));
       title = "";
     } catch (err) {
       error = String(err);
@@ -85,9 +91,9 @@
 </script>
 
 <section>
-  <h2>Migrations</h2>
+  <h2>Migrations{named ? ` of ` : ""}</h2>
   <p class="intro">
-    Each step in the <code>migrations</code> folder brings a database to the next version of the data dictionary. Run and the generated
+    Each step in <code>migrations/{source}</code> brings the database to the next version of the data dictionary. Run and the generated
     application apply the steps a database does not have yet.
   </p>
 

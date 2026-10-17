@@ -12,7 +12,12 @@ export type SpecFile = { path: string,
  * Hash of the source text. Editors send it back with an edit, so an
  * edit based on an outdated file is rejected.
  */
-version: string, module: Ident | null, uses: Array<Ident>, enums: Array<EnumDecl>, entities: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
+version: string, module: Ident | null, uses: Array<Ident>, 
+/**
+ * `source erp`: the data source the module's entities live in; the
+ * project's first data source when there is none.
+ */
+source: Ident | null, enums: Array<EnumDecl>, entities: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
 /**
  * Code behind: one block per window or app, with its handlers.
  */

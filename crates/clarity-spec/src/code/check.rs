@@ -1427,3 +1427,65 @@ fn path_text(expr: &Expr) -> String {
 fn has_text(props: &WidgetProps) -> bool {
     matches!(props.kind, WidgetKind::Textbox | WidgetKind::Memo | WidgetKind::Password)
 }
+
+/// Records of a read-only data source are never saved or deleted.
+pub(crate) fn check_readonly(project: &mut crate::model::Project) {
+    let readonly: Vec<&str> = project
+        .entities()
+        .map(|e| e.name.name.as_str())
+        .filter(|e| {
+            let source = project.source_of(e).unwrap_or_default();
+            project.sources.iter().any(|s| s.name == source && s.readonly)
+        })
+        .collect();
+    if readonly.is_empty() {
+        return;
+    }
+    let types = types(&project.files);
+    let mut found = Vec::new();
+    for file in &project.files {
+        let Some(file_types) = types.get(&file.path) else { continue };
+        let bodies = file
+            .code
+            .iter()
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body))
+            .chain(file.functions.iter().map(|f| &f.body));
+        for body in bodies {
+            writes(body, &mut |stmt, value, word| {
+                let TypeInfo::Record(entity) = file_types.type_of(value) else { return };
+                if readonly.contains(&entity.as_str()) {
+                    let source = project.source_of(&entity).unwrap_or_default();
+                    found.push(
+                        Diagnostic::error(
+                            format!("{entity} is in data source {source}, which is read-only; its records cannot be {word}"),
+                            stmt.span,
+                        )
+                        .in_file(&file.path),
+                    );
+                }
+            });
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// Calls `found` for every `save` and `delete` in `body`, nested blocks
+/// included, with the value and "saved" or "deleted".
+fn writes(body: &[Stmt], found: &mut impl FnMut(&Stmt, &Expr, &str)) {
+    for stmt in body {
+        match &stmt.kind {
+            StmtKind::Save { value } => found(stmt, value, "saved"),
+            StmtKind::Delete { value } => found(stmt, value, "deleted"),
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    writes(&branch.body, found);
+                }
+                if let Some(otherwise) = otherwise {
+                    writes(otherwise, found);
+                }
+            }
+            StmtKind::For { body, .. } => writes(body, found),
+            _ => {}
+        }
+    }
+}

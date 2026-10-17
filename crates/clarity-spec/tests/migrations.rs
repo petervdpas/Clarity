@@ -55,14 +55,14 @@ fn messages(project: &Project, severity: Severity) -> Vec<String> {
 
 /// The pending changes as the lines of a step.
 fn pending(project: &Project, renames: &[Rename]) -> Vec<String> {
-    migrate::pending(project, renames).iter().map(migrate::op_text).collect()
+    migrate::pending(project, "main", renames).iter().map(migrate::op_text).collect()
 }
 
 #[test]
 fn replaying_the_steps_gives_the_schema() {
     let project = load(&[("0001.clarity", FIRST)]);
     assert!(messages(&project, Severity::Error).is_empty(), "{:#?}", project.diagnostics);
-    let schema = migrate::schema(&project);
+    let schema = migrate::schema(&project, "main");
     let names: Vec<&str> = schema.tables.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, ["Customer", "Order", "Note"]);
     let customer = schema.table("Customer").unwrap();
@@ -85,7 +85,7 @@ fn every_step_changes_the_schema_it_finds() {
 ";
     let project = load(&[("0001.clarity", FIRST), ("0002.clarity", second)]);
     assert!(messages(&project, Severity::Error).is_empty(), "{:#?}", project.diagnostics);
-    let schema = migrate::schema(&project);
+    let schema = migrate::schema(&project, "main");
     let customer = schema.table("Customer").unwrap();
     let fields: Vec<&str> = customer.columns.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(fields, ["name", "email", "kind", "credit_limit"]);
@@ -141,10 +141,10 @@ fn dictionary_changes_not_in_a_step_are_pending() {
 
 #[test]
 fn a_project_in_step_with_its_migrations_has_nothing_pending() {
-    let first = migrate::step_text("Customers and orders", &migrate::pending(&load(&[]), &[]));
+    let first = migrate::step_text("Customers and orders", &migrate::pending(&load(&[]), "main", &[]));
     let project = load(&[("0001.clarity", first.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    assert!(migrate::pending(&project, &[]).is_empty());
+    assert!(migrate::pending(&project, "main", &[]).is_empty());
     assert!(first.starts_with("// Written by Clarity"), "{first}");
     assert!(first.contains("\nmigration \"Customers and orders\"\n    add entity Customer\n        name: text(80)\n"), "{first}");
 }
@@ -153,7 +153,7 @@ fn a_project_in_step_with_its_migrations_has_nothing_pending() {
 fn renames_are_proposed_and_decided() {
     let renamed = SHOP.replace("    credit_limit: money, default 0\n", "    vat: text(14)\n");
     let project = load_with_migrations([("shop.clarity", renamed.as_str())], [("0001.clarity", FIRST)]);
-    let proposed = migrate::proposed_renames(&project);
+    let proposed = migrate::proposed_renames(&project, "main");
     assert_eq!(
         proposed,
         [Rename {
@@ -174,7 +174,7 @@ fn renames_are_proposed_and_decided() {
 fn an_entity_rename_is_proposed_when_its_fields_stay() {
     let renamed = SHOP.replace("entity Order\n", "entity SalesOrder\n").replace("    credit_limit: money, default 0\n", "");
     let project = load_with_migrations([("shop.clarity", renamed.as_str())], [("0001.clarity", FIRST)]);
-    let proposed = migrate::proposed_renames(&project);
+    let proposed = migrate::proposed_renames(&project, "main");
     assert!(
         proposed.contains(&Rename {
             entity: None,
@@ -190,7 +190,7 @@ fn an_entity_rename_is_proposed_when_its_fields_stay() {
 fn changes_that_can_lose_data_are_marked() {
     let changed = SHOP.replace("number: text(12), unique", "number: integer, unique");
     let project = load_with_migrations([("shop.clarity", changed.as_str())], [("0001.clarity", FIRST)]);
-    let ops = migrate::pending(&project, &[]);
+    let ops = migrate::pending(&project, "main", &[]);
     let risky: Vec<String> = ops.iter().filter(|op| op.loses_data()).map(migrate::op_text).collect();
     assert_eq!(
         risky,
@@ -213,13 +213,13 @@ fn a_written_step_is_the_next_file_in_the_folder() {
 
     let before = clarity_spec::load_dir(&dir).unwrap();
     assert!(!messages(&before, Severity::Warning).is_empty());
-    let ops = migrate::pending(&before, &[]);
-    let path = clarity_spec::write_step(&dir, "First", &ops).unwrap();
-    assert_eq!(path, dir.join("migrations/0001.clarity"));
+    let ops = migrate::pending(&before, "main", &[]);
+    let path = clarity_spec::write_step(&dir, "main", "First", &ops).unwrap();
+    assert_eq!(path, dir.join("migrations/main/0001.clarity"));
 
     let after = clarity_spec::load_dir(&dir).unwrap();
     assert!(after.diagnostics.is_empty(), "{:#?}", after.diagnostics);
     // Nothing is pending, so nothing is written.
-    assert!(clarity_spec::write_step(&dir, "Second", &[]).is_err());
+    assert!(clarity_spec::write_step(&dir, "main", "Second", &[]).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }

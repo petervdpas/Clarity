@@ -1,0 +1,10 @@
+[package]
+name = "clarity-db"
+description = "Reads the schema of databases Clarity does not own: import into the data dictionary, and checks that the dictionary still fits."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+clarity-spec.workspace = true
+rusqlite = { version = "0.40", features = ["bundled"] }

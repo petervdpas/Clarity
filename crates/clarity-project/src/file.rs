@@ -8,6 +8,7 @@
 //!     output "out"
 //!     datasource main sqlite "data/shop.db"
 //!     datasource payments rest "https://api.example.com/v2"
+//!     datasource erp sqlite "legacy/erp.db" external readonly
 //!         auth bearer "keychain:payments"
 //! ```
 //!
@@ -171,14 +172,30 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                 };
                 let kind = pick(line, "data source kind", "kinds", &SOURCE_KINDS, source_word, kind)?;
                 let url = string(line, a.get(2), "where the data source is")?;
-                if a.len() > 3 {
-                    return Err(format!("line {line}: unexpected '{}'", a[3].text));
+                let (mut external, mut readonly) = (false, false);
+                for flag in &a[3.min(a.len())..] {
+                    let slot = match word(flag) {
+                        Some("external") => &mut external,
+                        Some("readonly") => &mut readonly,
+                        _ => {
+                            return Err(format!(
+                                "line {line}: unexpected '{}'; a data source can be external or readonly",
+                                flag.text
+                            ));
+                        }
+                    };
+                    if *slot {
+                        return Err(format!("line {line}: '{}' is written twice", flag.text));
+                    }
+                    *slot = true;
                 }
                 datasources.push(DataSource {
                     name: name.to_string(),
                     kind,
                     url,
                     auth: None,
+                    external,
+                    readonly,
                 });
             }
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
@@ -279,7 +296,14 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
         lines.push((
             format!("datasource {}", source.name),
             1,
-            format!("datasource {} {} {}", source.name, source_word(source.kind), quote(&source.url)),
+            format!(
+                "datasource {} {} {}{}{}",
+                source.name,
+                source_word(source.kind),
+                quote(&source.url),
+                if source.external { " external" } else { "" },
+                if source.readonly { " readonly" } else { "" }
+            ),
         ));
         if let Some(auth) = &source.auth {
             lines.push((

@@ -21,6 +21,8 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
         kind,
         url: url.into(),
         auth: None,
+        external: false,
+        readonly: false,
     }
 }
 
@@ -307,4 +309,26 @@ fn the_language_reference_project_files_are_valid() {
         found += 1;
     }
     assert_eq!(found, 2);
+}
+
+#[test]
+fn a_data_source_can_be_external_and_read_only() {
+    let text = "project Shop\n    stack rust web desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external readonly\n";
+    let settings = parse(text).unwrap();
+    let erp = &settings.datasources[1];
+    assert!(erp.external && erp.readonly);
+    assert!(!settings.datasources[0].external);
+    // Written back the same way.
+    let written = write(Some(text), &settings).unwrap();
+    assert_eq!(written, text);
+
+    let twice = text.replace("external readonly", "external external");
+    assert!(parse(&twice).unwrap_err().contains("'external' is written twice"));
+    let unknown = text.replace("external readonly", "shared");
+    assert!(parse(&unknown).unwrap_err().contains("unexpected 'shared'; a data source can be external or readonly"));
+
+    // A web API is never Clarity's own.
+    let mut web = settings.clone();
+    web.datasources[1].kind = SourceKind::Rest;
+    assert!(validate(&web).iter().any(|p| p.contains("a web API is always external")), "{:?}", validate(&web));
 }

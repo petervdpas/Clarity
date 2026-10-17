@@ -289,7 +289,7 @@ fn a_query_is_sql_with_parameters() {
     let query = Query::new()
         .filter(Cond::contains("name", "a").and(Cond::number("credit_limit", Op::LtEq, sql::integer(5)).negated()))
         .order("name", true);
-    let (sql, params) = query.sql("customer", "\"id\", \"name\"");
+    let (sql, params) = query.sql("customer", "id", "\"id\", \"name\"");
     assert_eq!(
         sql,
         "SELECT \"id\", \"name\" FROM \"customer\" WHERE (\"name\" LIKE ?1 ESCAPE '\\' AND NOT (CAST(\"credit_limit\" AS REAL) <= CAST(?2 AS REAL))) ORDER BY \"name\" DESC, \"id\""
@@ -336,4 +336,131 @@ fn a_step_that_breaks_references_changes_nothing() {
     assert!(db.migrate(&[STEPS[0], dangling]).is_err());
     assert_eq!(db.schema_version().unwrap(), 1);
     assert_eq!(db.get::<Customer>(grace.id).unwrap().referred_by, None);
+}
+
+/// A record kept in another database than the customers.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Invoice {
+    id: Id,
+    number: String,
+    customer: Option<Id>,
+}
+
+impl Record for Invoice {
+    const SOURCE: &'static str = "erp";
+    const TABLE: &'static str = "invoice";
+    const COLUMNS: &'static [&'static str] = &["number", "customer"];
+
+    fn id(&self) -> Id {
+        self.id
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = id;
+    }
+
+    fn to_values(&self) -> Vec<SqlValue> {
+        vec![sql::text(&self.number), sql::reference(self.customer)]
+    }
+
+    fn from_values(id: Id, values: &[SqlValue]) -> clarity_runtime::Result<Self> {
+        Ok(Invoice {
+            id,
+            number: sql::get_text("number", &values[0])?,
+            customer: sql::get_reference("customer", &values[1])?,
+        })
+    }
+}
+
+#[test]
+fn each_record_lives_in_its_own_data_source() {
+    let dir = std::env::temp_dir().join(format!("clarity-sources-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let main = dir.join("main.db");
+    let erp = dir.join("erp.db");
+    let mut db = Db::open_sources(&[("main", main.as_path()), ("erp", erp.as_path())]).unwrap();
+    db.migrate_source("main", &STEPS).unwrap();
+    // A reference to another database is a plain id: no foreign key.
+    db.migrate_source("erp", &["CREATE TABLE invoice (id INTEGER PRIMARY KEY, number TEXT NOT NULL, customer INTEGER);"])
+        .unwrap();
+
+    let mut ada = ada();
+    db.save(&mut ada).unwrap();
+    let mut invoice = Invoice { number: "INV-1".into(), customer: Some(ada.id), ..Invoice::default() };
+    db.save(&mut invoice).unwrap();
+    drop(db);
+
+    // Each table is in its own file.
+    let only_main = Db::open(&main).unwrap();
+    assert_eq!(only_main.all::<Customer>().unwrap().len(), 1);
+    let db = Db::open_sources(&[("main", main.as_path()), ("erp", erp.as_path())]).unwrap();
+    assert_eq!(db.all::<Invoice>().unwrap(), [invoice]);
+    assert_eq!(db.load::<Customer>(db.get::<Invoice>(1).unwrap().customer).unwrap().name, "Ada Lovelace");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A record of a table that was there before Clarity: its own key column
+/// and column names.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Legacy {
+    id: Id,
+    number: String,
+}
+
+impl Record for Legacy {
+    const TABLE: &'static str = "tblInvoice";
+    const KEY: &'static str = "InvoiceID";
+    const COLUMNS: &'static [&'static str] = &["InvNo"];
+
+    fn id(&self) -> Id {
+        self.id
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = id;
+    }
+
+    fn to_values(&self) -> Vec<SqlValue> {
+        vec![sql::text(&self.number)]
+    }
+
+    fn from_values(id: Id, values: &[SqlValue]) -> clarity_runtime::Result<Self> {
+        Ok(Legacy {
+            id,
+            number: sql::get_text("InvNo", &values[0])?,
+        })
+    }
+}
+
+#[test]
+fn a_record_can_live_in_an_existing_table() {
+    let mut db = Db::memory().unwrap();
+    db.migrate(&["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"])
+        .unwrap();
+    let mut first = Legacy { number: "INV-1".into(), ..Legacy::default() };
+    db.save(&mut first).unwrap();
+    let mut second = Legacy { number: "INV-2".into(), ..Legacy::default() };
+    db.save(&mut second).unwrap();
+    assert_eq!(second.id, 2);
+    second.number = "INV-2b".into();
+    db.save(&mut second).unwrap();
+    assert_eq!(db.get::<Legacy>(2).unwrap().number, "INV-2b");
+    let found = db.find::<Legacy>(&Query::new().filter(Cond::contains("InvNo", "2b"))).unwrap();
+    assert_eq!(found, [second.clone()]);
+    db.delete(&first).unwrap();
+    assert_eq!(db.all::<Legacy>().unwrap(), [second]);
+}
+
+#[test]
+fn values_written_by_other_programs_are_read() {
+    // SQLite keeps what was written: numbers in text columns, dates with
+    // seconds or a T.
+    assert_eq!(sql::get_text("code", &SqlValue::Integer(42)).unwrap(), "42");
+    assert_eq!(sql::get_text("ratio", &SqlValue::Real(1.5)).unwrap(), "1.5");
+    let at = |s: &str| sql::get_date_time("at", &SqlValue::Text(s.into())).unwrap().unwrap().to_string();
+    assert_eq!(at("2026-10-17 09:30"), "2026-10-17 09:30:00");
+    assert_eq!(at("2026-10-17 09:30:15"), "2026-10-17 09:30:15");
+    assert_eq!(at("2026-10-17T09:30:15"), "2026-10-17 09:30:15");
+    let day = sql::get_date("on", &SqlValue::Text("2026-10-17 00:00:00".into())).unwrap().unwrap();
+    assert_eq!(day.to_string(), "2026-10-17");
 }

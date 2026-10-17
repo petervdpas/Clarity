@@ -26,6 +26,9 @@ pub struct SpecFile {
     pub version: String,
     pub module: Option<Ident>,
     pub uses: Vec<Ident>,
+    /// `source erp`: the data source the module's entities live in; the
+    /// project's first data source when there is none.
+    pub source: Option<Ident>,
     pub enums: Vec<EnumDecl>,
     pub entities: Vec<Entity>,
     pub pages: Vec<Page>,
@@ -57,12 +60,33 @@ pub struct EnumVariant {
 pub struct Entity {
     pub name: Ident,
     pub fields: Vec<Field>,
+    /// `table "tblInvoice"`: the existing table of an entity in an external
+    /// data source.
+    pub table: Option<String>,
+    /// `key "InvoiceID"`: the integer column that identifies a record, in
+    /// an existing table; `id` otherwise.
+    pub key: Option<String>,
     pub span: Span,
 }
 
 impl Entity {
     pub fn field(&self, name: &str) -> Option<&Field> {
         self.fields.iter().find(|f| f.name.name == name)
+    }
+
+    /// The table the records are stored in.
+    pub fn table_name(&self) -> String {
+        self.table.clone().unwrap_or_else(|| snake_case(&self.name.name))
+    }
+
+    /// The column that identifies a record.
+    pub fn key_column(&self) -> &str {
+        self.key.as_deref().unwrap_or("id")
+    }
+
+    /// The column a field is stored in.
+    pub fn column_of<'a>(&'a self, field: &'a str) -> &'a str {
+        self.field(field).and_then(|f| f.modifiers.column.as_deref()).unwrap_or(field)
     }
 }
 
@@ -143,6 +167,9 @@ pub struct Modifiers {
     pub label: Option<String>,
     pub help: Option<String>,
     pub format: Option<String>,
+    /// `column "InvNo"`: the existing column a field of an external entity
+    /// is stored in.
+    pub column: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -458,14 +485,36 @@ pub struct CommandProps {
 pub struct Project {
     pub files: Vec<SpecFile>,
     pub diagnostics: Vec<Diagnostic>,
-    /// The steps in the project's `migrations` folder, in order. None when
-    /// the project was loaded without its folder (sources given in memory).
+    /// The steps in the project's `migrations` folder, in order, per data
+    /// source. None when the project was loaded without its folder
+    /// (sources given in memory).
     #[serde(skip)]
     #[ts(skip)]
-    pub migrations: Option<Vec<crate::migrate::Migration>>,
+    pub migrations: Option<std::collections::BTreeMap<String, Vec<crate::migrate::Migration>>>,
+    /// The project's data sources, the first being the default. Empty when
+    /// the project was loaded without them.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub sources: Vec<crate::SourceRef>,
 }
 
 impl Project {
+    /// The data source modules use when they name none.
+    pub fn default_source(&self) -> &str {
+        self.sources.first().map_or(crate::DEFAULT_SOURCE, |s| s.name.as_str())
+    }
+
+    /// The data source an entity lives in: its module's, or the default.
+    pub fn source_of(&self, entity: &str) -> Option<&str> {
+        let file = self.files.iter().find(|f| f.entities.iter().any(|e| e.name.name == entity))?;
+        Some(file.source.as_ref().map_or(self.default_source(), |s| s.name.as_str()))
+    }
+
+    /// The entities that live in data source `source`.
+    pub fn entities_in<'a>(&'a self, source: &'a str) -> impl Iterator<Item = &'a Entity> + 'a {
+        self.files.iter().filter(move |f| f.source.as_ref().map_or(self.default_source(), |s| s.name.as_str()) == source).flat_map(|f| &f.entities)
+    }
+
     pub fn has_errors(&self) -> bool {
         self.diagnostics
             .iter()
@@ -515,6 +564,30 @@ pub fn default_label(name: &str) -> String {
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),
         None => String::new(),
+    }
+}
+
+/// `CustomerKind` and `My shop` as `customer_kind` and `my_shop`: the
+/// default name of a table, and of a Rust module.
+pub fn snake_case(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    let out = out.trim_end_matches('_').to_string();
+    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("app_{out}")
+    } else {
+        out
     }
 }
 

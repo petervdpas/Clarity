@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::diagnostic::Diagnostic;
 use crate::frame;
 use crate::model::{
-    App, Command, CommandKind, DataDecl, Entity, Field, FieldType, Frame, Ident,
+    App, Command, CommandKind, DataDecl, Entity, Field, FieldType, Frame, Ident, Project,
     Literal, MAX_PAGE_COLUMNS, Page, PageKind, SpecFile, Widget,
     WidgetProps,
 };
@@ -967,5 +967,68 @@ fn article(noun: &str) -> &'static str {
         "an"
     } else {
         "a"
+    }
+}
+
+/// `source` lines name a SQL data source of the project.
+pub(crate) fn check_sources(project: &mut Project) {
+    let names: Vec<&str> = project.sources.iter().map(|s| s.name.as_str()).collect();
+    let mut found = Vec::new();
+    for file in &project.files {
+        let Some(source) = &file.source else { continue };
+        let message = match project.sources.iter().find(|s| s.name == source.name) {
+            None => format!("unknown data source '{}'; the project has {}", source.name, listed(&names)),
+            Some(s) if !s.sql => format!("'{}' is a web API; entities cannot live in a web API yet", source.name),
+            Some(_) => continue,
+        };
+        found.push(Diagnostic::error(message, source.span).in_file(&file.path));
+    }
+    for file in &project.files {
+        for entity in &file.entities {
+            found.extend(check_mapping(project, entity).into_iter().map(|d| d.in_file(&file.path)));
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// `table`, `key` and `column` map an entity of an external data source
+/// onto an existing table, one column per field.
+fn check_mapping(project: &Project, entity: &Entity) -> Vec<Diagnostic> {
+    let name = &entity.name.name;
+    let source = project.source_of(name).unwrap_or_default();
+    let external = project.sources.iter().any(|s| s.name == source && s.external);
+    let mapped = entity.table.is_some() || entity.key.is_some() || entity.fields.iter().any(|f| f.modifiers.column.is_some());
+    if mapped && !external {
+        return vec![Diagnostic::error(
+            format!("{name} is in data source {source}, which Clarity owns; 'table', 'key' and 'column' map entities of an external data source"),
+            entity.name.span,
+        )];
+    }
+    let mut found = Vec::new();
+    let stored: Vec<&Field> = entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. })).collect();
+    for (i, field) in stored.iter().enumerate() {
+        let column = entity.column_of(&field.name.name);
+        if column == entity.key_column() {
+            found.push(Diagnostic::error(
+                format!("{name}: field '{}' uses column '{column}', which is the key", field.name.name),
+                field.span,
+            ));
+        }
+        if let Some(other) = stored[..i].iter().find(|o| entity.column_of(&o.name.name) == column) {
+            found.push(Diagnostic::error(
+                format!("{name}: fields '{}' and '{}' both use column '{column}'", other.name.name, field.name.name),
+                field.span,
+            ));
+        }
+    }
+    found
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn listed(names: &[&str]) -> String {
+    match names {
+        [] => "none".to_string(),
+        [only] => (*only).to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }

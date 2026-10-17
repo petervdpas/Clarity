@@ -77,6 +77,7 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (&m.label, "label"),
         (&m.help, "help"),
         (&m.format, "format"),
+        (&m.column, "column"),
     ] {
         if let Some(value) = value {
             parts.push(format!("{word} {}", quote(value)));

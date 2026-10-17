@@ -44,6 +44,23 @@ enum Command {
         #[arg(long)]
         allow_data_loss: bool,
     },
+    /// Import tables of an external SQLite data source as a module of
+    /// entities mapped onto them.
+    Import {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The external data source, as the project file names it.
+        source: String,
+        /// The module to write; the source's name by default.
+        #[arg(long)]
+        module: Option<String>,
+        /// The tables to import, comma separated; all that can be by default.
+        #[arg(long, value_delimiter = ',')]
+        tables: Vec<String>,
+        /// Only list the tables.
+        #[arg(long)]
+        list: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -78,6 +95,13 @@ fn main() -> ExitCode {
             no_renames,
             allow_data_loss,
         } => migrate(&project, check, title, no_renames, allow_data_loss),
+        Command::Import {
+            project,
+            source,
+            module,
+            tables,
+            list,
+        } => import(&project, &source, module, tables, list),
     }
 }
 
@@ -100,7 +124,8 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
     };
     let out = out.map_or_else(|| clarity_project::out_dir(project_file, &settings), std::path::Path::to_path_buf);
     let out = out.as_path();
-    let files = match clarity_gen::generate(&project, &settings) {
+    let built = clarity_project::build_settings(&clarity_project::module_dir(project_file), &settings);
+    let files = match clarity_gen::generate(&project, &built) {
         Ok(files) => files,
         Err(errors) => {
             for diagnostic in project.diagnostics.iter().filter(|d| d.severity == Severity::Error) {
@@ -127,7 +152,7 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
 /// Loads the modules of a project, given its project file or its folder.
 fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
     let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
-    clarity_spec::load_dir(&dir).map_err(|err| {
+    clarity_project::load_modules(&dir).map_err(|err| {
         eprintln!("clarity: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })
@@ -198,39 +223,83 @@ fn migrate(project_file: &std::path::Path, check: bool, title: Option<String>, n
         eprintln!("clarity: fix the errors before migrating");
         return ExitCode::FAILURE;
     }
-    let renames = if no_renames { Vec::new() } else { migrate::proposed_renames(&project) };
-    let ops = migrate::pending(&project, &renames);
-    if ops.is_empty() {
-        eprintln!("The migrations cover the data dictionary; nothing to migrate.");
-        return ExitCode::SUCCESS;
-    }
-    eprintln!("Changes not in a migration yet:");
-    for op in &ops {
-        let mark = if op.loses_data() { "  (can lose data)" } else { "" };
-        for (i, line) in migrate::op_text(op).lines().enumerate() {
-            eprintln!("  {line}{}", if i == 0 { mark } else { "" });
+    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
+    let mut pending_any = false;
+    // Each SQL data source has its own steps.
+    for source in project.sources.iter().filter(|s| s.sql).map(|s| s.name.as_str()) {
+        let renames = if no_renames { Vec::new() } else { migrate::proposed_renames(&project, source) };
+        let ops = migrate::pending(&project, source, &renames);
+        if ops.is_empty() {
+            continue;
+        }
+        pending_any = true;
+        eprintln!("Changes in data source {source} not in a migration yet:");
+        for op in &ops {
+            let mark = if op.loses_data() { "  (can lose data)" } else { "" };
+            for (i, line) in migrate::op_text(op).lines().enumerate() {
+                eprintln!("  {line}{}", if i == 0 { mark } else { "" });
+            }
+        }
+        if !renames.is_empty() {
+            eprintln!("Renames are proposed; use --no-renames to remove and add instead.");
+        }
+        if check {
+            continue;
+        }
+        if ops.iter().any(migrate::Op::loses_data) && !allow_data_loss {
+            eprintln!("clarity: some changes can lose data; check them and run again with --allow-data-loss");
+            return ExitCode::FAILURE;
+        }
+        let count = project.migrations.as_ref().and_then(|m| m.get(source)).map_or(0, Vec::len);
+        let title = title.clone().unwrap_or_else(|| format!("Step {}", count + 1));
+        match clarity_spec::write_step(&dir, source, &title, &ops) {
+            Ok(path) => eprintln!("Wrote {}", path.display()),
+            Err(err) => {
+                eprintln!("clarity: cannot write the step: {err}");
+                return ExitCode::FAILURE;
+            }
         }
     }
-    if !renames.is_empty() {
-        eprintln!("Renames are proposed; use --no-renames to remove and add instead.");
+    if !pending_any {
+        eprintln!("The migrations cover the data dictionary; nothing to migrate.");
     }
-    if check {
+    ExitCode::SUCCESS
+}
+
+fn import(project_file: &std::path::Path, source: &str, module: Option<String>, tables: Vec<String>, list: bool) -> ExitCode {
+    let dir = clarity_project::module_dir(project_file);
+    let available = match clarity_project::source_tables(&dir, source) {
+        Ok(tables) => tables,
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if list {
+        for table in &available {
+            match &table.not_importable {
+                None => eprintln!("  {} ({} columns)", table.name, table.columns),
+                Some(reason) => eprintln!("  {} (not importable: {reason})", table.name),
+            }
+        }
         return ExitCode::SUCCESS;
     }
-    if ops.iter().any(migrate::Op::loses_data) && !allow_data_loss {
-        eprintln!("clarity: some changes can lose data; check them and run again with --allow-data-loss");
-        return ExitCode::FAILURE;
-    }
-    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
-    let count = project.migrations.as_ref().map_or(0, Vec::len);
-    let title = title.unwrap_or_else(|| format!("Step {}", count + 1));
-    match clarity_spec::write_step(&dir, &title, &ops) {
-        Ok(path) => {
-            eprintln!("Wrote {}", path.display());
+    let tables = if tables.is_empty() {
+        available.iter().filter(|t| t.not_importable.is_none()).map(|t| t.name.clone()).collect()
+    } else {
+        tables
+    };
+    let module = module.unwrap_or_else(|| source.to_string());
+    match clarity_project::import_tables(&dir, source, &module, &tables) {
+        Ok(done) => {
+            eprintln!("Wrote {}", done.path.display());
+            for (table, reason) in &done.skipped {
+                eprintln!("  {table} is left out: {reason}");
+            }
             ExitCode::SUCCESS
         }
         Err(err) => {
-            eprintln!("clarity: cannot write the step: {err}");
+            eprintln!("clarity: {err}");
             ExitCode::FAILURE
         }
     }

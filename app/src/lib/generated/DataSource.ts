@@ -7,4 +7,13 @@ export type DataSource = { name: string, kind: SourceKind,
  * A file path for SQLite, a connection for the SQL servers, a base URL
  * for web APIs.
  */
-url: string, auth: Auth | null, };
+url: string, auth: Auth | null, 
+/**
+ * A database Clarity does not own: it reads and writes its records,
+ * but never changes its schema.
+ */
+external: boolean, 
+/**
+ * Records are read, never saved or deleted.
+ */
+readonly: boolean, };

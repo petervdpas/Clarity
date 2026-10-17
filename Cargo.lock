@@ -466,6 +466,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-db"
+version = "0.1.0"
+dependencies = [
+ "clarity-spec",
+ "rusqlite",
+]
+
+[[package]]
 name = "clarity-gen"
 version = "0.1.0"
 dependencies = [
@@ -495,7 +503,9 @@ dependencies = [
 name = "clarity-project"
 version = "0.1.0"
 dependencies = [
+ "clarity-db",
  "clarity-spec",
+ "rusqlite",
  "serde",
  "ts-rs",
 ]

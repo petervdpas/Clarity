@@ -2,6 +2,7 @@
 //! and their history; the frontend only renders the `Preview` it receives.
 
 mod build;
+mod external;
 mod migrations;
 
 use std::path::{Path, PathBuf};
@@ -78,7 +79,7 @@ pub struct EditApplied {
 }
 
 fn load(dir: &Path) -> Result<Preview, String> {
-    let project = clarity_spec::load_dir(dir)
+    let project = clarity_project::load_modules(dir)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(Preview::new(project))
 }
@@ -209,12 +210,12 @@ fn apply_edit(
     }
 
     let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    let before = clarity_spec::load_dir(&dir).map_err(read_err)?;
+    let before = clarity_project::load_modules(&dir).map_err(read_err)?;
     let outcome = edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?;
     if outcome.text != source {
         // The checker decides what is valid: an edit that adds an error
         // anywhere in the project (an overlap, a wrong binding) is refused.
-        let after = clarity_spec::load_dir_with(&dir, &file, &outcome.text).map_err(read_err)?;
+        let after = clarity_project::load_modules_with(&dir, &file, &outcome.text).map_err(read_err)?;
         if let Some(error) = clarity_spec::new_error(&before, &after) {
             return Err(error.message.clone());
         }
@@ -244,7 +245,7 @@ pub struct CodeView {
 fn code_text(path: String, owner: String, state: State<WatchState>) -> Result<CodeView, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
-    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(CodeView {
         problems: clarity_spec::code::edit::problems_in_code(&source, &owner, &file.display().to_string(), &project.diagnostics),
         text: clarity_spec::code::edit::code_text(&source, &owner),
@@ -263,7 +264,7 @@ fn check_code(
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let after = clarity_spec::code::edit::set_code(&source, &owner, &text).map_err(|err| err.to_string())?;
-    let project = clarity_spec::load_dir_with(&dir, &file, &after)
+    let project = clarity_project::load_modules_with(&dir, &file, &after)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(clarity_spec::code::edit::problems_in_code(&after, &owner, &file.display().to_string(), &project.diagnostics))
 }
@@ -274,7 +275,7 @@ fn check_code(
 fn decl_text(path: String, item: u32, state: State<WatchState>) -> Result<CodeView, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
-    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(CodeView {
         text: clarity_spec::source::decl_text(&source, item).map_err(|err| err.to_string())?,
         problems: clarity_spec::source::problems_in_decl(&source, item, &file.display().to_string(), &project.diagnostics),
@@ -296,7 +297,7 @@ fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> 
     let (dir, file) = spec_file_of(&state, &path)?;
     let source = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {path}: {err}"))?;
     let after = clarity_spec::source::replace_decl(&source, item, &text).map_err(|err| err.to_string())?;
-    let project = clarity_spec::load_dir_with(&dir, &file, &after)
+    let project = clarity_project::load_modules_with(&dir, &file, &after)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     Ok(DeclTrial {
         problems: clarity_spec::source::problems_in_decl(&after, item, &file.display().to_string(), &project.diagnostics),
@@ -351,7 +352,7 @@ fn rename(
 ) -> Result<Preview, String> {
     let dir = open_dir_of(&state)?;
     let read_err = |err: std::io::Error| format!("cannot read {}: {err}", dir.display());
-    let before = clarity_spec::load_dir(&dir).map_err(read_err)?;
+    let before = clarity_project::load_modules(&dir).map_err(read_err)?;
     let source = |path: &str| std::fs::read_to_string(path).ok();
     let renamed = clarity_spec::rename::rename(&before, source, kind, &name, new_name.trim())?;
     if renamed.is_empty() {
@@ -680,7 +681,9 @@ pub fn run() {
             stop_app,
             rename,
             migrations::pending_migration,
-            migrations::create_migration
+            migrations::create_migration,
+            external::source_tables,
+            external::import_tables
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");
@@ -703,7 +706,7 @@ mod tests {
         assert_eq!(file, base.join("my-shop.clarity"));
         let dir = base.join("my-shop");
         assert!(dir.join("my_shop.clarity").exists());
-        let project = clarity_spec::load_dir(&dir).unwrap();
+        let project = clarity_project::load_modules(&dir).unwrap();
         assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
         assert_eq!(project.apps().next().unwrap().name.name, "MyShop");
         let loaded = clarity_project::load(&file);

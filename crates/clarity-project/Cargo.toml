@@ -7,5 +7,9 @@ license.workspace = true
 
 [dependencies]
 clarity-spec.workspace = true
+clarity-db.workspace = true
 serde.workspace = true
 ts-rs.workspace = true
+
+[dev-dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }

@@ -39,7 +39,7 @@ pub struct BuildDone {
 /// Returns the output folder and the name of the program cargo will build.
 pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
     let dir = clarity_project::module_dir(file);
-    let project = clarity_spec::load_dir(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let loaded = clarity_project::load(file);
     let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
     let settings = match (loaded.settings, loaded.problems.first()) {
@@ -47,7 +47,8 @@ pub fn generate_out(file: &Path) -> Result<(PathBuf, String), String> {
         (_, Some(problem)) => return Err(format!("{shown}: {problem}")),
         (None, None) => return Err(format!("{shown} cannot be read")),
     };
-    let files = clarity_gen::generate(&project, &settings).map_err(|errors| errors.join("; "))?;
+    let built = clarity_project::build_settings(&dir, &settings);
+    let files = clarity_gen::generate(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
     clarity_gen::write_out(&out, &files, &clarity_gen::BUILD_OUTPUT).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
     Ok((out, clarity_gen::binary_name(&settings)))
@@ -153,7 +154,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("shop")).unwrap();
         std::fs::copy(examples.join("shop.clarity"), dir.join("shop.clarity")).unwrap();
         // The modules and the migration steps.
-        for folder in ["shop", "shop/migrations"] {
+        for folder in ["shop", "shop/migrations/main"] {
             std::fs::create_dir_all(dir.join(folder)).unwrap();
             for entry in std::fs::read_dir(examples.join(folder)).unwrap() {
                 let path = entry.unwrap().path();

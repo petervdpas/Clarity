@@ -443,9 +443,15 @@ impl Emitter<'_> {
         for key in order {
             let numeric = self.field_type(entity, &key.field.name).is_some_and(|t| is_stored_number(&t));
             let method = if numeric { "order_number" } else { "order" };
-            query.push_str(&format!(".{method}({:?}, {})", key.field.name, key.descending));
+            query.push_str(&format!(".{method}({:?}, {})", self.column(entity, &key.field.name), key.descending));
         }
         format!("db.find::<{entity}>(&{query})?")
+    }
+
+    /// The column a field is stored in: its own name, or the existing
+    /// column it is mapped to.
+    fn column(&self, entity: &str, field: &str) -> String {
+        self.project.entity(entity).map_or_else(|| field.to_string(), |e| e.column_of(field).to_string())
     }
 
     fn field_type(&self, entity: &str, field: &str) -> Option<FieldType> {
@@ -484,11 +490,11 @@ impl Emitter<'_> {
                     return String::new();
                 };
                 if op == BinaryOp::Contains {
-                    return format!("Cond::contains({column:?}, &{})", self.text_ref(value));
+                    return format!("Cond::contains({:?}, &{})", self.column(entity, &column), self.text_ref(value));
                 }
                 let constructor = if is_stored_number(&ty) { "number" } else { "compare" };
                 let value = self.sql_value(&ty, value);
-                format!("Cond::{constructor}({column:?}, Op::{}, {value})", op_name(op))
+                format!("Cond::{constructor}({:?}, Op::{}, {value})", self.column(entity, &column), op_name(op))
             }
             ExprKind::In { value, options } => {
                 let Some(column) = field_of(value) else {
@@ -501,10 +507,10 @@ impl Emitter<'_> {
                 };
                 let constructor = if is_stored_number(&ty) { "one_of_numbers" } else { "one_of" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
-                format!("Cond::{constructor}({column:?}, vec![{}])", values.join(", "))
+                format!("Cond::{constructor}({:?}, vec![{}])", self.column(entity, &column), values.join(", "))
             }
             _ => match field_of(expr) {
-                Some(column) => format!("Cond::is_true({column:?})"),
+                Some(column) => format!("Cond::is_true({:?})", self.column(entity, &column)),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()

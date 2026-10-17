@@ -199,8 +199,8 @@ impl Query {
     }
 
     /// The SELECT statement for `table`, reading `columns`, and its
-    /// parameters.
-    pub fn sql(&self, table: &str, columns: &str) -> (String, Vec<SqlValue>) {
+    /// parameters. Records that sort the same come in the order of `key`.
+    pub fn sql(&self, table: &str, key: &str, columns: &str) -> (String, Vec<SqlValue>) {
         let mut params = Vec::new();
         let mut sql = format!("SELECT {columns} FROM {}", quoted(table));
         if let Some(filter) = &self.filter {
@@ -215,7 +215,7 @@ impl Query {
                 format!("{}{direction}", column_sql(column, *numeric))
             })
             .collect();
-        keys.push("\"id\"".to_string());
+        keys.push(quoted(key));
         sql.push_str(" ORDER BY ");
         sql.push_str(&keys.join(", "));
         (sql, params)

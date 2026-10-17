@@ -156,7 +156,7 @@ fn the_schema_is_the_first_migration() {
     );
     assert!(schema.contains("\"customer\" INTEGER REFERENCES \"customer\" (\"id\")"), "{schema}");
     assert!(schema.contains("\"credit_limit\" TEXT NOT NULL DEFAULT '100'"), "{schema}");
-    assert!(schema.contains("pub const STEPS: &[&str] = &["), "{schema}");
+    assert!(schema.contains("pub const SOURCES: &[(&str, &[&str])] = &[\n    (\"main\", &[\n"), "{schema}");
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn handlers_work_on_the_window_and_the_screen() {
     let main = file(&files, "src/main.rs");
     assert!(main.contains("(\"OrderForm\", \"approve_clicked\") => {"), "{main}");
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
-    assert!(main.contains("const DATABASE: &str = \"data/shop.db\";"), "{main}");
+    assert!(main.contains("const DATABASES: &[(&str, &str)] = &[(\"main\", \"data/shop.db\")];"), "{main}");
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
 }
 
@@ -312,8 +312,8 @@ fn every_migration_step_becomes_sql() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let schema = file(&files, "src/schema.rs");
-    assert!(schema.contains("    // 1: First\n    r#\"CREATE TABLE \"customer\" ("), "{schema}");
-    assert!(schema.contains("    // 2: Tidy up\n"), "{schema}");
+    assert!(schema.contains("        // 1: First\n        r#\"CREATE TABLE \"customer\" ("), "{schema}");
+    assert!(schema.contains("        // 2: Tidy up\n"), "{schema}");
     assert!(schema.contains("ALTER TABLE \"customer\" RENAME COLUMN \"limit\" TO \"credit_limit\";"), "{schema}");
     // SQLite changes a column's type by building the table again.
     assert!(schema.contains("CREATE TABLE \"order__new\" ("), "{schema}");
@@ -332,4 +332,64 @@ fn changes_without_a_step_are_not_generated() {
     assert!(errors[0].contains("not in a migration yet"), "{errors:?}");
     assert!(errors[0].contains("rename") || errors[0].contains("remove field Customer.limit"), "{errors:?}");
     assert!(errors[0].contains("clarity migrate"), "{errors:?}");
+}
+
+#[test]
+fn each_data_source_gets_its_own_database() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    number: text(20)\n    customer: ref Customer\n";
+    let project = clarity_spec::load_in(
+        [("sales.clarity", SALES), ("erp.clarity", erp)],
+        std::iter::empty(),
+        &[SourceRef::sql("main"), SourceRef::sql("erp")],
+    );
+    assert!(project.diagnostics.iter().all(|d| d.severity == clarity_spec::Severity::Warning), "{:#?}", project.diagnostics);
+    let mut settings = shop();
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false });
+    // Without steps yet, generating is refused for both.
+    assert_eq!(generate(&project, &settings).unwrap_err().len(), 2);
+
+    let project = clarity_spec::load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    let mut project = project;
+    project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp")];
+    let files = generate(&project, &settings).unwrap();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("const DATABASES: &[(&str, &str)] = &[(\"main\", \"data/shop.db\"), (\"erp\", \"data/erp.db\")];"), "{main}");
+    let erp_rs = file(&files, "src/erp.rs");
+    assert!(erp_rs.contains("const SOURCE: &'static str = \"erp\";"), "{erp_rs}");
+    let schema = file(&files, "src/schema.rs");
+    assert!(schema.contains("    (\"erp\", &[\n"), "{schema}");
+    // The customer is in the other database, so no foreign key.
+    assert!(schema.contains("\"customer\" INTEGER\n"), "{schema}");
+}
+
+#[test]
+fn an_external_source_is_opened_but_never_migrated() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
+    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp").external()];
+    let mut settings = shop();
+    settings.datasources.push(DataSource {
+        name: "erp".into(),
+        kind: SourceKind::Sqlite,
+        url: "legacy/erp.db".into(),
+        auth: None,
+        external: true,
+        readonly: false,
+    });
+    let files = generate(&project, &settings).unwrap();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("(\"erp\", \"legacy/erp.db\")"), "{main}");
+    let schema = file(&files, "src/schema.rs");
+    assert!(!schema.contains("(\"erp\""), "{schema}");
+    assert!(!schema.contains("tblInvoice"), "{schema}");
+    let erp_rs = file(&files, "src/erp.rs");
+    assert!(erp_rs.contains("const TABLE: &'static str = \"tblInvoice\";"), "{erp_rs}");
+    assert!(erp_rs.contains("const KEY: &'static str = \"InvoiceID\";"), "{erp_rs}");
+    assert!(erp_rs.contains("const COLUMNS: &'static [&'static str] = &[\"InvNo\", \"total\"];"), "{erp_rs}");
+    assert!(erp_rs.contains("Cond::contains(\"InvNo\", &String::from(\"INV\"))"), "{erp_rs}");
+    assert!(erp_rs.contains(".order(\"InvNo\", false)"), "{erp_rs}");
 }

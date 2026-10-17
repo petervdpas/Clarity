@@ -57,16 +57,31 @@ const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_paren
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let crate_name = crate_name(settings);
-    let database = match settings.datasources.first() {
-        Some(source) if source.kind == SourceKind::Sqlite => source.url.clone(),
-        Some(source) => {
+    if settings.datasources.is_empty() {
+        return Err(vec!["the project needs a data source to store its records".to_string()]);
+    }
+    // A database for every data source that holds entities.
+    let mut databases = Vec::new();
+    for source in &settings.datasources {
+        if project.entities_in(&source.name).next().is_none() {
+            continue;
+        }
+        if source.kind != SourceKind::Sqlite {
             return Err(vec![format!(
                 "data source '{}' is not SQLite; the Rust backend generates SQLite only for now",
                 source.name
             )]);
         }
-        None => return Err(vec!["the project needs a data source to store its records".to_string()]),
-    };
+        databases.push((source.name.clone(), source.url.clone()));
+    }
+    // Steps only for the databases Clarity owns; external ones are opened as
+    // they are.
+    let source_names: Vec<String> = settings
+        .datasources
+        .iter()
+        .filter(|s| !s.external && databases.iter().any(|(name, _)| *name == s.name))
+        .map(|s| s.name.clone())
+        .collect();
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);
     };
@@ -115,8 +130,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !errors.is_empty() {
         return Err(errors);
     }
-    files.push(text("src/schema.rs", schema::emit(project)?));
-    files.push(text("src/main.rs", main_rs(project, &modules, &owners, &database, &main_window)));
+    files.push(text("src/schema.rs", schema::emit(project, &source_names)?));
+    files.push(text("src/main.rs", main_rs(project, &modules, &owners, &databases, &main_window)));
     Ok(files)
 }
 
@@ -202,7 +217,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
         .map(|f| ident(&f.name.name))
 }
 
-fn main_rs(project: &Project, modules: &[String], owners: &[Owner], database: &str, main_window: &str) -> String {
+fn main_rs(project: &Project, modules: &[String], owners: &[Owner], databases: &[(String, String)], main_window: &str) -> String {
     let mods: String = modules.iter().map(|m| format!("mod {m};\n")).collect();
     let module_of = |name: &str| {
         project
@@ -302,7 +317,8 @@ use serde_json::{{Map, Value}};
 /// The windows, frame and data dictionary the renderer draws from.
 const MODEL: &str = include_str!("model.json");
 const MAIN_WINDOW: &str = {main_window:?};
-const DATABASE: &str = {database:?};
+/// The database file of each data source.
+const DATABASES: &[(&str, &str)] = &{databases:?};
 
 struct App(Mutex<Db>);
 
@@ -408,8 +424,11 @@ fn quit_app(handle: tauri::AppHandle) {{
 }}
 
 fn main() {{
-    let mut db = Db::open(std::path::Path::new(DATABASE)).expect("cannot open the database");
-    db.migrate(schema::STEPS).expect("cannot bring the database up to date");
+    let files: Vec<(&str, &std::path::Path)> = DATABASES.iter().map(|(name, path)| (*name, std::path::Path::new(path))).collect();
+    let mut db = Db::open_sources(&files).expect("cannot open the databases");
+    for (source, steps) in schema::SOURCES {{
+        db.migrate_source(source, steps).expect("cannot bring the database up to date");
+    }}
     tauri::Builder::default()
         .manage(App(Mutex::new(db)))
         .invoke_handler(tauri::generate_handler![

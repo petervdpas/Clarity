@@ -3,4 +3,14 @@ import type { Field } from "./Field";
 import type { Ident } from "./Ident";
 import type { Span } from "./Span";
 
-export type Entity = { name: Ident, fields: Array<Field>, span: Span, };
+export type Entity = { name: Ident, fields: Array<Field>, 
+/**
+ * `table "tblInvoice"`: the existing table of an entity in an external
+ * data source.
+ */
+table: string | null, 
+/**
+ * `key "InvoiceID"`: the integer column that identifies a record, in
+ * an existing table; `id` otherwise.
+ */
+key: string | null, span: Span, };

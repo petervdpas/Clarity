@@ -126,14 +126,14 @@ project Shop
 
 The text after the kind is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:` or `keychain:`), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
 
-**Which entity lives where.** The data dictionary says it, per module or per entity. Every entity uses the first source unless told otherwise, so a project with one source never mentions it. Windows do not know which source is behind an entity: they bind to the dictionary, and the dictionary supplies labels and validation for every source.
+**Which entity lives where.** A module says it with a `source erp` line; its entities live in that source. Without one they use the first source, so a project with one source never mentions it. Each owned SQL source has its own migration steps (`migrations/<source>/`) and its own database at run time; a reference into another database is a plain id without a foreign key (D1c, 2026-10-17). Windows do not know which source is behind an entity: they bind to the dictionary, and the dictionary supplies labels and validation for every source.
 
 **The Project tab.** The sidebar gets a Data sources section: add, edit and remove a source, and test its connection.
 
 **SQL sources** (SQLite, PostgreSQL, MySQL, Microsoft SQL Server) come in two kinds:
 
 - **Owned by Clarity.** The dictionary drives the schema: tables, keys, constraints and indexes, and migrations when the dictionary changes (below).
-- **External.** For a database that already exists, Clarity imports its schema into the dictionary, the way Clarion's dictionary import does. Imported entities are marked external and Clarity never changes their tables. "Take ownership" turns an external source into an owned one: its current schema becomes the baseline migration, and from then on Clarity migrates it.
+- **External.** For a database that already exists, marked `external` on its data source line. Clarity imports its schema into the dictionary, the way Clarion's dictionary import does, as entities mapped onto the tables with `table`, `key` and `column`, and never changes their tables: no migration steps, no migrating at run time. Each load compares the entities with the live tables and reports what no longer fits. `readonly` refuses `save` and `delete` (D1e, 2026-10-17). "Take ownership" turns an external source into an owned one: its current schema becomes the baseline migration, and from then on Clarity migrates it.
 
 Each backend's transpile library maps every database onto that language's usual library: sqlx for Rust, `database/sql` for Go, EF Core or Dapper for C#. That is a matrix of backends and databases, so databases arrive one at a time, SQLite first.
 
@@ -1180,9 +1180,10 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | C1 | Command-line applications: `targets = ["cli"]`; `command` declarations with typed arguments and options, written in Clarity like handlers; `print`, `ask` and `exit`; generated as a program without a window, over the same records and actions; needs queries (`find ... where`) from D1 | |
 | D1a | Queries: `find c in Entity where ... order by ...` as an expression, `contains` on text, the `text` of unbound text inputs, handlers that run other handlers; the runtime builds the SQL from a condition tree; the browse template filters and refreshes through its filter | done (LANGUAGE.md section 10); open: conditions through references (`o.customer.name`), which need joins |
 | D1b | Migrations (section 1.3): steps written in Clarity in `migrations/`, the schema from replaying them, pending changes as warnings and in the Project tab, proposed renames, confirmation for changes that lose data, `clarity migrate`, SQL per step with table rebuilds for SQLite, applied at startup with references checked | done (LANGUAGE.md section 4); open: data migrations (Clarity code that transforms rows), down steps, counting the rows a narrowing change would not fit, renaming enum values, a command-line switch to apply steps separately |
-| D1c | Data events (before and after save, before delete) and entities placed per data source | |
+| D1c | Entities placed per data source: `source` in a module, checked against the project file; migration steps per SQL source; one database per source at run time, each record type knowing its source | done (LANGUAGE.md section 3) |
+| D1f | Data events: before and after save, before delete, written in Clarity next to the entity | |
 | D1d | PostgreSQL, MySQL and SQL Server for owned sources: the runtime writes their dialects | |
-| D1e | External databases: schema import, entities marked external, Take ownership | |
+| D1e | External databases: `external` and `readonly` on a data source; `table`, `key` and `column` mapping; the runtime and generator using the mapped names; Import (Project tab and `clarity import`); comparing the dictionary with the live tables on every load; new crate `clarity-db` | done for SQLite (LANGUAGE.md section 4); open: Take ownership (baseline step, mapping kept in migrations), keys that are not one integer column, the other databases with D1d |
 | D2 | Web API data sources: REST endpoints mapped to entities, auth and paging, OpenAPI import | |
 | D3 | Copying data between databases when a source changes kind | |
 | G2 | C# with Avalonia: C# emitter and runtime, the Avalonia emitter (windows as AXAML with ViewModels), desktop first | |

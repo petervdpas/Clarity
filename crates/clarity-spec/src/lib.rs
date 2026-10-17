@@ -53,23 +53,91 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         files,
         diagnostics,
         migrations: None,
+        sources: Vec::new(),
     }
 }
 
+/// A data source of the project, as the checker needs to know it. The
+/// project file declares them; `clarity-project` hands them in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceRef {
+    pub name: String,
+    /// A SQL database, whose records Clarity reads and writes itself.
+    pub sql: bool,
+    /// A database Clarity does not own: no migration steps, and its
+    /// entities map onto existing tables.
+    pub external: bool,
+    /// Records are read, never saved or deleted.
+    pub readonly: bool,
+}
+
+impl SourceRef {
+    pub fn sql(name: &str) -> SourceRef {
+        SourceRef {
+            name: name.to_string(),
+            sql: true,
+            external: false,
+            readonly: false,
+        }
+    }
+
+    pub fn web(name: &str) -> SourceRef {
+        SourceRef {
+            name: name.to_string(),
+            sql: false,
+            external: true,
+            readonly: false,
+        }
+    }
+
+    pub fn external(mut self) -> SourceRef {
+        self.external = true;
+        self
+    }
+
+    pub fn readonly(mut self) -> SourceRef {
+        self.readonly = true;
+        self
+    }
+}
+
+/// The data source of a project loaded without its project file.
+pub const DEFAULT_SOURCE: &str = "main";
+
 /// Like `load_sources`, with the migration steps given as (path, text) in
-/// order, checked against the dictionary.
+/// order, checked against the dictionary. A step belongs to the data
+/// source its folder is named after (`migrations/main/0001.clarity`), or to
+/// the first source when its path has no folder.
 pub fn load_with_migrations<'a>(
     sources: impl IntoIterator<Item = (&'a str, &'a str)>,
     migrations: impl IntoIterator<Item = (&'a str, &'a str)>,
 ) -> Project {
-    let mut project = load_sources(sources);
-    let mut steps = Vec::new();
+    load_in(sources, migrations, &[])
+}
+
+/// Like `load_with_migrations`, for a project with these data sources.
+/// Without any, the project has one SQL source called `main`.
+pub fn load_in<'a>(
+    files: impl IntoIterator<Item = (&'a str, &'a str)>,
+    migrations: impl IntoIterator<Item = (&'a str, &'a str)>,
+    sources: &[SourceRef],
+) -> Project {
+    let mut project = load_sources(files);
+    project.sources = if sources.is_empty() { vec![SourceRef::sql(DEFAULT_SOURCE)] } else { sources.to_vec() };
+    let mut steps: BTreeMap<String, Vec<migrate::Migration>> = BTreeMap::new();
     for (path, text) in migrations {
         let (migration, diagnostics) = migrate::parse(text, path);
         project.diagnostics.extend(diagnostics);
-        steps.push(migration);
+        let source = Path::new(path)
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| project.default_source().to_string());
+        steps.entry(source).or_default().push(migration);
     }
     project.migrations = Some(steps);
+    check::check_sources(&mut project);
+    code::check::check_readonly(&mut project);
     migrate::check(&mut project);
     project
 }
@@ -77,30 +145,60 @@ pub fn load_with_migrations<'a>(
 /// The folder of migration steps in a project's folder.
 pub const MIGRATIONS_DIR: &str = "migrations";
 
-/// The step files of the project in `dir`, in order, as (path, text).
+/// The step files of the project in `dir`, as (path, text): per data
+/// source a folder, `migrations/main/0001.clarity`, in order.
 pub fn migration_sources(dir: &Path) -> std::io::Result<Vec<(String, String)>> {
     let folder = dir.join(MIGRATIONS_DIR);
     if !folder.is_dir() {
         return Ok(Vec::new());
     }
-    spec_files(&folder)?
-        .into_iter()
-        .map(|path| Ok((path.display().to_string(), std::fs::read_to_string(&path)?)))
-        .collect()
+    let mut folders: Vec<PathBuf> = std::fs::read_dir(&folder)?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir())
+        .collect();
+    folders.sort();
+    let mut steps = Vec::new();
+    for source in folders {
+        for path in spec_files(&source)? {
+            steps.push((path.display().to_string(), std::fs::read_to_string(&path)?));
+        }
+    }
+    Ok(steps)
 }
 
-/// Loads every `.clarity` file in `dir` (not recursive), sorted by name.
-pub fn load_dir(dir: &Path) -> std::io::Result<Project> {
-    let paths = spec_files(dir)?;
-    let mut sources = Vec::new();
-    for path in &paths {
-        sources.push((path.display().to_string(), std::fs::read_to_string(path)?));
+/// Loads every `.clarity` file in `dir` (not recursive), sorted by name,
+/// with its migration steps, for a project with these data sources.
+pub fn load_dir_in(dir: &Path, sources: &[SourceRef]) -> std::io::Result<Project> {
+    load_dir_with_in(dir, None, sources)
+}
+
+/// Like `load_dir_in`, but with `text` in place of the file at `path`. Used
+/// to check an edit against the whole project before it is written.
+pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[SourceRef]) -> std::io::Result<Project> {
+    let mut files = Vec::new();
+    for p in spec_files(dir)? {
+        let content = match replaced {
+            Some((path, text)) if p == path => text.to_string(),
+            _ => std::fs::read_to_string(&p)?,
+        };
+        files.push((p.display().to_string(), content));
     }
     let steps = migration_sources(dir)?;
-    Ok(load_with_migrations(
-        sources.iter().map(|(p, t)| (p.as_str(), t.as_str())),
+    Ok(load_in(
+        files.iter().map(|(p, t)| (p.as_str(), t.as_str())),
         steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
+        sources,
     ))
+}
+
+/// `load_dir_in` for a project whose only data source is `main`.
+pub fn load_dir(dir: &Path) -> std::io::Result<Project> {
+    load_dir_in(dir, &[])
+}
+
+/// `load_dir_with_in` for a project whose only data source is `main`.
+pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Project> {
+    load_dir_with_in(dir, Some((path, text)), &[])
 }
 
 pub fn spec_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -110,26 +208,6 @@ pub fn spec_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
         .collect();
     paths.sort();
     Ok(paths)
-}
-
-/// Like `load_dir`, but with `text` in place of the file at `path`. Used to
-/// check an edit against the whole project before it is written.
-pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Project> {
-    let paths = spec_files(dir)?;
-    let mut sources = Vec::new();
-    for p in &paths {
-        let content = if p == path {
-            text.to_string()
-        } else {
-            std::fs::read_to_string(p)?
-        };
-        sources.push((p.display().to_string(), content));
-    }
-    let steps = migration_sources(dir)?;
-    Ok(load_with_migrations(
-        sources.iter().map(|(p, t)| (p.as_str(), t.as_str())),
-        steps.iter().map(|(p, t)| (p.as_str(), t.as_str())),
-    ))
 }
 
 /// The first error in `after` that `before` does not have. Positions shift
@@ -188,13 +266,14 @@ impl Preview {
     }
 }
 
-/// Writes `ops` as the next step in the `migrations` folder of the
-/// project's module folder `dir`, and returns its path.
-pub fn write_step(dir: &Path, title: &str, ops: &[migrate::Op]) -> std::io::Result<PathBuf> {
+/// Writes `ops` as the next step of data source `source`, in the
+/// `migrations` folder of the project's module folder `dir`, and returns
+/// its path.
+pub fn write_step(dir: &Path, source: &str, title: &str, ops: &[migrate::Op]) -> std::io::Result<PathBuf> {
     if ops.is_empty() {
         return Err(std::io::Error::other("there are no changes to migrate"));
     }
-    let folder = dir.join(MIGRATIONS_DIR);
+    let folder = dir.join(MIGRATIONS_DIR).join(source);
     std::fs::create_dir_all(&folder)?;
     let existing: Vec<String> = spec_files(&folder)?
         .iter()

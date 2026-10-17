@@ -44,8 +44,9 @@ shop.clarity           the project file: open this one
 shop/
     customers.clarity  modules
     sales.clarity
-    migrations/        the steps that bring a database to the dictionary
-        0001.clarity
+    migrations/        the steps that bring each database to the dictionary
+        main/          one folder per SQL data source
+            0001.clarity
     out/               the generated application
     data/
 ```
@@ -67,7 +68,7 @@ project Shop
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
 | `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
-| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite and a connection string or URL for the others. |
+| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder) and a connection string or URL for the others. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
 Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
@@ -87,8 +88,24 @@ entity Order
     customer: ref Customer
 ```
 
+A module of entities that live in another database:
+
+```
+module erp
+
+use customers
+source erp
+
+entity Invoice
+    number: text(20), unique
+    customer: ref Customer
+```
+
+A reference to an entity in another database is stored as its id, without a foreign key, so the database cannot stop a referenced record from being deleted.
+
 - `module name` is the first line of the file (comments and blank lines may come before it).
 - `use other` makes the declarations of module `other` visible in this file. Without it, a name from another module is an error that tells you which `use` is missing.
+- `source name` places the entities of this module in that data source of the project. Without it, they live in the first data source. The source must be a SQL database (sqlite, postgres, mysql or mssql); entities in a web API come later. One module has at most one `source` line.
 - A name is declared once per module. Two modules may declare the same name, but a file that sees both (its own module and the modules it uses) cannot use that name: it is ambiguous, and the checker says so.
 
 The declarations a module can hold:
@@ -165,12 +182,13 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `format "text"` | How the value is shown. Accepted, but not used by the generated application yet. |
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
+| `column "Name"` | The existing column the field is stored in, for an entity of an external database. |
 
 Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
 
 ### Migrations
 
-A database follows the dictionary through migration steps. Each step is a file in the `migrations` folder of the project, numbered in the order the steps run: `0001.clarity`, `0002.clarity`. A step holds one `migration` block with a title and its changes:
+A database follows the dictionary through migration steps. Every SQL data source has its own steps, in a folder of the project's `migrations` folder named after the source and numbered in the order the steps run: `migrations/main/0001.clarity`, `migrations/main/0002.clarity`. A step changes only the entities of its source. A step holds one `migration` block with a title and its changes:
 
 ```
 migration "Phone and VAT"
@@ -198,6 +216,36 @@ Fields in a step are written as in an entity. Only what is stored counts: the ty
 - **Writing a step.** The Project tab lists the pending changes and writes them as the next step; `clarity migrate shop.clarity` does the same from the command line. Clarity proposes a rename when a field disappears and a field of the same type appears in the same entity, or an entity disappears and one with mostly the same fields appears. You confirm it or take it as a removal and an addition. Changes that can lose data (removing, changing a type) need a confirmation.
 - **Running.** The generated application applies the steps its database does not have yet when it starts, each in a transaction, and checks the references between records before a step is kept.
 - **A step that ran never changes.** To undo it, write a new step.
+
+### External databases
+
+A database that already exists, and that Clarity does not own, is a data source marked `external` in the project file:
+
+```
+datasource erp sqlite "legacy/erp.db" external
+```
+
+Its entities live in a module with `source erp`, and they map onto the tables and columns that are there:
+
+```
+entity Invoice
+    table "tblInvoice"
+    key "InvoiceID"
+    inv_no: text(20), required, unique, column "InvNo"
+    cust_id: ref Customers, column "CustID"
+    amount: decimal(18, 6), column "Amount"
+```
+
+- `table` names the existing table; without it, the table is the entity's name in snake case (`invoice`).
+- `key` names the integer column that identifies a record; without it, that column is `id`. Tables whose key is not one integer column cannot be used yet.
+- `column` names the existing column of a field; without it, the column has the field's name.
+- Only entities of an external source can be mapped. Two fields cannot share a column, and no field can use the key column.
+
+Clarity reads and writes the records of an external database, but never changes its tables: it writes no migration steps for it, and the generated application never migrates it.
+
+- **Import.** The Import button of an external SQLite source on the Project tab, or `clarity import shop.clarity erp`, writes the chosen tables as a new module of mapped entities. Names follow Clarity's style (`tblCustomers` becomes `Customers`, `CustName` becomes `cust_name`), column types become field types, foreign keys become `ref` fields when both tables are imported, `NOT NULL` becomes `required` and a unique index `unique`. Binary columns are left out.
+- **Checking.** Each time the project loads, Clarity compares the entities with the tables of the database. A missing table or column is an error; a column whose type does not fit the field, and a required column that no field fills (so new records cannot be saved), are warnings. When the database cannot be read, a warning says its tables were not checked.
+- **Read-only.** With `readonly` on the data source, `save` and `delete` of its records are errors.
 
 ## 5. Windows
 
@@ -729,22 +777,24 @@ A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` 
 project-file  = "project" Name
                     setting*
 setting       = "title" String | "stack" word word word+ | "output" String
-              | "datasource" name kind String
+              | "datasource" name kind String ["external"] ["readonly"]
                     ["auth" kind String]
 
 module-file   = "module" name
                 ("use" name)*
+                ["source" name]
                 declaration*
 declaration   = enum | entity | page | app | code | function | action
 
 enum          = "enum" Name
                     (Value ["label" String])+
 entity        = "entity" Name
+                    ["table" String] ["key" String]
                     (name ":" type ("," modifier)*)+
 type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "money" | "bool"
               | "date" | "datetime" | "email" | "url" | "id" | Enum | "ref" Entity | "list" "<" Entity ">"
 modifier      = "required" | "unique" | "owned" | "computed"
-              | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "format") String
+              | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "format" | "column") String
 
 page          = "page" Name ":" ("window" | "dialog" | "view")
                     (page-setting | region | part)*

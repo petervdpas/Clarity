@@ -338,10 +338,15 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
     Ok(op)
 }
 
-/// The schema the project's steps build, skipping steps that do not fit
-/// (the checker reports them).
-pub fn schema(project: &Project) -> Schema {
-    replay(project.migrations.as_deref().unwrap_or_default()).0
+/// The schema the steps of data source `source` build, skipping steps that
+/// do not fit (the checker reports them).
+pub fn schema(project: &Project, source: &str) -> Schema {
+    replay(steps(project, source)).0
+}
+
+/// The steps of data source `source`.
+fn steps<'a>(project: &'a Project, source: &str) -> &'a [Migration] {
+    project.migrations.as_ref().and_then(|m| m.get(source)).map_or(&[], Vec::as_slice)
 }
 
 /// Replays the steps, with the errors of the ones that do not fit.
@@ -376,9 +381,9 @@ fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The changes that bring the migrated schema to the dictionary, renames
 /// first, then new entities, then the fields of each entity, then removed
 /// entities.
-pub fn pending(project: &Project, renames: &[Rename]) -> Vec<Op> {
-    let mut schema = schema(project);
-    let entities: Vec<&Entity> = project.entities().collect();
+pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
+    let mut schema = schema(project, source);
+    let entities: Vec<&Entity> = project.entities_in(source).collect();
     let in_dictionary = |name: &str| entities.iter().any(|e| e.name.name == name);
     let mut ops = Vec::new();
     let take = |schema: &mut Schema, op: Op, ops: &mut Vec<Op>| {
@@ -455,9 +460,9 @@ pub fn pending(project: &Project, renames: &[Rename]) -> Vec<Op> {
 /// Renames worth proposing: an entity that went while one with mostly the
 /// same fields came, and within an entity, a field that went while a field
 /// of the same type came.
-pub fn proposed_renames(project: &Project) -> Vec<Rename> {
-    let mut schema = schema(project);
-    let entities: Vec<&Entity> = project.entities().collect();
+pub fn proposed_renames(project: &Project, source: &str) -> Vec<Rename> {
+    let mut schema = schema(project, source);
+    let entities: Vec<&Entity> = project.entities_in(source).collect();
     let mut proposals = Vec::new();
 
     let removed: Vec<Table> = schema
@@ -585,30 +590,51 @@ pub fn next_file_name(existing: &[String]) -> String {
 /// the dictionary has no changes that no step covers yet.
 pub(crate) fn check(project: &mut Project) {
     let Some(migrations) = &project.migrations else { return };
-    let (_, errors) = replay(migrations);
-    let mut found = errors;
-    let ops = pending(project, &proposed_renames(project));
-    for entity in project.files.iter().flat_map(|f| f.entities.iter().map(move |e| (f, e))) {
-        let (file, entity) = entity;
-        let name = &entity.name.name;
-        let mine: Vec<&Op> = ops.iter().filter(|op| op.entity() == name).collect();
-        let message = match mine.as_slice() {
-            [] => continue,
-            [Op::AddEntity { .. }] => format!("entity '{name}' is not in a migration yet"),
-            changes => format!(
-                "{name} has changes that are not in a migration yet: {}",
-                changes.iter().map(|op| short_text(op)).collect::<Vec<_>>().join(", ")
-            ),
+    let mut found = Vec::new();
+    for (source, steps) in migrations {
+        let message = match project.sources.iter().find(|s| s.name == *source && s.sql) {
+            None => format!("the project has no data source '{source}' for these steps"),
+            Some(s) if s.external => {
+                format!("data source '{source}' is external; Clarity does not change its schema, so it has no migration steps")
+            }
+            Some(_) => continue,
         };
-        found.push(Diagnostic::warning(message, entity.name.span).in_file(&file.path));
+        let path = steps.first().map(|m| m.path.clone()).unwrap_or_default();
+        found.push(Diagnostic::error(message, Span::default()).in_file(&path));
     }
-    let folder = migrations.last().map(|m| m.path.clone()).unwrap_or_else(|| "migrations".to_string());
-    for op in &ops {
-        if let Op::RemoveEntity { name } = op {
-            found.push(
-                Diagnostic::warning(format!("entity '{name}' is removed, but not in a migration yet"), Span::default())
-                    .in_file(&folder),
-            );
+    // The databases Clarity owns; external ones keep the schema they have.
+    let sql: Vec<&str> = project.sources.iter().filter(|s| s.sql && !s.external).map(|s| s.name.as_str()).collect();
+    for source in &sql {
+        found.extend(replay(steps(project, source)).1);
+        // With one database there is no need to say which.
+        let place = if sql.len() > 1 { format!(" (data source {source})") } else { String::new() };
+        let ops = pending(project, source, &proposed_renames(project, source));
+        for file in project.files.iter() {
+            for entity in file.entities.iter().filter(|e| project.source_of(&e.name.name) == Some(source)) {
+                let name = &entity.name.name;
+                let mine: Vec<&Op> = ops.iter().filter(|op| op.entity() == name).collect();
+                let message = match mine.as_slice() {
+                    [] => continue,
+                    [Op::AddEntity { .. }] => format!("entity '{name}' is not in a migration yet{place}"),
+                    changes => format!(
+                        "{name} has changes that are not in a migration yet{place}: {}",
+                        changes.iter().map(|op| short_text(op)).collect::<Vec<_>>().join(", ")
+                    ),
+                };
+                found.push(Diagnostic::warning(message, entity.name.span).in_file(&file.path));
+            }
+        }
+        let folder = steps(project, source)
+            .last()
+            .map(|m| m.path.clone())
+            .unwrap_or_else(|| format!("migrations/{source}"));
+        for op in &ops {
+            if let Op::RemoveEntity { name } = op {
+                found.push(
+                    Diagnostic::warning(format!("entity '{name}' is removed, but not in a migration yet{place}"), Span::default())
+                        .in_file(&folder),
+                );
+            }
         }
     }
     project.diagnostics.extend(found);

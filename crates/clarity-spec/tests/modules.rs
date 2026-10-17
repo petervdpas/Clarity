@@ -41,7 +41,8 @@ page OrderForm: window
 code OrderForm
     handler approve_clicked
         approve(order)
-        message \"Total \" + order_total(order)
+        let total = order_total(order)
+        message \"Total {total}\"
 ";
 
 fn problems_of(sources: &[(&str, &str)]) -> Vec<(Severity, String)> {
@@ -135,11 +136,11 @@ fn actions_declare_their_effects() {
 #[test]
 fn checks_calls() {
     assert_eq!(
-        errors(&SALES.replace("message \"Total \" + order_total(order)", "let t = order_total(order, order)")),
+        errors(&SALES.replace("let total = order_total(order)", "let total = order_total(order, order)")),
         ["order_total takes 1 argument, not 2"]
     );
     assert_eq!(
-        errors(&SALES.replace("message \"Total \" + order_total(order)", "let t = order_total(order.status)")),
+        errors(&SALES.replace("let total = order_total(order)", "let total = order_total(order.status)")),
         ["argument 'order' of order_total is an Order, not OrderStatus"]
     );
     assert_eq!(
@@ -244,6 +245,10 @@ fn records_types_and_names_for_generators() {
     assert_eq!(table.name_of(object), Some(&NameKind::Local));
     assert_eq!(table.type_of(object), TypeInfo::Record("Order".into()));
     let handler = &file.code[0].handlers[0];
-    let StmtKind::Message { text, .. } = &handler.body[1].kind else { panic!() };
+    let StmtKind::Message { text, .. } = &handler.body[2].kind else { panic!() };
     assert_eq!(table.type_of(text), TypeInfo::Text);
+    // A slot's type reaches the generators like any expression's.
+    let clarity_spec::code::ExprKind::Text { parts } = &text.kind else { panic!() };
+    let clarity_spec::code::TextPart::Slot { value } = &parts[1] else { panic!() };
+    assert_eq!(table.type_of(value), TypeInfo::Money);
 }

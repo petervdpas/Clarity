@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editText, formatValue, parseNumber, userLocale, type FieldFormat } from "./format.ts";
+import { editText, fillText, formatValue, parseNumber, userLocale, type FieldFormat, type ShownText } from "./format.ts";
 
 type Shows = { what: string; locale: string; currency: string | null; field: FieldFormat; value: string | number; shows: string };
 type Reads = { what: string; locale: string; currency: string | null; field: FieldFormat; typed: string; value: string | number | null };
@@ -48,4 +48,30 @@ test("the locale is the system's, then the project's language, then English", ()
   assert.equal(userLocale(["nl-NL", "en"], "de"), "nl-NL");
   assert.equal(userLocale([], "de-DE"), "de-DE");
   assert.equal(userLocale(undefined, null), "en");
+});
+
+type Fills = {
+  what: string;
+  locale: string;
+  currency: string | null;
+  text: ShownText;
+  labels?: Record<string, Record<string, string>>;
+  shows: string;
+};
+
+test("text with slots is filled as the conformance cases say", () => {
+  const fills: Fills[] = (cases as unknown as { fills: Fills[] }).fills;
+  assert.ok(fills.length >= 5);
+  for (const c of fills) {
+    const label = (enumName: string, value: string) => c.labels?.[enumName]?.[value] ?? value;
+    assert.equal(fillText(c.text, { locale: c.locale, currency: c.currency }, label), c.shows, `${c.locale} ${c.what}`);
+  }
+});
+
+test("plain text is shown as it is", () => {
+  assert.equal(fillText("Saved {not a slot}", { locale: "en-US", currency: null }, (_, v) => v), "Saved {not a slot}");
+});
+
+test("a percent without a scale keeps its own digits", () => {
+  assert.equal(formatValue({ kind: "decimal", format: "percent" }, "0.125", { locale: "en-US", currency: null }), "12.5%");
 });

@@ -47,7 +47,7 @@ pub enum Error {
     Storage(String),
     /// A data event refused a save or delete, or code refused to go on, in
     /// its own words.
-    Refused(String),
+    Refused(ui::Text),
 }
 
 impl fmt::Display for Error {
@@ -59,7 +59,7 @@ impl fmt::Display for Error {
             Error::InUse { table, id } => write!(f, "the {table} with id {id} is still referred to"),
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
-            Error::Refused(what) => f.write_str(what),
+            Error::Refused(what) => f.write_str(&what.show()),
         }
     }
 }

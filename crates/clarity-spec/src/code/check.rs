@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{
-    BinaryOp, CodeBlock, DataEvent, EFFECTS, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
+    BinaryOp, CodeBlock, DataEvent, EFFECTS, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -758,7 +758,7 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             StmtKind::Message { text, .. } => {
                 self.ui_only("message", stmt.span);
-                let ty = self.expr(text, None);
+                let ty = self.shown_text(text);
                 if !ty.is_value() {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
                 }
@@ -805,7 +805,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.check_own_record(word, value);
             }
             StmtKind::Refuse { text } => {
-                let ty = self.expr(text, None);
+                let ty = self.shown_text(text);
                 if !ty.is_value() {
                     self.error(format!("'refuse' needs text or a value, not {}", ty.name()), text.span);
                 }
@@ -873,6 +873,48 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+
+    /// Whether `target` is text the screen shows: a part's caption or error.
+    fn shows(&self, target: &Expr) -> bool {
+        let ExprKind::Member { object, member } = &target.kind else { return false };
+        let ExprKind::Name { name } = &object.kind else { return false };
+        self.local(name).is_none() && self.part(name).is_some() && matches!(member.name.as_str(), "caption" | "error")
+    }
+
+    /// Text the screen shows (a message, a refusal, a caption or an error):
+    /// text with slots is at home here. Text joined with `+` cannot be
+    /// translated or shown in the person's format, so slots are suggested.
+    fn shown_text(&mut self, expr: &Expr) -> Ty<'a> {
+        if let ExprKind::Text { parts } = &expr.kind {
+            self.slots(parts);
+            self.out.types.types.insert((expr.span.start, expr.span.end), TypeInfo::Text);
+            return Ty::Text;
+        }
+        let ty = self.expr(expr, None);
+        if joins_text(expr) {
+            self.out.push(Diagnostic::warning(
+                "write this as one text with slots, like \"Saved {customer.name}\", so it can be translated and its values shown in the person's format",
+                expr.span,
+            ));
+        }
+        ty
+    }
+
+    /// Each slot of a text names a value: a field, a local or a parameter
+    /// that is not a whole record or list.
+    fn slots(&mut self, parts: &[TextPart]) {
+        for part in parts {
+            let TextPart::Slot { value } = part else { continue };
+            let ty = self.expr(value, None);
+            if !ty.is_value() {
+                let path = crate::code::path_text(value);
+                self.error(
+                    format!("a slot shows a value, and {{{path}}} is {}; name one of its fields, like {{{path}.name}}", ty.name()),
+                    value.span,
+                );
+            }
+        }
+    }
     fn assign(&mut self, target: &Expr, value: &Expr) {
         let place = self.place(target);
         let (ty, writable) = match place {
@@ -898,7 +940,7 @@ impl<'a> BodyChecker<'_, 'a> {
         if let Err(message) = writable {
             self.error(message, target.span);
         }
-        let value_ty = self.expr(value, Some(ty));
+        let value_ty = if self.shows(target) { self.shown_text(value) } else { self.expr(value, Some(ty)) };
         if !ty.accepts(&value_ty) {
             self.error(format!("cannot set {} to {}", ty.name(), value_ty.name()), value.span);
         }
@@ -1054,6 +1096,14 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             ExprKind::Str { .. } => Ty::Text,
+            ExprKind::Text { parts } => {
+                self.error(
+                    "text with slots is text to show; use it in 'message', 'refuse', or a part's caption or error",
+                    expr.span,
+                );
+                self.slots(parts);
+                Ty::Text
+            }
             ExprKind::Bool { .. } => Ty::Bool,
             ExprKind::Name { name } => {
                 if let Some(Ty::Enum(decl)) = expected
@@ -1470,6 +1520,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::Find { var: inner, filter, .. } => {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
+        ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } => false,
     }
 }
@@ -1548,4 +1599,12 @@ fn writes(body: &[Stmt], found: &mut impl FnMut(&Stmt, &Expr, &str)) {
             _ => {}
         }
     }
+}
+
+/// Whether `expr` joins a piece of literal text with something else
+/// through `+`: `"Saved " + customer.name`.
+fn joins_text(expr: &Expr) -> bool {
+    let ExprKind::Binary { op: BinaryOp::Add, left, right } = &expr.kind else { return false };
+    let literal = |e: &Expr| matches!(e.kind, ExprKind::Str { .. });
+    literal(left) || literal(right) || joins_text(left) || joins_text(right)
 }

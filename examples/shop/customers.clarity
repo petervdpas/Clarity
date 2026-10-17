@@ -88,7 +88,7 @@ code CustomerForm
             message warning "A business customer needs a VAT number (Finance tab)"
             return
         save customer
-        message "Saved " + customer.name
+        message "Saved {customer.name}"
         close
 
     handler close_clicked

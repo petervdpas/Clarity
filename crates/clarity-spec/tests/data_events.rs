@@ -35,7 +35,7 @@ code Order
 
     before delete
         if order.status != Pending
-            refuse \"Only pending orders can be deleted, not \" + order.number
+            refuse \"Only pending orders can be deleted, not {order.number}\"
 ";
 
 fn errors(project: &Project) -> Vec<String> {

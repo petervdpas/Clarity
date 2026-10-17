@@ -9,7 +9,219 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{Error, Result};
+use crate::{Decimal, Error, NaiveDate, NaiveDateTime, Result};
+
+/// Text to show, with values in slots: `Saved {customer.name}`. The screen
+/// fills each slot in the format of the person using the application, so
+/// the backend never formats a value for a person. Text without slots
+/// travels as a plain string.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Text {
+    /// The text as written in Clarity, slots and all; `{{` and `}}` are braces.
+    pub text: String,
+    /// The value of each slot, by its path as written: `customer.name`.
+    pub values: BTreeMap<String, Slot>,
+}
+
+/// The value of one slot, with what the screen needs to format it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Slot {
+    pub kind: SlotKind,
+    pub value: Value,
+    /// The decimals of a decimal field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<u32>,
+    /// The named format of the field the value comes from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// The enum of an enum value, for its label.
+    #[serde(default, rename = "enum", skip_serializing_if = "Option::is_none")]
+    pub enum_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SlotKind {
+    Text,
+    Integer,
+    Decimal,
+    Money,
+    Date,
+    DateTime,
+    Bool,
+    Enum,
+}
+
+fn slot(kind: SlotKind, value: Value) -> Slot {
+    Slot {
+        kind,
+        value,
+        scale: None,
+        format: None,
+        enum_name: None,
+    }
+}
+
+fn format_of(format: Option<&str>) -> Option<String> {
+    format.map(str::to_string)
+}
+
+impl Slot {
+    pub fn text(value: impl Into<String>) -> Slot {
+        slot(SlotKind::Text, Value::String(value.into()))
+    }
+
+    pub fn integer(value: i64, format: Option<&str>) -> Slot {
+        Slot {
+            format: format_of(format),
+            ..slot(SlotKind::Integer, Value::from(value))
+        }
+    }
+
+    pub fn decimal(value: Decimal, scale: Option<u32>, format: Option<&str>) -> Slot {
+        Slot {
+            scale,
+            format: format_of(format),
+            ..slot(SlotKind::Decimal, Value::String(value.to_string()))
+        }
+    }
+
+    pub fn money(value: Decimal, format: Option<&str>) -> Slot {
+        Slot {
+            format: format_of(format),
+            ..slot(SlotKind::Money, Value::String(value.to_string()))
+        }
+    }
+
+    pub fn date(value: Option<NaiveDate>, format: Option<&str>) -> Slot {
+        Slot {
+            format: format_of(format),
+            ..slot(SlotKind::Date, value.map_or(Value::Null, |d| Value::String(d.to_string())))
+        }
+    }
+
+    pub fn date_time(value: Option<NaiveDateTime>, format: Option<&str>) -> Slot {
+        let text = value.map(|d| d.format("%Y-%m-%dT%H:%M:%S").to_string());
+        Slot {
+            format: format_of(format),
+            ..slot(SlotKind::DateTime, text.map_or(Value::Null, Value::String))
+        }
+    }
+
+    pub fn boolean(value: bool) -> Slot {
+        slot(SlotKind::Bool, Value::Bool(value))
+    }
+
+    /// An enum value, by its name; the screen shows its label.
+    pub fn name<E: ToString>(value: &E, enum_name: &str) -> Slot {
+        Slot {
+            enum_name: Some(enum_name.to_string()),
+            ..slot(SlotKind::Enum, Value::String(value.to_string()))
+        }
+    }
+
+    /// The value as plain text, for places that are not a screen.
+    fn plain(&self) -> String {
+        match (&self.kind, &self.value) {
+            (_, Value::Null) => String::new(),
+            (SlotKind::Bool, Value::Bool(b)) => if *b { "yes" } else { "no" }.to_string(),
+            (_, Value::String(s)) => s.clone(),
+            (_, other) => other.to_string(),
+        }
+    }
+}
+
+impl Text {
+    /// Text as written in Clarity, before its slots get values.
+    pub fn new(text: &str) -> Text {
+        Text {
+            text: text.to_string(),
+            values: BTreeMap::new(),
+        }
+    }
+
+    /// Text that is shown as it is: a brace in it is no slot.
+    pub fn plain(text: impl Into<String>) -> Text {
+        Text::new(&text.into().replace('{', "{{").replace('}', "}}"))
+    }
+
+    pub fn with(mut self, path: &str, value: Slot) -> Text {
+        self.values.insert(path.to_string(), value);
+        self
+    }
+
+    /// The text with its slots filled plainly, without a person's format:
+    /// for logs, and for code that reads a caption back.
+    pub fn show(&self) -> String {
+        let mut out = String::new();
+        let mut rest = self.text.as_str();
+        while let Some(at) = rest.find(['{', '}']) {
+            out.push_str(&rest[..at]);
+            let brace = &rest[at..at + 1];
+            let after = &rest[at + 1..];
+            // `{{` and `}}` are braces.
+            if let Some(stripped) = after.strip_prefix(brace) {
+                out.push_str(brace);
+                rest = stripped;
+                continue;
+            }
+            if brace == "}" {
+                out.push('}');
+                rest = after;
+                continue;
+            }
+            let end = after.find('}').unwrap_or(after.len());
+            let path = &after[..end];
+            out.push_str(&self.values.get(path).map(Slot::plain).unwrap_or_default());
+            rest = after.get(end + 1..).unwrap_or("");
+        }
+        out.push_str(rest);
+        out
+    }
+}
+
+impl From<&str> for Text {
+    fn from(text: &str) -> Text {
+        Text::plain(text)
+    }
+}
+
+impl From<String> for Text {
+    fn from(text: String) -> Text {
+        Text::plain(text)
+    }
+}
+
+/// Text on the wire: a plain string, or the text with its slot values.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum Wire {
+    Plain(String),
+    Slots { text: String, values: BTreeMap<String, Slot> },
+}
+
+impl Serialize for Text {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        if self.values.is_empty() {
+            Wire::Plain(self.show()).serialize(serializer)
+        } else {
+            Wire::Slots {
+                text: self.text.clone(),
+                values: self.values.clone(),
+            }
+            .serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Text {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Text, D::Error> {
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::Plain(text) => Text::plain(text),
+            Wire::Slots { text, values } => Text { text, values },
+        })
+    }
+}
 
 /// What a handler set on a part. Anything unset keeps the design.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -19,11 +231,11 @@ pub struct PartState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub caption: Option<String>,
+    pub caption: Option<Text>,
     /// A message at an input, such as why its value is not accepted;
     /// empty clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub error: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<bool>,
     /// What an unbound text input holds; the screen sends it with each
@@ -65,7 +277,7 @@ pub enum Level {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     pub level: Level,
-    pub text: String,
+    pub text: Text,
 }
 
 /// `open Window with name = value, ...`
@@ -123,20 +335,20 @@ impl Ui {
     pub fn caption(&self, part: &str, design: &str) -> String {
         self.parts
             .get(part)
-            .and_then(|p| p.caption.clone())
+            .and_then(|p| p.caption.as_ref().map(Text::show))
             .unwrap_or_else(|| design.to_string())
     }
 
-    pub fn set_caption(&mut self, part: &str, value: String) {
+    pub fn set_caption(&mut self, part: &str, value: Text) {
         self.parts.entry(part.to_string()).or_default().caption = Some(value);
     }
 
     /// The message a handler set on an input, or an empty text.
     pub fn error(&self, part: &str) -> String {
-        self.parts.get(part).and_then(|p| p.error.clone()).unwrap_or_default()
+        self.parts.get(part).and_then(|p| p.error.as_ref().map(Text::show)).unwrap_or_default()
     }
 
-    pub fn set_error(&mut self, part: &str, value: String) {
+    pub fn set_error(&mut self, part: &str, value: Text) {
         self.parts.entry(part.to_string()).or_default().error = Some(value);
     }
 
@@ -167,7 +379,7 @@ impl Ui {
             .ok_or_else(|| Error::Invalid(format!("no row of {part} is selected")))
     }
 
-    pub fn message(&mut self, level: Level, text: String) {
+    pub fn message(&mut self, level: Level, text: Text) {
         self.messages.push(Message { level, text });
     }
 
@@ -224,6 +436,33 @@ pub struct RefOption {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn text_travels_as_a_string_or_with_its_slots() {
+        let plain = Text::plain("Brace { yourself }");
+        assert_eq!(serde_json::to_value(&plain).unwrap(), Value::String("Brace { yourself }".into()));
+        assert_eq!(serde_json::from_value::<Text>(Value::String("Brace { yourself }".into())).unwrap(), plain);
+
+        let saved = Text::new("Saved {customer.name} on {when}, {{done}}")
+            .with("customer.name", Slot::text("Ada"))
+            .with("when", Slot::date(NaiveDate::from_ymd_opt(2026, 10, 17), Some("long")));
+        let wire = serde_json::to_value(&saved).unwrap();
+        assert_eq!(
+            wire,
+            serde_json::json!({
+                "text": "Saved {customer.name} on {when}, {{done}}",
+                "values": {
+                    "customer.name": { "kind": "text", "value": "Ada" },
+                    "when": { "kind": "date", "value": "2026-10-17", "format": "long" }
+                }
+            })
+        );
+        assert_eq!(serde_json::from_value::<Text>(wire).unwrap(), saved);
+        // Without a screen, slots are filled plainly.
+        assert_eq!(saved.show(), "Saved Ada on 2026-10-17, {done}");
+        assert_eq!(Slot::money(Decimal::new(125050, 2), None).value, Value::String("1250.50".into()));
+        assert_eq!(Slot::name(&"Business", "CustomerKind").enum_name.as_deref(), Some("CustomerKind"));
+    }
     #[test]
     fn unbound_inputs_carry_their_text() {
         let mut state = WindowState::new("Customers", Map::new());

@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet};
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TypeRef, TypeRefKind,
-    UnaryOp,
+    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind,
+    UnaryOp, path_text, template,
 };
 use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
 
@@ -92,7 +92,7 @@ struct Emitter<'a> {
     errors: Vec<String>,
 }
 
-impl Emitter<'_> {
+impl<'a> Emitter<'a> {
     fn is_ref(&self, name: &str) -> bool {
         self.refs.iter().any(|scope| scope.contains(name))
     }
@@ -182,7 +182,7 @@ impl Emitter<'_> {
                 let to = self.types.type_of(target);
                 let from = self.types.type_of(value);
                 if let Some((part, property)) = self.part_property(target) {
-                    let value = coerce(self.value(value), &from, &to);
+                    let value = if matches!(property, "caption" | "error") { self.shown(value) } else { coerce(self.value(value), &from, &to) };
                     out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
                     return;
                 }
@@ -238,11 +238,7 @@ impl Emitter<'_> {
                 out.push_str(&format!("{pad}db.delete({record})?;\n"));
             }
             StmtKind::Refuse { text } => {
-                let text = if self.types.type_of(text) == TypeInfo::Text {
-                    self.value(text)
-                } else {
-                    format!("{}.show()", self.value(text))
-                };
+                let text = self.shown(text);
                 out.push_str(&format!("{pad}return Err(Error::Refused({text}));\n"));
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
@@ -254,11 +250,7 @@ impl Emitter<'_> {
                     MessageLevel::Warning => "Warning",
                     MessageLevel::Error => "Error",
                 };
-                let text = if self.types.type_of(text) == TypeInfo::Text {
-                    self.value(text)
-                } else {
-                    format!("{}.show()", self.value(text))
-                };
+                let text = self.shown(text);
                 out.push_str(&format!("{pad}ui.message(Level::{level}, {text});\n"));
             }
             StmtKind::Open { window, with } => {
@@ -295,6 +287,63 @@ impl Emitter<'_> {
             Some(NameKind::Data) => Some((format!("w.{}", ident(name)), false)),
             _ => None,
         }
+    }
+
+    /// Text the screen shows (a message, a refusal, a caption, an error) as
+    /// a runtime `Text`: the text as written with a typed value per slot,
+    /// so the screen fills the slots in the person's format.
+    fn shown(&mut self, expr: &Expr) -> String {
+        match &expr.kind {
+            ExprKind::Str { value } => format!("Text::plain({value:?})"),
+            ExprKind::Text { parts } => {
+                let mut code = format!("Text::new({:?})", template(parts));
+                for part in parts {
+                    if let TextPart::Slot { value } = part {
+                        let slot = self.slot(value);
+                        code.push_str(&format!(".with({:?}, {slot})", path_text(value)));
+                    }
+                }
+                code
+            }
+            _ if self.types.type_of(expr) == TypeInfo::Text => format!("Text::plain({})", self.value(expr)),
+            _ => format!("Text::plain({}.show())", self.value(expr)),
+        }
+    }
+
+    /// The value of a slot with what the screen needs to show it: its type,
+    /// and the format and decimals of the field it comes from.
+    fn slot(&mut self, expr: &Expr) -> String {
+        let value = self.value(expr);
+        let field = self.field_of(expr);
+        let format = match field.and_then(|f| f.modifiers.format.as_deref()) {
+            Some(name) => format!("Some({name:?})"),
+            None => "None".to_string(),
+        };
+        let scale = match field.map(|f| &f.ty) {
+            Some(FieldType::Decimal { scale, .. }) => format!("Some({scale})"),
+            _ => "None".to_string(),
+        };
+        match self.types.type_of(expr) {
+            TypeInfo::Text => format!("Slot::text({value})"),
+            TypeInfo::Integer => format!("Slot::integer({value}, {format})"),
+            TypeInfo::Decimal => format!("Slot::decimal({value}, {scale}, {format})"),
+            TypeInfo::Money => format!("Slot::money({value}, {format})"),
+            TypeInfo::Date => format!("Slot::date({value}, {format})"),
+            TypeInfo::DateTime => format!("Slot::date_time({value}, {format})"),
+            TypeInfo::Bool => format!("Slot::boolean({value})"),
+            TypeInfo::Enum(name) => format!("Slot::name(&{value}, {name:?})"),
+            other => {
+                self.errors.push(format!("a slot cannot show {other:?}"));
+                String::new()
+            }
+        }
+    }
+
+    /// The dictionary field a member path such as `order.total` reads.
+    fn field_of(&self, expr: &Expr) -> Option<&'a clarity_spec::model::Field> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let TypeInfo::Record(entity) = self.types.type_of(object) else { return None };
+        self.project.entity(&entity)?.field(&member.name)
     }
 
     /// A part property such as `part.visible` or `part.error`: the part and
@@ -405,6 +454,11 @@ impl Emitter<'_> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("{value}i64"),
             ExprKind::Str { value } => format!("String::from({value:?})"),
+            // The checker allows text with slots only where it is shown.
+            ExprKind::Text { .. } => {
+                self.errors.push("text with slots is text to show".into());
+                String::new()
+            }
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
                 let (part, property) = self.part_property(expr).unwrap_or_default();

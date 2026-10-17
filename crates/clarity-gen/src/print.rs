@@ -7,6 +7,7 @@ pub fn expr(e: &Expr) -> String {
     match &e.kind {
         ExprKind::Number { value } => value.clone(),
         ExprKind::Str { value } => format!("{value:?}"),
+        ExprKind::Text { parts } => format!("{:?}", clarity_spec::code::template(parts)),
         ExprKind::Bool { value } => value.to_string(),
         ExprKind::Name { name } => name.clone(),
         ExprKind::Member { object, member } => format!("{}.{}", expr(object), member.name),

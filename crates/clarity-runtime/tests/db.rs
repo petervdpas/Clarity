@@ -189,7 +189,7 @@ fn a_reply_carries_the_state_messages_and_windows() {
     let reply = ui.reply("Form", to_data(&form).unwrap());
     assert_eq!(reply.state.data["name"], "b");
     assert_eq!(reply.state.parts["save"].enabled, Some(false));
-    assert_eq!(reply.messages[0].text, "careful");
+    assert_eq!(reply.messages[0].text.show(), "careful");
     assert_eq!(reply.open[0].with["record"], "x");
     assert!(!reply.close);
 }

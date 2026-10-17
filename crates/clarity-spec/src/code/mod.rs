@@ -237,6 +237,11 @@ pub enum ExprKind {
     Str {
         value: String,
     },
+    /// Text with values in slots: `"Saved {customer.name}"`. Only text
+    /// with at least one slot is this; other text is `Str`.
+    Text {
+        parts: Vec<TextPart>,
+    },
     Bool {
         value: bool,
     },
@@ -409,3 +414,36 @@ pub struct FunctionDecl {
 
 /// The effects an action can declare.
 pub const EFFECTS: [&str; 2] = ["db.read", "db.write"];
+
+/// A piece of a text with slots.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum TextPart {
+    /// Text as it is shown, with `{{` already read as a brace.
+    Plain { text: String },
+    /// `{customer.name}`: a name or a member path.
+    Slot { value: Expr },
+}
+
+/// The text as written, with its slots: `Saved {customer.name}`. Braces
+/// that are text are doubled, so the text reads back the same. It is what
+/// a translation is found by, and what the screen fills.
+pub fn template(parts: &[TextPart]) -> String {
+    parts
+        .iter()
+        .map(|part| match part {
+            TextPart::Plain { text } => text.replace('{', "{{").replace('}', "}}"),
+            TextPart::Slot { value } => format!("{{{}}}", path_text(value)),
+        })
+        .collect()
+}
+
+/// A slot's path as written: `customer.name`.
+pub fn path_text(expr: &Expr) -> String {
+    match &expr.kind {
+        ExprKind::Name { name } => name.clone(),
+        ExprKind::Member { object, member } => format!("{}.{}", path_text(object), member.name),
+        _ => String::new(),
+    }
+}

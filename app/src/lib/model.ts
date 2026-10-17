@@ -6,7 +6,7 @@ import type { EnumDecl } from "./generated/EnumDecl";
 import type { Field } from "./generated/Field";
 import type { Preview } from "./generated/Preview";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
-import { formatValue, userLocale, type FieldFormat, type Formats } from "./format";
+import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -93,4 +93,20 @@ export function describeType(field: Field): string {
     default:
       return t.kind;
   }
+}
+
+/** Text from the backend as shown: its slots filled in the person's
+ *  format, an enum value by its label. */
+export function shownText(preview: Preview, text: ShownText): string {
+  return fillText(text, formatsOf(preview), (enumName, value) => {
+    const variant = findEnum(preview, enumName)?.variants.find((v) => v.name.name === value);
+    return variant?.label ?? value;
+  });
+}
+
+/** What went wrong in the backend, as text to show: a refusal arrives as
+ *  text with slots, anything else as a plain message. */
+export function errorText(err: unknown): ShownText {
+  if (typeof err === "object" && err !== null && "text" in err && "values" in err) return err as ShownText;
+  return String(err);
 }

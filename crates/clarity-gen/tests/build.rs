@@ -118,7 +118,7 @@ code Order
 
     before delete
         if order.status == Approved
-            refuse \"Order \" + order.number + \" is approved\"
+            refuse \"Order {order.number} is approved\"
 ";
 
 /// SALES as two steps: the first had a `limit`, an integer total and a note.
@@ -178,7 +178,10 @@ fn approves_within_the_credit_limit() {
     assert_eq!(approve(&db, &mut big), Err(Error::Contract("within_credit(order)".into())));
 
     // Data events: an approved order stays, a negative total is never saved.
-    assert_eq!(db.delete(&order), Err(Error::Refused("Order ORD-1 is approved".into())));
+    // A refusal keeps its slots for the screen, and reads plainly elsewhere.
+    let Err(Error::Refused(refusal)) = db.delete(&order) else { panic!("the approved order was deleted") };
+    assert_eq!(refusal.text, "Order {order.number} is approved");
+    assert_eq!(refusal.show(), "Order ORD-1 is approved");
     let mut negative = Order { customer: Some(ada.id), total: Decimal::new(-1, 0), ..Order::default() };
     assert_eq!(db.save(&mut negative), Err(Error::Refused("An order cannot have a negative total".into())));
     assert_eq!(negative.id, 0);

@@ -2,7 +2,7 @@
 //! by indentation) and expressions (precedence climbing on one line).
 
 use super::{
-    Arg, BinaryOp, Branch, CodeBlock, DataEvent, EventDecl, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
+    Arg, BinaryOp, Branch, CodeBlock, DataEvent, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -586,9 +586,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Number => ExprKind::Number {
             value: token.text.clone(),
         },
-        TokenKind::Str => ExprKind::Str {
-            value: token.text.clone(),
-        },
+        TokenKind::Str => text_kind(token)?,
         TokenKind::Ident if token.text == "true" || token.text == "false" => ExprKind::Bool {
             value: token.text == "true",
         },
@@ -682,4 +680,103 @@ fn parse_find(cursor: &mut Cursor) -> ParseResult<Expr> {
         span: join(start, end),
         kind: ExprKind::Find { var, entity, filter, order },
     })
+}
+
+/// A string read for slots: `{customer.name}` is a slot, `{{` and `}}` are
+/// braces.
+/// Text without slots stays a plain string. A slot's span counts from the
+/// string's start as if nothing before it were escaped.
+fn text_kind(token: &Token) -> ParseResult<ExprKind> {
+    let text = &token.text;
+    let mut parts = Vec::new();
+    let mut plain = String::new();
+    let mut i = 0;
+    while i < text.len() {
+        let rest = &text[i..];
+        if rest.starts_with("{{") {
+            plain.push('{');
+            i += 2;
+            continue;
+        }
+        if rest.starts_with("}}") {
+            plain.push('}');
+            i += 2;
+            continue;
+        }
+        if rest.starts_with('}') {
+            return Err(Diagnostic::error("'}' ends a slot; write '}}' for a brace", token.span));
+        }
+        if !rest.starts_with('{') {
+            let c = rest.chars().next().unwrap_or_default();
+            plain.push(c);
+            i += c.len_utf8();
+            continue;
+        }
+        let Some(end) = rest.find('}') else {
+            return Err(Diagnostic::error(
+                "'{' starts a slot; close it with '}', or write '{{' for a brace",
+                token.span,
+            ));
+        };
+        let offset = token.span.start + 1 + i as u32 + 1;
+        let value = slot_path(&rest[1..end], offset, token.span)?;
+        if !plain.is_empty() {
+            parts.push(TextPart::Plain { text: std::mem::take(&mut plain) });
+        }
+        parts.push(TextPart::Slot { value });
+        i += end + 1;
+    }
+    if parts.is_empty() {
+        return Ok(ExprKind::Str { value: plain });
+    }
+    if !plain.is_empty() {
+        parts.push(TextPart::Plain { text: plain });
+    }
+    Ok(ExprKind::Text { parts })
+}
+
+/// The path in a slot, `customer.name`, as a name and its members. Spaces
+/// around it are allowed.
+fn slot_path(inner: &str, offset: u32, string: Span) -> ParseResult<Expr> {
+    let lead = (inner.len() - inner.trim_start().len()) as u32;
+    let path = inner.trim();
+    let wrong = || {
+        Diagnostic::error(
+            format!("a slot names a value or a field, like {{customer.name}}, not {{{path}}}"),
+            string,
+        )
+    };
+    let mut expr: Option<Expr> = None;
+    let mut at = offset + lead;
+    for word in path.split('.') {
+        let valid = word.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !valid {
+            return Err(wrong());
+        }
+        let span = Span {
+            start: at,
+            end: at + word.len() as u32,
+            line: string.line,
+            col: string.col + (at - string.start),
+        };
+        expr = Some(match expr {
+            None => Expr {
+                kind: ExprKind::Name { name: word.to_string() },
+                span,
+            },
+            Some(object) => Expr {
+                span: join(object.span, span),
+                kind: ExprKind::Member {
+                    object: Box::new(object),
+                    member: Ident {
+                        name: word.to_string(),
+                        span,
+                    },
+                },
+            },
+        });
+        at += word.len() as u32 + 1;
+    }
+    expr.ok_or_else(wrong)
 }

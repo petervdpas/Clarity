@@ -72,12 +72,12 @@ code OrderForm
             message warning "The total is above the customer's credit limit"
             return
         approve(order)
-        message "Order " + order.number + " is approved"
+        message "Order {order.number} is approved"
 
 code Order
     before save
         if order.status == Approved and not within_credit(order)
-            refuse "Order " + order.number + " is over its customer's credit limit"
+            refuse "Order {order.number} is over its customer's credit limit"
 
     before delete
         if order.status != Pending

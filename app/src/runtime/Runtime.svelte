@@ -10,7 +10,8 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState } from "../lib/live";
-  import type { Row } from "../lib/model";
+  import { errorText, shownText, type Row } from "../lib/model";
+  import type { ShownText } from "../lib/format";
   import { findPage, type PageData } from "../lib/pages";
 
   /** One open window, as the backend sends it. */
@@ -20,7 +21,7 @@
     parts: Record<string, PartState>;
     selected: Record<string, number>;
   };
-  type Message = { level: "info" | "warning" | "error"; text: string };
+  type Message = { level: "info" | "warning" | "error"; text: ShownText };
   type Reply = {
     state: WindowState;
     messages: Message[];
@@ -33,7 +34,8 @@
 
   let model = $state<Preview | null>(null);
   let stack = $state<WindowState[]>([]);
-  let messages = $state<(Message & { id: number })[]>([]);
+  /** The messages on screen, their text filled. */
+  let messages = $state<{ level: Message["level"]; text: string; id: number }[]>([]);
   let busy = $state(false);
   let options = $state<Record<string, { id: number; text: string }[]>>({});
   let nextMessage = 0;
@@ -62,7 +64,8 @@
 
   function say(message: Message) {
     const id = nextMessage++;
-    messages = [...messages, { ...message, id }];
+    const text = model ? shownText(model, message.text) : typeof message.text === "string" ? message.text : message.text.text;
+    messages = [...messages, { level: message.level, text, id }];
     if (message.level === "info") setTimeout(() => dismiss(id), MESSAGE_MS);
   }
 
@@ -86,7 +89,7 @@
       if (reply.close) return close();
       await follow(reply);
     } catch (err) {
-      say({ level: "error", text: String(err) });
+      say({ level: "error", text: errorText(err) });
     }
   }
 
@@ -108,7 +111,7 @@
       if (back.close) return close();
       await follow(back);
     } catch (err) {
-      say({ level: "error", text: String(err) });
+      say({ level: "error", text: errorText(err) });
     }
   }
 
@@ -128,7 +131,7 @@
         await follow(reply);
       }
     } catch (err) {
-      say({ level: "error", text: String(err) });
+      say({ level: "error", text: errorText(err) });
     } finally {
       busy = false;
     }
@@ -164,7 +167,7 @@
         loading.add(entity);
         invoke<{ id: number; text: string }[]>("ref_options", { entity })
           .then((list) => (options[entity] = list))
-          .catch((err) => say({ level: "error", text: String(err) }))
+          .catch((err) => say({ level: "error", text: errorText(err) }))
           .finally(() => loading.delete(entity));
       }
       return known ?? [];
@@ -180,7 +183,7 @@
       await open(start.main);
       await follow(started);
     } catch (err) {
-      say({ level: "error", text: String(err) });
+      say({ level: "error", text: errorText(err) });
     }
   });
 </script>

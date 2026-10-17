@@ -49,7 +49,7 @@ code CustomerForm
         let doubled = customer.credit_limit * 2
         customer.credit_limit = doubled + 1
         save customer
-        message \"Saved \" + customer.name
+        message \"Saved {customer.name}\"
         close
 
 code Orders

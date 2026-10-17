@@ -4,7 +4,7 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText } from "./model";
   import { editText, parseNumber } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
@@ -43,15 +43,18 @@
   const partState = $derived(live && p.name ? live.parts[p.name] : undefined);
   const hidden = $derived(partState?.visible === false);
   const disabled = $derived(partState?.enabled === false);
-  const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? partState.caption : p.caption);
+  const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? shownText(preview, partState.caption) : p.caption);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
   const readonly = $derived(partState?.readonly ?? p.readonly);
-  const error = $derived(partState?.error ? partState.error : null);
+  const error = $derived(partState?.error ? shownText(preview, partState.error) || null : null);
 
   // Labels and help texts belong to the input named in `for`.
   const target = $derived(findPart(page, p.for));
   const targetField = $derived(target ? fieldOf(data, target.props.bind) : undefined);
-  const targetError = $derived(live && p.for ? live.parts[p.for]?.error || null : null);
+  const targetError = $derived.by(() => {
+    const error = live && p.for ? live.parts[p.for]?.error : null;
+    return error ? shownText(preview, error) || null : null;
+  });
   const id = $derived(p.name ? partId(p.name) : undefined);
   const describedBy = $derived(
     p.name && allParts(page).some((w) => w.props.kind === "help" && w.props.for === p.name) ? helpId(p.name) : undefined,

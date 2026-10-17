@@ -12,7 +12,7 @@ entity Customer
     name: text(80), required
     credit_limit: money, default 100
     active: bool, default true
-    since: date
+    since: date, format long
 
 entity Order
     number: text(12), unique
@@ -58,7 +58,7 @@ code OrderForm
             approve_button.enabled = false
             return
         approve(order)
-        message \"Approved \" + order.number
+        message \"Approved {order.number}\"
 
     handler window_returned
         reload orders
@@ -215,7 +215,14 @@ fn handlers_work_on_the_window_and_the_screen() {
         "{sales}"
     );
     assert!(sales.contains("if !within_credit(db, &w.order)? {"), "{sales}");
-    assert!(sales.contains("ui.message(Level::Warning, String::from(\"Too much\"));"), "{sales}");
+    // Shown text goes to the screen as text with slots, which the screen
+    // fills in the format of the person using the application.
+    assert!(sales.contains("ui.message(Level::Warning, Text::plain(\"Too much\"));"), "{sales}");
+    assert!(
+        sales.contains("ui.message(Level::Info, Text::new(\"Approved {order.number}\").with(\"order.number\", Slot::text(w.order.number.clone())));"),
+        "{sales}"
+    );
+    assert!(sales.contains("ui.set_error(\"number_input\", Text::plain(\"Check the number\"));"), "{sales}");
     assert!(sales.contains("ui.set_enabled(\"approve_button\", false);"), "{sales}");
     assert!(sales.contains("approve(db, &mut w.order)?;"), "{sales}");
     assert!(sales.contains("ui.open(\"OrderForm\", vec![(\"order\", to_value(&ui.selected(\"grid\", &w.orders)?)?)]);"), "{sales}");
@@ -233,7 +240,7 @@ fn handlers_set_errors_and_readonly_on_inputs() {
     let files = files();
     let sales = file(&files, "src/sales.rs");
     assert!(
-        sales.contains("ui.set_error(\"number_input\", String::from(\"Check the number\"));"),
+        sales.contains("ui.set_error(\"number_input\", Text::plain(\"Check the number\"));"),
         "{sales}"
     );
     assert!(
@@ -439,14 +446,18 @@ code Order
             refuse \"An order cannot have a negative total\"
 
     after delete
-        refuse \"Deleted \" + order.number
+        refuse \"Deleted {order.number}\"
 ";
     let project = load_sources([("sales.clarity", text.as_str())]);
     assert!(!project.has_errors(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
     let sales = file(&files, "src/sales.rs");
     assert!(sales.contains("pub fn before_save_order(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
-    assert!(sales.contains("return Err(Error::Refused(String::from(\"An order cannot have a negative total\")));"), "{sales}");
+    assert!(sales.contains("return Err(Error::Refused(Text::plain(\"An order cannot have a negative total\")));"), "{sales}");
+    assert!(
+        sales.contains("return Err(Error::Refused(Text::new(\"Deleted {order.number}\").with(\"order.number\", Slot::text(order.number.clone()))));"),
+        "{sales}"
+    );
     assert!(sales.contains("    const EVENTS: bool = true;\n"), "{sales}");
     assert!(sales.contains("    fn before_save(&mut self, db: &Db) -> Result<()> {\n        before_save_order(db, self)\n    }\n"), "{sales}");
     assert!(sales.contains("    fn after_delete(&mut self, db: &Db) -> Result<()> {\n        after_delete_order(db, self)\n    }\n"), "{sales}");
@@ -462,4 +473,37 @@ fn the_renderer_gets_the_language_and_currency() {
     let files = generate(&project, &shop()).unwrap();
     let model = file(&files, "src/model.json");
     assert!(model.contains("\"locale\":{\"language\":\"nl-NL\",\"currency\":\"EUR\"}"), "{model}");
+}
+
+#[test]
+fn slots_carry_typed_values_with_their_format() {
+    let text = SALES.to_string()
+        + "
+action check(order: Order, rate: decimal)
+    if order.total > 1000
+        refuse \"{order.number} of {order.total} is {order.status} at {rate}, for a customer since {order.customer.since}\"
+";
+    let project = load_sources([("sales.clarity", text.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let sales = file(&files, "src/sales.rs");
+    for slot in [
+        ".with(\"order.number\", Slot::text(order.number.clone()))",
+        ".with(\"order.total\", Slot::money(order.total, None))",
+        ".with(\"order.status\", Slot::name(&order.status, \"OrderStatus\"))",
+        ".with(\"rate\", Slot::decimal(rate, None, None))",
+        // The field's format travels with the value.
+        ".with(\"order.customer.since\", Slot::date(db.load::<Customer>(order.customer)?.since, Some(\"long\")))",
+    ] {
+        assert!(sales.contains(slot), "{slot} in\n{sales}");
+    }
+}
+
+#[test]
+fn a_refusal_reaches_the_screen_with_its_slots() {
+    let files = files();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("type Answer<T> = std::result::Result<T, Value>;"), "{main}");
+    assert!(main.contains("Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),"), "{main}");
+    assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {"), "{main}");
 }

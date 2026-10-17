@@ -5,7 +5,7 @@
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::code::{Expr, ExprKind, Stmt, StmtKind};
+use crate::code::{Expr, ExprKind, Stmt, StmtKind, TextPart};
 use crate::model::{DataDecl, FieldType, Ident, Project, SpecFile};
 use crate::span::Span;
 use crate::widgets::is_identifier;
@@ -211,6 +211,13 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
         ExprKind::Find { filter, .. } => {
             if let Some(filter) = filter {
                 expr(filter, name, found);
+            }
+        }
+        ExprKind::Text { parts } => {
+            for part in parts {
+                if let TextPart::Slot { value } = part {
+                    expr(value, name, found);
+                }
             }
         }
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Name { .. } => {}

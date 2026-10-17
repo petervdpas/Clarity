@@ -43,11 +43,15 @@ function numberOptions(field: FieldFormat, f: Formats): Intl.NumberFormatOptions
     case "integer":
       return { maximumFractionDigits: 0, useGrouping: !plain };
     case "decimal": {
-      const scale = field.scale ?? 0;
+      // Without a field to take a scale from (a local in code), a value
+      // keeps its own digits.
+      const scale = field.scale ?? null;
       if (field.format === "percent") {
+        if (scale === null) return { style: "percent", maximumFractionDigits: 18 };
         const digits = Math.max(scale - 2, 0);
         return { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits };
       }
+      if (scale === null) return { maximumFractionDigits: 20, useGrouping: !plain };
       return { minimumFractionDigits: scale, maximumFractionDigits: scale, useGrouping: !plain };
     }
     default: {
@@ -152,4 +156,56 @@ export function parseNumber(field: FieldFormat, text: string, f: Formats): strin
   if (!/^-?\d+(\.\d+)?$/.test(clean)) return null;
   if (field.kind === "integer") return clean.includes(".") ? null : Number(clean);
   return field.format === "percent" ? shift(clean, -2) : shift(clean, 0);
+}
+
+/** The value of a slot, as the backend sends it (runtime `ui::Slot`). */
+export type Slot = {
+  kind: "text" | "integer" | "decimal" | "money" | "date" | "dateTime" | "bool" | "enum";
+  value: string | number | boolean | null;
+  scale?: number;
+  format?: string | null;
+  /** The enum of an enum value. */
+  enum?: string;
+};
+
+/** Text the backend sends to show: plain, or with values in slots
+ *  (design section 1.5, I1b). */
+export type ShownText = string | { text: string; values: Record<string, Slot> };
+
+function slotText(slot: Slot | undefined, f: Formats, label: (enumName: string, value: string) => string): string {
+  if (!slot || slot.value === null) return "";
+  switch (slot.kind) {
+    case "text":
+      return String(slot.value);
+    case "bool":
+      return slot.value ? "Yes" : "No";
+    case "enum":
+      return label(slot.enum ?? "", String(slot.value));
+    default:
+      return formatValue({ kind: slot.kind, scale: slot.scale, format: slot.format }, slot.value as string | number, f);
+  }
+}
+
+/** Text as shown: each slot filled with its value in the locale, `{{` and
+ *  `}}` as braces. Plain text arrives ready and is shown as it is.
+ *  `label` gives the label of an enum value. */
+export function fillText(text: ShownText, f: Formats, label: (enumName: string, value: string) => string): string {
+  if (typeof text === "string") return text;
+  const t = text.text;
+  let out = "";
+  let i = 0;
+  while (i < t.length) {
+    if (t.startsWith("{{", i) || t.startsWith("}}", i)) {
+      out += t[i];
+      i += 2;
+    } else if (t[i] === "{" && t.indexOf("}", i) > i) {
+      const end = t.indexOf("}", i);
+      out += slotText(text.values[t.slice(i + 1, end)], f, label);
+      i = end + 1;
+    } else {
+      out += t[i];
+      i += 1;
+    }
+  }
+  return out;
 }

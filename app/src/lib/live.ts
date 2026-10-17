@@ -6,6 +6,7 @@
 
 import { getContext, setContext } from "svelte";
 import type { Event as PartEvent } from "./generated/Event";
+import type { ShownText } from "./format";
 
 const LIVE = Symbol("clarity-live");
 
@@ -13,9 +14,9 @@ const LIVE = Symbol("clarity-live");
 export type PartState = {
   visible?: boolean;
   enabled?: boolean;
-  caption?: string | null;
+  caption?: ShownText | null;
   /** A message at an input; empty when there is none. */
-  error?: string | null;
+  error?: ShownText | null;
   readonly?: boolean;
   /** What an unbound text input holds. */
   text?: string | null;

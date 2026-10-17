@@ -1,5 +1,5 @@
 {
-  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. reads: typed text as the value to store, or null when it is not one.",
+  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. reads: typed text as the value to store, or null when it is not one. fills: text with slots (DESIGN 1.5, I1b) as shown, each slot in its type and format; {{ and }} are braces, and labels gives the label of each enum value.",
   "shows": [
     {
       "what": "integer",
@@ -863,6 +863,111 @@
       },
       "typed": "1.5",
       "value": "15"
+    }
+  ],
+  "fills": [
+    {
+      "what": "text, money and a long date",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "text": {
+        "text": "Order {order.number} van {order.total} op {order.placed}",
+        "values": {
+          "order.number": {
+            "kind": "text",
+            "value": "ORD-1"
+          },
+          "order.total": {
+            "kind": "money",
+            "value": "1250.5"
+          },
+          "order.placed": {
+            "kind": "date",
+            "value": "2026-10-17",
+            "format": "long"
+          }
+        }
+      },
+      "shows": "Order ORD-1 van €\u00a01.250,50 op 17 oktober 2026"
+    },
+    {
+      "what": "braces and a decimal with its scale",
+      "locale": "en-US",
+      "currency": "USD",
+      "text": {
+        "text": "{{rate}} is {rate}",
+        "values": {
+          "rate": {
+            "kind": "decimal",
+            "value": "0.5",
+            "scale": 2
+          }
+        }
+      },
+      "shows": "{rate} is 0.50"
+    },
+    {
+      "what": "a decimal without a scale keeps its digits",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "text": {
+        "text": "Faktor {f}",
+        "values": {
+          "f": {
+            "kind": "decimal",
+            "value": "1234.125"
+          }
+        }
+      },
+      "shows": "Faktor 1.234,125"
+    },
+    {
+      "what": "an integer, an enum label and a bool",
+      "locale": "en-US",
+      "currency": "EUR",
+      "text": {
+        "text": "{count} orders are {status}: {paid}",
+        "values": {
+          "count": {
+            "kind": "integer",
+            "value": 1234
+          },
+          "status": {
+            "kind": "enum",
+            "value": "Approved",
+            "enum": "OrderStatus"
+          },
+          "paid": {
+            "kind": "bool",
+            "value": true
+          }
+        }
+      },
+      "labels": {
+        "OrderStatus": {
+          "Approved": "approved by finance"
+        }
+      },
+      "shows": "1,234 orders are approved by finance: Yes"
+    },
+    {
+      "what": "a date and time, and a missing value",
+      "locale": "fr-FR",
+      "currency": "EUR",
+      "text": {
+        "text": "Le {at} ({since})",
+        "values": {
+          "at": {
+            "kind": "dateTime",
+            "value": "2026-10-17T21:05:00"
+          },
+          "since": {
+            "kind": "date",
+            "value": null
+          }
+        }
+      },
+      "shows": "Le 17/10/2026 21:05 ()"
     }
   ]
 }

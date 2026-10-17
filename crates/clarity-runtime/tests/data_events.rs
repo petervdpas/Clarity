@@ -77,7 +77,7 @@ impl Record for Account {
 
     fn before_delete(&mut self, _db: &Db) -> Result<()> {
         if self.balance != 0 {
-            return Err(Error::Refused(format!("{} still holds {}", self.name, self.balance)));
+            return Err(Error::Refused(format!("{} still holds {}", self.name, self.balance).into()));
         }
         Ok(())
     }

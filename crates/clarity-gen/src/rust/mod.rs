@@ -400,9 +400,17 @@ fn options(db: &Db, entity: &str) -> Result<Vec<RefOption>> {{
     }})
 }}
 
-fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> std::result::Result<T, String> {{
-    let db = app.0.lock().map_err(|_| "the database is not available".to_string())?;
-    run(&db).map_err(|err| err.to_string())
+/// What a command answers: its result, or what went wrong as the screen
+/// shows it. A refusal keeps its slots, so the screen fills them in the
+/// format of the person using the application.
+type Answer<T> = std::result::Result<T, Value>;
+
+fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
+    let db = app.0.lock().map_err(|_| Value::from("the database is not available"))?;
+    run(&db).map_err(|err| match err {{
+        Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),
+        other => Value::from(other.to_string()),
+    }})
 }}
 
 #[tauri::command]
@@ -411,35 +419,35 @@ fn start() -> Value {{
 }}
 
 #[tauri::command]
-fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> std::result::Result<Reply, String> {{
+fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> Answer<Reply> {{
     locked(&app, |db| open(db, &window, with))
 }}
 
 /// Runs a window's `on close` before the screen closes it.
 #[tauri::command]
-fn close_window(app: tauri::State<App>, state: WindowState) -> std::result::Result<Reply, String> {{
+fn close_window(app: tauri::State<App>, state: WindowState) -> Answer<Reply> {{
     locked(&app, |db| on_event(db, state, "close"))
 }}
 
 /// Runs a window's `on return` when it is on top again.
 #[tauri::command]
-fn return_to(app: tauri::State<App>, state: WindowState) -> std::result::Result<Reply, String> {{
+fn return_to(app: tauri::State<App>, state: WindowState) -> Answer<Reply> {{
     locked(&app, |db| on_event(db, state, "return"))
 }}
 
 /// Runs the app's `on start`, before its main window opens.
 #[tauri::command]
-fn start_app(app: tauri::State<App>) -> std::result::Result<Reply, String> {{
+fn start_app(app: tauri::State<App>) -> Answer<Reply> {{
     locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start"))
 }}
 
 #[tauri::command]
-fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> std::result::Result<Reply, String> {{
+fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {{
     locked(&app, |db| dispatch(db, state, &handler))
 }}
 
 #[tauri::command]
-fn ref_options(app: tauri::State<App>, entity: String) -> std::result::Result<Vec<RefOption>, String> {{
+fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>> {{
     locked(&app, |db| options(db, &entity))
 }}
 

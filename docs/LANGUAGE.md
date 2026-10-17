@@ -28,6 +28,7 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 - **Blank lines** are free and are kept too.
 - **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. By convention, entities, enums, windows and the app are `PascalCase`, and everything else is `snake_case`.
 - **Strings** are written in double quotes: `"Customer card"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
+  In code, a string is also read for slots: `{customer.name}` is a value, and `{{` and `}}` are braces (see [Text with slots](#text-with-slots)). Strings in settings, such as titles and patterns, have no slots.
 - **Numbers** are written without quotes: `12`, `9.95`.
 - **Booleans** are `true` and `false`.
 
@@ -211,7 +212,7 @@ entity Invoice
 
 - A number input reads what is typed in the same locale: in Dutch `1.250,50` is 1250.5 and a point is a thousands separator. The currency sign, the percent sign and thousands separators may be typed or left out. Text that is no number marks the input and keeps the last value.
 - Every stack shows the same thing: the cases in `conformance/formats.json` are what each renderer must show and read.
-- Text joined with `+` in code (`"Saved " + customer.since`) does not follow the locale yet; text with slots comes with I1b in the roadmap.
+- Values in text that is shown follow the locale when they are in slots: `message "Saved on {order.placed}"`. See [Text with slots](#text-with-slots).
 
 ### Migrations
 
@@ -603,7 +604,7 @@ code CustomerForm
             name.error = "Name is required"
             return
         save customer
-        message "Saved " + customer.name
+        message "Saved {customer.name}"
         close
 ```
 
@@ -643,7 +644,7 @@ An entity's code block holds its data events: code that runs whenever one of its
 code Order
     before save
         if order.status == Approved and not within_credit(order)
-            refuse "Order " + order.number + " is over its customer's credit limit"
+            refuse "Order {order.number} is over its customer's credit limit"
 
     after save
         log_change("saved " + order.number)
@@ -728,6 +729,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | Expression | Meaning |
 |---|---|
 | `12`, `9.95`, `"text"`, `true`, `false` | literals |
+| `"Saved {customer.name}"` | text with slots, for text that is shown; see [Text with slots](#text-with-slots) |
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
 | `Business`, `CustomerKind.Business` | enum values |
 | `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items |
@@ -743,6 +745,25 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `a and b`, `a or b` | both, either |
 
 From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
+
+### Text with slots
+
+Text that people read names its values in slots, instead of adding them together, so a translator can move them and each value shows in the person's format:
+
+```
+code OrderForm
+    handler approve_clicked
+        approve(order)
+        message "Order {order.number} of {order.total} is approved"
+        approve_button.caption = "Approved on {order.ordered_on}"
+```
+
+- A slot is a name or a member path in braces: `{total}`, `{order.customer.name}`. It is checked like any expression; a whole record or list is no value to show, so `{order.customer}` is an error that suggests one of its fields.
+- `{{` and `}}` are braces in the text; a `}` on its own is an error.
+- A value shows as its field shows it: money with its currency, a date in the locale and the field's `format`, an enum value by its label. A slot of a local or a parameter shows as its type does.
+- Text with slots is text to show: it goes in `message`, `refuse`, and a part's `caption` or `error`. Anywhere else it is an error.
+- Text joined with `+` in a message, a refusal, a caption or an error is a warning that suggests slots, since such text cannot be translated and its values do not follow the locale.
+- The backend never formats a value for a person: it sends the text as written and the value of each slot, and the screen fills the slots. Text read back in code (a caption, an error) has its slots filled plainly.
 
 ### Queries
 
@@ -872,7 +893,7 @@ code CustomerForm
             vat_number.error = "Needed for business customers"
             return
         save customer
-        message "Saved " + customer.name
+        message "Saved {customer.name}"
         close
 
     handler close_clicked

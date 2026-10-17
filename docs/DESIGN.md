@@ -175,6 +175,67 @@ Superseded by this: section 7.4 (persistence), which assumed SQLite first and Po
 - **The output folder** is set in the project file (`output "out"`, the default): a folder in the project's folder or a full path elsewhere, never the project folder itself. Because generation removes what it no longer produces, Clarity writes only into an empty folder or one that carries its `.clarity-out` marker.
 - **Fluid display.** Windows always resize with the screen, on the web and the desktop alike. The columns share the width; rows that hold a part that grows (a table, a list, an image or a canvas, or a panel, tabs or a splitter that holds one) share the extra height, and the other rows keep their height, so inputs never stretch. A window smaller than its design scrolls. The designer keeps every row at its fixed height, so placing parts stays exact. A native toolkit gets the same rule from its own layout: in Avalonia, rows of growing parts become `*` rows. Sidebars in a running application have a splitter on their inner edge; the designed width is where they start.
 
+### 1.5 Languages, formats and themes (2026-10-17)
+
+An application made with Clarity is shipped to people who read another language, write dates another way and expect their own house style. All three are part of the project, written once and carried to every stack. Nothing here may depend on a browser: the C# stack draws with Avalonia, so a theme is not CSS and a translation is not a JavaScript library's file. Each stack's runtime maps the same project onto its own means.
+
+**Formats (I1a).** How values look depends on the locale, not on the developer.
+
+- The project names its base language and, for money, its currency: `language en` and `currency EUR` in the project file.
+- Dates, times, numbers and money are shown and entered in the locale of the person using the application: `17-10-2026` or `10/17/2026`, `1.250,50` or `1,250.50`, `€ 1.250,50`. The locale comes from the system, and the application can offer a choice.
+- A field's `format` (accepted today, not used yet) picks a format by name rather than by pattern: `format short`, `format long`, `format percent`. Named formats stay the same across stacks and locales; a pattern does not.
+- Money shows its currency's decimals, so `0.0000` from a server database reads `€ 0,00`.
+- Values are stored the same way in every locale; only showing and entering them changes.
+
+**Text with slots (I1b).** A translator must be able to move the parts of a sentence, so text in code names its values instead of adding them together:
+
+```
+message "Saved {customer.name}"
+refuse "Order {order.number} is over its customer's credit limit"
+```
+
+- A slot is a name or a member path in braces, checked like any other expression; `{{` writes a brace. Slots are paths only, so a translator sees `{customer.name}` and knows what goes there.
+- A slot shows its value in the locale's format (I1a).
+- `+` on text stays valid, but the checker suggests slots for text that is shown: a message, a refusal, a caption.
+
+**Translations (I1c).** Every text a person sees is in the project already: labels, help texts, titles, captions, enum labels, menu items, messages and refusals. Clarity collects them; nobody marks them.
+
+- The text as written is the base language. Translations are files per language in the module folder, `translations/nl.clarity`, one per module:
+
+  ```
+  translation nl
+      "Customers" "Klanten"
+      "Saved {customer.name}" "{customer.name} opgeslagen"
+      "Order" context "the verb" "Bestellen"
+  ```
+
+- A text is found by what it says, within its module. A text whose base changes loses its translation, which is what should happen: the old translation no longer says the same thing. `context` separates one base text that needs two translations.
+- A translation must keep the slots of its base text; the checker reports a missing or unknown slot. Missing translations are listed per language, as information rather than warnings, so a project can grow a language step by step.
+- The generated application carries the texts as explicit literal key maps (section 6.7), and changes language while it runs, without restarting.
+- The designer gets a Translations table on the Project tab (base text, where it is used, one column per language) and a language choice for the canvas and Preview, so a window can be checked in German before it ships.
+
+**Themes (T1).** A theme is a set of named values, not a style sheet:
+
+```
+theme Shop
+    mode system
+    color accent "#2f6fdf"
+    color danger "#c62828"
+    font "Inter"
+    size 14
+    radius 6
+    style primary background accent, text white
+    style quiet border none
+```
+
+- `mode` is `light`, `dark` or `system`; each color can have a value per mode (`color accent "#2f6fdf" dark "#5b8cff"`).
+- Parts pick a named style, `button "Delete" style danger`, never raw colors, so a design stays consistent and the theme can change without touching windows.
+- The project file names the theme its application uses; a project without one gets Clarity's own, the look the renderer has today, which already follows the system's light or dark mode.
+- The web renderer turns a theme into CSS variables, and Avalonia into resources and styles. The designer draws with the same renderer as the application, so the canvas shows the theme as it will ship.
+- The designer gets a theme editor with a live preview of a sample window.
+
+**Order.** Formats first, since they fix visible gaps (dates as raw text, money with four decimals). Then text with slots, since it changes the language and is cheapest to settle while little code is written the old way. Then translations, which build on both. Themes stand apart and can come at any point; they mostly touch the renderer.
+
 ## 2. Goals and non-goals
 
 ### Goals
@@ -691,7 +752,7 @@ The generator emits a typed props definition, and the implementation lives in `f
 
 ### 6.7 Generated i18n
 
-All user-facing text in the spec (labels, help texts, group titles, messages) is extracted into generated translation files. Keys are always emitted as explicit literal keys in a generated key map, never built by string interpolation, so tools and searches can find every key.
+All user-facing text in the spec (labels, help texts, group titles, messages) is extracted into generated translation files (section 1.5). Keys are always emitted as explicit literal keys in a generated key map, never built by string interpolation, so tools and searches can find every key.
 
 ## 7. Stacks
 
@@ -711,7 +772,7 @@ A stack is a backend language, a desktop shell (determined by the backend), a fr
 
 Frontend generators: Svelte, Vue, React. The designer and the spec use abstract widgets (field, grid, button, tab, group); each frontend generator maps them to its framework's components.
 
-Styling is a separate choice: Tailwind or plain CSS, through a theme definition in the spec project.
+Styling comes from the project's theme (section 1.5): named values and styles that each frontend maps onto its own means, CSS variables for the web renderer and resources for Avalonia.
 
 ### 7.3 Transport and the web target
 
@@ -1174,9 +1235,13 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | G1b | Handlers and the event protocol, the web renderer as a standalone package, the Tauri shell, Run and Build on the Preview tab | done |
 | E1 | Events beyond parts: window `on open`, `on close` and `on return` (back from a window it opened, to refresh), app `on start`; data events (before and after save) follow with D1 | done (section 5.9): window and app events, `reload`, Events in the designer, the browse template refreshes on return; data events stay with D1 |
 | U1a | Forms and text parts (section 5.6): `form` bound to one record with `on submit`, `label for`, `help`, `heading`, `text`, `memo`, `password`, `switch`, `radio`; `placeholder`, `tooltip`, `readonly`, `taborder`, `key`, `default` and `cancel`; `error` and `readonly` as part properties in handlers; the form template and field drops place label, input and help together | done; open: a `time` part waits for a time field type, menu item keys are shown but not yet pressed at runtime |
-| U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator | |
+| U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator; containers that share the column lines of the grid around them (as CSS subgrid does), so a label and an input in a panel line up with those outside it, and a label column for forms | |
 | U1c | Data parts: tree, tree table, pager, search bar, lookup (a reference picked from a searchable list), chart; combo box, slider, spin box, color, file and tags inputs | |
 | U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | |
+| I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | |
+| I1b | Text with slots (section 1.5): `"Saved {customer.name}"` in messages, refusals and captions, slots checked as expressions and shown in the locale's format | |
+| I1c | Translations (section 1.5): text collected from the whole project, translation files per language and module, slots kept, missing translations listed, a Translations table on the Project tab, a language choice for the canvas and Preview, switching language in the running application | |
+| T1 | Themes (section 1.5): a `theme` with named colors per light and dark mode, font, size, radius and named styles; `style` on parts; a theme editor with a live sample; CSS variables for the web renderer, resources for Avalonia | |
 | C1 | Command-line applications: `targets = ["cli"]`; `command` declarations with typed arguments and options, written in Clarity like handlers; `print`, `ask` and `exit`; generated as a program without a window, over the same records and actions; needs queries (`find ... where`) from D1 | |
 | D1a | Queries: `find c in Entity where ... order by ...` as an expression, `contains` on text, the `text` of unbound text inputs, handlers that run other handlers; the runtime builds the SQL from a condition tree; the browse template filters and refreshes through its filter | done (LANGUAGE.md section 10); open: conditions through references (`o.customer.name`), which need joins |
 | D1b | Migrations (section 1.3): steps written in Clarity in `migrations/`, the schema from replaying them, pending changes as warnings and in the Project tab, proposed renames, confirmation for changes that lose data, `clarity migrate`, SQL per step with table rebuilds for SQLite, applied at startup with references checked | done (LANGUAGE.md section 4); open: data migrations (Clarity code that transforms rows), down steps, counting the rows a narrowing change would not fit, renaming enum values, a command-line switch to apply steps separately |

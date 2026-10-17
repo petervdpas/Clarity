@@ -232,6 +232,13 @@ impl<'a> Emitter<'a> {
                     }
                     return;
                 }
+                // A record given to a reference field is stored as its id.
+                if self.is_reference_field(target) {
+                    let stored = self.stored_reference(target);
+                    let record = self.value(value);
+                    out.push_str(&format!("{pad}{stored} = {record}.Id;\n"));
+                    return;
+                }
                 let place = self.place(target);
                 let value = self.value(value);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
@@ -435,6 +442,8 @@ impl<'a> Emitter<'a> {
                     String::new()
                 }
             },
+            // A part property inside a path: `grid.selected` in `grid.selected.number`.
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
             ExprKind::Member { object, member: field } => {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
                     return format!("{e}.{}", field.name);
@@ -444,7 +453,9 @@ impl<'a> Emitter<'a> {
                     return String::new();
                 };
                 let object = self.place(object);
-                let prop = property(&entity, &field.name);
+                // Every record has an id, read as the record's own `Id`.
+                let id = field.name == clarity_spec::code::check::RECORD_ID && self.field_type(&entity, &field.name).is_none();
+                let prop = if id { "Id".to_string() } else { property(&entity, &field.name) };
                 match self.field_type(&entity, &field.name) {
                     Some(FieldType::Ref { entity: target }) => format!("{db}.Load<{}>({object}.{prop})", target.name),
                     Some(FieldType::List { .. }) => {

@@ -186,3 +186,15 @@ fn a_menu_item_can_switch_the_language() {
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(clarity_spec::Preview::new(project).commands.contains(&"language".to_string()));
 }
+
+#[test]
+fn the_records_example_is_translated_to_german() {
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/records"));
+    let project = clarity_spec::load_dir(dir).unwrap();
+    let problems: Vec<String> = project.diagnostics.iter().map(|d| d.message.clone()).collect();
+    assert!(problems.is_empty(), "{problems:#?}");
+    let table = clarity_spec::translations::table(&project);
+    let de = table.languages.iter().position(|l| l == "de").expect("a German translation");
+    let untranslated: Vec<&str> = table.rows.iter().filter(|r| r.translations[de].is_none()).map(|r| r.text.as_str()).collect();
+    assert!(untranslated.is_empty(), "not in de.clarity: {untranslated:#?}");
+}

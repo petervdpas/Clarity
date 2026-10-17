@@ -7,16 +7,18 @@ use std::process::Command;
 
 use clarity_project::SourceKind;
 
-#[test]
-#[ignore]
-fn the_shop_example_builds() {
+/// Generates the example `name` (examples/<name>.clarity) as Rust with
+/// Tauri and builds it with cargo.
+fn builds_with_cargo(name: &str) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/shop.clarity");
+    let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
-    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = clarity_project::Backend::Rust;
+    settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
-    let out = std::env::temp_dir().join(format!("clarity-gen-build-{}", std::process::id()));
+    let out = std::env::temp_dir().join(format!("clarity-gen-build-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
@@ -32,8 +34,21 @@ fn the_shop_example_builds() {
     assert!(status.success(), "the generated project does not build; it is in {}", out.display());
 
     // The application opens a window, so it is built here, not started.
-    assert!(target.join("debug/shop").exists());
+    assert!(target.join(format!("debug/{name}")).exists());
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+#[ignore]
+fn the_shop_example_builds() {
+    builds_with_cargo("shop");
+}
+
+/// The second example, whose project file names C#: on Rust it builds too.
+#[test]
+#[ignore]
+fn the_records_example_builds() {
+    builds_with_cargo("records");
 }
 
 /// The shop example on each server database: the generated project turns

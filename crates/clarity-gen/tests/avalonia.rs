@@ -350,3 +350,19 @@ fn the_language_and_theme_targets_pick_in_place() {
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "        Pickers.Language(picker1);\n        Pickers.Theme(picker2);\n        Pickers.Theme(picker3);\n");
 }
+
+/// The selected row goes on into paths and calls, as any record does.
+#[test]
+fn the_selected_row_is_a_record_in_any_expression() {
+    let source = SHOP.replace(
+        "    handler grid_opened\n",
+        "    handler grid_opened\n        if within_credit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
+    );
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "if (Logic.WithinCredit(Db, Selected<Order>(Grid)))");
+    has(vm, ".With(\"grid.selected.number\", Slot.OfText(Selected<Order>(Grid).Number))");
+    has(vm, "Db.Load<Customer>(Selected<Order>(Grid).Customer).Name");
+}

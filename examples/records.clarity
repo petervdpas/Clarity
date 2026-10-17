@@ -1,0 +1,10 @@
+// The record collection example: albums with their tracks, artists,
+// genres and loans to friends, in the style of the desktop examples of the
+// 2000s. Its modules are in the records folder next to this file.
+project Records
+    title "My Record Collection"
+    stack csharp avalonia desktop
+    language "en"
+    currency USD
+    theme Classic Midnight
+    datasource main sqlite "data/records.db"

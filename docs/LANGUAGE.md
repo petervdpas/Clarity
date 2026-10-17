@@ -174,7 +174,7 @@ entity Customer
     notes: text, help "Internal notes, not shown to the customer"
 ```
 
-A field is `name: type`, followed by modifiers separated by commas. Every record also has an `id`, which Clarity adds itself.
+A field is `name: type`, followed by modifiers separated by commas. Every record also has an `id`, which Clarity adds itself. Code can read it, to tell two records apart (`other.id != loan.id`); only `save` sets it, and a new record has id 0.
 
 **Field types**
 
@@ -523,7 +523,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus and toolbars, `close` closes the current window, `quit` ends the application, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window and `quit` ends the application. In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 

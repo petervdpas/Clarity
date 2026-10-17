@@ -653,7 +653,13 @@ impl<'a> Checker<'a> {
                 if p.new_window && frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
                     self.error(file, "only a window opens in a new window", widget.span);
                 }
-                self.check_click_target(file, target, widget.span);
+                if frame::BUTTON_COMMANDS.contains(&target.as_str()) {
+                    // A button closes its window or quits like a menu item.
+                } else if frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
+                    self.error(file, format!("'{target}' picks in a menu or a toolbar; a button can close its window or quit"), widget.span);
+                } else {
+                    self.check_click_target(file, target, widget.span);
+                }
             }
 
             match widgets::container(p.kind) {

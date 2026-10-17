@@ -350,3 +350,19 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     // Its database's driver comes along, though Clarity owns no table there.
     has(file(&files, "Shop.csproj"), "<DefineConstants>$(DefineConstants);CLARITY_MSSQL</DefineConstants>");
 }
+
+/// A record's id, which code can read, is the record's `Id`.
+#[test]
+fn a_record_s_id_reads_as_its_id() {
+    let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Sales.cs"), "return (order.Id == other.Id);");
+}
+
+/// A record given to a reference field is stored as its id.
+#[test]
+fn a_reference_field_takes_a_record() {
+    let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Sales.cs"), "order.Customer = customer.Id;");
+}

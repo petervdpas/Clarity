@@ -628,6 +628,9 @@ struct BodyChecker<'e, 'a> {
 }
 
 /// What a name or path refers to.
+/// The id every record has, which code can read.
+pub const RECORD_ID: &str = "id";
+
 enum Place<'a> {
     Value { ty: Ty<'a>, writable: Result<(), String> },
     Part(Part<'a>, &'a str),
@@ -1061,6 +1064,11 @@ impl<'a> BodyChecker<'_, 'a> {
                 Some(field) => Some(Place::Value {
                     ty: self.env.field_type(&field.ty),
                     writable: Ok(()),
+                }),
+                // Every record has an id; `save` gives it one.
+                None if member == RECORD_ID => Some(Place::Value {
+                    ty: Ty::Integer,
+                    writable: Err("a record's id is set by 'save'".into()),
                 }),
                 None => {
                     self.error(format!("{} has no field '{member}'", entity.name.name), span);

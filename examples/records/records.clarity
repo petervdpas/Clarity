@@ -1,0 +1,64 @@
+module records
+
+use music
+use loans
+
+// The application frame, shared by every window.
+app Records
+    title "My Record Collection"
+    main AlbumBrowse
+    menu
+        item "File"
+            item "Albums" key "Ctrl+1" on click -> AlbumBrowse
+            item "New album" key "Ctrl+N" on click -> AlbumForm
+            separator
+            item "Language" on click -> language
+            item "Theme" on click -> theme
+            item "Quit" key "Ctrl+Q" on click -> quit
+        item "Collection"
+            item "Artists" on click -> ArtistBrowse
+            item "Genres" on click -> GenreBrowse
+        item "Loans"
+            item "On loan" on click -> LoanBrowse
+            item "Friends" on click -> FriendBrowse
+    toolbar
+        button "Albums" on click -> AlbumBrowse
+        button "Artists" on click -> ArtistBrowse
+        separator
+        button "On loan" on click -> LoanBrowse
+    footer
+        status "Ready"
+
+// Grey and square, like a desktop program of 2003.
+theme Classic
+    title "Classic"
+    mode light
+    color background "#d4d0c8"
+    color panel "#ece9d8"
+    color raised "#f1efe2"
+    color frame "#d4d0c8"
+    color accent "#0a246a"
+    color accent_soft "#c1d2ee"
+    color selection "#316ac5"
+    color border "#aca899"
+    color strong_border "#716f64"
+    font "Tahoma, Verdana, sans-serif"
+    size 12
+    size heading 16
+    radius 0
+    padding 3
+    shadow none
+    part button background raised, border strong_border
+    part button hover background accent_soft
+    part header background frame, text text, weight bold
+    style primary background accent, text "#ffffff", border accent
+
+// The music player look: dark, with a green display.
+theme Midnight
+    title "Midnight"
+    mode dark
+    color accent "#2fd25a"
+    color accent_soft "#1d3a25"
+    font mono "Lucida Console, monospace"
+    radius 2
+    style primary background accent, text "#0b0b0b", border accent, weight bold

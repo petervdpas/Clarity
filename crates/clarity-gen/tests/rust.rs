@@ -573,3 +573,34 @@ fn only_a_target_in_new_window_makes_a_second_desktop_window() {
     assert!(main.contains("open_apart,\n            apart_start,\n            close_apart,"), "{main}");
     assert!(!file(&files(), "src/main.rs").contains("open_apart"));
 }
+
+/// A record's id, which code can read, is the record's `id`.
+#[test]
+fn a_record_s_id_reads_as_its_id() {
+    let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("Ok((order.id == other.id))"), "{sales}");
+}
+
+/// The selected row goes on into paths and calls, as any record does.
+#[test]
+fn the_selected_row_is_a_record_in_any_expression() {
+    let source = SALES.replace(
+        "        open OrderForm with order = grid.selected\n",
+        "        approve(grid.selected)\n        message \"{grid.selected.number} of {grid.selected.customer.name} is approved\"\n        open OrderForm with order = grid.selected\n",
+    );
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("approve(db, &mut ui.selected(\"grid\", &w.orders)?)?;"), "{sales}");
+    assert!(sales.contains("ui.selected(\"grid\", &w.orders)?.number"), "{sales}");
+}
+
+/// A record given to a reference field is stored as its id.
+#[test]
+fn a_reference_field_takes_a_record() {
+    let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("order.customer = Some(customer.id);"), "{sales}");
+}

@@ -9,11 +9,11 @@ use std::process::Command;
 
 use clarity_project::{Backend, SourceKind, Ui};
 
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_runs_in_csharp() {
+/// Generates the example `name` (examples/<name>.clarity) as C# with
+/// Avalonia, builds it with warnings as errors and runs `--check`.
+fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/shop.clarity");
+    let file = root.join(format!("examples/{name}.clarity"));
     // As Run loads it: with the project file's language, currency and themes.
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     assert!(!project.themes.is_empty() && !project.translations.is_empty(), "the example has themes and translations");
@@ -21,9 +21,9 @@ fn the_shop_example_builds_and_runs_in_csharp() {
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
     let files = clarity_gen::generate(&project, &settings).unwrap();
-    assert!(files.iter().any(|f| f.path == "Texts.nl.resx"));
+    assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
 
-    let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{}", std::process::id()));
+    let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
@@ -43,12 +43,25 @@ fn the_shop_example_builds_and_runs_in_csharp() {
     let ran = Command::new("dotnet").args(["run", "--no-build", "--", "--check"]).current_dir(&out).output().unwrap();
     let said = String::from_utf8_lossy(&ran.stdout);
     assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(said.contains("Shop: the databases are ready."), "{said}");
+    assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // The database the project file names, with every step applied.
-    assert!(out.join("data/shop.db").exists());
-    // The Dutch texts as a satellite assembly, as .NET looks for them.
-    assert!(out.join("bin/Debug/net10.0/nl/Shop.resources.dll").exists());
+    assert!(out.join(format!("data/{name}.db")).exists());
+    // The translated texts as a satellite assembly, as .NET looks for them.
+    assert!(out.join(format!("bin/Debug/net10.0/{translated}/{program}.resources.dll")).exists());
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+#[ignore]
+fn the_shop_example_builds_and_runs_in_csharp() {
+    builds_and_runs_in_csharp("shop", "Shop", "nl");
+}
+
+/// The second example: master and detail, dialogs, a tree of genres, loans.
+#[test]
+#[ignore]
+fn the_records_example_builds_and_runs_in_csharp() {
+    builds_and_runs_in_csharp("records", "Records", "de");
 }
 
 /// Empties a scratch database: drops every table of `tables` and the

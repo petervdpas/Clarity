@@ -186,6 +186,16 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
                     return;
                 }
+                // A record given to a reference field is stored as its id.
+                if let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                    && matches!(self.project.entity(&owner).and_then(|e| e.field(&member.name)).map(|f| &f.ty), Some(FieldType::Ref { .. }))
+                {
+                    let object = self.object(object);
+                    let record = self.object(value);
+                    out.push_str(&format!("{pad}{object}.{} = Some({record}.id);\n", ident(&member.name)));
+                    return;
+                }
                 let place = self.place(target);
                 let value = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
@@ -414,6 +424,11 @@ impl<'a> Emitter<'a> {
                     String::new()
                 }
             },
+            // A part property inside a path: `grid.selected` in `grid.selected.number`.
+            ExprKind::Member { .. } if self.part_property(expr).is_some() => {
+                let (part, property) = self.part_property(expr).unwrap_or_default();
+                self.read_part(&part, property)
+            }
             ExprKind::Member { object, member } => {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
                     return format!("{e}::{}", member.name);

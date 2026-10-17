@@ -1,0 +1,266 @@
+module music
+
+// What an album came out on.
+enum Format
+    Vinyl label "LP"
+    Single
+    Cd label "CD"
+    Cassette
+    Digital
+
+// Genres form a tree: Bebop belongs to Jazz.
+entity Genre
+    name: text(40), required, unique
+    parent: ref Genre, help "The genre this one belongs to, like Jazz for Bebop"
+
+entity Artist
+    name: text(80), required, unique
+    country: text(40)
+    formed: integer, format plain, label "Formed in"
+    website: url
+
+entity Album
+    title: text(120), required
+    artist: ref Artist, required
+    genre: ref Genre
+    year: integer, format plain, min 1900, max 2100
+    format: Format, default Cd
+    record_label: text(60), label "Label"
+    bought_on: date
+    price: money, min 0
+    rating: integer, min 0, max 5, help "From 0 to 5 stars"
+    cover: text(200), help "The file of the cover scan"
+    notes: text
+
+// A track of an album; the album form lists them in order.
+entity Track
+    album: ref Album, required
+    number: integer, min 1, label "No."
+    title: text(120), required
+    seconds: integer, min 0, label "Length (s)"
+
+// The length of a set of tracks, in seconds.
+function total_seconds(tracks: list<Track>) -> integer
+    ensure result >= 0
+    let total = 0
+    for track in tracks
+        total = total + track.seconds
+    return total
+
+page AlbumBrowse: window
+    title "Albums"
+    data albums: list<Album>
+    on return: window_returned
+
+    heading "The collection" at 1,1 span 6
+    label "Title" at 1,2 span 2 for title_filter
+    textbox name title_filter at 3,2 span 5 placeholder "Part of the title" on change: filter_changed
+    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: open_clicked
+    button "New album" at 9,11 span 2 on click -> AlbumForm
+    button "Open" at 11,11 span 2 on click: open_clicked
+
+page AlbumForm: window
+    title "Album"
+    data album: Album
+    data tracks: list<Track>
+    on open: album_opened
+    on return: album_opened
+
+    splitter at 1,1 span 12 rows 10 horizontal
+        pane
+            panel "Album" at 1,1 span 6 rows 9
+                label "Title" at 1,1 span 2 for title
+                textbox name title at 3,1 span 4 bind album.title
+                label "Artist" at 1,2 span 2 for artist
+                dropdown name artist at 3,2 span 4 bind album.artist
+                label "Genre" at 1,3 span 2 for genre
+                dropdown name genre at 3,3 span 4 bind album.genre
+                label "Year" at 1,4 span 2 for year
+                number name year at 3,4 span 2 bind album.year
+                label "Format" at 1,5 span 2 for format
+                radio name format at 3,5 span 4 bind album.format vertical rows 3
+                label "Label" at 1,8 span 2 for record_label
+                textbox name record_label at 3,8 span 4 bind album.record_label
+        pane
+            tabs at 1,1 span 6 rows 9
+                tab "Tracks"
+                    table name track_grid at 1,1 span 6 rows 6 bind tracks columns number, title, seconds on open: track_opened
+                    label name length at 1,7 span 4
+                    button "Add track" at 5,7 span 2 on click: add_track_clicked
+                tab "Purchase"
+                    label "Bought on" at 1,1 span 2 for bought_on
+                    date name bought_on at 3,1 span 3 bind album.bought_on
+                    label "Price" at 1,2 span 2 for price
+                    number name price at 3,2 span 2 bind album.price
+                    label "Rating" at 1,3 span 2 for rating
+                    number name rating at 3,3 span 1 bind album.rating
+                    help at 4,3 span 3 for rating
+                tab "Cover"
+                    image at 1,1 span 3 rows 4 source "cover.jpg"
+                    label "Cover file" at 1,5 span 2 for cover
+                    textbox name cover at 3,5 span 4 bind album.cover
+                tab "Notes"
+                    memo at 1,1 span 6 rows 6 bind album.notes
+    button "Save" name save at 9,11 span 2 style primary key "Ctrl+S" default on click: save_clicked
+    button "Close" at 11,11 span 2 cancel on click -> close
+
+// One track, in a dialog over the album.
+page TrackDialog: dialog
+    title "Track"
+    data album: Album
+    data track: Track
+
+    label "No." at 1,1 span 3 for number
+    number name number at 4,1 span 2 bind track.number
+    label "Title" at 1,2 span 3 for title
+    textbox name title at 4,2 span 9 bind track.title
+    label "Length (s)" at 1,3 span 3 for seconds
+    number name seconds at 4,3 span 3 bind track.seconds
+    button "Delete" name delete_button at 1,5 span 2 on click: delete_clicked
+    button "Save" at 9,5 span 2 style primary default on click: save_clicked
+    button "Cancel" at 11,5 span 2 cancel on click -> close
+
+page ArtistBrowse: window
+    title "Artists"
+    data artists: list<Artist>
+    on return: window_returned
+
+    label "Name" at 1,1 span 2 for name_filter
+    textbox name name_filter at 3,1 span 5 on change: filter_changed
+    list name artist_list at 1,2 span 12 rows 8 bind artists show name, country, formed on open: open_clicked
+    button "New artist" at 9,10 span 2 on click -> ArtistForm
+    button "Open" at 11,10 span 2 on click: open_clicked
+
+page ArtistForm: window
+    title "Artist"
+    data artist: Artist
+
+    form at 1,1 span 12 rows 4 bind artist
+        label "Name" at 1,1 span 3 for name
+        textbox name name at 4,1 span 6 bind artist.name
+        label "Country" at 1,2 span 3 for country
+        textbox name country at 4,2 span 4 bind artist.country
+        label "Formed in" at 1,3 span 3 for formed
+        number name formed at 4,3 span 2 bind artist.formed
+        label "Website" at 1,4 span 3 for website
+        textbox name website at 4,4 span 6 bind artist.website placeholder "https://"
+    button "Save" at 9,6 span 2 style primary default on click: save_clicked
+    button "Close" at 11,6 span 2 cancel on click -> close
+
+page GenreBrowse: window
+    title "Genres"
+    data genres: list<Genre>
+    on return: window_returned
+
+    table name genre_grid at 1,1 span 8 rows 8 bind genres columns name, parent on open: open_clicked
+    button "New genre" at 9,1 span 3 on click -> GenreDialog
+    button "Open" at 9,2 span 3 on click: open_clicked
+
+page GenreDialog: dialog
+    title "Genre"
+    data genre: Genre
+
+    label "Name" at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind genre.name
+    label "Belongs to" at 1,2 span 3 for parent
+    dropdown name parent at 4,2 span 6 bind genre.parent
+    help at 4,3 span 9 for parent
+    button "Save" at 9,5 span 2 style primary default on click: save_clicked
+    button "Cancel" at 11,5 span 2 cancel on click -> close
+
+code AlbumBrowse
+    handler window_returned
+        filter_changed()
+
+    handler filter_changed
+        albums = find a in Album where a.title contains title_filter.text order by a.title
+
+    handler open_clicked
+        open AlbumForm with album = grid.selected
+
+code AlbumForm
+    handler album_opened
+        tracks = find t in Track where t.album == album order by t.number
+        let seconds = total_seconds(tracks)
+        let count = count(tracks)
+        length.caption = "{count} tracks, {seconds} seconds"
+
+    handler track_opened
+        open TrackDialog with album = album, track = track_grid.selected
+
+    handler add_track_clicked
+        if album.title == ""
+            message warning "Save the album before adding tracks"
+            return
+        save album
+        open TrackDialog with album = album
+
+    handler save_clicked
+        title.error = ""
+        if album.title == ""
+            title.error = "An album needs a title"
+            return
+        save album
+        message "Saved {album.title}"
+        close
+
+code TrackDialog
+    handler save_clicked
+        title.error = ""
+        if track.title == ""
+            title.error = "A track needs a title"
+            return
+        track.album = album
+        save track
+        close
+
+    handler delete_clicked
+        delete track
+        close
+
+code ArtistBrowse
+    handler window_returned
+        filter_changed()
+
+    handler filter_changed
+        artists = find a in Artist where a.name contains name_filter.text order by a.name
+
+    handler open_clicked
+        open ArtistForm with artist = artist_list.selected
+
+code ArtistForm
+    handler save_clicked
+        name.error = ""
+        if artist.name == ""
+            name.error = "An artist needs a name"
+            return
+        save artist
+        message "Saved {artist.name}"
+        close
+
+code GenreBrowse
+    handler window_returned
+        reload genres
+
+    handler open_clicked
+        open GenreDialog with genre = genre_grid.selected
+
+code GenreDialog
+    handler save_clicked
+        name.error = ""
+        if genre.name == ""
+            name.error = "A genre needs a name"
+            return
+        save genre
+        close
+
+code Track
+    before save
+        if track.seconds > 7200
+            refuse "Track {track.number} is longer than two hours"
+
+code Genre
+    before delete
+        let below = find g in Genre where g.parent == genre
+        if count(below) > 0
+            refuse "{genre.name} still has genres below it"

@@ -325,3 +325,28 @@ code Shop
     let code = format!("{app}{}", CODE);
     assert_eq!(problems(&code), vec![]);
 }
+
+/// Every record has an id, which code can read (to tell two records apart)
+/// but only `save` sets.
+#[test]
+fn a_record_s_id_can_be_read_not_set() {
+    assert!(errors(&form("if customer.id != 0\n    message \"Stored as {customer.id}\"")).is_empty());
+    assert_eq!(errors(&form("customer.id = 3")), ["a record's id is set by 'save'"]);
+}
+
+/// A button can close its window or quit, as a menu item can, without a handler.
+#[test]
+fn a_button_can_close_its_window() {
+    let base = BASE.replace(
+        "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n",
+        "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n    button \"Close\" at 3,3 span 2 on click -> close\n    button \"Quit\" at 5,3 span 2 on click -> quit\n",
+    );
+    let source = format!("{base}{CODE}");
+    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    assert!(problems.is_empty(), "{problems:#?}");
+    // Language and theme pick in a menu or a toolbar.
+    let base = BASE.replace("    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n", "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n    button \"Theme\" at 3,3 span 2 on click -> theme\n");
+    let source = format!("{base}{CODE}");
+    let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
+    assert_eq!(problems, ["'theme' picks in a menu or a toolbar; a button can close its window or quit"]);
+}

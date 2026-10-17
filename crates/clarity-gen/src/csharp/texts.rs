@@ -32,17 +32,18 @@ impl Texts {
     pub fn of(project: &Project) -> Self {
         let used = texts(project);
         let mut names = BTreeMap::new();
-        let mut taken: Vec<String> = MEMBERS.iter().map(|m| m.to_string()).collect();
+        // .NET finds a resource by its name ignoring case.
+        let mut taken: Vec<String> = MEMBERS.iter().map(|m| m.to_lowercase()).collect();
         for u in &used {
             let mut name: String = pascal(&u.text).chars().take(LONGEST).collect();
-            if taken.contains(&name) {
+            if taken.contains(&name.to_lowercase()) {
                 let mut n = 2;
-                while taken.contains(&format!("{name}{n}")) {
+                while taken.contains(&format!("{name}{n}").to_lowercase()) {
                     n += 1;
                 }
                 name = format!("{name}{n}");
             }
-            taken.push(name.clone());
+            taken.push(name.to_lowercase());
             names.insert(u.text.clone(), name);
         }
         Texts { used, names }
@@ -174,4 +175,21 @@ fn resx<'a>(entries: impl Iterator<Item = (&'a str, &'a str, Option<String>)>) -
 {data}</root>
 "
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// .NET finds resources by name ignoring case, so "Email" and "E-mail" need two names.
+    #[test]
+    fn names_differ_ignoring_case() {
+        let project = clarity_spec::load_sources([(
+            "a.clarity",
+            "module a\n\nentity Friend\n    email: email, label \"Email\"\n    mail: email, label \"E-mail\"\n",
+        )]);
+        let texts = Texts::of(&project);
+        let (a, b) = (texts.property("Email").unwrap(), texts.property("E-mail").unwrap());
+        assert_ne!(a.to_lowercase(), b.to_lowercase(), "{a} {b}");
+    }
 }

@@ -1,0 +1,38 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "The collection"
+    add entity Friend
+        name: text(80), unique
+        phone: text(20)
+        email: email
+    add entity Loan
+        album: ref Album
+        friend: ref Friend
+        lent_on: date
+        returned: bool, default false
+        returned_on: date
+    add entity Genre
+        name: text(40), unique
+        parent: ref Genre
+    add entity Artist
+        name: text(80), unique
+        country: text(40)
+        formed: integer
+        website: url
+    add entity Album
+        title: text(120)
+        artist: ref Artist
+        genre: ref Genre
+        year: integer
+        format: Format, default Cd
+        record_label: text(60)
+        bought_on: date
+        price: money
+        rating: integer
+        cover: text(200)
+        notes: text
+    add entity Track
+        album: ref Album
+        number: integer
+        title: text(120)
+        seconds: integer

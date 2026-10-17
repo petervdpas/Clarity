@@ -99,6 +99,28 @@ impl Dialect {
         }
     }
 
+    pub(crate) fn begin(self) -> &'static str {
+        match self {
+            Dialect::Mysql => "START TRANSACTION",
+            Dialect::Mssql => "BEGIN TRANSACTION",
+            Dialect::Sqlite | Dialect::Postgres => "BEGIN",
+        }
+    }
+
+    pub(crate) fn commit(self) -> &'static str {
+        match self {
+            Dialect::Mssql => "COMMIT TRANSACTION",
+            _ => "COMMIT",
+        }
+    }
+
+    pub(crate) fn rollback(self) -> &'static str {
+        match self {
+            Dialect::Mssql => "ROLLBACK TRANSACTION",
+            _ => "ROLLBACK",
+        }
+    }
+
     /// Creates the table that remembers how many migration steps a
     /// database has had.
     pub(crate) fn version_table(self) -> &'static str {

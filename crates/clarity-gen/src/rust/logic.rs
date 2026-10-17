@@ -19,7 +19,14 @@ use crate::print;
 pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
     let mut out = String::new();
     let mut errors = Vec::new();
-    for decl in &file.functions {
+    // Data events are actions on their record, run by the record's hooks.
+    let events: Vec<FunctionDecl> = file
+        .code
+        .iter()
+        .filter(|b| file.entities.iter().any(|e| e.name.name == b.name.name))
+        .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
+        .collect();
+    for decl in file.functions.iter().chain(&events) {
         let mut emitter = Emitter {
             project,
             types,
@@ -96,7 +103,7 @@ impl Emitter<'_> {
 
     fn function(&mut self) -> String {
         let decl = self.decl.expect("a function or action");
-        let action = decl.kind == FunctionKind::Action;
+        let action = decl.kind != FunctionKind::Function;
         let mut params = vec!["db: &Db".to_string()];
         for param in &decl.params {
             let info = type_ref_info(self.project, &param.ty);
@@ -229,6 +236,14 @@ impl Emitter<'_> {
             StmtKind::Delete { value } => {
                 let record = self.record_mut(value, "delete");
                 out.push_str(&format!("{pad}db.delete({record})?;\n"));
+            }
+            StmtKind::Refuse { text } => {
+                let text = if self.types.type_of(text) == TypeInfo::Text {
+                    self.value(text)
+                } else {
+                    format!("{}.show()", self.value(text))
+                };
+                out.push_str(&format!("{pad}return Err(Error::Refused({text}));\n"));
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
                 self.errors.push("messages and windows belong in handlers".into());

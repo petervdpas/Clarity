@@ -19,7 +19,7 @@ mod postgres;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 
-use std::cell::{RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::fmt;
 #[cfg(feature = "sqlite")]
 use std::path::Path;
@@ -45,6 +45,9 @@ pub enum Error {
     /// A stored value does not fit its field.
     Invalid(String),
     Storage(String),
+    /// A data event refused a save or delete, or code refused to go on, in
+    /// its own words.
+    Refused(String),
 }
 
 impl fmt::Display for Error {
@@ -56,6 +59,7 @@ impl fmt::Display for Error {
             Error::InUse { table, id } => write!(f, "the {table} with id {id} is still referred to"),
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
+            Error::Refused(what) => f.write_str(what),
         }
     }
 }
@@ -89,6 +93,27 @@ pub trait Record: Sized + Clone {
     fn to_values(&self) -> Vec<SqlValue>;
     /// Builds a record from values in `COLUMNS` order.
     fn from_values(id: Id, values: &[SqlValue]) -> Result<Self>;
+
+    /// Whether the entity has data events. A save or delete then runs
+    /// with its events in one transaction: when an event fails, nothing
+    /// of it is kept.
+    const EVENTS: bool = false;
+
+    fn before_save(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
+
+    fn after_save(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
+
+    fn before_delete(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
+
+    fn after_delete(&mut self, _db: &Db) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// How a value appears in text, for messages and `"text" + value`.
@@ -141,10 +166,29 @@ impl Show for Option<NaiveDateTime> {
 /// One migration step: its statements, run in order.
 pub type Step<'a> = &'a [&'a str];
 
+/// The database of one data source.
+struct Source {
+    name: String,
+    conn: RefCell<Box<dyn Driver>>,
+    /// How many saves and deletes with data events are running in it; the
+    /// outermost one holds the transaction.
+    depth: Cell<usize>,
+}
+
+impl Source {
+    fn new(name: &str, driver: Box<dyn Driver>) -> Source {
+        Source {
+            name: name.to_string(),
+            conn: RefCell::new(driver),
+            depth: Cell::new(0),
+        }
+    }
+}
+
 /// The databases of an application: one per data source.
 pub struct Db {
     /// By data source name; the first is the default.
-    sources: Vec<(String, RefCell<Box<dyn Driver>>)>,
+    sources: Vec<Source>,
 }
 
 impl Db {
@@ -163,7 +207,7 @@ impl Db {
     #[cfg(feature = "sqlite")]
     fn single(driver: Box<dyn Driver>) -> Db {
         Db {
-            sources: vec![(String::new(), RefCell::new(driver))],
+            sources: vec![Source::new("", driver)],
         }
     }
 
@@ -173,19 +217,49 @@ impl Db {
     pub fn connect(sources: &[(&str, Dialect, &str)]) -> Result<Db> {
         let sources = sources
             .iter()
-            .map(|(name, dialect, at)| Ok((name.to_string(), RefCell::new(store::open(*dialect, at)?))))
+            .map(|(name, dialect, at)| Ok(Source::new(name, store::open(*dialect, at)?)))
             .collect::<Result<Vec<_>>>()?;
         Ok(Db { sources })
     }
 
-    /// The database of `source`. With one database, every record is in it.
-    fn conn(&self, source: &str) -> Result<RefMut<'_, Box<dyn Driver>>> {
+    /// The data source `source`. With one database, every record is in it.
+    fn source(&self, source: &str) -> Result<&Source> {
         let single = self.sources.len() == 1;
         self.sources
             .iter()
-            .find(|(name, _)| single || source.is_empty() || name == source)
-            .map(|(_, conn)| conn.borrow_mut())
+            .find(|s| single || source.is_empty() || s.name == source)
             .ok_or_else(|| Error::Storage(format!("there is no data source '{source}'")))
+    }
+
+    fn conn(&self, source: &str) -> Result<RefMut<'_, Box<dyn Driver>>> {
+        Ok(self.source(source)?.conn.borrow_mut())
+    }
+
+    /// Runs `run` in a transaction of `source`, or in the one that is open
+    /// already: a save that an event of another save makes is part of it.
+    fn atomic<T>(&self, source: &str, run: impl FnOnce() -> Result<T>) -> Result<T> {
+        let at = self.source(source)?;
+        let outer = at.depth.get() == 0;
+        if outer {
+            let mut conn = at.conn.borrow_mut();
+            let begin = conn.dialect().begin();
+            conn.batch(begin)?;
+        }
+        at.depth.set(at.depth.get() + 1);
+        let result = run();
+        at.depth.set(at.depth.get() - 1);
+        if outer {
+            let mut conn = at.conn.borrow_mut();
+            let d = conn.dialect();
+            match &result {
+                Ok(_) => conn.batch(d.commit())?,
+                // The error that made it roll back is the one to report.
+                Err(_) => {
+                    let _ = conn.batch(d.rollback());
+                }
+            }
+        }
+        result
     }
 
     /// Runs SQL without parameters in the database of `source`, for tools
@@ -220,8 +294,26 @@ impl Db {
         Ok(steps.len().saturating_sub(done))
     }
 
-    /// Inserts a new record (and gives it its id) or updates a stored one.
+    /// Inserts a new record (and gives it its id) or updates a stored one,
+    /// with the entity's data events around it.
     pub fn save<R: Record>(&self, record: &mut R) -> Result<()> {
+        if !R::EVENTS {
+            return self.store(record);
+        }
+        let id = record.id();
+        let saved = self.atomic(R::SOURCE, || {
+            record.before_save(self)?;
+            self.store(record)?;
+            record.after_save(self)
+        });
+        // Nothing was kept, so a new record is still new.
+        if saved.is_err() {
+            record.set_id(id);
+        }
+        saved
+    }
+
+    fn store<R: Record>(&self, record: &mut R) -> Result<()> {
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
         let values = record.to_values();
@@ -255,7 +347,20 @@ impl Db {
         Ok(())
     }
 
+    /// Removes a stored record, with the entity's data events around it.
     pub fn delete<R: Record>(&self, record: &R) -> Result<()> {
+        if !R::EVENTS {
+            return self.remove(record);
+        }
+        let mut record = record.clone();
+        self.atomic(R::SOURCE, || {
+            record.before_delete(self)?;
+            self.remove(&record)?;
+            record.after_delete(self)
+        })
+    }
+
+    fn remove<R: Record>(&self, record: &R) -> Result<()> {
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
         let sql = format!("DELETE FROM {} WHERE {} = {}", d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));

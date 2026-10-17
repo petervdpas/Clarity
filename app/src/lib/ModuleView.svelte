@@ -7,7 +7,7 @@
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
-  import type { FunctionKind } from "./generated/FunctionKind";
+  import type { DataEvent } from "./generated/DataEvent";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
 
@@ -37,12 +37,35 @@
   } as const;
 
   /** Adds a function or action with a free name and opens it. */
-  async function addFunction(kind: FunctionKind) {
+  async function addFunction(kind: keyof typeof STARTERS) {
     const taken = new Set(file.functions.map((f) => f.name.name));
     let name = "new_" + kind;
     for (let n = 2; taken.has(name); n++) name = "new_" + kind + n;
     await onapply({ op: "appendDecl", text: STARTERS[kind](name) });
     openFunction = name;
+  }
+
+  /** The entity whose data events are open in the editor. */
+  let openEvents = $state<string | null>(null);
+  const eventsBlock = $derived(file.code.find((b) => b.name.name === openEvents) ?? null);
+
+  const EVENT_TEXT: Record<DataEvent, string> = {
+    beforeSave: "before save",
+    afterSave: "after save",
+    beforeDelete: "before delete",
+    afterDelete: "after delete",
+  };
+
+  function eventsOf(entity: string): string {
+    const block = file.code.find((b) => b.name.name === entity);
+    return block ? block.events.map((e) => EVENT_TEXT[e.event]).join(", ") : "";
+  }
+
+  /** Writes the entity's code block with a first event and opens it. */
+  async function addEvents(entity: string) {
+    const text = `code ${entity}\n    before save\n        // Runs before a record is stored; refuse "text" stops the save.\n        return\n`;
+    await onapply({ op: "appendDecl", text });
+    openEvents = entity;
   }
 
   /** Saves the text and follows a rename. */
@@ -133,6 +156,45 @@
       </div>
     {/if}
   </section>
+
+  {#if file.entities.length > 0}
+    <section>
+      <h3>Data events</h3>
+      <p class="muted">
+        Code that runs whenever a record is saved or deleted, from any window or action: <code>before save</code>,
+        <code>after save</code>, <code>before delete</code> and <code>after delete</code>. <code>refuse "text"</code> stops the save or
+        delete, and nothing of it is kept.
+      </p>
+      <ul>
+        {#each file.entities as e (e.name.name)}
+          {@const events = eventsOf(e.name.name)}
+          <li>
+            {#if events}
+              <button class:active={openEvents === e.name.name} onclick={() => (openEvents = e.name.name)}>
+                <span class="kind">events</span>{e.name.name}<span class="muted">{events}</span>
+              </button>
+            {:else}
+              <button onclick={() => addEvents(e.name.name)}>
+                <span class="kind">entity</span>{e.name.name}<span class="muted">Add events</span>
+              </button>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      {#if eventsBlock}
+        {@const item = eventsBlock.span.start}
+        <div class="function-editor">
+          <SourceEditor
+            load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+            check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+            save={(text) => onapply({ op: "replaceDecl", item, text })}
+            reloadKey={file.path + "\n" + item + "\n" + file.version}
+            onclose={() => (openEvents = null)}
+          />
+        </div>
+      {/if}
+    </section>
+  {/if}
 </div>
 
 <style>

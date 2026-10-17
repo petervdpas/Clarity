@@ -2,7 +2,7 @@
 //! by indentation) and expressions (precedence climbing on one line).
 
 use super::{
-    Arg, BinaryOp, Branch, CodeBlock, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
+    Arg, BinaryOp, Branch, CodeBlock, DataEvent, EventDecl, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -13,17 +13,44 @@ use crate::span::Span;
 
 pub(crate) fn parse_code(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> CodeBlock {
     let mut handlers = Vec::new();
+    let mut events = Vec::new();
     for child in &node.children {
-        match parse_handler(child, diagnostics) {
-            Ok(handler) => handlers.push(handler),
-            Err(diag) => diagnostics.push(diag),
+        let parsed = match first_word(child) {
+            Some("before" | "after") => parse_event(child, diagnostics).map(|e| events.push(e)),
+            _ => parse_handler(child, diagnostics).map(|h| handlers.push(h)),
+        };
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
         }
     }
     CodeBlock {
         name,
         handlers,
+        events,
         span: node.span(),
     }
+}
+
+/// `before save`, `after save`, `before delete` or `after delete`, with
+/// its statements.
+fn parse_event(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<EventDecl> {
+    let mut cursor = Cursor::new(node.line);
+    let when = cursor.expect_ident("'before' or 'after'")?;
+    let what = cursor.expect_ident("'save' or 'delete'")?;
+    cursor.expect_end()?;
+    let text = format!("{} {}", when.name, what.name);
+    let Some(event) = DataEvent::ALL.into_iter().find(|e| e.text() == text) else {
+        return Err(Diagnostic::error(
+            format!("unknown event '{text}'; the events are before save, after save, before delete and after delete"),
+            node.line.span,
+        ));
+    };
+    Ok(EventDecl {
+        event,
+        body: indented_body(node, event.text(), diagnostics)?,
+        head: node.line.span,
+        span: node.span(),
+    })
 }
 
 /// `function name(a: T, b: T) -> T` or `action name(...)`, then its
@@ -34,6 +61,7 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
     let name = cursor.expect_ident(match kind {
         FunctionKind::Function => "a function name",
         FunctionKind::Action => "an action name",
+        FunctionKind::Event => "an event",
     })?;
     cursor.expect(TokenKind::LParen, "'(' and the parameters")?;
     let mut params = Vec::new();
@@ -206,7 +234,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 10] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload"];
+const STATEMENT_WORDS: [&str; 11] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload", "refuse"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -313,6 +341,12 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             cursor.next();
             StmtKind::Reload {
                 data: cursor.expect_ident("the name of the window's data")?,
+            }
+        }
+        Some("refuse") => {
+            cursor.next();
+            StmtKind::Refuse {
+                text: parse_expr(&mut cursor)?,
             }
         }
         Some("delete") => {

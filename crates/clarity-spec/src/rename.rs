@@ -5,7 +5,9 @@
 use serde::Deserialize;
 use ts_rs::TS;
 
+use crate::code::{Expr, ExprKind, Stmt, StmtKind};
 use crate::model::{DataDecl, FieldType, Ident, Project, SpecFile};
+use crate::span::Span;
 use crate::widgets::is_identifier;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
@@ -69,10 +71,20 @@ pub fn rename(
         if taken {
             return Err(format!("'{new}' is already declared in module '{}'", this.unwrap_or("")));
         }
-        let mut spans: Vec<(usize, usize)> = references(file, kind, old)
+        // Each place to change: where it is, what it says now, and what it
+        // says after.
+        let mut spans: Vec<(usize, usize, String, String)> = references(file, kind, old)
             .into_iter()
-            .map(|i| (i.span.start as usize, i.span.end as usize))
+            .map(|i| (i.span.start as usize, i.span.end as usize, old.to_string(), new.to_string()))
             .collect();
+        if kind == RenameKind::Entity {
+            let (was, now) = (crate::code::record_name(old), crate::code::record_name(new));
+            spans.extend(
+                record_uses(file, old)
+                    .into_iter()
+                    .map(|s| (s.start as usize, s.end as usize, was.clone(), now.clone())),
+            );
+        }
         if spans.is_empty() {
             continue;
         }
@@ -81,11 +93,11 @@ pub fn rename(
         };
         spans.sort_unstable();
         spans.dedup();
-        for (start, end) in spans.into_iter().rev() {
-            if text.get(start..end) != Some(old) {
+        for (start, end, was, now) in spans.into_iter().rev() {
+            if text.get(start..end) != Some(was.as_str()) {
                 return Err(format!("{} changed while renaming; try again", file.path));
             }
-            text.replace_range(start..end, new);
+            text.replace_range(start..end, &now);
         }
         changed.push(Renamed {
             path: file.path.clone(),
@@ -117,7 +129,90 @@ fn references<'f>(file: &'f SpecFile, kind: RenameKind, name: &str) -> Vec<&'f I
             .flat_map(|p| &p.data)
             .chain(file.apps.iter().flat_map(|a| &a.data));
         out.extend(data.map(|d: &DataDecl| &d.entity));
+        // The code block of the entity, with its data events.
+        out.extend(file.code.iter().map(|b| &b.name));
     }
     out.retain(|i| i.name == name);
     out
+}
+
+/// Where the events of entity `entity` name their record, as in
+/// `order.total` in the events of `Order`.
+fn record_uses(file: &SpecFile, entity: &str) -> Vec<Span> {
+    let record = crate::code::record_name(entity);
+    let mut found = Vec::new();
+    for block in file.code.iter().filter(|b| b.name.name == entity) {
+        for event in &block.events {
+            stmts(&event.body, &record, &mut found);
+        }
+    }
+    found
+}
+
+fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
+    for stmt in body {
+        match &stmt.kind {
+            StmtKind::Let { value, .. } => expr(value, name, found),
+            StmtKind::Assign { target, value } => {
+                expr(target, name, found);
+                expr(value, name, found);
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    expr(&branch.condition, name, found);
+                    stmts(&branch.body, name, found);
+                }
+                if let Some(body) = otherwise {
+                    stmts(body, name, found);
+                }
+            }
+            StmtKind::Return { value } => {
+                if let Some(value) = value {
+                    expr(value, name, found);
+                }
+            }
+            StmtKind::For { list, body, .. } => {
+                expr(list, name, found);
+                stmts(body, name, found);
+            }
+            StmtKind::Call { call } => expr(call, name, found),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => expr(text, name, found),
+            StmtKind::Open { with, .. } => {
+                for arg in with {
+                    expr(&arg.value, name, found);
+                }
+            }
+            StmtKind::Save { value } | StmtKind::Delete { value } => expr(value, name, found),
+            StmtKind::Close | StmtKind::Reload { .. } => {}
+        }
+    }
+}
+
+fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
+    match &e.kind {
+        ExprKind::Name { name: n } if n == name => found.push(e.span),
+        ExprKind::Member { object, .. } => expr(object, name, found),
+        ExprKind::Unary { operand, .. } => expr(operand, name, found),
+        ExprKind::Binary { left, right, .. } => {
+            expr(left, name, found);
+            expr(right, name, found);
+        }
+        ExprKind::In { value, options } => {
+            expr(value, name, found);
+            for option in options {
+                expr(option, name, found);
+            }
+        }
+        ExprKind::Call { args, .. } => {
+            for arg in args {
+                expr(arg, name, found);
+            }
+        }
+        ExprKind::Find { filter, .. } => {
+            if let Some(filter) = filter {
+                expr(filter, name, found);
+            }
+        }
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Name { .. } => {}
+    }
 }

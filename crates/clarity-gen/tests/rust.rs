@@ -428,3 +428,28 @@ fn a_taken_over_database_keeps_its_names() {
     assert!(schema.contains("ALTER TABLE \"invoices\" RENAME COLUMN \"InvNo\" TO \"InvoiceNumber\";"), "{schema}");
     assert!(schema.contains("CREATE UNIQUE INDEX \"invoices_InvoiceNumber_unique\""), "{schema}");
 }
+
+#[test]
+fn data_events_become_record_hooks() {
+    let text = SALES.to_string()
+        + "
+code Order
+    before save
+        if order.total < 0
+            refuse \"An order cannot have a negative total\"
+
+    after delete
+        refuse \"Deleted \" + order.number
+";
+    let project = load_sources([("sales.clarity", text.as_str())]);
+    assert!(!project.has_errors(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("pub fn before_save_order(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("return Err(Error::Refused(String::from(\"An order cannot have a negative total\")));"), "{sales}");
+    assert!(sales.contains("    const EVENTS: bool = true;\n"), "{sales}");
+    assert!(sales.contains("    fn before_save(&mut self, db: &Db) -> Result<()> {\n        before_save_order(db, self)\n    }\n"), "{sales}");
+    assert!(sales.contains("    fn after_delete(&mut self, db: &Db) -> Result<()> {\n        after_delete_order(db, self)\n    }\n"), "{sales}");
+    // Only the entity with events gets hooks.
+    assert_eq!(sales.matches("const EVENTS").count(), 1, "{sales}");
+}

@@ -1,6 +1,7 @@
 //! Enums and entities as Rust enums and records.
 
 use clarity_spec::Project;
+use clarity_spec::code::{DataEvent, record_name};
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
 use super::names::{decimal, field_type, ident};
@@ -134,6 +135,26 @@ fn record(project: &Project, entity: &Entity) -> String {
         .filter(|f| matches!(f.ty, FieldType::List { .. }))
         .map(|f| format!("            {}: Vec::new(),\n", ident(&f.name.name)))
         .collect();
+    // The data events written in the entity's code block; each runs the
+    // action generated from it.
+    let events: Vec<DataEvent> = project
+        .files
+        .iter()
+        .flat_map(|f| &f.code)
+        .filter(|b| b.name.name == *name)
+        .flat_map(|b| b.events.iter().map(|e| e.event))
+        .collect();
+    let mut hooks = String::new();
+    if !events.is_empty() {
+        hooks.push_str("\n    const EVENTS: bool = true;\n");
+        for event in events {
+            let function = ident(&format!("{}_{}", event.word(), record_name(name)));
+            hooks.push_str(&format!(
+                "\n    fn {}(&mut self, db: &Db) -> Result<()> {{\n        {function}(db, self)\n    }}\n",
+                event.word()
+            ));
+        }
+    }
     out.push_str(&format!(
         "impl Record for {name} {{
     const SOURCE: &'static str = {source:?};
@@ -159,7 +180,7 @@ fn record(project: &Project, entity: &Entity) -> String {
             id,
 {from_values}{lists}        }})
     }}
-}}
+{hooks}}}
 
 ",
         table = entity.table_name(),

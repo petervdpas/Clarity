@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{
-    BinaryOp, CodeBlock, EFFECTS, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
+    BinaryOp, CodeBlock, DataEvent, EFFECTS, Expr, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -425,14 +425,22 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
             continue;
         }
         seen.push(name);
-        let Some(owner) = owners.iter().find(|o| o.name == name) else {
+        if let Some(owner) = owners.iter().find(|o| o.name == name) {
+            for event in &block.events {
+                out.push(Diagnostic::error(
+                    format!("'{}' belongs in the code of an entity; {name} is a window", event.event.text()),
+                    event.head,
+                ));
+            }
+            check_block(env, owner, block, out);
+        } else if file.entities.iter().any(|e| e.name.name == name) {
+            check_events(env, block, out);
+        } else {
             out.push(Diagnostic::error(
-                format!("there is no window or app '{name}' in this file"),
+                format!("there is no window, app or entity '{name}' in this file"),
                 block.name.span,
             ));
-            continue;
-        };
-        check_block(env, owner, block, out);
+        }
     }
     // Wired handlers that are not written yet, window by window.
     for owner in &owners {
@@ -476,12 +484,31 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
     }
 }
 
+/// The code block of an entity: its data events, each once.
+fn check_events(env: &Env, block: &CodeBlock, out: &mut Output) {
+    let entity = block.name.name.as_str();
+    for handler in &block.handlers {
+        out.push(Diagnostic::error(
+            format!("the code of entity {entity} holds data events (before save, after save, before delete, after delete), not handlers"),
+            handler.span,
+        ));
+    }
+    for (i, event) in block.events.iter().enumerate() {
+        if block.events[..i].iter().any(|e| e.event == event.event) {
+            out.push(Diagnostic::error(format!("'{}' is written twice", event.event.text()), event.head));
+            continue;
+        }
+        check_body(env, &event.action(entity), Some(event.event), out);
+    }
+}
+
 fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &HandlerDecl, out: &mut Output) {
     let mut checker = BodyChecker {
         env,
         owner: Some(owner),
         handlers,
         decl: None,
+        event: None,
         returns: None,
         scopes: vec![HashMap::new()],
         saves_reported: false,
@@ -517,49 +544,57 @@ fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
                 ));
             }
         }
-        let mut scope = HashMap::new();
-        for param in &decl.params {
-            let ty = env.type_ref(&param.ty).unwrap_or_else(|message| {
-                out.push(Diagnostic::error(message, param.ty.span));
-                Ty::Unknown
-            });
-            scope.insert(param.name.name.clone(), ty);
-        }
-        let returns = decl.returns.as_ref().map(|r| {
-            env.type_ref(r).unwrap_or_else(|message| {
-                out.push(Diagnostic::error(message, r.span));
-                Ty::Unknown
-            })
+        check_body(env, decl, None, out);
+    }
+}
+
+/// Checks the parameters, conditions and statements of a function, action
+/// or data event.
+fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, out: &mut Output) {
+    let name = decl.name.name.as_str();
+    let mut scope = HashMap::new();
+    for param in &decl.params {
+        let ty = env.type_ref(&param.ty).unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, param.ty.span));
+            Ty::Unknown
         });
-        let mut checker = BodyChecker {
-            env,
-            owner: None,
-            handlers: &[],
-            decl: Some(decl),
-            returns,
-            scopes: vec![scope],
-            saves_reported: false,
-            out,
-        };
-        for condition in &decl.requires {
+        scope.insert(param.name.name.clone(), ty);
+    }
+    let returns = decl.returns.as_ref().map(|r| {
+        env.type_ref(r).unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, r.span));
+            Ty::Unknown
+        })
+    });
+    let mut checker = BodyChecker {
+        env,
+        owner: None,
+        handlers: &[],
+        decl: Some(decl),
+        event,
+        returns,
+        scopes: vec![scope],
+        saves_reported: false,
+        out,
+    };
+    for condition in &decl.requires {
+        checker.condition(condition);
+    }
+    if let Some(result) = returns {
+        checker.scopes.push(HashMap::from([("result".to_string(), result)]));
+        for condition in &decl.ensures {
             checker.condition(condition);
         }
-        if let Some(result) = returns {
-            checker.scopes.push(HashMap::from([("result".to_string(), result)]));
-            for condition in &decl.ensures {
-                checker.condition(condition);
-            }
-            checker.scopes.pop();
-        } else if let Some(first) = decl.ensures.first() {
-            checker.error(format!("'ensure' needs a result; {name} returns nothing"), first.span);
-        }
-        checker.block(&decl.body);
-        if returns.is_some() && !always_returns(&decl.body) {
-            out.push(Diagnostic::error(
-                format!("{} '{name}' does not return a value on every path", decl.kind.keyword()),
-                decl.name.span,
-            ));
-        }
+        checker.scopes.pop();
+    } else if let Some(first) = decl.ensures.first() {
+        checker.error(format!("'ensure' needs a result; {name} returns nothing"), first.span);
+    }
+    checker.block(&decl.body);
+    if returns.is_some() && !always_returns(&decl.body) {
+        out.push(Diagnostic::error(
+            format!("{} '{name}' does not return a value on every path", decl.kind.keyword()),
+            decl.name.span,
+        ));
     }
 }
 
@@ -581,8 +616,10 @@ struct BodyChecker<'e, 'a> {
     owner: Option<&'e Owner<'a>>,
     /// The handlers of the same window or app, which a handler can run.
     handlers: &'e [HandlerDecl],
-    /// The function or action being checked; None for a handler.
+    /// The function, action or data event being checked; None for a handler.
     decl: Option<&'e FunctionDecl>,
+    /// The data event being checked, if it is one.
+    event: Option<DataEvent>,
     returns: Option<Ty<'a>>,
     scopes: Vec<HashMap<String, Ty<'a>>>,
     /// A missing `effects db.write` is reported once per action.
@@ -616,6 +653,7 @@ impl<'a> BodyChecker<'_, 'a> {
             None => "a handler",
             Some(FunctionKind::Function) => "a function",
             Some(FunctionKind::Action) => "an action",
+            Some(FunctionKind::Event) => "a data event",
         }
     }
 
@@ -764,7 +802,29 @@ impl<'a> BodyChecker<'_, 'a> {
                 if !matches!(ty, Ty::Record(_) | Ty::Unknown) {
                     self.error(format!("'{word}' needs a record, not {}", ty.name()), value.span);
                 }
+                self.check_own_record(word, value);
             }
+            StmtKind::Refuse { text } => {
+                let ty = self.expr(text, None);
+                if !ty.is_value() {
+                    self.error(format!("'refuse' needs text or a value, not {}", ty.name()), text.span);
+                }
+            }
+        }
+    }
+
+    /// A data event that saves its own record would run itself again, and
+    /// so on without end; the same for deleting.
+    fn check_own_record(&mut self, word: &str, value: &Expr) {
+        let (Some(event), Some(decl)) = (self.event, self.decl) else { return };
+        let ExprKind::Name { name } = &value.kind else { return };
+        let own = decl.params.first().is_some_and(|p| p.name.name == *name);
+        if own && event.saves() == (word == "save") {
+            let doing = if word == "save" { "saving" } else { "deleting" };
+            self.error(
+                format!("{doing} {name} in its own '{}' would run the event again, without end", event.text()),
+                value.span,
+            );
         }
     }
 
@@ -776,7 +836,7 @@ impl<'a> BodyChecker<'_, 'a> {
             FunctionKind::Function => {
                 self.error(format!("'{word}' is not allowed in a function; make it an action"), span);
             }
-            FunctionKind::Action => {
+            FunctionKind::Action | FunctionKind::Event => {
                 let declared = decl.effects.iter().any(|e| e.name == "db.write");
                 if !declared && !self.saves_reported {
                     self.saves_reported = true;
@@ -1132,7 +1192,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 format!("function '{}' cannot call action '{}'", caller.name.name, callee.name.name),
                 span,
             ),
-            FunctionKind::Action => {
+            FunctionKind::Action | FunctionKind::Event => {
                 let missing = callee
                     .effects
                     .iter()
@@ -1448,7 +1508,7 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
         let bodies = file
             .code
             .iter()
-            .flat_map(|b| b.handlers.iter().map(|h| &h.body))
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body).chain(b.events.iter().map(|e| &e.body)))
             .chain(file.functions.iter().map(|f| &f.body));
         for body in bodies {
             writes(body, &mut |stmt, value, word| {

@@ -562,7 +562,7 @@ An item with a submenu opens the submenu, so it has no `on click` of its own.
 
 ## 8. Code behind
 
-A window's handlers are in a `code` block named after the window, in the same file as the window. The app's handlers are in a `code` block named after the app.
+A window's handlers are in a `code` block named after the window, in the same file as the window. The app's handlers are in a `code` block named after the app, and an entity's data events in one named after the entity (see [Data events](#data-events)).
 
 ```
 code CustomerForm
@@ -607,6 +607,38 @@ A name that is both data and a part in the same window is an error.
 | `selected` | tables, lists | the record of the selected row | no |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
+
+### Data events
+
+An entity's code block holds its data events: code that runs whenever one of its records is saved or deleted, from any window, action or other event. The block has the entity's name and is in the same file as the entity.
+
+```
+code Order
+    before save
+        if order.status == Approved and not within_credit(order)
+            refuse "Order " + order.number + " is over its customer's credit limit"
+
+    after save
+        log_change("saved " + order.number)
+
+    before delete
+        if order.status != Pending
+            refuse "Only pending orders can be deleted"
+```
+
+| Event | Runs |
+|---|---|
+| `before save` | before a record is stored; what it changes in the record is stored |
+| `after save` | after it is stored; a new record has its id by then |
+| `before delete` | before a record is removed |
+| `after delete` | after it is removed |
+
+- **The record** is named after the entity in snake case: `order` in the events of `Order`, `order_line` in those of `OrderLine`. A new record has id 0 in `before save`.
+- **An event is an action** on its record. It can read and change records, `save` and `delete` others, and call functions and actions; it declares no effects. Like an action, it does not talk to the screen: no `message`, `open`, `close` or part properties.
+- **`refuse "text"`** stops the save or delete. The text is the error the window shows, so a refusal reads as the message for the person using the application.
+- **All or nothing.** The save or delete runs in one transaction with its events, and with the saves and deletes they make in the same database. When an event fails or refuses, none of it is kept, and a new record is still new.
+- An event that saves its own record in a save event, or deletes it in a delete event, would run itself again without end; the checker reports it. Each event is written once per entity, and an entity's code block has no handlers.
+- Renaming an entity renames its code block and the record's name in its events.
 
 ## 9. Functions and actions
 
@@ -659,8 +691,9 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `open Window` | Opens a window. | handlers |
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
 | `close` | Closes this window. | handlers |
-| `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions |
-| `delete expr` | Removes a record from its data source. | handlers, actions |
+| `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions, data events |
+| `delete expr` | Removes a record from its data source. | handlers, actions, data events |
+| `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
 | `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). | handlers |
 
 ### Expressions
@@ -724,7 +757,7 @@ An integer is accepted where a decimal is expected. Nothing else converts by its
 
 ## 11. A complete example
 
-A project file and one module: a customer list with a filter that opens a form, and the form that saves a customer.
+A project file and one module: a customer list with a filter that opens a form, the form that saves a customer, and a data event that clears the VAT number of a private customer.
 
 `shop.clarity`:
 
@@ -780,6 +813,12 @@ page CustomerForm: window
         textbox name notes at 4,4 span 9 bind customer.notes
     button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: save_clicked
     button "Close" name close_form at 11,6 span 2 cancel on click: close_clicked
+
+code Customer
+    before save
+        // Only business customers keep a VAT number, whichever window saves them.
+        if customer.kind == Private
+            customer.vat_number = ""
 
 code CustomerBrowse
     handler window_returned
@@ -860,8 +899,11 @@ region        = "menu" | "toolbar" | "ribbon" | "sidebar" ("left" | "right") ["s
 command       = ("item" | "button" | "separator") [String]
                 ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target))*
 
-code          = "code" Name
+code          = "code" (Window | App)
                     ("handler" name
+                        statement*)*
+              | "code" Entity
+                    (("before" | "after") ("save" | "delete")
                         statement*)*
 function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" type-ref]
                     ("require" expr | "ensure" expr | "effects" effect ("," effect)*)*

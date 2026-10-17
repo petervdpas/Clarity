@@ -13,12 +13,14 @@ use ts_rs::TS;
 use crate::model::Ident;
 use crate::span::Span;
 
-/// `code Name` with the handlers of the window or app called Name.
+/// `code Name` with the handlers of the window or app called Name, or the
+/// data events of the entity called Name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct CodeBlock {
     pub name: Ident,
     pub handlers: Vec<HandlerDecl>,
+    pub events: Vec<EventDecl>,
     pub span: Span,
 }
 
@@ -28,6 +30,91 @@ pub struct HandlerDecl {
     pub name: Ident,
     pub body: Vec<Stmt>,
     pub span: Span,
+}
+
+/// When a data event runs: around storing or removing a record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DataEvent {
+    BeforeSave,
+    AfterSave,
+    BeforeDelete,
+    AfterDelete,
+}
+
+impl DataEvent {
+    pub const ALL: [DataEvent; 4] = [Self::BeforeSave, Self::AfterSave, Self::BeforeDelete, Self::AfterDelete];
+
+    /// The event as written: `before save`.
+    pub fn text(self) -> &'static str {
+        match self {
+            Self::BeforeSave => "before save",
+            Self::AfterSave => "after save",
+            Self::BeforeDelete => "before delete",
+            Self::AfterDelete => "after delete",
+        }
+    }
+
+    /// The event as one word, for names in generated code: `before_save`.
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::BeforeSave => "before_save",
+            Self::AfterSave => "after_save",
+            Self::BeforeDelete => "before_delete",
+            Self::AfterDelete => "after_delete",
+        }
+    }
+
+    /// Whether the event is about saving, rather than deleting.
+    pub fn saves(self) -> bool {
+        matches!(self, Self::BeforeSave | Self::AfterSave)
+    }
+}
+
+/// `before save` and the other data events, in the code block of an
+/// entity. The record is named after the entity in snake case: `order`
+/// in the events of `Order`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct EventDecl {
+    pub event: DataEvent,
+    pub body: Vec<Stmt>,
+    /// The line that names the event.
+    pub head: Span,
+    pub span: Span,
+}
+
+/// The name of the record in the events of `entity`.
+pub fn record_name(entity: &str) -> String {
+    crate::model::snake_case(entity)
+}
+
+impl EventDecl {
+    /// The event as the action it amounts to, so the checker and the
+    /// generators treat it as one: it takes the record, and it may read
+    /// and write records.
+    pub fn action(&self, entity: &str) -> FunctionDecl {
+        let ident = |name: String| Ident { name, span: self.head };
+        let record = record_name(entity);
+        FunctionDecl {
+            kind: FunctionKind::Event,
+            name: ident(format!("{}_{record}", self.event.word())),
+            params: vec![Param {
+                name: ident(record),
+                ty: TypeRef {
+                    kind: TypeRefKind::Named { name: entity.to_string() },
+                    span: self.head,
+                },
+            }],
+            returns: None,
+            requires: Vec::new(),
+            ensures: Vec::new(),
+            effects: EFFECTS.iter().map(|e| ident(e.to_string())).collect(),
+            body: self.body.clone(),
+            span: self.span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -89,6 +176,11 @@ pub enum StmtKind {
     },
     Delete {
         value: Expr,
+    },
+    /// `refuse "text"`: stops with that text as the error, so a save or
+    /// delete it is part of does not happen.
+    Refuse {
+        text: Expr,
     },
 }
 
@@ -275,6 +367,9 @@ pub enum FunctionKind {
     Function,
     /// May have the effects it declares, such as saving records.
     Action,
+    /// A data event of an entity: an action that runs when its record
+    /// is saved or deleted.
+    Event,
 }
 
 impl FunctionKind {
@@ -282,6 +377,7 @@ impl FunctionKind {
         match self {
             Self::Function => "function",
             Self::Action => "action",
+            Self::Event => "event",
         }
     }
 }

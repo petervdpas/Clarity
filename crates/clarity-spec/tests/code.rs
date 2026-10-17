@@ -290,7 +290,7 @@ code CustomerForm
     assert_eq!(warnings(&unwired), ["handler 'nobody' is not wired to any event"]);
     let twice = CODE.replace("    handler grid_opened\n", "    handler grid_opened\n        close\n    handler grid_opened\n");
     assert_eq!(errors(&twice), ["handler 'grid_opened' is written twice"]);
-    assert_eq!(errors("\ncode Missing\n    handler x\n        close\n"), ["there is no window or app 'Missing' in this file"]);
+    assert_eq!(errors("\ncode Missing\n    handler x\n        close\n"), ["there is no window, app or entity 'Missing' in this file"]);
 }
 
 #[test]

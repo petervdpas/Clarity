@@ -110,6 +110,15 @@ action approve(order: Order)
 page Orders: window
     data orders: list<Order>
     table name grid at 1,1 span 12 rows 4 bind orders columns number, total
+
+code Order
+    before save
+        if order.total < 0
+            refuse \"An order cannot have a negative total\"
+
+    before delete
+        if order.status == Approved
+            refuse \"Order \" + order.number + \" is approved\"
 ";
 
 /// SALES as two steps: the first had a `limit`, an integer total and a note.
@@ -167,6 +176,12 @@ fn approves_within_the_credit_limit() {
     assert_eq!(approve(&db, &mut order), Err(Error::Contract("order.status == Pending".into())));
     let mut big = Order { customer: Some(ada.id), total: Decimal::new(500, 0), ..Order::default() };
     assert_eq!(approve(&db, &mut big), Err(Error::Contract("within_credit(order)".into())));
+
+    // Data events: an approved order stays, a negative total is never saved.
+    assert_eq!(db.delete(&order), Err(Error::Refused("Order ORD-1 is approved".into())));
+    let mut negative = Order { customer: Some(ada.id), total: Decimal::new(-1, 0), ..Order::default() };
+    assert_eq!(db.save(&mut negative), Err(Error::Refused("An order cannot have a negative total".into())));
+    assert_eq!(negative.id, 0);
 
     // Queries: the orders of a customer over 50, biggest first.
     let mut grace = Customer { name: "Grace".into(), ..Customer::default() };

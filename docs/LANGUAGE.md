@@ -523,7 +523,7 @@ A button, an image, a menu item, or a toolbar or ribbon button can open a window
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 ```
 
-`on click -> Target` opens the window `Target`. In menus and toolbars, `close` closes the current window, `quit` ends the application, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
+`on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus and toolbars, `close` closes the current window, `quit` ends the application, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
 
 ### Containers
 
@@ -1023,13 +1023,13 @@ property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" pa
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
               | "columns" names | "show" names | "source" String | "surface" word | "renderer" Name
-              | "on" event ":" handler | "on" "click" "->" Target
+              | "on" event ":" handler | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name
                     ("title" String | "main" Window | "data" ... | "on" "start" ":" handler | region)*
 region        = "menu" | "toolbar" | "ribbon" | "sidebar" ("left" | "right") ["span" n] | "footer"
 command       = ("item" | "button" | "separator") [String]
-                ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target))*
+                ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target ["in" "new" "window"]))*
 
 code          = "code" (Window | App)
                     ("handler" name

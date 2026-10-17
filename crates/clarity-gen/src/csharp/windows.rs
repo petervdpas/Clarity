@@ -193,10 +193,9 @@ impl<'a> Window<'a> {
     /// The help a named input shows while it has no error: a help part's
     /// caption, or its field's help.
     fn help_of(&self, input: &str) -> String {
-        if let Some(help) = self.parts.iter().find(|w| w.props.kind == WidgetKind::Help && w.props.for_part.as_deref() == Some(input)) {
-            if let Some(caption) = &help.props.caption {
-                return caption.clone();
-            }
+        let help = self.parts.iter().find(|w| w.props.kind == WidgetKind::Help && w.props.for_part.as_deref() == Some(input));
+        if let Some(caption) = help.and_then(|h| h.props.caption.as_ref()) {
+            return caption.clone();
         }
         self.part(input)
             .and_then(|w| w.props.bind.as_deref())
@@ -205,15 +204,18 @@ impl<'a> Window<'a> {
             .unwrap_or_default()
     }
 
-    /// The command a click runs: a handler, or opening a window.
-    fn click_command(&self, handler: Option<&str>, on_click: Option<&str>) -> Option<String> {
+    /// The command a click runs: a handler, or opening a window, in place or,
+    /// where the design says so, in a desktop window of its own.
+    fn click_command(&self, handler: Option<&str>, on_click: Option<&str>, new_window: bool) -> Option<String> {
         if let Some(handler) = handler {
             return Some(format!("{}Command", pascal(handler)));
         }
         match on_click? {
             QUIT => Some("QuitCommand".into()),
             CLOSE => Some("CloseWindowCommand".into()),
-            target if self.project.pages().any(|p| p.name.name == target) => Some(format!("Open{target}Command")),
+            target if self.project.pages().any(|p| p.name.name == target) => {
+                Some(format!("Open{target}{}Command", if new_window { "InNewWindow" } else { "" }))
+            }
             _ => None,
         }
     }
@@ -318,7 +320,7 @@ impl<'a> Window<'a> {
         if let Some(key) = &item.props.shortcut {
             let _ = write!(attrs, " InputGesture=\"{key}\" HotKey=\"{key}\"", key = attr(key));
         }
-        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref()) {
+        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
         let _ = writeln!(out, "{pad}<MenuItem {attrs} />");
@@ -332,7 +334,7 @@ impl<'a> Window<'a> {
             return;
         }
         let mut attrs = format!("Content=\"{}\"", caption(item.props.caption.as_deref().unwrap_or_default()));
-        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref()) {
+        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
         let _ = writeln!(out, "{pad}<Button {attrs} />");
@@ -517,7 +519,7 @@ impl<'a> Window<'a> {
                     None => caption(&caption_text),
                 };
                 let mut attrs = format!("Content=\"{content}\"");
-                if let Some(command) = self.click_command(Self::handler(widget, Event::Click), p.on_click.as_deref()) {
+                if let Some(command) = self.click_command(Self::handler(widget, Event::Click), p.on_click.as_deref(), p.new_window) {
                     let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
                 }
                 if p.default_button {
@@ -614,7 +616,7 @@ impl<'a> Window<'a> {
                 let _ = writeln!(
                     out,
                     "{pad}<Border {at} Classes=\"placeholder\"{plain_state}{extra}>\n{pad}  <TextBlock Text=\"{}\" />\n{pad}</Border>",
-                    attr(&format!("{what} {source}").trim().to_string())
+                    attr(format!("{what} {source}").trim())
                 );
             }
         }
@@ -716,10 +718,10 @@ public partial class {name}View : UserControl
         let mut choices: BTreeMap<String, String> = BTreeMap::new();
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Dropdown) {
             let Some((_, field)) = widget.props.bind.as_deref().and_then(|b| self.bound_field(b)) else { continue };
-            if let FieldType::Ref { entity } = &field.ty {
-                if let Some(target) = self.project.entity(&entity.name) {
-                    choices.insert(entity.name.clone(), display(target));
-                }
+            if let FieldType::Ref { entity } = &field.ty
+                && let Some(target) = self.project.entity(&entity.name)
+            {
+                choices.insert(entity.name.clone(), display(target));
             }
         }
         for (entity, shown) in &choices {
@@ -736,10 +738,10 @@ public partial class {name}View : UserControl
                 continue;
             }
             let mut args = vec![string(n)];
-            if let Some(c) = &widget.props.caption {
-                if matches!(widget.props.kind, WidgetKind::Button | WidgetKind::Label | WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Heading) {
-                    args.push(format!("caption: {}", string(c)));
-                }
+            if let Some(c) = &widget.props.caption
+                && matches!(widget.props.kind, WidgetKind::Button | WidgetKind::Label | WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Heading)
+            {
+                args.push(format!("caption: {}", string(c)));
             }
             if widget.props.readonly {
                 args.push("readOnly: true".into());
@@ -796,21 +798,28 @@ public partial class {name}View : UserControl
         let targets = self
             .parts
             .iter()
-            .filter_map(|w| w.props.on_click.as_deref())
-            .chain(self.commands.iter().filter_map(|c| c.props.on_click.as_deref()));
-        for target in targets {
+            .filter_map(|w| w.props.on_click.as_deref().map(|t| (t, w.props.new_window)))
+            .chain(self.commands.iter().filter_map(|c| c.props.on_click.as_deref().map(|t| (t, c.props.new_window))));
+        for (target, new_window) in targets {
             match target {
                 QUIT => quit = true,
                 CLOSE => close = true,
                 t if self.project.pages().any(|p| p.name.name == t) => {
-                    opens.insert(t.to_string());
+                    opens.insert((t.to_string(), new_window));
                 }
                 _ => {}
             }
         }
         let mut clicks = String::new();
-        for target in &opens {
-            let _ = write!(clicks, "    [RelayCommand]\n    void Open{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
+        for (target, new_window) in &opens {
+            if *new_window {
+                let _ = write!(
+                    clicks,
+                    "    [RelayCommand]\n    void Open{target}InNewWindow() => Handle(() => Open(new {target}ViewModel(Db), newWindow: true));\n\n"
+                );
+            } else {
+                let _ = write!(clicks, "    [RelayCommand]\n    void Open{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
+            }
         }
         if quit {
             clicks.push_str("    [RelayCommand]\n    void Quit() => Handle(QuitApplication);\n\n");

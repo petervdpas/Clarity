@@ -268,6 +268,10 @@ pub struct WidgetProps {
     pub bind: Option<String>,
     /// Window opened on click.
     pub on_click: Option<String>,
+    /// The window opens in a desktop window of its own (`in new window`);
+    /// otherwise it opens in place, on top of this one.
+    #[serde(default)]
+    pub new_window: bool,
     /// Handlers in the code behind, per event.
     pub handlers: Vec<Handler>,
     pub columns: Vec<String>,
@@ -478,6 +482,10 @@ pub struct CommandProps {
     pub large: bool,
     /// Window opened on click.
     pub on_click: Option<String>,
+    /// The window opens in a desktop window of its own (`in new window`);
+    /// otherwise it opens in place, on top of this one.
+    #[serde(default)]
+    pub new_window: bool,
     /// Handler in the code behind that runs on click.
     pub handler: Option<String>,
 }

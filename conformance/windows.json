@@ -1,0 +1,221 @@
+{
+  "about": "How windows open and close, on every stack (DESIGN.md, Page kinds): open shows a window in place, on top of the one that opened it; close goes back to the one below, which is told (return); closing the last window of the first desktop window ends the application. A desktop window of its own opens only where the design says so: a target marked 'in new window' starts its own stack there (closing its last window closes that desktop window and tells the window that opened it), and a dialog may get one too. Each step is one handler run on the window on top of the newest desktop window, doing its actions in order; a handler that closes its window and opens others closes first. Expected: every desktop window with its windows from bottom to top (dialogs on top of their own), every open, close and return in order, and whether the application ended.",
+  "cases": [
+    {
+      "name": "open shows a window in place, close goes back",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "open Customers"
+        ],
+        [
+          "open Customer"
+        ],
+        [
+          "close"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card",
+            "Customers"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Customers:open",
+          "Customer:open",
+          "Customer:close",
+          "Customers:return"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "a dialog opens on top",
+      "dialogs": [
+        "Ask"
+      ],
+      "start": "Card",
+      "steps": [
+        [
+          "open Ask"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card",
+            "Ask"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Ask:open"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "closing a dialog goes back to the window below",
+      "dialogs": [
+        "Ask"
+      ],
+      "start": "Card",
+      "steps": [
+        [
+          "open Ask"
+        ],
+        [
+          "close"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Ask:open",
+          "Ask:close",
+          "Card:return"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "a handler that opens a window and closes its own closes first",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "open List"
+        ],
+        [
+          "open Form",
+          "close"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card",
+            "Form"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "List:open",
+          "List:close",
+          "Card:return",
+          "Form:open"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "closing the last window ends the application",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "close"
+        ]
+      ],
+      "expect": {
+        "desktops": [],
+        "events": [
+          "Card:open",
+          "Card:close"
+        ],
+        "ended": true
+      }
+    },
+    {
+      "name": "in new window opens a desktop window of its own",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "open Customer in new window"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card"
+          ],
+          [
+            "Customer"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Customer:open"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "closing the new window's last window closes it and tells the opener",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "open Customer in new window"
+        ],
+        [
+          "close"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Customer:open",
+          "Customer:close",
+          "Card:return"
+        ],
+        "ended": false
+      }
+    },
+    {
+      "name": "in a new window, open goes in place there",
+      "dialogs": [],
+      "start": "Card",
+      "steps": [
+        [
+          "open Customer in new window"
+        ],
+        [
+          "open Orders"
+        ]
+      ],
+      "expect": {
+        "desktops": [
+          [
+            "Card"
+          ],
+          [
+            "Customer",
+            "Orders"
+          ]
+        ],
+        "events": [
+          "Card:open",
+          "Customer:open",
+          "Orders:open"
+        ],
+        "ended": false
+      }
+    }
+  ]
+}

@@ -15,4 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="../Clarity.Avalonia/Clarity.Avalonia.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The cases every stack shares. -->
+    <None Include="../../../conformance/*.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

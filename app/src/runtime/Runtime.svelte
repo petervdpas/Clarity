@@ -17,6 +17,7 @@
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
   import { findPage, type PageData } from "../lib/pages";
+  import { Navigator } from "../lib/navigator";
 
   /** One open window, as the backend sends it. */
   type WindowState = {
@@ -77,47 +78,31 @@
     messages = messages.filter((m) => m.id !== id);
   }
 
-  /** Shows what a handler asked for: messages, and windows to open. */
-  async function follow(reply: Reply) {
-    reply.messages.forEach(say);
-    // Data may have changed: reference lists load again when needed.
-    options = {};
-    for (const request of reply.open) await open(request.window, request.with);
-  }
+  /** Set when this is a desktop window of its own (`in new window`), not the main one. */
+  let apart = false;
 
-  /** Opens a window; the backend loads its data and runs its `on open`. */
-  async function open(window: string, withData: Record<string, unknown> = {}) {
-    try {
-      const reply = await invoke<Reply>("open_window", { window, with: withData });
-      stack = [...stack, reply.state];
-      if (reply.close) return close();
-      await follow(reply);
-    } catch (err) {
-      say({ level: "error", text: errorText(err) });
-    }
-  }
-
-  /** Closes the top window after its `on close`, then runs `on return` on the one below. */
-  async function close() {
-    const top = stack.at(-1);
-    if (!top) return;
-    try {
-      const closing = await invoke<Reply>("close_window", { state: $state.snapshot(top) });
-      closing.messages.forEach(say);
-      stack = stack.slice(0, -1);
-      const below = stack.at(-1);
-      if (!below) {
-        await invoke("quit_app");
-        return;
-      }
-      const back = await invoke<Reply>("return_to", { state: $state.snapshot(below) });
-      stack[stack.length - 1] = back.state;
-      if (back.close) return close();
-      await follow(back);
-    } catch (err) {
-      say({ level: "error", text: errorText(err) });
-    }
-  }
+  // Opening and closing windows, as on every stack (lib/navigator.ts). The
+  // backend gets snapshots, so what the user types is in the state it sees.
+  const nav = new Navigator<WindowState, Message>(
+    {
+      get: () => stack,
+      set: (next) => {
+        stack = next;
+        // Data may have changed: reference lists load again when needed.
+        options = {};
+      },
+    },
+    {
+      open: (window, withData) => invoke<Reply>("open_window", { window, with: withData }),
+      close: (state) => invoke<Reply>("close_window", { state: $state.snapshot(state) }),
+      returnTo: (state) => invoke<Reply>("return_to", { state: $state.snapshot(state) }),
+      openApart: (window, withData) => invoke("open_apart", { window, with: withData }),
+      // The main window ends the application; a window of its own just closes.
+      quit: () => invoke(apart ? "close_apart" : "quit_app"),
+    },
+    say,
+    (err) => say({ level: "error", text: errorText(err) }),
+  );
 
   /** Runs a handler on the current window and applies the reply. */
   async function run(handler: string) {
@@ -126,14 +111,7 @@
     const index = stack.length - 1;
     try {
       const reply = await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler });
-      stack[index] = reply.state;
-      if (reply.close) {
-        reply.messages.forEach(say);
-        await close();
-        for (const request of reply.open) await open(request.window, request.with);
-      } else {
-        await follow(reply);
-      }
+      await nav.apply(index, reply);
     } catch (err) {
       say({ level: "error", text: errorText(err) });
     } finally {
@@ -141,12 +119,15 @@
     }
   }
 
-  function navigate(target: string) {
-    if (target === "close") close();
+  // A window opened elsewhere (`in new window`) has closed: this one is on top again.
+  window.addEventListener("clarity-return", () => nav.returned());
+
+  function navigate(target: string, newWindow = false) {
+    if (target === "close") nav.close();
     else if (target === "quit") invoke("quit_app");
     else if (target === "language") choosing = "language";
     else if (target === "theme") choosing = "theme";
-    else open(target);
+    else nav.target(target, newWindow);
   }
 
   const loading = new Set<string>();
@@ -231,9 +212,16 @@
     model = start.model;
     remember(start.model);
     try {
+      // A desktop window of its own starts with the window it was opened for.
+      const own = await invoke<{ window: string; with: Record<string, unknown> } | null>("apart_start").catch(() => null);
+      if (own) {
+        apart = true;
+        await nav.open(own.window, own.with);
+        return;
+      }
       const started = await invoke<Reply>("start_app");
-      await open(start.main);
-      await follow(started);
+      await nav.open(start.main);
+      await nav.follow(started);
     } catch (err) {
       say({ level: "error", text: errorText(err) });
     }

@@ -27,7 +27,7 @@
     data: PageData;
     design: boolean;
     widget: Widget;
-    onnavigate: (target: string) => void;
+    onnavigate: (target: string, newWindow?: boolean) => void;
   } = $props();
 
   const p = $derived(widget.props);
@@ -142,7 +142,7 @@
   function click() {
     if (design) return;
     if (p.handlers.some((h) => h.event === "click")) fire("click");
-    else if (p.onClick) onnavigate(p.onClick);
+    else if (p.onClick) onnavigate(p.onClick, p.newWindow);
   }
 
   function selectRow(index: number) {

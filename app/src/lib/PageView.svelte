@@ -11,7 +11,7 @@
   }: {
     preview: Preview;
     page: Page;
-    onnavigate: (target: string) => void;
+    onnavigate: (target: string, newWindow?: boolean) => void;
   } = $props();
 
   // The preview edits its own copy of the sample data; nothing is saved.

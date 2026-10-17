@@ -589,6 +589,12 @@ impl<'a> Checker<'a> {
                 );
             }
             if let Some(target) = &p.on_click
+                && p.new_window
+                && frame::BUILT_IN_COMMANDS.contains(&target.as_str())
+            {
+                self.error(file, "only a window opens in a new window", command.span);
+            }
+            if let Some(target) = &p.on_click
                 && !frame::BUILT_IN_COMMANDS.contains(&target.as_str())
             {
                 self.check_click_target(file, target, command.span);
@@ -644,6 +650,9 @@ impl<'a> Checker<'a> {
             }
             self.check_binding(file, page, widget);
             if let Some(target) = &p.on_click {
+                if p.new_window && frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
+                    self.error(file, "only a window opens in a new window", widget.span);
+                }
                 self.check_click_target(file, target, widget.span);
             }
 

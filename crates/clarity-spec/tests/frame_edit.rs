@@ -161,6 +161,7 @@ fn rewrites_a_command_and_keeps_its_comment() {
         shortcut: Some("Ctrl+O".into()),
         large: false,
         on_click: Some("Card".into()),
+        new_window: false,
         handler: None,
     };
     let text = edit(

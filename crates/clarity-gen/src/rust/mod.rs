@@ -136,7 +136,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(errors);
     }
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
-    files.push(text("src/main.rs", main_rs(project, &modules, &owners, &databases, &main_window)));
+    files.push(text("src/main.rs", main_rs(project, &modules, &owners, &databases, &main_window, &clarity_project::title(settings))));
     Ok(files)
 }
 
@@ -225,7 +225,14 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
         .map(|f| ident(&f.name.name))
 }
 
-fn main_rs(project: &Project, modules: &[String], owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
+fn main_rs(project: &Project, modules: &[String], owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, title: &str) -> String {
+    // A second desktop window only where the design marks a target `in new window`.
+    let apart = clarity_spec::frame::opens_new_windows(project);
+    let (apart_code, apart_manage, apart_events, apart_commands) = if apart {
+        (APART.replace("{title}", &format!("{title:?}")), "\n        .manage(Apart::default())", APART_EVENTS, "\n            open_apart,\n            apart_start,\n            close_apart,")
+    } else {
+        (String::new(), "", "", "")
+    };
     let databases = databases
         .iter()
         .map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime()))
@@ -445,14 +452,14 @@ fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>>
 fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
 }}
-
+{apart_code}
 fn main() {{
     let mut db = Db::connect(DATABASES).expect("cannot open the databases");
     for (source, steps) in schema::SOURCES {{
         db.migrate_source(source, steps).expect("cannot bring the database up to date");
     }}
     tauri::Builder::default()
-        .manage(App(Mutex::new(db)))
+        .manage(App(Mutex::new(db))){apart_manage}{apart_events}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -460,7 +467,7 @@ fn main() {{
             close_window,
             return_to,
             dispatch_event,
-            ref_options,
+            ref_options,{apart_commands}
             quit_app
         ])
         .run(tauri::generate_context!())
@@ -469,6 +476,69 @@ fn main() {{
 "#
     )
 }
+
+/// The commands of desktop windows of their own (`in new window`): the Clarity
+/// window each starts with, its data, and the window that opened it.
+const APART: &str = r#"
+const TITLE: &str = {title};
+
+#[derive(Default)]
+struct Apart(Mutex<(u32, std::collections::HashMap<String, (String, Map<String, Value>, String)>)>);
+
+/// Opens a Clarity window in a desktop window of its own, as the design marks it.
+#[tauri::command]
+fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tauri::State<Apart>, window: String, with: Map<String, Value>) -> Answer<()> {
+    let label = {
+        let mut open = apart.0.lock().map_err(|_| Value::from("the windows are not available"))?;
+        open.0 += 1;
+        let label = format!("apart-{}", open.0);
+        open.1.insert(label.clone(), (window, with, opener.label().to_string()));
+        label
+    };
+    tauri::WebviewWindowBuilder::new(&handle, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title(TITLE)
+        .inner_size(1100.0, 760.0)
+        .build()
+        .map_err(|err| Value::from(err.to_string()))?;
+    Ok(())
+}
+
+/// The Clarity window a desktop window of its own starts with; none for the main one.
+#[tauri::command]
+fn apart_start(window: tauri::WebviewWindow, apart: tauri::State<Apart>) -> Option<Value> {
+    let open = apart.0.lock().ok()?;
+    open.1.get(window.label()).map(|(start, with, _)| serde_json::json!({ "window": start, "with": with }))
+}
+
+/// Closes a desktop window of its own once its last Clarity window has closed.
+#[tauri::command]
+fn close_apart(window: tauri::WebviewWindow) {
+    let _ = window.close();
+}
+
+/// A desktop window of its own is gone, closed by its last window or by the
+/// person: the window that opened it is told, so it can reload its data.
+fn apart_closed(window: &tauri::Window) {
+    use tauri::Manager;
+    let opener = window
+        .state::<Apart>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|mut open| open.1.remove(window.label()))
+        .map(|(_, _, opener)| opener);
+    if let Some(opener) = opener.and_then(|label| window.app_handle().get_webview_window(&label)) {
+        let _ = opener.eval("window.dispatchEvent(new Event('clarity-return'))");
+    }
+}
+"#;
+
+const APART_EVENTS: &str = r#"
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                apart_closed(window);
+            }
+        })"#;
 
 /// The Cargo package (and program) name of a project.
 pub fn crate_name(settings: &Settings) -> String {

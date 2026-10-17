@@ -22,17 +22,27 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>The messages on screen, newest last; the shell's, once it shows the window.</summary>
     public ObservableCollection<Message> Messages { get; internal set; } = [];
 
-    /// <summary>A window this one asks to open.</summary>
-    public event Action<WindowViewModel>? OpenRequested;
+    /// <summary>A window this one asks to open: in place, or in a desktop window of its own.</summary>
+    public event Action<WindowViewModel, bool>? OpenRequested;
 
     /// <summary>The window asks to be closed.</summary>
     public event Action? CloseRequested;
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
-    /// <summary>Runs a handler; a refusal or another failure is shown as an error message.</summary>
+    /// <summary>Windows a running handler asked to open, and whether it asked to close this one.</summary>
+    readonly List<(WindowViewModel Window, bool NewWindow)> opening = [];
+    bool closing;
+    int running;
+
+    /// <summary>
+    /// Runs a handler; a refusal or another failure is shown as an error message.
+    /// What it asks of windows happens when it is done, on every stack alike:
+    /// this window closes first, then the windows it opened open.
+    /// </summary>
     public void Handle(Action handler)
     {
+        running++;
         try
         {
             handler();
@@ -45,15 +55,45 @@ public abstract class WindowViewModel(Db db) : ObservableObject
         {
             Say(Level.Error, Text.Plain(e.Message));
         }
+        finally
+        {
+            running--;
+        }
+        if (running > 0)
+            return;
+        var close = closing;
+        var open = opening.ToList();
+        closing = false;
+        opening.Clear();
+        if (close)
+            CloseRequested?.Invoke();
+        foreach (var (other, newWindow) in open)
+            OpenRequested?.Invoke(other, newWindow);
     }
 
     /// <summary>The row selected in a table or list.</summary>
     protected static R Selected<R>(PartState part) where R : class =>
         part.SelectedItem as R ?? throw new InvalidValueException($"no row of {part.Name} is selected");
 
-    protected void Open(WindowViewModel other) => OpenRequested?.Invoke(other);
+    /// <summary>
+    /// Opens a window: in place, on top of this one, or in a desktop window of
+    /// its own when the design marks it (`in new window`).
+    /// </summary>
+    protected void Open(WindowViewModel other, bool newWindow = false)
+    {
+        if (running > 0)
+            opening.Add((other, newWindow));
+        else
+            OpenRequested?.Invoke(other, newWindow);
+    }
 
-    protected void Close() => CloseRequested?.Invoke();
+    protected void Close()
+    {
+        if (running > 0)
+            closing = true;
+        else
+            CloseRequested?.Invoke();
+    }
 
     /// <summary>Ends the application: the built-in <c>quit</c>.</summary>
     protected static void QuitApplication()

@@ -140,13 +140,21 @@
       </fieldset>
       <label class="prop">
         <span>Or on click, open</span>
-        <select value={p.onClick ?? ""} onchange={(e) => update(p, { onClick: textOf(e), handler: textOf(e) ? null : p.handler })}>
+        <select
+          value={p.onClick ?? ""}
+          onchange={(e) => update(p, { onClick: textOf(e), handler: textOf(e) ? null : p.handler, newWindow: textOf(e) ? p.newWindow : false })}
+        >
           <option value="">(nothing)</option>
           {#each targets as target (target)}
             <option value={target}>{target}</option>
           {/each}
         </select>
       </label>
+      {#if p.onClick && !preview.commands.includes(p.onClick)}
+        <label class="inline" title="Opens in a desktop window of its own. Without it, the window opens in place, on top of this one.">
+          <input type="checkbox" checked={p.newWindow} onchange={(e) => update(p, { newWindow: e.currentTarget.checked })} /> In a new window
+        </label>
+      {/if}
     {:else}
       <p class="hint">Opens its submenu.</p>
     {/if}

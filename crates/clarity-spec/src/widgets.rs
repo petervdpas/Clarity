@@ -559,6 +559,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         height: e.size.1,
         bind: None,
         on_click: None,
+        new_window: false,
         handlers: Vec::new(),
         columns: Vec::new(),
         show: Vec::new(),
@@ -648,6 +649,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));
+        if props.new_window {
+            parts.push("in new window".to_string());
+        }
     }
     parts.join(" ")
 }

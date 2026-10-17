@@ -1107,6 +1107,12 @@ fn parse_command(
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
                 props.on_click = Some(cursor.expect_ident("a page, screen or command")?.name);
+                if cursor.eat_keyword("in") {
+                    if !(cursor.eat_keyword("new") && cursor.eat_keyword("window")) {
+                        return Err(cursor.error_here("expected 'in new window'".to_string()));
+                    }
+                    props.new_window = true;
+                }
             }
             other => {
                 return Err(Diagnostic::error(
@@ -1230,6 +1236,7 @@ fn parse_widget_props(
         height,
         bind: None,
         on_click: None,
+        new_window: false,
         handlers: Vec::new(),
         columns: Vec::new(),
         show: Vec::new(),
@@ -1343,6 +1350,12 @@ fn parse_widget_props(
                 }
                 cursor.expect(TokenKind::Arrow, "'->' and a target")?;
                 props.on_click = Some(cursor.expect_ident("a window")?.name);
+                if cursor.eat_keyword("in") {
+                    if !(cursor.eat_keyword("new") && cursor.eat_keyword("window")) {
+                        return Err(cursor.error_here("expected 'in new window'".to_string()));
+                    }
+                    props.new_window = true;
+                }
             }
             "columns" => {
                 applies(WidgetProperty::Columns)?;

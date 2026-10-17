@@ -32,6 +32,7 @@ app Shop
     menu
         item \"File\"
             item \"Orders\" key \"Ctrl+O\" on click -> OrderForm
+            item \"Another order\" on click -> OrderForm in new window
             separator
             item \"Quit\" on click -> quit
     footer
@@ -184,6 +185,8 @@ fn the_frame_comes_from_the_app() {
     has(window, "<MenuItem Header=\"Orders\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding OpenOrderFormCommand}\" />");
     has(window, "<Separator />");
     has(window, "<MenuItem Header=\"Quit\" Command=\"{Binding QuitCommand}\" />");
+    // A window opens in a desktop window of its own only where the design says so.
+    has(window, "<MenuItem Header=\"Another order\" Command=\"{Binding OpenOrderFormInNewWindowCommand}\" />");
     has(window, "<TextBlock Classes=\"status\" Text=\"Ready\" />");
 }
 
@@ -226,6 +229,7 @@ fn handlers_are_viewmodel_methods() {
     has(vm, "    protected override void OnReturn() => OnWindowReturned();");
     has(vm, "    [RelayCommand]\n    void OpenOrderForm() => Handle(() => Open(new OrderFormViewModel(Db)));");
     has(vm, "    [RelayCommand]\n    void Quit() => Handle(QuitApplication);");
+    has(vm, "    [RelayCommand]\n    void OpenOrderFormInNewWindow() => Handle(() => Open(new OrderFormViewModel(Db), newWindow: true));");
 }
 
 #[test]
@@ -236,4 +240,16 @@ fn events_without_a_command_are_wired_in_the_code_behind() {
     has(code, "        Events.OnCommit(numberFilter, () => Vm.FilterChangedCommand.Execute(null));");
     has(code, "        grid.SelectionChanged += (_, _) => Vm.GridSelectedCommand.Execute(null);");
     has(code, "        grid.DoubleTapped += (_, _) => Vm.GridOpenedCommand.Execute(null);");
+}
+
+/// One desktop window (DESIGN.md, Page kinds): the runtime's shell is the only
+/// `Window`; every Clarity window is a view in it.
+#[test]
+fn the_application_has_one_desktop_window() {
+    let files = files();
+    for f in files.iter().filter(|f| !f.path.starts_with("Clarity.")) {
+        let derives = f.text.lines().any(|l| l.trim_end().ends_with(": Window") || l.contains(": Window,"));
+        assert!(!derives && !f.text.contains("new Window") && !f.text.contains("<Window "), "{} makes a window", f.path);
+    }
+    has(file(&files, "Windows/OrderFormView.axaml"), "<UserControl ");
 }

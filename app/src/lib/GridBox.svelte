@@ -25,7 +25,7 @@
     columns: number;
     /** Offset of the page, panel, tab or pane this grid belongs to. */
     container: number;
-    onnavigate: (target: string) => void;
+    onnavigate: (target: string, newWindow?: boolean) => void;
     /** A grid with a fixed number of rows, such as the footer. */
     fixedRows?: number | null;
   } = $props();

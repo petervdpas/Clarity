@@ -245,13 +245,18 @@
     {#if info.clickable}
       <label class="prop">
         <span>On click, open</span>
-        <select value={p.onClick ?? ""} onchange={(e) => update({ onClick: textOf(e) })}>
+        <select value={p.onClick ?? ""} onchange={(e) => update({ onClick: textOf(e), newWindow: textOf(e) ? p.newWindow : false })}>
           <option value="">(nothing)</option>
           {#each targets as target (target)}
             <option value={target}>{target}</option>
           {/each}
         </select>
       </label>
+      {#if p.onClick}
+        <label class="inline" title="Opens in a desktop window of its own. Without it, the window opens in place, on top of this one.">
+          <input type="checkbox" checked={p.newWindow} onchange={(e) => update({ newWindow: e.currentTarget.checked })} /> In a new window
+        </label>
+      {/if}
     {/if}
 
     {#if info.properties.includes("for")}

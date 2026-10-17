@@ -249,3 +249,38 @@ app Shop
     let ask = clarity_spec::frame::shown(app, page("Ask"));
     assert!(ask.menu.is_none() && ask.toolbar.is_none() && ask.footer.is_none() && ask.left.is_none());
 }
+
+/// `-> Window in new window`: the one way a design asks for a desktop window
+/// of its own (DESIGN.md, Page kinds); without it, a window opens in place.
+#[test]
+fn a_click_target_can_open_in_a_new_window() {
+    let app = "module shop
+use p
+
+app Shop
+    main CustomerCard
+    menu
+        item \"File\"
+            item \"New customer\" on click -> CustomerCard in new window
+            item \"Card\" on click -> CustomerCard
+";
+    let pages = "module p
+page CustomerCard: window
+    title \"Card\"
+    button \"Other\" at 1,1 span 2 on click -> CustomerCard in new window
+";
+    let project = load_sources([("p.clarity", pages), ("shop.clarity", app)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let app = project.apps().next().unwrap();
+    let items = &app.frame.menu.as_ref().unwrap().items[0].items;
+    assert!(items[0].props.new_window);
+    assert!(!items[1].props.new_window);
+    assert_eq!(clarity_spec::frame::command_line(&items[0].props), "item \"New customer\" on click -> CustomerCard in new window");
+    let button = &project.pages().next().unwrap().widgets[0].props;
+    assert!(button.new_window);
+    assert!(clarity_spec::widgets::widget_line(button).ends_with("on click -> CustomerCard in new window"), "{}", clarity_spec::widgets::widget_line(button));
+
+    // Only a window opens in a new window.
+    let quit = "module shop\nuse p\n\napp Shop\n    menu\n        item \"Quit\" on click -> quit in new window\n";
+    assert!(errors(quit).iter().any(|e| e == "only a window opens in a new window"), "{:?}", errors(quit));
+}

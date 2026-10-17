@@ -22,6 +22,11 @@ large: boolean,
  */
 onClick: string | null, 
 /**
+ * The window opens in a desktop window of its own (`in new window`);
+ * otherwise it opens in place, on top of this one.
+ */
+newWindow: boolean, 
+/**
  * Handler in the code behind that runs on click.
  */
 handler: string | null, };

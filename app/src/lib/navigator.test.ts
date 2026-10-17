@@ -1,0 +1,89 @@
+// How windows open and close in a running application on the web renderer,
+// against the cases every stack shares (conformance/windows.json).
+
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Navigator, type NavReply } from "./navigator.ts";
+
+type Case = {
+  name: string;
+  dialogs: string[];
+  start: string;
+  steps: string[][];
+  expect: { desktops: string[][]; events: string[]; ended: boolean };
+};
+const cases: { cases: Case[] } = JSON.parse(readFileSync(new URL("../../../conformance/windows.json", import.meta.url), "utf8"));
+
+/** A desktop window of a case: its stack (a window is its name) and its navigator. */
+type Desktop = { stack: string[]; nav: Navigator<string, string> };
+
+/** Runs a case's application: the backend logs the events of every desktop window. */
+function application() {
+  const events: string[] = [];
+  const desktops: Desktop[] = [];
+  let ended = false;
+  const reply = (state: string): NavReply<string, string> => ({ state, messages: [], open: [], close: false });
+
+  function desktop(opener: Navigator<string, string> | null): Desktop {
+    const d = { stack: [] as string[] } as Desktop;
+    d.nav = new Navigator<string, string>(
+      { get: () => d.stack, set: (next) => (d.stack = next) },
+      {
+        open: async (window) => {
+          events.push(`${window}:open`);
+          return reply(window);
+        },
+        close: async (state) => {
+          events.push(`${state}:close`);
+          return reply(state);
+        },
+        returnTo: async (state) => {
+          events.push(`${state}:return`);
+          return reply(state);
+        },
+        openApart: async (window, withData) => {
+          await desktop(d.nav).nav.open(window, withData);
+        },
+        quit: async () => {
+          // The first desktop window ends the application; another closes and tells its opener.
+          desktops.splice(desktops.indexOf(d), 1);
+          if (opener === null) ended = true;
+          else await opener.returned();
+        },
+      },
+      () => {},
+      (err) => assert.fail(String(err)),
+    );
+    desktops.push(d);
+    return d;
+  }
+
+  return { events, desktops, ended: () => ended, first: desktop(null) };
+}
+
+test("every case opens and closes its windows the same way", async () => {
+  assert.ok(cases.cases.length > 0);
+  for (const c of cases.cases) {
+    const app = application();
+    await app.first.nav.open(c.start);
+    for (const actions of c.steps) {
+      // A handler of the window on top of the newest desktop window asked for these.
+      const d = app.desktops.at(-1)!;
+      const opens = actions
+        .filter((a) => a.startsWith("open "))
+        .map((a) => {
+          const apart = a.endsWith(" in new window");
+          return { window: a.slice(5, apart ? -" in new window".length : undefined), with: {}, newWindow: apart };
+        });
+      await d.nav.apply(d.stack.length - 1, { state: d.stack.at(-1)!, messages: [], open: opens, close: actions.includes("close") });
+    }
+    assert.deepEqual(
+      app.desktops.map((d) => d.stack),
+      c.expect.desktops,
+      `${c.name}: desktop windows`,
+    );
+    assert.deepEqual(app.events, c.expect.events, `${c.name}: events`);
+    assert.equal(app.ended(), c.expect.ended, `${c.name}: ended`);
+  }
+});

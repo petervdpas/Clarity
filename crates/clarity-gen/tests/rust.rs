@@ -528,3 +528,35 @@ fn the_application_carries_its_theme() {
     assert!(model.contains("\"themes\":[\"Shop\"]"), "{model}");
     assert!(model.contains("\"light\":\"#1f6f5c\""), "{model}");
 }
+
+/// One desktop window (DESIGN.md, Page kinds): Tauri opens one, and the
+/// renderer shows every Clarity window in it.
+#[test]
+fn the_application_has_one_desktop_window() {
+    let files = files();
+    let conf: serde_json::Value = serde_json::from_str(file(&files, "tauri.conf.json")).unwrap();
+    assert_eq!(conf["app"]["windows"].as_array().map(Vec::len), Some(1));
+    for f in files.iter().filter(|f| f.path.ends_with(".rs")) {
+        assert!(!f.text.contains("WebviewWindowBuilder") && !f.text.contains("WindowBuilder"), "{} opens a window", f.path);
+    }
+}
+
+/// A target marked `in new window` is the one way to a second desktop
+/// window: only then does the application make one, through `open_apart`.
+#[test]
+fn only_a_target_in_new_window_makes_a_second_desktop_window() {
+    let apart = SALES.replace(
+        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
+        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"Again\" at 3,6 span 2 on click -> OrderForm in new window",
+    );
+    assert_ne!(apart, SALES);
+    let project = load_sources([("sales.clarity", apart.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let apart_files = generate(&project, &shop()).unwrap();
+    let main = file(&apart_files, "src/main.rs");
+    assert!(main.contains("fn open_apart("), "{main}");
+    assert!(main.contains("tauri::WebviewWindowBuilder::new("), "{main}");
+    assert!(main.contains("fn close_apart("), "{main}");
+    assert!(main.contains("open_apart,\n            apart_start,\n            close_apart,"), "{main}");
+    assert!(!file(&files(), "src/main.rs").contains("open_apart"));
+}

@@ -34,7 +34,7 @@
     frame: ShownFrame;
     data: PageData;
     design: boolean;
-    onnavigate: (target: string) => void;
+    onnavigate: (target: string, newWindow?: boolean) => void;
     children: Snippet;
   } = $props();
 
@@ -63,7 +63,7 @@
       live.event(command.props.name, "click", command.props.handler);
     } else if (command.props.onClick) {
       openMenu = null;
-      onnavigate(command.props.onClick);
+      onnavigate(command.props.onClick, command.props.newWindow);
     }
   }
 

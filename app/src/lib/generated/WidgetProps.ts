@@ -31,6 +31,11 @@ bind: string | null,
  */
 onClick: string | null, 
 /**
+ * The window opens in a desktop window of its own (`in new window`);
+ * otherwise it opens in place, on top of this one.
+ */
+newWindow: boolean, 
+/**
  * Handlers in the code behind, per event.
  */
 handlers: Array<Handler>, columns: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 

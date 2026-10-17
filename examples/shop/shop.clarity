@@ -17,7 +17,7 @@ app Shop
             item "Quit" key "Ctrl+Q" on click -> quit
         item "Customers"
             item "All customers" on click -> CustomerBrowse
-            item "New customer" on click -> CustomerForm
+            item "New customer" on click -> CustomerForm in new window
         item "Orders"
             item "All orders" on click -> OrderBrowse
     toolbar

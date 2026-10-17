@@ -169,6 +169,7 @@ pub fn new_command(kind: CommandKind, caption: Option<String>) -> CommandProps {
         shortcut: None,
         large: false,
         on_click: None,
+        new_window: false,
         handler: None,
     }
 }
@@ -196,6 +197,9 @@ pub fn command_line(props: &CommandProps) -> String {
     }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));
+        if props.new_window {
+            parts.push("in new window".to_string());
+        }
     }
     parts.join(" ")
 }
@@ -326,4 +330,23 @@ pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Pag
         right: side(Some(own), Side::Right).or(side(theirs, Side::Right)),
         footer: own.footer.as_ref().or(theirs.and_then(|f| f.footer.as_ref())),
     }
+}
+
+/// Whether any click target of the project opens `in new window`: only then
+/// does an application make a second desktop window.
+pub fn opens_new_windows(project: &crate::model::Project) -> bool {
+    fn widgets(list: &[crate::model::Widget]) -> bool {
+        list.iter().any(|w| w.props.new_window || widgets(&w.children) || w.pages.iter().any(|p| widgets(&p.children)))
+    }
+    fn commands(list: &[crate::model::Command]) -> bool {
+        list.iter().any(|c| c.props.new_window || commands(&c.items))
+    }
+    let frame = |f: &crate::model::Frame| {
+        f.menu.as_ref().is_some_and(|m| commands(&m.items))
+            || f.toolbar.as_ref().is_some_and(|t| commands(&t.items))
+            || f.ribbon.as_ref().is_some_and(|r| r.tabs.iter().flat_map(|t| &t.groups).any(|g| commands(&g.items)))
+            || f.sidebars.iter().any(|s| widgets(&s.widgets))
+            || f.footer.as_ref().is_some_and(|ft| widgets(&ft.widgets))
+    };
+    project.pages().any(|p| widgets(&p.widgets) || frame(&p.frame)) || project.apps().any(|a| frame(&a.frame))
 }

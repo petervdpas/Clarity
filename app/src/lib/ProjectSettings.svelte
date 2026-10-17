@@ -230,7 +230,7 @@
                 {/if}
               </div>
             {:else}
-              <span class="muted">No module declares a theme yet; the Module view writes them.</span>
+              <span class="muted">No module declares a theme yet; New theme under Themes in the project tree starts one.</span>
             {/each}
             {#if settings.themes.length > 1}
               <label>
@@ -437,7 +437,6 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    max-width: 900px;
   }
 
   header {
@@ -512,8 +511,15 @@
   }
 
   .theme-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 140px auto;
     gap: 16px;
+    align-items: center;
+  }
+
+  .theme-row label {
+    display: flex;
+    gap: 6px;
     align-items: center;
   }
 

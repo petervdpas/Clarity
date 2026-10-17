@@ -102,6 +102,21 @@ textarea {
   min-width: 0;
 }
 
+/* Dropdowns drawn by the page, not the platform, so they are as tall as a
+   text box; the arrow is two gradients in the text color. */
+select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 26px;
+}
+
 input:focus,
 select:focus,
 textarea:focus,
@@ -137,7 +152,7 @@ button:focus-visible {
   padding-bottom: 0;
 }
 
-.form-grid input:not([type="checkbox"]),
+.form-grid input:not([type="checkbox"]):not([type="radio"]),
 .form-grid select {
   height: 30px;
   box-sizing: border-box;

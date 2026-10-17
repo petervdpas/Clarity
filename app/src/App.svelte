@@ -14,6 +14,7 @@
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";
   import ModuleView from "./lib/ModuleView.svelte";
+  import ThemeView from "./lib/ThemeView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
   import NewProjectDialog from "./lib/NewProjectDialog.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
@@ -52,9 +53,9 @@
   ];
 
   /** What the sidebar shows while designing. */
-  type DesignSide = "windows" | "parts" | "outline" | "settings";
+  type DesignSide = "elements" | "parts" | "outline" | "settings";
   const DESIGN_SIDES: { key: DesignSide; name: string }[] = [
-    { key: "windows", name: "Windows" },
+    { key: "elements", name: "Elements" },
     { key: "parts", name: "Parts" },
     { key: "outline", name: "Window" },
     { key: "settings", name: "Settings" },
@@ -121,6 +122,14 @@
   const files = $derived(preview?.project.files ?? []);
   const entity = $derived(current?.kind === "entity" ? files.flatMap((f) => f.entities).find((e) => e.name.name === current.name) : undefined);
   const enumDecl = $derived(current?.kind === "enum" ? files.flatMap((f) => f.enums).find((e) => e.name.name === current.name) : undefined);
+  /** The open theme and the module that declares it; no module for Clarity's own. */
+  const openTheme = $derived.by(() => {
+    if (!preview || current?.kind !== "theme") return null;
+    if (current.name === preview.baseTheme.name.name) return { theme: preview.baseTheme, file: null };
+    const declaring = files.find((f) => f.themes.some((t) => t.name.name === current.name));
+    const theme = declaring?.themes.find((t) => t.name.name === current.name);
+    return declaring && theme ? { theme, file: declaring } : null;
+  });
   const moduleFile = $derived(current?.kind === "module" ? files.find((f) => (f.module?.name ?? "") === current.name) : undefined);
   const appPage = $derived(app ? appAsPage(app) : null);
   const file = $derived(
@@ -207,6 +216,8 @@
         return all.some((f) => f.entities.some((e) => e.name.name === o.name));
       case "enum":
         return all.some((f) => f.enums.some((e) => e.name.name === o.name));
+      case "theme":
+        return o.name === p.baseTheme.name.name || all.some((f) => f.themes.some((t) => t.name.name === o.name));
       case "module":
         return all.some((f) => (f.module?.name ?? "") === o.name);
       case "settings":
@@ -277,6 +288,25 @@
     if (target) {
       newDataError = null;
       newData = { kind, file: target };
+    }
+  }
+
+  /** Adds a theme with a free name, a full copy of Clarity's own, and opens it.
+      It goes into the module that already declares themes, or the first one. */
+  async function addTheme() {
+    if (!preview) return;
+    const target = files.find((f) => f.themes.length > 0) ?? files[0];
+    if (!target) return;
+    const taken = new Set(files.flatMap((f) => f.themes.map((t) => t.name.name)));
+    let name = "Theme";
+    for (let n = 2; taken.has(name); n++) name = "Theme" + n;
+    actionError = null;
+    try {
+      const text = await invoke<string>("theme_starter", { name });
+      applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
+      select({ kind: "theme", name });
+    } catch (err) {
+      actionError = String(err);
     }
   }
 
@@ -495,6 +525,7 @@
       onwindow={selectPage}
       onselect={select}
       onnewdata={full ? startNewData : null}
+      onnewtheme={full ? addTheme : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -674,7 +705,7 @@
             {@render tree(true)}
           </section>
         {/if}
-      {:else if tab === "design" && (!designing || designSide === "windows")}
+      {:else if tab === "design" && (!designing || designSide === "elements")}
         <section class="side-section">
           {@render tree(true)}
         </section>
@@ -746,6 +777,16 @@
             onedit={editData}
             ondelete={deletePicked}
             onrename={(newName) => renameData("enum", enumDecl.name.name, newName)}
+          />
+        {:else if openTheme}
+          <ThemeView
+            {preview}
+            theme={openTheme.theme}
+            file={openTheme.file}
+            onapply={async (edit) => {
+              if (openTheme.file) applyPreview((await applyEdit(openTheme.file, edit)).preview);
+            }}
+            onopensettings={selectSettings}
           />
         {:else if moduleFile}
           <ModuleView

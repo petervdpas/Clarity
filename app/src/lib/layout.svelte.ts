@@ -29,8 +29,32 @@ function read(): Sizes {
   }
 }
 
+const FOLDED_KEY = "clarity.folded";
+
+/** The panels and sections that can be folded away. */
+type Foldable = "properties" | "window" | "picked";
+
+function readFolded(): Partial<Record<Foldable, boolean>> {
+  try {
+    return JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "{}") as Partial<Record<Foldable, boolean>>;
+  } catch {
+    return {};
+  }
+}
+
 class Layout {
   sizes = $state<Sizes>(read());
+  folded = $state<Partial<Record<Foldable, boolean>>>(readFolded());
+
+  /** Folds a panel or section away, or opens it again, and remembers it. */
+  toggle(which: Foldable) {
+    this.folded[which] = !this.folded[which];
+    try {
+      localStorage.setItem(FOLDED_KEY, JSON.stringify(this.folded));
+    } catch {
+      // Remembering is a convenience only.
+    }
+  }
 
   /** Changes a size by `delta` pixels, within its limits, and remembers it. */
   resize(which: keyof Sizes, delta: number) {

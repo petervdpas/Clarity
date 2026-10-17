@@ -286,7 +286,7 @@
 </div>
 </div>
 
-<div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.sizes.properties}px">
+<div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.folded.properties ? 'auto' : layout.sizes.properties + 'px'}">
   <div class="stage">
 
     <div class="window {area.class}" data-scheme={area.scheme}>
@@ -326,10 +326,19 @@
     </div>
   </div>
 
-  <Splitter axis="x" label="Width of the properties" onmove={(d) => layout.resize("properties", -d)} />
+  {#if layout.folded.properties}
+    <span></span>
+  {:else}
+    <Splitter axis="x" label="Width of the properties" onmove={(d) => layout.resize("properties", -d)} />
+  {/if}
   <aside>
-    <PageProperties {preview} {page} {app} onedit={edit} subject="window" />
-    <PageProperties {preview} {page} {app} onedit={edit} subject="picked" />
+    {#if layout.folded.properties}
+      <button class="dock" title="Show the properties" onclick={() => layout.toggle("properties")}>&lsaquo; Properties</button>
+    {:else}
+      <button class="undock" title="Fold the properties away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
+      <PageProperties {preview} {page} {app} onedit={edit} subject="window" />
+      <PageProperties {preview} {page} {app} onedit={edit} subject="picked" />
+    {/if}
 
     {#if pageDesigner.error}
       <div class="error" role="alert">
@@ -465,6 +474,31 @@
     gap: 12px;
     position: sticky;
     top: 0;
+  }
+
+  .undock {
+    align-self: flex-end;
+    margin-bottom: -8px;
+    padding: 2px 8px;
+    font-size: 11px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+  }
+
+  .undock:hover,
+  .dock:hover {
+    color: var(--text);
+  }
+
+  .dock {
+    writing-mode: vertical-rl;
+    padding: 10px 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
   }
 
   section {

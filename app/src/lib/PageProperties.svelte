@@ -9,6 +9,7 @@
   import type { Surface } from "./generated/Surface";
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
+  import { layout } from "./layout.svelte";
   import { describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
@@ -152,9 +153,16 @@
 </script>
 
 <section>
-  <h3>{subject === "window" ? "The window" : "What is picked"}</h3>
+  <h3>
+    <button class="fold" aria-expanded={!layout.folded[subject]} onclick={() => layout.toggle(subject)}>
+      <span class="chevron" class:closed={layout.folded[subject]}>&#9662;</span>
+      {subject === "window" ? "The window" : "What is picked"}
+    </button>
+  </h3>
 
-  {#if subject === "picked" && location && p && info}
+  {#if layout.folded[subject]}
+    <!-- Folded: only the header shows. -->
+  {:else if subject === "picked" && location && p && info}
     <div class="kind">{info.name}</div>
 
     <label class="prop">
@@ -321,8 +329,10 @@
             <span class="event-name">{ev}</span>
             <input value={handler} placeholder="handler" onchange={(e) => setHandler(ev, textOf(e))} />
             {#if handler}
-              <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
-              <button class="small" title="Unwire" onclick={() => setHandler(ev, null)}>&times;</button>
+              <span class="event-buttons">
+                <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+                <button class="small" title="Unwire" onclick={() => setHandler(ev, null)}>&times;</button>
+              </span>
             {:else}
               <button
                 class="small"
@@ -454,8 +464,10 @@
           <span class="event-name">{ev}</span>
           <input value={handler} placeholder="handler" onchange={(e) => setOwnerHandler(ev, textOf(e))} />
           {#if handler}
-            <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
-            <button class="small" title="Unwire" onclick={() => setOwnerHandler(ev, null)}>&times;</button>
+            <span class="event-buttons">
+              <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+              <button class="small" title="Unwire" onclick={() => setOwnerHandler(ev, null)}>&times;</button>
+            </span>
           {:else}
             <button class="small" title="Wire a handler for this event" onclick={() => setOwnerHandler(ev, OWNER_HANDLERS[ev] ?? null)}
               >Wire</button
@@ -487,6 +499,30 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-muted);
+  }
+
+  .fold {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    text-align: left;
+  }
+
+  .chevron {
+    display: inline-block;
+    transition: transform 0.1s;
+  }
+
+  .chevron.closed {
+    transform: rotate(-90deg);
   }
 
   .kind {
@@ -563,6 +599,11 @@
     align-items: center;
   }
 
+  .event-buttons {
+    display: flex;
+    gap: 4px;
+  }
+
   .event-name {
     font-family: var(--mono);
     font-size: 12px;
@@ -585,6 +626,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 6px;
+    align-items: center;
     margin-top: 4px;
   }
 

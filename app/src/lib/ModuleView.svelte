@@ -8,7 +8,6 @@
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
   import type { DataEvent } from "./generated/DataEvent";
-  import ThemeSample from "./ThemeSample.svelte";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
 
@@ -25,7 +24,7 @@
     /** Applies an edit and throws with the reason when it is refused. */
     onapply: (edit: Edit) => Promise<void>;
     /** Opens a declaration by kind and name. */
-    onopen: (kind: "window" | "app" | "entity" | "enum", name: string) => void;
+    onopen: (kind: "window" | "app" | "entity" | "enum" | "theme", name: string) => void;
   } = $props();
 
   /** The function or action open in the editor, by name. */
@@ -63,30 +62,6 @@
   }
 
   /** Writes the entity's code block with a first event and opens it. */
-  /** The theme open in the editor, by name. */
-  let openTheme = $state<string | null>(null);
-  const themeDecl = $derived(file.themes.find((t) => t.name.name === openTheme) ?? null);
-
-
-  /** Adds a theme with a free name and opens it. */
-  async function addTheme() {
-    const taken = new Set(preview.project.files.flatMap((f) => f.themes.map((t) => t.name.name)));
-    let name = "Theme";
-    for (let n = 2; taken.has(name); n++) name = "Theme" + n;
-    // A copy of Clarity's own theme, so every value is there to change.
-    const text = await invoke<string>("theme_starter", { name });
-    await onapply({ op: "appendDecl", text });
-    openTheme = name;
-  }
-
-  /** Clarity's own theme as written, shown when it is opened. */
-  let baseText = $state<string | null>(null);
-
-  async function openBase() {
-    openTheme = null;
-    baseText = baseText === null ? await invoke<string>("theme_starter", { name: preview.baseTheme.name.name }) : null;
-  }
-
   async function addEvents(entity: string) {
     const text = `code ${entity}\n    before save\n        // Runs before a record is stored; refuse "text" stops the save.\n        return\n`;
     await onapply({ op: "appendDecl", text });
@@ -185,42 +160,19 @@
   <section>
     <h3>Themes</h3>
     <p class="muted">
-      How the application looks: colors for light and dark mode, fonts, sizes, corner radii, spacing, borders, a shadow, the look of each
-      kind of part in its states, and named styles that parts pick with <code>style</code>. Every theme starts from Clarity's own and
-      changes what it sets; a new theme is a full copy of it. The project file names the themes its application offers, the first one the
-      one it starts with; the Project tab chooses them.
+      How the application looks. Each theme opens in its own view, also from Themes in the project tree, where New theme starts one.
     </p>
     <ul>
-      <li>
-        <button class:active={baseText !== null} onclick={openBase}>
-          <span class="kind">theme</span>{preview.baseTheme.name.name}<span class="muted">built in, the base of every theme</span>
-        </button>
-      </li>
       {#each file.themes as t (t.name.name)}
         <li>
-          <button class:active={openTheme === t.name.name} onclick={() => ((openTheme = t.name.name), (baseText = null))}>
-            <span class="kind">theme</span>{t.name.name}{#if preview.project.themes.includes(t.name.name)}<span class="muted">{preview.project.themes[0] === t.name.name ? "offered, the first" : "offered"}</span>{/if}
+          <button onclick={() => onopen("theme", t.name.name)}>
+            <span class="kind">theme</span>{t.name.name}{#if preview.project.themes.includes(t.name.name)}<span class="muted">{preview.project.themes[0] === t.name.name ? "offered, starts with it" : "offered"}</span>{/if}
           </button>
         </li>
+      {:else}
+        <li class="muted">This module declares no themes.</li>
       {/each}
     </ul>
-    <div class="buttons"><button onclick={addTheme}>New theme</button></div>
-    {#if themeDecl}
-      {@const item = themeDecl.span.start}
-      <div class="function-editor">
-        <SourceEditor
-          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
-          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
-          save={(text) => onapply({ op: "replaceDecl", item, text })}
-          reloadKey={file.path + "\n" + item + "\n" + file.version}
-          onclose={() => (openTheme = null)}
-        />
-      </div>
-      <ThemeSample theme={themeDecl} />
-    {:else if baseText !== null}
-      <pre class="base-theme">{baseText}</pre>
-      <ThemeSample theme={preview.baseTheme} />
-    {/if}
   </section>
 
   {#if file.entities.length > 0}
@@ -268,7 +220,6 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 900px;
   }
 
   h2 {
@@ -328,17 +279,6 @@
 
   li button:hover {
     background: var(--panel-alt);
-  }
-
-  .base-theme {
-    font-family: var(--mono);
-    font-size: 12px;
-    max-height: 320px;
-    overflow: auto;
-    background: var(--panel-alt);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 10px;
   }
 
   .kind {

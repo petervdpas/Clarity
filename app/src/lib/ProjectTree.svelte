@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The project as one tree: the app, its windows, its data and the modules
+  // The project as one tree: the app, its windows, its data, its themes and the modules
   // its files form.
 
   import type { Page } from "./generated/Page";
@@ -17,6 +17,7 @@
     onnewwindow = null,
     onnewapp = null,
     onnewdata = null,
+    onnewtheme = null,
   }: {
     preview: Preview;
     /** What is open: a window, the app, an entity, an enum or a module. */
@@ -30,6 +31,7 @@
     onnewapp?: (() => void) | null;
     /** Starts a new entity or enum. */
     onnewdata?: ((kind: "entity" | "enum") => void) | null;
+    onnewtheme?: (() => void) | null;
   } = $props();
 
   function is(kind: Selected["kind"], name: string): boolean {
@@ -46,6 +48,7 @@
   });
   const entities = $derived(files.flatMap((f) => f.entities.map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
+  const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -104,6 +107,33 @@
       {#if onnewdata}
         <button class="row add" onclick={() => onnewdata("entity")}>+ New entity</button>
         <button class="row add" onclick={() => onnewdata("enum")}>+ New enum</button>
+      {/if}
+    </details>
+
+    <details open>
+      <summary>Themes <span class="count">{themes.length + 1}</span></summary>
+      <button
+        class="row"
+        class:current={is("theme", preview.baseTheme.name.name)}
+        title="Clarity's own theme, the base every theme changes"
+        onclick={() => onselect({ kind: "theme", name: preview.baseTheme.name.name })}
+      >
+        {preview.baseTheme.name.name}
+        <span class="note">built in</span>
+      </button>
+      {#each themes as { theme, module } (theme.name.name)}
+        {@const name = theme.name.name}
+        <button class="row" class:current={is("theme", name)} title="in module {module}" onclick={() => onselect({ kind: "theme", name })}>
+          {name}
+          {#if preview.project.themes[0] === name}
+            <span class="note">offered, starts with it</span>
+          {:else if preview.project.themes.includes(name)}
+            <span class="note">offered</span>
+          {/if}
+        </button>
+      {/each}
+      {#if onnewtheme}
+        <button class="row add" onclick={onnewtheme}>+ New theme</button>
       {/if}
     </details>
 

@@ -101,6 +101,7 @@ fn writes_a_complete_cargo_project() {
         paths,
         [
             "Cargo.toml",
+            "README.md",
             "build.rs",
             "clarity-runtime/Cargo.toml",
             "clarity-runtime/src/dialect.rs",

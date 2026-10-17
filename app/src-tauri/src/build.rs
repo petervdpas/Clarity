@@ -35,10 +35,42 @@ pub struct BuildDone {
     pub binary: Option<String>,
 }
 
+/// The build tools of a stack on this machine, for New project and the
+/// Project tab (P3).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct StackTools {
+    pub backend: clarity_project::Backend,
+    pub ui: clarity_project::Ui,
+    /// Whether Clarity generates this stack already.
+    pub generated: bool,
+    /// Whether Build and Run can work.
+    pub ready: bool,
+    /// The tools found, as they name themselves.
+    pub found: Vec<String>,
+    /// What to install, with where to get it.
+    pub missing: Vec<String>,
+}
+
+/// Looks for the build tools of every stack the catalog offers.
+pub fn stack_tools() -> Vec<StackTools> {
+    clarity_gen::tools::check_all(&clarity_gen::tools::System)
+        .into_iter()
+        .map(|t| StackTools {
+            ready: t.ready(),
+            backend: t.backend,
+            ui: t.ui,
+            generated: t.generated,
+            found: t.found,
+            missing: t.missing,
+        })
+        .collect()
+}
+
 /// Generates the project of the project file `file` into its output folder.
 /// Returns the output folder and how its stack builds it, as a debug or
 /// (with `release`) a release program.
-pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen::Toolchain), String> {
+pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
     let dir = clarity_project::module_dir(file);
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let loaded = clarity_project::load(file);
@@ -53,7 +85,20 @@ pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen:
     let toolchain = clarity_gen::toolchain(&settings, release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
     let out = clarity_project::out_dir(file, &settings);
     clarity_gen::write_out(&out, &files, clarity_gen::build_output(settings.stack.backend)).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
-    Ok((out, toolchain))
+    Ok((out, toolchain, settings.stack))
+}
+
+/// Why the generated project in `out` cannot be built on this machine: the
+/// tools of its stack that are missing; none when they are all there.
+pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Option<String> {
+    (!tools.missing.is_empty()).then(|| {
+        format!(
+            "the project is generated in {}; to build {} here, install {}",
+            out.display(),
+            clarity_gen::tools::stack_name(tools.backend, tools.ui),
+            tools.missing.join(", and ")
+        )
+    })
 }
 
 fn send_lines(app: &AppHandle, from: impl std::io::Read) {
@@ -69,7 +114,15 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
-    let (out, toolchain) = match generate_out(&file, release) {
+    // Generating works without the stack's tools; building needs them.
+    let found = generate_out(&file, release).and_then(|(out, toolchain, stack)| {
+        let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
+        match cannot_build(&tools, &out) {
+            Some(why) => Err(why),
+            None => Ok((out, toolchain)),
+        }
+    });
+    let (out, toolchain) = match found {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -175,7 +228,7 @@ mod tests {
     #[test]
     fn generates_the_example_into_out() {
         let dir = example("rust", "stack rust web desktop");
-        let (out, toolchain) = generate_out(&dir.join("shop.clarity"), true).unwrap();
+        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), true).unwrap();
         assert_eq!(out, dir.join("shop/out"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());
@@ -184,10 +237,32 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// Without the stack's tools the project is still generated, and Build
+    /// says what to install, so it can be built here later or elsewhere.
+    #[test]
+    fn missing_tools_say_what_to_install_after_generating() {
+        let check = clarity_gen::tools::StackTools {
+            backend: clarity_project::Backend::Csharp,
+            ui: clarity_project::Ui::Avalonia,
+            generated: true,
+            found: vec![],
+            missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
+        };
+        assert_eq!(
+            cannot_build(&check, Path::new("/p/shop/out")),
+            Some(
+                "the project is generated in /p/shop/out; to build C# with Avalonia here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download"
+                    .to_string()
+            )
+        );
+        let ready = clarity_gen::tools::StackTools { missing: vec![], found: vec![".NET SDK 10.0.402".into()], ..check };
+        assert_eq!(cannot_build(&ready, Path::new("/p/shop/out")), None);
+    }
+
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
         let dir = example("csharp", "stack csharp avalonia desktop");
-        let (out, toolchain) = generate_out(&dir.join("shop.clarity"), false).unwrap();
+        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), false).unwrap();
         assert!(out.join("Shop.csproj").exists());
         assert!(!out.join("Cargo.toml").exists());
         assert_eq!(toolchain.tool, "dotnet");

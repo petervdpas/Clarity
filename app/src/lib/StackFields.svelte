@@ -8,6 +8,8 @@
   import type { Stack } from "./generated/Stack";
   import type { Target } from "./generated/Target";
   import type { Ui } from "./generated/Ui";
+  import { toolsNote } from "./stackTools";
+  import { checkTools, stackTools } from "./tools.svelte";
 
   let {
     catalog,
@@ -33,6 +35,10 @@
     onchange({ ...stack, targets });
   }
 
+  // Whether this machine can build the stack (P3).
+  $effect(() => checkTools());
+  const note = $derived(toolsNote(stackTools.all, stack.backend, stack.ui));
+
   function uiLabel(ui: Ui): string {
     return catalog.uis.find((u) => u.id === ui)?.label ?? ui;
   }
@@ -56,3 +62,35 @@
     </label>
   {/each}
 </div>
+<span class="form-label">Build tools</span>
+<div class="tools">
+  {#if note}
+    <span class="note {note.level}">{note.text}</span>
+  {:else}
+    <span class="note">{stackTools.checking ? "Looking for the build tools..." : "Not checked"}</span>
+  {/if}
+  <button type="button" disabled={stackTools.checking} onclick={() => checkTools(true)}>Check again</button>
+</div>
+
+<style>
+  .tools {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .note {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-muted);
+    user-select: text;
+  }
+
+  .note.warning {
+    color: var(--warning, var(--text));
+  }
+
+  button {
+    flex: none;
+  }
+</style>

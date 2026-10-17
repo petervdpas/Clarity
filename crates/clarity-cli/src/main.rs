@@ -69,6 +69,8 @@ enum Command {
         #[arg(long)]
         list: bool,
     },
+    /// Look for the build tools of every stack, and say what to install.
+    Tools,
 }
 
 #[derive(Subcommand)]
@@ -111,6 +113,10 @@ fn main() -> ExitCode {
             list,
         } => import(&project, &source, module, tables, list),
         Command::Own { project, source } => own(&project, &source),
+        Command::Tools => {
+            print!("{}", clarity_gen::tools::report(&clarity_gen::tools::check_all(&clarity_gen::tools::System)));
+            ExitCode::SUCCESS
+        }
     }
 }
 

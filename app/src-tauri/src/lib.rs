@@ -513,6 +513,13 @@ fn stack_catalog() -> Catalog {
     clarity_project::catalog()
 }
 
+/// The build tools of every stack on this machine. Looking runs the tools,
+/// so it happens off the window's thread.
+#[tauri::command]
+async fn stack_tools() -> Result<Vec<build::StackTools>, String> {
+    tauri::async_runtime::spawn_blocking(build::stack_tools).await.map_err(|err| err.to_string())
+}
+
 /// Saves the project settings. `version` is the file version the Project
 /// tab saw; settings with problems are refused, with the first one.
 #[tauri::command]
@@ -682,6 +689,7 @@ pub fn run() {
             project_file,
             save_settings,
             stack_catalog,
+            stack_tools,
             project_folder,
             project_path,
             code_text,

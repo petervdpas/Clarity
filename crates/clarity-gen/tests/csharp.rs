@@ -119,6 +119,7 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Clarity.Runtime/Store.cs",
             "Clarity.Runtime/Text.cs",
             "Program.cs",
+            "README.md",
             "Sales.cs",
             "Schema.cs",
             "Shop.csproj",

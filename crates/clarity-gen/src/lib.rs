@@ -3,9 +3,11 @@
 //! deterministic: the same project always gives the same files, byte for
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
+pub mod tools;
 mod csharp;
 mod ddl;
 mod print;
+mod readme;
 mod rust;
 mod schema;
 mod web;
@@ -89,6 +91,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             return Err(vec![format!("the {name} backend is not generated yet; Rust and C# are")]);
         }
     };
+    files.push(OutFile {
+        path: "README.md".to_string(),
+        text: readme::readme(settings),
+        bytes: None,
+    });
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }

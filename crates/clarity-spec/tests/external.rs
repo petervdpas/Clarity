@@ -80,18 +80,6 @@ fn external_entities_need_no_migration() {
 }
 
 #[test]
-fn only_external_entities_are_mapped() {
-    let mapped = SHOP.replace("entity Customer\n", "entity Customer\n    table \"tblCustomer\"\n");
-    let project = load(&mapped, ERP, false, &[]);
-    assert!(
-        messages(&project, Severity::Error).iter().any(|m| m
-            == "Customer is in data source main, which Clarity owns; 'table', 'key' and 'column' map entities of an external data source"),
-        "{:#?}",
-        project.diagnostics
-    );
-}
-
-#[test]
 fn two_fields_cannot_share_a_column() {
     let shared = ERP.replace("amount: money", "amount: money, column \"InvNo\"");
     let project = load(SHOP, &shared, false, &[]);

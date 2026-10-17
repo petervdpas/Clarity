@@ -393,3 +393,30 @@ fn an_external_source_is_opened_but_never_migrated() {
     assert!(erp_rs.contains("Cond::contains(\"InvNo\", &String::from(\"INV\"))"), "{erp_rs}");
     assert!(erp_rs.contains(".order(\"InvNo\", false)"), "{erp_rs}");
 }
+
+#[test]
+fn a_taken_over_database_keeps_its_names() {
+    use clarity_project::{DataSource, SourceKind};
+    use clarity_spec::SourceRef;
+    let start = "module start\npage Start: window\n    title \"Start\"\n";
+    let erp = "module erp\nsource erp\n\nentity Invoice\n    table \"invoices\"\n    key \"InvoiceID\"\n    number: text(20), unique, column \"InvoiceNumber\"\n    total: money\n";
+    let baseline = "migration \"Taken over\" baseline\n    add entity Invoice\n        table \"tblInvoice\"\n        key \"InvoiceID\"\n        number: text(20), unique, column \"InvNo\"\n        total: money\n";
+    let remap = "migration \"Tidy names\"\n    map table Invoice to \"invoices\"\n    map column Invoice.number to \"InvoiceNumber\"\n";
+    let project = clarity_spec::load_in(
+        [("start.clarity", start), ("erp.clarity", erp)],
+        [("migrations/erp/0001.clarity", baseline), ("migrations/erp/0002.clarity", remap)],
+        &[SourceRef::sql("main"), SourceRef::sql("erp")],
+    );
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = shop();
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false });
+    let files = generate(&project, &settings).unwrap();
+    let schema = file(&files, "src/schema.rs");
+    // The baseline creates only what is missing, under the old names.
+    assert!(schema.contains("CREATE TABLE IF NOT EXISTS \"tblInvoice\" (\n    \"InvoiceID\" INTEGER PRIMARY KEY,\n    \"InvNo\" TEXT NOT NULL DEFAULT ''"), "{schema}");
+    assert!(schema.contains("CREATE UNIQUE INDEX IF NOT EXISTS \"tblInvoice_InvNo_unique\""), "{schema}");
+    // Then the renames, with the unique index following its column.
+    assert!(schema.contains("ALTER TABLE \"tblInvoice\" RENAME TO \"invoices\";"), "{schema}");
+    assert!(schema.contains("ALTER TABLE \"invoices\" RENAME COLUMN \"InvNo\" TO \"InvoiceNumber\";"), "{schema}");
+    assert!(schema.contains("CREATE UNIQUE INDEX \"invoices_InvoiceNumber_unique\""), "{schema}");
+}

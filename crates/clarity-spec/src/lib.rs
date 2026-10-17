@@ -273,6 +273,11 @@ pub fn write_step(dir: &Path, source: &str, title: &str, ops: &[migrate::Op]) ->
     if ops.is_empty() {
         return Err(std::io::Error::other("there are no changes to migrate"));
     }
+    write_step_text(dir, source, &migrate::step_text(title, ops))
+}
+
+/// Writes `text` as the next step file of data source `source`.
+pub fn write_step_text(dir: &Path, source: &str, text: &str) -> std::io::Result<PathBuf> {
     let folder = dir.join(MIGRATIONS_DIR).join(source);
     std::fs::create_dir_all(&folder)?;
     let existing: Vec<String> = spec_files(&folder)?
@@ -280,6 +285,6 @@ pub fn write_step(dir: &Path, source: &str, title: &str, ops: &[migrate::Op]) ->
         .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
         .collect();
     let path = folder.join(migrate::next_file_name(&existing));
-    std::fs::write(&path, migrate::step_text(title, ops))?;
+    std::fs::write(&path, text)?;
     Ok(path)
 }

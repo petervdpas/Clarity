@@ -536,13 +536,14 @@ fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
     }
 }
 
-/// The settings a generated application is built with. An external SQLite
-/// file already exists somewhere on this machine, so a relative location
-/// becomes the full path from the project's folder `dir`. Owned databases
-/// keep their location: the application creates them where it runs.
+/// The settings a generated application is built with. A relative SQLite
+/// location is in the project's folder `dir`, for Clarity and for the
+/// application alike, so it becomes the full path from there: the same file
+/// whether a database is owned or external, and whichever folder the
+/// application runs in.
 pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     let mut built = settings.clone();
-    for source in built.datasources.iter_mut().filter(|s| s.external && s.kind == SourceKind::Sqlite) {
+    for source in built.datasources.iter_mut().filter(|s| s.kind == SourceKind::Sqlite) {
         source.url = sqlite_path(dir, source).display().to_string();
     }
     built
@@ -623,5 +624,48 @@ pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String]) 
         path,
         text: imported.text,
         skipped: imported.skipped,
+    })
+}
+
+/// What taking ownership wrote: the baseline step, and the project file
+/// before and after, so it can be undone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Owned {
+    pub step: PathBuf,
+    pub step_text: String,
+    pub project_file: PathBuf,
+    pub before: String,
+    pub after: String,
+}
+
+/// Makes external data source `source` one Clarity owns: its entities as
+/// they are become a baseline step, and the source loses `external`. From
+/// then on the dictionary drives its tables through ordinary steps.
+pub fn take_ownership(dir: &Path, source: &str) -> Result<Owned, String> {
+    external_schema(dir, source)?;
+    let project = load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    if let Some(problem) = project.diagnostics.iter().find(|d| d.severity == clarity_spec::Severity::Error) {
+        return Err(format!("fix the problems first: {}", problem.message));
+    }
+    let ops = clarity_spec::migrate::pending(&project, source, &[]);
+    if ops.is_empty() {
+        return Err(format!("data source {source} has no entities to take over; import its tables first"));
+    }
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    let before = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
+    let mut settings = parse(&before)?;
+    for s in settings.datasources.iter_mut().filter(|s| s.name == source) {
+        s.external = false;
+    }
+    let after = write(Some(&before), &settings)?;
+    let step_text = clarity_spec::migrate::step_text_baseline("Taken over", &ops);
+    let step = clarity_spec::write_step_text(dir, source, &step_text).map_err(|err| format!("cannot write the step: {err}"))?;
+    std::fs::write(&file, &after).map_err(|err| format!("cannot write {}: {err}", file.display()))?;
+    Ok(Owned {
+        step,
+        step_text,
+        project_file: file,
+        before,
+        after,
     })
 }

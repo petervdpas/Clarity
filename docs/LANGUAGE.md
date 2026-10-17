@@ -68,7 +68,7 @@ project Shop
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
 | `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
-| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder) and a connection string or URL for the others. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
+| `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application) and a connection string or URL for the others. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
 Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
@@ -208,8 +208,11 @@ migration "Phone and VAT"
 | `rename field Entity.old to new` | renames a field; its values stay |
 | `change field Entity.name: type` | changes a field's type, converting the values |
 | `add unique Entity.name`, `remove unique Entity.name` | makes a field unique, or not |
+| `map table Entity to "name"` | stores the entity in a table of another name (renames the table); `to default` goes back to the entity's name |
+| `map key Entity to "name"` | names the key column (renames it); `to default` is `id` |
+| `map column Entity.field to "name"` | stores a field in a column of another name (renames the column); `to default` is the field's name |
 
-Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone.
+Fields in a step are written as in an entity. Only what is stored counts: the type, `unique`, `column`, and `default` for the records that already exist. Labels, help texts and checks such as `min` belong to the dictionary alone. An added entity can name its table and key with `table` and `key` lines, as in the dictionary; renaming a field whose column is mapped changes nothing in the database.
 
 - **Replaying the steps** in order gives the schema as last migrated. Each step must fit the schema the steps before it made; one that renames a field that does not exist is an error.
 - **Pending changes** are what the dictionary has and the steps do not. The checker reports them as warnings on the entity, and the generator refuses to write the application until a step covers them.
@@ -239,13 +242,14 @@ entity Invoice
 - `table` names the existing table; without it, the table is the entity's name in snake case (`invoice`).
 - `key` names the integer column that identifies a record; without it, that column is `id`. Tables whose key is not one integer column cannot be used yet.
 - `column` names the existing column of a field; without it, the column has the field's name.
-- Only entities of an external source can be mapped. Two fields cannot share a column, and no field can use the key column.
+- Two fields cannot share a column, and no field can use the key column. The mapping is meant for existing tables; it stays when Clarity takes ownership (below).
 
 Clarity reads and writes the records of an external database, but never changes its tables: it writes no migration steps for it, and the generated application never migrates it.
 
 - **Import.** The Import button of an external SQLite source on the Project tab, or `clarity import shop.clarity erp`, writes the chosen tables as a new module of mapped entities. Names follow Clarity's style (`tblCustomers` becomes `Customers`, `CustName` becomes `cust_name`), column types become field types, foreign keys become `ref` fields when both tables are imported, `NOT NULL` becomes `required` and a unique index `unique`. Binary columns are left out.
 - **Checking.** Each time the project loads, Clarity compares the entities with the tables of the database. A missing table or column is an error; a column whose type does not fit the field, and a required column that no field fills (so new records cannot be saved), are warnings. When the database cannot be read, a warning says its tables were not checked.
 - **Read-only.** With `readonly` on the data source, `save` and `delete` of its records are errors.
+- **Take ownership.** The Own button of an external source on the Project tab, or `clarity own shop.clarity erp`, makes Clarity the owner. It writes the source's first step, a `baseline`, which describes the mapped tables as they are and creates only what is missing, so it changes nothing in the database it was taken from (and a new, empty database gets the tables). Then it removes `external`. From there on the dictionary drives the tables through ordinary steps, and the mapped names stay: `table`, `key` and `column` work on owned entities too.
 
 ## 5. Windows
 
@@ -824,11 +828,12 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]
 
-migration     = "migration" String
+migration     = "migration" String ["baseline"]
                     (("add" "entity" Entity
                         field*)
                     | "remove" "entity" Entity | "rename" "entity" Entity "to" Name
                     | "add" "field" Entity "." field | "remove" "field" Entity "." name
                     | "rename" "field" Entity "." name "to" name | "change" "field" Entity "." name ":" type
-                    | ("add" | "remove") "unique" Entity "." name)*
+                    | ("add" | "remove") "unique" Entity "." name
+                    | "map" ("table" Entity | "key" Entity | "column" Entity "." name) "to" (String | "default"))*
 ```

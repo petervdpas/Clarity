@@ -52,6 +52,8 @@ struct Writer<'a> {
     /// The data source whose database the steps build.
     source: &'a str,
     schema: Schema,
+    /// Writing a baseline step: create only what is missing.
+    baseline: bool,
 }
 
 impl Writer<'_> {
@@ -59,13 +61,24 @@ impl Writer<'_> {
         self.project.enum_decl(name).and_then(|d| d.variants.first()).map(|v| v.name.name.clone())
     }
 
+    /// The table and key column of entity `name`: as the steps made it, or
+    /// as the dictionary has it when the steps do not know it.
+    fn target(&self, name: &str) -> (String, String) {
+        match (self.schema.table(name), self.project.entity(name)) {
+            (Some(table), _) => (table.table_name(), table.key_column().to_string()),
+            (None, Some(entity)) => (entity.table_name(), entity.key_column().to_string()),
+            (None, None) => (table(name), "id".to_string()),
+        }
+    }
+
     fn column_sql(&self, column: &Column) -> String {
         let (ty, default) = storage(column, |e| self.enum_first(e));
-        let name = quoted(&column.name);
+        let name = quoted(column.stored());
         match (&column.ty, default) {
             // A reference into another database is a plain id.
             (FieldType::Ref { entity }, _) if self.project.source_of(&entity.name).is_none_or(|s| s == self.source) => {
-                format!("{name} INTEGER REFERENCES {} (\"id\")", quoted(&table(&entity.name)))
+                let (target, key) = self.target(&entity.name);
+                format!("{name} INTEGER REFERENCES {} ({})", quoted(&target), quoted(&key))
             }
             (FieldType::Ref { .. }, _) => format!("{name} INTEGER"),
             (_, Some(default)) => format!("{name} {ty} NOT NULL DEFAULT {default}"),
@@ -73,37 +86,43 @@ impl Writer<'_> {
         }
     }
 
-    fn table_sql(&self, table_name: &str, columns: &[Column]) -> String {
-        let mut lines = vec!["\"id\" INTEGER PRIMARY KEY".to_string()];
-        lines.extend(columns.iter().map(|c| self.column_sql(c)));
-        format!("CREATE TABLE {} (\n    {}\n);\n", quoted(table_name), lines.join(",\n    "))
+    /// CREATE TABLE for `table` under the name `table_name`, without its
+    /// indexes. A baseline creates only what is missing.
+    fn table_sql(&self, table: &Table, table_name: &str) -> String {
+        let mut lines = vec![format!("{} INTEGER PRIMARY KEY", quoted(table.key_column()))];
+        lines.extend(table.columns.iter().map(|c| self.column_sql(c)));
+        let missing = if self.baseline { " IF NOT EXISTS" } else { "" };
+        format!("CREATE TABLE{missing} {} (\n    {}\n);\n", quoted(table_name), lines.join(",\n    "))
     }
 
-    /// A table of entity `name` with its unique indexes.
-    fn create_table(&self, name: &str, columns: &[Column]) -> String {
-        let mut sql = self.table_sql(&table(name), columns);
-        for column in columns.iter().filter(|c| c.unique) {
-            sql.push_str(&unique_index(name, column));
-        }
+    /// A table with its unique indexes.
+    fn create_table(&self, table: &Table) -> String {
+        let mut sql = self.table_sql(table, &table.table_name());
+        sql.push_str(&self.unique_indexes(table));
         sql
+    }
+
+    fn unique_indexes(&self, table: &Table) -> String {
+        table.columns.iter().filter(|c| c.unique).map(|c| unique_index(table, c, self.baseline)).collect()
+    }
+
+    fn drop_uniques(table: &Table) -> String {
+        table.columns.iter().filter(|c| c.unique).map(|c| drop_unique(table, c)).collect()
     }
 
     /// SQLite cannot drop or retype a column in place everywhere, so the
     /// table is built again with the new shape and the rows copied over,
     /// converting values where the stored type changed.
     fn rebuild(&self, before: &Table, after: &Table) -> String {
-        let name = table(&after.name);
+        let name = after.table_name();
         let fresh = format!("{name}__new");
-        let mut sql = String::new();
-        for column in before.columns.iter().filter(|c| c.unique) {
-            sql.push_str(&drop_unique(&before.name, &column.name));
-        }
-        sql.push_str(&self.table_sql(&fresh, &after.columns));
-        let mut targets = vec!["\"id\"".to_string()];
-        let mut sources = vec!["\"id\"".to_string()];
+        let mut sql = Self::drop_uniques(before);
+        sql.push_str(&self.table_sql(after, &fresh));
+        let mut targets = vec![quoted(after.key_column())];
+        let mut sources = vec![quoted(before.key_column())];
         for column in &after.columns {
             let Some(old) = before.column(&column.name) else { continue };
-            targets.push(quoted(&column.name));
+            targets.push(quoted(column.stored()));
             sources.push(self.converted(old, column));
         }
         sql.push_str(&format!(
@@ -111,20 +130,18 @@ impl Writer<'_> {
             quoted(&fresh),
             targets.join(", "),
             sources.join(", "),
-            quoted(&name),
-            quoted(&name),
+            quoted(&before.table_name()),
+            quoted(&before.table_name()),
             quoted(&fresh),
             quoted(&name)
         ));
-        for column in after.columns.iter().filter(|c| c.unique) {
-            sql.push_str(&unique_index(&after.name, column));
-        }
+        sql.push_str(&self.unique_indexes(after));
         sql
     }
 
     /// An old column's value as the new column stores it.
     fn converted(&self, old: &Column, new: &Column) -> String {
-        let name = quoted(&old.name);
+        let name = quoted(old.stored());
         let (old_ty, _) = storage(old, |e| self.enum_first(e));
         let (new_ty, default) = storage(new, |e| self.enum_first(e));
         let value = match (&old.ty, &new.ty) {
@@ -139,6 +156,48 @@ impl Writer<'_> {
         }
     }
 
+    /// Field `from` before the step is field `to` after it; its column is
+    /// renamed when the stored name changed.
+    fn moved_column(&self, before: &Table, after: &Table, from: &str, to: &str) -> String {
+        match (before.column(from), after.column(to)) {
+            (Some(was), Some(now)) => Self::rename_column(before, after, was, now, self.baseline),
+            _ => String::new(),
+        }
+    }
+
+    /// Renames column `from` of `table` to `to`, keeping its unique index.
+    fn rename_column(table_before: &Table, table_after: &Table, from: &Column, to: &Column, baseline: bool) -> String {
+        if from.stored() == to.stored() {
+            return String::new();
+        }
+        let mut sql = if from.unique { drop_unique(table_before, from) } else { String::new() };
+        sql.push_str(&format!(
+            "ALTER TABLE {} RENAME COLUMN {} TO {};\n",
+            quoted(&table_after.table_name()),
+            quoted(from.stored()),
+            quoted(to.stored())
+        ));
+        if to.unique {
+            sql.push_str(&unique_index(table_after, to, baseline));
+        }
+        sql
+    }
+
+    /// Renames the table of an entity, keeping its unique indexes.
+    fn rename_table(&self, before: &Table, after: &Table) -> String {
+        if before.table_name() == after.table_name() {
+            return String::new();
+        }
+        let mut sql = Self::drop_uniques(before);
+        sql.push_str(&format!(
+            "ALTER TABLE {} RENAME TO {};\n",
+            quoted(&before.table_name()),
+            quoted(&after.table_name())
+        ));
+        sql.push_str(&self.unique_indexes(after));
+        sql
+    }
+
     fn step(&mut self, op: &Op) -> String {
         let before = self.schema.clone();
         if let Err(message) = self.schema.apply(op) {
@@ -148,80 +207,80 @@ impl Writer<'_> {
         let after = |name: &str| self.schema.table(name).cloned().expect("applied above");
         let old = |name: &str| before.table(name).cloned().expect("checked by apply");
         match op {
-            Op::AddEntity { name, columns } => self.create_table(name, columns),
-            Op::RemoveEntity { name } => format!("DROP TABLE {};\n", quoted(&table(name))),
-            Op::RenameEntity { from, to } => {
-                let mut sql = String::new();
-                let table_before = old(from);
-                for column in table_before.columns.iter().filter(|c| c.unique) {
-                    sql.push_str(&drop_unique(from, &column.name));
+            Op::AddEntity { name, .. } => self.create_table(&after(name)),
+            Op::RemoveEntity { name } => format!("DROP TABLE {};\n", quoted(&old(name).table_name())),
+            Op::RenameEntity { from, to } => self.rename_table(&old(from), &after(to)),
+            Op::MapTable { entity, .. } => self.rename_table(&old(entity), &after(entity)),
+            Op::MapKey { entity, .. } => {
+                let (b, a) = (old(entity), after(entity));
+                if b.key_column() == a.key_column() {
+                    return String::new();
                 }
-                sql.push_str(&format!("ALTER TABLE {} RENAME TO {};\n", quoted(&table(from)), quoted(&table(to))));
-                for column in table_before.columns.iter().filter(|c| c.unique) {
-                    sql.push_str(&unique_index(to, column));
-                }
-                sql
+                format!(
+                    "ALTER TABLE {} RENAME COLUMN {} TO {};\n",
+                    quoted(&a.table_name()),
+                    quoted(b.key_column()),
+                    quoted(a.key_column())
+                )
             }
             Op::AddField { entity, column } => {
-                let mut sql = format!("ALTER TABLE {} ADD COLUMN {};\n", quoted(&table(entity)), self.column_sql(column));
+                let table_after = after(entity);
+                let mut sql = format!(
+                    "ALTER TABLE {} ADD COLUMN {};\n",
+                    quoted(&table_after.table_name()),
+                    self.column_sql(column)
+                );
                 if column.unique {
-                    sql.push_str(&unique_index(entity, column));
+                    sql.push_str(&unique_index(&table_after, column, self.baseline));
                 }
                 sql
             }
-            Op::RenameField { entity, from, to } => {
-                let unique = old(entity).column(from).is_some_and(|c| c.unique);
-                let mut sql = String::new();
-                if unique {
-                    sql.push_str(&drop_unique(entity, from));
-                }
-                sql.push_str(&format!(
-                    "ALTER TABLE {} RENAME COLUMN {} TO {};\n",
-                    quoted(&table(entity)),
-                    quoted(from),
-                    quoted(to)
-                ));
-                if let Some(column) = after(entity).column(to).filter(|_| unique) {
-                    sql.push_str(&unique_index(entity, column));
-                }
-                sql
-            }
+            Op::RenameField { entity, from, to } => self.moved_column(&old(entity), &after(entity), from, to),
+            Op::MapColumn { entity, field, .. } => self.moved_column(&old(entity), &after(entity), field, field),
             Op::RemoveField { entity, .. } | Op::ChangeField { entity, .. } => self.rebuild(&old(entity), &after(entity)),
             Op::AddUnique { entity, field } => {
                 let table_after = after(entity);
                 let column = table_after.column(field).expect("applied above");
-                unique_index(entity, column)
+                unique_index(&table_after, column, self.baseline)
             }
-            Op::RemoveUnique { entity, field } => drop_unique(entity, field),
+            Op::RemoveUnique { entity, field } => {
+                let table_before = old(entity);
+                let column = table_before.column(field).expect("checked by apply");
+                drop_unique(&table_before, column)
+            }
         }
     }
 }
 
-fn index_name(entity: &str, column: &str) -> String {
-    quoted(&format!("{}_{column}_unique", table(entity)))
+fn index_name(table: &Table, column: &Column) -> String {
+    quoted(&format!("{}_{}_unique", table.table_name(), column.stored()))
 }
 
 /// A unique field gets a unique index. Empty text is no value, so for text
 /// the index leaves empty text out and many records can leave it empty.
-fn unique_index(entity: &str, column: &Column) -> String {
-    let name = quoted(&column.name);
+fn unique_index(table: &Table, column: &Column, baseline: bool) -> String {
+    let name = quoted(column.stored());
     let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url);
     let filter = if textual { format!(" WHERE {name} != ''") } else { String::new() };
+    let missing = if baseline { " IF NOT EXISTS" } else { "" };
     format!(
-        "CREATE UNIQUE INDEX {} ON {} ({name}){filter};\n",
-        index_name(entity, &column.name),
-        quoted(&table(entity))
+        "CREATE UNIQUE INDEX{missing} {} ON {} ({name}){filter};\n",
+        index_name(table, column),
+        quoted(&table.table_name())
     )
 }
 
-fn drop_unique(entity: &str, column: &str) -> String {
-    format!("DROP INDEX IF EXISTS {};\n", index_name(entity, column))
+fn drop_unique(table: &Table, column: &Column) -> String {
+    format!("DROP INDEX IF EXISTS {};\n", index_name(table, column))
 }
 
 /// The steps of `source` as SQL, or why they cannot be written yet.
-fn source_steps(project: &Project, source: &str) -> Result<Vec<(String, Vec<Op>)>, String> {
+/// A step to write: its title, whether it is a baseline, and its changes.
+type Step = (String, bool, Vec<Op>);
+
+fn source_steps(project: &Project, source: &str) -> Result<Vec<Step>, String> {
     let Some(migrations) = &project.migrations else {
-        return Ok(vec![("the schema from the data dictionary".to_string(), migrate::pending(project, source, &[]))]);
+        return Ok(vec![("the schema from the data dictionary".to_string(), false, migrate::pending(project, source, &[]))]);
     };
     let pending = migrate::pending(project, source, &migrate::proposed_renames(project, source));
     if !pending.is_empty() {
@@ -236,7 +295,7 @@ fn source_steps(project: &Project, source: &str) -> Result<Vec<(String, Vec<Op>)
         .map(Vec::as_slice)
         .unwrap_or_default()
         .iter()
-        .map(|m| (m.title.clone(), m.ops.iter().map(|(op, _)| op.clone()).collect()))
+        .map(|m| (m.title.clone(), m.baseline, m.ops.iter().map(|(op, _)| op.clone()).collect()))
         .collect())
 }
 
@@ -263,9 +322,11 @@ pub const SOURCES: &[(&str, &[&str])] = &[
             project,
             source,
             schema: Schema::default(),
+            baseline: false,
         };
         out.push_str(&format!("    ({source:?}, &[\n"));
-        for (i, (title, ops)) in steps.iter().enumerate() {
+        for (i, (title, baseline, ops)) in steps.iter().enumerate() {
+            writer.baseline = *baseline;
             let sql: String = ops.iter().map(|op| writer.step(op)).collect();
             out.push_str(&format!("        // {}: {title}\n        r#\"{sql}\"#,\n", i + 1));
         }

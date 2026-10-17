@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use crate::diagnostic::Diagnostic;
 use crate::dictionary::{literal_text, type_text};
 use crate::lexer::{TokenKind, lex, quote};
-use crate::model::{Entity, Field, FieldType, Literal, Project};
+use crate::model::{Entity, Field, FieldType, Literal, Project, snake_case};
 use crate::parser::{Cursor, Node, ParseResult, build_tree, first_word, no_children, parse_field_at, parse_type};
 use crate::span::Span;
 
@@ -29,6 +29,8 @@ pub struct Column {
     pub unique: bool,
     /// The value existing records get when the field is added.
     pub default: Option<Literal>,
+    /// The column it is stored in, when that is not the field's name.
+    pub column: Option<String>,
 }
 
 impl Column {
@@ -38,7 +40,13 @@ impl Column {
             ty: field.ty.clone(),
             unique: field.modifiers.unique,
             default: field.modifiers.default.clone(),
+            column: field.modifiers.column.clone(),
         }
+    }
+
+    /// The column the field is stored in.
+    pub fn stored(&self) -> &str {
+        self.column.as_deref().unwrap_or(&self.name)
     }
 
     /// Whether two columns store the same kind of value; a rename is
@@ -53,9 +61,26 @@ impl Column {
 pub struct Table {
     pub name: String,
     pub columns: Vec<Column>,
+    /// The table's name, when it is not the entity's name in snake case.
+    pub table: Option<String>,
+    /// The key column, when it is not `id`.
+    pub key: Option<String>,
 }
 
 impl Table {
+    pub fn table_name(&self) -> String {
+        self.table.clone().unwrap_or_else(|| snake_case(&self.name))
+    }
+
+    pub fn key_column(&self) -> &str {
+        self.key.as_deref().unwrap_or("id")
+    }
+
+    /// The column field `field` is stored in.
+    pub fn column_name<'a>(&'a self, field: &'a str) -> &'a str {
+        self.column(field).map_or(field, Column::stored)
+    }
+
     pub fn column(&self, name: &str) -> Option<&Column> {
         self.columns.iter().find(|c| c.name == name)
     }
@@ -78,7 +103,12 @@ pub struct Schema {
 /// One change to the schema.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
-    AddEntity { name: String, columns: Vec<Column> },
+    AddEntity {
+        name: String,
+        columns: Vec<Column>,
+        table: Option<String>,
+        key: Option<String>,
+    },
     RemoveEntity { name: String },
     RenameEntity { from: String, to: String },
     AddField { entity: String, column: Column },
@@ -87,6 +117,12 @@ pub enum Op {
     ChangeField { entity: String, field: String, ty: FieldType },
     AddUnique { entity: String, field: String },
     RemoveUnique { entity: String, field: String },
+    /// Store the entity in another table; None is the default name.
+    MapTable { entity: String, table: Option<String> },
+    /// Another column identifies a record; None is `id`.
+    MapKey { entity: String, key: Option<String> },
+    /// Store a field in another column; None is the field's name.
+    MapColumn { entity: String, field: String, column: Option<String> },
 }
 
 impl Op {
@@ -106,7 +142,10 @@ impl Op {
             | Op::RenameField { entity, .. }
             | Op::ChangeField { entity, .. }
             | Op::AddUnique { entity, .. }
-            | Op::RemoveUnique { entity, .. } => entity,
+            | Op::RemoveUnique { entity, .. }
+            | Op::MapTable { entity, .. }
+            | Op::MapKey { entity, .. }
+            | Op::MapColumn { entity, .. } => entity,
         }
     }
 }
@@ -126,15 +165,20 @@ impl Schema {
     /// Applies one change, or says why it does not fit this schema.
     pub fn apply(&mut self, op: &Op) -> Result<(), String> {
         match op {
-            Op::AddEntity { name, columns } => {
+            Op::AddEntity { name, columns, table, key } => {
                 if self.table(name).is_some() {
                     return Err(format!("there is already an entity '{name}'"));
                 }
                 self.tables.push(Table {
                     name: name.clone(),
                     columns: columns.clone(),
+                    table: table.clone(),
+                    key: key.clone(),
                 });
             }
+            Op::MapTable { entity, table } => self.table_mut(entity)?.table = table.clone(),
+            Op::MapKey { entity, key } => self.table_mut(entity)?.key = key.clone(),
+            Op::MapColumn { entity, field, column } => self.table_mut(entity)?.column_mut(field)?.column = column.clone(),
             Op::RemoveEntity { name } => {
                 self.table_mut(name)?;
                 let referring = self.tables.iter().find(|t| {
@@ -203,6 +247,9 @@ impl Schema {
 pub struct Migration {
     pub path: String,
     pub title: String,
+    /// `migration "Taken over" baseline`: the tables were there before the
+    /// step, so it creates only what is missing.
+    pub baseline: bool,
     /// The changes, each with the span of its line.
     pub ops: Vec<(Op, Span)>,
 }
@@ -214,6 +261,7 @@ pub fn parse(text: &str, path: &str) -> (Migration, Vec<Diagnostic>) {
     let mut migration = Migration {
         path: path.to_string(),
         title: String::new(),
+        baseline: false,
         ops: Vec::new(),
     };
     match tree.as_slice() {
@@ -221,10 +269,14 @@ pub fn parse(text: &str, path: &str) -> (Migration, Vec<Diagnostic>) {
             let mut cursor = Cursor::new(node.line);
             cursor.next();
             match cursor.expect_string("a title, as in migration \"Phone numbers\"").and_then(|t| {
+                let baseline = cursor.eat_keyword("baseline");
                 cursor.expect_end()?;
-                Ok(t)
+                Ok((t, baseline))
             }) {
-                Ok(title) => migration.title = title,
+                Ok((title, baseline)) => {
+                    migration.title = title;
+                    migration.baseline = baseline;
+                }
                 Err(diag) => diagnostics.push(diag),
             }
             for child in &node.children {
@@ -266,13 +318,23 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
         ("add", "entity") => {
             let name = cursor.expect_ident("an entity name")?.name;
             cursor.expect_end()?;
-            let mut columns = Vec::new();
+            let (mut columns, mut table, mut key) = (Vec::new(), None, None);
             for child in &node.children {
                 no_children(child)?;
                 let mut c = Cursor::new(child.line);
+                // `table "x"` and `key "x"`, as in an entity.
+                if let Some(word @ ("table" | "key")) = first_word(child)
+                    && child.line.tokens.get(1).is_some_and(|t| t.kind == TokenKind::Str)
+                {
+                    c.next();
+                    let value = Some(c.expect_string("a name")?);
+                    c.expect_end()?;
+                    if word == "table" { table = value } else { key = value }
+                    continue;
+                }
                 columns.push(Column::from_field(&parse_field_at(&mut c, child.line.span)?));
             }
-            return Ok(Op::AddEntity { name, columns });
+            return Ok(Op::AddEntity { name, columns, table, key });
         }
         ("remove", "entity") => Op::RemoveEntity {
             name: cursor.expect_ident("an entity name")?.name,
@@ -320,7 +382,19 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
             let (entity, field) = field_path(&mut cursor)?;
             Op::RemoveUnique { entity, field }
         }
-        ("add" | "remove" | "rename" | "change", _) => {
+        ("map", "table") => {
+            let entity = cursor.expect_ident("an entity")?.name;
+            Op::MapTable { entity, table: mapped_to(&mut cursor)? }
+        }
+        ("map", "key") => {
+            let entity = cursor.expect_ident("an entity")?.name;
+            Op::MapKey { entity, key: mapped_to(&mut cursor)? }
+        }
+        ("map", "column") => {
+            let (entity, field) = field_path(&mut cursor)?;
+            Op::MapColumn { entity, field, column: mapped_to(&mut cursor)? }
+        }
+        ("add" | "remove" | "rename" | "change" | "map", _) => {
             return Err(Diagnostic::error(
                 format!("expected 'entity', 'field' or 'unique' after '{}'", verb.name),
                 what.span,
@@ -328,7 +402,7 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
         }
         (other, _) => {
             return Err(Diagnostic::error(
-                format!("unknown migration step '{other}'; the steps add, remove, rename and change"),
+                format!("unknown migration step '{other}'; the steps add, remove, rename, change and map"),
                 verb.span,
             ));
         }
@@ -353,8 +427,16 @@ fn steps<'a>(project: &'a Project, source: &str) -> &'a [Migration] {
 fn replay(migrations: &[Migration]) -> (Schema, Vec<Diagnostic>) {
     let mut schema = Schema::default();
     let mut errors = Vec::new();
-    for migration in migrations {
+    for (i, migration) in migrations.iter().enumerate() {
+        if migration.baseline && i > 0 {
+            errors.push(
+                Diagnostic::error("only the first step of a data source can be a baseline", Span::default()).in_file(&migration.path),
+            );
+        }
         for (op, span) in &migration.ops {
+            if migration.baseline && !matches!(op, Op::AddEntity { .. }) {
+                errors.push(Diagnostic::error("a baseline step only adds entities", *span).in_file(&migration.path));
+            }
             if let Err(message) = schema.apply(op) {
                 errors.push(Diagnostic::error(message, *span).in_file(&migration.path));
             }
@@ -405,7 +487,13 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
         let name = &entity.name.name;
         if schema.table(name).is_none() {
             let columns = stored(entity).map(Column::from_field).collect();
-            take(&mut schema, Op::AddEntity { name: name.clone(), columns }, &mut ops);
+            let op = Op::AddEntity {
+                name: name.clone(),
+                columns,
+                table: entity.table.clone(),
+                key: entity.key.clone(),
+            };
+            take(&mut schema, op, &mut ops);
             continue;
         }
         for rename in renames.iter().filter(|r| r.entity.as_deref() == Some(name)) {
@@ -420,6 +508,13 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
             }
         }
         let table = schema.table(name).expect("checked above").clone();
+        // A name that maps elsewhere; the names compared are the ones stored.
+        if table.table_name() != entity.table_name() {
+            take(&mut schema, Op::MapTable { entity: name.clone(), table: entity.table.clone() }, &mut ops);
+        }
+        if table.key_column() != entity.key_column() {
+            take(&mut schema, Op::MapKey { entity: name.clone(), key: entity.key.clone() }, &mut ops);
+        }
         for field in stored(entity) {
             let wanted = Column::from_field(field);
             let Some(column) = table.column(&wanted.name) else {
@@ -437,6 +532,14 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
             if column.unique != wanted.unique {
                 let (entity, field) = (name.clone(), wanted.name.clone());
                 let op = if wanted.unique { Op::AddUnique { entity, field } } else { Op::RemoveUnique { entity, field } };
+                take(&mut schema, op, &mut ops);
+            }
+            if column.stored() != wanted.stored() {
+                let op = Op::MapColumn {
+                    entity: name.clone(),
+                    field: wanted.name.clone(),
+                    column: wanted.column.clone(),
+                };
                 take(&mut schema, op, &mut ops);
             }
         }
@@ -525,14 +628,28 @@ fn column_text(column: &Column) -> String {
     if let Some(default) = &column.default {
         text.push_str(&format!(", default {}", literal_text(default)));
     }
+    if let Some(stored) = &column.column {
+        text.push_str(&format!(", column {}", quote(stored)));
+    }
     text
+}
+
+/// `to "Name"`, or `to default` for the default name.
+fn mapped_text(name: &Option<String>) -> String {
+    name.as_deref().map_or_else(|| "to default".to_string(), |n| format!("to {}", quote(n)))
 }
 
 /// A change as a line of a step (an added entity takes several lines).
 pub fn op_text(op: &Op) -> String {
     match op {
-        Op::AddEntity { name, columns } => {
+        Op::AddEntity { name, columns, table, key } => {
             let mut text = format!("add entity {name}");
+            if let Some(table) = table {
+                text.push_str(&format!("\n    table {}", quote(table)));
+            }
+            if let Some(key) = key {
+                text.push_str(&format!("\n    key {}", quote(key)));
+            }
             for column in columns {
                 text.push_str(&format!("\n    {}", column_text(column)));
             }
@@ -546,6 +663,9 @@ pub fn op_text(op: &Op) -> String {
         Op::ChangeField { entity, field, ty } => format!("change field {entity}.{field}: {}", type_text(ty)),
         Op::AddUnique { entity, field } => format!("add unique {entity}.{field}"),
         Op::RemoveUnique { entity, field } => format!("remove unique {entity}.{field}"),
+        Op::MapTable { entity, table } => format!("map table {entity} {}", mapped_text(table)),
+        Op::MapKey { entity, key } => format!("map key {entity} {}", mapped_text(key)),
+        Op::MapColumn { entity, field, column } => format!("map column {entity}.{field} {}", mapped_text(column)),
     }
 }
 
@@ -558,6 +678,8 @@ fn short_text(op: &Op) -> String {
         Op::ChangeField { field, ty, .. } => format!("change field {field} to {}", type_text(ty)),
         Op::AddUnique { field, .. } => format!("make {field} unique"),
         Op::RemoveUnique { field, .. } => format!("make {field} not unique"),
+        Op::MapColumn { field, column: Some(column), .. } => format!("store {field} in column {}", quote(column)),
+        Op::MapColumn { field, column: None, .. } => format!("store {field} in a column of its own name"),
         other => op_text(other),
     }
 }
@@ -568,12 +690,27 @@ pub fn step_text(title: &str, ops: &[Op]) -> String {
         "// Written by Clarity from the changes in the data dictionary. Check it\n// before it runs; once a step has run on a database, it never changes.\n",
     );
     text.push_str(&format!("migration {}\n", quote(title)));
+    push_ops(&mut text, ops);
+    text
+}
+
+/// The text of the baseline step Take ownership writes: the tables as they
+/// are, created only where they are missing.
+pub fn step_text_baseline(title: &str, ops: &[Op]) -> String {
+    let mut text = String::from(
+        "// Written by Clarity when it took ownership of this database: the tables\n// as they were. It creates only what is missing, so it changes nothing\n// in the database it was taken from.\n",
+    );
+    text.push_str(&format!("migration {} baseline\n", quote(title)));
+    push_ops(&mut text, ops);
+    text
+}
+
+fn push_ops(text: &mut String, ops: &[Op]) {
     for op in ops {
         for line in op_text(op).lines() {
             text.push_str(&format!("    {line}\n"));
         }
     }
-    text
 }
 
 /// The file name of the step after `existing`: `0003.clarity`.
@@ -638,4 +775,15 @@ pub(crate) fn check(project: &mut Project) {
         }
     }
     project.diagnostics.extend(found);
+}
+
+/// `to "Name"` or `to default`, after `map table`, `map key` or `map column`.
+fn mapped_to(cursor: &mut Cursor) -> ParseResult<Option<String>> {
+    if !cursor.eat_keyword("to") {
+        return Err(cursor.error_here("expected 'to' and a name in quotes, or 'to default'"));
+    }
+    if cursor.eat_keyword("default") {
+        return Ok(None);
+    }
+    Ok(Some(cursor.expect_string("a name in quotes, or 'default'")?))
 }

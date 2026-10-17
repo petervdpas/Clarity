@@ -101,6 +101,19 @@
 
   /** The external data source being imported from, if any. */
   let importing = $state<string | null>(null);
+  /** The external data source waiting for the go-ahead to be owned. */
+  let owning = $state<string | null>(null);
+  let ownError = $state<string | null>(null);
+
+  async function takeOwnership() {
+    try {
+      onapplied(await invoke<Preview>("take_ownership", { source: owning }));
+      owning = null;
+      ownError = null;
+    } catch (err) {
+      ownError = String(err);
+    }
+  }
 
   let newName = $state("");
   let newKind = $state<SourceKind>("sqlite");
@@ -263,6 +276,7 @@
                     <td class="actions">
                       {#if source.external && source.kind === "sqlite"}
                         <button title="Import tables of this database as entities" onclick={() => (importing = source.name)}>Import...</button>
+                        <button title="Let Clarity change this database's tables from now on" onclick={() => (owning = source.name)}>Own...</button>
                       {/if}
                       <button title="Move up" disabled={i === 0} onclick={() => move(i, -1)}>&uarr;</button>
                       <button title="Move down" disabled={i === settings.datasources.length - 1} onclick={() => move(i, 1)}>&darr;</button>
@@ -281,6 +295,19 @@
           </select>
           <button type="submit" disabled={!newName.trim()}>Add data source</button>
         </form>
+        {#if owning}
+          <div class="confirm">
+            <p>
+              Take ownership of <strong>{owning}</strong>? Its tables, as the dictionary maps them, become the first migration step, and from
+              then on Clarity changes them through migration steps. The step itself changes nothing in the database.
+            </p>
+            {#if ownError}<p class="problem">{ownError}</p>{/if}
+            <div class="buttons">
+              <button onclick={takeOwnership}>Take ownership</button>
+              <button onclick={() => ((owning = null), (ownError = null))}>Cancel</button>
+            </div>
+          </div>
+        {/if}
         {#if importing}
           <ImportPanel source={importing} {onapplied} onclose={() => (importing = null)} />
         {/if}
@@ -294,6 +321,24 @@
 </div>
 
 <style>
+  .confirm {
+    border: 1px solid var(--warning, #d9a400);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .confirm .buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .problem {
+    color: var(--error);
+  }
+
   .flags {
     display: flex;
     flex-direction: column;

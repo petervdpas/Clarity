@@ -985,25 +985,16 @@ pub(crate) fn check_sources(project: &mut Project) {
     }
     for file in &project.files {
         for entity in &file.entities {
-            found.extend(check_mapping(project, entity).into_iter().map(|d| d.in_file(&file.path)));
+            found.extend(check_mapping(entity).into_iter().map(|d| d.in_file(&file.path)));
         }
     }
     project.diagnostics.extend(found);
 }
 
-/// `table`, `key` and `column` map an entity of an external data source
-/// onto an existing table, one column per field.
-fn check_mapping(project: &Project, entity: &Entity) -> Vec<Diagnostic> {
+/// `table`, `key` and `column` map an entity onto a table, one column per
+/// field.
+fn check_mapping(entity: &Entity) -> Vec<Diagnostic> {
     let name = &entity.name.name;
-    let source = project.source_of(name).unwrap_or_default();
-    let external = project.sources.iter().any(|s| s.name == source && s.external);
-    let mapped = entity.table.is_some() || entity.key.is_some() || entity.fields.iter().any(|f| f.modifiers.column.is_some());
-    if mapped && !external {
-        return vec![Diagnostic::error(
-            format!("{name} is in data source {source}, which Clarity owns; 'table', 'key' and 'column' map entities of an external data source"),
-            entity.name.span,
-        )];
-    }
     let mut found = Vec::new();
     let stored: Vec<&Field> = entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. })).collect();
     for (i, field) in stored.iter().enumerate() {

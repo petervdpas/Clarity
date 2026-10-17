@@ -44,6 +44,14 @@ enum Command {
         #[arg(long)]
         allow_data_loss: bool,
     },
+    /// Take ownership of an external data source: its tables as they are
+    /// become a baseline step, and from then on Clarity migrates them.
+    Own {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+        /// The external data source, as the project file names it.
+        source: String,
+    },
     /// Import tables of an external SQLite data source as a module of
     /// entities mapped onto them.
     Import {
@@ -102,6 +110,7 @@ fn main() -> ExitCode {
             tables,
             list,
         } => import(&project, &source, module, tables, list),
+        Command::Own { project, source } => own(&project, &source),
     }
 }
 
@@ -296,6 +305,20 @@ fn import(project_file: &std::path::Path, source: &str, module: Option<String>, 
             for (table, reason) in &done.skipped {
                 eprintln!("  {table} is left out: {reason}");
             }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("clarity: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn own(project_file: &std::path::Path, source: &str) -> ExitCode {
+    match clarity_project::take_ownership(&clarity_project::module_dir(project_file), source) {
+        Ok(owned) => {
+            eprintln!("Wrote {} and removed 'external' from {source} in {}.", owned.step.display(), owned.project_file.display());
+            eprintln!("Clarity now migrates {source}; the baseline step changes nothing in the database it was taken from.");
             ExitCode::SUCCESS
         }
         Err(err) => {

@@ -69,3 +69,45 @@ fn importing_writes_a_module_of_mapped_entities() {
     assert!(main.contains("data source main is not external"), "{main}");
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn taking_ownership_writes_a_baseline_and_drops_external() {
+    let root = std::env::temp_dir().join(format!("clarity-own-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let dir = root.join("shop");
+    std::fs::create_dir_all(dir.join("legacy")).unwrap();
+    std::fs::write(root.join("shop.clarity"), PROJECT).unwrap();
+    rusqlite::Connection::open(dir.join("legacy/erp.db"))
+        .unwrap()
+        .execute_batch("CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL UNIQUE);")
+        .unwrap();
+
+    // Nothing to take over before there are entities.
+    let empty = clarity_project::take_ownership(&dir, "erp").unwrap_err();
+    assert!(empty.contains("no entities"), "{empty}");
+
+    clarity_project::import_tables(&dir, "erp", "erp", &["tblInvoice".to_string()]).unwrap();
+    let done = clarity_project::take_ownership(&dir, "erp").unwrap();
+    assert_eq!(done.step, dir.join("migrations/erp/0001.clarity"));
+    let step = std::fs::read_to_string(&done.step).unwrap();
+    assert!(step.contains("migration \"Taken over\" baseline\n    add entity Invoice\n        table \"tblInvoice\"\n        key \"InvoiceID\"\n"), "{step}");
+
+    let settings = clarity_project::load(&root.join("shop.clarity")).settings.unwrap();
+    assert!(!settings.datasources[1].external);
+    // The project is in step with its database: nothing pending, no problems.
+    let project = load_modules(&dir).unwrap();
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+
+    let again = clarity_project::take_ownership(&dir, "erp").unwrap_err();
+    assert!(again.contains("is not external"), "{again}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn every_sqlite_file_is_found_from_the_project_folder() {
+    let settings = clarity_project::parse(PROJECT).unwrap();
+    let dir = std::path::Path::new("/work/shop");
+    let built = clarity_project::build_settings(dir, &settings);
+    assert_eq!(built.datasources[0].url, "/work/shop/data/shop.db");
+    assert_eq!(built.datasources[1].url, "/work/shop/legacy/erp.db");
+}

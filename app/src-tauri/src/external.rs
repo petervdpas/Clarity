@@ -51,3 +51,19 @@ pub fn import_tables(
         skipped: done.skipped.into_iter().map(|(table, reason)| Skipped { table, reason }).collect(),
     })
 }
+
+/// Takes ownership of external data source `source`. Undo puts the
+/// project file back and removes the baseline step.
+#[tauri::command]
+pub fn take_ownership(source: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let owned = clarity_project::take_ownership(&dir, &source)?;
+    record(
+        &history,
+        vec![
+            FileChange { file: owned.step, before: None, after: owned.step_text },
+            FileChange { file: owned.project_file, before: Some(owned.before), after: owned.after },
+        ],
+    )?;
+    load(&dir)
+}

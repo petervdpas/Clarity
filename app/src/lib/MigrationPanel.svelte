@@ -91,7 +91,7 @@
 </script>
 
 <section>
-  <h2>Migrations{named ? ` of ` : ""}</h2>
+  <h2>Migrations{named ? ` of ${source}` : ""}</h2>
   <p class="intro">
     Each step in <code>migrations/{source}</code> brings the database to the next version of the data dictionary. Run and the generated
     application apply the steps a database does not have yet.

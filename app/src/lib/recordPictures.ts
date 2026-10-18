@@ -1,6 +1,7 @@
 // The pictures of records on the web renderer: an image field is null, a
-// stored picture ({ stored: true }) fetched on its own, or a new one loaded
-// from a file ({ data: base64 }) until the record is saved. The runtimes
+// stored picture ({ stored: true }) fetched on its own, a new one loaded
+// from a file ({ data: base64 }) until the record is saved, or a file of the
+// field's own store that code linked ({ file: path }). The runtimes
 // read and write the same (conformance/pictures.json).
 
 export type PictureKind = { extension: string; type: string };
@@ -41,8 +42,13 @@ export function pictureUrl(value: unknown, fetched: string | null | undefined): 
     const kind = kindOf(fromBase64(value.data));
     return kind ? `data:${kind.type};base64,${value.data}` : null;
   }
-  if (value && typeof value === "object" && "stored" in value) return fetched ?? null;
+  if (value && typeof value === "object" && ("stored" in value || "file" in value)) return fetched ?? null;
   return null;
+}
+
+/** The path of a picture linked from a file of the field's store, before its record is saved. */
+export function linkedFile(value: unknown): string | null {
+  return value && typeof value === "object" && "file" in value && typeof value.file === "string" ? value.file : null;
 }
 
 /** Whether a field holds a stored picture, to be fetched on its own. */

@@ -19,13 +19,21 @@ public sealed class Picture : IEquatable<Picture>
     /// <summary>The bytes of one loaded but not yet saved; null for <see cref="Stored"/>.</summary>
     public byte[]? Bytes { get; }
 
-    Picture(byte[]? bytes) => Bytes = bytes;
+    /// <summary>The path of a file of the field's own file store: saved as that path, nothing copied.</summary>
+    public string? FilePath { get; }
+
+    Picture(byte[]? bytes, string? path = null) => (Bytes, FilePath) = (bytes, path);
 
     /// <summary>One loaded but not yet saved.</summary>
     public static Picture New(byte[] bytes) => new(bytes);
 
+    /// <summary>A file of the field's own file store, by its path there.</summary>
+    public static Picture InStore(string path) => new(null, path);
+
     public bool Equals(Picture? other) =>
-        other is not null && (ReferenceEquals(this, other) || (Bytes is not null && other.Bytes is not null && Bytes.AsSpan().SequenceEqual(other.Bytes)));
+        other is not null && (ReferenceEquals(this, other)
+            || (Bytes is not null && other.Bytes is not null && Bytes.AsSpan().SequenceEqual(other.Bytes))
+            || (FilePath is not null && FilePath == other.FilePath));
 
     public override bool Equals(object? obj) => Equals(obj as Picture);
 

@@ -19,11 +19,14 @@ import (
 	"strings"
 )
 
-// Picture is the picture of an image field that has one: stored (Bytes is
-// nil) or new.
+// Picture is the picture of an image field that has one: stored (Bytes and
+// Path empty), new (Bytes), or a file of the field's own store (Path).
 type Picture struct {
 	// Bytes are those of a picture loaded but not yet saved.
 	Bytes []byte
+	// Path is that of a file of the field's own file store: saved as that
+	// path, nothing copied.
+	Path string
 }
 
 var stored = &Picture{}
@@ -107,6 +110,8 @@ func PictureValue(p *Picture) any {
 	switch {
 	case p == nil:
 		return nil
+	case p.Path != "":
+		return p.Path
 	case p.Bytes == nil:
 		return keptValue{}
 	default:
@@ -155,10 +160,15 @@ func inStore(root, path string) (string, error) {
 type pictureWire struct {
 	Stored bool   `json:"stored,omitempty"`
 	Data   string `json:"data,omitempty"`
+	File   string `json:"file,omitempty"`
 }
 
-// MarshalJSON writes {"stored": true}, or {"data": base64} for a new picture.
+// MarshalJSON writes {"stored": true}, {"data": base64} for a new picture,
+// or {"file": path} for a file of the field's own store.
 func (p *Picture) MarshalJSON() ([]byte, error) {
+	if p.Path != "" {
+		return json.Marshal(pictureWire{File: p.Path})
+	}
 	if p.Bytes == nil {
 		return json.Marshal(pictureWire{Stored: true})
 	}
@@ -171,7 +181,7 @@ func (p *Picture) UnmarshalJSON(text []byte) error {
 		return err
 	}
 	if wire.Data == "" {
-		*p = Picture{}
+		*p = Picture{Path: wire.File}
 		return nil
 	}
 	b, err := base64.StdEncoding.DecodeString(wire.Data)

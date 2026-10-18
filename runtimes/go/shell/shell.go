@@ -134,6 +134,8 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Title   string              `json:"title"`
 		ID      int64               `json:"id"`
 		Field   string              `json:"field"`
+		Store   string              `json:"store"`
+		Path    string              `json:"path"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -169,6 +171,13 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		// A picture of a record, fetched on its own, as the page shows it.
 		b, err := c.options.Windows.Picture(db, a.Entity, a.ID, a.Field)
 		if err != nil || b == nil {
+			return answer(nil, err)
+		}
+		return answer(clarity.DataURL(b))
+	case "store_file":
+		// A picture linked from a file of a store, before its record is saved.
+		b, err := db.StoreFile(a.Store, a.Path)
+		if err != nil {
 			return answer(nil, err)
 		}
 		return answer(clarity.DataURL(b))

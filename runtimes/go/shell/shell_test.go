@@ -6,6 +6,8 @@ package shell
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"clarity-runtime/clarity"
@@ -152,6 +154,23 @@ func TestAPictureIsFetchedOnItsOwnAsADataURL(t *testing.T) {
 		t.Fatal(got)
 	}
 	if got := wire(t, call(t, c, "picture", `{"entity":"Card","id":1,"field":"logo"}`)); got != `{"error":"invalid value: Card has no picture logo"}` {
+		t.Fatal(got)
+	}
+}
+
+func TestAPictureLinkedFromAFileIsReadFromItsStore(t *testing.T) {
+	c, _ := service(t)
+	store := t.TempDir()
+	if err := os.WriteFile(filepath.Join(store, "cover.png"), []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.options.Db.AddStore("photos", store); err != nil {
+		t.Fatal(err)
+	}
+	if got := wire(t, call(t, c, "store_file", `{"store":"photos","path":"cover.png"}`)); got != `{"value":"data:image/png;base64,iVBORw0KGgo="}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "store_file", `{"store":"photos","path":"../x.png"}`)); got != `{"error":"invalid value: '../x.png' is not a picture of its file store"}` {
 		t.Fatal(got)
 	}
 }

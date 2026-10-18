@@ -134,6 +134,12 @@ pub fn attach_stores(project: &mut Project, stores: Vec<String>) {
             }
         }
     }
+    for (path, store) in code::check::code_stores(project) {
+        if !stores.contains(&store.name) {
+            let have = if stores.is_empty() { "add one in the project settings".to_string() } else { format!("the project settings have {}", stores.join(", ")) };
+            found.push(diagnostic::Diagnostic::error(format!("there is no file store '{}'; {have}", store.name), store.span).in_file(&path));
+        }
+    }
     project.diagnostics.extend(found);
     project.stores = Some(stores);
 }

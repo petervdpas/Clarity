@@ -55,6 +55,24 @@ public sealed class PictureBoxTests
         Assert.Equal(["first", "second"], asked);
     }
 
+    /// A picture linked from a file of the field's store, before it is saved.
+    [AvaloniaFact]
+    public void APictureLinkedFromAFileShowsFromItsStore()
+    {
+        string? asked = null;
+        var box = new PictureBox
+        {
+            FetchFile = path =>
+            {
+                asked = path;
+                return Pixel;
+            },
+        };
+        box.Picture = Picture.InStore("2024/cover.png");
+        Assert.Equal("2024/cover.png", asked);
+        Assert.NotNull(box.Shown);
+    }
+
     [AvaloniaFact]
     public void NoPictureShowsItsText()
     {

@@ -62,6 +62,7 @@ pub fn picture(value: &Option<crate::picture::Picture>) -> SqlValue {
         None => SqlValue::Null,
         Some(crate::picture::Picture::Stored) => SqlValue::Kept,
         Some(crate::picture::Picture::New(bytes)) => SqlValue::Blob(bytes.clone()),
+        Some(crate::picture::Picture::InStore(path)) => SqlValue::Text(path.clone()),
     }
 }
 

@@ -56,6 +56,8 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Bool => TypeInfo::Bool,
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
+        TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
         TypeRefKind::List { item } => TypeInfo::List(item.clone()),
@@ -64,7 +66,7 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
 
 /// Values of these types are copied; the others are cloned when read.
 fn is_copy(ty: &TypeInfo) -> bool {
-    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_))
+    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files)
 }
 
 fn is_decimal(ty: &TypeInfo) -> bool {
@@ -197,6 +199,18 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}{object}.{} = {stored};\n", ident(&member.name)));
                     return;
                 }
+                // A file as a picture: linked in the field's own store, else copied.
+                if from == TypeInfo::File
+                    && let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                {
+                    let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone());
+                    let store = store.map_or("None".to_string(), |s| format!("Some({s:?})"));
+                    let place = self.place(target);
+                    let file = self.object(value);
+                    out.push_str(&format!("{pad}{place} = Some(db.picture_from(&{file}, {store})?);\n"));
+                    return;
+                }
                 let place = self.place(target);
                 let value = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
@@ -215,12 +229,20 @@ impl<'a> Emitter<'a> {
                 }
                 out.push('\n');
             }
+            StmtKind::Write { text, store, path } => {
+                let path = self.text_ref(path);
+                let text = self.text_ref(text);
+                out.push_str(&format!("{pad}db.write_text({:?}, &{path}, &{text})?;\n", store.name));
+            }
             StmtKind::For { var, list, body } => {
                 let source = match self.held(list) {
                     Some((place, _)) => place,
                     None => format!("({})", self.value(list)),
                 };
-                out.push_str(&format!("{pad}for {} in {source}.iter() {{\n", ident(&var.name)));
+                // A body that changes, saves or deletes its record works on the
+                // record in the list, as on the other stacks.
+                let each = if changes(body, &var.name) { "iter_mut" } else { "iter" };
+                out.push_str(&format!("{pad}for {} in {source}.{each}() {{\n", ident(&var.name)));
                 self.refs.push(HashSet::from([var.name.clone()]));
                 self.block(body, depth + 1, out);
                 self.refs.pop();
@@ -436,6 +458,11 @@ impl<'a> Emitter<'a> {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
                     return format!("{e}::{}", member.name);
                 }
+                // A file's details have the same names in the runtime.
+                if self.types.type_of(object) == TypeInfo::File {
+                    let object = self.object(object);
+                    return format!("{object}.{}", member.name);
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -517,7 +544,38 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
+            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
+            ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
+            ExprKind::New { entity } => format!("{}::default()", entity.name),
         }
+    }
+
+    /// `files f in store where ... order by ...`: the files of a store,
+    /// filtered and sorted in memory.
+    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut list = format!("db.files({store:?})?.into_iter()");
+        if let Some(filter) = filter {
+            self.refs.push(HashSet::from([var.to_string()]));
+            let cond = self.value(filter);
+            self.refs.pop();
+            list.push_str(&format!(".filter(|{}| {cond})", ident(var)));
+        }
+        list.push_str(".collect::<Vec<FileEntry>>()");
+        if order.is_empty() {
+            return list;
+        }
+        let keys: Vec<String> = order
+            .iter()
+            .map(|k| {
+                let (a, b) = if k.descending { ("b", "a") } else { ("a", "b") };
+                format!("{a}.{m}.cmp(&{b}.{m})", m = k.field.name)
+            })
+            .collect();
+        let mut compare = keys[0].clone();
+        for key in &keys[1..] {
+            compare = format!("{compare}.then_with(|| {key})");
+        }
+        format!("{{ let mut found = {list}; found.sort_by(|a, b| {compare}); found }}")
     }
 
     /// `find c in Entity where ... order by ...` as a database query. The
@@ -989,4 +1047,25 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
     hops.iter()
         .rev()
         .fold(cond, |inner, h| format!("Cond::through({:?}, {:?}, {:?}, {inner})", h.column, h.table, h.key))
+}
+
+/// Whether `body` sets a field of `var`, or saves or deletes it.
+fn changes(body: &[Stmt], var: &str) -> bool {
+    fn root(expr: &Expr) -> Option<&str> {
+        match &expr.kind {
+            ExprKind::Name { name } => Some(name),
+            ExprKind::Member { object, .. } => root(object),
+            _ => None,
+        }
+    }
+    body.iter().any(|stmt| match &stmt.kind {
+        StmtKind::Assign { target, .. } => matches!(&target.kind, ExprKind::Member { .. }) && root(target) == Some(var),
+        StmtKind::Save { value } | StmtKind::Delete { value } => root(value) == Some(var),
+        StmtKind::If { branches, otherwise } => {
+            branches.iter().any(|b| changes(&b.body, var)) || otherwise.as_deref().is_some_and(|o| changes(o, var))
+        }
+        // An inner loop of its own name hides this one.
+        StmtKind::For { var: inner, body, .. } => inner.name != var && changes(body, var),
+        _ => false,
+    })
 }

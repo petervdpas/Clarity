@@ -43,6 +43,8 @@ export interface Live {
    * undefined while it loads, null when there is none.
    */
   picture(entity: string, id: number, field: string): string | null | undefined;
+  /** A file of a store as a URL to show: a picture linked before its record is saved. */
+  storeFile(store: string, path: string): string | null | undefined;
   /** Forgets a fetched picture that a new one replaces. */
   forgetPicture(entity: string, id: number, field: string): void;
 }

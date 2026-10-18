@@ -22,7 +22,7 @@ public static class Sql
     public static readonly object Kept = new();
 
     /// <summary>A picture as it is saved: none, the one stored already (kept), or a new one.</summary>
-    public static object? Picture(Picture? value) => value is null ? null : value.Bytes ?? Kept;
+    public static object? Picture(Picture? value) => value is null ? null : value.Bytes ?? (object?)value.FilePath ?? Kept;
 
     /// <summary>
     /// Whether a record has a picture: what the select list reads of one kept in

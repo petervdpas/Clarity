@@ -56,6 +56,9 @@ pub enum TypeInfo {
     Duration,
     /// A picture of an image field.
     Image,
+    /// A file of a file store, and a list of them.
+    File,
+    Files,
     Enum(String),
     Record(String),
     List(String),
@@ -175,6 +178,8 @@ impl<'a> Env<'a> {
             TypeRefKind::Date => Ty::Date,
             TypeRefKind::DateTime => Ty::DateTime,
             TypeRefKind::Duration => Ty::Duration,
+            TypeRefKind::File => Ty::File,
+            TypeRefKind::List { item } if item == "file" => Ty::Files,
             TypeRefKind::Named { name } => match (self.entity(name), self.enum_decl(name)) {
                 (Some(entity), _) => Ty::Record(entity),
                 (None, Some(decl)) => Ty::Enum(decl),
@@ -225,6 +230,8 @@ enum Ty<'a> {
     DateTime,
     Duration,
     Image,
+    File,
+    Files,
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
@@ -244,6 +251,8 @@ impl Ty<'_> {
             Ty::DateTime => TypeInfo::DateTime,
             Ty::Duration => TypeInfo::Duration,
             Ty::Image => TypeInfo::Image,
+            Ty::File => TypeInfo::File,
+            Ty::Files => TypeInfo::Files,
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
@@ -262,6 +271,8 @@ impl Ty<'_> {
             Ty::DateTime => "datetime".into(),
             Ty::Duration => "duration".into(),
             Ty::Image => "image".into(),
+            Ty::File => "file".into(),
+            Ty::Files => "list<file>".into(),
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
             Ty::List(e) => format!("list<{}>", e.name.name),
@@ -279,7 +290,7 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image)
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image | Ty::File | Ty::Files)
     }
 
     fn same(&self, other: &Ty) -> bool {
@@ -553,7 +564,7 @@ fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
                 ));
             } else if !EFFECTS.contains(&effect.name.as_str()) {
                 out.push(Diagnostic::error(
-                    format!("unknown effect '{}'; the effects are {}", effect.name, EFFECTS.join(" and ")),
+                    format!("unknown effect '{}'; the effects are {}", effect.name, crate::check::listed(&EFFECTS)),
                     effect.span,
                 ));
             }
@@ -648,6 +659,11 @@ pub const RECORD_ID: &str = "id";
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
 pub const TODAY: &str = "today";
+
+/// What a file of a file store has: its name (`photo.jpg`), its path inside
+/// the store (`2024/photo.jpg`), its extension in lower case without the
+/// dot (`jpg`), its size in bytes and when it was last changed.
+pub const FILE_MEMBERS: [&str; 5] = ["name", "path", "extension", "size", "modified"];
 pub const NOW: &str = "now";
 
 enum Place<'a> {
@@ -751,10 +767,20 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.block(body);
                 }
             }
+            StmtKind::Write { text, path, .. } => {
+                self.check_files("writes a file", "files.write", stmt.span);
+                for (value, what) in [(text, "the text to write"), (path, "the path to write it to")] {
+                    let ty = self.expr(value, Some(Ty::Text));
+                    if !Ty::Text.accepts(&ty) {
+                        self.error(format!("{what} must be text, not {}", ty.name()), value.span);
+                    }
+                }
+            }
             StmtKind::For { var, list, body } => {
                 let ty = self.expr(list, None);
                 let item = match ty {
                     Ty::List(entity) => Ty::Record(entity),
+                    Ty::Files => Ty::File,
                     Ty::Unknown => Ty::Unknown,
                     other => {
                         self.error(format!("'for' needs a list, not {}", other.name()), list.span);
@@ -847,6 +873,23 @@ impl<'a> BodyChecker<'_, 'a> {
                 format!("{doing} {name} in its own '{}' would run the event again, without end", event.text()),
                 value.span,
             );
+        }
+    }
+
+    /// Listing, reading and writing files: not in functions; in actions and
+    /// data events only with the effect.
+    fn check_files(&mut self, doing: &str, effect: &str, span: Span) {
+        let Some(decl) = self.decl else { return };
+        match decl.kind {
+            FunctionKind::Function => self.error(
+                format!("function '{}' cannot reach files; an action can, with 'effects {effect}'", decl.name.name),
+                span,
+            ),
+            FunctionKind::Action | FunctionKind::Event => {
+                if !decl.effects.iter().any(|e| e.name == effect) {
+                    self.error(format!("action '{}' {doing}, which needs 'effects {effect}'", decl.name.name), span);
+                }
+            }
         }
     }
 
@@ -963,8 +1006,11 @@ impl<'a> BodyChecker<'_, 'a> {
             self.error(message, target.span);
         }
         if matches!(ty, Ty::Image) && !matches!(value.kind, ExprKind::Empty) {
-            self.expr(value, Some(ty));
-            self.error("a picture cannot be copied from one record to another yet", value.span);
+            // A file of a file store becomes the picture; another record's
+            // picture cannot be copied yet.
+            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::Unknown) {
+                self.error("a picture cannot be copied from one record to another yet", value.span);
+            }
             return;
         }
         let value_ty = if self.shows(target) { self.shown_text(value) } else { self.expr(value, Some(ty)) };
@@ -1087,6 +1133,18 @@ impl<'a> BodyChecker<'_, 'a> {
                 ty: Ty::Unknown,
                 writable: Ok(()),
             }),
+            Ty::File => {
+                let ty = match member {
+                    "name" | "path" | "extension" => Ty::Text,
+                    "size" => Ty::Integer,
+                    "modified" => Ty::DateTime,
+                    _ => {
+                        self.error(format!("a file has {}, not '{member}'", crate::check::listed(&FILE_MEMBERS)), span);
+                        return None;
+                    }
+                };
+                Some(Place::Value { ty, writable: Err("a file's details are read, not set".into()) })
+            }
             Ty::Record(entity) => match entity.field(member) {
                 Some(field) => Some(Place::Value {
                     ty: self.env.field_type(&field.ty),
@@ -1181,6 +1239,22 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             ExprKind::Call { .. } => self.call(expr, false).unwrap_or(Ty::Unknown),
             ExprKind::Find { var, entity, filter, order } => self.find(var, entity, filter.as_deref(), order),
+            ExprKind::Files { var, filter, order, .. } => self.files(var, filter.as_deref(), order, expr.span),
+            ExprKind::ReadText { file } => {
+                self.check_files("reads a file", "files.read", expr.span);
+                let ty = self.expr(file, None);
+                if !matches!(ty, Ty::File | Ty::Unknown) {
+                    self.error(format!("'read text of' needs a file, not {}", ty.name()), file.span);
+                }
+                Ty::Text
+            }
+            ExprKind::New { entity } => match self.env.entity(&entity.name) {
+                Some(decl) => Ty::Record(decl),
+                None => {
+                    self.error(format!("unknown entity '{}'", entity.name), entity.span);
+                    Ty::Unknown
+                }
+            },
         }
     }
 
@@ -1193,7 +1267,7 @@ impl<'a> BodyChecker<'_, 'a> {
         if function.name == "count" {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
             match tys.as_slice() {
-                [Ty::List(_) | Ty::Unknown] => {}
+                [Ty::List(_) | Ty::Files | Ty::Unknown] => {}
                 [other] => self.error(format!("'count' needs a list, not {}", other.name()), args[0].span),
                 _ => self.error("'count' takes one list", expr.span),
             }
@@ -1303,6 +1377,29 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
         }
+    }
+
+    /// `files f in photos where ... order by ...`: a list of files. `f` is a
+    /// local of the condition and the order, which run in memory, so the
+    /// condition may be any bool.
+    fn files(&mut self, var: &Ident, filter: Option<&Expr>, order: &[OrderKey], span: Span) -> Ty<'a> {
+        self.check_files("lists files", "files.read", span);
+        self.scopes.push(HashMap::new());
+        self.define(var, Ty::File);
+        if let Some(filter) = filter {
+            self.condition(filter);
+        }
+        for key in order {
+            if key.var.name != var.name || !key.through.is_empty() {
+                self.error(format!("order by a detail of {0}, as in '{0}.name'", var.name), key.var.span);
+                continue;
+            }
+            if !FILE_MEMBERS.contains(&key.field.name.as_str()) {
+                self.error(format!("a file has {}, not '{}'", crate::check::listed(&FILE_MEMBERS), key.field.name), key.field.span);
+            }
+        }
+        self.scopes.pop();
+        Ty::Files
     }
 
     /// `find c in Customer where ... order by ...`: a list of the entity.
@@ -1652,9 +1749,11 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::In { value, options } => mentions(value, var) || options.iter().any(|o| mentions(o, var)),
         ExprKind::Call { args, .. } => args.iter().any(|a| mentions(a, var)),
         // An inner query has its own record name.
-        ExprKind::Find { var: inner, filter, .. } => {
+        ExprKind::Find { var: inner, filter, .. } | ExprKind::Files { var: inner, filter, .. } => {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
+        ExprKind::ReadText { file } => mentions(file, var),
+        ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
     }
@@ -1790,6 +1889,47 @@ fn other_source(project: &crate::model::Project, entity: &str, var: &str, hops: 
     None
 }
 
+/// The file stores code reaches, by file: every `files ... in store` and
+/// `write ... to store`.
+pub(crate) fn code_stores(project: &crate::model::Project) -> Vec<(String, Ident)> {
+    fn writes(body: &[Stmt], found: &mut Vec<Ident>) {
+        for stmt in body {
+            match &stmt.kind {
+                StmtKind::Write { store, .. } => found.push(store.clone()),
+                StmtKind::If { branches, otherwise } => {
+                    for branch in branches {
+                        writes(&branch.body, found);
+                    }
+                    if let Some(otherwise) = otherwise {
+                        writes(otherwise, found);
+                    }
+                }
+                StmtKind::For { body, .. } => writes(body, found),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for file in &project.files {
+        let bodies = file
+            .code
+            .iter()
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body).chain(b.events.iter().map(|e| &e.body)))
+            .chain(file.functions.iter().map(|f| &f.body));
+        let mut stores = Vec::new();
+        for body in bodies {
+            each_stmt_expr(body, &mut |e| {
+                if let ExprKind::Files { store, .. } = &e.kind {
+                    stores.push(store.clone());
+                }
+            });
+            writes(body, &mut stores);
+        }
+        out.extend(stores.into_iter().map(|s| (file.path.clone(), s)));
+    }
+    out
+}
+
 /// Calls `found` for every expression in `body` and in the expressions
 /// inside it, nested blocks included.
 fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
@@ -1825,6 +1965,10 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                     each_expr(&arg.value, found);
                 }
             }
+            StmtKind::Write { text, path, .. } => {
+                each_expr(text, found);
+                each_expr(path, found);
+            }
             StmtKind::Close | StmtKind::Reload { .. } => {}
         }
     }
@@ -1852,11 +1996,12 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(arg, found);
             }
         }
-        ExprKind::Find { filter, .. } => {
+        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
             if let Some(filter) = filter {
                 each_expr(filter, found);
             }
         }
+        ExprKind::ReadText { file } => each_expr(file, found),
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {
@@ -1864,7 +2009,7 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 }
             }
         }
-        ExprKind::Name { .. } | ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => {}
+        ExprKind::Name { .. } | ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::New { .. } => {}
     }
 }
 

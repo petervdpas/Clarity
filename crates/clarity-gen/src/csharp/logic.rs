@@ -84,6 +84,8 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Bool => TypeInfo::Bool,
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
+        TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
         TypeRefKind::List { item } => TypeInfo::List(item.clone()),
@@ -241,9 +243,25 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}{stored} = {record};\n"));
                     return;
                 }
+                // A file as a picture: linked in the field's own store, else copied.
+                if self.types.type_of(value) == TypeInfo::File
+                    && let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                {
+                    let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone());
+                    let store = store.map_or("null".to_string(), |s| string(&s));
+                    let place = self.place(target);
+                    let file = self.value(value);
+                    out.push_str(&format!("{pad}{place} = {db}.PictureFrom({file}, {store});\n"));
+                    return;
+                }
                 let place = self.place(target);
                 let value = self.value(value);
                 out.push_str(&format!("{pad}{place} = {value};\n"));
+            }
+            StmtKind::Write { text, store, path } => {
+                let (path, text) = (self.value(path), self.value(text));
+                out.push_str(&format!("{pad}{db}.WriteText({}, {path}, {text});\n", string(&store.name)));
             }
             StmtKind::If { branches, otherwise } => {
                 for (i, branch) in branches.iter().enumerate() {
@@ -451,6 +469,11 @@ impl<'a> Emitter<'a> {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
                     return format!("{e}.{}", field.name);
                 }
+                // A file's details: Name, Path, Extension, Size, Modified.
+                if self.types.type_of(object) == TypeInfo::File {
+                    let object = self.place(object);
+                    return format!("{object}.{}", pascal(&field.name));
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -510,6 +533,12 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
+            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
+            ExprKind::ReadText { file } => {
+                let db = self.db;
+                format!("{db}.ReadText({})", self.value(file))
+            }
+            ExprKind::New { entity } => format!("new {}()", entity.name),
         }
     }
 
@@ -603,6 +632,30 @@ impl<'a> Emitter<'a> {
             }
         }
         format!("{}.Find<{entity}>({query})", self.db)
+    }
+
+    /// `files f in store where ... order by ...`: the files of a store,
+    /// filtered and sorted in memory, text by its ordinal order as on every stack.
+    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey]) -> String {
+        let mut code = format!("{}.Files({})", self.db, string(store));
+        let name = camel(var);
+        if let Some(filter) = filter {
+            let cond = self.value(filter);
+            code.push_str(&format!(".Where({name} => {cond})"));
+        }
+        for (i, key) in order.iter().enumerate() {
+            let method = match (i, key.descending) {
+                (0, false) => "OrderBy",
+                (0, true) => "OrderByDescending",
+                (_, false) => "ThenBy",
+                (_, true) => "ThenByDescending",
+            };
+            let text = matches!(key.field.name.as_str(), "name" | "path" | "extension");
+            let comparer = if text { ", StringComparer.Ordinal" } else { "" };
+            code.push_str(&format!(".{method}({name} => {name}.{}{comparer})", pascal(&key.field.name)));
+        }
+        code.push_str(".ToList()");
+        code
     }
 
     /// A query condition as a `Cond`. The checker made sure each comparison

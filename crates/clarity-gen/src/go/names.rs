@@ -103,6 +103,8 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "*clarity.Date".into(),
         TypeInfo::DateTime => "*clarity.DateTime".into(),
         TypeInfo::Image => "*clarity.Picture".into(),
+        TypeInfo::File => "clarity.FileEntry".into(),
+        TypeInfo::Files => "[]clarity.FileEntry".into(),
         TypeInfo::Enum(name) => name.clone(),
         TypeInfo::Record(name) => format!("*{name}"),
         TypeInfo::List(name) => format!("[]{name}"),
@@ -117,6 +119,7 @@ pub fn zero(ty: &TypeInfo) -> String {
         TypeInfo::Integer | TypeInfo::Duration => "0".into(),
         TypeInfo::Decimal | TypeInfo::Money => "decimal.Zero".into(),
         TypeInfo::Bool => "false".into(),
+        TypeInfo::File => "clarity.FileEntry{}".into(),
         _ => "nil".into(),
     }
 }

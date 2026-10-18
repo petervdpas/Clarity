@@ -55,6 +55,8 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "Option<NaiveDate>".into(),
         TypeInfo::DateTime => "Option<NaiveDateTime>".into(),
         TypeInfo::Image => "Option<Picture>".into(),
+        TypeInfo::File => "FileEntry".into(),
+        TypeInfo::Files => "Vec<FileEntry>".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("Vec<{item}>"),
         TypeInfo::Unknown => "()".into(),

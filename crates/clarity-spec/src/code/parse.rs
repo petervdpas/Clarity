@@ -158,6 +158,7 @@ pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
         "date" => TypeRefKind::Date,
         "datetime" => TypeRefKind::DateTime,
         "duration" => TypeRefKind::Duration,
+        "file" => TypeRefKind::File,
         "list" => {
             cursor.expect(TokenKind::Lt, "'<' after 'list'")?;
             let item = cursor.expect_ident("an entity name")?;
@@ -235,7 +236,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 11] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload", "refuse"];
+const STATEMENT_WORDS: [&str; 12] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload", "refuse", "write"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -349,6 +350,16 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             StmtKind::Refuse {
                 text: parse_expr(&mut cursor)?,
             }
+        }
+        Some("write") => {
+            cursor.next();
+            let text = parse_expr(&mut cursor)?;
+            if !cursor.eat_keyword("to") {
+                return Err(cursor.error_here("expected 'to', a file store and a path, as in 'write lines to photos \"list.txt\"'"));
+            }
+            let store = cursor.expect_ident("a file store")?;
+            let path = parse_expr(&mut cursor)?;
+            StmtKind::Write { text, store, path }
         }
         Some("delete") => {
             cursor.next();
@@ -598,6 +609,23 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "find" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_find(cursor);
         }
+        TokenKind::Ident if token.text == "files" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
+            return parse_files(cursor);
+        }
+        TokenKind::Ident
+            if token.text == "read" && cursor.peek_at(1).is_some_and(|t| t.text == "text") && cursor.peek_at(2).is_some_and(|t| t.text == "of") =>
+        {
+            cursor.next();
+            cursor.next();
+            cursor.next();
+            let file = parse_postfix(cursor)?;
+            return Ok(Expr { span: join(token.span, file.span), kind: ExprKind::ReadText { file: Box::new(file) } });
+        }
+        TokenKind::Ident if token.text == "new" && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident) => {
+            cursor.next();
+            let entity = cursor.expect_ident("an entity")?;
+            return Ok(Expr { span: join(token.span, entity.span), kind: ExprKind::New { entity } });
+        }
         TokenKind::Ident if !RESERVED.contains(&token.text.as_str()) => {
             cursor.next();
             if cursor.eat(TokenKind::LParen) {
@@ -645,6 +673,60 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
     })
 }
 
+/// `files f in photos [where condition] [order by f.field [desc], ...]`
+fn parse_files(cursor: &mut Cursor) -> ParseResult<Expr> {
+    let start = cursor.next().map(|t| t.span).unwrap_or_else(|| cursor.end_span());
+    let var = cursor.expect_ident("a name for each file")?;
+    if !cursor.eat_keyword("in") {
+        return Err(cursor.error_here("expected 'in' and a file store"));
+    }
+    let store = cursor.expect_ident("a file store")?;
+    let mut end = store.span;
+    let filter = if cursor.eat_keyword("where") {
+        let condition = parse_expr(cursor)?;
+        end = condition.span;
+        Some(Box::new(condition))
+    } else {
+        None
+    };
+    let order = parse_order(cursor, &mut end)?;
+    Ok(Expr {
+        span: join(start, end),
+        kind: ExprKind::Files { var, store, filter, order },
+    })
+}
+
+/// `order by c.field [desc], ...`, if it is there; `end` moves past it.
+fn parse_order(cursor: &mut Cursor, end: &mut Span) -> ParseResult<Vec<OrderKey>> {
+    let mut order = Vec::new();
+    if cursor.eat_keyword("order") {
+        if !cursor.eat_keyword("by") {
+            return Err(cursor.error_here("expected 'by', as in 'order by c.name'"));
+        }
+        loop {
+            let key_var = cursor.expect_ident("a field, as in 'c.name'")?;
+            cursor.expect(TokenKind::Dot, "'.' and a field, as in 'c.name'")?;
+            let mut field = cursor.expect_ident("a field")?;
+            // Through references: `a.artist.name`.
+            let mut through = Vec::new();
+            while cursor.eat(TokenKind::Dot) {
+                let next = cursor.expect_ident("a field")?;
+                through.push(std::mem::replace(&mut field, next));
+            }
+            *end = field.span;
+            let descending = cursor.peek().is_some_and(|t| t.text == "desc");
+            if descending {
+                *end = cursor.next().map(|t| t.span).unwrap_or(*end);
+            }
+            order.push(OrderKey { var: key_var, through, field, descending });
+            if !cursor.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+    }
+    Ok(order)
+}
+
 /// `find c in Customer [where condition] [order by c.field [desc], ...]`
 fn parse_find(cursor: &mut Cursor) -> ParseResult<Expr> {
     let start = cursor.next().map(|t| t.span).unwrap_or_else(|| cursor.end_span());
@@ -661,32 +743,7 @@ fn parse_find(cursor: &mut Cursor) -> ParseResult<Expr> {
     } else {
         None
     };
-    let mut order = Vec::new();
-    if cursor.eat_keyword("order") {
-        if !cursor.eat_keyword("by") {
-            return Err(cursor.error_here("expected 'by', as in 'order by c.name'"));
-        }
-        loop {
-            let key_var = cursor.expect_ident("a field, as in 'c.name'")?;
-            cursor.expect(TokenKind::Dot, "'.' and a field, as in 'c.name'")?;
-            let mut field = cursor.expect_ident("a field")?;
-            // Through references: `a.artist.name`.
-            let mut through = Vec::new();
-            while cursor.eat(TokenKind::Dot) {
-                let next = cursor.expect_ident("a field")?;
-                through.push(std::mem::replace(&mut field, next));
-            }
-            end = field.span;
-            let descending = cursor.peek().is_some_and(|t| t.text == "desc");
-            if descending {
-                end = cursor.next().map(|t| t.span).unwrap_or(end);
-            }
-            order.push(OrderKey { var: key_var, through, field, descending });
-            if !cursor.eat(TokenKind::Comma) {
-                break;
-            }
-        }
-    }
+    let order = parse_order(cursor, &mut end)?;
     Ok(Expr {
         span: join(start, end),
         kind: ExprKind::Find { var, entity, filter, order },

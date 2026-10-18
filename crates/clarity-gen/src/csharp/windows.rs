@@ -708,9 +708,12 @@ impl<'a> Window<'a> {
                 let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
                 let path = bound.as_deref().unwrap_or_default();
                 let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
+                // A field kept in a store shows a file linked before the record is saved.
+                let in_store = self.bound_field(p.bind.as_deref().unwrap_or_default()).is_some_and(|(_, f)| f.modifiers.store.is_some());
+                let fetch_file = if in_store { format!(" FetchFile=\"{{Binding {}}}\"", picture_file(data, field)) } else { String::new() };
                 let _ = writeln!(
                     out,
-                    "{pad}<c:PictureBox {at} Picture=\"{{Binding {path}}}\" Record=\"{{Binding {record}}}\" Fetch=\"{{Binding {fetch}}}\" EmptyText=\"{empty}\" LoadText=\"{load}\" RemoveText=\"{remove}\"{read_only}{text_state}{extra} />",
+                    "{pad}<c:PictureBox {at} Picture=\"{{Binding {path}}}\" Record=\"{{Binding {record}}}\" Fetch=\"{{Binding {fetch}}}\"{fetch_file} EmptyText=\"{empty}\" LoadText=\"{load}\" RemoveText=\"{remove}\"{read_only}{text_state}{extra} />",
                     record = member(data),
                     fetch = picture_fetch(data, field),
                     empty = self.text("No picture"),
@@ -835,17 +838,20 @@ public partial class {name}View : UserControl
             }
         }
         // The picture each picture field shows when the record has one stored.
-        let mut fetches: BTreeMap<String, String> = BTreeMap::new();
+        let mut fetches: BTreeMap<String, (&str, String)> = BTreeMap::new();
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Image) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
             let Some(entity) = self.entity_of(data) else { continue };
             fetches.insert(
                 picture_fetch(data, field),
-                format!("() => Db.PictureOf<{}>({}.Id, {})", entity.name.name, member(data), string(entity.column_of(field))),
+                ("byte[]?", format!("() => Db.PictureOf<{}>({}.Id, {})", entity.name.name, member(data), string(entity.column_of(field)))),
             );
+            if let Some(store) = entity.field(field).and_then(|f| f.modifiers.store.as_deref()) {
+                fetches.insert(picture_file(data, field), ("string, byte[]?", format!("path => Db.StoreFile({}, path)", string(store))));
+            }
         }
-        for (name, fetch) in &fetches {
-            let _ = write!(properties, "    public Func<byte[]?> {name} => {fetch};\n\n");
+        for (name, (ty, fetch)) in &fetches {
+            let _ = write!(properties, "    public Func<{ty}> {name} => {fetch};\n\n");
         }
         let mut choices: BTreeMap<String, String> = BTreeMap::new();
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Dropdown) {
@@ -988,6 +994,11 @@ public sealed partial class {name}ViewModel : WindowViewModel
             body.trim_end()
         ))
     }
+}
+
+/// The view model member that reads a file of the store of `data.field`.
+fn picture_file(data: &str, field: &str) -> String {
+    format!("{}{}File", member(data), pascal(field))
 }
 
 /// The view model member that fetches the stored picture of `data.field`.

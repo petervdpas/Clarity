@@ -105,6 +105,7 @@ fn writes_a_complete_cargo_project() {
             "build.rs",
             "clarity-runtime/Cargo.toml",
             "clarity-runtime/src/dialect.rs",
+            "clarity-runtime/src/files.rs",
             "clarity-runtime/src/lib.rs",
             "clarity-runtime/src/mssql.rs",
             "clarity-runtime/src/mysql.rs",
@@ -670,4 +671,15 @@ fn a_query_goes_through_a_reference() {
     ] {
         assert!(sales.contains(expected), "{expected}\nin\n{sales}");
     }
+}
+
+/// A loop that changes and saves its records works on the records in the
+/// list, as on the other stacks.
+#[test]
+fn a_loop_changes_and_saves_its_records() {
+    let source = format!("{SALES}\naction approve_all(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
+    assert!(sales.contains("for order in found.iter() {"), "{sales}");
 }

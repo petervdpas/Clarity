@@ -23,6 +23,9 @@ pub enum Picture {
     Stored,
     /// One loaded but not yet saved.
     New(Vec<u8>),
+    /// A file of the field's own file store, by its path there: saved as
+    /// that path, nothing copied.
+    InStore(String),
 }
 
 /// An `image` field's column, and the file store it keeps its pictures in;
@@ -95,14 +98,18 @@ struct Wire {
     stored: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     data: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
 }
 
-/// `{"stored": true}`, or `{"data": base64}` for a new picture.
+/// `{"stored": true}`, `{"data": base64}` for a new picture, or
+/// `{"file": path}` for a file of the field's own store.
 impl Serialize for Picture {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         let wire = match self {
-            Picture::Stored => Wire { stored: Some(true), data: None },
-            Picture::New(bytes) => Wire { stored: None, data: Some(base64::engine::general_purpose::STANDARD.encode(bytes)) },
+            Picture::Stored => Wire { stored: Some(true), data: None, file: None },
+            Picture::New(bytes) => Wire { stored: None, data: Some(base64::engine::general_purpose::STANDARD.encode(bytes)), file: None },
+            Picture::InStore(path) => Wire { stored: None, data: None, file: Some(path.clone()) },
         };
         wire.serialize(serializer)
     }
@@ -111,9 +118,10 @@ impl Serialize for Picture {
 impl<'de> Deserialize<'de> for Picture {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let wire = Wire::deserialize(deserializer)?;
-        match wire.data {
-            Some(data) => base64::engine::general_purpose::STANDARD.decode(data).map(Picture::New).map_err(D::Error::custom),
-            None => Ok(Picture::Stored),
+        match (wire.data, wire.file) {
+            (Some(data), _) => base64::engine::general_purpose::STANDARD.decode(data).map(Picture::New).map_err(D::Error::custom),
+            (None, Some(path)) => Ok(Picture::InStore(path)),
+            (None, None) => Ok(Picture::Stored),
         }
     }
 }

@@ -111,6 +111,7 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Clarity.Runtime/Db.cs",
             "Clarity.Runtime/Dialect.cs",
             "Clarity.Runtime/Errors.cs",
+            "Clarity.Runtime/Files.cs",
             "Clarity.Runtime/Formats.cs",
             "Clarity.Runtime/Languages.cs",
             "Clarity.Runtime/Locations.cs",

@@ -5,6 +5,7 @@
 //! project, so a project builds on its own.
 
 pub mod dialect;
+pub mod files;
 pub mod picture;
 pub mod query;
 pub mod sql;
@@ -27,6 +28,7 @@ use std::path::Path;
 
 pub use chrono::{NaiveDate, NaiveDateTime};
 pub use dialect::Dialect;
+pub use files::FileEntry;
 pub use picture::{Picture, PictureColumn};
 pub use query::{Cond, Hop, Op, Query, contains};
 pub use rust_decimal::Decimal;

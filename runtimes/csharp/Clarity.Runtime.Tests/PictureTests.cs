@@ -87,7 +87,9 @@ public class PictureTests
     [Fact]
     public void APictureIsKeptInTheDatabaseAndFetchedOnItsOwn()
     {
-        using var db = Albums(Scratch("db"));
+        var store = Scratch("db");
+        using var cleanup = new Cleanup(store);
+        using var db = Albums(store);
         var album = new Album { Title = "Blue Train", Cover = Picture.New(Png) };
         db.Save(album);
         var read = db.Get<Album>(album.Id);
@@ -152,4 +154,14 @@ public class PictureTests
     public void SameBytesSamePicture() =>
         Assert.Equal(Picture.New([1, 2]), Picture.New([1, 2]));
 
+}
+
+/// Removes a scratch folder when a test is done with it.
+sealed class Cleanup(string folder) : IDisposable
+{
+    public void Dispose()
+    {
+        if (Directory.Exists(folder))
+            Directory.Delete(folder, true);
+    }
 }

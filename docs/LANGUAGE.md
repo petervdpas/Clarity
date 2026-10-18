@@ -822,7 +822,7 @@ action approve(order: Order)
 
 - **The signature** is `name(param: type, ...)`, optionally followed by `-> type` for the result. The types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum, and `list<Entity>`.
 - **`require expr`** checks the arguments before the body runs. **`ensure expr`** checks the result after it, as `result`. Both must be bool, and both come before the statements.
-- **`effects`** lists what an action does to data: `db.read`, `db.write` or both, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`.
+- **`effects`** lists what an action does to data: `db.read`, `db.write`, `files.read` and `files.write`, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`; one that lists or reads files declares `files.read`, and one that writes a file `files.write`. A function cannot reach files at all; handlers can, as they can save.
 - **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
 - **An action** can change data. Neither functions nor actions talk to the screen: `message`, `open`, `close` and part properties belong in handlers.
 - A function or action with a result returns a value on every path; the checker reports a path that does not.
@@ -852,6 +852,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `delete expr` | Removes a record from its data source. | handlers, actions, data events |
 | `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
 | `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). | handlers |
+| `write expr to store "path"` | Writes text as a file of a file store, at a path inside it, making its folders. See [Files](#files). | handlers, actions with `files.write` |
 
 ### Expressions
 
@@ -871,6 +872,9 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `x in [a, b, c]` | whether `x` equals one of the values |
 | `a contains b` | whether text `a` contains text `b`, ignoring case |
 | `find c in Entity where ... order by ...` | the records that meet a condition; see [Queries](#queries) |
+| `new Entity` | a new record of the entity, with its defaults; `save` stores it |
+| `files f in store where ... order by ...` | the files of a file store that meet a condition; see [Files](#files) |
+| `read text of f` | the text a file holds |
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
@@ -917,6 +921,37 @@ code Customers
 - A query reads one database, so it cannot go through a reference to an entity in another data source.
 - The database does the work: the condition becomes a query with parameters, so values never become part of the SQL text.
 
+### Files
+
+Code reaches files only in the file stores of the project settings, the folders that also keep pictures (`filestore photos "data/photos"`). What a program touches on disk is in its settings, and a store that differs per machine comes from an environment variable.
+
+```
+// Photos dropped in the photos folder, named after the artist
+// (Miles Davis.jpg), become the photos of artists that have none.
+action find_artist_photos()
+    effects db.write, files.read
+    let found = files f in photos where f.extension == "jpg" or f.extension == "png"
+    let artists = find a in Artist where a.photo == none
+    for artist in artists
+        for f in found
+            if f.name == artist.name + "." + f.extension
+                artist.photo = f
+                save artist
+
+action export_collection()
+    effects files.write
+    let lines = ""
+    for album in find a in Album order by a.title
+        lines = lines + album.title + "\n"
+    write lines to exports "collection.txt"
+```
+
+- `files f in photos` lists every file of the store and its folders, leaving out files and folders whose name starts with a dot, sorted by path. `where` and `order by` work as in `find`, on the details of a file, and run in memory: the condition may be any bool.
+- A file has `name` (`Blue Train.jpg`), `path` inside the store (`2024/Blue Train.jpg`, with `/` between folders), `extension` in lower case without the dot (`jpg`), `size` in bytes and `modified` (a date and time, in UTC). A list of files is `list<file>`, one file `file`.
+- `read text of f` gives the text a file holds, as UTF-8. `write t to exports "lists/albums.txt"` writes one, making its folders. A path that would leave the store is refused.
+- A file becomes a record's picture with `photo.picture = f`. In the field's own store (`store photos`) it is the file itself: the column holds its path, nothing is copied, as a catalog of photos wants. Kept anywhere else, the picture is a copy of the file. A file that is no picture is refused.
+- Listing, reading and writing are effects, `files.read` and `files.write`, which an action declares; a function cannot reach files.
+
 ### Types
 
 The types of values follow the data dictionary:
@@ -932,6 +967,8 @@ The types of values follow the data dictionary:
 | an enum | that enum |
 | a record | an entity, a `ref` |
 | a list of records | `list<Entity>`, a list in the window's data |
+| `image` | an `image` field; compared with and set to `none`, or set to a file |
+| `file`, `list<file>` | a file of a file store, and a list of them; see [Files](#files) |
 
 An integer is accepted where a decimal is expected. Nothing else converts by itself. The checker reports unknown names, wrong types, setting something that cannot be set, and calls with the wrong arguments.
 

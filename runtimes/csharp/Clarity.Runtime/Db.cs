@@ -4,7 +4,7 @@
 
 namespace Clarity.Runtime;
 
-public sealed class Db : IDisposable
+public sealed partial class Db : IDisposable
 {
     /// <summary>The database of one data source.</summary>
     sealed class SourceDb(string name, IDriver driver)

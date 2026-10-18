@@ -182,6 +182,13 @@ pub enum StmtKind {
     Refuse {
         text: Expr,
     },
+    /// `write lines to photos "exports/titles.txt"`: writes text as a file
+    /// of a file store, at a path inside it.
+    Write {
+        text: Expr,
+        store: Ident,
+        path: Expr,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -282,6 +289,19 @@ pub enum ExprKind {
         filter: Option<Box<Expr>>,
         order: Vec<OrderKey>,
     },
+    /// `files f in photos where f.extension == "jpg" order by f.path`: the
+    /// files of a file store, subfolders too, that meet the condition, in
+    /// order. `var` names the file inside the condition and the order.
+    Files {
+        var: Ident,
+        store: Ident,
+        filter: Option<Box<Expr>>,
+        order: Vec<OrderKey>,
+    },
+    /// `read text of f`: the text a file holds.
+    ReadText { file: Box<Expr> },
+    /// `new Photo`: a new record of the entity, with its defaults.
+    New { entity: Ident },
 }
 
 /// `c.name` or `c.name desc` in `order by`.
@@ -365,6 +385,8 @@ pub enum TypeRefKind {
     Date,
     DateTime,
     Duration,
+    /// A file of a file store.
+    File,
     /// An entity (a record) or an enum.
     Named { name: String },
     List { item: String },
@@ -419,7 +441,7 @@ pub struct FunctionDecl {
 }
 
 /// The effects an action can declare.
-pub const EFFECTS: [&str; 2] = ["db.read", "db.write"];
+pub const EFFECTS: [&str; 4] = ["db.read", "db.write", "files.read", "files.write"];
 
 /// A piece of a text with slots.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

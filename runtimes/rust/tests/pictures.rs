@@ -138,6 +138,7 @@ fn a_picture_is_kept_in_the_database_and_fetched_on_its_own() {
     // Only a picture is kept.
     again.cover = Some(Picture::New(b"%PDF-1.7".to_vec()));
     assert!(matches!(db.save(&mut again), Err(Error::Invalid(_))));
+    std::fs::remove_dir_all(&store).unwrap();
 }
 
 #[test]

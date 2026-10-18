@@ -35,6 +35,11 @@ public sealed class PictureBox : Grid
 
     public Picture? Picture { get => GetValue(PictureProperty); set => SetValue(PictureProperty, value); }
     public Func<byte[]?>? Fetch { get => GetValue(FetchProperty); set => SetValue(FetchProperty, value); }
+
+    /// <summary>Gives a file of the field's store: a picture linked from a file before its record is saved.</summary>
+    public static readonly StyledProperty<Func<string, byte[]?>?> FetchFileProperty = AvaloniaProperty.Register<PictureBox, Func<string, byte[]?>?>(nameof(FetchFile));
+
+    public Func<string, byte[]?>? FetchFile { get => GetValue(FetchFileProperty); set => SetValue(FetchFileProperty, value); }
     public object? Record { get => GetValue(RecordProperty); set => SetValue(RecordProperty, value); }
     public string EmptyText { get => GetValue(EmptyTextProperty); set => SetValue(EmptyTextProperty, value); }
     public string LoadText { get => GetValue(LoadTextProperty); set => SetValue(LoadTextProperty, value); }
@@ -79,7 +84,7 @@ public sealed class PictureBox : Grid
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == PictureProperty || change.Property == FetchProperty || change.Property == RecordProperty || change.Property == EmptyTextProperty
+        if (change.Property == PictureProperty || change.Property == FetchProperty || change.Property == FetchFileProperty || change.Property == RecordProperty || change.Property == EmptyTextProperty
             || change.Property == LoadTextProperty || change.Property == RemoveTextProperty || change.Property == IsReadOnlyProperty)
             Show();
     }
@@ -90,6 +95,7 @@ public sealed class PictureBox : Grid
         {
             null => null,
             { Bytes: { } b } => b,
+            { FilePath: { } path } => FetchFile?.Invoke(path),
             _ => Fetch?.Invoke(),
         };
         (image.Source as IDisposable)?.Dispose();

@@ -1,0 +1,72 @@
+{
+  "about": "The files of a file store, alike in every runtime. Listing a store gives every file in it and in its folders, leaving out files and folders whose name starts with a dot, sorted by path (byte order), with '/' between folders whatever the system writes. A file has its path inside the store, its name, its extension in lower case without the dot (empty without one), its size in bytes and when it was last changed (UTC, to the second). Text is read and written as UTF-8. Writing takes a path inside the store, making its folders; a path that would leave the store is refused (refused).",
+  "tree": [
+    {
+      "path": "notes.txt",
+      "text": "Hello\nworld\n",
+      "modified": "2026-01-02T03:04:05"
+    },
+    {
+      "path": "2024/Blue Train.JPG",
+      "text": "jpg",
+      "modified": "2024-05-01T10:00:00"
+    },
+    {
+      "path": "2024/live/set.png",
+      "text": "png!",
+      "modified": "2024-06-30T23:59:59"
+    },
+    {
+      "path": "README",
+      "text": "",
+      "modified": "2025-12-31T00:00:00"
+    },
+    {
+      "path": ".hidden",
+      "text": "x",
+      "modified": "2025-01-01T00:00:00"
+    },
+    {
+      "path": "2024/.thumbs/a.jpg",
+      "text": "x",
+      "modified": "2025-01-01T00:00:00"
+    }
+  ],
+  "listing": [
+    {
+      "path": "2024/Blue Train.JPG",
+      "name": "Blue Train.JPG",
+      "extension": "jpg",
+      "size": 3,
+      "modified": "2024-05-01T10:00:00"
+    },
+    {
+      "path": "2024/live/set.png",
+      "name": "set.png",
+      "extension": "png",
+      "size": 4,
+      "modified": "2024-06-30T23:59:59"
+    },
+    {
+      "path": "README",
+      "name": "README",
+      "extension": "",
+      "size": 0,
+      "modified": "2025-12-31T00:00:00"
+    },
+    {
+      "path": "notes.txt",
+      "name": "notes.txt",
+      "extension": "txt",
+      "size": 12,
+      "modified": "2026-01-02T03:04:05"
+    }
+  ],
+  "refused": [
+    "../outside.txt",
+    "/etc/passwd",
+    "a/../../b.txt",
+    "",
+    ".."
+  ]
+}

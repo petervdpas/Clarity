@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { kindOf, pictureFromFile, pictureUrl } from "./recordPictures.ts";
+import { kindOf, linkedFile, pictureFromFile, pictureUrl } from "./recordPictures.ts";
 
 type Cases = {
   kinds: { extension: string; bytes: string; type: string }[];
@@ -32,4 +32,11 @@ test("a field shows its new picture, or the stored one once fetched", () => {
   assert.equal(pictureUrl({ stored: true }, undefined), null);
   assert.equal(pictureUrl({ stored: true }, "data:image/jpeg;base64,/9j/"), "data:image/jpeg;base64,/9j/");
   assert.equal(pictureUrl(null, "data:image/png;base64,x"), null);
+});
+
+test("a picture linked from a file shows once its file has come", () => {
+  assert.equal(pictureUrl({ file: "2024/cover.png" }, undefined), null);
+  assert.equal(pictureUrl({ file: "2024/cover.png" }, "data:image/png;base64,x"), "data:image/png;base64,x");
+  assert.equal(linkedFile({ file: "2024/cover.png" }), "2024/cover.png");
+  assert.equal(linkedFile({ stored: true }), null);
 });

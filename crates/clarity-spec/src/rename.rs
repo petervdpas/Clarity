@@ -183,6 +183,10 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                 }
             }
             StmtKind::Save { value } | StmtKind::Delete { value } => expr(value, name, found),
+            StmtKind::Write { text, path, .. } => {
+                expr(text, name, found);
+                expr(path, name, found);
+            }
             StmtKind::Close | StmtKind::Reload { .. } => {}
         }
     }
@@ -208,11 +212,12 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(arg, name, found);
             }
         }
-        ExprKind::Find { filter, .. } => {
+        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
             if let Some(filter) = filter {
                 expr(filter, name, found);
             }
         }
+        ExprKind::ReadText { file } => expr(file, name, found),
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {
@@ -220,6 +225,6 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 }
             }
         }
-        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::Name { .. } => {}
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::Name { .. } | ExprKind::New { .. } => {}
     }
 }

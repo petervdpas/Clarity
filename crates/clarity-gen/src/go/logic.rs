@@ -57,6 +57,8 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Bool => TypeInfo::Bool,
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
+        TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
         TypeRefKind::List { item } => TypeInfo::List(item.clone()),
@@ -352,6 +354,29 @@ impl<'a> Emitter<'a> {
         out.push_str(&unused_locals(&code));
     }
 
+    /// `files f in store where ... order by ...`: the files of a store,
+    /// filtered in a function of their own and sorted by the runtime.
+    fn files(&mut self, var: &str, store: &str, filter: Option<&Expr>, order: &[OrderKey], pre: &mut String) -> String {
+        let mut list = self.lift(format!("db.Files({})", string(store)), pre);
+        if let Some(filter) = filter {
+            let mut inner = String::new();
+            let cond = bare(self.value(filter, &mut inner));
+            if !inner.is_empty() {
+                self.errors.push("a condition on files cannot call what can fail yet".into());
+            }
+            self.temps += 1;
+            let kept = format!("v{}", self.temps);
+            pre.push_str(&format!("{kept} := clarity.FilterFiles({list}, func({} clarity.FileEntry) bool {{\n\treturn {cond}\n}})\n", local(var)));
+            list = kept;
+        }
+        if order.is_empty() {
+            return list;
+        }
+        let keys: Vec<String> =
+            order.iter().map(|k| format!("clarity.{}({})", if k.descending { "Desc" } else { "Asc" }, string(&k.field.name))).collect();
+        format!("clarity.SortFiles({list}, {})", keys.join(", "))
+    }
+
     /// The lines that lift a call that can fail; gives the name of its value.
     fn lift(&mut self, call: String, pre: &mut String) -> String {
         self.temps += 1;
@@ -422,6 +447,19 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{stored} = {record}\n"));
                     return;
                 }
+                // A file as a picture: linked in the field's own store, else copied.
+                if self.types.type_of(value) == TypeInfo::File
+                    && let ExprKind::Member { object, member } = &target.kind
+                    && let TypeInfo::Record(owner) = self.types.type_of(object)
+                {
+                    let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone()).unwrap_or_default();
+                    let file = bare(self.value(value, &mut pre));
+                    let picture = self.lift(format!("db.PictureFrom({file}, {})", string(&store)), &mut pre);
+                    let place = self.place(target, &mut pre);
+                    out.push_str(&pre);
+                    out.push_str(&format!("{place} = {picture}\n"));
+                    return;
+                }
                 let to = self.types.type_of(target);
                 let code = if is_decimal(&to) { self.decimal(value, &mut pre) } else { self.value(value, &mut pre) };
                 let place = self.place(target, &mut pre);
@@ -429,13 +467,25 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{place} = {}\n", bare(code)));
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
+            StmtKind::Write { text, store, path } => {
+                let path = bare(self.value(path, &mut pre));
+                let text = bare(self.value(text, &mut pre));
+                out.push_str(&pre);
+                out.push_str(&format!(
+                    "if err := db.WriteText({}, {path}, {text}); err != nil {{\n\t{}\n}}\n",
+                    string(&store.name),
+                    self.fail("err")
+                ));
+            }
             StmtKind::For { var, list, body } => {
+                // Files are worked on as values, records through pointers.
+                let by_value = self.types.type_of(list) == TypeInfo::Files;
                 let list = bare(self.value(list, &mut pre));
                 out.push_str(&pre);
                 self.loops += 1;
                 let index = if self.loops == 1 { "i".to_string() } else { format!("i{}", self.loops) };
                 let item = local(&var.name);
-                let mut inner = format!("{item} := &{list}[{index}]\n");
+                let mut inner = if by_value { format!("{item} := {list}[{index}]\n") } else { format!("{item} := &{list}[{index}]\n") };
                 self.block(body, &mut inner);
                 out.push_str(&format!("for {index} := range {list} {{\n{}}}\n", indent(&unused_locals(&inner), 1)));
             }
@@ -678,6 +728,11 @@ impl<'a> Emitter<'a> {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
                     return constant(e, &member.name);
                 }
+                // A file's details: Name, Path, Extension, Size, Modified.
+                if self.types.type_of(object) == TypeInfo::File {
+                    let object = self.place(object, pre);
+                    return format!("{object}.{}", pascal(&member.name));
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for Go", print::expr(expr)));
                     return String::new();
@@ -779,6 +834,12 @@ impl<'a> Emitter<'a> {
                 let query = self.find(&var.name, &entity.name, filter.as_deref(), order, pre);
                 self.lift(query, pre)
             }
+            ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order, pre),
+            ExprKind::ReadText { file } => {
+                let file = bare(self.value(file, pre));
+                self.lift(format!("db.ReadText({file})"), pre)
+            }
+            ExprKind::New { entity } => format!("clarity.New(New{}())", entity.name),
         }
     }
 

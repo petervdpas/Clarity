@@ -137,6 +137,8 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "DateOnly?".into(),
         TypeInfo::DateTime => "DateTime?".into(),
         TypeInfo::Image => "Picture?".into(),
+        TypeInfo::File => "FileEntry".into(),
+        TypeInfo::Files => "List<FileEntry>".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("List<{item}>"),
         TypeInfo::Unknown => "void".into(),

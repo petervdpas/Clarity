@@ -1051,7 +1051,7 @@ fn check_mapping(entity: &Entity) -> Vec<Diagnostic> {
 }
 
 /// `a`, `a and b`, `a, b and c`.
-fn listed(names: &[&str]) -> String {
+pub(crate) fn listed(names: &[&str]) -> String {
     match names {
         [] => "none".to_string(),
         [only] => (*only).to_string(),

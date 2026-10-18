@@ -127,3 +127,18 @@ fn avalonia_shows_a_picture_field_in_a_picture_box() {
     assert!(files.iter().any(|f| f.path == "Clarity.Avalonia/PictureBox.cs"));
     assert!(files.iter().any(|f| f.path == "Clarity.Runtime/Pictures.cs"));
 }
+
+/// A picture linked from a file before its record is saved shows from its store.
+#[test]
+fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
+    let rust = files(Backend::Rust, Ui::Web, SourceKind::Sqlite);
+    let main = text(&rust, "src/main.rs");
+    has(main, "fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<String> {");
+    has(main, "            store_file,\n");
+    let csharp = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
+    let model = text(&csharp, "Windows/AlbumFormViewModel.cs");
+    has(model, "    public Func<string, byte[]?> AlbumPhotoFile => path => Db.StoreFile(\"photos\", path);\n");
+    let view = text(&csharp, "Windows/AlbumFormView.axaml");
+    has(view, "Fetch=\"{Binding AlbumPhotoPicture}\" FetchFile=\"{Binding AlbumPhotoFile}\"");
+    assert!(!view.contains("AlbumCoverFile"), "a picture kept in the database has no store file");
+}

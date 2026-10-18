@@ -14,7 +14,7 @@
   import { provideForm, useForm } from "./form";
   import { matchesShortcut } from "./shortcut";
   import { pictureUrl } from "./pictures.svelte";
-  import { isStored, pictureFromFile, pictureUrl as recordPictureUrl } from "./recordPictures";
+  import { isStored, linkedFile, pictureFromFile, pictureUrl as recordPictureUrl } from "./recordPictures";
 
   let {
     preview,
@@ -450,7 +450,14 @@
         {/each}
       </ul>
     {:else if p.kind === "image" && p.bind}
-      {@const fetched = live && bound && boundEntity && isStored(value) ? live.picture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name) : undefined}
+      {@const linked = linkedFile(value)}
+      {@const fetched = !live || !bound
+        ? undefined
+        : linked && bound.field.modifiers.store
+          ? live.storeFile(bound.field.modifiers.store, linked)
+          : boundEntity && isStored(value)
+            ? live.picture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name)
+            : undefined}
       {@const shownPicture = recordPictureUrl(value, fetched)}
       <div class="picture-field">
         {#if shownPicture}

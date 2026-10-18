@@ -184,6 +184,21 @@
       }
       return undefined;
     },
+    storeFile(store: string, path: string) {
+      const key = `file:${store}/${path}`;
+      if (key in pictures) return pictures[key];
+      if (!fetching.has(key)) {
+        fetching.add(key);
+        invoke<string>("store_file", { store, path })
+          .then((url) => (pictures[key] = url))
+          .catch((err) => {
+            pictures[key] = null;
+            say({ level: "error", text: errorText(err) });
+          })
+          .finally(() => fetching.delete(key));
+      }
+      return undefined;
+    },
     forgetPicture(entity: string, id: number, field: string) {
       delete pictures[pictureKey(entity, id, field)];
     },

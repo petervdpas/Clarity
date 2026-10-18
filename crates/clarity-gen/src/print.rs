@@ -25,22 +25,28 @@ pub fn expr(e: &Expr) -> String {
             function.name,
             args.iter().map(expr).collect::<Vec<_>>().join(", ")
         ),
-        ExprKind::Find { var, entity, filter, order } => {
-            let mut text = format!("find {} in {}", var.name, entity.name);
-            if let Some(filter) = filter {
-                text.push_str(&format!(" where {}", expr(filter)));
-            }
-            if !order.is_empty() {
-                let keys: Vec<String> = order
-                    .iter()
-                    .map(|k| {
-                        let path: String = k.through.iter().map(|t| format!("{}.", t.name)).collect();
-                        format!("{}.{path}{}{}", k.var.name, k.field.name, if k.descending { " desc" } else { "" })
-                    })
-                    .collect();
-                text.push_str(&format!(" order by {}", keys.join(", ")));
-            }
-            text
-        }
+        ExprKind::Find { var, entity, filter, order } => query(&format!("find {} in {}", var.name, entity.name), filter.as_deref(), order),
+        ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
+        ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
+        ExprKind::New { entity } => format!("new {}", entity.name),
     }
+}
+
+/// A `find` or `files` with its condition and order.
+fn query(head: &str, filter: Option<&Expr>, order: &[clarity_spec::code::OrderKey]) -> String {
+    let mut text = head.to_string();
+    if let Some(filter) = filter {
+        text.push_str(&format!(" where {}", expr(filter)));
+    }
+    if !order.is_empty() {
+        let keys: Vec<String> = order
+            .iter()
+            .map(|k| {
+                let path: String = k.through.iter().map(|t| format!("{}.", t.name)).collect();
+                format!("{}.{path}{}{}", k.var.name, k.field.name, if k.descending { " desc" } else { "" })
+            })
+            .collect();
+        text.push_str(&format!(" order by {}", keys.join(", ")));
+    }
+    text
 }

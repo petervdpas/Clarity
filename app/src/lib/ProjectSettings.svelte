@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The project settings from the project file: name, stack, output and data sources.
+  // The project settings from the project file: name, folders, stack and data sources.
   // Every change is saved at once; the Rust backend checks it and refuses
   // settings with problems, with the reason.
 
@@ -58,6 +58,8 @@
     if (project.settings) save({ themes: [name, ...project.settings.themes.filter((t) => t !== name)] });
   }
   const fileName = $derived(file.split(/[\\/]/).at(-1) ?? file);
+  /** The project's folder: the project file's path without `.clarity`, as clarity_project::module_dir has it. */
+  const folder = $derived(file.replace(/\.clarity$/, ""));
 
   function sourceInfo(kind: SourceKind) {
     return catalog.sources.find((s) => s.id === kind);
@@ -91,7 +93,7 @@
   async function browseOutput() {
     const picked = await openDialog({
       directory: true,
-      title: "Output folder: where Run and Build put the application",
+      title: "App folder: where Run and Build create the app",
       defaultPath: await invoke<string>("project_folder"),
     });
     if (typeof picked === "string") save({ out: await stored(picked) });
@@ -209,6 +211,24 @@
             onchange={(e) => save({ title: e.currentTarget.value.trim() || null })}
           />
           <p class="form-help">Shown in the window title. Empty follows the name.</p>
+          <span class="form-label">Folder</span>
+          <span class="mono path">{folder}</span>
+          <p class="form-help">The project's folder: its modules, pictures, translations and migrations.</p>
+          <label class="form-label" for="output-folder">App folder</label>
+          <div class="form-inline">
+            <input
+              id="output-folder"
+              class="mono"
+              value={settings.out}
+              spellcheck="false"
+              onchange={(e) => save({ out: e.currentTarget.value.trim() })}
+            />
+            <button onclick={browseOutput} title="Choose the app folder">Browse...</button>
+          </div>
+          <p class="form-help">
+            Where Run and Build create the app: its sources and its build project. Relative to the project's folder, or a
+            full path. Clarity replaces its contents, so it only writes into an empty folder or one it made.
+          </p>
         </div>
       </section>
 
@@ -276,27 +296,6 @@
           <p class="form-help">
             The themes the application offers; people switch between them with a click target <code>theme</code>. Without any, it looks as
             Clarity does.
-          </p>
-        </div>
-      </section>
-
-      <section>
-        <h2>Output</h2>
-        <div class="form-grid">
-          <label class="form-label" for="output-folder">Output folder</label>
-          <div class="form-inline">
-            <input
-              id="output-folder"
-              class="mono"
-              value={settings.out}
-              spellcheck="false"
-              onchange={(e) => save({ out: e.currentTarget.value.trim() })}
-            />
-            <button onclick={browseOutput} title="Choose the output folder">Browse...</button>
-          </div>
-          <p class="form-help">
-            Where Run and Build put the application, inside the project's folder or elsewhere. Clarity replaces its
-            contents, so it only writes into an empty folder or one it made.
           </p>
         </div>
       </section>
@@ -522,6 +521,11 @@
     margin: 0;
     font-size: 18px;
     white-space: nowrap;
+  }
+
+  .path {
+    align-self: center;
+    overflow-wrap: anywhere;
   }
 
   .file {

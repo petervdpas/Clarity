@@ -62,7 +62,7 @@ fn has(text: &str, expected: &str) {
 #[test]
 fn rust_reaches_the_files_of_a_store() {
     let files = files(Backend::Rust, Ui::Web);
-    let code = text(&files, "src/catalog.rs");
+    let code = text(&files, "src/modules/catalog.rs");
     has(code, "db.files(\"photos\")?.into_iter().filter(|f| ");
     has(code, ".sort_by(|a, b| b.path.cmp(&a.path).then_with(|| a.name.cmp(&b.name)));");
     has(code, "let mut photo = Photo::default();");
@@ -76,7 +76,7 @@ fn rust_reaches_the_files_of_a_store() {
 #[test]
 fn csharp_reaches_the_files_of_a_store() {
     let files = files(Backend::Csharp, Ui::Avalonia);
-    let code = text(&files, "Catalog.cs");
+    let code = text(&files, "Modules/Catalog.cs");
     has(code, "db.Files(\"photos\").Where(f => ");
     has(code, ".OrderByDescending(f => f.Path, StringComparer.Ordinal).ThenBy(f => f.Name, StringComparer.Ordinal).ToList()");
     has(code, "var photo = new Photo();");
@@ -90,7 +90,7 @@ fn csharp_reaches_the_files_of_a_store() {
 #[test]
 fn go_reaches_the_files_of_a_store() {
     let files = files(Backend::Go, Ui::Web);
-    let code = text(&files, "catalog.go");
+    let code = text(&files, "catalog_module.go");
     has(code, "db.Files(\"photos\")");
     has(code, "clarity.SortFiles(");
     has(code, "photo := clarity.New(NewPhoto())");

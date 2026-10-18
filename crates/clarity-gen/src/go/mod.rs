@@ -123,7 +123,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             }
             Err(mut problems) => errors.append(&mut problems),
         }
-        files.push(text(&format!("{}.go", names::module(&m.name)), go_file(&module, &body)));
+        files.push(text(&format!("{}_module.go", names::module(&m.name)), go_file(&module, &body)));
     }
     if !errors.is_empty() {
         return Err(errors);

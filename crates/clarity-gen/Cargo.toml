@@ -9,6 +9,7 @@ license.workspace = true
 clarity-spec.workspace = true
 clarity-project.workspace = true
 serde_json.workspace = true
+base64 = "0.22"
 
 [dev-dependencies]
 clarity-runtime = { path = "../../runtimes/rust", features = ["postgres", "mysql", "mssql"] }

@@ -33,3 +33,14 @@ test("a picture that cannot be loaded shows as missing", async () => {
   await Promise.resolve();
   assert.equal(pictures.url("gone.png"), null);
 });
+
+test("a program that carries its pictures in the page gives them from there", () => {
+  const page = globalThis as { clarityPictures?: Record<string, string> };
+  page.clarityPictures = { "logo.png": "data:image/png;base64,iVBORw0KGgo=" };
+  try {
+    assert.equal(bundled("logo.png"), "data:image/png;base64,iVBORw0KGgo=");
+    assert.equal(bundled("other.png"), "images/other.png");
+  } finally {
+    delete page.clarityPictures;
+  }
+});

@@ -1,7 +1,8 @@
 // How the renderer reaches the backend of the application it runs in: with
-// Tauri's invoke for Rust (and in the designer), or through the Clarity
-// service of the Go shell over Wails. The commands and their arguments are
-// the same on both; only the way there differs.
+// Tauri's invoke for Rust (and in the designer), through the Clarity
+// service of the Go shell over Wails, or through the function the C and C++
+// shells bind into the page with webview. The commands and their arguments
+// are the same on all; only the way there differs.
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
@@ -26,10 +27,25 @@ export function unwrap<T>(answer: Answer): T {
   return answer.value as T;
 }
 
+/** The function the C and C++ shells bind into the page: a command and its arguments, answered like the Go shell. */
+type WebviewInvoke = (command: string, args: Record<string, unknown>) => Promise<Answer>;
+
+/** Which shell the page runs in, by what that shell puts in it. */
+export function transport(global: object): "tauri" | "webview" | "wails" {
+  if (isTauri(global)) return "tauri";
+  if ("clarityInvoke" in global) return "webview";
+  return "wails";
+}
+
 let wails: Promise<WailsRuntime> | null = null;
 
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (isTauri(globalThis)) return tauriInvoke<T>(command, args);
+  const shell = transport(globalThis);
+  if (shell === "tauri") return tauriInvoke<T>(command, args);
+  if (shell === "webview") {
+    const call = (globalThis as unknown as { clarityInvoke: WebviewInvoke }).clarityInvoke;
+    return unwrap<T>(await call(command, args));
+  }
   wails ??= import(/* @vite-ignore */ WAILS_RUNTIME) as Promise<WailsRuntime>;
   const { Call } = await wails;
   return unwrap<T>(await Call.ByName(WAILS_METHOD, command, args));

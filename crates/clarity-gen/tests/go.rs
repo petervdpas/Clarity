@@ -169,7 +169,7 @@ fn is_deterministic() {
 #[test]
 fn enums_and_entities_become_go_types() {
     let files = files();
-    let sales = file(&files, "sales.go");
+    let sales = file(&files, "sales_module.go");
     has(sales, "package main\n");
     has(sales, "type OrderStatus string\n");
     has(sales, "\tOrderStatusApproved OrderStatus = \"Approved\"\n");
@@ -195,7 +195,7 @@ fn the_schema_comes_from_the_shared_migration_steps() {
 #[test]
 fn functions_and_actions_return_their_errors() {
     let files = files();
-    let sales = file(&files, "sales.go");
+    let sales = file(&files, "sales_module.go");
     // A reference read in an expression is loaded before it, and its error returned.
     has(
         sales,
@@ -218,7 +218,7 @@ fn functions_and_actions_return_their_errors() {
 #[test]
 fn queries_text_and_loops() {
     let files = files();
-    let sales = file(&files, "sales.go");
+    let sales = file(&files, "sales_module.go");
     has(sales, "clarity.Find[Order](db, clarity.Query{}.Filter(clarity.And(clarity.Number(\"total\", clarity.GtEq, limit), clarity.OneOf(\"status\", []any{string(OrderStatusPending), string(OrderStatusApproved)}))).OrderNumber(\"total\", true).Order(\"number\", false))");
     has(sales, "for i := range all {\n\t\tother := &all[i]\n");
     has(sales, "clarity.TextContains(other.Number, \"X\")");
@@ -232,7 +232,7 @@ fn and_or_keep_short_circuiting() {
     let source = format!("{SALES}\nfunction both(order: Order) -> bool\n    return order.total > 10 and within_credit(order)\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(
-        file(&files, "sales.go"),
+        file(&files, "sales_module.go"),
         "func Both(db *clarity.Db, order *Order) (bool, error) {
 \tv1 := order.Total.GreaterThan(decimal.NewFromInt(10))
 \tif v1 {
@@ -250,7 +250,7 @@ fn and_or_keep_short_circuiting() {
 #[test]
 fn data_events_run_from_the_record() {
     let files = files();
-    let sales = file(&files, "sales.go");
+    let sales = file(&files, "sales_module.go");
     has(sales, "func (r *Order) BeforeSave(db *clarity.Db) error {\n\treturn beforeSaveOrder(db, r)\n}");
     has(sales, "return clarity.Refuse(clarity.NewText(\"Order {order.number} is over its customer's credit limit\").With(\"order.number\", clarity.SlotText(order.Number)))");
 }
@@ -382,7 +382,7 @@ fn a_wails_application_with_the_web_renderer() {
 #[test]
 fn a_window_is_a_struct_of_its_data() {
     let files = windows();
-    let shop = file(&files, "shop.go");
+    let shop = file(&files, "shop_module.go");
     has(shop, "type OrderFormWindow struct {\n\tOrder  *Order  `json:\"order\"`\n\tOrders []Order `json:\"orders\"`\n}");
     has(
         shop,
@@ -403,7 +403,7 @@ fn a_window_is_a_struct_of_its_data() {
 #[test]
 fn handlers_are_methods_of_their_window() {
     let files = windows();
-    let shop = file(&files, "shop.go");
+    let shop = file(&files, "shop_module.go");
     has(shop, "func (w *OrderFormWindow) approveClicked(db *clarity.Db, ui *clarity.Ui) error {");
     has(shop, "\t\tui.Message(clarity.Warning, clarity.NewText(\"Order {order.number} is too large\").With(\"order.number\", clarity.SlotText(w.Order.Number)))\n\t\tui.SetEnabled(\"approve_button\", false)\n\t\treturn nil\n");
     has(shop, "\tui.SetError(\"number_input\", clarity.PlainText(\"\"))\n\tui.Message(clarity.Info, clarity.PlainText(\"Approved\"))\n\tif err := w.filterChanged(db, ui); err != nil {\n\t\treturn err\n\t}\n");
@@ -448,7 +448,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     has(file(&files, "main.go"), "{Name: \"erp\", Dialect: clarity.Mssql, At: \"env:ERP_DATABASE\"}");
     let schema = file(&files, "schema.go");
     assert!(!schema.contains("\"erp\"") && !schema.contains("tblInvoice"), "{schema}");
-    let erp_go = file(&files, "erp.go");
+    let erp_go = file(&files, "erp_module.go");
     has(erp_go, "func (*Invoice) Source() string {\n\treturn \"erp\"\n}");
     has(erp_go, "func (*Invoice) Table() string {\n\treturn \"tblInvoice\"\n}");
     has(erp_go, "func (*Invoice) Key() string {\n\treturn \"InvoiceID\"\n}");
@@ -467,7 +467,7 @@ fn a_query_goes_through_a_reference() {
         "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "sales.go");
+    let sales = file(&files, "sales_module.go");
     has(sales, ".Filter(clarity.And(clarity.Through(\"customer\", \"customer\", \"id\", clarity.Contains(\"name\", name)), clarity.Through(\"customer\", \"customer\", \"id\", clarity.Number(\"credit_limit\", clarity.Gt, ");
     has(sales, ".OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"name\", true, false).OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"credit_limit\", false, true)");
 }

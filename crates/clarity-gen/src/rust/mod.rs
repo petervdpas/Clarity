@@ -89,7 +89,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
         let mut code = format!("{HEADER}\nuse clarity_runtime::sql;\nuse clarity_runtime::ui::*;\nuse clarity_runtime::*;\n");
         for used in &file.uses {
-            code.push_str(&format!("use crate::{}::*;\n", snake(&used.name)));
+            code.push_str(&format!("use super::{}::*;\n", snake(&used.name)));
         }
         code.push('\n');
         code.push_str(&model::emit(project, file));
@@ -97,21 +97,23 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             Ok(functions) => code.push_str(&functions),
             Err(mut problems) => errors.append(&mut problems),
         }
-        match logic::emit_windows(project, file, &file_types, &name) {
+        match logic::emit_windows(project, file, &file_types, &format!("modules::{name}")) {
             Ok((windows, mut found)) => {
                 code.push_str(&windows);
                 owners.append(&mut found);
             }
             Err(mut problems) => errors.append(&mut problems),
         }
-        files.push(text(&format!("src/{name}.rs"), code.trim_end().to_string() + "\n"));
+        files.push(text(&format!("src/modules/{name}.rs"), code.trim_end().to_string() + "\n"));
         modules.push(name);
     }
     if !errors.is_empty() {
         return Err(errors);
     }
+    let declared: String = modules.iter().map(|m| format!("pub mod {m};\n")).collect();
+    files.push(text("src/modules.rs", format!("{HEADER}\n{declared}")));
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
-    files.push(text("src/main.rs", main_rs(project, settings, &modules, &owners, &databases, &main_window)));
+    files.push(text("src/main.rs", main_rs(project, settings, &owners, &databases, &main_window)));
     Ok(files)
 }
 
@@ -183,7 +185,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
         .map(|f| ident(&f.name.name))
 }
 
-fn main_rs(project: &Project, settings: &Settings, modules: &[String], owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
+fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
@@ -197,14 +199,13 @@ fn main_rs(project: &Project, settings: &Settings, modules: &[String], owners: &
         .map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime()))
         .collect::<Vec<_>>()
         .join(", ");
-    let mods: String = modules.iter().map(|m| format!("mod {m};\n")).collect();
     let module_of = |name: &str| {
         project
             .files
             .iter()
             .find(|f| f.entities.iter().any(|e| e.name.name == name))
             .and_then(|f| f.module.as_ref())
-            .map(|m| snake(&m.name))
+            .map(|m| format!("modules::{}", snake(&m.name)))
             .unwrap_or_default()
     };
 
@@ -294,7 +295,8 @@ fn main_rs(project: &Project, settings: &Settings, modules: &[String], owners: &
     format!(
         r#"{HEADER}{ALLOW}
 mod schema;
-{mods}
+mod modules;
+
 use std::sync::Mutex;
 
 use clarity_runtime::ui::{{RefOption, Reply, Ui, WindowState, from_data, to_data}};

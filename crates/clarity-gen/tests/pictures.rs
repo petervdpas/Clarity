@@ -73,7 +73,7 @@ fn a_store_must_be_in_the_project_settings() {
 #[test]
 fn rust_records_hold_their_pictures() {
     let files = files(Backend::Rust, Ui::Web, SourceKind::Sqlite);
-    let music = text(&files, "src/music.rs");
+    let music = text(&files, "src/modules/music.rs");
     has(music, "    pub cover: Option<Picture>,
 ");
     has(music, "            sql::picture(&self.cover),\n");
@@ -82,14 +82,14 @@ fn rust_records_hold_their_pictures() {
     let main = text(&files, "src/main.rs");
     has(main, "const STORES: &[(&str, &str)] = &[(\"photos\", \"env:PHOTO_FOLDER\")];");
     has(main, "db.add_store(name, at).expect(\"cannot open a file store\");");
-    has(main, "        (\"Album\", \"cover\") => db.picture::<music::Album>(id, \"cover\"),\n");
+    has(main, "        (\"Album\", \"cover\") => db.picture::<modules::music::Album>(id, \"cover\"),\n");
     has(main, "fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {");
 }
 
 #[test]
 fn csharp_records_hold_their_pictures() {
     let files = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
-    let music = text(&files, "Music.cs");
+    let music = text(&files, "Modules/Music.cs");
     has(music, "    public Picture? Cover { get => _cover; set => SetProperty(ref _cover, value); }\n");
     has(music, "    public static IReadOnlyList<PictureColumn> Pictures { get; } = [new(\"cover\", null), new(\"photo\", \"photos\")];\n");
     has(music, "Sql.Picture(Cover), Sql.Picture(Photo)]");
@@ -102,7 +102,7 @@ fn csharp_records_hold_their_pictures() {
 #[test]
 fn go_records_hold_their_pictures() {
     let files = files(Backend::Go, Ui::Web, SourceKind::Sqlite);
-    let music = text(&files, "music.go");
+    let music = text(&files, "music_module.go");
     has(music, "\tCover *clarity.Picture `json:\"cover\"`\n");
     has(music, "clarity.PictureValue(r.Cover), clarity.PictureValue(r.Photo)}");
     has(music, "\tr.Cover = read.Picture(1, \"cover\")\n");

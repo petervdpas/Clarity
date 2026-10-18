@@ -80,7 +80,7 @@ project Shop
 
 Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
 
-Three stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia, and Go with the web UI (Wails). C and C++ are on the roadmap in DESIGN.md.
+Four stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia, Go with the web UI (Wails) and C++ with the web UI (webview, SQLite only for now). C is on the roadmap in DESIGN.md.
 
 ### Translations
 

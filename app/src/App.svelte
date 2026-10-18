@@ -713,6 +713,8 @@
               <dd>{projectName}</dd>
               <dt>File</dt>
               <dd class="path" title={openFile}>{openFile}</dd>
+              <dt>App folder</dt>
+              <dd class="path"><button class="link" title="Open the project settings" onclick={selectSettings}>{projectFile?.settings?.out ?? "-"}</button></dd>
               <dt>Main window</dt>
               <dd>{app?.main?.name ?? "(none)"}</dd>
               <dt>Stack</dt>

@@ -132,7 +132,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             Ok(methods) => code.push_str(&methods),
             Err(mut problems) => errors.append(&mut problems),
         }
-        files.push(text(&format!("{}.cs", pascal(&module.name)), code.trim_end().to_string() + "\n"));
+        files.push(text(&format!("Modules/{}.cs", pascal(&module.name)), code.trim_end().to_string() + "\n"));
         for page in &file.pages {
             match windows::emit(project, page, &file_types, &name, &texts) {
                 Ok(mut window) => files.append(&mut window),

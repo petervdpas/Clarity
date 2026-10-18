@@ -137,7 +137,7 @@ fn an_avalonia_desktop_application() {
 #[test]
 fn records_tell_the_window_when_they_change() {
     let files = files();
-    let shop = file(&files, "Shop.cs");
+    let shop = file(&files, "Modules/Shop.cs");
     has(shop, "public sealed partial class Order : ObservableObject, IRecord<Order>");
     has(shop, "    public decimal Total { get => _total; set => SetProperty(ref _total, value); }\n    decimal _total;");
     has(shop, "    public string Number { get => _number; set => SetProperty(ref _number, value); }\n    string _number = \"\";");

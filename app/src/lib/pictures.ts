@@ -6,9 +6,13 @@
 /** Gives a picture by name as a URL the page can show. */
 export type PictureLoader = (name: string) => Promise<string>;
 
-/** A picture next to the renderer, as every web stack ships it. */
+/**
+ * A picture next to the renderer, as the web stacks ship it; the C and C++
+ * shells, whose page has no folder, carry them in the page itself.
+ */
 export function bundled(name: string): string {
-  return `images/${encodeURIComponent(name)}`;
+  const carried = (globalThis as { clarityPictures?: Record<string, string> }).clarityPictures?.[name];
+  return carried ?? `images/${encodeURIComponent(name)}`;
 }
 
 export class Pictures {

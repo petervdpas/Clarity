@@ -1,0 +1,76 @@
+// The shell's commands, run without a window: the same commands and JSON as
+// the Tauri and Wails shells.
+
+#include "check.hpp"
+#include "shell/shell.hpp"
+
+using namespace clarity;
+using nlohmann::json;
+
+namespace {
+
+class Cards final : public shell::Windows {
+public:
+    WindowState open(Db&, const std::string& window, const json& with) override {
+        if (window != "Card") throw InvalidError("there is no window " + window);
+        return opened(window, {{"name", "Ada"}}, with);
+    }
+    std::optional<std::string> handler(const std::string& window, const std::string& event) override {
+        if (window == "Card" && event == "open") return "opened";
+        return std::nullopt;
+    }
+    Reply dispatch(Db&, const WindowState& state, const std::string& handler) override {
+        Ui ui(state);
+        if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
+        if (handler == "save") refuse(Text("{name} is taken").with("name", slot_text("Ada")));
+        if (handler == "fail") throw StorageError("locked");
+        return ui.reply(state.window, state.data);
+    }
+    std::vector<RefOption> options(Db&, const std::string&) override { return {{1, "Ada"}}; }
+    std::optional<Bytes> picture(Db&, const std::string& entity, int64_t id, const std::string& field) override {
+        if (entity != "Card" || field != "photo") throw InvalidError(entity + " has no picture " + field);
+        if (id == 1) return Bytes{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        return std::nullopt;
+    }
+};
+
+class Fake final : public shell::Desktop {
+public:
+    std::string title;
+    bool closed = false;
+    std::string name() const override { return "main"; }
+    void set_title(const std::string& t) override { title = t; }
+    void close() override { closed = true; }
+};
+
+}  // namespace
+
+TEST(the_shell_answers_the_renderers_commands) {
+    Db db = Db::memory();
+    Cards cards;
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
+    json opened = service.invoke("open_window", {{"window", "Card"}, {"with", {{"name", "Grace"}}}});
+    CHECK_EQ(opened["value"]["state"]["parts"]["title"]["caption"], json("Card of Grace"));
+    // A refusal keeps its slots; other errors are text.
+    CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}, {"data", json::object()}}}, {"handler", "save"}}),
+             json::parse(R"({"error":{"text":"{name} is taken","values":{"name":{"kind":"text","value":"Ada"}}}})"));
+    CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}}}, {"handler", "fail"}}), json::parse(R"({"error":"storage: locked"})"));
+    CHECK_EQ(service.invoke("ref_options", {{"entity", "Customer"}}), json::parse(R"({"value":[{"id":1,"text":"Ada"}]})"));
+    CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 1}, {"field", "photo"}}), json::parse(R"({"value":"data:image/png;base64,iVBORw0KGgo="})"));
+    CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 2}, {"field", "photo"}}), json::parse(R"({"value":null})"));
+    CHECK_EQ(service.invoke("nonsense", json::object()), json::parse(R"({"error":"there is no command nonsense"})"));
+    CHECK_EQ(service.invoke("start_app", json::object()), json::parse(R"({"value":{"state":{"window":"","data":{},"parts":{},"selected":{}},"messages":[],"open":[],"close":false}})"));
+
+    // The window a command came from takes its title, and a window of its own starts where it was opened.
+    Fake main;
+    service.invoke("set_title", {{"title", "Customer card"}}, &main);
+    CHECK_EQ(main.title, "Customer card");
+    std::string opened_name;
+    service.open_desktop = [&](shell::Desktop&, const std::string& name) { opened_name = name; };
+    service.invoke("open_apart", {{"window", "Card"}, {"with", {{"name", "Linus"}}}}, &main);
+    CHECK_EQ(opened_name, "apart-1");
+    CHECK(service.closed("apart-1") == std::optional<std::string>("main"));
+    service.invoke("close_apart", json::object(), &main);
+    CHECK(main.closed);
+}

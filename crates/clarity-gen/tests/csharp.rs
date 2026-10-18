@@ -122,9 +122,9 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Clarity.Runtime/SqliteDriver.cs",
             "Clarity.Runtime/Store.cs",
             "Clarity.Runtime/Text.cs",
+            "Modules/Sales.cs",
             "Program.cs",
             "README.md",
-            "Sales.cs",
             "Schema.cs",
             "Shop.csproj",
             "Shown.cs",
@@ -155,7 +155,7 @@ fn is_deterministic() {
 #[test]
 fn enums_and_entities_become_csharp_types() {
     let files = files();
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(sales, "namespace Shop;");
     has(sales, "public enum OrderStatus\n{\n    Pending,\n    Approved,\n}");
     has(sales, "        OrderStatus.Approved => Texts.ApprovedBySales,");
@@ -187,7 +187,7 @@ fn the_schema_comes_from_the_shared_migration_steps() {
 #[test]
 fn functions_and_actions_become_methods_of_logic() {
     let files = files();
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(sales, "public static partial class Logic\n{");
     has(sales, "    public static bool WithinCredit(Db db, Order order)\n    {\n        return (order.Total <= db.Load<Customer>(order.Customer).CreditLimit);\n    }");
     has(
@@ -224,7 +224,7 @@ fn functions_and_actions_become_methods_of_logic() {
 #[test]
 fn queries_text_and_loops() {
     let files = files();
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(
         sales,
         "return db.Find<Order>(new Query().Filter(Cond.Number(\"total\", Op.GtEq, limit).And(Cond.OneOf(\"status\", [Sql.Name(OrderStatus.Pending), Sql.Name(OrderStatus.Approved)]))).OrderNumber(\"total\", true).Order(\"number\", false));",
@@ -242,7 +242,7 @@ fn queries_text_and_loops() {
 #[test]
 fn data_events_run_from_the_record() {
     let files = files();
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(sales, "    public static bool HasEvents => true;");
     has(sales, "    public void BeforeSave(Db db) => Logic.BeforeSaveOrder(db, this);");
     has(sales, "    public void AfterDelete(Db db) => Logic.AfterDeleteOrder(db, this);");
@@ -265,7 +265,7 @@ fn csharp_needs_avalonia_or_the_web_renderer() {
     let project = load_sources([("sales.clarity", SALES)]);
     let mut settings = settings();
     settings.stack.backend = Backend::C;
-    assert_eq!(generate(&project, &settings).unwrap_err(), ["the C backend is not generated yet; Rust, Go and C# are"]);
+    assert_eq!(generate(&project, &settings).unwrap_err(), ["the C backend is not generated yet; Rust, Go, C# and C++ are"]);
 }
 
 /// A runtime file added later must reach generated projects too.
@@ -344,7 +344,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     has(file(&files, "Program.cs"), "(\"erp\", Dialect.Mssql, \"env:ERP_DATABASE\")");
     let schema = file(&files, "Schema.cs");
     assert!(!schema.contains("(\"erp\"") && !schema.contains("tblInvoice"), "{schema}");
-    let erp_cs = file(&files, "Erp.cs");
+    let erp_cs = file(&files, "Modules/Erp.cs");
     has(erp_cs, "    public static string SourceName => \"erp\";");
     has(erp_cs, "    public static string TableName => \"tblInvoice\";");
     has(erp_cs, "    public static string KeyColumn => \"InvoiceID\";");
@@ -360,7 +360,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
 fn a_record_s_id_reads_as_its_id() {
     let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "Sales.cs"), "return (order.Id == other.Id);");
+    has(file(&files, "Modules/Sales.cs"), "return (order.Id == other.Id);");
 }
 
 /// A record given to a reference field is stored as its id.
@@ -368,7 +368,7 @@ fn a_record_s_id_reads_as_its_id() {
 fn a_reference_field_takes_a_record() {
     let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "Sales.cs"), "order.Customer = customer.Id;");
+    has(file(&files, "Modules/Sales.cs"), "order.Customer = customer.Id;");
 }
 
 /// `none`, the empty value of a date or reference (X2).
@@ -376,7 +376,7 @@ fn a_reference_field_takes_a_record() {
 fn none_is_null() {
     let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     for line in ["(order.Customer == null)", "!(db.Load<Customer>(order.Customer).Since == null)", "customer.Since = null;", "order.Customer = null;", "Cond.IsNone(\"customer\")"] {
         has(sales, line);
     }
@@ -387,7 +387,7 @@ fn none_is_null() {
 fn today_reads_the_clock() {
     let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(sales, "customer.Since = Clock.Today();");
     has(sales, "(customer.Since > Clock.Today())");
 }
@@ -400,7 +400,7 @@ fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
     let project = load_sources([("music.clarity", MUSIC)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let music = file(&files, "Music.cs");
+    let music = file(&files, "Modules/Music.cs");
     has(music, "public long Length");
     has(music, "long _length = 180L;");
     has(music, ".With(\"track.length\", Slot.OfDuration(track.Length))");
@@ -420,7 +420,7 @@ fn a_query_goes_through_a_reference() {
         "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "Sales.cs");
+    let sales = file(&files, "Modules/Sales.cs");
     has(sales, ".Filter(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Contains(\"name\", name)).And(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Number(\"credit_limit\", Op.Gt, ");
     has(sales, ".OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"name\", true, false).OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true)");
 }

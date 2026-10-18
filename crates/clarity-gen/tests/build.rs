@@ -165,7 +165,7 @@ const STEPS: [(&str, &str); 2] = [
 
 /// Uses the generated functions the way a handler will.
 const LOGIC_TEST: &str = r#"
-#[path = "../src/sales.rs"]
+#[path = "../src/modules/sales.rs"]
 mod sales;
 #[path = "../src/schema.rs"]
 mod schema;

@@ -9,11 +9,12 @@ Current state: the designer for windows and the application frame, with every pa
 ```
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
 crates/clarity-project/  the project file: stack, output and data sources
-crates/clarity-gen/      the transpiler: a project as a Rust, C# or Go application
+crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go or C++ application
 crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/csharp/         the runtime of generated C# applications, with Avalonia
 runtimes/go/             the runtime of generated Go applications, with Wails
+runtimes/cpp/            the runtime of generated C++ applications, with webview
 conformance/             cases every runtime and renderer must pass alike
 app/                     Clarity: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build
@@ -24,13 +25,14 @@ examples/records.clarity example project: a record collection, with albums, trac
 examples/records/        its modules
 ```
 
-Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests` and the `_test.go` files next to the Go code.
+Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
 
 ## Requirements
 
 - Rust 1.88 or newer (edition 2024)
 - Node.js 20 or newer
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
+- For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 
 ## Commands
 
@@ -69,7 +71,7 @@ A project is one file, `shop.clarity`, with its modules in the folder `shop/` ne
 
 Clarity has a ribbon with three tabs, and the left sidebar follows the tab:
 
-- **Project:** New project (choose where its file goes; the folder next to it is made too), Open (a `.clarity` project file), Reload, Settings (name, title, stack, output folder, data sources), New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
+- **Project:** New project (choose where its file goes; the folder next to it is made too), Open (a `.clarity` project file), Reload, Settings (name, title, folders, stack, data sources), New window, the app, and the error count. The sidebar shows the project settings and the project as one tree: the app, its windows (the main window first), its data with their fields, and the modules its files form. Click an entity for its data dictionary (a row per field: name, type, required, unique, label, default, help; add, reorder and remove fields), an enum for its values, and rename either by editing the name at the top: every reference in every file follows, and one Undo takes the whole rename back. Click a module for what it declares and which modules it uses. A change that would break a window is refused with the reason.
 - **Design:** Undo and Redo (also Ctrl+Z and Ctrl+Y), Delete (the picked part, or the window itself when nothing is picked), New window and the snap grid. Every change is written to the project files at once; the Save button shows that. The sidebar has the project tree, the parts, a tree of the open window and the design settings. The right column shows the window's own properties and, below them, what is picked.
 - **Preview:** run the main window or any other window, and go back after following a button.
 

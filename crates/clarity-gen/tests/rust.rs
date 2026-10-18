@@ -119,7 +119,8 @@ fn writes_a_complete_cargo_project() {
             "icons/icon.png",
             "src/main.rs",
             "src/model.json",
-            "src/sales.rs",
+            "src/modules.rs",
+            "src/modules/sales.rs",
             "src/schema.rs",
             "tauri.conf.json",
             "ui/index.html",
@@ -133,7 +134,8 @@ fn writes_a_complete_cargo_project() {
     assert!(cargo.contains("clarity-runtime = { path = \"clarity-runtime\", default-features = false, features = [\"sqlite\"] }"), "{cargo}");
     let runtime = file(&files, "clarity-runtime/Cargo.toml");
     assert!(runtime.contains("edition = \"2024\"") && !runtime.contains("workspace"), "{runtime}");
-    assert!(file(&files, "src/main.rs").contains("mod sales;"));
+    assert!(file(&files, "src/main.rs").contains("mod modules;"));
+    assert!(file(&files, "src/modules.rs").contains("pub mod sales;"));
 }
 
 #[test]
@@ -144,7 +146,7 @@ fn is_deterministic() {
 #[test]
 fn entities_become_records_with_their_defaults() {
     let files = files();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("pub struct Customer {"), "{sales}");
     assert!(sales.contains("    pub credit_limit: Decimal,"), "{sales}");
     assert!(sales.contains("    pub since: Option<NaiveDate>,"), "{sales}");
@@ -174,7 +176,7 @@ fn the_schema_is_the_first_migration() {
 #[test]
 fn functions_and_actions_become_rust_functions() {
     let files = files();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("pub fn within_credit(db: &Db, order: &Order) -> Result<bool> {"), "{sales}");
     assert!(
         sales.contains("(order.total <= db.load::<Customer>(order.customer)?.credit_limit)"),
@@ -196,9 +198,9 @@ fn functions_and_actions_become_rust_functions() {
 fn refuses_backends_that_are_not_generated_yet() {
     let project = load_sources([("sales.clarity", SALES)]);
     let mut settings = shop();
-    settings.stack.backend = Backend::Cpp;
+    settings.stack.backend = Backend::C;
     let errors = generate(&project, &settings).unwrap_err();
-    assert_eq!(errors, ["the C++ backend is not generated yet; Rust, Go and C# are"]);
+    assert_eq!(errors, ["the C backend is not generated yet; Rust, Go, C# and C++ are"]);
 }
 
 #[test]
@@ -211,7 +213,7 @@ fn refuses_a_project_with_errors() {
 #[test]
 fn handlers_work_on_the_window_and_the_screen() {
     let files = files();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("pub struct OrderFormWindow {\n    pub order: Order,\n    pub orders: Vec<Order>,\n}"), "{sales}");
     assert!(sales.contains("orders: db.all::<Order>()?,"), "{sales}");
     assert!(
@@ -254,7 +256,7 @@ fn a_desktop_window_takes_the_title_of_its_window() {
 #[test]
 fn handlers_set_errors_and_readonly_on_inputs() {
     let files = files();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(
         sales.contains("ui.set_error(\"number_input\", Text::plain(\"Check the number\"));"),
         "{sales}"
@@ -274,7 +276,7 @@ fn window_events_and_reload_reach_the_backend() {
     assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"window_returned\"),"), "{main}");
     assert!(main.contains("fn close_window("), "{main}");
     assert!(main.contains("on_event(db, state, \"open\")"), "{main}");
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("    w.orders = db.all::<Order>()?;\n"), "{sales}");
     assert!(sales.contains("    if w.order.id != 0 {\n        w.order = db.get::<Order>(w.order.id)?;\n    }\n"), "{sales}");
 }
@@ -282,7 +284,7 @@ fn window_events_and_reload_reach_the_backend() {
 #[test]
 fn queries_become_database_queries() {
     let files = files();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(
         sales.contains(
             "return Ok(db.find::<Order>(&Query::new().filter(Cond::number(\"total\", Op::GtEq, sql::decimal(limit)).and(Cond::one_of(\"status\", vec![sql::name(&OrderStatus::Pending), sql::name(&OrderStatus::Approved)]))).order_number(\"total\", true).order(\"number\", false))?);"
@@ -387,7 +389,7 @@ fn each_data_source_gets_its_own_database() {
     let files = generate(&project, &settings).unwrap();
     let main = file(&files, "src/main.rs");
     assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\"), (\"erp\", Dialect::Sqlite, \"data/erp.db\")];"), "{main}");
-    let erp_rs = file(&files, "src/erp.rs");
+    let erp_rs = file(&files, "src/modules/erp.rs");
     assert!(erp_rs.contains("const SOURCE: &'static str = \"erp\";"), "{erp_rs}");
     let schema = file(&files, "src/schema.rs");
     assert!(schema.contains("    (\"erp\", &[\n"), "{schema}");
@@ -417,7 +419,7 @@ fn an_external_source_is_opened_but_never_migrated() {
     let schema = file(&files, "src/schema.rs");
     assert!(!schema.contains("(\"erp\""), "{schema}");
     assert!(!schema.contains("tblInvoice"), "{schema}");
-    let erp_rs = file(&files, "src/erp.rs");
+    let erp_rs = file(&files, "src/modules/erp.rs");
     assert!(erp_rs.contains("const TABLE: &'static str = \"tblInvoice\";"), "{erp_rs}");
     assert!(erp_rs.contains("const KEY: &'static str = \"InvoiceID\";"), "{erp_rs}");
     assert!(erp_rs.contains("const COLUMNS: &'static [&'static str] = &[\"InvNo\", \"total\"];"), "{erp_rs}");
@@ -467,7 +469,7 @@ code Order
     let project = load_sources([("sales.clarity", text.as_str())]);
     assert!(!project.has_errors(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("pub fn before_save_order(db: &Db, order: &mut Order) -> Result<()> {"), "{sales}");
     assert!(sales.contains("return Err(Error::Refused(Text::plain(\"An order cannot have a negative total\")));"), "{sales}");
     assert!(
@@ -502,7 +504,7 @@ action check(order: Order, rate: decimal)
     let project = load_sources([("sales.clarity", text.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap();
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     for slot in [
         ".with(\"order.number\", Slot::text(order.number.clone()))",
         ".with(\"order.total\", Slot::money(order.total, None))",
@@ -581,7 +583,7 @@ fn only_a_target_in_new_window_makes_a_second_desktop_window() {
 fn a_record_s_id_reads_as_its_id() {
     let source = format!("{SALES}\nfunction same(order: Order, other: Order) -> bool\n    return order.id == other.id\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("Ok((order.id == other.id))"), "{sales}");
 }
 
@@ -593,7 +595,7 @@ fn the_selected_row_is_a_record_in_any_expression() {
         "        approve(grid.selected)\n        message \"{grid.selected.number} of {grid.selected.customer.name} is approved\"\n        open OrderForm with order = grid.selected\n",
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("approve(db, &mut ui.selected(\"grid\", &w.orders)?)?;"), "{sales}");
     assert!(sales.contains("ui.selected(\"grid\", &w.orders)?.number"), "{sales}");
 }
@@ -603,7 +605,7 @@ fn the_selected_row_is_a_record_in_any_expression() {
 fn a_reference_field_takes_a_record() {
     let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("order.customer = Some(customer.id);"), "{sales}");
 }
 
@@ -612,7 +614,7 @@ fn a_reference_field_takes_a_record() {
 fn none_is_an_empty_option() {
     let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     for line in ["order.customer.is_none()", "!db.load::<Customer>(order.customer)?.since.is_none()", "customer.since = None;", "order.customer = None;", "Cond::is_none(\"customer\")"] {
         assert!(sales.contains(line), "{line} not in {sales}");
     }
@@ -623,7 +625,7 @@ fn none_is_an_empty_option() {
 fn today_reads_the_clock() {
     let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("customer.since = Some(clarity_runtime::today());"), "{sales}");
     assert!(sales.contains("(customer.since > Some(clarity_runtime::today()))"), "{sales}");
 }
@@ -637,7 +639,7 @@ fn an_unbound_checkbox_is_checked_in_the_window_state() {
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("if ui.checked(\"mine\") {"), "{sales}");
     assert!(sales.contains("ui.set_checked(\"mine\", false);"), "{sales}");
 }
@@ -650,7 +652,7 @@ fn a_duration_is_seconds_with_its_own_slot() {
     let project = load_sources([("music.clarity", MUSIC)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let music = file(&files, "src/music.rs");
+    let music = file(&files, "src/modules/music.rs");
     assert!(music.contains("pub length: i64,"), "{music}");
     assert!(music.contains("            length: 180i64,"), "{music}");
     assert!(music.contains(".with(\"track.length\", Slot::duration(track.length))"), "{music}");
@@ -664,7 +666,7 @@ fn a_query_goes_through_a_reference() {
         "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
     );
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     for expected in [
         ".filter(Cond::through(\"customer\", \"customer\", \"id\", Cond::contains(\"name\", &name)).and(Cond::through(\"customer\", \"customer\", \"id\", Cond::number(\"credit_limit\", Op::Gt, ",
         ".order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"name\", true, false).order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true))?",
@@ -679,7 +681,7 @@ fn a_query_goes_through_a_reference() {
 fn a_loop_changes_and_saves_its_records() {
     let source = format!("{SALES}\naction approve_all(orders: list<Order>)\n    effects db.write\n    let found = orders\n    for order in found\n        order.status = Approved\n        save order\n    for order in found\n        let n = order.number\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
-    let sales = file(&files, "src/sales.rs");
+    let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
     assert!(sales.contains("for order in found.iter() {"), "{sales}");
 }

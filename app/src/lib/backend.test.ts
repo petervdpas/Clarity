@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isTauri, unwrap } from "./backend.ts";
+import { isTauri, transport, unwrap } from "./backend.ts";
 
 test("a Tauri window has Tauri's internals; a Wails window does not", () => {
   assert.equal(isTauri({ __TAURI_INTERNALS__: {} }), true);
@@ -15,4 +15,11 @@ test("the Go shell answers with the value, or with what the screen shows as the 
   const refusal = { text: "Order {n} is over", values: {} };
   assert.throws(() => unwrap({ error: refusal }), (e) => e === refusal);
   assert.throws(() => unwrap({ error: "storage: locked" }), (e) => e === "storage: locked");
+});
+
+test("each shell is told by what it puts in the page", () => {
+  assert.equal(transport({ __TAURI_INTERNALS__: {} }), "tauri");
+  // The C and C++ shells bind one function into the page, through webview.
+  assert.equal(transport({ clarityInvoke: () => {} }), "webview");
+  assert.equal(transport({}), "wails");
 });

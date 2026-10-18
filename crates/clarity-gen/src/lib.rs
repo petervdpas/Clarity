@@ -7,6 +7,7 @@ pub mod tools;
 mod csharp;
 mod ddl;
 pub(crate) mod go;
+mod cpp;
 mod print;
 mod query;
 mod readme;
@@ -108,6 +109,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             return Err(vec!["C# with the web renderer is not generated yet; C# uses Avalonia".to_string()]);
         }
         Backend::Go => go::generate(project, settings)?,
+        Backend::Cpp => cpp::generate(project, settings)?,
         other => {
             let name = match other {
                 Backend::Go => "Go",
@@ -116,7 +118,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
                 Backend::Cpp => "C++",
                 Backend::Rust => "Rust",
             };
-            return Err(vec![format!("the {name} backend is not generated yet; Rust, Go and C# are")]);
+            return Err(vec![format!("the {name} backend is not generated yet; Rust, Go, C# and C++ are")]);
         }
     };
     files.push(OutFile {
@@ -247,6 +249,17 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 missing: "is Go installed?",
             })
         }
+        Backend::Cpp => {
+            // CMakePresets.json: one workflow configures and builds.
+            let preset = if release { "release" } else { "debug" };
+            Some(Toolchain {
+                tool: "cmake",
+                args: ["--workflow", "--preset", preset].map(String::from).to_vec(),
+                env: vec![],
+                program: exe(format!("build/{preset}/{}", cpp::program_name(settings))),
+                missing: "is CMake installed?",
+            })
+        }
         _ => None,
     }
 }
@@ -263,7 +276,9 @@ pub fn build_output(backend: Backend) -> &'static [&'static str] {
         Backend::Csharp => &["bin", "obj", "data"],
         // go build's program.
         Backend::Go => &["bin", "data"],
-        Backend::C | Backend::Cpp => &["data"],
+        // CMake's builds.
+        Backend::Cpp => &["build", "data"],
+        Backend::C => &["data"],
     }
 }
 

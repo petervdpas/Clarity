@@ -94,6 +94,13 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
   }
 }
 
+/** The field types a table cell can edit, as the language allows them in `edit`. */
+const CELL_EDIT_KINDS = ["text", "email", "url", "integer", "decimal", "money", "bool", "date", "enum"];
+
+export function cellEdits(field: Field): boolean {
+  return CELL_EDIT_KINDS.includes(field.type.kind);
+}
+
 export function isNumeric(field: Field): boolean {
   return ["integer", "decimal", "money", "id", "duration"].includes(field.type.kind);
 }

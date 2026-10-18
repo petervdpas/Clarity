@@ -154,6 +154,7 @@ pub enum ContainerKind {
 #[ts(export)]
 pub enum WidgetProperty {
     Columns,
+    Edit,
     Show,
     Orientation,
     Surface,
@@ -396,8 +397,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open],
-        properties: &[WidgetProperty::Columns],
+        events: &[Event::Select, Event::Open, Event::Change],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit],
     },
     Entry {
         kind: WidgetKind::List,
@@ -536,6 +537,23 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
     }
 }
 
+/// Whether a table cell can edit a field of this type: a checkbox for
+/// bool, a dropdown for an enum, an input for text, numbers and dates.
+pub fn cell_edits(ty: &FieldType) -> bool {
+    matches!(
+        ty,
+        FieldType::Text { .. }
+            | FieldType::Email
+            | FieldType::Url
+            | FieldType::Integer
+            | FieldType::Decimal { .. }
+            | FieldType::Money
+            | FieldType::Bool
+            | FieldType::Date
+            | FieldType::Enum { .. }
+    )
+}
+
 /// The widget that shows a field of this type by default, used when a
 /// field is dropped onto a page.
 pub fn widget_for(ty: &FieldType) -> WidgetKind {
@@ -567,6 +585,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         new_window: false,
         handlers: Vec::new(),
         columns: Vec::new(),
+        edit: Vec::new(),
         show: Vec::new(),
         orientation: has_property(kind, WidgetProperty::Orientation)
             .then_some(Orientation::Horizontal),
@@ -609,6 +628,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if !props.columns.is_empty() {
         parts.push(format!("columns {}", props.columns.join(", ")));
+    }
+    if !props.edit.is_empty() {
+        parts.push(format!("edit {}", props.edit.join(", ")));
     }
     if !props.show.is_empty() {
         parts.push(format!("show {}", props.show.join(", ")));
@@ -728,6 +750,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             !props.columns.is_empty(),
             "columns",
         ),
+        (WidgetProperty::Edit, !props.edit.is_empty(), "edit"),
         (WidgetProperty::Show, !props.show.is_empty(), "show"),
         (
             WidgetProperty::Orientation,
@@ -758,7 +781,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             return Err(format!("'{what}' does not apply to a {name}"));
         }
     }
-    for field in props.columns.iter().chain(&props.show) {
+    for field in props.columns.iter().chain(&props.edit).chain(&props.show) {
         identifier("field name", field)?;
     }
     if let Some(renderer) = &props.renderer {

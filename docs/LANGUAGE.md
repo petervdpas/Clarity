@@ -505,7 +505,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field, field, ...` | `select`, `open` |
+| `table` | a list: `bind orders` | `columns field, field, ...`; `edit field, ...` | `select`, `open`, `change` |
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 
 **Graphics**
@@ -516,6 +516,20 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `canvas` | nothing | `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `pointer`, `key` |
 
 `select` fires when a row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
+
+### Editing in a table
+
+`edit` names the columns whose cells are inputs, so a row can be changed where it is shown:
+
+    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done edit done on change: task_changed
+
+    handler task_changed
+        save grid.selected
+
+- A `bool` column holds a checkbox and an enum column a dropdown. Text, numbers and dates are edited in place, like a text box, number or date input.
+- An edited column must be one of the `columns`, of one of these types: text, `email`, `url`, `integer`, `decimal`, `money`, `bool`, `date` or an enum. References, pictures, moments (`datetime`) and durations are not edited in a cell.
+- An edit changes the row on screen. Then the row is selected and `on change` runs, so `grid.selected` is the changed record. Saving it is up to the handler, as with a form: `save grid.selected`. When the record breaks a rule, `save` refuses it as anywhere else.
+- A table that edits but has no `on change` is a warning: its edits are lost when the data is read again.
 
 ### Binding
 
@@ -1107,7 +1121,7 @@ part          = kind [String] property*
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" names | "show" names | "source" String | "surface" word | "renderer" Name
+              | "columns" names | "edit" names | "show" names | "source" String | "surface" word | "renderer" Name
               | "on" event ":" handler | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name

@@ -10,7 +10,7 @@
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
   import { layout } from "./layout.svelte";
-  import { describeType, themeStyles } from "./model";
+  import { cellEdits, describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
 
@@ -214,7 +214,7 @@
     {:else if info.bind === "collection"}
       <label class="prop">
         <span>Bound to</span>
-        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], show: [] })}>
+        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], show: [] })}>
           <option value="">(not bound)</option>
           {#each listOptions as name (name)}
             <option value={name}>{name}</option>
@@ -232,12 +232,36 @@
             <input
               type="checkbox"
               checked={p[key].includes(field.name.name)}
-              onchange={(e) => update({ [key]: toggle(p[key], field.name.name, e.currentTarget.checked) })}
+              onchange={(e) =>
+                update(
+                  key === "columns" && !e.currentTarget.checked
+                    ? { columns: toggle(p.columns, field.name.name, false), edit: toggle(p.edit, field.name.name, false) }
+                    : { [key]: toggle(p[key], field.name.name, e.currentTarget.checked) },
+                )}
             />
             {field.label}
           </label>
         {:else}
           <p class="hint">Bind to a list first.</p>
+        {/each}
+      </fieldset>
+    {/if}
+
+    {#if info.properties.includes("edit") && p.columns.length > 0}
+      {@const editable = collectionFields.filter((f) => p.columns.includes(f.name.name) && cellEdits(f))}
+      <fieldset class="checks" title="These cells are inputs. Wire 'on change' to save the row, as in: save grid.selected">
+        <legend>Edited in the table</legend>
+        {#each editable as field (field.name.name)}
+          <label>
+            <input
+              type="checkbox"
+              checked={p.edit.includes(field.name.name)}
+              onchange={(e) => update({ edit: toggle(p.edit, field.name.name, e.currentTarget.checked) })}
+            />
+            {field.label}
+          </label>
+        {:else}
+          <p class="hint">None of the columns can be edited in a cell.</p>
         {/each}
       </fieldset>
     {/if}

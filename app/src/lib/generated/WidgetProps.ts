@@ -38,7 +38,11 @@ newWindow: boolean,
 /**
  * Handlers in the code behind, per event.
  */
-handlers: Array<Handler>, columns: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+handlers: Array<Handler>, columns: Array<string>, 
+/**
+ * The columns of a table whose cells are inputs: `edit done`.
+ */
+edit: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
 /**
  * The input a label or help text belongs to, by part name.
  */

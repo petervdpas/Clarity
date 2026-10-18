@@ -178,9 +178,9 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "SelectedDate=\"{Binding Order.OrderedOn, Converter={x:Static c:Converters.Date}}\"");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
     has(window, "<DataGrid x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
-    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Status}\" Binding=\"{Binding Status, Converter={x:Static local:Shown.Converter}}\" x:DataType=\"local:Order\" />");
+    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Status}\" Width=\"*\" Binding=\"{Binding Status, Converter={x:Static local:Shown.Converter}}\" x:DataType=\"local:Order\" />");
     // A value with a format shows in the person's format.
-    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Total}\" Binding=\"{Binding Total, Converter={x:Static local:Shown.OrderTotal}}\" x:DataType=\"local:Order\" />");
+    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Total}\" Width=\"*\" Binding=\"{Binding Total, Converter={x:Static local:Shown.OrderTotal}}\" x:DataType=\"local:Order\" />");
     has(window, "<TextBox x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Text=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
     has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{x:Static local:Texts.New}\" Command=\"{Binding OpenOrderFormCommand}\" />");
@@ -380,4 +380,58 @@ fn an_unbound_checkbox_is_checked_in_its_state() {
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "if (Mine.IsChecked)");
     has(vm, "Mine.IsChecked = false;");
+}
+
+const TODO: &str = "module todo
+
+enum Priority
+    Low
+    High
+
+entity Task
+    title: text(120), required
+    done: bool
+    priority: Priority
+    due: date
+    hours: decimal(5, 1)
+
+page Main: window
+    data tasks: list<Task>
+    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority, due, hours edit title, done, priority, due, hours on change: task_changed
+
+code Main
+    handler task_changed
+        save grid.selected
+";
+
+#[test]
+fn edited_columns_hold_the_inputs_a_form_would() {
+    let project = load_sources([("todo.clarity", TODO)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = settings();
+    settings.name = "Todo".into();
+    let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    let window = file(&files, "Windows/MainView.axaml");
+    let cell = |header: &str, control: &str| {
+        let width = if header == "Done" { "Auto" } else { "*" };
+        format!(
+            "<DataGridTemplateColumn Header=\"{{x:Static local:Texts.{header}}}\" Width=\"{width}\">\n            <DataGridTemplateColumn.CellTemplate>\n              <DataTemplate x:DataType=\"local:Task\">\n                {control}\n              </DataTemplate>\n            </DataGridTemplateColumn.CellTemplate>\n          </DataGridTemplateColumn>"
+        )
+    };
+    has(window, &cell("Title", "<TextBox Classes=\"cell\" Text=\"{Binding Title}\" />"));
+    has(window, &cell("Done", "<CheckBox Classes=\"cell\" IsChecked=\"{Binding Done}\" />"));
+    has(
+        window,
+        &cell(
+            "Priority",
+            "<ComboBox Classes=\"cell\" ItemsSource=\"{x:Static local:Choices.Priority}\" DisplayMemberBinding=\"{Binding Label, x:DataType=c:Choice}\" SelectedValueBinding=\"{Binding Value, x:DataType=c:Choice}\" SelectedValue=\"{Binding Priority}\" />",
+        ),
+    );
+    has(window, &cell("Due", "<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{Binding Due, Converter={x:Static c:Converters.Date}}\" />"));
+    has(window, &cell("Hours", "<TextBox Classes=\"cell number\" Text=\"{Binding Hours, Converter={x:Static local:Edit.TaskHours}}\" />"));
+    // An edit selects its row, then the table's change runs.
+    has(
+        file(&files, "Windows/MainView.axaml.cs"),
+        "Events.OnCellEdit(grid, row => { grid.SelectedItem = row; Vm.TaskChangedCommand.Execute(null); });",
+    );
 }

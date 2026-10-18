@@ -1246,6 +1246,7 @@ fn parse_widget_props(
         new_window: false,
         handlers: Vec::new(),
         columns: Vec::new(),
+        edit: Vec::new(),
         show: Vec::new(),
         orientation: None,
         surface: None,
@@ -1367,6 +1368,14 @@ fn parse_widget_props(
             "columns" => {
                 applies(WidgetProperty::Columns)?;
                 props.columns = cursor
+                    .ident_list("a field name")?
+                    .into_iter()
+                    .map(|i| i.name)
+                    .collect();
+            }
+            "edit" => {
+                applies(WidgetProperty::Edit)?;
+                props.edit = cursor
                     .ident_list("a field name")?
                     .into_iter()
                     .map(|i| i.name)

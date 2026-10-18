@@ -195,6 +195,24 @@ impl<'a> Window<'a> {
     }
 
     /// A value of a field with a format, shown in the person's format, else as the runtime shows it.
+    /// The input in an edited cell of a table: what a form would use for the field.
+    fn cell_input(&self, entity: &Entity, field: &clarity_spec::model::Field, path: &str) -> String {
+        match &field.ty {
+            FieldType::Bool => format!("<CheckBox Classes=\"cell\" IsChecked=\"{{Binding {path}}}\" />"),
+            FieldType::Enum { name } => format!(
+                "<ComboBox Classes=\"cell\" ItemsSource=\"{{x:Static local:Choices.{}}}\" DisplayMemberBinding=\"{{Binding Label, x:DataType=c:Choice}}\" SelectedValueBinding=\"{{Binding Value, x:DataType=c:Choice}}\" SelectedValue=\"{{Binding {path}}}\" />",
+                name.name
+            ),
+            FieldType::Date => format!("<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{{Binding {path}, Converter={{x:Static c:Converters.Date}}}}\" />"),
+            FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => format!(
+                "<TextBox Classes=\"cell number\" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}}}\" />",
+                entity.name.name,
+                pascal(&field.name.name)
+            ),
+            _ => format!("<TextBox Classes=\"cell\" Text=\"{{Binding {path}}}\" />"),
+        }
+    }
+
     fn shown_converter(&self, entity: &Entity, field: &str) -> String {
         match entity.field(field).map(|f| &f.ty) {
             Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration | FieldType::Date | FieldType::DateTime) => {
@@ -669,9 +687,21 @@ impl<'a> Window<'a> {
                     for column in &p.columns {
                         let Some(field) = entity.field(column) else { continue };
                         let path = property(&entity.name.name, column);
+                        // The columns fill the table; a checkbox needs only its own width.
+                        let width = if field.ty == FieldType::Bool { "Auto" } else { "*" };
+                        if p.edit.contains(column) {
+                            let control = self.cell_input(entity, field, &path);
+                            let _ = writeln!(
+                                out,
+                                "{pad}    <DataGridTemplateColumn Header=\"{}\" Width=\"{width}\">\n{pad}      <DataGridTemplateColumn.CellTemplate>\n{pad}        <DataTemplate x:DataType=\"local:{}\">\n{pad}          {control}\n{pad}        </DataTemplate>\n{pad}      </DataGridTemplateColumn.CellTemplate>\n{pad}    </DataGridTemplateColumn>",
+                                self.text(&field.label),
+                                entity.name.name
+                            );
+                            continue;
+                        }
                         let _ = writeln!(
                             out,
-                            "{pad}    <DataGridTextColumn Header=\"{}\" Binding=\"{{Binding {path}, Converter={{x:Static {}}}}}\" x:DataType=\"local:{}\" />",
+                            "{pad}    <DataGridTextColumn Header=\"{}\" Width=\"{width}\" Binding=\"{{Binding {path}, Converter={{x:Static {}}}}}\" x:DataType=\"local:{}\" />",
                             self.text(&field.label),
                             self.shown_converter(entity, &field.name.name),
                             entity.name.name
@@ -755,6 +785,10 @@ impl<'a> Window<'a> {
                     Event::Change if matches!(kind, WidgetKind::Checkbox | WidgetKind::Switch) => format!("{control}.IsCheckedChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Date => format!("{control}.SelectedDateChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Radio => format!("Events.OnChoice({control}, () => {run});"),
+                    // An edit in a cell selects its row first, so the handler finds it.
+                    Event::Change if kind == WidgetKind::Table => {
+                        format!("Events.OnCellEdit({control}, row => {{ {control}.SelectedItem = row; {run}; }});")
+                    }
                     Event::Change | Event::Select => format!("{control}.SelectionChanged += (_, _) => {run};"),
                     Event::Open => format!("{control}.DoubleTapped += (_, _) => {run};"),
                     Event::Enter => format!("{control}.GotFocus += (_, _) => {run};"),

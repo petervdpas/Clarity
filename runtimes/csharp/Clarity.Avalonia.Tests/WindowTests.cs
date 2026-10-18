@@ -18,6 +18,16 @@ public class TestApp : Application
 {
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<TestApp>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
+
+    // The themes a generated application has, so controls have their parts and can be clicked.
+    public override void Initialize()
+    {
+        Styles.Add(new global::Avalonia.Themes.Fluent.FluentTheme());
+        Styles.Add(new global::Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://Clarity.Avalonia.Tests"))
+        {
+            Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"),
+        });
+    }
 }
 
 /// A window as Clarity generates one: data, parts and handlers.
@@ -273,5 +283,83 @@ public class BindingTests
         Assert.Equal(0, commits);
         other.Focus();
         Assert.Equal(1, commits);
+    }
+
+    sealed record Row(string Title);
+
+    [AvaloniaFact]
+    public void AnEditInATableCellTellsItsRow()
+    {
+        var first = new Row("Milk");
+        var second = new Row("Bread");
+        var check = new CheckBox { DataContext = second };
+        var choice = new ComboBox { DataContext = first, ItemsSource = new[] { "Low", "High" } };
+        var box = new TextBox { DataContext = first };
+        var other = new Button();
+        var table = new StackPanel { Children = { check, choice, box } };
+        var window = new Window { Content = new StackPanel { Children = { table, other } } };
+        window.Show();
+        var edited = new List<object?>();
+        Events.OnCellEdit(table, row => edited.Add(row));
+
+        // Values the rows show when they are drawn are no edits.
+        check.IsChecked = true;
+        Assert.Empty(edited);
+
+        check.Focus();
+        check.IsChecked = false;
+        choice.Focus();
+        choice.SelectedIndex = 1;
+        box.Focus();
+        box.Text = "Oat milk";
+        other.Focus();
+        Assert.Equal(new object?[] { second, first, first }, edited);
+    }
+
+    sealed class TaskRow
+    {
+        public string Title { get; set; } = "";
+        public bool Done { get; set; }
+    }
+
+    [AvaloniaFact]
+    public void ClickingACheckBoxInATableEditsItsRowAndSelectsIt()
+    {
+        var milk = new TaskRow { Title = "Milk" };
+        var bread = new TaskRow { Title = "Bread" };
+        var grid = new DataGrid
+        {
+            ItemsSource = new[] { milk, bread },
+            AutoGenerateColumns = false,
+            IsReadOnly = true,
+            Columns =
+            {
+                new DataGridTextColumn { Header = "Task", Binding = new global::Avalonia.Data.Binding("Title"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
+                new DataGridTemplateColumn
+                {
+                    Header = "Done",
+                    CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) =>
+                        new CheckBox { [!global::Avalonia.Controls.Primitives.ToggleButton.IsCheckedProperty] = new global::Avalonia.Data.Binding("Done") }),
+                },
+            },
+        };
+        var window = new Window { Width = 400, Height = 300, Content = grid };
+        window.Show();
+        var edited = new List<object?>();
+        Events.OnCellEdit(grid, row =>
+        {
+            grid.SelectedItem = row;
+            edited.Add(row);
+        });
+        Dispatcher.UIThread.RunJobs();
+
+        var box = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(grid).OfType<CheckBox>().First(c => c.DataContext == bread);
+        var middle = box.TranslatePoint(new Point(box.Bounds.Width / 2, box.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(middle, global::Avalonia.Input.MouseButton.Left);
+        window.MouseUp(middle, global::Avalonia.Input.MouseButton.Left);
+
+        Assert.True(bread.Done);
+        Assert.Equal(new object?[] { bread }, edited);
+        Assert.Same(bread, grid.SelectedItem);
     }
 }

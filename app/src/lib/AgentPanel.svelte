@@ -3,6 +3,7 @@
   // It sits right of every tab; what it changes is one Undo step per turn.
   import { toolLine } from "./agent";
   import { agent } from "./agentStore.svelte";
+  import { markdown } from "./markdown";
 
   let text = $state("");
   let list: HTMLElement | undefined = $state();
@@ -47,7 +48,8 @@
       {#if item.kind === "user"}
         <p class="user">{item.text}</p>
       {:else if item.kind === "assistant"}
-        <p class="assistant">{item.text}</p>
+        <!-- Escaped first: the answer brings no HTML of its own. -->
+        <div class="assistant">{@html markdown(item.text)}</div>
       {:else if item.kind === "tool"}
         <details class="tool" class:failed={item.isError}>
           <summary>
@@ -121,6 +123,48 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: 13px;
+  }
+
+  .assistant {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .assistant :global(p),
+  .assistant :global(ul),
+  .assistant :global(ol),
+  .assistant :global(h4),
+  .assistant :global(pre) {
+    margin: 0 0 6px;
+  }
+
+  .assistant :global(ul),
+  .assistant :global(ol) {
+    padding-left: 18px;
+  }
+
+  .assistant :global(h4) {
+    font-size: 13px;
+  }
+
+  .assistant :global(code) {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+    border-radius: 3px;
+    padding: 0 3px;
+  }
+
+  .assistant :global(pre) {
+    padding: 6px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .assistant :global(pre code) {
+    background: none;
+    padding: 0;
   }
 
   .user {

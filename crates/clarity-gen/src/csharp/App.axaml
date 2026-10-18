@@ -54,6 +54,19 @@
     <Style Selector="TextBox.number">
       <Setter Property="TextAlignment" Value="Right" />
     </Style>
+    <!-- An input in a table cell sits flush in the cell, as in a spreadsheet. -->
+    <Style Selector="TextBox.cell, ComboBox.cell, CalendarDatePicker.cell">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="CheckBox.cell">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
     <Style Selector="Border.panel, Border.form, Border.placeholder">
       <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />
       <Setter Property="BorderBrush" Value="{DynamicResource ClarityBorder}" />

@@ -4,9 +4,11 @@
 
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
@@ -130,6 +132,44 @@ public static class Events
                 if (button.IsChecked == true)
                     change();
             };
+    }
+
+    /// <summary>
+    /// Runs <paramref name="edited"/> with the row whose cell was edited in a
+    /// table: a check box or dropdown changed, or a text cell committed (focus
+    /// leaves it, or Enter). Clarity's <c>change</c> of a table. Only what the
+    /// person does counts: values a row shows as it is drawn are no edits.
+    /// </summary>
+    public static void OnCellEdit(Control table, Action<object?> edited)
+    {
+        void Edited(object? source)
+        {
+            if (source is Control control && control != table)
+                edited(control.DataContext);
+        }
+        static bool ByThePerson(object? source) => source is InputElement { IsKeyboardFocusWithin: true };
+
+        table.AddHandler(ToggleButton.IsCheckedChangedEvent, (_, e) =>
+        {
+            if (ByThePerson(e.Source))
+                Edited(e.Source);
+        }, RoutingStrategies.Bubble);
+        table.AddHandler(SelectingItemsControl.SelectionChangedEvent, (_, e) =>
+        {
+            // The table's own selection is no edit.
+            if (e.Source is ComboBox && ByThePerson(e.Source))
+                Edited(e.Source);
+        }, RoutingStrategies.Bubble);
+        table.AddHandler(InputElement.LostFocusEvent, (_, e) =>
+        {
+            if (e.Source is TextBox)
+                Edited(e.Source);
+        }, RoutingStrategies.Bubble);
+        table.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter && e.Source is TextBox)
+                Edited(e.Source);
+        }, RoutingStrategies.Bubble);
     }
 
     /// <summary>Runs <paramref name="submit"/> when Enter is pressed in a form: Clarity's <c>submit</c>.</summary>

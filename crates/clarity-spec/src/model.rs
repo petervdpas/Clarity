@@ -283,6 +283,9 @@ pub struct WidgetProps {
     /// Handlers in the code behind, per event.
     pub handlers: Vec<Handler>,
     pub columns: Vec<String>,
+    /// The columns of a table whose cells are inputs: `edit done`.
+    #[serde(default)]
+    pub edit: Vec<String>,
     pub show: Vec<String>,
     pub orientation: Option<Orientation>,
     pub surface: Option<Surface>,

@@ -712,7 +712,7 @@ impl<'a> Checker<'a> {
         let at = format!("{name} at {},{}", p.col, p.row);
 
         let Some(bind) = &p.bind else {
-            if !p.columns.is_empty() || !p.show.is_empty() {
+            if !p.columns.is_empty() || !p.edit.is_empty() || !p.show.is_empty() {
                 self.error(
                     file,
                     format!("{at} lists fields but is not bound to data"),
@@ -811,7 +811,37 @@ impl<'a> Checker<'a> {
                         Some(_) => {}
                     }
                 }
+                self.check_edits(file, &at, entity, widget);
             }
+        }
+    }
+
+    /// The edited columns of a table: shown, of a type a cell can edit,
+    /// and saved by an `on change` handler.
+    fn check_edits(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
+        let p = &widget.props;
+        if p.edit.is_empty() {
+            return;
+        }
+        for field in &p.edit {
+            if !p.columns.contains(field) {
+                self.error(file, format!("{at}: '{field}' is edited but is not one of the columns"), widget.span);
+                continue;
+            }
+            let Some(f) = entity.field(field) else { continue };
+            if !widgets::cell_edits(&f.ty) {
+                self.error(
+                    file,
+                    format!(
+                        "{at}: '{field}' is {}; a table edits text, numbers, bool, date and enum columns",
+                        widgets::field_type_tag(&f.ty)
+                    ),
+                    widget.span,
+                );
+            }
+        }
+        if !p.handlers.iter().any(|h| h.event == widgets::Event::Change) {
+            self.warning(file, format!("{at} edits its rows but has no 'on change' handler to save them"), widget.span);
         }
     }
 

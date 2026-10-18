@@ -184,6 +184,24 @@
     fire("select");
   }
 
+  /** A cell of an edited column changed: the row takes the value, is
+   *  selected, and the table's `on change` runs with it. */
+  function editCell(index: number, column: string, next: string | number | boolean | null) {
+    const row = collection?.rows[index];
+    if (!row || design) return;
+    row[column] = next;
+    if (live && p.name) live.select(p.name, index);
+    fire("change");
+  }
+
+  /** What a number cell's text reads as, or null when it is no number. */
+  function cellNumber(field: NonNullable<ReturnType<typeof findField>>, typed: string): string | number | null {
+    const format = fieldFormat(field);
+    if (!format) return typed;
+    if (typed.trim() === "") return format.kind === "integer" ? 0 : "0";
+    return parseNumber(format, typed, formatsOf(preview));
+  }
+
   function pressMove(e: PointerEvent) {
     if (!design) return;
     const el = e.currentTarget as HTMLElement;
@@ -442,7 +460,41 @@
               <tr class:chosen={selectedRow === i} onclick={() => selectRow(i)} ondblclick={() => fire("open")}>
                 {#each p.columns as column (column)}
                   {@const field = collection ? findField(collection.entity, column) : undefined}
-                  <td class:numeric={field ? isNumeric(field) : false}>{field ? displayValue(preview, field, row[column]) : ""}</td>
+                  {@const cell = row[column]}
+                  {#if field && p.edit.includes(column)}
+                    <td class="edit" class:numeric={isNumeric(field)}>
+                      {#if field.type.kind === "bool"}
+                        <input type="checkbox" aria-label={columnLabel(column)} checked={cell === true} disabled={design || disabled || readonly}
+                          onchange={(e) => editCell(i, column, e.currentTarget.checked)} />
+                      {:else if field.type.kind === "enum"}
+                        <select aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled || readonly}
+                          onchange={(e) => editCell(i, column, e.currentTarget.value === "" ? null : e.currentTarget.value)}>
+                          <option value=""></option>
+                          {#each findEnum(preview, field.type.name.name)?.variants ?? [] as v (v.name.name)}
+                            <option value={v.name.name}>{tr(preview, v.label)}</option>
+                          {/each}
+                        </select>
+                      {:else if field.type.kind === "date"}
+                        <input type="date" aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled} {readonly}
+                          onchange={(e) => editCell(i, column, e.currentTarget.value === "" ? null : e.currentTarget.value)} />
+                      {:else if isNumeric(field)}
+                        {@const format = fieldFormat(field)}
+                        <input aria-label={columnLabel(column)} inputmode="decimal" disabled={design || disabled} {readonly}
+                          value={format && (typeof cell === "string" || typeof cell === "number") && cell !== "" ? editText(format, cell, formatsOf(preview)) : String(cell ?? "")}
+                          onchange={(e) => {
+                            const read = cellNumber(field, e.currentTarget.value);
+                            // Text that is no number keeps the value the cell had.
+                            if (read === null) e.currentTarget.value = format ? editText(format, cell as string | number, formatsOf(preview)) : String(cell ?? "");
+                            else editCell(i, column, read);
+                          }} />
+                      {:else}
+                        <input aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled} {readonly}
+                          onchange={(e) => editCell(i, column, e.currentTarget.value)} />
+                      {/if}
+                    </td>
+                  {:else}
+                    <td class:numeric={field ? isNumeric(field) : false}>{field ? displayValue(preview, field, cell) : ""}</td>
+                  {/if}
                 {/each}
               </tr>
             {/each}
@@ -919,6 +971,40 @@
     padding: calc(var(--padding) - 1px) calc(var(--padding) * 2);
     border-bottom: var(--border-width) solid var(--border);
     white-space: nowrap;
+  }
+
+  /* An edited cell holds its input flush in the cell, as a spreadsheet does. */
+  td.edit {
+    padding: 0 calc(var(--padding) * 2 - 4px);
+  }
+
+  td.edit input:not([type="checkbox"]),
+  td.edit select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 1px 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+  }
+
+  td.edit input:not([type="checkbox"]):focus,
+  td.edit select:focus,
+  td.edit input:not([type="checkbox"]):hover,
+  td.edit select:hover {
+    border-color: var(--border-strong);
+    background: var(--input-bg);
+  }
+
+  td.edit.numeric input {
+    text-align: right;
+  }
+
+  td.edit input[type="checkbox"] {
+    margin: 0 4px;
+    vertical-align: middle;
   }
 
   .empty {

@@ -15,7 +15,7 @@ const RESERVED: [&str; 62] = [
 ];
 
 /// Names the generated code uses itself.
-const TAKEN: [&str; 9] = ["db", "err", "result", "body", "read", "r", "clarity", "decimal", "slices"];
+const TAKEN: [&str; 12] = ["db", "err", "result", "body", "read", "r", "w", "ui", "app", "clarity", "decimal", "slices"];
 
 /// Members every record has, which a field cannot be called.
 const RECORD_MEMBERS: [&str; 13] =

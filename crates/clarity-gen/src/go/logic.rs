@@ -8,13 +8,16 @@
 //! write them in Go. Records are worked on through pointers, so an action
 //! changes the record it is given.
 
+use std::collections::HashMap;
+use std::fmt::Write as _;
+
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp, path_text,
-    template,
+    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp,
+    path_text, template,
 };
-use clarity_spec::model::FieldType;
+use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
 
 use super::model::{constant, decimal_literal};
 use super::names::{field, local, pascal, string, value_type, zero};
@@ -32,7 +35,7 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
         .flat_map(|b| b.events.iter().map(|e| e.action(&b.name.name)))
         .collect();
     for decl in file.functions.iter().chain(&events) {
-        let mut emitter = Emitter::new(project, types, decl);
+        let mut emitter = Emitter::new(project, types, Some(decl), None);
         let code = emitter.function();
         if emitter.errors.is_empty() {
             out.push_str(&code);
@@ -119,10 +122,153 @@ fn indent(lines: &str, depth: usize) -> String {
     lines.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("{pad}{l}\n") }).collect()
 }
 
+/// What a handler may read of a part.
+#[derive(Debug, Clone, Default)]
+pub struct PartInfo {
+    /// The data a table or list shows, for its selected row.
+    pub bind: Option<String>,
+    pub caption: Option<String>,
+    /// Whether the design makes the part read-only.
+    pub readonly: bool,
+}
+
+/// The window or app a handler belongs to.
+#[derive(Debug, Clone, Default)]
+pub struct WindowCtx {
+    pub parts: HashMap<String, PartInfo>,
+    /// The window's data: name, entity and whether it is a list.
+    pub data: Vec<(String, String, bool)>,
+}
+
+impl WindowCtx {
+    fn widgets(&mut self, widgets: &[Widget]) {
+        for widget in widgets {
+            if let Some(name) = &widget.props.name {
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly };
+                self.parts.insert(name.clone(), info);
+            }
+            self.widgets(&widget.children);
+            for page in &widget.pages {
+                self.widgets(&page.children);
+            }
+        }
+    }
+
+    fn commands(&mut self, commands: &[Command]) {
+        for command in commands {
+            if let Some(name) = &command.props.name {
+                self.parts.insert(name.clone(), PartInfo { caption: command.props.caption.clone(), ..PartInfo::default() });
+            }
+            self.commands(&command.items);
+        }
+    }
+
+    fn frame(&mut self, frame: &Frame) {
+        if let Some(menu) = &frame.menu {
+            self.commands(&menu.items);
+        }
+        if let Some(toolbar) = &frame.toolbar {
+            self.commands(&toolbar.items);
+        }
+        if let Some(ribbon) = &frame.ribbon {
+            for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
+                self.commands(&group.items);
+            }
+        }
+        for sidebar in &frame.sidebars {
+            self.widgets(&sidebar.widgets);
+        }
+        if let Some(footer) = &frame.footer {
+            self.widgets(&footer.widgets);
+        }
+    }
+}
+
+/// A window or the app, as main.go dispatches to it.
+#[derive(Debug, Clone)]
+pub struct Owner {
+    pub name: String,
+    /// The struct holding its data: `CustomerFormWindow`, `ShopApp`.
+    pub struct_name: String,
+    /// Handlers by Clarity name, with their method names.
+    pub handlers: Vec<(String, String)>,
+    pub is_app: bool,
+    /// Its own events (open, close, return, start) with their handlers.
+    pub events: Vec<(&'static str, String)>,
+}
+
+/// The struct, its loading and the handlers of every window and the app in `file`.
+pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<(String, Vec<Owner>), Vec<String>> {
+    let mut out = String::new();
+    let mut owners = Vec::new();
+    let mut errors = Vec::new();
+    let pages = file.pages.iter().map(|p| (&p.name.name, &p.data, Some(p), None));
+    let apps = file.apps.iter().map(|a| (&a.name.name, &a.data, None, Some(a)));
+    for (name, data, page, app) in pages.chain(apps) {
+        let struct_name = if app.is_some() { format!("{name}App") } else { format!("{name}Window") };
+        let mut ctx = WindowCtx::default();
+        let mut events = Vec::new();
+        if let Some(page) = page {
+            ctx.widgets(&page.widgets);
+            ctx.frame(&page.frame);
+            events.extend(page.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
+        }
+        if let Some(app) = app {
+            ctx.frame(&app.frame);
+            events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
+        }
+        ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
+
+        let rows: Vec<Vec<String>> = data
+            .iter()
+            .map(|d| {
+                let ty = if d.list { format!("[]{}", d.entity.name) } else { format!("*{}", d.entity.name) };
+                vec![pascal(&d.name.name), ty, format!("`json:\"{}\"`", d.name.name)]
+            })
+            .collect();
+        let mut load = String::new();
+        for d in data {
+            let (local_name, field_name, entity) = (local(&d.name.name), pascal(&d.name.name), &d.entity.name);
+            if d.list {
+                let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tw.{field_name} = {local_name}\n");
+            } else {
+                let _ = write!(load, "\t{local_name} := New{entity}()\n\tw.{field_name} = &{local_name}\n");
+            }
+        }
+        let body = if rows.is_empty() { String::new() } else { super::model::aligned(&rows, "\t") };
+        let _ = write!(
+            out,
+            "// {struct_name} is the data of {name}, as its handlers see it.\ntype {struct_name} struct {{\n{body}}}\n\n// load{struct_name} is the data when {name} opens: every record of a list, a new record otherwise.\nfunc load{struct_name}(db *clarity.Db) (*{struct_name}, error) {{\n\tw := &{struct_name}{{}}\n{load}\treturn w, nil\n}}\n\n"
+        );
+
+        let mut handlers = Vec::new();
+        for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
+            let method = local(&handler.name.name);
+            let mut emitter = Emitter::new(project, types, None, Some(&ctx));
+            let mut code = String::new();
+            emitter.block(&handler.body, &mut code);
+            if !code.trim_end().ends_with("return nil") {
+                code.push_str("return nil\n");
+            }
+            if emitter.errors.is_empty() {
+                let _ = write!(out, "func (w *{struct_name}) {method}(db *clarity.Db, ui *clarity.Ui) error {{\n{}}}\n\n", indent(&code, 1));
+                handlers.push((handler.name.name.clone(), method));
+            } else {
+                errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
+            }
+        }
+        owners.push(Owner { name: name.clone(), struct_name, handlers, is_app: app.is_some(), events });
+    }
+    if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
+}
+
 struct Emitter<'a> {
     project: &'a Project,
     types: &'a FileTypes,
-    decl: &'a FunctionDecl,
+    /// The function, action or data event being written; None for a handler.
+    decl: Option<&'a FunctionDecl>,
+    /// The window of a handler.
+    window: Option<&'a WindowCtx>,
     errors: Vec<String>,
     /// Lifted values so far: `v1`, `v2`.
     temps: usize,
@@ -133,12 +279,12 @@ struct Emitter<'a> {
 }
 
 impl<'a> Emitter<'a> {
-    fn new(project: &'a Project, types: &'a FileTypes, decl: &'a FunctionDecl) -> Self {
-        Emitter { project, types, decl, errors: Vec::new(), temps: 0, loops: 0, ensuring: false }
+    fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
+        Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
-        self.decl.returns.as_ref().map(|r| type_ref_info(self.project, r))
+        self.decl.and_then(|d| d.returns.as_ref()).map(|r| type_ref_info(self.project, r))
     }
 
     /// The statement that returns `err`.
@@ -150,7 +296,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn function(&mut self) -> String {
-        let decl = self.decl;
+        let decl = self.decl.expect("a function, action or data event");
         let mut params = vec!["db *clarity.Db".to_string()];
         for param in &decl.params {
             params.push(format!("{} {}", local(&param.name.name), value_type(&type_ref_info(self.project, &param.ty))));
@@ -244,6 +390,26 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::Assign { target, value } => {
+                if let Some((part, property)) = self.part_property(target) {
+                    let method = match property.as_str() {
+                        "caption" => "SetCaption",
+                        "error" => "SetError",
+                        "visible" => "SetVisible",
+                        "enabled" => "SetEnabled",
+                        "readonly" => "SetReadonly",
+                        "text" => "SetText",
+                        "checked" => "SetChecked",
+                        other => {
+                            self.errors.push(format!("'{other}' of a part cannot be set"));
+                            return;
+                        }
+                    };
+                    // A caption or error is kept as written with its slots, and shown in the person's format.
+                    let code = if matches!(property.as_str(), "caption" | "error") { self.shown(value, &mut pre) } else { bare(self.value(value, &mut pre)) };
+                    out.push_str(&pre);
+                    out.push_str(&format!("ui.{method}({}, {code})\n", string(&part)));
+                    return;
+                }
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target, &mut pre);
@@ -287,6 +453,11 @@ impl<'a> Emitter<'a> {
                     self.errors.push("only a call can stand on its own".into());
                     return;
                 };
+                // A handler runs another handler of its window.
+                if self.types.name_of(call) == Some(&NameKind::Handler) {
+                    out.push_str(&format!("if err := w.{}(db, ui); err != nil {{\n\treturn err\n}}\n", local(&function.name)));
+                    return;
+                }
                 let call_code = self.call_code(&function.name, args, &mut pre);
                 out.push_str(&pre);
                 let returns = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == function.name).and_then(|f| f.returns.as_ref());
@@ -304,8 +475,42 @@ impl<'a> Emitter<'a> {
                 out.push_str(&pre);
                 out.push_str(&format!("{}\n", self.fail(&format!("clarity.Refuse({text})"))));
             }
-            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } => {
+            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
+            }
+            StmtKind::Message { level, text } => {
+                let level = match level {
+                    MessageLevel::Info => "Info",
+                    MessageLevel::Warning => "Warning",
+                    MessageLevel::Error => "Error",
+                };
+                let text = self.shown(text, &mut pre);
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Message(clarity.{level}, {text})\n"));
+            }
+            StmtKind::Open { window, with } => {
+                let args: Vec<String> = with.iter().map(|arg| format!("{}: {}", string(&arg.name.name), bare(self.value(&arg.value, &mut pre)))).collect();
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Open({}, map[string]any{{{}}})\n", string(&window.name), args.join(", ")));
+            }
+            StmtKind::Close => out.push_str("ui.Close()\n"),
+            StmtKind::Reload { data } => {
+                let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
+                match found {
+                    Some((name, entity, true)) => {
+                        let all = self.lift(format!("clarity.All[{entity}](db)"), &mut pre);
+                        out.push_str(&pre);
+                        out.push_str(&format!("w.{} = {all}\n", pascal(&name)));
+                    }
+                    Some((name, entity, false)) => {
+                        let field_name = format!("w.{}", pascal(&name));
+                        let mut inner = String::new();
+                        let fresh = self.lift(format!("clarity.Get[{entity}](db, {field_name}.ID)"), &mut inner);
+                        inner.push_str(&format!("{field_name} = &{fresh}\n"));
+                        out.push_str(&format!("if {field_name}.ID != 0 {{\n{}}}\n", indent(&inner, 1)));
+                    }
+                    None => self.errors.push(format!("there is no data '{}' to reload", data.name)),
+                }
             }
         }
     }
@@ -455,10 +660,14 @@ impl<'a> Emitter<'a> {
 
     /// An expression as a place: what can be assigned or read in place.
     fn place(&mut self, expr: &Expr, pre: &mut String) -> String {
+        if self.part_property(expr).is_some() {
+            return self.read_part(expr, pre);
+        }
         match &expr.kind {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) if self.ensuring && name == "result" => "result".into(),
                 Some(NameKind::Local) => local(name),
+                Some(NameKind::Data) if self.window.is_some() => format!("w.{}", pascal(name)),
                 Some(NameKind::EnumValue(e)) => constant(e, name),
                 _ => {
                     self.errors.push(format!("'{name}' is not generated yet for Go"));
@@ -488,6 +697,41 @@ impl<'a> Emitter<'a> {
                 }
             }
             _ => self.value(expr, pre),
+        }
+    }
+
+    /// A part property such as `grid.selected` or `name_input.error`: the
+    /// part's name and the property, when `expr` is one.
+    fn part_property(&self, expr: &Expr) -> Option<(String, String)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        (self.types.name_of(object) == Some(&NameKind::Part)).then(|| (name.clone(), member.name.clone()))
+    }
+
+    /// Reading a part property in a handler; the selected row is a record.
+    fn read_part(&mut self, expr: &Expr, pre: &mut String) -> String {
+        let (part, property) = self.part_property(expr).unwrap_or_default();
+        let info = self.window.and_then(|w| w.parts.get(&part)).cloned().unwrap_or_default();
+        let quoted = string(&part);
+        match property.as_str() {
+            "visible" => format!("ui.Visible({quoted})"),
+            "enabled" => format!("ui.Enabled({quoted})"),
+            "caption" => format!("ui.Caption({quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
+            "error" => format!("ui.Error({quoted})"),
+            "readonly" => format!("ui.Readonly({quoted}, {})", info.readonly),
+            "text" => format!("ui.Text({quoted})"),
+            "checked" => format!("ui.Checked({quoted})"),
+            "selected" => match info.bind {
+                Some(bind) => self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&bind)), pre),
+                None => {
+                    self.errors.push(format!("'{part}' is not bound to a list"));
+                    String::new()
+                }
+            },
+            other => {
+                self.errors.push(format!("'{other}' of a part is not generated yet for Go"));
+                String::new()
+            }
         }
     }
 

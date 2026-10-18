@@ -23,11 +23,15 @@ fn kind_label(kind: SourceKind) -> &'static str {
 }
 
 /// The commands that build and run a project of `backend`, in its folder.
-fn commands(backend: Backend) -> (&'static str, &'static str) {
-    match backend {
-        Backend::Rust => ("cargo build --release", "cargo run"),
-        Backend::Csharp => ("dotnet build -c Release", "dotnet run"),
-        _ => ("", ""),
+fn commands(settings: &Settings) -> (String, String) {
+    match settings.stack.backend {
+        Backend::Rust => ("cargo build --release".into(), "cargo run".into()),
+        Backend::Csharp => ("dotnet build -c Release".into(), "dotnet run".into()),
+        Backend::Go => {
+            let name = crate::go::module_name(settings);
+            (format!("go build -tags production -trimpath -ldflags=\"-s -w\" -o bin/{name} ."), "go run .".into())
+        }
+        _ => (String::new(), String::new()),
     }
 }
 
@@ -46,7 +50,7 @@ pub fn readme(settings: &Settings) -> String {
     }
     out.push_str("\nClarity looks for these itself (`clarity tools`, and Build tools on the Project tab); this list is for building the project without it.\n");
 
-    let (build, run) = commands(backend);
+    let (build, run) = commands(settings);
     if !build.is_empty() {
         out.push_str(&format!("\n## Build and run\n\nIn this folder, build the program with\n\n    {build}\n\n"));
         if let Some(toolchain) = crate::toolchain(settings, true) {

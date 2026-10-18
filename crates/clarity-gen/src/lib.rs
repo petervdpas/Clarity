@@ -6,7 +6,7 @@
 pub mod tools;
 mod csharp;
 mod ddl;
-mod go;
+pub(crate) mod go;
 mod print;
 mod readme;
 mod rust;
@@ -205,6 +205,22 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 missing: "is the .NET SDK installed?",
             })
         }
+        Backend::Go => {
+            let program = format!("bin/{}", go::module_name(settings));
+            let mut args = vec!["build".to_string()];
+            if release {
+                // Wails' production build, without debug information.
+                args.extend(["-tags", "production", "-trimpath", "-ldflags=-s -w"].map(String::from));
+            }
+            args.extend(["-o".to_string(), program.clone(), ".".to_string()]);
+            Some(Toolchain {
+                tool: "go",
+                args,
+                env: vec![],
+                program: exe(program),
+                missing: "is Go installed?",
+            })
+        }
         _ => None,
     }
 }
@@ -219,7 +235,9 @@ pub fn build_output(backend: Backend) -> &'static [&'static str] {
         Backend::Rust => &["target", "data", "gen", "Cargo.lock"],
         // dotnet's `bin` and `obj`.
         Backend::Csharp => &["bin", "obj", "data"],
-        Backend::Go | Backend::C | Backend::Cpp => &["data"],
+        // go build's program.
+        Backend::Go => &["bin", "data"],
+        Backend::C | Backend::Cpp => &["data"],
     }
 }
 

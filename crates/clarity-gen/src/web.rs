@@ -6,6 +6,9 @@
 //! designer gets the same CSS for its canvas.
 
 use clarity_spec::model::{Look, Shadow, ThemeDecl, ThemeValue, Weight};
+use clarity_spec::{Preview, Project};
+
+use crate::OutFile;
 use clarity_spec::themes::{built_in, full_hex, resolve};
 
 /// The renderer's CSS variable for each color role.
@@ -250,4 +253,56 @@ pub fn base_css() -> String {
 /// `themes/night-owl.css` for the class `theme-night-owl`.
 pub fn theme_file(theme: &ThemeDecl) -> String {
     format!("themes/{}.css", theme.class.trim_start_matches("theme-"))
+}
+
+/// The frontend, built from the designer's renderer (`npm run build:runtime`).
+const UI_FILES: [(&str, &str); 3] = [
+    ("ui/index.html", include_str!("../ui/runtime.html")),
+    ("ui/runtime.js", include_str!("../ui/runtime.js")),
+    ("ui/runtime.css", include_str!("../ui/runtime.css")),
+];
+
+/// The renderer of an application on a web stack, in `ui/`: its page,
+/// script and styles, and a CSS file per theme the application offers,
+/// linked from the page so the application can hold the class of the theme
+/// it shows. Every web stack ships the same files.
+pub fn renderer_files(project: &Project) -> Vec<OutFile> {
+    let mut files: Vec<OutFile> = UI_FILES.iter().map(|(path, body)| OutFile { path: (*path).into(), text: (*body).into(), bytes: None }).collect();
+    let themes: Vec<&ThemeDecl> = project
+        .themes
+        .iter()
+        .filter_map(|name| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *name))
+        .collect();
+    // Clarity's own theme first: the base the project's themes change.
+    let base = built_in();
+    let links: String = std::iter::once(&base)
+        .chain(themes.iter().copied())
+        .map(|t| format!("    <link rel=\"stylesheet\" href=\"./{}\">\n", theme_file(t)))
+        .collect();
+    files.push(OutFile { path: format!("ui/{}", theme_file(&base)), text: base_css(), bytes: None });
+    for theme in &themes {
+        files.push(OutFile { path: format!("ui/{}", theme_file(theme)), text: theme_css(theme), bytes: None });
+    }
+    if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
+        index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
+    }
+    files
+}
+
+/// The windows, the frame and the data dictionary, for the renderer. File
+/// paths are left out: they belong to the machine the project was on.
+pub fn model_json(project: &Project) -> String {
+    let mut project = project.clone();
+    for file in &mut project.files {
+        file.path = std::path::Path::new(&file.path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        file.version = String::new();
+    }
+    project.diagnostics.clear();
+    let mut preview = Preview::new(project);
+    preview.samples.clear();
+    preview.displays.clear();
+    serde_json::to_string(&preview).unwrap_or_default() + "\n"
 }

@@ -64,3 +64,14 @@ fn a_server_database_is_named_by_its_variable() {
     has(&text, "PostgreSQL");
     has(&text, "postgres://user:password@host:5432/database");
 }
+
+#[test]
+fn a_go_project_says_what_it_needs_and_how_to_build_it() {
+    let mut settings = starter("Shop", "shop");
+    settings.stack.backend = Backend::Go;
+    let text = readme(&settings);
+    has(&text, "Go with the web renderer");
+    has(&text, "- Go, from https://go.dev/dl\n");
+    has(&text, "    go build -tags production -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
+    has(&text, "    go run .\n");
+}

@@ -73,7 +73,8 @@ fn avalonia_needs_the_dotnet_sdk_the_project_targets() {
 #[test]
 fn stacks_clarity_does_not_generate_yet_still_say_what_they_need() {
     let go = check(Backend::Go, Ui::Web, &Machine::default());
-    assert!(!go.generated);
+    // Go with Wails is generated (G3b); Wails builds against WebKitGTK on Linux, like Tauri.
+    assert!(go.generated);
     assert!(go.missing[0].contains("https://go.dev/dl"), "{:?}", go.missing);
     // C and C++ build with CMake (the generated project has a CMakeLists.txt) and make or Ninja.
     let c = check(
@@ -121,5 +122,5 @@ fn every_stack_of_the_catalog_is_checked_and_reported() {
     let report = clarity_gen::tools::report(&all);
     assert!(report.contains("C# with Avalonia: ready (.NET SDK 10.0.402)\n"), "{report}");
     assert!(report.contains("Rust with the web renderer: missing Rust with cargo, from https://rustup.rs"), "{report}");
-    assert!(report.contains("Go with the web renderer: not generated yet; missing Go, from https://go.dev/dl\n"), "{report}");
+    assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
 }

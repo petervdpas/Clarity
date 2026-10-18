@@ -10,7 +10,6 @@ mod names;
 use clarity_project::Settings;
 use clarity_spec::code::check;
 use clarity_spec::model::{FieldType, Project};
-use clarity_spec::Preview;
 
 use crate::OutFile;
 use crate::ddl::Sql;
@@ -37,13 +36,6 @@ const RUNTIME_FILES: [(&str, &str); 10] = [
 
 /// The application icon until a project sets its own.
 const ICON: &[u8] = include_bytes!("../../assets/icon.png");
-
-/// The frontend, built from the designer's renderer (`npm run build:runtime`).
-const UI_FILES: [(&str, &str); 3] = [
-    ("ui/index.html", include_str!("../../ui/runtime.html")),
-    ("ui/runtime.js", include_str!("../../ui/runtime.js")),
-    ("ui/runtime.css", include_str!("../../ui/runtime.css")),
-];
 
 /// The runtime's own manifest, with every database driver as a feature.
 const RUNTIME_MANIFEST: &str = include_str!("../../../clarity-runtime/Cargo.toml");
@@ -77,29 +69,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
         text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name)),
         text("clarity-runtime/Cargo.toml", runtime_cargo()),
-        text("src/model.json", model_json(project)),
+        text("src/model.json", crate::web::model_json(project)),
     ];
-    files.extend(RUNTIME_FILES.iter().chain(&UI_FILES).map(|(path, body)| text(path, (*body).into())));
-    // A CSS file per theme the application offers, linked from the page so
-    // the application can hold the class of the theme it shows.
-    let themes: Vec<&clarity_spec::model::ThemeDecl> = project
-        .themes
-        .iter()
-        .filter_map(|name| project.files.iter().flat_map(|f| &f.themes).find(|t| t.name.name == *name))
-        .collect();
-    // Clarity's own theme first: the base the project's themes change.
-    let base = clarity_spec::themes::built_in();
-    let links: String = std::iter::once(&base)
-        .chain(themes.iter().copied())
-        .map(|t| format!("    <link rel=\"stylesheet\" href=\"./{}\">\n", crate::web::theme_file(t)))
-        .collect();
-    files.push(text(&format!("ui/{}", crate::web::theme_file(&base)), crate::web::base_css()));
-    for theme in &themes {
-        files.push(text(&format!("ui/{}", crate::web::theme_file(theme)), crate::web::theme_css(theme)));
-    }
-    if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
-        index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
-    }
+    files.extend(RUNTIME_FILES.iter().map(|(path, body)| text(path, (*body).into())));
+    files.extend(crate::web::renderer_files(project));
     files.push(OutFile {
         path: "icons/icon.png".into(),
         text: String::new(),
@@ -157,23 +130,6 @@ fn main_window(project: &Project) -> Option<String> {
         .or_else(|| project.pages().next().map(|p| p.name.name.clone()))
 }
 
-/// The windows, the frame and the data dictionary, for the renderer. File
-/// paths are left out: they belong to the machine the project was on.
-fn model_json(project: &Project) -> String {
-    let mut project = project.clone();
-    for file in &mut project.files {
-        file.path = std::path::Path::new(&file.path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        file.version = String::new();
-    }
-    project.diagnostics.clear();
-    let mut preview = Preview::new(project);
-    preview.samples.clear();
-    preview.displays.clear();
-    serde_json::to_string(&preview).unwrap_or_default() + "\n"
-}
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.

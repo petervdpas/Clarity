@@ -74,7 +74,7 @@ impl StackTools {
 
 /// Whether Clarity generates `backend` with `ui`.
 pub fn generates(backend: Backend, ui: Ui) -> bool {
-    matches!((backend, ui), (Backend::Rust, Ui::Web) | (Backend::Csharp, Ui::Avalonia))
+    matches!((backend, ui), (Backend::Rust, Ui::Web) | (Backend::Go, Ui::Web) | (Backend::Csharp, Ui::Avalonia))
 }
 
 /// The first line a tool prints, as it names itself.
@@ -123,7 +123,7 @@ pub fn requirements(backend: Backend) -> Vec<String> {
     match backend {
         Backend::Rust => vec![RUST.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::Csharp => vec![dotnet()],
-        Backend::Go => vec![GO.to_string()],
+        Backend::Go => vec![GO.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::C | Backend::Cpp => vec![compiler_needed(backend), CMAKE.to_string(), MAKE.to_string()],
     }
 }
@@ -149,10 +149,16 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 None => missing.push(dotnet()),
             }
         }
-        Backend::Go => match probe.run("go", &["version"]) {
-            Some(version) => found.push(first_line(&version)),
-            None => missing.push(GO.to_string()),
-        },
+        Backend::Go => {
+            match probe.run("go", &["version"]) {
+                Some(version) => found.push(first_line(&version)),
+                None => missing.push(GO.to_string()),
+            }
+            // Wails draws with WebKitGTK on Linux too, through cgo.
+            if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
+                missing.push(WEBKIT.to_string());
+            }
+        }
         Backend::C | Backend::Cpp => {
             let compilers = if backend == Backend::C { ["cc", "gcc", "clang"] } else { ["c++", "g++", "clang++"] };
             match compiler(probe, &compilers) {

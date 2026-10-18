@@ -45,6 +45,19 @@ fn csharp_builds_with_dotnet() {
 }
 
 #[test]
+fn go_builds_with_go_build() {
+    let settings = shop(Backend::Go, Ui::Web);
+    let debug = clarity_gen::toolchain(&settings, false).unwrap();
+    assert_eq!(debug.tool, "go");
+    assert_eq!(debug.args, ["build", "-o", "bin/shop", "."]);
+    assert_eq!(debug.program, exe("bin/shop"));
+    let release = clarity_gen::toolchain(&settings, true).unwrap();
+    // Wails' production build, without debug information.
+    assert_eq!(release.args, ["build", "-tags", "production", "-trimpath", "-ldflags=-s -w", "-o", "bin/shop", "."]);
+    assert!(debug.missing.contains("Go"), "{}", debug.missing);
+}
+
+#[test]
 fn stacks_without_a_generator_have_no_toolchain() {
-    assert!(clarity_gen::toolchain(&shop(Backend::Go, Ui::Web), false).is_none());
+    assert!(clarity_gen::toolchain(&shop(Backend::C, Ui::Web), false).is_none());
 }

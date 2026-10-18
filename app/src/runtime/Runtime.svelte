@@ -3,7 +3,7 @@
   // renderer, with every event sent to the backend. The backend owns the
   // behavior; this page only shows state and reports what the user does.
 
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke } from "../lib/backend";
   import FrameView from "../lib/FrameView.svelte";
   import GridBox from "../lib/GridBox.svelte";
   import { frameForPage } from "../lib/frame";

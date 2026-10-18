@@ -1,7 +1,11 @@
 // The generated migration steps (conformance/migrations.json) applied by the
 // Go runtime, with records stored between the steps: the same scenario as
-// the Rust and C# runtimes' server tests. It runs on SQLite here; the
-// server databases come with G3d.
+// the Rust and C# runtimes' server tests. It runs on SQLite always, and on
+// a server database when its variable says where one is to spare:
+//
+//	CLARITY_TEST_POSTGRES="host=localhost port=5432 user=postgres password=... dbname=scratch"
+//	CLARITY_TEST_MYSQL="mysql://root:...@localhost:3306/scratch"
+//	CLARITY_TEST_MSSQL="server=tcp:localhost,1433;database=scratch;user=sa;password=...;TrustServerCertificate=true"
 
 package clarity
 
@@ -270,4 +274,33 @@ func migratesAndKeepsRecords(t *testing.T, dialect Dialect, at, database string)
 
 func TestTheServerScenarioOnSqlite(t *testing.T) {
 	migratesAndKeepsRecords(t, Sqlite, filepath.Join(t.TempDir(), "scenario.db"), "sqlite")
+}
+
+func onServer(t *testing.T, variable string, dialect Dialect, database string) {
+	at := os.Getenv(variable)
+	if at == "" {
+		t.Skip(variable + " is not set")
+	}
+	migratesAndKeepsRecords(t, dialect, at, database)
+}
+
+func TestTheServerScenarioOnPostgres(t *testing.T) {
+	onServer(t, "CLARITY_TEST_POSTGRES", Postgres, "postgres")
+}
+
+func TestTheServerScenarioOnMysql(t *testing.T) {
+	onServer(t, "CLARITY_TEST_MYSQL", Mysql, "mysql")
+}
+
+func TestTheServerScenarioOnMssql(t *testing.T) {
+	onServer(t, "CLARITY_TEST_MSSQL", Mssql, "mssql")
+}
+
+// Every server driver is in the runtime; an application keeps the ones it uses.
+func TestEveryServerHasADriver(t *testing.T) {
+	for _, d := range []Dialect{Postgres, Mysql, Mssql} {
+		if _, ok := servers[d]; !ok {
+			t.Errorf("no driver for %s", d.Label())
+		}
+	}
 }

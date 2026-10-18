@@ -1,7 +1,7 @@
 // The connection to one database, behind the same few calls for every
 // kind: run a statement, insert and get the new key, read rows, and apply a
-// migration step. SQLite is always there; the server databases come with
-// their drivers (G3d).
+// migration step. SQLite is always there; a server database is there when
+// the application has its driver's file (server.go has what they share).
 
 package clarity
 

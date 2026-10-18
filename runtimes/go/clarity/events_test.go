@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -76,16 +77,54 @@ func (a *account) AfterDelete(db *Db) error {
 	return Save(db, &logLine{Text: "deleted " + a.Name})
 }
 
-func newDb(t *testing.T) *Db {
-	db, err := Memory()
-	must(t, err)
-	_, err = db.Migrate([][]string{{
-		"CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL);",
-		"CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL);",
-	}})
-	must(t, err)
-	t.Cleanup(func() { db.Close() })
-	return db
+// eventTables are the tables of the event tests, per database.
+var eventTables = map[Dialect][]string{
+	Sqlite: {
+		"CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL)",
+		"CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL)",
+	},
+	Postgres: {
+		"CREATE TABLE account (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, balance BIGINT NOT NULL)",
+		"CREATE TABLE log (id BIGSERIAL PRIMARY KEY, text TEXT NOT NULL)",
+	},
+	Mysql: {
+		"CREATE TABLE account (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(200) NOT NULL, balance BIGINT NOT NULL)",
+		"CREATE TABLE log (id BIGINT AUTO_INCREMENT PRIMARY KEY, text VARCHAR(200) NOT NULL)",
+	},
+	Mssql: {
+		"CREATE TABLE account (id BIGINT IDENTITY PRIMARY KEY, name NVARCHAR(200) NOT NULL, balance BIGINT NOT NULL)",
+		"CREATE TABLE log (id BIGINT IDENTITY PRIMARY KEY, text NVARCHAR(200) NOT NULL)",
+	},
+}
+
+// eachDb runs test on SQLite in memory, and on every server database a
+// CLARITY_TEST_* variable names (see server_test.go), with empty tables.
+func eachDb(t *testing.T, test func(t *testing.T, db *Db)) {
+	databases := []struct {
+		dialect Dialect
+		at      string
+	}{
+		{Sqlite, ":memory:"},
+		{Postgres, os.Getenv("CLARITY_TEST_POSTGRES")},
+		{Mysql, os.Getenv("CLARITY_TEST_MYSQL")},
+		{Mssql, os.Getenv("CLARITY_TEST_MSSQL")},
+	}
+	for _, d := range databases {
+		t.Run(d.dialect.Label(), func(t *testing.T) {
+			if d.at == "" {
+				t.Skip("no " + d.dialect.Label() + " to test on")
+			}
+			db, err := Connect(Source{"", d.dialect, d.at})
+			must(t, err)
+			t.Cleanup(func() { db.Close() })
+			for _, table := range []string{"account", "log", "clarity_schema"} {
+				must(t, db.Batch("", "DROP TABLE IF EXISTS "+d.dialect.Quote(table)))
+			}
+			_, err = db.Migrate([][]string{eventTables[d.dialect]})
+			must(t, err)
+			test(t, db)
+		})
+	}
 }
 
 func logged(t *testing.T, db *Db) []string {
@@ -104,48 +143,51 @@ func refusal(t *testing.T, err error) string {
 }
 
 func TestEventsRunAroundASave(t *testing.T) {
-	db := newDb(t)
-	ada := &account{Name: "  Ada ", Balance: 10}
-	must(t, Save(db, ada))
-	// Before save changed the record that was stored.
-	equal(t, ada.Name, "Ada")
-	stored, err := Get[account](db, ada.ID)
-	must(t, err)
-	equal(t, stored.Name, "Ada")
-	equal(t, logged(t, db), []string{"saved Ada with 10"})
+	eachDb(t, func(t *testing.T, db *Db) {
+		ada := &account{Name: "  Ada ", Balance: 10}
+		must(t, Save(db, ada))
+		// Before save changed the record that was stored.
+		equal(t, ada.Name, "Ada")
+		stored, err := Get[account](db, ada.ID)
+		must(t, err)
+		equal(t, stored.Name, "Ada")
+		equal(t, logged(t, db), []string{"saved Ada with 10"})
 
-	equal(t, refusal(t, Save(db, &account{})), "An account needs a name")
-	all, _ := All[account](db)
-	equal(t, len(all), 1)
+		equal(t, refusal(t, Save(db, &account{})), "An account needs a name")
+		all, _ := All[account](db)
+		equal(t, len(all), 1)
+	})
 }
 
 func TestAFailingEventKeepsNothing(t *testing.T) {
-	db := newDb(t)
-	debtor := &account{Name: "Grace", Balance: -5}
-	equal(t, refusal(t, Save(db, debtor)), "An account cannot be in debt")
-	// The record, and what after save wrote, are gone; the record is new again.
-	equal(t, debtor.ID, int64(0))
-	all, _ := All[account](db)
-	equal(t, len(all), 0)
-	equal(t, logged(t, db), []string{})
+	eachDb(t, func(t *testing.T, db *Db) {
+		debtor := &account{Name: "Grace", Balance: -5}
+		equal(t, refusal(t, Save(db, debtor)), "An account cannot be in debt")
+		// The record, and what after save wrote, are gone; the record is new again.
+		equal(t, debtor.ID, int64(0))
+		all, _ := All[account](db)
+		equal(t, len(all), 0)
+		equal(t, logged(t, db), []string{})
 
-	// The database is usable afterwards.
-	debtor.Balance = 0
-	must(t, Save(db, debtor))
-	equal(t, logged(t, db), []string{"saved Grace with 0"})
+		// The database is usable afterwards.
+		debtor.Balance = 0
+		must(t, Save(db, debtor))
+		equal(t, logged(t, db), []string{"saved Grace with 0"})
+	})
 }
 
 func TestEventsRunAroundADelete(t *testing.T) {
-	db := newDb(t)
-	ada := &account{Name: "Ada", Balance: 10}
-	must(t, Save(db, ada))
-	equal(t, refusal(t, Delete(db, ada)), "Ada still holds 10")
-	ada.Balance = 0
-	must(t, Save(db, ada))
-	must(t, Delete(db, ada))
-	all, _ := All[account](db)
-	equal(t, len(all), 0)
-	equal(t, logged(t, db), []string{"saved Ada with 10", "saved Ada with 0", "deleted Ada"})
+	eachDb(t, func(t *testing.T, db *Db) {
+		ada := &account{Name: "Ada", Balance: 10}
+		must(t, Save(db, ada))
+		equal(t, refusal(t, Delete(db, ada)), "Ada still holds 10")
+		ada.Balance = 0
+		must(t, Save(db, ada))
+		must(t, Delete(db, ada))
+		all, _ := All[account](db)
+		equal(t, len(all), 0)
+		equal(t, logged(t, db), []string{"saved Ada with 10", "saved Ada with 0", "deleted Ada"})
+	})
 }
 
 // Text goes to the screen as the Rust runtime sends it: plain text as a

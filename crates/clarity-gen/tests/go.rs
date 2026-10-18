@@ -2,7 +2,7 @@
 //! events as Go, over the Go runtime copied into the module.
 
 use clarity_gen::{OutFile, generate};
-use clarity_project::{Backend, Settings, Ui, starter};
+use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
 use clarity_spec::load_sources;
 
 const SALES: &str = "module sales
@@ -96,7 +96,10 @@ fn writes_a_go_module_with_the_runtime_copied_in() {
     let runtime = include_str!("../../../runtimes/go/go.mod");
     let sqlite = runtime.lines().find(|l| l.contains("modernc.org/sqlite")).unwrap().trim();
     has(module, sqlite);
-    assert_eq!(file(&files, "go.sum"), include_str!("../../../runtimes/go/go.sum"));
+    // The sums of the runtime's modules this application needs.
+    let sums = include_str!("../../../runtimes/go/go.sum");
+    assert!(file(&files, "go.sum").lines().all(|l| sums.lines().any(|s| s == l)));
+    has(file(&files, "go.sum"), "modernc.org/sqlite v1.54.0 h1:");
     assert_eq!(file(&files, "clarity/db.go"), include_str!("../../../runtimes/go/clarity/db.go"));
     // The runtime's own tests stay behind.
     assert!(!files.iter().any(|f| f.path.ends_with("_test.go")));
@@ -110,10 +113,52 @@ fn every_go_runtime_source_file_is_copied() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go/clarity");
     for entry in std::fs::read_dir(root).unwrap() {
         let name = entry.unwrap().file_name().to_string_lossy().to_string();
-        if name.ends_with(".go") && !name.ends_with("_test.go") {
+        // A server driver goes only where a data source uses it (tested below).
+        let driver = ["server.go", "postgres.go", "mysql.go", "mssql.go"].contains(&name.as_str());
+        if name.ends_with(".go") && !name.ends_with("_test.go") && !driver {
             assert!(files.iter().any(|f| f.path == format!("clarity/{name}")), "{name} is not copied");
         }
     }
+}
+
+/// A module holds the drivers of the databases its data sources are, with
+/// the modules they need, and no others (as the C# output picks packages).
+#[test]
+fn a_module_gets_the_drivers_of_its_databases_only() {
+    let project = load_sources([("sales.clarity", SALES)]);
+    let drivers = [
+        (SourceKind::Postgres, "clarity/postgres.go", "github.com/jackc/pgx/v5 "),
+        (SourceKind::Mysql, "clarity/mysql.go", "github.com/go-sql-driver/mysql "),
+        (SourceKind::Mssql, "clarity/mssql.go", "github.com/microsoft/go-mssqldb "),
+    ];
+    let plain = generate(&project, &settings()).unwrap();
+    assert!(!plain.iter().any(|f| f.path == "clarity/server.go"));
+    for (_, path, module) in drivers {
+        assert!(!plain.iter().any(|f| f.path == path), "{path}");
+        assert!(!file(&plain, "go.mod").contains(module), "{module}");
+        assert!(!file(&plain, "go.sum").contains(module), "{module}");
+    }
+    // Shared with the SQLite driver and Wails, so it stays.
+    has(file(&plain, "go.mod"), "golang.org/x/crypto ");
+
+    for (kind, path, module) in drivers {
+        let mut settings = settings();
+        settings.datasources[0].kind = kind;
+        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        let files = generate(&project, &settings).unwrap();
+        assert!(files.iter().any(|f| f.path == "clarity/server.go"));
+        assert!(files.iter().any(|f| f.path == path), "{path}");
+        has(file(&files, "go.mod"), module);
+        has(file(&files, "go.sum"), module);
+        for (_, other, other_module) in drivers.iter().filter(|d| d.1 != path) {
+            assert!(!files.iter().any(|f| f.path == *other), "{other}");
+            assert!(!file(&files, "go.mod").contains(other_module), "{other_module}");
+        }
+    }
+    // pgx's own requirements come along with it.
+    let mut settings = settings();
+    settings.datasources[0].kind = SourceKind::Postgres;
+    has(file(&generate(&project, &settings).unwrap(), "go.mod"), "github.com/jackc/puddle/v2 ");
 }
 
 #[test]
@@ -378,4 +423,38 @@ fn the_program_dispatches_to_the_handlers() {
     has(main, "\tcase \"OrderForm\":\n\t\tswitch event {\n\t\tcase \"open\":\n\t\t\treturn \"window_opened\", true\n");
     has(main, "\t\tcase \"approve_clicked\":\n\t\t\tw := &OrderFormWindow{}\n\t\t\tif err := state.Decode(w); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\tif err := w.approveClicked(db, ui); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\treturn ui.Reply(state.Window, w)\n");
     has(main, "\tcase \"Customer\":\n\t\trows, err := clarity.All[Customer](db)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tfor _, r := range rows {\n\t\t\toptions = append(options, clarity.RefOption{ID: r.ID, Text: r.Name})\n\t\t}\n");
+}
+
+/// An external source (D1e) on Go: opened with its own driver but never
+/// migrated, its records read and written by its own table, key and column
+/// names, with a read-only one on a server database.
+#[test]
+fn an_external_source_keeps_its_names_and_is_never_migrated() {
+    use clarity_project::DataSource;
+    use clarity_spec::SourceRef;
+    let erp = "module erp\nuse sales\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n    total: money\n\nfunction big(limit: money) -> list<Invoice>\n    return find i in Invoice where i.number contains \"INV\" and i.total > limit order by i.number\n";
+    let mut project = load_sources([("sales.clarity", SALES), ("erp.clarity", erp)]);
+    project.sources = vec![SourceRef::sql("main"), SourceRef { readonly: true, ..SourceRef::sql("erp").external() }];
+    let mut settings = settings();
+    settings.datasources.push(DataSource {
+        name: "erp".into(),
+        kind: SourceKind::Mssql,
+        url: "env:ERP_DATABASE".into(),
+        auth: None,
+        external: true,
+        readonly: true,
+    });
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "main.go"), "{Name: \"erp\", Dialect: clarity.Mssql, At: \"env:ERP_DATABASE\"}");
+    let schema = file(&files, "schema.go");
+    assert!(!schema.contains("\"erp\"") && !schema.contains("tblInvoice"), "{schema}");
+    let erp_go = file(&files, "erp.go");
+    has(erp_go, "func (*Invoice) Source() string {\n\treturn \"erp\"\n}");
+    has(erp_go, "func (*Invoice) Table() string {\n\treturn \"tblInvoice\"\n}");
+    has(erp_go, "func (*Invoice) Key() string {\n\treturn \"InvoiceID\"\n}");
+    has(erp_go, "[]string{\"InvNo\", \"total\"}");
+    has(erp_go, "clarity.Contains(\"InvNo\", \"INV\")");
+    has(erp_go, ".Order(\"InvNo\", false)");
+    // Its database's driver comes along, though Clarity owns no table there.
+    assert!(files.iter().any(|f| f.path == "clarity/mssql.go"));
 }

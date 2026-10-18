@@ -9,6 +9,9 @@ use std::process::Command;
 
 use clarity_project::{Backend, SourceKind, Ui};
 
+mod scratch;
+use scratch::empty;
+
 /// Generates the example `name` (examples/<name>.clarity) as C# with
 /// Avalonia, builds it with warnings as errors and runs `--check`.
 fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
@@ -62,20 +65,6 @@ fn the_shop_example_builds_and_runs_in_csharp() {
 #[ignore]
 fn the_records_example_builds_and_runs_in_csharp() {
     builds_and_runs_in_csharp("records", "Records", "de");
-}
-
-/// Empties a scratch database: drops every table of `tables` and the
-/// migration record, as often as references between them ask.
-fn empty(at: &str, dialect: clarity_runtime::Dialect, tables: &[String]) {
-    let db = clarity_runtime::Db::connect(&[("main", dialect, at)]).unwrap();
-    // The tables of the server scenario (tests/servers.rs) may be there too.
-    let mut left: Vec<String> = tables.iter().cloned().chain(["purchase", "order", "clarity_schema"].map(String::from)).collect();
-    left.sort_unstable();
-    left.dedup();
-    for _ in 0..=left.len() {
-        left.retain(|t| db.batch("main", &format!("DROP TABLE IF EXISTS {}", dialect.quote(t))).is_err());
-    }
-    assert!(left.is_empty(), "cannot drop {left:?}");
 }
 
 /// The shop on each server database: the project builds with only that

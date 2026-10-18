@@ -181,6 +181,14 @@ public class ServerTests
         Assert.Single(db.Find<Before>(new Query().Filter(Cond.Compare("since", Op.Eq, since))));
         Assert.Equal(["Grace Hopper"], Names(db.Find<Before>(new Query().Filter(Cond.OneOf("kind", ["Private"]))), c => c.Name));
 
+        // Through a reference: the customer's name, in a condition and an order.
+        Assert.Equal(["ORD-1"], Names(db.Find<Order>(new Query().Filter(Cond.Through("customer", "customer", "id", Cond.Contains("name", "LOVE")))), o => o.Number));
+        var grace2 = new Order { Number = "ORD-G", Customer = grace.Id };
+        db.Save(grace2);
+        var byName = new Query().Filter(Cond.IsNone("customer").Negated()).OrderThrough([new Hop("customer", "customer", "id")], "name", true, false);
+        Assert.Equal(["ORD-G", "ORD-1"], Names(db.Find<Order>(byName), o => o.Number));
+        db.Delete(grace2);
+
         Assert.Equal(1, db.Migrate(steps));
         Assert.Equal(0, db.Migrate(steps));
         Assert.Equal(2, db.SchemaVersion());

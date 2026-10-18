@@ -9,15 +9,22 @@ Current state: the designer for windows and the application frame, with every pa
 ```
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
 crates/clarity-project/  the project file: stack, output and data sources
-crates/clarity-gen/      the transpiler: a project as a Rust and Tauri application
-crates/clarity-runtime/  the library generated applications use (copied into each)
+crates/clarity-gen/      the transpiler: a project as a Rust, C# or Go application
 crates/clarity-cli/      the `clarity` command
+runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
+runtimes/csharp/         the runtime of generated C# applications, with Avalonia
+runtimes/go/             the runtime of generated Go applications, with Wails
+conformance/             cases every runtime and renderer must pass alike
 app/                     Clarity: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build
   src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
 examples/shop.clarity    example project: customers and orders
 examples/shop/           its modules
+examples/records.clarity example project: a record collection, with albums, tracks and loans
+examples/records/        its modules
 ```
+
+Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests` and the `_test.go` files next to the Go code.
 
 ## Requirements
 

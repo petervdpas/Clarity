@@ -6,6 +6,7 @@ mod external;
 mod themes;
 mod translations;
 mod migrations;
+mod pictures;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -101,8 +102,11 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     ) && event.paths.iter().any(|p| {
         let folder = p.parent();
+        let images = dir.join(clarity_spec::images::IMAGES_DIR);
         p == file
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
+            || *p == images
+            || folder == Some(&images)
     })
 }
 
@@ -119,11 +123,14 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    // The migration steps too, once the project has them.
+    // The migration steps and the pictures too, once the project has them.
     let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
+    let images = dir.join(clarity_spec::images::IMAGES_DIR);
     let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    if steps.is_dir() {
-        folders.push(&steps);
+    for extra in [&steps, &images] {
+        if extra.is_dir() {
+            folders.push(extra);
+        }
     }
     for folder in folders {
         watcher
@@ -708,7 +715,8 @@ pub fn run() {
             translations::set_translation,
             translations::add_language,
             themes::theme_styles,
-            themes::theme_starter
+            themes::theme_starter,
+            pictures::project_picture
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");
@@ -844,6 +852,16 @@ mod tests {
         assert!(changes(EventKind::Modify(ModifyKind::Name(RenameMode::To)), FILE));
         // Migration steps belong to the project too.
         assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/migrations/0002.clarity"));
+    }
+
+    /// A picture added, changed or removed, and the images folder itself.
+    #[test]
+    fn reacts_to_changes_of_the_pictures() {
+        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/images/logo.png"));
+        assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/images/logo.png"));
+        assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/images/logo.png"));
+        assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/images"));
+        assert!(!changes(EventKind::Create(CreateKind::File), "/p/shop/notes.txt"));
     }
 
     #[test]

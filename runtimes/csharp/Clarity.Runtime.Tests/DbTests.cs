@@ -1,5 +1,5 @@
 // Records written the way Clarity generates them, stored in SQLite. The same
-// behavior as the Rust runtime's tests (clarity-runtime/tests/db.rs).
+// behavior as the Rust runtime's tests (runtimes/rust/tests/db.rs).
 
 using Clarity.Runtime;
 using Xunit;

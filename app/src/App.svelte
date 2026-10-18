@@ -3,6 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import { loadPicturesWith } from "./lib/pictures.svelte";
   import FrameView from "./lib/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
@@ -196,7 +197,16 @@
     }
   }
 
+  /** The pictures the designer has loaded, by the names of the images folder. */
+  let pictureNames: string | null = null;
+
   function applyPreview(next: Preview) {
+    // Pictures load again when the images folder changes.
+    const names = JSON.stringify(next.project.images?.map((i) => i.name) ?? []);
+    if (names !== pictureNames) {
+      pictureNames = names;
+      loadPicturesWith((name) => invoke<string>("project_picture", { name }));
+    }
     preview = next;
     // Keep the open windows that still exist after an edit.
     const kept = stack.filter((o) => exists(next, o));

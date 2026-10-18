@@ -3,7 +3,7 @@
 
 use std::str::FromStr;
 
-use clarity_runtime::{Cond, Decimal, Dialect, NaiveDate, Op, Query, SqlValue};
+use clarity_runtime::{Cond, Decimal, Dialect, Hop, NaiveDate, Op, Query, SqlValue};
 use serde_json::Value;
 
 const CASES: &str = include_str!("../../../conformance/queries.json");
@@ -72,6 +72,7 @@ fn cond(value: &Value) -> Cond {
             left.or(right)
         }
         "not" => cond(inner).negated(),
+        "through" => Cond::through(name(&inner["column"]), name(&inner["table"]), name(&inner["key"]), cond(&inner["filter"])),
         other => panic!("unknown condition {other}"),
     }
 }
@@ -84,10 +85,17 @@ fn query(value: &Value) -> Query {
     for key in value.get("order").and_then(Value::as_array).into_iter().flatten() {
         let column = name(&key["column"]);
         let descending = key["descending"].as_bool().expect("descending");
-        query = if key["numeric"].as_bool().expect("numeric") {
-            query.order_number(column, descending)
-        } else {
-            query.order(column, descending)
+        let hops: Vec<Hop> = key
+            .get("through")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|h| Hop::new(name(&h["column"]), name(&h["table"]), name(&h["key"])))
+            .collect();
+        query = match (hops.is_empty(), key["numeric"].as_bool().expect("numeric")) {
+            (true, true) => query.order_number(column, descending),
+            (true, false) => query.order(column, descending),
+            (false, numeric) => query.order_through(&hops, column, descending, numeric),
         };
     }
     query

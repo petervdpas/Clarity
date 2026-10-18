@@ -53,8 +53,9 @@ page AlbumBrowse: window
     on return: window_returned
 
     heading "The collection" at 1,1 span 6
-    label "Title" at 1,2 span 2 for title_filter
-    textbox name title_filter at 3,2 span 5 placeholder "Part of the title" on change: filter_changed
+    image at 12,1 span 1 rows 1 source "logo.png" tooltip "My Record Collection"
+    label "Find" at 1,2 span 2 for title_filter
+    textbox name title_filter at 3,2 span 5 placeholder "Part of the title or the artist" on change: filter_changed
     table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: open_clicked
     button "New album" at 9,11 span 2 on click -> AlbumForm
     button "Open" at 11,11 span 2 on click: open_clicked
@@ -96,7 +97,6 @@ page AlbumForm: window
                     number name rating at 3,3 span 1 bind album.rating
                     help at 4,3 span 3 for rating
                 tab "Cover"
-                    image at 1,1 span 3 rows 4 source "cover.jpg"
                     label "Cover file" at 1,5 span 2 for cover
                     textbox name cover at 3,5 span 4 bind album.cover
                 tab "Notes"
@@ -173,7 +173,7 @@ code AlbumBrowse
         filter_changed()
 
     handler filter_changed
-        albums = find a in Album where a.title contains title_filter.text order by a.title
+        albums = find a in Album where a.title contains title_filter.text or a.artist.name contains title_filter.text order by a.artist.name, a.title
 
     handler open_clicked
         open AlbumForm with album = grid.selected

@@ -10,7 +10,7 @@
 //! ```
 
 use clarity_project::SourceKind;
-use clarity_runtime::{Cond, Db, Decimal, Dialect, Error, Id, NaiveDate, NaiveDateTime, Op, Query, Record, SqlValue, sql};
+use clarity_runtime::{Cond, Db, Decimal, Dialect, Error, Hop, Id, NaiveDate, NaiveDateTime, Op, Query, Record, SqlValue, sql};
 
 const SHOP: &str = "module shop
 
@@ -315,6 +315,15 @@ fn migrates_and_keeps_records(variable: &str, dialect: Dialect, kind: SourceKind
     assert_eq!(db.find::<Before>(&on_day).unwrap().len(), 1);
     let one_of = Query::new().filter(Cond::one_of("kind", vec![sql::text("Private")]));
     assert_eq!(names(&db.find::<Before>(&one_of).unwrap(), |c| &c.name), ["Grace Hopper"]);
+
+    // Through a reference: the customer's name, in a condition and an order.
+    let through = Query::new().filter(Cond::through("customer", "customer", "id", Cond::contains("name", "LOVE")));
+    assert_eq!(names(&db.find::<Order>(&through).unwrap(), |o| &o.number), ["ORD-1"]);
+    let mut grace2 = Order { number: "ORD-G".into(), customer: Some(grace.id), ..Order::default() };
+    db.save(&mut grace2).unwrap();
+    let by_name = Query::new().filter(Cond::is_none("customer").negated()).order_through(&[Hop::new("customer", "customer", "id")], "name", true, false);
+    assert_eq!(names(&db.find::<Order>(&by_name).unwrap(), |o| &o.number), ["ORD-G", "ORD-1"]);
+    db.delete(&grace2).unwrap();
 
     assert_eq!(db.migrate(&steps).unwrap(), 1);
     assert_eq!(db.migrate(&steps).unwrap(), 0);

@@ -1,5 +1,5 @@
 // Data events: a record whose entity has them runs them around its save and
-// delete, in one transaction with them (clarity-runtime/tests/data_events.rs).
+// delete, in one transaction with them (runtimes/rust/tests/data_events.rs).
 
 using Clarity.Runtime;
 using Xunit;

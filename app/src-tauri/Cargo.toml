@@ -20,5 +20,6 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
 notify = "8"
+base64 = "0.22"
 ts-rs.workspace = true
 tauri-plugin-dialog = "2"

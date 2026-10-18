@@ -5,6 +5,7 @@
 package clarity
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -48,6 +49,15 @@ type isTrueCond struct{ column string }
 
 type isNoneCond struct{ column string }
 
+// Hop is a step through a reference: the column that holds it, and the
+// table and key column of the records it refers to.
+type Hop struct{ Column, Table, Key string }
+
+type throughCond struct {
+	hop   Hop
+	inner Cond
+}
+
 type andCond struct{ left, right Cond }
 
 type orCond struct{ left, right Cond }
@@ -78,6 +88,12 @@ func IsTrue(column string) Cond { return isTrueCond{column} }
 
 // IsNone is a column with no value: an empty date or reference (none).
 func IsNone(column string) Cond { return isNoneCond{column} }
+
+// Through is cond on the record that column refers to, in table by key
+// (a.artist.name contains x).
+func Through(column, table, key string, cond Cond) Cond {
+	return throughCond{Hop{column, table, key}, cond}
+}
 
 func And(left, right Cond) Cond { return andCond{left, right} }
 
@@ -123,6 +139,12 @@ func (c isTrueCond) sql(d Dialect, _ *[]any) string { return d.isTrue(c.column) 
 
 func (c isNoneCond) sql(d Dialect, _ *[]any) string { return d.Quote(c.column) + " IS NULL" }
 
+// The inner condition names the columns of the referred table, which a
+// subquery's own FROM resolves first, even for a table that refers to itself.
+func (c throughCond) sql(d Dialect, params *[]any) string {
+	return d.Quote(c.hop.Column) + " IN (SELECT " + d.Quote(c.hop.Key) + " FROM " + d.Quote(c.hop.Table) + " WHERE " + c.inner.sql(d, params) + ")"
+}
+
 func (c andCond) sql(d Dialect, params *[]any) string {
 	left := c.left.sql(d, params)
 	return "(" + left + " AND " + c.right.sql(d, params) + ")"
@@ -135,9 +157,40 @@ func (c orCond) sql(d Dialect, params *[]any) string {
 
 func (c notCond) sql(d Dialect, params *[]any) string { return "NOT (" + c.inner.sql(d, params) + ")" }
 
+// orderKey is a column to sort by, perhaps of a record the references in
+// through lead to.
 type orderKey struct {
+	through             []Hop
 	column              string
 	descending, numeric bool
+}
+
+// sql is the key as SQL. Through references, each step is a subquery on its
+// own alias (t1, t2, ...) that finds the referred record by the column of
+// the step before.
+func (o orderKey) sql(d Dialect, table string) string {
+	direction := ""
+	if o.descending {
+		direction = " DESC"
+	}
+	if len(o.through) == 0 {
+		return columnSQL(d, o.column, o.numeric) + direction
+	}
+	var step func(outer string, at int) string
+	step = func(outer string, at int) string {
+		if at == len(o.through) {
+			column := outer + "." + d.Quote(o.column)
+			if o.numeric {
+				return d.number(column)
+			}
+			return column
+		}
+		hop := o.through[at]
+		alias := d.Quote(fmt.Sprintf("t%d", at+1))
+		return "(SELECT " + step(alias, at+1) + " FROM " + d.Quote(hop.Table) + " " + alias +
+			" WHERE " + alias + "." + d.Quote(hop.Key) + " = " + outer + "." + d.Quote(hop.Column) + ")"
+	}
+	return step(d.Quote(table), 0) + direction
 }
 
 // Query is the records to read: a condition and an order. Without an order,
@@ -153,13 +206,18 @@ func (q Query) Filter(cond Cond) Query {
 }
 
 func (q Query) Order(column string, descending bool) Query {
-	q.order = append(append([]orderKey(nil), q.order...), orderKey{column, descending, false})
-	return q
+	return q.OrderThrough(nil, column, descending, false)
 }
 
 // OrderNumber is Order for a decimal or money column.
 func (q Query) OrderNumber(column string, descending bool) Query {
-	q.order = append(append([]orderKey(nil), q.order...), orderKey{column, descending, true})
+	return q.OrderThrough(nil, column, descending, true)
+}
+
+// OrderThrough is Order by a column of the record the references in through
+// lead to (order by a.artist.name); numeric for a decimal or money column.
+func (q Query) OrderThrough(through []Hop, column string, descending, numeric bool) Query {
+	q.order = append(append([]orderKey(nil), q.order...), orderKey{through, column, descending, numeric})
 	return q
 }
 
@@ -173,11 +231,7 @@ func (q Query) SQL(d Dialect, table, key, columns string) (string, []any) {
 	}
 	keys := make([]string, 0, len(q.order)+1)
 	for _, o := range q.order {
-		direction := ""
-		if o.descending {
-			direction = " DESC"
-		}
-		keys = append(keys, columnSQL(d, o.column, o.numeric)+direction)
+		keys = append(keys, o.sql(d, table))
 	}
 	keys = append(keys, d.Quote(key))
 	return sql + " ORDER BY " + strings.Join(keys, ", "), params

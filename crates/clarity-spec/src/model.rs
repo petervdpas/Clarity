@@ -519,6 +519,9 @@ pub struct Project {
     /// The themes the application offers, the first being the one it starts
     /// with; empty when the project file names none (design section 1.5, T1).
     pub themes: Vec<String>,
+    /// The pictures of the project's `images` folder, by name. None when
+    /// the project was loaded without its folder.
+    pub images: Option<Vec<crate::images::ProjectImage>>,
 }
 
 impl Project {

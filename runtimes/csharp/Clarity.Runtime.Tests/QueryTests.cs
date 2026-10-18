@@ -90,6 +90,8 @@ public class QueryTests
             }
             case "not":
                 return ToCond(inner).Negated();
+            case "through":
+                return Cond.Through(Column(), inner.GetProperty("table").GetString()!, inner.GetProperty("key").GetString()!, ToCond(inner.GetProperty("filter")));
             default:
                 throw new ArgumentException($"unknown condition {field.Name}");
         }
@@ -106,9 +108,18 @@ public class QueryTests
             {
                 var column = key.GetProperty("column").GetString()!;
                 var descending = key.GetProperty("descending").GetBoolean();
-                query = key.GetProperty("numeric").GetBoolean()
-                    ? query.OrderNumber(column, descending)
-                    : query.Order(column, descending);
+                var numeric = key.GetProperty("numeric").GetBoolean();
+                if (key.TryGetProperty("through", out var through))
+                {
+                    var hops = through.EnumerateArray()
+                        .Select(h => new Hop(h.GetProperty("column").GetString()!, h.GetProperty("table").GetString()!, h.GetProperty("key").GetString()!))
+                        .ToArray();
+                    query = query.OrderThrough(hops, column, descending, numeric);
+                }
+                else
+                {
+                    query = numeric ? query.OrderNumber(column, descending) : query.Order(column, descending);
+                }
             }
         }
         return query;

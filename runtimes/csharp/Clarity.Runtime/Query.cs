@@ -16,6 +16,12 @@ public enum Op
 }
 
 /// <summary>
+/// A step through a reference: the column that holds it, and the table and
+/// key column of the records it refers to.
+/// </summary>
+public sealed record Hop(string Column, string Table, string Key);
+
+/// <summary>
 /// A condition on the columns of one table. Values are what ADO.NET takes:
 /// string, long, decimal, bool, DateOnly, DateTime or null.
 /// </summary>
@@ -36,6 +42,9 @@ public abstract record Cond
     sealed record IsTrueCond(string Column) : Cond;
 
     sealed record IsNoneCond(string Column) : Cond;
+
+    /// <summary>The record the reference in the hop's column refers to meets the condition.</summary>
+    sealed record ThroughCond(Hop Hop, Cond Inner) : Cond;
 
     sealed record AndCond(Cond Left, Cond Right) : Cond;
 
@@ -60,6 +69,9 @@ public abstract record Cond
     /// <summary>A column with no value: an empty date or reference (<c>none</c>).</summary>
     public static Cond IsNone(string column) => new IsNoneCond(column);
 
+    /// <summary>A condition on the record that <paramref name="column"/> refers to (<c>a.artist.name contains x</c>).</summary>
+    public static Cond Through(string column, string table, string key, Cond cond) => new ThroughCond(new Hop(column, table, key), cond);
+
     public Cond And(Cond other) => new AndCond(this, other);
 
     public Cond Or(Cond other) => new OrCond(this, other);
@@ -81,6 +93,10 @@ public abstract record Cond
             OneOfCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} IN ({string.Join(", ", c.Values.Select(v => Param(v, c.Numeric)))})",
             IsTrueCond c => dialect.IsTrue(c.Column),
             IsNoneCond c => $"{dialect.Quote(c.Column)} IS NULL",
+            // The inner condition names the columns of the referred table,
+            // which a subquery's own FROM resolves first, even for a table
+            // that refers to itself.
+            ThroughCond c => $"{dialect.Quote(c.Hop.Column)} IN (SELECT {dialect.Quote(c.Hop.Key)} FROM {dialect.Quote(c.Hop.Table)} WHERE {c.Inner.Sql(dialect, parameters)})",
             AndCond c => $"({c.Left.Sql(dialect, parameters)} AND {c.Right.Sql(dialect, parameters)})",
             OrCond c => $"({c.Left.Sql(dialect, parameters)} OR {c.Right.Sql(dialect, parameters)})",
             NotCond c => $"NOT ({c.Inner.Sql(dialect, parameters)})",
@@ -106,7 +122,7 @@ public abstract record Cond
 public sealed record Query
 {
     Cond? filter;
-    readonly List<(string Column, bool Descending, bool Numeric)> order = [];
+    readonly List<(Hop[] Through, string Column, bool Descending, bool Numeric)> order = [];
 
     public Query Filter(Cond cond)
     {
@@ -114,16 +130,19 @@ public sealed record Query
         return this;
     }
 
-    public Query Order(string column, bool descending)
-    {
-        order.Add((column, descending, false));
-        return this;
-    }
+    public Query Order(string column, bool descending) => OrderThrough([], column, descending, false);
 
     /// <summary><see cref="Order"/> for a decimal or money column.</summary>
-    public Query OrderNumber(string column, bool descending)
+    public Query OrderNumber(string column, bool descending) => OrderThrough([], column, descending, true);
+
+    /// <summary>
+    /// <see cref="Order"/> by a column of the record the references in
+    /// <paramref name="through"/> lead to (<c>order by a.artist.name</c>);
+    /// <paramref name="numeric"/> for a decimal or money column.
+    /// </summary>
+    public Query OrderThrough(Hop[] through, string column, bool descending, bool numeric)
     {
-        order.Add((column, descending, true));
+        order.Add((through, column, descending, numeric));
         return this;
     }
 
@@ -139,10 +158,33 @@ public sealed record Query
         if (filter is not null)
             sql += " WHERE " + filter.Sql(dialect, parameters);
         var keys = order
-            .Select(o => ColumnSql(dialect, o.Column, o.Numeric) + (o.Descending ? " DESC" : ""))
+            .Select(o => OrderSql(dialect, table, o.Through, o.Column, o.Numeric) + (o.Descending ? " DESC" : ""))
             .Append(dialect.Quote(key));
         sql += " ORDER BY " + string.Join(", ", keys);
         return (sql, parameters);
+    }
+
+    /// <summary>
+    /// An order key. Through references, each step is a subquery on its own
+    /// alias (t1, t2, ...) that finds the referred record by the column of the
+    /// step before.
+    /// </summary>
+    static string OrderSql(Dialect dialect, string table, Hop[] through, string column, bool numeric)
+    {
+        if (through.Length == 0)
+            return ColumnSql(dialect, column, numeric);
+        string Step(string outer, int at)
+        {
+            if (at == through.Length)
+            {
+                var qualified = $"{outer}.{dialect.Quote(column)}";
+                return numeric ? dialect.Number(qualified) : qualified;
+            }
+            var hop = through[at];
+            var alias = dialect.Quote($"t{at + 1}");
+            return $"(SELECT {Step(alias, at + 1)} FROM {dialect.Quote(hop.Table)} {alias} WHERE {alias}.{dialect.Quote(hop.Key)} = {outer}.{dialect.Quote(hop.Column)})";
+        }
+        return Step(dialect.Quote(table), 0);
     }
 
     /// <summary>A column as a comparison reads it.</summary>

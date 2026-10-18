@@ -703,6 +703,10 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</ListBox>");
             }
+            WidgetKind::Image if p.source.is_some() => {
+                let source = p.source.as_deref().unwrap_or_default();
+                let _ = writeln!(out, "{pad}<Image {at} Source=\"/images/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
+            }
             WidgetKind::Image | WidgetKind::Canvas => {
                 let what = if p.kind == WidgetKind::Image { "Image" } else { "Canvas" };
                 let source = p.source.as_deref().or(p.renderer.as_deref()).unwrap_or_default();

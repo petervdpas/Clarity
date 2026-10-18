@@ -286,7 +286,22 @@ pub fn renderer_files(project: &Project) -> Vec<OutFile> {
     if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
         index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
     }
+    files.extend(picture_files(project, "ui/images"));
     files
+}
+
+/// The pictures of the project's images folder, in `folder` of the output.
+pub(crate) fn picture_files(project: &Project, folder: &str) -> Vec<OutFile> {
+    project
+        .images
+        .iter()
+        .flatten()
+        .map(|image| OutFile {
+            path: format!("{folder}/{}", image.name),
+            text: String::new(),
+            bytes: Some(std::borrow::Cow::Owned(image.bytes.clone())),
+        })
+        .collect()
 }
 
 /// The windows, the frame and the data dictionary, for the renderer. File

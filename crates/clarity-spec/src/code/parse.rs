@@ -669,13 +669,19 @@ fn parse_find(cursor: &mut Cursor) -> ParseResult<Expr> {
         loop {
             let key_var = cursor.expect_ident("a field, as in 'c.name'")?;
             cursor.expect(TokenKind::Dot, "'.' and a field, as in 'c.name'")?;
-            let field = cursor.expect_ident("a field")?;
+            let mut field = cursor.expect_ident("a field")?;
+            // Through references: `a.artist.name`.
+            let mut through = Vec::new();
+            while cursor.eat(TokenKind::Dot) {
+                let next = cursor.expect_ident("a field")?;
+                through.push(std::mem::replace(&mut field, next));
+            }
             end = field.span;
             let descending = cursor.peek().is_some_and(|t| t.text == "desc");
             if descending {
                 end = cursor.next().map(|t| t.span).unwrap_or(end);
             }
-            order.push(OrderKey { var: key_var, field, descending });
+            order.push(OrderKey { var: key_var, through, field, descending });
             if !cursor.eat(TokenKind::Comma) {
                 break;
             }

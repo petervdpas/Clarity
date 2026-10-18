@@ -108,3 +108,16 @@ fn steps_for_a_source_the_project_does_not_have_are_an_error() {
         project.diagnostics
     );
 }
+
+/// A query runs in one database: it cannot go through a reference into
+/// another data source.
+#[test]
+fn a_query_stays_in_its_own_database() {
+    let erp = format!("{ERP}\nfunction of(name: text) -> list<Invoice>\n    return find i in Invoice where i.customer.name == name order by i.customer.name\n");
+    let project = load(&erp, &[]);
+    let errors = errors(&project);
+    assert!(
+        errors.iter().filter(|e| *e == "'i.customer' refers to Customer in data source 'main'; a query reads one database").count() == 2,
+        "{errors:#?}"
+    );
+}

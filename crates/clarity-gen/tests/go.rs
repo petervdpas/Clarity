@@ -458,3 +458,16 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     // Its database's driver comes along, though Clarity owns no table there.
     assert!(files.iter().any(|f| f.path == "clarity/mssql.go"));
 }
+
+/// X2: a query through a reference: the condition and the order read the
+/// referred record in a subquery.
+#[test]
+fn a_query_goes_through_a_reference() {
+    let source = format!(
+        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+    );
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "sales.go");
+    has(sales, ".Filter(clarity.And(clarity.Through(\"customer\", \"customer\", \"id\", clarity.Contains(\"name\", name)), clarity.Through(\"customer\", \"customer\", \"id\", clarity.Number(\"credit_limit\", clarity.Gt, ");
+    has(sales, ".OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"name\", true, false).OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"credit_limit\", false, true)");
+}

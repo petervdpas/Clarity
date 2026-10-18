@@ -302,7 +302,7 @@ fn queries_become_database_queries() {
 #[test]
 fn every_runtime_source_file_is_copied() {
     let files = files();
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../clarity-runtime/src");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../runtimes/rust/src");
     for entry in std::fs::read_dir(dir).unwrap() {
         let name = entry.unwrap().file_name().into_string().unwrap();
         let path = format!("clarity-runtime/src/{name}");
@@ -652,4 +652,21 @@ fn a_duration_is_seconds_with_its_own_slot() {
     assert!(music.contains("pub length: i64,"), "{music}");
     assert!(music.contains("            length: 180i64,"), "{music}");
     assert!(music.contains(".with(\"track.length\", Slot::duration(track.length))"), "{music}");
+}
+
+/// X2: a query through a reference: the condition and the order read the
+/// referred record in a subquery.
+#[test]
+fn a_query_goes_through_a_reference() {
+    let source = format!(
+        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+    );
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    for expected in [
+        ".filter(Cond::through(\"customer\", \"customer\", \"id\", Cond::contains(\"name\", &name)).and(Cond::through(\"customer\", \"customer\", \"id\", Cond::number(\"credit_limit\", Op::Gt, ",
+        ".order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"name\", true, false).order_through(&[Hop::new(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true))?",
+    ] {
+        assert!(sales.contains(expected), "{expected}\nin\n{sales}");
+    }
 }

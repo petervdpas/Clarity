@@ -8,4 +8,9 @@ export type OrderKey = {
 /**
  * The record name before the dot, as written.
  */
-var: Ident, field: Ident, descending: boolean, };
+var: Ident, 
+/**
+ * The reference fields between the record and the field, as in
+ * `a.artist.name`: the field is of the record they lead to.
+ */
+through: Array<Ident>, field: Ident, descending: boolean, };

@@ -290,6 +290,9 @@ pub enum ExprKind {
 pub struct OrderKey {
     /// The record name before the dot, as written.
     pub var: Ident,
+    /// The reference fields between the record and the field, as in
+    /// `a.artist.name`: the field is of the record they lead to.
+    pub through: Vec<Ident>,
     pub field: Ident,
     pub descending: bool,
 }

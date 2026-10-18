@@ -122,12 +122,6 @@ fn a_query_compares_a_field_with_a_value() {
         "a query compares a field of c with a value, as in 'c.name == x'",
     );
 
-    let through_ref = with("o.total > 100", "o.customer.name == \"Ada\"");
-    assert_has(
-        &errors(&through_ref),
-        "a query compares a field of o itself; 'o.customer.name' goes through a reference",
-    );
-
     let not_bool = with("where c.kind in [Business]", "where c.name");
     assert_has(&errors(&not_bool), "a condition must be bool, not text");
 }
@@ -163,4 +157,36 @@ fn handlers_run_other_handlers_of_their_window() {
 fn the_query_variable_is_only_inside_the_query() {
     let source = with("        let all = find c in Customer\n", "        let all = find c in Customer\n        let x = c.name\n");
     assert_has(&errors(&source), "unknown name 'c'");
+}
+
+/// X2: a condition or an order may go through references, to the fields of
+/// the records they refer to; the database reads them in a subquery.
+#[test]
+fn a_query_goes_through_references() {
+    let through = with(
+        "orders = find o in Order where o.customer == customer and o.total > 100",
+        "orders = find o in Order where o.customer.name contains name_filter.text and o.customer.active and o.customer.kind in [Business] and o.customer.since != none and o.customer.credit_limit > 10 order by o.customer.name desc, o.number",
+    );
+    assert_eq!(problems(&through), Vec::new());
+
+    let (file, _) = parse(&through, "shop.clarity");
+    let order = file.code[0].handlers[1].body[1].kind.clone();
+    let StmtKind::Assign { value, .. } = order else { panic!("{order:#?}") };
+    let ExprKind::Find { order, .. } = &value.kind else { panic!("{value:#?}") };
+    assert_eq!(order[0].through.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["customer"]);
+    assert_eq!(order[0].field.name, "name");
+    assert!(order[0].descending);
+    assert!(order[1].through.is_empty());
+}
+
+#[test]
+fn a_query_goes_through_references_only() {
+    let text = with("o.total > 100", "o.number.name == \"Ada\"");
+    assert_has(&errors(&text), "'o.number' is text, not a reference; a query goes through references only");
+
+    let order = with("order by c.name\n", "order by c.since.year\n");
+    assert_has(&errors(&order), "'c.since' is a date, not a reference; a query goes through references only");
+
+    let missing = with("o.total > 100", "o.customer.nickname == \"Ada\"");
+    assert_has(&errors(&missing), "Customer has no field 'nickname'");
 }

@@ -587,9 +587,20 @@ impl<'a> Emitter<'a> {
             query.push_str(&format!(".Filter({cond})"));
         }
         for key in order {
-            let numeric = self.field_type(entity, &key.field.name).is_some_and(|t| is_stored_number(&t));
-            let method = if numeric { "OrderNumber" } else { "Order" };
-            query.push_str(&format!(".{method}({}, {})", string(&self.column(entity, &key.field.name)), key.descending));
+            let Some(path) = crate::query::order_path(self.project, entity, key) else {
+                self.errors.push(format!("{entity} cannot be ordered by '{}'", key.field.name));
+                continue;
+            };
+            let numeric = self.field_type(&path.entity, &path.field).is_some_and(|t| is_stored_number(&t));
+            let column = string(&self.column(&path.entity, &path.field));
+            if path.hops.is_empty() {
+                let method = if numeric { "OrderNumber" } else { "Order" };
+                query.push_str(&format!(".{method}({column}, {})", key.descending));
+            } else {
+                let hops: Vec<String> =
+                    path.hops.iter().map(|h| format!("new Hop({}, {}, {})", string(&h.column), string(&h.table), string(&h.key))).collect();
+                query.push_str(&format!(".OrderThrough([{}], {column}, {}, {numeric})", hops.join(", "), key.descending));
+            }
         }
         format!("{}.Find<{entity}>({query})", self.db)
     }
@@ -597,12 +608,8 @@ impl<'a> Emitter<'a> {
     /// A query condition as a `Cond`. The checker made sure each comparison
     /// has a field of `var` on one side and a value on the other.
     fn cond(&mut self, expr: &Expr, var: &str, entity: &str) -> String {
-        let field_of = |e: &Expr| match &e.kind {
-            ExprKind::Member { object, member } if matches!(&object.kind, ExprKind::Name { name } if name == var) => {
-                Some(member.name.clone())
-            }
-            _ => None,
-        };
+        let project = self.project;
+        let path_of = |e: &Expr| crate::query::field_path(project, entity, var, e);
         match &expr.kind {
             ExprKind::Binary { op: BinaryOp::And, left, right } => {
                 format!("{}.And({})", self.cond(left, var, entity), self.cond(right, var, entity))
@@ -613,45 +620,47 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("{}.Negated()", self.cond(operand, var, entity)),
             ExprKind::Binary { op, left, right } => {
                 // The field on the left: `5 < c.x` is `c.x > 5`.
-                let (column, value, op) = match (field_of(left), field_of(right)) {
-                    (Some(column), _) => (column, right, *op),
-                    (None, Some(column)) => (column, left, flipped(*op)),
+                let (path, value, op) = match (path_of(left), path_of(right)) {
+                    (Some(path), _) => (path, right, *op),
+                    (None, Some(path)) => (path, left, flipped(*op)),
                     (None, None) => {
                         self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                         return String::new();
                     }
                 };
-                let Some(ty) = self.field_type(entity, &column) else {
-                    self.errors.push(format!("{entity} has no field '{column}'"));
+                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                    self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
-                let name = string(&self.column(entity, &column));
-                if matches!(value.kind, ExprKind::Empty) {
+                let name = string(&self.column(&path.entity, &path.field));
+                let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("Cond.IsNone({name})");
-                    return if op == BinaryOp::Eq { test } else { format!("{test}.Negated()") };
-                }
-                if op == BinaryOp::Contains {
-                    return format!("Cond.Contains({name}, {})", self.value(value));
-                }
-                let constructor = if is_stored_number(&ty) { "Number" } else { "Compare" };
-                let value = self.sql_value(&ty, value);
-                format!("Cond.{constructor}({name}, Op.{}, {value})", op_name(op))
+                    if op == BinaryOp::Eq { test } else { format!("{test}.Negated()") }
+                } else if op == BinaryOp::Contains {
+                    format!("Cond.Contains({name}, {})", self.value(value))
+                } else {
+                    let constructor = if is_stored_number(&ty) { "Number" } else { "Compare" };
+                    let value = self.sql_value(&ty, value);
+                    format!("Cond.{constructor}({name}, Op.{}, {value})", op_name(op))
+                };
+                through(&path.hops, own)
             }
             ExprKind::In { value, options } => {
-                let Some(column) = field_of(value) else {
+                let Some(path) = path_of(value) else {
                     self.errors.push(format!("'{}' compares no field of {var}", print::expr(expr)));
                     return String::new();
                 };
-                let Some(ty) = self.field_type(entity, &column) else {
-                    self.errors.push(format!("{entity} has no field '{column}'"));
+                let Some(ty) = self.field_type(&path.entity, &path.field) else {
+                    self.errors.push(format!("{} has no field '{}'", path.entity, path.field));
                     return String::new();
                 };
                 let constructor = if is_stored_number(&ty) { "OneOfNumbers" } else { "OneOf" };
                 let values: Vec<String> = options.iter().map(|o| self.sql_value(&ty, o)).collect();
-                format!("Cond.{constructor}({}, [{}])", string(&self.column(entity, &column)), values.join(", "))
+                let own = format!("Cond.{constructor}({}, [{}])", string(&self.column(&path.entity, &path.field)), values.join(", "));
+                through(&path.hops, own)
             }
-            _ => match field_of(expr) {
-                Some(column) => format!("Cond.IsTrue({})", string(&self.column(entity, &column))),
+            _ => match path_of(expr) {
+                Some(path) => through(&path.hops, format!("Cond.IsTrue({})", string(&self.column(&path.entity, &path.field)))),
                 None => {
                     self.errors.push(format!("'{}' is not a condition on {var}", print::expr(expr)));
                     String::new()
@@ -693,4 +702,12 @@ impl<'a> Emitter<'a> {
         let TypeInfo::Record(owner) = self.types.type_of(object) else { return String::new() };
         format!("{}.{}", self.place(object), property(&owner, &member.name))
     }
+}
+
+/// A condition on the record the steps lead to, as one on the query's own
+/// record: each step a `Cond.Through`, the first one outermost.
+fn through(hops: &[crate::query::Hop], cond: String) -> String {
+    hops.iter().rev().fold(cond, |inner, h| {
+        format!("Cond.Through({}, {}, {}, {inner})", string(&h.column), string(&h.table), string(&h.key))
+    })
 }

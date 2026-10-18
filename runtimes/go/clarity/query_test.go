@@ -105,6 +105,8 @@ func caseCond(t *testing.T, value any) Cond {
 		return Or(l, r)
 	case "not":
 		return Not(caseCond(t, inner))
+	case "through":
+		return Through(field("column").(string), field("table").(string), field("key").(string), caseCond(t, field("filter")))
 	}
 	t.Fatalf("unknown condition %s", kind)
 	return nil
@@ -119,9 +121,19 @@ func caseQuery(t *testing.T, value map[string]any) Query {
 		for _, o := range order.([]any) {
 			key := o.(map[string]any)
 			descending, _ := key["descending"].(bool)
-			if numeric, _ := key["numeric"].(bool); numeric {
+			numeric, _ := key["numeric"].(bool)
+			through, hops := key["through"].([]any)
+			switch {
+			case hops:
+				var path []Hop
+				for _, h := range through {
+					hop := h.(map[string]any)
+					path = append(path, Hop{hop["column"].(string), hop["table"].(string), hop["key"].(string)})
+				}
+				query = query.OrderThrough(path, key["column"].(string), descending, numeric)
+			case numeric:
 				query = query.OrderNumber(key["column"].(string), descending)
-			} else {
+			default:
 				query = query.Order(key["column"].(string), descending)
 			}
 		}

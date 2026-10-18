@@ -11,4 +11,4 @@ clarity-project.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-clarity-runtime = { path = "../clarity-runtime", features = ["postgres", "mysql", "mssql"] }
+clarity-runtime = { path = "../../runtimes/rust", features = ["postgres", "mysql", "mssql"] }

@@ -26,7 +26,7 @@ use std::path::Path;
 
 pub use chrono::{NaiveDate, NaiveDateTime};
 pub use dialect::Dialect;
-pub use query::{Cond, Op, Query, contains};
+pub use query::{Cond, Hop, Op, Query, contains};
 pub use rust_decimal::Decimal;
 pub use sql::SqlValue;
 use store::{Driver, Failure};

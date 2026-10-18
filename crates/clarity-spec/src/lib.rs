@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
 pub mod formats;
+pub mod images;
 pub mod themes;
 pub mod translations;
 pub mod frame;
@@ -61,6 +62,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         sources: Vec::new(),
         locale: model::Locale::default(),
         themes: Vec::new(),
+        images: None,
         translations: BTreeMap::new(),
     }
 }
@@ -146,6 +148,7 @@ pub fn load_in<'a>(
     project.migrations = Some(steps);
     check::check_sources(&mut project);
     code::check::check_readonly(&mut project);
+    code::check::check_query_sources(&mut project);
     migrate::check(&mut project);
     project
 }
@@ -199,6 +202,9 @@ pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[
     );
     let translations = translation_sources(dir, replaced)?;
     translations::attach(&mut project, translations.iter().map(|(p, t)| (p.as_str(), t.as_str())));
+    if let Some(found) = images::image_files(dir)? {
+        images::attach(&mut project, found);
+    }
     Ok(project)
 }
 

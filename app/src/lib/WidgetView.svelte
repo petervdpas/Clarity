@@ -13,6 +13,7 @@
   import { useLive } from "./live";
   import { provideForm, useForm } from "./form";
   import { matchesShortcut } from "./shortcut";
+  import { pictureUrl } from "./pictures.svelte";
 
   let {
     preview,
@@ -420,10 +421,15 @@
         {/each}
       </ul>
     {:else if p.kind === "image"}
-      <div class="placeholder image">
-        <span>Image</span>
-        <code>{p.source ?? "no source"}</code>
-      </div>
+      {@const picture = p.source ? pictureUrl(p.source) : null}
+      {#if picture}
+        <img class="picture" src={picture} alt={p.tooltip ? tr(preview, p.tooltip) : ""} />
+      {:else}
+        <div class="placeholder image">
+          <span>Image</span>
+          <code>{p.source ?? "no source"}</code>
+        </div>
+      {/if}
     {:else if p.kind === "canvas"}
       <div class="placeholder canvas">
         <span>Canvas ({p.surface ?? "svg"})</span>
@@ -686,6 +692,13 @@
   .image > .content,
   .canvas > .content {
     align-items: stretch;
+  }
+
+  .picture {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: contain;
   }
 
   fieldset {

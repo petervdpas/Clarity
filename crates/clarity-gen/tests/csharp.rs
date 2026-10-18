@@ -408,3 +408,16 @@ fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
     has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Edit.TrackLength}}\"");
     has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Shown.TrackLength}}\"");
 }
+
+/// X2: a query through a reference: the condition and the order read the
+/// referred record in a subquery.
+#[test]
+fn a_query_goes_through_a_reference() {
+    let source = format!(
+        "{SALES}\nfunction of_customers(name: text) -> list<Order>\n    return find o in Order where o.customer.name contains name and o.customer.credit_limit > 10 order by o.customer.name desc, o.customer.credit_limit\n"
+    );
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Sales.cs");
+    has(sales, ".Filter(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Contains(\"name\", name)).And(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Number(\"credit_limit\", Op.Gt, ");
+    has(sales, ".OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"name\", true, false).OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true)");
+}

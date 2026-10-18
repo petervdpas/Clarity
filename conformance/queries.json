@@ -1,5 +1,5 @@
 {
-  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), oneOf and oneOfNumbers (column, values), isTrue (a column), isNone (a column with no value: an empty date or reference), and, or (two conditions), not (one). A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
+  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), oneOf and oneOfNumbers (column, values), isTrue (a column), isNone (a column with no value: an empty date or reference), through (a reference column, the table and key it refers to, and a condition on that table, which becomes a subquery), and, or (two conditions), not (one). An order key may go through references too, each hop a subquery on an alias t1, t2 and so on. A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
   "cases": [
     {
       "name": "every record, in the order stored",
@@ -246,6 +246,293 @@
         "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" ORDER BY \"name\" DESC, \"credit_limit\", \"id\"", "params": [] },
         "mysql": { "sql": "SELECT `id`, `name` FROM `customer` ORDER BY `name` DESC, `credit_limit`, `id`", "params": [] },
         "mssql": { "sql": "SELECT [id], [name] FROM [customer] ORDER BY [name] DESC, [credit_limit], [id]", "params": [] }
+      }
+    },
+    {
+      "name": "a condition through a reference",
+      "table": "album",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "filter": {
+          "through": {
+            "column": "artist",
+            "table": "artist",
+            "key": "id",
+            "filter": {
+              "contains": {
+                "column": "name",
+                "text": "beat"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE \"artist\" IN (SELECT \"id\" FROM \"artist\" WHERE \"name\" LIKE ?1 ESCAPE '!') ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "%beat%"
+            }
+          ]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE \"artist\" IN (SELECT \"id\" FROM \"artist\" WHERE LOWER(\"name\") LIKE LOWER($1) ESCAPE '!') ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "%beat%"
+            }
+          ]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `album` WHERE `artist` IN (SELECT `id` FROM `artist` WHERE LOWER(`name`) LIKE LOWER(?) ESCAPE '!') ORDER BY `id`",
+          "params": [
+            {
+              "text": "%beat%"
+            }
+          ]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [album] WHERE [artist] IN (SELECT [id] FROM [artist] WHERE LOWER([name]) LIKE LOWER(@P1) ESCAPE '!') ORDER BY [id]",
+          "params": [
+            {
+              "text": "%beat%"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "through two references, and a decimal on the far side",
+      "table": "track",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "filter": {
+          "and": [
+            {
+              "through": {
+                "column": "album",
+                "table": "album",
+                "key": "id",
+                "filter": {
+                  "through": {
+                    "column": "artist",
+                    "table": "artist",
+                    "key": "ArtistId",
+                    "filter": {
+                      "compare": {
+                        "column": "country",
+                        "op": "Eq",
+                        "value": {
+                          "text": "UK"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "through": {
+                "column": "album",
+                "table": "album",
+                "key": "id",
+                "filter": {
+                  "number": {
+                    "column": "price",
+                    "op": "Gt",
+                    "value": {
+                      "decimal": "10"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"track\" WHERE (\"album\" IN (SELECT \"id\" FROM \"album\" WHERE \"artist\" IN (SELECT \"ArtistId\" FROM \"artist\" WHERE \"country\" = ?1)) AND \"album\" IN (SELECT \"id\" FROM \"album\" WHERE CAST(\"price\" AS REAL) > CAST(?2 AS REAL))) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "UK"
+            },
+            {
+              "decimal": "10"
+            }
+          ]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"track\" WHERE (\"album\" IN (SELECT \"id\" FROM \"album\" WHERE \"artist\" IN (SELECT \"ArtistId\" FROM \"artist\" WHERE \"country\" = $1)) AND \"album\" IN (SELECT \"id\" FROM \"album\" WHERE \"price\" > $2)) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "UK"
+            },
+            {
+              "decimal": "10"
+            }
+          ]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `track` WHERE (`album` IN (SELECT `id` FROM `album` WHERE `artist` IN (SELECT `ArtistId` FROM `artist` WHERE `country` = ?)) AND `album` IN (SELECT `id` FROM `album` WHERE `price` > ?)) ORDER BY `id`",
+          "params": [
+            {
+              "text": "UK"
+            },
+            {
+              "decimal": "10"
+            }
+          ]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [track] WHERE ([album] IN (SELECT [id] FROM [album] WHERE [artist] IN (SELECT [ArtistId] FROM [artist] WHERE [country] = @P1)) AND [album] IN (SELECT [id] FROM [album] WHERE [price] > @P2)) ORDER BY [id]",
+          "params": [
+            {
+              "text": "UK"
+            },
+            {
+              "decimal": "10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a reference to a record of the same table",
+      "table": "genre",
+      "key": "id",
+      "columns": [
+        "name"
+      ],
+      "query": {
+        "filter": {
+          "through": {
+            "column": "parent",
+            "table": "genre",
+            "key": "id",
+            "filter": {
+              "compare": {
+                "column": "name",
+                "op": "Eq",
+                "value": {
+                  "text": "Jazz"
+                }
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"name\" FROM \"genre\" WHERE \"parent\" IN (SELECT \"id\" FROM \"genre\" WHERE \"name\" = ?1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "Jazz"
+            }
+          ]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"name\" FROM \"genre\" WHERE \"parent\" IN (SELECT \"id\" FROM \"genre\" WHERE \"name\" = $1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "Jazz"
+            }
+          ]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `name` FROM `genre` WHERE `parent` IN (SELECT `id` FROM `genre` WHERE `name` = ?) ORDER BY `id`",
+          "params": [
+            {
+              "text": "Jazz"
+            }
+          ]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [name] FROM [genre] WHERE [parent] IN (SELECT [id] FROM [genre] WHERE [name] = @P1) ORDER BY [id]",
+          "params": [
+            {
+              "text": "Jazz"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an order through references, each in its own subquery",
+      "table": "track",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "order": [
+          {
+            "through": [
+              {
+                "column": "album",
+                "table": "album",
+                "key": "id"
+              }
+            ],
+            "column": "title",
+            "descending": false,
+            "numeric": false
+          },
+          {
+            "through": [
+              {
+                "column": "album",
+                "table": "album",
+                "key": "id"
+              },
+              {
+                "column": "artist",
+                "table": "artist",
+                "key": "ArtistId"
+              }
+            ],
+            "column": "name",
+            "descending": true,
+            "numeric": false
+          },
+          {
+            "through": [
+              {
+                "column": "album",
+                "table": "album",
+                "key": "id"
+              }
+            ],
+            "column": "price",
+            "descending": false,
+            "numeric": true
+          }
+        ]
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"track\" ORDER BY (SELECT \"t1\".\"title\" FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\"), (SELECT (SELECT \"t2\".\"name\" FROM \"artist\" \"t2\" WHERE \"t2\".\"ArtistId\" = \"t1\".\"artist\") FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\") DESC, (SELECT CAST(\"t1\".\"price\" AS REAL) FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\"), \"id\"",
+          "params": []
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"track\" ORDER BY (SELECT \"t1\".\"title\" FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\"), (SELECT (SELECT \"t2\".\"name\" FROM \"artist\" \"t2\" WHERE \"t2\".\"ArtistId\" = \"t1\".\"artist\") FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\") DESC, (SELECT \"t1\".\"price\" FROM \"album\" \"t1\" WHERE \"t1\".\"id\" = \"track\".\"album\"), \"id\"",
+          "params": []
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `track` ORDER BY (SELECT `t1`.`title` FROM `album` `t1` WHERE `t1`.`id` = `track`.`album`), (SELECT (SELECT `t2`.`name` FROM `artist` `t2` WHERE `t2`.`ArtistId` = `t1`.`artist`) FROM `album` `t1` WHERE `t1`.`id` = `track`.`album`) DESC, (SELECT `t1`.`price` FROM `album` `t1` WHERE `t1`.`id` = `track`.`album`), `id`",
+          "params": []
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [track] ORDER BY (SELECT [t1].[title] FROM [album] [t1] WHERE [t1].[id] = [track].[album]), (SELECT (SELECT [t2].[name] FROM [artist] [t2] WHERE [t2].[ArtistId] = [t1].[artist]) FROM [album] [t1] WHERE [t1].[id] = [track].[album]) DESC, (SELECT [t1].[price] FROM [album] [t1] WHERE [t1].[id] = [track].[album]), [id]",
+          "params": []
+        }
       }
     }
   ]

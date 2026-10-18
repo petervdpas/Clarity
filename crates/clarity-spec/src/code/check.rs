@@ -1314,9 +1314,18 @@ impl<'a> BodyChecker<'_, 'a> {
                 );
                 continue;
             }
-            match decl.field(&key.field.name) {
+            let hops: Vec<&Ident> = key.through.iter().collect();
+            let target = match self.through(decl, &var.name, &hops) {
+                Ok(Some(target)) => target,
+                Ok(None) => continue,
+                Err(message) => {
+                    self.error(message, join(key.var.span, key.field.span));
+                    continue;
+                }
+            };
+            match target.field(&key.field.name) {
                 None => self.error(
-                    format!("{} has no field '{}'", decl.name.name, key.field.name),
+                    format!("{} has no field '{}'", target.name.name, key.field.name),
                     key.field.span,
                 ),
                 Some(field) if matches!(field.ty, FieldType::List { .. }) => self.error(
@@ -1387,24 +1396,55 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// Whether `expr` uses the query's record: `None` when it does not,
-    /// `Ok` when it is one of its fields (`c.name`), and the reason when it
+    /// `Ok` when it is one of its fields (`c.name`) or a field of a record
+    /// its references lead to (`o.customer.name`), and the reason when it
     /// uses the record some other way.
     fn query_field(&self, expr: &Expr, var: &str) -> Option<Result<(), String>> {
         if !mentions(expr, var) {
             return None;
         }
-        let ExprKind::Member { object, .. } = &expr.kind else {
-            return Some(Err(format!(
-                "a query compares a field of {var} with a value, as in '{var}.name == x'"
-            )));
-        };
-        match &object.kind {
-            ExprKind::Name { name } if name == var => Some(Ok(())),
-            _ => Some(Err(format!(
-                "a query compares a field of {var} itself; '{}' goes through a reference",
-                path_text(expr)
-            ))),
+        let general = || Some(Err(format!("a query compares a field of {var} with a value, as in '{var}.name == x'")));
+        let mut members = Vec::new();
+        let mut at = expr;
+        while let ExprKind::Member { object, member } = &at.kind {
+            members.push(member);
+            at = object;
         }
+        match &at.kind {
+            ExprKind::Name { name } if name == var && !members.is_empty() => {}
+            _ => return general(),
+        }
+        members.reverse();
+        let Some(Ty::Record(entity)) = self.local(var) else { return Some(Ok(())) };
+        match self.through(entity, var, &members[..members.len() - 1]) {
+            Ok(_) => Some(Ok(())),
+            Err(message) => Some(Err(message)),
+        }
+    }
+
+    /// The entity the reference fields `hops` of a record of `entity`
+    /// (named `var`) lead to; `None` when one of them has an unknown type,
+    /// which is reported where it is declared.
+    fn through(&self, entity: &'a Entity, var: &str, hops: &[&Ident]) -> Result<Option<&'a Entity>, String> {
+        let mut current = entity;
+        let mut path = var.to_string();
+        for hop in hops {
+            path = format!("{path}.{}", hop.name);
+            let Some(field) = current.field(&hop.name) else {
+                return Err(format!("{} has no field '{}'", current.name.name, hop.name));
+            };
+            match self.env.field_type(&field.ty) {
+                Ty::Record(next) => current = next,
+                Ty::Unknown => return Ok(None),
+                other => {
+                    return Err(format!(
+                        "'{path}' is {}, not a reference; a query goes through references only",
+                        described(&other)
+                    ));
+                }
+            }
+        }
+        Ok(Some(current))
     }
 
     fn in_scope(&self, name: &str) -> bool {
@@ -1562,6 +1602,14 @@ fn join(a: Span, b: Span) -> Span {
     Span { end: b.end, ..a }
 }
 
+/// A type as a sentence names it: "text", "money", "a date", "an integer".
+fn described(ty: &Ty) -> String {
+    match ty {
+        Ty::Text | Ty::Money | Ty::Bool => ty.name(),
+        other => format!("{} {}", article(&other.name()), other.name()),
+    }
+}
+
 fn article(word: &str) -> &'static str {
     match word.chars().next() {
         Some(c) if "aeiouAEIOU".contains(c) => "an",
@@ -1598,15 +1646,6 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         }
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
-    }
-}
-
-/// A member path as written: `o.customer.name`.
-fn path_text(expr: &Expr) -> String {
-    match &expr.kind {
-        ExprKind::Name { name } => name.clone(),
-        ExprKind::Member { object, member } => format!("{}.{}", path_text(object), member.name),
-        _ => "...".to_string(),
     }
 }
 
@@ -1659,6 +1698,163 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
         }
     }
     project.diagnostics.extend(found);
+}
+
+/// A query runs in one database: its condition and order may go through
+/// references only to records of the same data source.
+pub(crate) fn check_query_sources(project: &mut crate::model::Project) {
+    if project.sources.len() < 2 {
+        return;
+    }
+    let mut found = Vec::new();
+    for file in &project.files {
+        let bodies = file
+            .code
+            .iter()
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body).chain(b.events.iter().map(|e| &e.body)))
+            .chain(file.functions.iter().map(|f| &f.body));
+        let mut check = |expr: &Expr| {
+            let ExprKind::Find { var, entity, filter, order } = &expr.kind else { return };
+            let mut paths: Vec<(Vec<Ident>, Span)> = order.iter().filter(|k| k.var.name == var.name).map(|k| (k.through.clone(), join(k.var.span, k.field.span))).collect();
+            if let Some(filter) = filter {
+                each_expr(filter, &mut |e| {
+                    if let Some(hops) = member_hops(e, &var.name) {
+                        paths.push((hops.into_iter().cloned().collect(), e.span));
+                    }
+                });
+            }
+            for (hops, span) in paths {
+                if let Some(message) = other_source(project, &entity.name, &var.name, &hops) {
+                    found.push(Diagnostic::error(message, span).in_file(&file.path));
+                }
+            }
+        };
+        for body in bodies {
+            each_stmt_expr(body, &mut check);
+        }
+        for function in &file.functions {
+            for e in function.requires.iter().chain(&function.ensures) {
+                each_expr(e, &mut check);
+            }
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// The reference fields a member path of the query's record goes through
+/// before its last field: `o.customer.name` gives `[customer]`. Only the
+/// longest path counts, not the paths inside it.
+fn member_hops<'e>(expr: &'e Expr, var: &str) -> Option<Vec<&'e Ident>> {
+    let mut members = Vec::new();
+    let mut at = expr;
+    while let ExprKind::Member { object, member } = &at.kind {
+        members.push(member);
+        at = object;
+    }
+    match &at.kind {
+        ExprKind::Name { name } if name == var && members.len() > 1 => {
+            members.reverse();
+            members.pop();
+            Some(members)
+        }
+        _ => None,
+    }
+}
+
+/// Why going through `hops` from a record of `entity` leaves its data
+/// source, if it does.
+fn other_source(project: &crate::model::Project, entity: &str, var: &str, hops: &[Ident]) -> Option<String> {
+    let home = project.source_of(entity)?;
+    let mut current = project.entity(entity)?;
+    let mut path = var.to_string();
+    for hop in hops {
+        path = format!("{path}.{}", hop.name);
+        let FieldType::Ref { entity: target } = &current.field(&hop.name)?.ty else { return None };
+        let source = project.source_of(&target.name)?;
+        if source != home {
+            return Some(format!("'{path}' refers to {} in data source '{source}'; a query reads one database", target.name));
+        }
+        current = project.entity(&target.name)?;
+    }
+    None
+}
+
+/// Calls `found` for every expression in `body` and in the expressions
+/// inside it, nested blocks included.
+fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
+    for stmt in body {
+        match &stmt.kind {
+            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } => each_expr(value, found),
+            StmtKind::Assign { target, value } => {
+                each_expr(target, found);
+                each_expr(value, found);
+            }
+            StmtKind::Return { value } => {
+                if let Some(value) = value {
+                    each_expr(value, found);
+                }
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    each_expr(&branch.condition, found);
+                    each_stmt_expr(&branch.body, found);
+                }
+                if let Some(otherwise) = otherwise {
+                    each_stmt_expr(otherwise, found);
+                }
+            }
+            StmtKind::For { list, body, .. } => {
+                each_expr(list, found);
+                each_stmt_expr(body, found);
+            }
+            StmtKind::Call { call } => each_expr(call, found),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
+            StmtKind::Open { with, .. } => {
+                for arg in with {
+                    each_expr(&arg.value, found);
+                }
+            }
+            StmtKind::Close | StmtKind::Reload { .. } => {}
+        }
+    }
+}
+
+/// Calls `found` for `expr` and every expression inside it, outer first.
+fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
+    found(expr);
+    match &expr.kind {
+        // A member path is one value; its inner paths are not visited.
+        ExprKind::Member { .. } => {}
+        ExprKind::Unary { operand, .. } => each_expr(operand, found),
+        ExprKind::Binary { left, right, .. } => {
+            each_expr(left, found);
+            each_expr(right, found);
+        }
+        ExprKind::In { value, options } => {
+            each_expr(value, found);
+            for option in options {
+                each_expr(option, found);
+            }
+        }
+        ExprKind::Call { args, .. } => {
+            for arg in args {
+                each_expr(arg, found);
+            }
+        }
+        ExprKind::Find { filter, .. } => {
+            if let Some(filter) = filter {
+                each_expr(filter, found);
+            }
+        }
+        ExprKind::Text { parts } => {
+            for part in parts {
+                if let TextPart::Slot { value } = part {
+                    each_expr(value, found);
+                }
+            }
+        }
+        ExprKind::Name { .. } | ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => {}
+    }
 }
 
 /// Calls `found` for every `save` and `delete` in `body`, nested blocks

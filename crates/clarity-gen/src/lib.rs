@@ -8,6 +8,7 @@ mod csharp;
 mod ddl;
 pub(crate) mod go;
 mod print;
+mod query;
 mod readme;
 mod rust;
 mod schema;
@@ -66,7 +67,7 @@ pub struct OutFile {
     pub path: String,
     pub text: String,
     /// The contents of a binary file; `text` is empty then.
-    pub bytes: Option<&'static [u8]>,
+    pub bytes: Option<std::borrow::Cow<'static, [u8]>>,
 }
 
 /// The files of the application, sorted by path; or why it cannot be
@@ -127,7 +128,7 @@ pub fn write_out(dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std
     let mut written = 0;
     for file in files {
         let path = dir.join(&file.path);
-        let contents = file.bytes.unwrap_or(file.text.as_bytes());
+        let contents = file.bytes.as_deref().unwrap_or(file.text.as_bytes());
         if std::fs::read(&path).ok().as_deref() == Some(contents) {
             continue;
         }

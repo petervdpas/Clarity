@@ -195,6 +195,18 @@ func migratesAndKeepsRecords(t *testing.T, dialect Dialect, at, database string)
 	blank := &order{Number: "ORD-0"}
 	must(t, Save(db, blank))
 	must(t, Save(db, o))
+	// Through a reference: the customer's name, in a condition and an order.
+	byNumber := func(o order) string { return o.Number }
+	through, err := Find[order](db, Query{}.Filter(Through("customer", "customer", "id", Contains("name", "LOVE"))))
+	must(t, err)
+	equal(t, names(through, byNumber), []string{"ORD-1"})
+	grace2 := &order{Number: "ORD-G", Customer: ref(grace.ID)}
+	must(t, Save(db, grace2))
+	through, err = Find[order](db, Query{}.Filter(Not(IsNone("customer"))).OrderThrough([]Hop{{Column: "customer", Table: "customer", Key: "id"}}, "name", true, false))
+	must(t, err)
+	equal(t, names(through, byNumber), []string{"ORD-G", "ORD-1"})
+	must(t, Delete(db, grace2))
+
 	var inUse *InUseError
 	if err := Delete(db, ada); !errors.As(err, &inUse) || inUse.Table != "customer" || inUse.ID != ada.ID {
 		t.Fatalf("deleting a customer with orders: %v", err)

@@ -33,7 +33,10 @@ pub fn expr(e: &Expr) -> String {
             if !order.is_empty() {
                 let keys: Vec<String> = order
                     .iter()
-                    .map(|k| format!("{}.{}{}", k.var.name, k.field.name, if k.descending { " desc" } else { "" }))
+                    .map(|k| {
+                        let path: String = k.through.iter().map(|t| format!("{}.", t.name)).collect();
+                        format!("{}.{path}{}{}", k.var.name, k.field.name, if k.descending { " desc" } else { "" })
+                    })
                     .collect();
                 text.push_str(&format!(" order by {}", keys.join(", ")));
             }

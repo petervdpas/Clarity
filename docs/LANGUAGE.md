@@ -79,7 +79,7 @@ project Shop
 
 Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
 
-Today the Rust backend with the web UI is generated; the other stacks are on the roadmap in DESIGN.md.
+Three stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia, and Go with the web UI (Wails). C and C++ are on the roadmap in DESIGN.md.
 
 ### Translations
 
@@ -101,6 +101,21 @@ translation nl
 - A text without a translation shows as written, so a language can grow text by text. The Project tab lists every text with a column per language, says how many each misses, and writes what is typed into the files. `Yes` and `No`, which the screen shows for bools, can be translated too.
 - The application shows the translation for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, and the project's own language shows as written. The designer can show the canvas and Preview in any of the project's languages.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
+
+### Pictures
+
+The `images` folder of the module folder holds the fixed pictures of the application, such as a logo. An image part shows one by its file name:
+
+```
+// records/images/logo.png
+page AlbumBrowse: window
+    image at 12,1 span 1 rows 1 source "logo.png"
+```
+
+- The picture must be in the `images` folder; a name that is not there is an error that lists what is.
+- A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file, which every stack shows without extra libraries.
+- Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the pictures as they are in the folder, and shows them again when the folder changes.
+- The picture keeps its proportions inside the part.
 
 ## 3. Modules
 
@@ -869,8 +884,9 @@ code Customers
 - `where` is optional. Without it, `find` reads every record.
 - The condition combines, with `and`, `or`, `not` and parentheses, comparisons between a field of the record and a value: `c.name == x`, `c.total > 100`, `c.name contains x`, `c.kind in [Private, Business]`. A bool field stands on its own: `c.active`, `not c.active`. A reference field is compared with a record: `o.customer == customer`. A date or reference field compared with `none` finds the records where it is empty: `l.returned_on == none`.
 - The value side can be anything that does not use the record: a literal, a local, the window's data, a part property.
-- Only the record's own fields can be compared. `o.customer.name` goes through a reference and is not allowed yet.
-- `order by` takes one or more fields, each optionally followed by `desc`. Without it, records come in the order they were stored.
+- A condition can go through references to the fields of the record they refer to: `o.customer.name contains x`, `t.album.artist.country == "UK"`. A record whose reference is empty does not meet such a condition.
+- `order by` takes one or more fields, each optionally followed by `desc`, and may go through references too: `order by a.artist.name, a.title`. Without it, records come in the order they were stored.
+- A query reads one database, so it cannot go through a reference to an entity in another data source.
 - The database does the work: the condition becomes a query with parameters, so values never become part of the SQL text.
 
 ### Types

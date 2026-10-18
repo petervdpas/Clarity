@@ -1,0 +1,35 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Pictures, bundled } from "./pictures.ts";
+
+test("a generated application finds a picture next to its renderer", () => {
+  const pictures = new Pictures(null, () => {});
+  assert.equal(pictures.url("logo.png"), "images/logo.png");
+  assert.equal(bundled("my logo.png"), "images/my%20logo.png");
+});
+
+test("the designer loads a picture once, and shows it when it has come", async () => {
+  const asked: string[] = [];
+  let changes = 0;
+  const pictures = new Pictures(async (name) => {
+    asked.push(name);
+    return `data:image/png;base64,${name}`;
+  }, () => changes++);
+  assert.equal(pictures.url("logo.png"), undefined);
+  assert.equal(pictures.url("logo.png"), undefined);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(pictures.url("logo.png"), "data:image/png;base64,logo.png");
+  assert.deepEqual(asked, ["logo.png"]);
+  assert.equal(changes, 1);
+});
+
+test("a picture that cannot be loaded shows as missing", async () => {
+  const pictures = new Pictures(async () => {
+    throw new Error("gone");
+  }, () => {});
+  assert.equal(pictures.url("gone.png"), undefined);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(pictures.url("gone.png"), null);
+});

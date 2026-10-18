@@ -4,6 +4,7 @@
 //! byte, so `out/` can be compared, cached and regenerated at any time.
 
 pub mod tools;
+mod c;
 mod csharp;
 mod ddl;
 pub(crate) mod go;
@@ -109,17 +110,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             return Err(vec!["C# with the web renderer is not generated yet; C# uses Avalonia".to_string()]);
         }
         Backend::Go => go::generate(project, settings)?,
+        Backend::C => c::generate(project, settings)?,
         Backend::Cpp => cpp::generate(project, settings)?,
-        other => {
-            let name = match other {
-                Backend::Go => "Go",
-                Backend::Csharp => "C#",
-                Backend::C => "C",
-                Backend::Cpp => "C++",
-                Backend::Rust => "Rust",
-            };
-            return Err(vec![format!("the {name} backend is not generated yet; Rust, Go, C# and C++ are")]);
-        }
     };
     files.push(OutFile {
         path: "README.md".to_string(),
@@ -249,18 +241,20 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 missing: "is Go installed?",
             })
         }
-        Backend::Cpp => {
+        Backend::C | Backend::Cpp => {
             // CMakePresets.json: one workflow configures and builds.
             let preset = if release { "release" } else { "debug" };
+            let program = if settings.stack.backend == Backend::C { c::program_name(settings) } else { cpp::program_name(settings) };
             Some(Toolchain {
                 tool: "cmake",
                 args: ["--workflow", "--preset", preset].map(String::from).to_vec(),
                 env: vec![],
-                program: exe(format!("build/{preset}/{}", cpp::program_name(settings))),
+                program: exe(format!("build/{preset}/{program}")),
                 missing: "is CMake installed?",
             })
         }
-        _ => None,
+        // C# with the web renderer is not generated.
+        Backend::Csharp => None,
     }
 }
 
@@ -277,8 +271,7 @@ pub fn build_output(backend: Backend) -> &'static [&'static str] {
         // go build's program.
         Backend::Go => &["bin", "data"],
         // CMake's builds.
-        Backend::Cpp => &["build", "data"],
-        Backend::C => &["data"],
+        Backend::C | Backend::Cpp => &["build", "data"],
     }
 }
 

@@ -13,7 +13,6 @@ mod names;
 
 use std::fmt::Write as _;
 
-use base64::Engine as _;
 use clarity_project::Settings;
 use clarity_spec::Project;
 use clarity_spec::code::check;
@@ -248,48 +247,11 @@ fn long_text(text: &str) -> String {
     format!("    static const char* const parts[] = {{\n{},\n    }};\n    std::string out;\n    for (const char* part : parts) out += part;\n    return out;\n", parts.join(",\n"))
 }
 
-/// The renderer's page with everything in it, since the webview shows a
-/// page and no folder: its script, styles, theme styles and fixed pictures.
-pub fn page_html(project: &Project) -> String {
-    let files = crate::web::renderer_files(project);
-    let find = |path: &str| files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
-    let safe = |code: String, tag: &str| code.replace(&format!("</{tag}"), &format!("<\\/{tag}"));
-    let mut html = find("ui/index.html");
-    let script = safe(find("ui/runtime.js"), "script");
-    html = html.replace("<script type=\"module\" crossorigin src=\"./runtime.js\"></script>", &format!("<script type=\"module\">{script}</script>"));
-    html = html.replace("<link rel=\"stylesheet\" crossorigin href=\"./runtime.css\">", &format!("<style>{}</style>", safe(find("ui/runtime.css"), "style")));
-    for file in files.iter().filter(|f| f.path.starts_with("ui/themes/")) {
-        let link = format!("<link rel=\"stylesheet\" href=\"./{}\">", file.path.trim_start_matches("ui/"));
-        html = html.replace(&link, &format!("<style>{}</style>", safe(file.text.clone(), "style")));
-    }
-    let pictures: serde_json::Map<String, serde_json::Value> = files
-        .iter()
-        .filter_map(|f| {
-            let name = f.path.strip_prefix("ui/images/")?;
-            let bytes = f.bytes.as_deref()?;
-            let kind = match name.rsplit('.').next().unwrap_or_default().to_lowercase().as_str() {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "gif" => "image/gif",
-                "bmp" => "image/bmp",
-                _ => "image/webp",
-            };
-            let url = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
-            Some((name.to_string(), serde_json::Value::String(url)))
-        })
-        .collect();
-    if !pictures.is_empty() {
-        let map = safe(serde_json::Value::Object(pictures).to_string(), "script");
-        html = html.replace("  </head>", &format!("    <script>window.clarityPictures = {map};</script>\n  </head>"));
-    }
-    html
-}
-
 fn page_cpp(project: &Project, program: &str) -> String {
     let body = format!(
         "/// The windows, frame and data dictionary the renderer draws from.\nconst std::string& model() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n\n/// The renderer's page, with its script, styles and pictures in it.\nconst std::string& page() {{\n    static const std::string text = [] {{\n{}    }}();\n    return text;\n}}\n",
         indent_lines(&long_text(&crate::web::model_json(project)), 1),
-        indent_lines(&long_text(&page_html(project)), 1)
+        indent_lines(&long_text(&crate::web::single_page(project)), 1)
     );
     namespaced(program, "#include <string>\n", &body)
 }

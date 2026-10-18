@@ -74,7 +74,10 @@ impl StackTools {
 
 /// Whether Clarity generates `backend` with `ui`.
 pub fn generates(backend: Backend, ui: Ui) -> bool {
-    matches!((backend, ui), (Backend::Rust, Ui::Web) | (Backend::Go, Ui::Web) | (Backend::Csharp, Ui::Avalonia))
+    matches!(
+        (backend, ui),
+        (Backend::Rust, Ui::Web) | (Backend::Go, Ui::Web) | (Backend::Csharp, Ui::Avalonia) | (Backend::C, Ui::Web) | (Backend::Cpp, Ui::Web)
+    )
 }
 
 /// The first line a tool prints, as it names itself.
@@ -108,6 +111,11 @@ const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and
 const GO: &str = "Go, from https://go.dev/dl";
 const CMAKE: &str = "CMake, from https://cmake.org/download";
 const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org)";
+const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; elsewhere https://sqlite.org/download.html)";
+const WEBKIT_GTK: &str = "the WebKitGTK and GTK 3 development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev libgtk-3-dev)";
+const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; elsewhere https://github.com/nlohmann/json)";
+/// The webview of a C program is one C++ file.
+const WEBVIEW_CXX: &str = "a C++ compiler for the webview's one C++ file: GCC (g++) or Clang (clang++)";
 
 fn dotnet() -> String {
     format!("the .NET {} SDK, from https://dotnet.microsoft.com/download", dotnet_major())
@@ -124,7 +132,22 @@ pub fn requirements(backend: Backend) -> Vec<String> {
         Backend::Rust => vec![RUST.to_string(), format!("on Linux, {WEBKIT}")],
         Backend::Csharp => vec![dotnet()],
         Backend::Go => vec![GO.to_string(), format!("on Linux, {WEBKIT}")],
-        Backend::C | Backend::Cpp => vec![compiler_needed(backend), CMAKE.to_string(), MAKE.to_string()],
+        Backend::C => vec![
+            compiler_needed(backend),
+            WEBVIEW_CXX.to_string(),
+            CMAKE.to_string(),
+            MAKE.to_string(),
+            SQLITE.to_string(),
+            format!("on Linux, {WEBKIT_GTK}"),
+        ],
+        Backend::Cpp => vec![
+            compiler_needed(backend),
+            CMAKE.to_string(),
+            MAKE.to_string(),
+            SQLITE.to_string(),
+            NLOHMANN.to_string(),
+            format!("on Linux, {WEBKIT_GTK}"),
+        ],
     }
 }
 
@@ -165,6 +188,12 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(version),
                 None => missing.push(compiler_needed(backend)),
             }
+            if backend == Backend::C {
+                match compiler(probe, &["c++", "g++", "clang++"]) {
+                    Some(version) => found.push(version),
+                    None => missing.push(WEBVIEW_CXX.to_string()),
+                }
+            }
             // The generated project is a CMake project (CMakeLists.txt), built with make or Ninja.
             match probe.run("cmake", &["--version"]) {
                 Some(version) => found.push(first_line(&version)),
@@ -176,6 +205,18 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 found.push(format!("ninja {}", first_line(&version)));
             } else {
                 missing.push(MAKE.to_string());
+            }
+            // The libraries CMake finds, through pkg-config on Linux.
+            if cfg!(target_os = "linux") {
+                let mut libraries = vec![("sqlite3", SQLITE), ("webkit2gtk-4.1", WEBKIT_GTK)];
+                if backend == Backend::Cpp {
+                    libraries.push(("nlohmann_json", NLOHMANN));
+                }
+                for (package, install) in libraries {
+                    if probe.run("pkg-config", &["--exists", package]).is_none() {
+                        missing.push(install.to_string());
+                    }
+                }
             }
         }
     }

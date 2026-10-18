@@ -71,28 +71,54 @@ fn avalonia_needs_the_dotnet_sdk_the_project_targets() {
 }
 
 #[test]
-fn stacks_clarity_does_not_generate_yet_still_say_what_they_need() {
+fn go_needs_go_and_on_linux_webkitgtk() {
     let go = check(Backend::Go, Ui::Web, &Machine::default());
     // Go with Wails is generated (G3b); Wails builds against WebKitGTK on Linux, like Tauri.
     assert!(go.generated);
     assert!(go.missing[0].contains("https://go.dev/dl"), "{:?}", go.missing);
+}
+
+/// What the C and C++ projects build with on Linux besides the tools: the
+/// libraries CMake finds through pkg-config.
+fn with_libraries(machine: Machine) -> Machine {
+    machine
+        .with("pkg-config", "--exists sqlite3", "")
+        .with("pkg-config", "--exists webkit2gtk-4.1", "")
+        .with("pkg-config", "--exists nlohmann_json", "")
+}
+
+#[test]
+fn c_and_cpp_need_a_compiler_cmake_and_their_libraries() {
     // C and C++ build with CMake (the generated project has a CMakeLists.txt) and make or Ninja.
+    // C needs a C++ compiler too, for the webview's one C++ file.
     let c = check(
         Backend::C,
         Ui::Web,
-        &Machine::default()
-            .with("clang", "--version", "clang version 19.1.7\nTarget: x86_64\n")
-            .with("cmake", "--version", "cmake version 3.31.6\n\nCMake suite maintained by Kitware\n")
-            .with("make", "--version", "GNU Make 4.4.1\n"),
+        &with_libraries(
+            Machine::default()
+                .with("clang", "--version", "clang version 19.1.7\nTarget: x86_64\n")
+                .with("clang++", "--version", "clang version 19.1.7\nTarget: x86_64\n")
+                .with("cmake", "--version", "cmake version 3.31.6\n\nCMake suite maintained by Kitware\n")
+                .with("make", "--version", "GNU Make 4.4.1\n"),
+        ),
     );
-    assert_eq!(c.found, ["clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
-    assert!(c.missing.is_empty());
-    let cpp = check(Backend::Cpp, Ui::Web, &Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n"));
+    assert!(c.generated);
+    assert_eq!(c.found, ["clang version 19.1.7", "clang version 19.1.7", "cmake version 3.31.6", "GNU Make 4.4.1"]);
+    assert!(c.missing.is_empty(), "{:?}", c.missing);
+    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(Machine::default().with("g++", "--version", "g++ (Debian 14.2.0-19) 14.2.0\n").with("ninja", "--version", "1.12.1\n")));
+    assert!(cpp.generated);
     assert_eq!(cpp.found, ["g++ (Debian 14.2.0-19) 14.2.0", "ninja 1.12.1"]);
     assert_eq!(cpp.missing.len(), 1);
     assert!(cpp.missing[0].contains("CMake") && cpp.missing[0].contains("https://cmake.org/download"), "{:?}", cpp.missing);
     let bare = check(Backend::C, Ui::Web, &Machine::default().with("cc", "--version", "cc (Debian 14.2.0-19) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n"));
-    assert!(bare.missing[0].contains("make or Ninja"), "{:?}", bare.missing);
+    assert!(bare.missing.iter().any(|m| m.contains("C++ compiler")), "{:?}", bare.missing);
+    assert!(bare.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", bare.missing);
+    if cfg!(target_os = "linux") {
+        assert!(bare.missing.iter().any(|m| m.contains("libsqlite3-dev")), "{:?}", bare.missing);
+        assert!(bare.missing.iter().any(|m| m.contains("libwebkit2gtk-4.1-dev")), "{:?}", bare.missing);
+        let no_json = check(Backend::Cpp, Ui::Web, &Machine::default().with("g++", "--version", "g++ 14\n"));
+        assert!(no_json.missing.iter().any(|m| m.contains("nlohmann-json3-dev")), "{:?}", no_json.missing);
+    }
 }
 
 #[test]

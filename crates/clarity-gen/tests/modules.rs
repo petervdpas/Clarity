@@ -40,8 +40,8 @@ page LoanBrowse: window
     button \"Album\" at 1,1 span 2 on click -> AlbumForm
 ";
 
-const STACKS: [(Backend, Ui); 4] =
-    [(Backend::Rust, Ui::Web), (Backend::Csharp, Ui::Avalonia), (Backend::Go, Ui::Web), (Backend::Cpp, Ui::Web)];
+const STACKS: [(Backend, Ui); 5] =
+    [(Backend::Rust, Ui::Web), (Backend::Csharp, Ui::Avalonia), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web)];
 
 fn project() -> Project {
     let project = load_sources([("music.clarity", MUSIC), ("loans.clarity", LOANS)]);

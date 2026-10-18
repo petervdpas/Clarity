@@ -1,5 +1,5 @@
 use clarity_gen::{OutFile, generate};
-use clarity_project::{Backend, Settings, starter};
+use clarity_project::{Settings, starter};
 use clarity_spec::load_sources;
 
 const SALES: &str = "module sales
@@ -192,15 +192,6 @@ fn functions_and_actions_become_rust_functions() {
     assert!(sales.contains("return Ok(Decimal::from(0i64));"), "{sales}");
     assert!(sales.contains("return Ok((x + Decimal::new(5, 1)));"), "{sales}");
     assert!(sales.contains("ensure((result >= Decimal::from(0i64)), \"result >= 0\")?;"), "{sales}");
-}
-
-#[test]
-fn refuses_backends_that_are_not_generated_yet() {
-    let project = load_sources([("sales.clarity", SALES)]);
-    let mut settings = shop();
-    settings.stack.backend = Backend::C;
-    let errors = generate(&project, &settings).unwrap_err();
-    assert_eq!(errors, ["the C backend is not generated yet; Rust, Go, C# and C++ are"]);
 }
 
 #[test]

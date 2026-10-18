@@ -5,6 +5,7 @@
 //! out keeps the base's value. A part holds the class of its style. The
 //! designer gets the same CSS for its canvas.
 
+use base64::Engine as _;
 use clarity_spec::model::{Look, Shadow, ThemeDecl, ThemeValue, Weight};
 use clarity_spec::{Preview, Project};
 
@@ -320,4 +321,42 @@ pub fn model_json(project: &Project) -> String {
     preview.samples.clear();
     preview.displays.clear();
     serde_json::to_string(&preview).unwrap_or_default() + "\n"
+}
+
+/// The renderer's page with everything in it, for the C and C++ stacks,
+/// whose webview shows a page and no folder: its script, styles, theme
+/// styles and fixed pictures.
+pub fn single_page(project: &Project) -> String {
+    let files = renderer_files(project);
+    let find = |path: &str| files.iter().find(|f| f.path == path).map(|f| f.text.clone()).unwrap_or_default();
+    let safe = |code: String, tag: &str| code.replace(&format!("</{tag}"), &format!("<\\/{tag}"));
+    let mut html = find("ui/index.html");
+    let script = safe(find("ui/runtime.js"), "script");
+    html = html.replace("<script type=\"module\" crossorigin src=\"./runtime.js\"></script>", &format!("<script type=\"module\">{script}</script>"));
+    html = html.replace("<link rel=\"stylesheet\" crossorigin href=\"./runtime.css\">", &format!("<style>{}</style>", safe(find("ui/runtime.css"), "style")));
+    for file in files.iter().filter(|f| f.path.starts_with("ui/themes/")) {
+        let link = format!("<link rel=\"stylesheet\" href=\"./{}\">", file.path.trim_start_matches("ui/"));
+        html = html.replace(&link, &format!("<style>{}</style>", safe(file.text.clone(), "style")));
+    }
+    let pictures: serde_json::Map<String, serde_json::Value> = files
+        .iter()
+        .filter_map(|f| {
+            let name = f.path.strip_prefix("ui/images/")?;
+            let bytes = f.bytes.as_deref()?;
+            let kind = match name.rsplit('.').next().unwrap_or_default().to_lowercase().as_str() {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "bmp" => "image/bmp",
+                _ => "image/webp",
+            };
+            let url = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+            Some((name.to_string(), serde_json::Value::String(url)))
+        })
+        .collect();
+    if !pictures.is_empty() {
+        let map = safe(serde_json::Value::Object(pictures).to_string(), "script");
+        html = html.replace("  </head>", &format!("    <script>window.clarityPictures = {map};</script>\n  </head>"));
+    }
+    html
 }

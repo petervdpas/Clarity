@@ -58,6 +58,20 @@ fn go_builds_with_go_build() {
 }
 
 #[test]
+fn c_and_cpp_build_with_a_cmake_workflow() {
+    for backend in [Backend::C, Backend::Cpp] {
+        let settings = shop(backend, Ui::Web);
+        let debug = clarity_gen::toolchain(&settings, false).unwrap();
+        assert_eq!(debug.tool, "cmake");
+        assert_eq!(debug.args, ["--workflow", "--preset", "debug"]);
+        assert_eq!(debug.program, exe("build/debug/shop"));
+        let release = clarity_gen::toolchain(&settings, true).unwrap();
+        assert_eq!(release.args, ["--workflow", "--preset", "release"]);
+        assert_eq!(release.program, exe("build/release/shop"));
+    }
+}
+
+#[test]
 fn stacks_without_a_generator_have_no_toolchain() {
-    assert!(clarity_gen::toolchain(&shop(Backend::C, Ui::Web), false).is_none());
+    assert!(clarity_gen::toolchain(&shop(Backend::Csharp, Ui::Web), false).is_none());
 }

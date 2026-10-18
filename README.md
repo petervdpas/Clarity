@@ -9,11 +9,12 @@ Current state: the designer for windows and the application frame, with every pa
 ```
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
 crates/clarity-project/  the project file: stack, output and data sources
-crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go or C++ application
+crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ application
 crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/csharp/         the runtime of generated C# applications, with Avalonia
 runtimes/go/             the runtime of generated Go applications, with Wails
+runtimes/c/              the runtime of generated C applications, with webview and cJSON
 runtimes/cpp/            the runtime of generated C++ applications, with webview
 conformance/             cases every runtime and renderer must pass alike
 app/                     Clarity: Tauri 2 + Svelte 5
@@ -25,13 +26,14 @@ examples/records.clarity example project: a record collection, with albums, trac
 examples/records/        its modules
 ```
 
-Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
+Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
 
 ## Requirements
 
 - Rust 1.88 or newer (edition 2024)
 - Node.js 20 or newer
 - On Linux: the Tauri system libraries (WebKitGTK 4.1, GTK 3, libsoup 3)
+- For C applications: CMake 3.25 or newer, a C17 compiler and a C++ compiler (for the webview), pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 
 ## Commands

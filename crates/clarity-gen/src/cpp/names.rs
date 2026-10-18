@@ -25,7 +25,7 @@ pub fn ident(name: &str) -> String {
 
 /// `order_status` and `My shop` as `OrderStatus` and `MyShop`.
 pub fn pascal(name: &str) -> String {
-    name.split(|c: char| c == '_' || c == ' ' || c == '-')
+    name.split(['_', ' ', '-'])
         .filter(|w| !w.is_empty())
         .map(|w| {
             let mut chars = w.chars();

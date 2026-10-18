@@ -60,6 +60,30 @@ fn databases(project: &Project, settings: &Settings, backend: &str) -> Result<Da
     Ok((databases, owned))
 }
 
+/// Every file store an image field keeps its pictures in must be one of the
+/// project settings, which say where it is.
+fn check_stores(project: &Project, settings: &Settings) -> Result<(), Vec<String>> {
+    let missing: Vec<String> = project
+        .entities()
+        .flat_map(|e| e.fields.iter().map(move |f| (e, f)))
+        .filter_map(|(e, f)| {
+            let store = f.modifiers.store.as_ref()?;
+            (!settings.filestores.iter().any(|s| &s.name == store)).then(|| {
+                format!("{}.{} is kept in file store '{store}', which the project settings do not have", e.name.name, f.name.name)
+            })
+        })
+        .collect();
+    if missing.is_empty() { Ok(()) } else { Err(missing) }
+}
+
+/// The image fields of every entity, with the column and store of each.
+pub(crate) fn picture_fields(project: &Project) -> Vec<(&clarity_spec::model::Entity, &clarity_spec::model::Field)> {
+    project
+        .entities()
+        .flat_map(|e| e.fields.iter().filter(|f| f.ty == clarity_spec::model::FieldType::Image).map(move |f| (e, f)))
+        .collect()
+}
+
 /// One generated file, by its path inside `out/`. Most are text; a few, like
 /// icons, are bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +100,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
+    check_stores(project, settings)?;
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,

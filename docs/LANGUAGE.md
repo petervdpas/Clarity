@@ -75,9 +75,10 @@ project Shop
 | `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
+| `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine. |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. |
 
-Each setting appears once, except `datasource`. An unknown setting or value is an error that names the line and lists the accepted words.
+Each setting appears once, except `datasource` and `filestore`. An unknown setting or value is an error that names the line and lists the accepted words.
 
 Three stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia, and Go with the web UI (Wails). C and C++ are on the roadmap in DESIGN.md.
 
@@ -204,6 +205,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `date` | a calendar date |
 | `datetime` | a date with a time |
 | `duration` | a length of time in whole seconds, shown and typed as `3:45` or `1:02:03` everywhere |
+| `image` | a picture (png, jpg, gif, bmp or webp), kept in the database, or with `store` as a file; see [Pictures in records](#pictures-in-records) |
 | `email` | an e-mail address |
 | `url` | a web address |
 | `id` | the id of a record |
@@ -226,8 +228,34 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
 | `column "Name"` | The existing column the field is stored in, for an entity of an external database. |
+| `store name` | For an `image`: its pictures are files in that file store of the project settings, not in the database. |
 
 Each modifier appears at most once per field. The checker reports defaults and limits that do not fit the type, such as `min "x"` on a number, or a default that is not one of the enum's values.
+
+### Pictures in records
+
+An `image` field holds a picture, or none. Without `store`, the picture is kept in the database. With `store`, it is a file in a file store, a folder that the project settings name, and the column holds the file's name there:
+
+```
+entity Album
+    cover: image, help "The scan of the front cover"
+
+entity Artist
+    photo: image, store photos
+```
+
+```
+// records.clarity
+    filestore photos "data/photos"
+```
+
+- An image part shows it: `image name cover at 1,1 span 4 rows 6 bind album.cover`. It shows "No picture" while there is none, and, while the pointer is on it, a button to load a picture from a file and one to remove it. A label or help text can be for it.
+- Reading records never carries their pictures, so a list of thousands stays light; the screen fetches each picture on its own when it shows.
+- A picture is a png, jpg, gif, bmp or webp file, told by its first bytes; any other file is refused.
+- In a file store, a picture's file is named after the SHA-256 of its bytes, so the same picture is kept once. Files are never deleted: a store can be a folder of photos that are not the application's alone.
+- In code, a picture is compared with `none` and set to `none`: `if album.cover != none`, `album.cover = none`. Copying a picture from one record to another comes later. A query can find the records with or without one: `where a.cover == none`.
+- A table or list does not show a picture column; an image part does.
+- Moving a field's pictures between the database and a file store, or between `image` and another type, is a change that can lose data: pictures do not move by themselves.
 
 ### Formats
 
@@ -484,7 +512,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `image` | nothing | `source "file"` | `click` |
+| `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the images folder | `click` |
 | `canvas` | nothing | `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `pointer`, `key` |
 
 `select` fires when a row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.

@@ -134,6 +134,10 @@
   }
 
   const loading = new Set<string>();
+  // The stored pictures fetched so far, by entity, record and field.
+  let pictures = $state<Record<string, string | null>>({});
+  const fetching = new Set<string>();
+  const pictureKey = (entity: string, id: number, field: string) => `${entity}/${id}/${field}`;
 
   provideLive({
     get parts() {
@@ -164,6 +168,24 @@
           .finally(() => loading.delete(entity));
       }
       return known ?? [];
+    },
+    picture(entity: string, id: number, field: string) {
+      const key = pictureKey(entity, id, field);
+      if (key in pictures) return pictures[key];
+      if (!fetching.has(key)) {
+        fetching.add(key);
+        invoke<string | null>("picture", { entity, id, field })
+          .then((url) => (pictures[key] = url))
+          .catch((err) => {
+            pictures[key] = null;
+            say({ level: "error", text: errorText(err) });
+          })
+          .finally(() => fetching.delete(key));
+      }
+      return undefined;
+    },
+    forgetPicture(entity: string, id: number, field: string) {
+      delete pictures[pictureKey(entity, id, field)];
     },
   });
 

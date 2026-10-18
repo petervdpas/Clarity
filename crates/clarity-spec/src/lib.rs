@@ -63,6 +63,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         locale: model::Locale::default(),
         themes: Vec::new(),
         images: None,
+        stores: None,
         translations: BTreeMap::new(),
     }
 }
@@ -109,6 +110,32 @@ impl SourceRef {
         self.readonly = true;
         self
     }
+}
+
+/// Gives the project the file stores of its settings, by name, and checks
+/// that every image field with a `store` names one of them.
+pub fn attach_stores(project: &mut Project, stores: Vec<String>) {
+    let mut found = Vec::new();
+    for file in &project.files {
+        for entity in &file.entities {
+            for field in &entity.fields {
+                let Some(store) = &field.modifiers.store else { continue };
+                if stores.contains(store) {
+                    continue;
+                }
+                let have = if stores.is_empty() { "add it there".to_string() } else { format!("they have {}", stores.join(", ")) };
+                found.push(
+                    diagnostic::Diagnostic::error(
+                        format!("'{}' is kept in file store '{store}', which the project settings do not have; {have}", field.name.name),
+                        field.span,
+                    )
+                    .in_file(&file.path),
+                );
+            }
+        }
+    }
+    project.diagnostics.extend(found);
+    project.stores = Some(stores);
 }
 
 /// The data source of a project loaded without its project file.

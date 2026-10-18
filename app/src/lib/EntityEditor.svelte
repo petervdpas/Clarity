@@ -18,6 +18,7 @@
     onedit,
     ondelete,
     onrename,
+    stores,
   }: {
     preview: Preview;
     entity: Entity;
@@ -25,9 +26,11 @@
     onedit: (edit: Edit) => void;
     ondelete: () => void;
     onrename: (newName: string) => void;
+    /** The file stores of the project settings, by name. */
+    stores: string[];
   } = $props();
 
-  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "email", "url", "id"];
+  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "id"];
   const types = $derived([
     ...BASE_TYPES,
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),
@@ -91,6 +94,7 @@
       help: null,
       format: null,
       column: null,
+      store: null,
     };
     onedit({ op: "addField", entity: entity.span.start, spec: { name, typeText: newType.trim() || "text", modifiers } });
     newName = "";
@@ -122,6 +126,7 @@
           <th>Default</th>
           <th title="How values are shown, in every locale">Format</th>
           <th>Help</th>
+          <th title="Pictures kept as files in a file store of the project settings, not in the database">Store</th>
           <th></th>
         </tr>
       </thead>
@@ -162,6 +167,15 @@
               {/if}
             </td>
             <td><input value={m.help ?? ""} onchange={(e) => update(field, { modifiers: { help: textOf(e) } })} /></td>
+            <td>
+              {#if field.type.kind === "image"}
+                <select value={m.store ?? ""} onchange={(e) => update(field, { modifiers: { store: e.currentTarget.value || null } })}>
+                  <option value="">database</option>
+                  {#each stores as store (store)}<option value={store}>{store}</option>{/each}
+                  {#if m.store && !stores.includes(m.store)}<option value={m.store}>{m.store} (not in the settings)</option>{/if}
+                </select>
+              {/if}
+            </td>
             <td class="actions">
               <button title="Move up" disabled={i === 0} onclick={() => onedit({ op: "moveSibling", item: field.span.start, delta: -1 })}>&uarr;</button>
               <button

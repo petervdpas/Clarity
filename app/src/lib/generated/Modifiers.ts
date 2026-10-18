@@ -6,4 +6,9 @@ export type Modifiers = { required: boolean, unique: boolean, owned: boolean, co
  * `column "InvNo"`: the existing column a field of an external entity
  * is stored in.
  */
-column: string | null, };
+column: string | null, 
+/**
+ * `store photos`: an image field keeps its pictures as files in this
+ * file store of the project settings, not in the database.
+ */
+store: string | null, };

@@ -17,6 +17,13 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     static abstract IReadOnlyList<string> ColumnNames { get; }
 
     /// <summary>
+    /// The columns of the image fields, which reading records gives only
+    /// whether there is a picture, and saving leaves alone when the picture is
+    /// the one stored.
+    /// </summary>
+    static virtual IReadOnlyList<PictureColumn> Pictures => [];
+
+    /// <summary>
     /// Whether the entity has data events. A save or delete then runs with its
     /// events in one transaction: when an event fails, nothing of it is kept.
     /// </summary>

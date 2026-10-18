@@ -14,6 +14,7 @@
   import { provideForm, useForm } from "./form";
   import { matchesShortcut } from "./shortcut";
   import { pictureUrl } from "./pictures.svelte";
+  import { isStored, pictureFromFile, pictureUrl as recordPictureUrl } from "./recordPictures";
 
   let {
     preview,
@@ -102,8 +103,36 @@
   // which the running application sends with the next event.
   const shown = $derived(bound || !p.name ? text : (partState?.text ?? ""));
 
-  function setValue(next: string | boolean | number | null) {
+  function setValue(next: string | boolean | number | { data: string } | null) {
     if (bound) bound.record[bound.field.name.name] = next;
+  }
+
+  // A picture field: its stored picture comes on its own; a new one is
+  // chosen from a file and kept in the field until the record is saved.
+  const boundEntity = $derived(p.bind ? data[p.bind.split(".")[0]]?.entity.name.name : undefined);
+  const canLoadPicture = $derived(!!live && !design && !readonly && !disabled);
+  let fileInput = $state<HTMLInputElement | null>(null);
+  let pictureProblem = $state(false);
+
+  function forgetFetched() {
+    if (live && bound && boundEntity) live.forgetPicture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name);
+  }
+
+  async function pictureChosen(e: Event) {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    (e.currentTarget as HTMLInputElement).value = "";
+    if (!file) return;
+    const picture = pictureFromFile(new Uint8Array(await file.arrayBuffer()));
+    pictureProblem = picture === null;
+    if (!picture) return;
+    forgetFetched();
+    setValue(picture);
+  }
+
+  function removePicture() {
+    pictureProblem = false;
+    forgetFetched();
+    setValue(null);
   }
 
   // A number input shows its value in the locale, and reads what is typed
@@ -420,6 +449,27 @@
           <li class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
         {/each}
       </ul>
+    {:else if p.kind === "image" && p.bind}
+      {@const fetched = live && bound && boundEntity && isStored(value) ? live.picture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name) : undefined}
+      {@const shownPicture = recordPictureUrl(value, fetched)}
+      <div class="picture-field">
+        {#if shownPicture}
+          <img class="picture" src={shownPicture} alt={caption ?? ""} />
+        {:else}
+          <div class="placeholder image" class:problem={pictureProblem}>
+            <span>{tr(preview, "No picture")}</span>
+          </div>
+        {/if}
+        {#if canLoadPicture}
+          <div class="picture-actions">
+            <button type="button" onclick={() => fileInput?.click()}>{tr(preview, "Load a picture")}</button>
+            {#if value}
+              <button type="button" onclick={removePicture}>{tr(preview, "Remove the picture")}</button>
+            {/if}
+          </div>
+          <input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden onchange={pictureChosen} />
+        {/if}
+      </div>
     {:else if p.kind === "image"}
       {@const picture = p.source ? pictureUrl(p.source) : null}
       {#if picture}
@@ -699,6 +749,35 @@
     height: 100%;
     min-height: 0;
     object-fit: contain;
+  }
+
+  .picture-field {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+  }
+
+  /* The buttons show when the pointer or the keyboard is on the picture. */
+  .picture-actions {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .picture-field:hover .picture-actions,
+  .picture-field:focus-within .picture-actions {
+    opacity: 1;
+  }
+
+  .placeholder.problem {
+    outline: 2px solid var(--error);
   }
 
   fieldset {

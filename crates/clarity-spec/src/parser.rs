@@ -505,6 +505,7 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
         "date" => FieldType::Date,
         "datetime" => FieldType::DateTime,
         "duration" => FieldType::Duration,
+        "image" => FieldType::Image,
         "email" => FieldType::Email,
         "url" => FieldType::Url,
         "id" => FieldType::Id,
@@ -582,6 +583,11 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "column" => set(
             &mut modifiers.column,
             cursor.expect_string("a column name")?,
+            duplicate,
+        ),
+        "store" => set(
+            &mut modifiers.store,
+            cursor.expect_ident("a file store, as in 'store photos'")?.name,
             duplicate,
         ),
         other => Err(Diagnostic::error(

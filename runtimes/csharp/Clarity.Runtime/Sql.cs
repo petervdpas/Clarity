@@ -18,6 +18,31 @@ public static class Sql
     /// <summary>An enum value, stored by its name.</summary>
     public static string Name<E>(E value) where E : struct, Enum => value.ToString();
 
+    /// <summary>A picture the record has stored already: its column is left as it is when the record is saved.</summary>
+    public static readonly object Kept = new();
+
+    /// <summary>A picture as it is saved: none, the one stored already (kept), or a new one.</summary>
+    public static object? Picture(Picture? value) => value is null ? null : value.Bytes ?? Kept;
+
+    /// <summary>
+    /// Whether a record has a picture: what the select list reads of one kept in
+    /// the database (1 or 0), or the path of its file in a file store.
+    /// </summary>
+    public static Picture? GetPicture(string column, object? value)
+    {
+        var there = value switch
+        {
+            null => false,
+            long n => n != 0,
+            int n => n != 0,
+            bool b => b,
+            string path => path.Length > 0,
+            byte[] bytes => bytes.Length > 0,
+            _ => throw new StorageException($"{column}: {value} is no picture"),
+        };
+        return there ? Runtime.Picture.Stored : null;
+    }
+
     static InvalidValueException Invalid(string column, object? value) => new($"{column} cannot be {value ?? "null"}");
 
     public static string GetText(string column, object? value) => value switch

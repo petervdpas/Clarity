@@ -82,6 +82,7 @@ fn to_sql(field: &Field) -> String {
         FieldType::DateTime => format!("sql::date_time({value})"),
         FieldType::Enum { .. } => format!("sql::name(&{value})"),
         FieldType::Ref { .. } => format!("sql::reference({value})"),
+        FieldType::Image => format!("sql::picture(&{value})"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -96,6 +97,7 @@ fn from_sql(field: &Field) -> &'static str {
         FieldType::DateTime => "get_date_time",
         FieldType::Enum { .. } => "get_name",
         FieldType::Ref { .. } => "get_reference",
+        FieldType::Image => "get_picture",
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -145,6 +147,17 @@ fn record(project: &Project, entity: &Entity) -> String {
         .flat_map(|b| b.events.iter().map(|e| e.event))
         .collect();
     let mut hooks = String::new();
+    let pictures: Vec<String> = entity
+        .fields
+        .iter()
+        .filter(|f| f.ty == FieldType::Image)
+        .map(|f| format!("PictureColumn {{ column: {:?}, store: {:?} }}", entity.column_of(&f.name.name), f.modifiers.store.as_deref()))
+        .collect();
+    let pictures = if pictures.is_empty() {
+        String::new()
+    } else {
+        format!("    const PICTURES: &'static [PictureColumn] = &[{}];\n", pictures.join(", "))
+    };
     if !events.is_empty() {
         hooks.push_str("\n    const EVENTS: bool = true;\n");
         for event in events {
@@ -161,7 +174,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     const TABLE: &'static str = {table:?};
     const KEY: &'static str = {key:?};
     const COLUMNS: &'static [&'static str] = &[{columns}];
-
+{pictures}
     fn id(&self) -> Id {{
         self.id
     }}

@@ -10,6 +10,7 @@
 //!     datasource payments rest "https://api.example.com/v2"
 //!     datasource erp sqlite "legacy/erp.db" external readonly
 //!         auth bearer "keychain:payments"
+//!     filestore photos "env:PHOTO_FOLDER"
 //! ```
 //!
 //! Reading is strict: unknown settings and values are errors, so a typo
@@ -22,7 +23,7 @@ use std::collections::HashMap;
 use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 
 use crate::{
-    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, SOURCE_KINDS, Settings, Stack, TARGETS, UIS, auth_word, currency_problem,
+    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, SOURCE_KINDS, Settings, Stack, TARGETS, UIS, auth_word, currency_problem,
     language_problem,
     backend_word, source_word, target_word, ui_word,
 };
@@ -102,6 +103,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut currency = None;
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
+    let mut filestores: Vec<FileStore> = Vec::new();
     let setting_indent = entries.get(1).map(|e| e.indent).unwrap_or(4);
     for entry in &entries[1..] {
         let line = entry.line;
@@ -226,10 +228,19 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     readonly,
                 });
             }
+            "filestore" => {
+                let (Some(name), Some(location), None) = (a.first().and_then(|t| word(t)), a.get(1), a.get(2)) else {
+                    return Err(format!(
+                        "line {line}: write a name and its folder, like: filestore photos \"pictures\""
+                    ));
+                };
+                let location = string(line, Some(location), "the folder of the file store")?;
+                filestores.push(FileStore { name: name.to_string(), location });
+            }
             "auth" => return Err(format!("line {line}: 'auth' belongs under a datasource line, indented")),
             other => {
                 return Err(format!(
-                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency, theme and datasource"
+                    "line {line}: unknown setting '{other}'; the settings are title, stack, output, language, currency, theme, datasource and filestore"
                 ));
             }
         }
@@ -245,6 +256,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         language,
         currency,
         themes: themes.unwrap_or_default(),
+        filestores,
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
     })
 }
@@ -265,6 +277,7 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
     let keyword = entry.tokens.first().map(|t| t.text.as_str()).unwrap_or("");
     match keyword {
         "datasource" => format!("datasource {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
+        "filestore" => format!("filestore {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "auth" => format!("auth {}", current_source.unwrap_or("")),
         other => other.to_string(),
     }
@@ -352,6 +365,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
                 format!("auth {} {}", auth_word(auth.kind), quote(&auth.secret)),
             ));
         }
+    }
+    for store in &settings.filestores {
+        lines.push((format!("filestore {}", store.name), 1, format!("filestore {} {}", store.name, quote(&store.location))));
     }
 
     let mut out: Vec<String> = Vec::new();

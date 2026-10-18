@@ -31,6 +31,8 @@ pub struct Column {
     pub default: Option<Literal>,
     /// The column it is stored in, when that is not the field's name.
     pub column: Option<String>,
+    /// The file store a picture is kept in; the column holds its path there.
+    pub store: Option<String>,
 }
 
 impl Column {
@@ -41,6 +43,7 @@ impl Column {
             unique: field.modifiers.unique,
             default: field.modifiers.default.clone(),
             column: field.modifiers.column.clone(),
+            store: field.modifiers.store.clone(),
         }
     }
 
@@ -52,7 +55,7 @@ impl Column {
     /// Whether two columns store the same kind of value; a rename is
     /// proposed only between such columns.
     fn same_type(&self, other: &Column) -> bool {
-        type_text(&self.ty) == type_text(&other.ty)
+        type_text(&self.ty) == type_text(&other.ty) && self.store.is_some() == other.store.is_some()
     }
 
     /// Whether the values of `other` fit this column as they are: the same
@@ -121,7 +124,7 @@ pub enum Op {
     AddField { entity: String, column: Column },
     RemoveField { entity: String, field: String },
     RenameField { entity: String, from: String, to: String },
-    ChangeField { entity: String, field: String, ty: FieldType },
+    ChangeField { entity: String, field: String, ty: FieldType, store: Option<String> },
     AddUnique { entity: String, field: String },
     RemoveUnique { entity: String, field: String },
     /// Store the entity in another table; None is the default name.
@@ -232,8 +235,10 @@ impl Schema {
                 }
                 table.column_mut(from)?.name = to.clone();
             }
-            Op::ChangeField { entity, field, ty } => {
-                self.table_mut(entity)?.column_mut(field)?.ty = ty.clone();
+            Op::ChangeField { entity, field, ty, store } => {
+                let column = self.table_mut(entity)?.column_mut(field)?;
+                column.ty = ty.clone();
+                column.store = store.clone();
             }
             Op::AddUnique { entity, field } | Op::RemoveUnique { entity, field } => {
                 let column = self.table_mut(entity)?.column_mut(field)?;
@@ -375,11 +380,18 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
         ("change", "field") => {
             let (entity, field) = field_path(&mut cursor)?;
             cursor.expect(TokenKind::Colon, "':' and the new type")?;
-            Op::ChangeField {
-                entity,
-                field,
-                ty: parse_type(&mut cursor)?,
-            }
+            let ty = parse_type(&mut cursor)?;
+            // A picture kept in a file store: `image, store photos`.
+            let store = if cursor.eat(TokenKind::Comma) {
+                let word = cursor.expect_ident("'store' and a file store")?;
+                if word.name != "store" {
+                    return Err(Diagnostic::error("expected 'store' and a file store", word.span));
+                }
+                Some(cursor.expect_ident("a file store")?.name)
+            } else {
+                None
+            };
+            Op::ChangeField { entity, field, ty, store }
         }
         ("add", "unique") => {
             let (entity, field) = field_path(&mut cursor)?;
@@ -533,6 +545,7 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
                     entity: name.clone(),
                     field: wanted.name.clone(),
                     ty: wanted.ty.clone(),
+                    store: wanted.store.clone(),
                 };
                 take(&mut schema, op, &mut ops);
             }
@@ -638,6 +651,9 @@ fn column_text(column: &Column) -> String {
     if let Some(stored) = &column.column {
         text.push_str(&format!(", column {}", quote(stored)));
     }
+    if let Some(store) = &column.store {
+        text.push_str(&format!(", store {store}"));
+    }
     text
 }
 
@@ -667,7 +683,10 @@ pub fn op_text(op: &Op) -> String {
         Op::AddField { entity, column } => format!("add field {entity}.{}", column_text(column)),
         Op::RemoveField { entity, field } => format!("remove field {entity}.{field}"),
         Op::RenameField { entity, from, to } => format!("rename field {entity}.{from} to {to}"),
-        Op::ChangeField { entity, field, ty } => format!("change field {entity}.{field}: {}", type_text(ty)),
+        Op::ChangeField { entity, field, ty, store } => {
+            let store = store.as_ref().map(|s| format!(", store {s}")).unwrap_or_default();
+            format!("change field {entity}.{field}: {}{store}", type_text(ty))
+        }
         Op::AddUnique { entity, field } => format!("add unique {entity}.{field}"),
         Op::RemoveUnique { entity, field } => format!("remove unique {entity}.{field}"),
         Op::MapTable { entity, table } => format!("map table {entity} {}", mapped_text(table)),

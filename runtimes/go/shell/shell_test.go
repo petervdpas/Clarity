@@ -51,6 +51,17 @@ func (c *cards) Options(db *clarity.Db, entity string) ([]clarity.RefOption, err
 	return []clarity.RefOption{{ID: 1, Text: "Ada"}}, nil
 }
 
+// Picture is a PNG for card 1's photo, none for card 2.
+func (c *cards) Picture(db *clarity.Db, entity string, id int64, field string) ([]byte, error) {
+	if entity != "Card" || field != "photo" {
+		return nil, &clarity.InvalidError{What: entity + " has no picture " + field}
+	}
+	if id == 1 {
+		return []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, nil
+	}
+	return nil, nil
+}
+
 func service(t *testing.T) (*Service, *cards) {
 	db, err := clarity.Memory()
 	if err != nil {
@@ -128,6 +139,19 @@ func TestReferenceOptionsAndCommandsWithoutAWindow(t *testing.T) {
 		t.Fatal(got)
 	}
 	if got := wire(t, call(t, c, "nonsense", `{}`)); got != `{"error":"there is no command nonsense"}` {
+		t.Fatal(got)
+	}
+}
+
+func TestAPictureIsFetchedOnItsOwnAsADataURL(t *testing.T) {
+	c, _ := service(t)
+	if got := wire(t, call(t, c, "picture", `{"entity":"Card","id":1,"field":"photo"}`)); got != `{"value":"data:image/png;base64,iVBORw0KGgo="}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "picture", `{"entity":"Card","id":2,"field":"photo"}`)); got != `{"value":null}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "picture", `{"entity":"Card","id":1,"field":"logo"}`)); got != `{"error":"invalid value: Card has no picture logo"}` {
 		t.Fatal(got)
 	}
 }

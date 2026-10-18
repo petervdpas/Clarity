@@ -466,7 +466,8 @@ impl<'a> Checker<'a> {
                 Some(other) if !widgets::info(other.props.kind).input => self.error(
                     file,
                     format!(
-                        "{at}: '{target}' is a {}, not an input",
+                        "{at}: '{target}' is {} {}, not an input",
+                        article(widgets::keyword(other.props.kind)),
                         widgets::keyword(other.props.kind)
                     ),
                     widget.span,
@@ -694,7 +695,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            if p.kind == WidgetKind::Image && p.source.is_none() {
+            if p.kind == WidgetKind::Image && p.source.is_none() && p.bind.is_none() {
                 self.warning(
                     file,
                     format!("image at {},{} has no source yet", p.col, p.row),
@@ -802,6 +803,11 @@ impl<'a> Checker<'a> {
                             format!("{at}: list field '{field}' cannot be shown in a {name}"),
                             widget.span,
                         ),
+                        Some(f) if f.ty == FieldType::Image => self.error(
+                            file,
+                            format!("{at}: '{field}' is a picture; show it in an image part"),
+                            widget.span,
+                        ),
                         Some(_) => {}
                     }
                 }
@@ -874,6 +880,17 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
+        if m.store.is_some() && field.ty != FieldType::Image {
+            self.error(file, format!("only an image field has a store ('{name}')"), field.span);
+        }
+        if field.ty == FieldType::Image {
+            if m.unique {
+                self.error(file, format!("a picture cannot be unique ('{name}')"), field.span);
+            }
+            if m.default.is_some() {
+                self.error(file, format!("a picture has no default; it starts empty ('{name}')"), field.span);
+            }
+        }
         if m.pattern.is_some() && !field.ty.is_textual() {
             self.error(
                 file,
@@ -919,7 +936,7 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if let Some(default) = &m.default {
+        if let Some(default) = m.default.as_ref().filter(|_| field.ty != FieldType::Image) {
             self.check_default(file, field, default);
         }
     }

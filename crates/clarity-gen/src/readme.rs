@@ -77,5 +77,17 @@ pub fn readme(settings: &Settings) -> String {
             (kind, None) => out.push_str(&format!("- `{}`: a {} database at `{}`, {owner}.\n", source.name, kind_label(kind), source.url)),
         }
     }
+    for store in &settings.filestores {
+        match store.location.strip_prefix("env:") {
+            Some(variable) => out.push_str(&format!(
+                "- `{}`: a file store of pictures. Set the environment variable `{variable}` to its folder.\n",
+                store.name
+            )),
+            None => out.push_str(&format!(
+                "- `{}`: the file store of pictures in the folder `{}`; a relative path is taken from the folder the program starts in.\n",
+                store.name, store.location
+            )),
+        }
+    }
     out
 }

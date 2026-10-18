@@ -5,6 +5,7 @@
 //! project, so a project builds on its own.
 
 pub mod dialect;
+pub mod picture;
 pub mod query;
 pub mod sql;
 mod store;
@@ -26,6 +27,7 @@ use std::path::Path;
 
 pub use chrono::{NaiveDate, NaiveDateTime};
 pub use dialect::Dialect;
+pub use picture::{Picture, PictureColumn};
 pub use query::{Cond, Hop, Op, Query, contains};
 pub use rust_decimal::Decimal;
 pub use sql::SqlValue;
@@ -100,6 +102,10 @@ pub trait Record: Sized + Clone {
     const KEY: &'static str = "id";
     /// The stored columns, without `id`, in the order of `to_values`.
     const COLUMNS: &'static [&'static str];
+    /// The columns of the `image` fields, which reading records gives only
+    /// whether there is a picture, and saving leaves alone when the picture
+    /// is the one stored.
+    const PICTURES: &'static [picture::PictureColumn] = &[];
     fn id(&self) -> Id;
     fn set_id(&mut self, id: Id);
     fn to_values(&self) -> Vec<SqlValue>;
@@ -201,6 +207,8 @@ impl Source {
 pub struct Db {
     /// By data source name; the first is the default.
     sources: Vec<Source>,
+    /// The folders of the file stores, by name.
+    stores: Vec<(String, std::path::PathBuf)>,
 }
 
 impl Db {
@@ -220,6 +228,7 @@ impl Db {
     fn single(driver: Box<dyn Driver>) -> Db {
         Db {
             sources: vec![Source::new("", driver)],
+            stores: Vec::new(),
         }
     }
 
@@ -231,7 +240,72 @@ impl Db {
             .iter()
             .map(|(name, dialect, at)| Ok(Source::new(name, store::open(*dialect, at)?)))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Db { sources })
+        Ok(Db { sources, stores: Vec::new() })
+    }
+
+    /// Adds the file store `name` at `location`, a folder (made when it is
+    /// not there yet); `env:NAME` takes it from that environment variable.
+    pub fn add_store(&mut self, name: &str, location: &str) -> Result<()> {
+        let folder = std::path::PathBuf::from(store::location(location)?);
+        std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
+        self.stores.retain(|(n, _)| n != name);
+        self.stores.push((name.to_string(), folder));
+        Ok(())
+    }
+
+    fn store_folder(&self, name: &str) -> Result<&std::path::Path> {
+        self.stores
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, f)| f.as_path())
+            .ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))
+    }
+
+    /// The values of a record as they are saved: a new picture checked, and
+    /// written to its file store when it has one, its column then holding
+    /// the file's name.
+    fn saved_values<R: Record>(&self, record: &R) -> Result<Vec<SqlValue>> {
+        let mut values = record.to_values();
+        for picture in R::PICTURES {
+            let Some(at) = R::COLUMNS.iter().position(|c| *c == picture.column) else { continue };
+            let SqlValue::Blob(bytes) = &values[at] else { continue };
+            let name = picture::file_name(bytes)?;
+            if let Some(store) = picture.store {
+                let file = self.store_folder(store)?.join(&name);
+                if !file.exists() {
+                    std::fs::write(&file, bytes).map_err(|e| Error::Storage(format!("cannot write {}: {e}", file.display())))?;
+                }
+                values[at] = SqlValue::Text(name);
+            }
+        }
+        Ok(values)
+    }
+
+    /// The picture of field `column` of record `id`, read from the database
+    /// or from its file store; none when the record has none.
+    pub fn picture<R: Record>(&self, id: Id, column: &str) -> Result<Option<Vec<u8>>> {
+        let picture = R::PICTURES
+            .iter()
+            .find(|p| p.column == column)
+            .ok_or_else(|| Error::Storage(format!("{} has no picture '{column}'", R::TABLE)))?;
+        let value = {
+            let mut conn = self.conn(R::SOURCE)?;
+            let d = conn.dialect();
+            let sql = format!("SELECT {} FROM {} WHERE {} = {}", d.quote(column), d.quote(R::TABLE), d.quote(R::KEY), d.mark(1));
+            let rows = conn.rows(&sql, &[SqlValue::Integer(id)])?;
+            let row = rows.into_iter().next().ok_or(Error::NotFound { table: R::TABLE, id: Some(id) })?;
+            row.into_iter().next().unwrap_or(SqlValue::Null)
+        };
+        match (picture.store, value) {
+            (_, SqlValue::Null) => Ok(None),
+            (None, SqlValue::Blob(bytes)) => Ok(Some(bytes)),
+            (Some(store), SqlValue::Text(path)) if !path.is_empty() => {
+                let file = picture::in_store(self.store_folder(store)?, &path)?;
+                std::fs::read(&file).map(Some).map_err(|e| Error::Storage(format!("cannot read {}: {e}", file.display())))
+            }
+            (_, SqlValue::Text(_)) => Ok(None),
+            (_, other) => Err(Error::Storage(format!("{column}: {other:?} is no picture"))),
+        }
     }
 
     /// The data source `source`. With one database, every record is in it.
@@ -326,27 +400,46 @@ impl Db {
     }
 
     fn store<R: Record>(&self, record: &mut R) -> Result<()> {
+        let values = self.saved_values(record)?;
         let mut conn = self.conn(R::SOURCE)?;
         let d = conn.dialect();
-        let values = record.to_values();
+        let picture = |c: &str| R::PICTURES.iter().any(|p| p.column == c);
         if record.id() == 0 {
-            let id = conn.insert(&d.insert(R::TABLE, R::KEY, R::COLUMNS), &values).map_err(unfit)?;
+            // An empty or kept picture is left to the column's NULL, so no
+            // NULL is bound to a binary column (SQL Server refuses that).
+            let (columns, values): (Vec<&str>, Vec<SqlValue>) = R::COLUMNS
+                .iter()
+                .zip(values)
+                .filter(|(c, v)| !(picture(c) && matches!(v, SqlValue::Null | SqlValue::Kept)))
+                .map(|(c, v)| (*c, v))
+                .unzip();
+            let id = conn.insert(&d.insert(R::TABLE, R::KEY, &columns), &values).map_err(unfit)?;
             record.set_id(id);
             return Ok(());
         }
-        let sets = R::COLUMNS
-            .iter()
-            .enumerate()
-            .map(|(i, c)| format!("{} = {}", d.quote(c), d.mark(i + 1)))
-            .collect::<Vec<_>>()
-            .join(", ");
+        // A kept picture stays as it is; an emptied one is set to NULL as text.
+        let mut sets = Vec::new();
+        let mut params = Vec::new();
+        for (column, value) in R::COLUMNS.iter().zip(values) {
+            match value {
+                SqlValue::Kept => {}
+                SqlValue::Null if picture(column) => sets.push(format!("{} = NULL", d.quote(column))),
+                value => {
+                    params.push(value);
+                    sets.push(format!("{} = {}", d.quote(column), d.mark(params.len())));
+                }
+            }
+        }
+        if sets.is_empty() {
+            return if exists::<R>(&mut **conn, record.id())? { Ok(()) } else { Err(Error::NotFound { table: R::TABLE, id: Some(record.id()) }) };
+        }
         let sql = format!(
-            "UPDATE {} SET {sets} WHERE {} = {}",
+            "UPDATE {} SET {} WHERE {} = {}",
             d.quote(R::TABLE),
+            sets.join(", "),
             d.quote(R::KEY),
-            d.mark(values.len() + 1)
+            d.mark(params.len() + 1)
         );
-        let mut params = values;
         params.push(SqlValue::Integer(record.id()));
         // MySQL counts only the rows whose values changed, so an update
         // that changes nothing is told apart from a missing record.
@@ -436,7 +529,11 @@ fn unfit(failure: Failure) -> Error {
 /// The key and the stored columns of a record, for SELECT.
 fn select_columns<R: Record>(d: Dialect) -> String {
     std::iter::once(d.quote(R::KEY))
-        .chain(R::COLUMNS.iter().map(|c| d.quote(c)))
+        .chain(R::COLUMNS.iter().map(|c| match R::PICTURES.iter().find(|p| p.column == *c) {
+            // Whether there is a picture, not the picture.
+            Some(p) if p.store.is_none() => picture::presence(d, c),
+            _ => d.quote(c),
+        }))
         .collect::<Vec<_>>()
         .join(", ")
 }

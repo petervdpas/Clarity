@@ -421,9 +421,12 @@ const ENTRIES: &[Entry] = &[
         category: Category::Graphics,
         size: (3, 3),
         caption: None,
-        bind: BindTarget::Nothing,
-        field_types: &[],
-        input: false,
+        // A picture of a record (`bind album.cover`), or a fixed one of the
+        // images folder (`source "logo.png"`).
+        bind: BindTarget::Field,
+        field_types: &["image"],
+        // Bound, it takes a picture from a file: a label or help is for it.
+        input: true,
         container: None,
         clickable: true,
         events: &[Event::Click],
@@ -523,6 +526,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Date => "date",
         FieldType::DateTime => "dateTime",
         FieldType::Duration => "duration",
+        FieldType::Image => "image",
         FieldType::Email => "email",
         FieldType::Url => "url",
         FieldType::Id => "id",

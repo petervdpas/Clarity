@@ -608,6 +608,7 @@ dependencies = [
 name = "clarity-runtime"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "mysql",
@@ -616,6 +617,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tiberius",
  "tokio",
  "tokio-util",

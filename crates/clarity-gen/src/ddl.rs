@@ -22,6 +22,8 @@ const MYSQL_KEY_TEXT: u32 = 768;
 const MSSQL_KEY_TEXT: u32 = 850;
 /// The longest text kept in the row itself, rather than as a long text.
 const MSSQL_SHORT_TEXT: u32 = 4000;
+/// The longest path of a picture inside its file store.
+const PICTURE_PATH: u32 = 400;
 
 impl Sql {
     /// The dialect of a data source; None for one that is not SQL.
@@ -89,7 +91,7 @@ impl Sql {
     pub fn storage(self, column: &Column, enum_first: impl Fn(&str) -> Option<String>) -> (String, Option<String>) {
         let default = column.default.as_ref();
         let number = |n: &str| if self == Sql::Sqlite { self.text(n) } else { n.to_string() };
-        let ty = self.column_type(&column.ty);
+        let ty = if column.ty == FieldType::Image { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
         let value = match (&column.ty, default) {
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) => Some(self.text(s)),
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url, _) => Some(self.text("")),
@@ -106,7 +108,7 @@ impl Sql {
                 };
                 Some(self.text(&value.unwrap_or_default()))
             }
-            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. }, _) => None,
+            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image, _) => None,
         };
         // MySQL takes a default for long text only as an expression.
         let value = match value {
@@ -121,6 +123,20 @@ impl Sql {
             (Sql::Postgres | Sql::Mysql, true) => "TRUE".into(),
             (Sql::Postgres | Sql::Mysql, false) => "FALSE".into(),
             (Sql::Sqlite | Sql::Mssql, b) => u8::from(b).to_string(),
+        }
+    }
+
+    /// The column of a picture: the picture itself, or, for a picture in a
+    /// file store, the path of its file in the store.
+    fn picture_type(self, in_store: bool) -> String {
+        match (self, in_store) {
+            (Sql::Sqlite, true) => "TEXT".into(),
+            (Sql::Mssql, true) => format!("NVARCHAR({PICTURE_PATH})"),
+            (_, true) => format!("VARCHAR({PICTURE_PATH})"),
+            (Sql::Sqlite, false) => "BLOB".into(),
+            (Sql::Postgres, false) => "BYTEA".into(),
+            (Sql::Mysql, false) => "LONGBLOB".into(),
+            (Sql::Mssql, false) => "VARBINARY(MAX)".into(),
         }
     }
 
@@ -155,6 +171,7 @@ impl Sql {
             (Sql::Postgres, FieldType::DateTime) => "TIMESTAMP".into(),
             (Sql::Mysql, FieldType::DateTime) => "DATETIME".into(),
             (_, FieldType::DateTime) => "DATETIME2".into(),
+            (_, FieldType::Image) => self.picture_type(false),
             (Sql::Postgres, FieldType::Enum { .. }) => "TEXT".into(),
             (Sql::Mssql, FieldType::Enum { .. }) => "NVARCHAR(100)".into(),
             (_, FieldType::Enum { .. }) => "VARCHAR(100)".into(),

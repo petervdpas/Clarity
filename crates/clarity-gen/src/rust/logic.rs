@@ -642,6 +642,11 @@ impl<'a> Emitter<'a> {
             FieldType::Date => format!("sql::date({})", self.value(value)),
             FieldType::DateTime => format!("sql::date_time({})", self.value(value)),
             FieldType::Enum { .. } => format!("sql::name(&{})", self.value(value)),
+            // The checker allows only `== none` and `!= none`, handled before.
+            FieldType::Image => {
+                self.errors.push("a picture is compared with none only".into());
+                String::new()
+            }
             FieldType::Ref { .. } => {
                 // A reference field holds the id already; a record has its own.
                 let stored_ref = match &value.kind {

@@ -54,6 +54,8 @@ pub enum TypeInfo {
     Date,
     DateTime,
     Duration,
+    /// A picture of an image field.
+    Image,
     Enum(String),
     Record(String),
     List(String),
@@ -204,6 +206,7 @@ impl<'a> Env<'a> {
             FieldType::Date => Ty::Date,
             FieldType::DateTime => Ty::DateTime,
             FieldType::Duration => Ty::Duration,
+            FieldType::Image => Ty::Image,
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
             FieldType::Ref { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
@@ -221,6 +224,7 @@ enum Ty<'a> {
     Date,
     DateTime,
     Duration,
+    Image,
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
@@ -239,6 +243,7 @@ impl Ty<'_> {
             Ty::Date => TypeInfo::Date,
             Ty::DateTime => TypeInfo::DateTime,
             Ty::Duration => TypeInfo::Duration,
+            Ty::Image => TypeInfo::Image,
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
@@ -256,6 +261,7 @@ impl Ty<'_> {
             Ty::Date => "date".into(),
             Ty::DateTime => "datetime".into(),
             Ty::Duration => "duration".into(),
+            Ty::Image => "image".into(),
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
             Ty::List(e) => format!("list<{}>", e.name.name),
@@ -273,7 +279,7 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_))
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image)
     }
 
     fn same(&self, other: &Ty) -> bool {
@@ -956,6 +962,11 @@ impl<'a> BodyChecker<'_, 'a> {
         if let Err(message) = writable {
             self.error(message, target.span);
         }
+        if matches!(ty, Ty::Image) && !matches!(value.kind, ExprKind::Empty) {
+            self.expr(value, Some(ty));
+            self.error("a picture cannot be copied from one record to another yet", value.span);
+            return;
+        }
         let value_ty = if self.shows(target) { self.shown_text(value) } else { self.expr(value, Some(ty)) };
         if !ty.accepts(&value_ty) {
             self.error(format!("cannot set {} to {}", ty.name(), value_ty.name()), value.span);
@@ -1493,7 +1504,7 @@ impl<'a> BodyChecker<'_, 'a> {
     /// a date and time or a reference, and of nothing else.
     fn empty(&mut self, expected: Option<Ty<'a>>, span: Span) -> Ty<'a> {
         match expected {
-            Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Unknown)) => ty,
+            Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Image | Ty::Unknown)) => ty,
             Some(Ty::Text) => {
                 self.error("text is never none; empty text is \"\"", span);
                 Ty::Unknown

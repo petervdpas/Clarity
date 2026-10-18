@@ -98,6 +98,7 @@ fn to_value(f: &Field) -> String {
     let value = format!("r.{}", field(&f.name.name));
     match &f.ty {
         FieldType::Enum { .. } => format!("string({value})"),
+        FieldType::Image => format!("clarity.PictureValue({value})"),
         _ => value,
     }
 }
@@ -112,6 +113,7 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
         FieldType::Date => format!("read.Date({i}, {column})"),
         FieldType::DateTime => format!("read.DateTime({i}, {column})"),
         FieldType::Ref { .. } => format!("read.Reference({i}, {column})"),
+        FieldType::Image => format!("read.Picture({i}, {column})"),
         FieldType::Enum { name } => {
             let names: String =
                 project.enum_decl(&name.name).map(|d| d.variants.iter().map(|v| format!(", {}", string(&v.name.name))).collect()).unwrap_or_default();
@@ -150,6 +152,18 @@ fn record(project: &Project, entity: &Entity) -> String {
     }
     if entity.key_column() != "id" {
         let _ = write!(out, "func (*{name}) Key() string {{\n\treturn {}\n}}\n\n", string(entity.key_column()));
+    }
+    let pictures: Vec<String> = entity
+        .fields
+        .iter()
+        .filter(|f| f.ty == FieldType::Image)
+        .map(|f| {
+            let store = f.modifiers.store.as_deref().map(|s| format!(", Store: {}", string(s))).unwrap_or_default();
+            format!("{{Column: {}{store}}}", string(entity.column_of(&f.name.name)))
+        })
+        .collect();
+    if !pictures.is_empty() {
+        let _ = write!(out, "func (*{name}) Pictures() []clarity.PictureColumn {{\n\treturn []clarity.PictureColumn{{{}}}\n}}\n\n", pictures.join(", "));
     }
     let _ = write!(out, "func (r *{name}) GetID() int64 {{\n\treturn r.ID\n}}\n\n");
     let _ = write!(out, "func (r *{name}) SetID(id int64) {{\n\tr.ID = id\n}}\n\n");

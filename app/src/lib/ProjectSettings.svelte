@@ -13,6 +13,7 @@
   import type { Preview } from "./generated/Preview";
   import type { AuthKind } from "./generated/AuthKind";
   import type { DataSource } from "./generated/DataSource";
+  import type { FileStore } from "./generated/FileStore";
   import type { ProjectFile } from "./generated/ProjectFile";
   import type { Settings } from "./generated/Settings";
   import type { SourceKind } from "./generated/SourceKind";
@@ -132,6 +133,30 @@
     } catch (err) {
       ownError = String(err);
     }
+  }
+
+  function saveStore(i: number, change: Partial<FileStore>) {
+    if (!project.settings) return;
+    save({ filestores: project.settings.filestores.map((s, j) => (j === i ? { ...s, ...change } : s)) });
+  }
+
+  async function browseStore(i: number) {
+    const picked = await openDialog({
+      directory: true,
+      title: "File store: the folder that keeps the pictures",
+      defaultPath: await invoke<string>("project_folder"),
+    });
+    if (typeof picked === "string") saveStore(i, { location: await stored(picked) });
+  }
+
+  let newStore = $state("");
+
+  function addStore(e: SubmitEvent) {
+    e.preventDefault();
+    const name = newStore.trim();
+    if (!name || !project.settings) return;
+    save({ filestores: [...project.settings.filestores, { name, location: name }] });
+    newStore = "";
   }
 
   let newName = $state("");
@@ -390,6 +415,47 @@
         {#if importing}
           <ImportPanel source={importing} {onapplied} onclose={() => (importing = null)} />
         {/if}
+      </section>
+
+      <section>
+        <h2>File stores</h2>
+        <p class="intro">
+          Folders that keep pictures as files, for image fields with <code>store</code>, such as a folder of photos. A folder relative to the
+          application, or <code>env:NAME</code> when it differs per machine.
+        </p>
+        {#if settings.filestores.length > 0}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Folder</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each settings.filestores as store, i (i)}
+                  <tr>
+                    <td><input class="mono" value={store.name} onchange={(e) => saveStore(i, { name: e.currentTarget.value.trim() })} /></td>
+                    <td>
+                      <div class="with-browse">
+                        <input class="mono" value={store.location} placeholder="pictures" onchange={(e) => saveStore(i, { location: e.currentTarget.value.trim() })} />
+                        <button onclick={() => browseStore(i)} title="Choose the folder">Browse...</button>
+                      </div>
+                    </td>
+                    <td class="actions">
+                      <button class="danger" title="Remove the file store" onclick={() => save({ filestores: settings.filestores.filter((_, j) => j !== i) })}>&times;</button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+        <form class="add" onsubmit={addStore}>
+          <input class="mono" bind:value={newStore} placeholder="photos" spellcheck="false" />
+          <button type="submit" disabled={!newStore.trim()}>Add file store</button>
+        </form>
       </section>
 
       {#each databases as db (db.name)}

@@ -43,7 +43,7 @@ internal static class Store
     /// The location of a database: as written, or from the environment variable
     /// that <c>env:NAME</c> names, so passwords stay out of the program.
     /// </summary>
-    static string Location(string text)
+    internal static string Location(string text)
     {
         if (!text.StartsWith("env:", StringComparison.Ordinal))
             return text;

@@ -75,3 +75,14 @@ fn a_go_project_says_what_it_needs_and_how_to_build_it() {
     has(&text, "    go build -tags production -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
     has(&text, "    go run .\n");
 }
+
+/// A file store says where its pictures are, and which variable names it.
+#[test]
+fn a_file_store_says_where_its_pictures_are() {
+    let mut settings = starter("Shop", "shop");
+    settings.filestores.push(clarity_project::FileStore { name: "photos".into(), location: "env:PHOTO_FOLDER".into() });
+    settings.filestores.push(clarity_project::FileStore { name: "scans".into(), location: "scans".into() });
+    let text = readme(&settings);
+    has(&text, "- `photos`: a file store of pictures. Set the environment variable `PHOTO_FOLDER` to its folder.\n");
+    has(&text, "- `scans`: the file store of pictures in the folder `scans`; a relative path is taken from the folder the program starts in.\n");
+}

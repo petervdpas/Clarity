@@ -129,6 +129,9 @@ pub enum FieldType {
     DateTime,
     /// A length of time in whole seconds, shown as `3:45`.
     Duration,
+    /// A picture: kept in the database, or as a file in a file store
+    /// (`store photos`).
+    Image,
     Email,
     Url,
     Id,
@@ -174,6 +177,9 @@ pub struct Modifiers {
     /// `column "InvNo"`: the existing column a field of an external entity
     /// is stored in.
     pub column: Option<String>,
+    /// `store photos`: an image field keeps its pictures as files in this
+    /// file store of the project settings, not in the database.
+    pub store: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -522,6 +528,11 @@ pub struct Project {
     /// The pictures of the project's `images` folder, by name. None when
     /// the project was loaded without its folder.
     pub images: Option<Vec<crate::images::ProjectImage>>,
+    /// The file stores of the project settings, by name. None when the
+    /// project was loaded without its settings.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub stores: Option<Vec<String>>,
 }
 
 impl Project {

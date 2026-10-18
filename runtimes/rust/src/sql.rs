@@ -23,6 +23,9 @@ pub enum SqlValue {
     Bool(bool),
     Date(NaiveDate),
     DateTime(NaiveDateTime),
+    /// A picture the record has stored already: its column is left as it
+    /// is when the record is saved. It never reaches a driver.
+    Kept,
 }
 
 pub fn text(value: &str) -> SqlValue {
@@ -51,6 +54,29 @@ pub fn date_time(value: Option<NaiveDateTime>) -> SqlValue {
 
 pub fn reference(value: Option<Id>) -> SqlValue {
     value.map_or(SqlValue::Null, SqlValue::Integer)
+}
+
+/// A picture: none, the one stored already (kept), or a new one.
+pub fn picture(value: &Option<crate::picture::Picture>) -> SqlValue {
+    match value {
+        None => SqlValue::Null,
+        Some(crate::picture::Picture::Stored) => SqlValue::Kept,
+        Some(crate::picture::Picture::New(bytes)) => SqlValue::Blob(bytes.clone()),
+    }
+}
+
+/// Whether a record has a picture: what the select list reads of one kept
+/// in the database (1 or 0), or the path of its file in a file store.
+pub fn get_picture(column: &str, value: &SqlValue) -> Result<Option<crate::picture::Picture>> {
+    let there = match value {
+        SqlValue::Null => false,
+        SqlValue::Integer(n) => *n != 0,
+        SqlValue::Bool(b) => *b,
+        SqlValue::Text(path) => !path.is_empty(),
+        SqlValue::Blob(bytes) => !bytes.is_empty(),
+        other => return Err(Error::Storage(format!("{column}: {other:?} is no picture"))),
+    };
+    Ok(there.then_some(crate::picture::Picture::Stored))
 }
 
 /// An enum value, stored by its name.

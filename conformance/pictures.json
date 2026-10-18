@@ -1,0 +1,70 @@
+{
+  "about": "Pictures in records, alike in every runtime. A picture is a png, jpg, gif, bmp or webp file, told by its first bytes (kinds; the bytes are hex); anything else is refused (notPictures). In a file store a picture is the file named by the first 32 hex digits of the SHA-256 of its bytes and the extension of its kind (fileNames). On the wire to the renderer a picture field is null when empty, {\"stored\": true} when the record has one (fetched on its own), or {\"data\": base64} for one loaded but not yet saved (wire). Reading records, the select list holds whether a picture kept in the database is there, not the picture (presence).",
+  "kinds": [
+    {
+      "extension": "png",
+      "bytes": "89504E470D0A1A0A0000000D49484452",
+      "type": "image/png"
+    },
+    {
+      "extension": "jpg",
+      "bytes": "FFD8FFE000104A464946",
+      "type": "image/jpeg"
+    },
+    {
+      "extension": "gif",
+      "bytes": "474946383961010001",
+      "type": "image/gif"
+    },
+    {
+      "extension": "bmp",
+      "bytes": "424D3A000000",
+      "type": "image/bmp"
+    },
+    {
+      "extension": "webp",
+      "bytes": "524946461A000000574542505650",
+      "type": "image/webp"
+    }
+  ],
+  "notPictures": [
+    "255044462D312E37",
+    "",
+    "00"
+  ],
+  "fileNames": [
+    {
+      "bytes": "89504E470D0A1A0A0000000D49484452",
+      "name": "02a3e298f1533f62558c58e4c70edcab.png"
+    },
+    {
+      "bytes": "FFD8FFE000104A464946",
+      "name": "45ae705277879f7f01d778f7c95a065b.jpg"
+    }
+  ],
+  "wire": [
+    {
+      "value": "none",
+      "json": null
+    },
+    {
+      "value": "stored",
+      "json": {
+        "stored": true
+      }
+    },
+    {
+      "value": "new",
+      "bytes": "89504E470D0A1A0A0000000D49484452",
+      "json": {
+        "data": "iVBORw0KGgoAAAANSUhEUg=="
+      }
+    }
+  ],
+  "presence": {
+    "sqlite": "CASE WHEN \"cover\" IS NULL THEN 0 ELSE 1 END",
+    "postgres": "CASE WHEN \"cover\" IS NULL THEN 0 ELSE 1 END",
+    "mysql": "CASE WHEN `cover` IS NULL THEN 0 ELSE 1 END",
+    "mssql": "CASE WHEN [cover] IS NULL THEN 0 ELSE 1 END"
+  }
+}

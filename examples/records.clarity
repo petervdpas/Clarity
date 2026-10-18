@@ -8,3 +8,4 @@ project Records
     currency USD
     theme Classic Midnight
     datasource main sqlite "data/records.db"
+    filestore photos "data/photos"

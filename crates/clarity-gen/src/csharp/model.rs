@@ -82,6 +82,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
     let value = property(entity, &field.name.name);
     match &field.ty {
         FieldType::Enum { .. } => format!("Sql.Name({value})"),
+        FieldType::Image => format!("Sql.Picture({value})"),
         _ => value,
     }
 }
@@ -96,6 +97,7 @@ fn from_sql(field: &Field) -> String {
         FieldType::DateTime => "GetDateTime".into(),
         FieldType::Enum { name } => format!("GetName<{}>", name.name),
         FieldType::Ref { .. } => "GetReference".into(),
+        FieldType::Image => "GetPicture".into(),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -150,7 +152,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     public static string TableName => {table};
     public static string KeyColumn => {key};
     public static IReadOnlyList<string> ColumnNames {{ get; }} = [{columns}];
-
+{pictures}
     public long Id {{ get; set; }}
 {properties}
     public object?[] ToValues() => [{to_values}];
@@ -163,7 +165,25 @@ fn record(project: &Project, entity: &Entity) -> String {
 
 ",
         source = string(project.source_of(name).unwrap_or_default()),
+        pictures = pictures(entity),
         table = string(&entity.table_name()),
         key = string(entity.key_column()),
     )
+}
+
+/// The columns of an entity's image fields, with the file store of each.
+fn pictures(entity: &Entity) -> String {
+    let columns: Vec<String> = entity
+        .fields
+        .iter()
+        .filter(|f| f.ty == FieldType::Image)
+        .map(|f| {
+            let store = f.modifiers.store.as_deref().map_or("null".to_string(), string);
+            format!("new({}, {store})", string(entity.column_of(&f.name.name)))
+        })
+        .collect();
+    if columns.is_empty() {
+        return String::new();
+    }
+    format!("    public static IReadOnlyList<PictureColumn> Pictures {{ get; }} = [{}];\n", columns.join(", "))
 }

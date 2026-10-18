@@ -13,7 +13,7 @@ use crate::{Error, Id, Result, SqlValue};
 impl rusqlite::ToSql for SqlValue {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         Ok(match self {
-            SqlValue::Null => ToSqlOutput::Owned(Value::Null),
+            SqlValue::Null | SqlValue::Kept => ToSqlOutput::Owned(Value::Null),
             SqlValue::Integer(n) => ToSqlOutput::Owned(Value::Integer(*n)),
             SqlValue::Real(r) => ToSqlOutput::Owned(Value::Real(*r)),
             SqlValue::Text(s) => ToSqlOutput::Borrowed(ValueRef::Text(s.as_bytes())),

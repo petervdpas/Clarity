@@ -31,6 +31,8 @@ type sourceDb struct {
 type Db struct {
 	// sources by data source name; the first is the default.
 	sources []*sourceDb
+	// stores are the folders of the file stores, by name.
+	stores map[string]string
 }
 
 // Connect opens a database per data source.
@@ -210,35 +212,72 @@ func store(db *Db, record Record) error {
 	}
 	d := s.driver.dialect()
 	table, key, columns := record.Table(), keyOf(record), record.Columns()
-	values := record.Values()
+	values, err := db.savedValues(record)
+	if err != nil {
+		return err
+	}
+	isPicture := func(c string) bool {
+		_, ok := pictureColumn(record, c)
+		return ok
+	}
 	if record.GetID() == 0 {
-		id, err := s.driver.insert(d.insert(table, key, columns), values)
+		// An empty or kept picture is left to the column's NULL, so no NULL
+		// is bound to a binary column (SQL Server refuses that).
+		var names []string
+		var params []any
+		for i, c := range columns {
+			_, kept := values[i].(keptValue)
+			if isPicture(c) && (values[i] == nil || kept) {
+				continue
+			}
+			names = append(names, c)
+			params = append(params, values[i])
+		}
+		id, err := s.driver.insert(d.insert(table, key, names), params)
 		if err != nil {
 			return unfit(err)
 		}
 		record.SetID(id)
 		return nil
 	}
-	sets := make([]string, len(columns))
+	// A kept picture stays as it is; an emptied one is set to NULL as text.
+	var sets []string
+	var params []any
 	for i, c := range columns {
-		sets[i] = d.Quote(c) + " = " + d.Mark(i+1)
+		if _, kept := values[i].(keptValue); kept {
+			continue
+		}
+		if values[i] == nil && isPicture(c) {
+			sets = append(sets, d.Quote(c)+" = NULL")
+			continue
+		}
+		params = append(params, values[i])
+		sets = append(sets, d.Quote(c)+" = "+d.Mark(len(params)))
 	}
-	sql := "UPDATE " + d.Quote(table) + " SET " + strings.Join(sets, ", ") + " WHERE " + d.Quote(key) + " = " + d.Mark(len(values)+1)
-	changed, err := s.driver.execute(sql, append(values, record.GetID()))
+	if len(sets) == 0 {
+		return exists(s.driver, d, table, key, record.GetID())
+	}
+	sql := "UPDATE " + d.Quote(table) + " SET " + strings.Join(sets, ", ") + " WHERE " + d.Quote(key) + " = " + d.Mark(len(params)+1)
+	changed, err := s.driver.execute(sql, append(params, record.GetID()))
 	if err != nil {
 		return unfit(err)
 	}
 	// MySQL counts only the rows whose values changed, so an update that
 	// changes nothing is told apart from a missing record.
 	if changed == 0 {
-		rows, err := s.driver.rows("SELECT "+d.Quote(key)+" FROM "+d.Quote(table)+" WHERE "+d.Quote(key)+" = "+d.Mark(1), []any{record.GetID()})
-		if err != nil {
-			return err
-		}
-		if len(rows) == 0 {
-			id := record.GetID()
-			return &NotFoundError{table, &id}
-		}
+		return exists(s.driver, d, table, key, record.GetID())
+	}
+	return nil
+}
+
+// exists is nil when the record id is stored, else a NotFoundError.
+func exists(conn driver, d Dialect, table, key string, id int64) error {
+	rows, err := conn.rows("SELECT "+d.Quote(key)+" FROM "+d.Quote(table)+" WHERE "+d.Quote(key)+" = "+d.Mark(1), []any{id})
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return &NotFoundError{table, &id}
 	}
 	return nil
 }
@@ -282,6 +321,11 @@ func remove(db *Db, record Record) error {
 func selectColumns(d Dialect, record Record) string {
 	columns := []string{d.Quote(keyOf(record))}
 	for _, c := range record.Columns() {
+		// Whether there is a picture, not the picture.
+		if p, ok := pictureColumn(record, c); ok && p.Store == "" {
+			columns = append(columns, Presence(d, c))
+			continue
+		}
 		columns = append(columns, d.Quote(c))
 	}
 	return strings.Join(columns, ", ")

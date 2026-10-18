@@ -108,6 +108,7 @@ fn writes_a_complete_cargo_project() {
             "clarity-runtime/src/lib.rs",
             "clarity-runtime/src/mssql.rs",
             "clarity-runtime/src/mysql.rs",
+            "clarity-runtime/src/picture.rs",
             "clarity-runtime/src/postgres.rs",
             "clarity-runtime/src/query.rs",
             "clarity-runtime/src/sql.rs",

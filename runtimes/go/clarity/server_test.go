@@ -83,20 +83,22 @@ type customer struct {
 	Vip         bool
 	Remarks     string
 	Phone       string
+	Portrait    *Picture
 }
 
 func (*customer) Table() string { return "customer" }
 func (*customer) Columns() []string {
-	return []string{"name", "email", "kind", "credit_limit", "vip", "remarks", "phone"}
+	return []string{"name", "email", "kind", "credit_limit", "vip", "remarks", "phone", "portrait"}
 }
-func (c *customer) GetID() int64   { return c.ID }
-func (c *customer) SetID(id int64) { c.ID = id }
+func (*customer) Pictures() []PictureColumn { return []PictureColumn{{Column: "portrait"}} }
+func (c *customer) GetID() int64            { return c.ID }
+func (c *customer) SetID(id int64)          { c.ID = id }
 func (c *customer) Values() []any {
-	return []any{c.Name, c.Email, c.Kind, c.CreditLimit, c.Vip, c.Remarks, c.Phone}
+	return []any{c.Name, c.Email, c.Kind, c.CreditLimit, c.Vip, c.Remarks, c.Phone, PictureValue(c.Portrait)}
 }
 func (c *customer) Load(id int64, v []any) error {
 	r := NewReader(v)
-	*c = customer{id, r.Text(0, "name"), r.Text(1, "email"), r.Text(2, "kind"), r.Decimal(3, "credit_limit"), r.Bool(4, "vip"), r.Text(5, "remarks"), r.Text(6, "phone")}
+	*c = customer{id, r.Text(0, "name"), r.Text(1, "email"), r.Text(2, "kind"), r.Decimal(3, "credit_limit"), r.Bool(4, "vip"), r.Text(5, "remarks"), r.Text(6, "phone"), r.Picture(7, "portrait")}
 	return r.Err()
 }
 
@@ -260,6 +262,27 @@ func migratesAndKeepsRecords(t *testing.T, dialect Dialect, at, database string)
 	b, err := Get[purchase](db, blank.ID)
 	must(t, err)
 	equal(t, b.Code, int64(0))
+
+	// A picture in a binary column: saved, kept by a save that leaves it, emptied.
+	png := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
+	pictured, err := Get[customer](db, ada.ID)
+	must(t, err)
+	equal(t, pictured.Portrait, (*Picture)(nil))
+	pictured.Portrait = NewPicture(png)
+	must(t, Save(db, &pictured))
+	pictured, err = Get[customer](db, ada.ID)
+	must(t, err)
+	equal(t, pictured.Portrait, StoredPicture())
+	pictured.Phone = "555"
+	must(t, Save(db, &pictured))
+	portrait, err := PictureOf[customer](db, ada.ID, "portrait")
+	must(t, err)
+	equal(t, portrait, png)
+	pictured.Portrait, pictured.Phone = nil, ""
+	must(t, Save(db, &pictured))
+	portrait, err = PictureOf[customer](db, ada.ID, "portrait")
+	must(t, err)
+	equal(t, portrait, []byte(nil))
 
 	// Unique email: empty many times, a filled one once.
 	linus := &customer{Name: "Linus"}

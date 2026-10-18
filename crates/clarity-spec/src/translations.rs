@@ -27,6 +27,10 @@ pub const TRANSLATIONS_DIR: &str = "translations";
 /// The renderer's own words, which a translation can give too.
 pub const RENDERER_TEXTS: [&str; 2] = ["Yes", "No"];
 
+/// What an image part bound to a picture shows of its own: in its empty
+/// state, and on its buttons to load a picture and to remove it.
+pub const PICTURE_TEXTS: [&str; 3] = ["No picture", "Load a picture", "Remove the picture"];
+
 /// A text people see, and where it is used: `window Card`, `entity Customer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Used {
@@ -187,6 +191,14 @@ pub fn texts(project: &Project) -> Vec<Used> {
         for decl in &file.functions {
             let place = format!("{} {}", decl.kind.keyword(), decl.name.name);
             texts.statements(&decl.body, &place);
+        }
+    }
+    let bound_picture = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+        w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
+    }));
+    if bound_picture {
+        for text in PICTURE_TEXTS {
+            texts.add(text, "Clarity");
         }
     }
     for text in RENDERER_TEXTS {
@@ -373,4 +385,9 @@ pub fn table(project: &Project) -> TranslationTable {
         .collect();
     let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.translations[i].is_none()).count()).collect();
     TranslationTable { languages, rows, missing }
+}
+
+/// Whether any part in `widgets`, inside containers too, is one `test` picks.
+fn any_widget(widgets: &[Widget], test: &impl Fn(&Widget) -> bool) -> bool {
+    widgets.iter().any(|w| test(w) || any_widget(&w.children, test) || w.pages.iter().any(|p| any_widget(&p.children, test)))
 }

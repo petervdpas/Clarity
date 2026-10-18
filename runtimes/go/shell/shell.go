@@ -35,6 +35,9 @@ type Windows interface {
 	Dispatch(db *clarity.Db, state clarity.WindowState, handler string) (clarity.Reply, error)
 	// Options are the records a reference field of entity can point at.
 	Options(db *clarity.Db, entity string) ([]clarity.RefOption, error)
+	// Picture is the picture of image field field of record id of entity;
+	// nil when it has none.
+	Picture(db *clarity.Db, entity string, id int64, field string) ([]byte, error)
 }
 
 type Options struct {
@@ -129,6 +132,8 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Handler string              `json:"handler"`
 		Entity  string              `json:"entity"`
 		Title   string              `json:"title"`
+		ID      int64               `json:"id"`
+		Field   string              `json:"field"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -160,6 +165,13 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		return answer(c.options.Windows.Dispatch(db, a.State, a.Handler))
 	case "ref_options":
 		return answer(c.options.Windows.Options(db, a.Entity))
+	case "picture":
+		// A picture of a record, fetched on its own, as the page shows it.
+		b, err := c.options.Windows.Picture(db, a.Entity, a.ID, a.Field)
+		if err != nil || b == nil {
+			return answer(nil, err)
+		}
+		return answer(clarity.DataURL(b))
 	case "set_title":
 		if window := caller(ctx); window != nil {
 			window.SetTitle(a.Title)

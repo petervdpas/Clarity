@@ -20,7 +20,7 @@ impl ToSql for Param<'_> {
     fn to_sql(&self) -> ColumnData<'_> {
         match self.0 {
             // Text converts to every type, so a missing value fits any column.
-            SqlValue::Null => ColumnData::String(None),
+            SqlValue::Null | SqlValue::Kept => ColumnData::String(None),
             SqlValue::Integer(n) => ColumnData::I64(Some(*n)),
             SqlValue::Real(r) => ColumnData::F64(Some(*r)),
             SqlValue::Text(s) => ColumnData::String(Some(Cow::Borrowed(s.as_str()))),

@@ -20,8 +20,9 @@ const KEYWORDS: [&str; 77] = [
 const TAKEN: [&str; 1] = ["db"];
 
 /// Members every record has, which a field cannot be called.
-const RECORD_MEMBERS: [&str; 15] = [
+const RECORD_MEMBERS: [&str; 16] = [
     "Id",
+    "Pictures",
     "SourceName",
     "TableName",
     "KeyColumn",
@@ -121,6 +122,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::DateTime => "DateTime?".into(),
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "long?".into(),
+        FieldType::Image => "Picture?".into(),
         FieldType::List { item } => format!("List<{}>", item.name),
     }
 }
@@ -134,6 +136,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bool => "bool".into(),
         TypeInfo::Date => "DateOnly?".into(),
         TypeInfo::DateTime => "DateTime?".into(),
+        TypeInfo::Image => "Picture?".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("List<{item}>"),
         TypeInfo::Unknown => "void".into(),

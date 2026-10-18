@@ -796,6 +796,7 @@
           <EntityEditor
             {preview}
             {entity}
+            stores={projectFile?.settings?.filestores.map((s) => s.name) ?? []}
             module={file.module?.name ?? ""}
             onedit={editData}
             ondelete={deletePicked}

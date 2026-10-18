@@ -35,6 +35,7 @@ pub fn type_text(ty: &FieldType) -> String {
         FieldType::Date => "date".to_string(),
         FieldType::DateTime => "datetime".to_string(),
         FieldType::Duration => "duration".to_string(),
+        FieldType::Image => "image".to_string(),
         FieldType::Email => "email".to_string(),
         FieldType::Url => "url".to_string(),
         FieldType::Id => "id".to_string(),
@@ -85,6 +86,9 @@ pub fn field_line(spec: &FieldSpec) -> String {
         if let Some(value) = value {
             parts.push(format!("{word} {}", quote(value)));
         }
+    }
+    if let Some(store) = &m.store {
+        parts.push(format!("store {store}"));
     }
     parts.join(", ")
 }

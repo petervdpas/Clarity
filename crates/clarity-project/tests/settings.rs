@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use clarity_project::{
-    Auth, AuthKind, Backend, DataSource, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir,
+    Auth, AuthKind, Backend, DataSource, FileStore, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir,
     parse, starter, title, validate, write,
 };
 
@@ -50,6 +50,7 @@ fn shop() -> Settings {
         language: Some("nl-NL".into()),
         currency: Some("EUR".into()),
         themes: Vec::new(),
+        filestores: Vec::new(),
         out: "out".into(),
     }
 }
@@ -81,7 +82,7 @@ fn names_the_expected_values_for_an_unknown_one() {
 #[test]
 fn refuses_unknown_settings_and_a_wrong_shape() {
     let err = parse(&SHOP.replace("    stack", "    frontend svelte\n    stack")).unwrap_err();
-    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme and datasource");
+    assert_eq!(err, "line 3: unknown setting 'frontend'; the settings are title, stack, output, language, currency, theme, datasource and filestore");
     assert_eq!(parse("module shop\n").unwrap_err(), "line 1: a project file starts with 'project Name'");
     assert_eq!(
         parse("project Shop\n    datasource main sqlite \"x.db\"\n").unwrap_err(),
@@ -407,4 +408,43 @@ fn loading_hands_the_theme_to_the_project() {
     std::fs::remove_dir_all(&root).unwrap();
     assert_eq!(project.themes, ["Plain"]);
     assert!(project.diagnostics.iter().all(|d| !d.message.contains("theme")), "{:#?}", project.diagnostics);
+}
+
+/// A file store keeps the pictures of image fields as files: a folder, or
+/// `env:NAME` for one that differs per machine.
+#[test]
+fn reads_and_writes_file_stores() {
+    let text = format!("{SHOP}    filestore photos \"pictures\"\n    filestore scans \"env:SCAN_FOLDER\"\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(
+        settings.filestores,
+        [FileStore { name: "photos".into(), location: "pictures".into() }, FileStore { name: "scans".into(), location: "env:SCAN_FOLDER".into() }]
+    );
+    assert_eq!(write(Some(&text), &settings).unwrap(), text);
+    let fresh = write(None, &settings).unwrap();
+    assert!(fresh.contains("    filestore photos \"pictures\"\n    filestore scans \"env:SCAN_FOLDER\"\n"), "{fresh}");
+    assert!(parse(&format!("{SHOP}    filestore photos\n")).unwrap_err().contains("filestore photos \"pictures\""));
+}
+
+#[test]
+fn file_store_names_are_identifiers_and_unique() {
+    let store = |name: &str| FileStore { name: name.into(), location: "pictures".into() };
+    assert_eq!(problems_of(|s| s.filestores = vec![store("photos"), store("photos")]), ["there are two file stores named 'photos'"]);
+    assert_eq!(problems_of(|s| s.filestores = vec![store("my photos")]), ["'my photos' is not a valid file store name"]);
+    assert_eq!(problems_of(|s| s.filestores = vec![FileStore { location: "".into(), ..store("photos") }]), ["file store 'photos' needs a folder"]);
+}
+
+/// A relative file store is in the project's folder, as a SQLite file is,
+/// whichever folder the application runs in; `env:` stays as written.
+#[test]
+fn a_file_store_is_found_from_the_project_folder() {
+    let mut settings = shop();
+    settings.filestores = vec![
+        FileStore { name: "photos".into(), location: "data/photos".into() },
+        FileStore { name: "scans".into(), location: "env:SCAN_FOLDER".into() },
+    ];
+    let dir = Path::new("/projects/shop");
+    let built = clarity_project::build_settings(dir, &settings);
+    assert_eq!(built.filestores[0].location, "/projects/shop/data/photos");
+    assert_eq!(built.filestores[1].location, "env:SCAN_FOLDER");
 }

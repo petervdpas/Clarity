@@ -79,6 +79,16 @@ pub struct Auth {
     pub secret: String,
 }
 
+/// A folder that keeps the pictures of image fields with `store <name>` as
+/// files, such as a folder of photos a catalog shows. Where it is differs
+/// per installation, like a data source: a folder, or `env:NAME`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct FileStore {
+    pub name: String,
+    pub location: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DataSource {
@@ -122,6 +132,9 @@ pub struct Settings {
     /// it looks as Clarity does.
     #[serde(default)]
     pub themes: Vec<String>,
+    /// The file stores of image fields kept as files, by name.
+    #[serde(default)]
+    pub filestores: Vec<FileStore>,
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
@@ -203,6 +216,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         language: None,
         currency: None,
         themes: Vec::new(),
+        filestores: Vec::new(),
         out: DEFAULT_OUT.to_string(),
     }
 }
@@ -335,6 +349,16 @@ pub fn validate(settings: &Settings) -> Vec<String> {
                 "data source '{}': a web API is always external; leave out 'external'",
                 source.name
             ));
+        }
+    }
+    for (i, store) in settings.filestores.iter().enumerate() {
+        if !is_identifier(&store.name) {
+            problems.push(format!("'{}' is not a valid file store name", store.name));
+        } else if settings.filestores[..i].iter().any(|s| s.name == store.name) {
+            problems.push(format!("there are two file stores named '{}'", store.name));
+        }
+        if store.location.trim().is_empty() {
+            problems.push(format!("file store '{}' needs a folder", store.name));
         }
     }
     problems
@@ -546,6 +570,9 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
     let settings = load(&file).settings;
     let themes = settings.as_ref().map(|s| s.themes.clone()).unwrap_or_default();
+    if let Some(settings) = &settings {
+        clarity_spec::attach_stores(project, settings.filestores.iter().map(|s| s.name.clone()).collect());
+    }
     if let Some(settings) = settings {
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
@@ -581,14 +608,19 @@ fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
 }
 
 /// The settings a generated application is built with. A relative SQLite
-/// location is in the project's folder `dir`, for Clarity and for the
-/// application alike, so it becomes the full path from there: the same file
-/// whether a database is owned or external, and whichever folder the
-/// application runs in.
+/// location or file store is in the project's folder `dir`, for Clarity and
+/// for the application alike, so it becomes the full path from there: the
+/// same place whether a database is owned or external, and whichever folder
+/// the application runs in.
 pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     let mut built = settings.clone();
     for source in built.datasources.iter_mut().filter(|s| s.kind == SourceKind::Sqlite) {
         source.url = sqlite_path(dir, source).display().to_string();
+    }
+    for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:")) {
+        let path = Path::new(&store.location);
+        let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
+        store.location = std::path::absolute(&joined).unwrap_or(joined).display().to_string();
     }
     built
 }

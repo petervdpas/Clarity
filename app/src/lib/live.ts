@@ -38,6 +38,13 @@ export interface Live {
   setChecked(part: string, checked: boolean): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
+  /**
+   * A record's stored picture as a URL to show, fetched on its own:
+   * undefined while it loads, null when there is none.
+   */
+  picture(entity: string, id: number, field: string): string | null | undefined;
+  /** Forgets a fetched picture that a new one replaces. */
+  forgetPicture(entity: string, id: number, field: string): void;
 }
 
 export function provideLive(live: Live) {

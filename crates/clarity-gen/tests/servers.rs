@@ -10,7 +10,7 @@
 //! ```
 
 use clarity_project::SourceKind;
-use clarity_runtime::{Cond, Db, Decimal, Dialect, Error, Hop, Id, NaiveDate, NaiveDateTime, Op, Query, Record, SqlValue, sql};
+use clarity_runtime::{Cond, Db, Decimal, Dialect, Error, Hop, Id, Picture, PictureColumn, NaiveDate, NaiveDateTime, Op, Query, Record, SqlValue, sql};
 
 const SHOP: &str = "module shop
 
@@ -26,6 +26,7 @@ entity Customer
     vip: bool
     remarks: text
     phone: text(20)
+    portrait: image
 
 entity Purchase
     number: text(12), unique
@@ -60,6 +61,7 @@ const SECOND: &str = "migration \"Second\"
     rename field Customer.active to vip
     remove field Customer.since
     add field Customer.phone: text(20)
+    add field Customer.portrait: image
     add unique Customer.email
     change field Order.total: money
     add unique Order.number
@@ -178,11 +180,13 @@ struct Customer {
     vip: bool,
     remarks: String,
     phone: String,
+    portrait: Option<Picture>,
 }
 
 impl Record for Customer {
     const TABLE: &'static str = "customer";
-    const COLUMNS: &'static [&'static str] = &["name", "email", "kind", "credit_limit", "vip", "remarks", "phone"];
+    const COLUMNS: &'static [&'static str] = &["name", "email", "kind", "credit_limit", "vip", "remarks", "phone", "portrait"];
+    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: "portrait", store: None }];
     fn id(&self) -> Id {
         self.id
     }
@@ -198,6 +202,7 @@ impl Record for Customer {
             sql::boolean(self.vip),
             sql::text(&self.remarks),
             sql::text(&self.phone),
+            sql::picture(&self.portrait),
         ]
     }
     fn from_values(id: Id, v: &[SqlValue]) -> clarity_runtime::Result<Self> {
@@ -210,6 +215,7 @@ impl Record for Customer {
             vip: sql::get_boolean("vip", &v[4])?,
             remarks: sql::get_text("remarks", &v[5])?,
             phone: sql::get_text("phone", &v[6])?,
+            portrait: sql::get_picture("portrait", &v[7])?,
         })
     }
 }
@@ -342,6 +348,23 @@ fn migrates_and_keeps_records(variable: &str, dialect: Dialect, kind: SourceKind
     // Empty text is no number: it becomes the default.
     assert_eq!(db.get::<Purchase>(blank.id).unwrap().code, 0);
 
+    // A picture in a binary column: saved, kept by a save that leaves it, emptied.
+    let png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    let mut pictured = db.get::<Customer>(ada.id).unwrap();
+    assert_eq!(pictured.portrait, None);
+    pictured.portrait = Some(Picture::New(png.clone()));
+    db.save(&mut pictured).unwrap();
+    let mut pictured = db.get::<Customer>(ada.id).unwrap();
+    assert_eq!(pictured.portrait, Some(Picture::Stored));
+    pictured.phone = "555".into();
+    db.save(&mut pictured).unwrap();
+    assert_eq!(db.picture::<Customer>(ada.id, "portrait").unwrap(), Some(png));
+    pictured.portrait = None;
+    db.save(&mut pictured).unwrap();
+    assert_eq!(db.picture::<Customer>(ada.id, "portrait").unwrap(), None);
+    pictured.phone = String::new();
+    db.save(&mut pictured).unwrap();
+
     // Unique email: empty many times, a filled one once.
     let mut linus = Customer { name: "Linus".into(), ..Customer::default() };
     db.save(&mut linus).unwrap();
@@ -396,7 +419,7 @@ fn the_shared_migration_steps_are_current() {
         databases.insert(name.to_string(), serde_json::json!(steps(kind)));
     }
     let cases = serde_json::json!({
-        "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. The Rust runtime runs them from the generator; the C# runtime's tests read them here (Clarity.Runtime.Tests/ServerTests.cs).",
+        "about": "The two migration steps of the server scenario (crates/clarity-gen/tests/servers.rs), as the generator writes them per database: a list of steps, each a list of statements. The Rust runtime runs them from the generator; the C# and Go runtimes' tests read them here (Clarity.Runtime.Tests/ServerTests.cs, runtimes/go/clarity/server_test.go).",
         "steps": databases,
     });
     let text = serde_json::to_string_pretty(&cases).unwrap() + "\n";

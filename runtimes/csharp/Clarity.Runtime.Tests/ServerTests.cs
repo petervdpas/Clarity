@@ -80,7 +80,8 @@ public sealed record Order : IRecord<Order>
 public sealed record Customer : IRecord<Customer>
 {
     public static string TableName => "customer";
-    public static IReadOnlyList<string> ColumnNames { get; } = ["name", "email", "kind", "credit_limit", "vip", "remarks", "phone"];
+    public static IReadOnlyList<string> ColumnNames { get; } = ["name", "email", "kind", "credit_limit", "vip", "remarks", "phone", "portrait"];
+    public static IReadOnlyList<PictureColumn> Pictures { get; } = [new("portrait", null)];
 
     public long Id { get; set; }
     public string Name { get; set; } = "";
@@ -90,8 +91,9 @@ public sealed record Customer : IRecord<Customer>
     public bool Vip { get; set; }
     public string Remarks { get; set; } = "";
     public string Phone { get; set; } = "";
+    public Picture? Portrait { get; set; }
 
-    public object?[] ToValues() => [Name, Email, Kind, CreditLimit, Vip, Remarks, Phone];
+    public object?[] ToValues() => [Name, Email, Kind, CreditLimit, Vip, Remarks, Phone, Sql.Picture(Portrait)];
 
     public static Customer FromValues(long id, object?[] v) => new()
     {
@@ -103,6 +105,7 @@ public sealed record Customer : IRecord<Customer>
         Vip = Sql.GetBoolean("vip", v[4]),
         Remarks = Sql.GetText("remarks", v[5]),
         Phone = Sql.GetText("phone", v[6]),
+        Portrait = Sql.GetPicture("portrait", v[7]),
     };
 }
 
@@ -205,6 +208,18 @@ public class ServerTests
         Assert.Equal((1L, 42L), (purchase.Paid, purchase.Code));
         // Empty text is no number: it becomes the default.
         Assert.Equal(0, db.Get<Purchase>(blank.Id).Code);
+
+        // A picture in a binary column: saved, kept by a save that leaves it, emptied.
+        byte[] png = [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        var pictured = db.Get<Customer>(ada.Id);
+        Assert.Null(pictured.Portrait);
+        db.Save(pictured with { Portrait = Picture.New(png) });
+        pictured = db.Get<Customer>(ada.Id);
+        Assert.Same(Picture.Stored, pictured.Portrait);
+        db.Save(pictured with { Phone = "555" });
+        Assert.Equal(png, db.PictureOf<Customer>(ada.Id, "portrait"));
+        db.Save(pictured with { Portrait = null, Phone = "" });
+        Assert.Null(db.PictureOf<Customer>(ada.Id, "portrait"));
 
         // Unique email: empty many times, a filled one once.
         var linus = new Customer { Name = "Linus" };

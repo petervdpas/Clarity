@@ -703,6 +703,21 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</ListBox>");
             }
+            // A record's picture, which the view model fetches when it is stored.
+            WidgetKind::Image if p.bind.as_deref().is_some_and(|b| b.contains('.')) => {
+                let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
+                let path = bound.as_deref().unwrap_or_default();
+                let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:PictureBox {at} Picture=\"{{Binding {path}}}\" Record=\"{{Binding {record}}}\" Fetch=\"{{Binding {fetch}}}\" EmptyText=\"{empty}\" LoadText=\"{load}\" RemoveText=\"{remove}\"{read_only}{text_state}{extra} />",
+                    record = member(data),
+                    fetch = picture_fetch(data, field),
+                    empty = self.text("No picture"),
+                    load = self.text("Load a picture"),
+                    remove = self.text("Remove the picture"),
+                );
+            }
             WidgetKind::Image if p.source.is_some() => {
                 let source = p.source.as_deref().unwrap_or_default();
                 let _ = writeln!(out, "{pad}<Image {at} Source=\"/images/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
@@ -818,6 +833,19 @@ public partial class {name}View : UserControl
                     "    public {entity} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {entity} {field} = new();\n\n"
                 );
             }
+        }
+        // The picture each picture field shows when the record has one stored.
+        let mut fetches: BTreeMap<String, String> = BTreeMap::new();
+        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Image) {
+            let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
+            let Some(entity) = self.entity_of(data) else { continue };
+            fetches.insert(
+                picture_fetch(data, field),
+                format!("() => Db.PictureOf<{}>({}.Id, {})", entity.name.name, member(data), string(entity.column_of(field))),
+            );
+        }
+        for (name, fetch) in &fetches {
+            let _ = write!(properties, "    public Func<byte[]?> {name} => {fetch};\n\n");
         }
         let mut choices: BTreeMap<String, String> = BTreeMap::new();
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Dropdown) {
@@ -960,6 +988,11 @@ public sealed partial class {name}ViewModel : WindowViewModel
             body.trim_end()
         ))
     }
+}
+
+/// The view model member that fetches the stored picture of `data.field`.
+fn picture_fetch(data: &str, field: &str) -> String {
+    format!("{}{}Picture", member(data), pascal(field))
 }
 
 #[cfg(test)]

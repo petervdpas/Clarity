@@ -42,7 +42,7 @@ fn whole(n: i64, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, B
 impl ToSql for Param<'_> {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, Boxed> {
         match self.0 {
-            SqlValue::Null => Ok(IsNull::Yes),
+            SqlValue::Null | SqlValue::Kept => Ok(IsNull::Yes),
             SqlValue::Integer(n) => whole(*n, ty, out),
             SqlValue::Bool(b) if *ty == Type::BOOL => b.to_sql(ty, out),
             SqlValue::Bool(b) => whole(i64::from(*b), ty, out),

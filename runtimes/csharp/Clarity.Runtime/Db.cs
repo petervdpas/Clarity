@@ -22,6 +22,9 @@ public sealed class Db : IDisposable
     /// <summary>By data source name; the first is the default.</summary>
     readonly List<SourceDb> sources;
 
+    /// <summary>The folders of the file stores, by name.</summary>
+    readonly Dictionary<string, string> stores = [];
+
     Db(List<SourceDb> sources) => this.sources = sources;
 
     /// <summary>One SQLite database, used for every record.</summary>
@@ -47,6 +50,93 @@ public sealed class Db : IDisposable
     }
 
     IDriver Conn(string source) => At(source).Driver;
+
+    /// <summary>
+    /// Adds the file store <paramref name="name"/> at <paramref name="location"/>, a folder
+    /// (made when it is not there yet); <c>env:NAME</c> takes it from that environment variable.
+    /// </summary>
+    public void AddStore(string name, string location)
+    {
+        var folder = Store.Location(location);
+        try
+        {
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new StorageException($"cannot make the file store {folder}: {e.Message}", e);
+        }
+        stores[name] = folder;
+    }
+
+    string StoreFolder(string name) => stores.TryGetValue(name, out var folder) ? folder : throw new StorageException($"there is no file store '{name}'");
+
+    /// <summary>
+    /// The values of a record as they are saved: a new picture checked, and
+    /// written to its file store when it has one, its column then holding the
+    /// file's name.
+    /// </summary>
+    object?[] SavedValues<R>(R record) where R : IRecord<R>
+    {
+        var values = record.ToValues();
+        foreach (var picture in R.Pictures)
+        {
+            var at = R.ColumnNames.ToList().IndexOf(picture.Column);
+            if (at < 0 || values[at] is not byte[] bytes)
+                continue;
+            var name = Pictures.FileName(bytes);
+            if (picture.Store is not { } store)
+                continue;
+            var file = Path.Combine(StoreFolder(store), name);
+            try
+            {
+                if (!File.Exists(file))
+                    File.WriteAllBytes(file, bytes);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new StorageException($"cannot write {file}: {e.Message}", e);
+            }
+            values[at] = name;
+        }
+        return values;
+    }
+
+    /// <summary>
+    /// The picture of field <paramref name="column"/> of record <paramref name="id"/>, read
+    /// from the database or from its file store; null when the record has none.
+    /// </summary>
+    public byte[]? PictureOf<R>(long id, string column) where R : IRecord<R>
+    {
+        var picture = R.Pictures.FirstOrDefault(p => p.Column == column)
+            ?? throw new StorageException($"{R.TableName} has no picture '{column}'");
+        var conn = Conn(R.SourceName);
+        var d = conn.Dialect;
+        var rows = conn.Rows($"SELECT {d.Quote(column)} FROM {d.Quote(R.TableName)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(1)}", [id]);
+        if (rows.Count == 0)
+            throw new NotFoundException(R.TableName, id);
+        switch (picture.Store, rows[0][0])
+        {
+            case (_, null):
+                return null;
+            case (null, byte[] bytes):
+                return bytes;
+            case ({ } store, string path) when path.Length > 0:
+                var file = Pictures.InStore(StoreFolder(store), path);
+                try
+                {
+                    return File.ReadAllBytes(file);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    throw new StorageException($"cannot read {file}: {e.Message}", e);
+                }
+            case (_, string):
+                return null;
+            case (_, var other):
+                throw new StorageException($"{column}: {other} is no picture");
+        }
+    }
 
     /// <summary>
     /// Runs <paramref name="run"/> in a transaction of <paramref name="source"/>, or in
@@ -137,17 +227,45 @@ public sealed class Db : IDisposable
 
     void Write<R>(R record) where R : IRecord<R>
     {
+        var values = SavedValues(record);
         var conn = Conn(R.SourceName);
         var d = conn.Dialect;
-        var values = record.ToValues();
+        bool IsPicture(string c) => R.Pictures.Any(p => p.Column == c);
         if (record.Id == 0)
         {
-            record.Id = Unfit(() => conn.Insert(d.Insert(R.TableName, R.KeyColumn, R.ColumnNames), values));
+            // An empty or kept picture is left to the column's NULL, so no NULL
+            // is bound to a binary column (SQL Server refuses that).
+            var kept = R.ColumnNames.Select((c, i) => (Column: c, Value: values[i]))
+                .Where(p => !(IsPicture(p.Column) && (p.Value is null || ReferenceEquals(p.Value, Sql.Kept))))
+                .ToList();
+            var insert = d.Insert(R.TableName, R.KeyColumn, kept.Select(p => p.Column).ToList());
+            record.Id = Unfit(() => conn.Insert(insert, kept.Select(p => p.Value).ToArray()));
             return;
         }
-        var sets = string.Join(", ", R.ColumnNames.Select((c, i) => $"{d.Quote(c)} = {d.Mark(i + 1)}"));
-        var sql = $"UPDATE {d.Quote(R.TableName)} SET {sets} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(values.Length + 1)}";
-        object?[] parameters = [.. values, record.Id];
+        // A kept picture stays as it is; an emptied one is set to NULL as text.
+        var sets = new List<string>();
+        var parameters = new List<object?>();
+        for (var i = 0; i < values.Length; i++)
+        {
+            var column = R.ColumnNames[i];
+            if (ReferenceEquals(values[i], Sql.Kept))
+                continue;
+            if (values[i] is null && IsPicture(column))
+            {
+                sets.Add($"{d.Quote(column)} = NULL");
+                continue;
+            }
+            parameters.Add(values[i]);
+            sets.Add($"{d.Quote(column)} = {d.Mark(parameters.Count)}");
+        }
+        if (sets.Count == 0)
+        {
+            if (!Exists<R>(conn, record.Id))
+                throw new NotFoundException(R.TableName, record.Id);
+            return;
+        }
+        var sql = $"UPDATE {d.Quote(R.TableName)} SET {string.Join(", ", sets)} WHERE {d.Quote(R.KeyColumn)} = {d.Mark(parameters.Count + 1)}";
+        parameters.Add(record.Id);
         // MySQL counts only the rows whose values changed, so an update that
         // changes nothing is told apart from a missing record.
         if (Unfit(() => conn.Execute(sql, parameters)) == 0 && !Exists<R>(conn, record.Id))
@@ -222,7 +340,9 @@ public sealed class Db : IDisposable
 
     /// <summary>The key and the stored columns of a record, for SELECT.</summary>
     static string SelectColumns<R>(Dialect d) where R : IRecord<R> =>
-        string.Join(", ", R.ColumnNames.Prepend(R.KeyColumn).Select(c => d.Quote(c)));
+        string.Join(", ", R.ColumnNames.Prepend(R.KeyColumn).Select(c =>
+            // Whether there is a picture, not the picture.
+            R.Pictures.Any(p => p.Column == c && p.Store is null) ? Pictures.Presence(d, c) : d.Quote(c)));
 
     static List<R> Records<R>(IDriver conn, string sql, IReadOnlyList<object?> parameters) where R : IRecord<R> =>
         conn.Rows(sql, parameters).Select(row => R.FromValues(Sql.GetInteger(R.KeyColumn, row[0]), row[1..])).ToList();

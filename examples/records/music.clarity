@@ -18,6 +18,7 @@ entity Artist
     country: text(40)
     formed: integer, format plain, label "Formed in"
     website: url
+    photo: image, store photos
 
 entity Album
     title: text(120), required
@@ -29,7 +30,7 @@ entity Album
     bought_on: date
     price: money, min 0
     rating: integer, min 0, max 5, help "From 0 to 5 stars"
-    cover: text(200), help "The file of the cover scan"
+    cover: image, help "The scan of the front cover"
     notes: text
 
 // A track of an album; the album form lists them in order.
@@ -97,8 +98,8 @@ page AlbumForm: window
                     number name rating at 3,3 span 1 bind album.rating
                     help at 4,3 span 3 for rating
                 tab "Cover"
-                    label "Cover file" at 1,5 span 2 for cover
-                    textbox name cover at 3,5 span 4 bind album.cover
+                    image name cover at 1,1 span 4 rows 6 bind album.cover
+                    help at 1,7 span 6 for cover
                 tab "Notes"
                     memo at 1,1 span 6 rows 6 bind album.notes
     button "Save" name save at 9,11 span 2 style primary key "Ctrl+S" default on click: save_clicked
@@ -135,7 +136,8 @@ page ArtistForm: window
     title "Artist"
     data artist: Artist
 
-    form at 1,1 span 12 rows 4 bind artist
+    image name photo at 10,1 span 3 rows 4 bind artist.photo
+    form at 1,1 span 9 rows 4 bind artist
         label "Name" at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind artist.name
         label "Country" at 1,2 span 3 for country

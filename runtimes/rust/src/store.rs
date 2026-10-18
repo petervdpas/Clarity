@@ -46,7 +46,7 @@ pub(crate) fn applied(version: usize) -> String {
 
 /// The location of a database: as written, or from the environment
 /// variable that `env:NAME` names, so passwords stay out of the program.
-fn location(text: &str) -> Result<String> {
+pub(crate) fn location(text: &str) -> Result<String> {
     match text.strip_prefix("env:") {
         Some(name) => std::env::var(name).map_err(|_| Error::Storage(format!("the environment variable {name} is not set"))),
         None => Ok(text.to_string()),

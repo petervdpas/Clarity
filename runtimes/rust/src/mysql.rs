@@ -14,7 +14,7 @@ use crate::{Error, Id, NaiveDate, Result, SqlValue};
 
 fn param(value: &SqlValue) -> Value {
     match value {
-        SqlValue::Null => Value::NULL,
+        SqlValue::Null | SqlValue::Kept => Value::NULL,
         SqlValue::Integer(n) => Value::Int(*n),
         SqlValue::Real(r) => Value::Double(*r),
         SqlValue::Text(s) => Value::Bytes(s.as_bytes().to_vec()),

@@ -194,9 +194,9 @@ fn functions_and_actions_become_rust_functions() {
 fn refuses_backends_that_are_not_generated_yet() {
     let project = load_sources([("sales.clarity", SALES)]);
     let mut settings = shop();
-    settings.stack.backend = Backend::Go;
+    settings.stack.backend = Backend::Cpp;
     let errors = generate(&project, &settings).unwrap_err();
-    assert_eq!(errors, ["the Go backend is not generated yet; Rust and C# are"]);
+    assert_eq!(errors, ["the C++ backend is not generated yet; Rust, Go and C# are"]);
 }
 
 #[test]

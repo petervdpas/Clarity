@@ -261,8 +261,8 @@ fn the_program_opens_and_migrates_every_database() {
 fn csharp_needs_avalonia_or_the_web_renderer() {
     let project = load_sources([("sales.clarity", SALES)]);
     let mut settings = settings();
-    settings.stack.backend = Backend::Go;
-    assert_eq!(generate(&project, &settings).unwrap_err(), ["the Go backend is not generated yet; Rust and C# are"]);
+    settings.stack.backend = Backend::C;
+    assert_eq!(generate(&project, &settings).unwrap_err(), ["the C backend is not generated yet; Rust, Go and C# are"]);
 }
 
 /// A runtime file added later must reach generated projects too.

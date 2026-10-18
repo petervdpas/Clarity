@@ -6,6 +6,7 @@
 pub mod tools;
 mod csharp;
 mod ddl;
+mod go;
 mod print;
 mod readme;
 mod rust;
@@ -80,6 +81,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         Backend::Csharp => {
             return Err(vec!["C# with the web renderer is not generated yet; C# uses Avalonia".to_string()]);
         }
+        Backend::Go => go::generate(project, settings)?,
         other => {
             let name = match other {
                 Backend::Go => "Go",
@@ -88,7 +90,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
                 Backend::Cpp => "C++",
                 Backend::Rust => "Rust",
             };
-            return Err(vec![format!("the {name} backend is not generated yet; Rust and C# are")]);
+            return Err(vec![format!("the {name} backend is not generated yet; Rust, Go and C# are")]);
         }
     };
     files.push(OutFile {

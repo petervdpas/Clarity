@@ -62,6 +62,8 @@ export function fieldFormat(field: Field): FieldFormat | null {
     case "date":
     case "dateTime":
       return { kind: t.kind, format };
+    case "duration":
+      return { kind: "duration" };
     case "decimal":
       return { kind: "decimal", scale: t.scale, format };
     default:
@@ -93,7 +95,7 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
 }
 
 export function isNumeric(field: Field): boolean {
-  return ["integer", "decimal", "money", "id"].includes(field.type.kind);
+  return ["integer", "decimal", "money", "id", "duration"].includes(field.type.kind);
 }
 
 /** Compares two cell values for sorting: numbers numerically, the rest as text. */

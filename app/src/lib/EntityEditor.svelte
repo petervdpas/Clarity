@@ -27,7 +27,7 @@
     onrename: (newName: string) => void;
   } = $props();
 
-  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "email", "url", "id"];
+  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "email", "url", "id"];
   const types = $derived([
     ...BASE_TYPES,
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),

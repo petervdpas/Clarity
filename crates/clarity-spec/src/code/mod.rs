@@ -245,6 +245,8 @@ pub enum ExprKind {
     Bool {
         value: bool,
     },
+    /// `none`: the empty value of a date, a date and time or a reference.
+    Empty,
     Name {
         name: String,
     },
@@ -359,6 +361,7 @@ pub enum TypeRefKind {
     Bool,
     Date,
     DateTime,
+    Duration,
     /// An entity (a record) or an enum.
     Named { name: String },
     List { item: String },

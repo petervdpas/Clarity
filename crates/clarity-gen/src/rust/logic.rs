@@ -50,6 +50,7 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
     match &ty.kind {
         TypeRefKind::Text => TypeInfo::Text,
         TypeRefKind::Integer => TypeInfo::Integer,
+        TypeRefKind::Duration => TypeInfo::Duration,
         TypeRefKind::Decimal => TypeInfo::Decimal,
         TypeRefKind::Money => TypeInfo::Money,
         TypeRefKind::Bool => TypeInfo::Bool,
@@ -192,8 +193,8 @@ impl<'a> Emitter<'a> {
                     && matches!(self.project.entity(&owner).and_then(|e| e.field(&member.name)).map(|f| &f.ty), Some(FieldType::Ref { .. }))
                 {
                     let object = self.object(object);
-                    let record = self.object(value);
-                    out.push_str(&format!("{pad}{object}.{} = Some({record}.id);\n", ident(&member.name)));
+                    let stored = if matches!(value.kind, ExprKind::Empty) { "None".to_string() } else { format!("Some({}.id)", self.object(value)) };
+                    out.push_str(&format!("{pad}{object}.{} = {stored};\n", ident(&member.name)));
                     return;
                 }
                 let place = self.place(target);
@@ -336,6 +337,7 @@ impl<'a> Emitter<'a> {
         match self.types.type_of(expr) {
             TypeInfo::Text => format!("Slot::text({value})"),
             TypeInfo::Integer => format!("Slot::integer({value}, {format})"),
+            TypeInfo::Duration => format!("Slot::duration({value})"),
             TypeInfo::Decimal => format!("Slot::decimal({value}, {scale}, {format})"),
             TypeInfo::Money => format!("Slot::money({value}, {format})"),
             TypeInfo::Date => format!("Slot::date({value}, {format})"),
@@ -369,6 +371,7 @@ impl<'a> Emitter<'a> {
             "enabled" => "enabled",
             "caption" => "caption",
             "text" => "text",
+            "checked" => "checked",
             "error" => "error",
             "readonly" => "readonly",
             "selected" => "selected",
@@ -475,6 +478,7 @@ impl<'a> Emitter<'a> {
                 String::new()
             }
             ExprKind::Bool { value } => value.to_string(),
+            ExprKind::Empty => "None".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
                 let (part, property) = self.part_property(expr).unwrap_or_default();
                 self.read_part(&part, property)
@@ -573,6 +577,10 @@ impl<'a> Emitter<'a> {
                     self.errors.push(format!("{entity} has no field '{column}'"));
                     return String::new();
                 };
+                if matches!(value.kind, ExprKind::Empty) {
+                    let test = format!("Cond::is_none({:?})", self.column(entity, &column));
+                    return if op == BinaryOp::Eq { test } else { format!("{test}.negated()") };
+                }
                 if op == BinaryOp::Contains {
                     return format!("Cond::contains({:?}, &{})", self.column(entity, &column), self.text_ref(value));
                 }
@@ -617,7 +625,7 @@ impl<'a> Emitter<'a> {
         let from = self.types.type_of(value);
         match ty {
             FieldType::Text { .. } | FieldType::Email | FieldType::Url => format!("sql::text(&{})", self.value(value)),
-            FieldType::Integer | FieldType::Id => format!("sql::integer({})", self.value(value)),
+            FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => {
                 format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))
             }
@@ -649,7 +657,34 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// Whether a date or reference field is empty (`x == none`); a record
+    /// that is no field is none until it is stored.
+    fn is_none(&mut self, expr: &Expr) -> String {
+        if let ExprKind::Member { object, member } = &expr.kind
+            && let TypeInfo::Record(owner) = self.types.type_of(object)
+            && let Some(ty) = self.field_type(&owner, &member.name)
+            && matches!(ty, FieldType::Ref { .. } | FieldType::Date | FieldType::DateTime)
+        {
+            return format!("{}.{}.is_none()", self.object(object), ident(&member.name));
+        }
+        if matches!(self.types.type_of(expr), TypeInfo::Record(_)) {
+            return format!("({}.id == 0)", self.object(expr));
+        }
+        format!("{}.is_none()", self.place(expr))
+    }
+
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+            let other = match (&left.kind, &right.kind) {
+                (_, ExprKind::Empty) => Some(left),
+                (ExprKind::Empty, _) => Some(right),
+                _ => None,
+            };
+            if let Some(other) = other {
+                let test = self.is_none(other);
+                return if op == BinaryOp::Eq { test } else { format!("!{test}") };
+            }
+        }
         let lt = self.types.type_of(left);
         let rt = self.types.type_of(right);
         let symbol = match op {
@@ -678,6 +713,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn call(&mut self, name: &str, args: &[Expr]) -> String {
+        use clarity_spec::code::check::{NOW, TODAY};
+        // Dates are optional values in records and locals.
+        if name == TODAY || name == NOW {
+            return format!("Some(clarity_runtime::{name}())");
+        }
         if name == "count" {
             let list = match args.first() {
                 Some(arg) => match self.held(arg) {

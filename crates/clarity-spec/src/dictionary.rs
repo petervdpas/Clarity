@@ -34,6 +34,7 @@ pub fn type_text(ty: &FieldType) -> String {
         FieldType::Bool => "bool".to_string(),
         FieldType::Date => "date".to_string(),
         FieldType::DateTime => "datetime".to_string(),
+        FieldType::Duration => "duration".to_string(),
         FieldType::Email => "email".to_string(),
         FieldType::Url => "url".to_string(),
         FieldType::Id => "id".to_string(),

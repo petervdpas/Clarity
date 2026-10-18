@@ -366,3 +366,18 @@ fn the_selected_row_is_a_record_in_any_expression() {
     has(vm, ".With(\"grid.selected.number\", Slot.OfText(Selected<Order>(Grid).Number))");
     has(vm, "Db.Load<Customer>(Selected<Order>(Grid).Customer).Name");
 }
+
+/// An unbound checkbox holds its own state in its PartState (X2).
+#[test]
+fn an_unbound_checkbox_is_checked_in_its_state() {
+    let source = SHOP
+        .replace("    checkbox \"Paid\" at 4,3 span 3 bind order.paid\n", "    checkbox \"Paid\" at 4,3 span 3 bind order.paid\n    checkbox \"Only mine\" name mine at 10,3 span 3\n")
+        .replace("    handler grid_selected\n", "    handler grid_selected\n        if mine.checked\n            mine.checked = false\n");
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Windows/OrderFormView.axaml"), "<CheckBox x:Name=\"mine\" Grid.Column=\"9\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.OnlyMine}\" IsChecked=\"{Binding Mine.IsChecked}\"");
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "if (Mine.IsChecked)");
+    has(vm, "Mine.IsChecked = false;");
+}

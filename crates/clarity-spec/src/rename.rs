@@ -220,6 +220,6 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 }
             }
         }
-        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Name { .. } => {}
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::Name { .. } => {}
     }
 }

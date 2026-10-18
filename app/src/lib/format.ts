@@ -13,7 +13,7 @@ export type Formats = {
 };
 
 /** The types this file formats, by the kind the designer sees. */
-export type FormatKind = "integer" | "decimal" | "money" | "date" | "dateTime";
+export type FormatKind = "integer" | "decimal" | "money" | "date" | "dateTime" | "duration";
 
 /** How a value of a field is shown: its kind, its scale (decimals), and
  *  the named format the field picks, if any. */
@@ -88,10 +88,37 @@ function timePart(date: Date, format: string | null | undefined, locale: string)
   return new Intl.DateTimeFormat(locale, { hour, minute: "2-digit", timeZone: "UTC" }).format(date);
 }
 
+/** A duration of whole seconds as `m:ss`, or `h:mm:ss` from an hour, in
+ *  every locale. */
+function formatDuration(seconds: number): string {
+  const sign = seconds < 0 ? "-" : "";
+  const all = Math.abs(Math.trunc(seconds));
+  const h = Math.floor(all / 3600);
+  const m = Math.floor((all % 3600) / 60);
+  const s = all % 60;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${sign}${h}:${two(m)}:${two(s)}` : `${sign}${m}:${two(s)}`;
+}
+
+/** Typed text as a duration in seconds: `3:45`, `1:02:03`, or seconds
+ *  alone; null when it is no duration. */
+function parseDuration(text: string): number | null {
+  const m = /^(?:(?:(\d+):)?(\d+):)?(\d+)$/.exec(text.trim());
+  if (!m) return null;
+  const [, h, min, sec] = m;
+  if (min !== undefined && (sec.length !== 2 || Number(sec) > 59)) return null;
+  if (h !== undefined && (min.length !== 2 || Number(min) > 59)) return null;
+  return Number(h ?? 0) * 3600 + Number(min ?? 0) * 60 + Number(sec);
+}
+
 /** A stored value as people read it. Decimals and money arrive as text
  *  (`"1250.50"`), so they are formatted exactly, without rounding through
  *  a floating point number. */
 export function formatValue(field: FieldFormat, value: string | number, f: Formats): string {
+  if (field.kind === "duration") {
+    const seconds = Number(value);
+    return Number.isFinite(seconds) ? formatDuration(seconds) : String(value);
+  }
   if (field.kind === "date" || field.kind === "dateTime") {
     const date = moment(String(value));
     if (!date) return String(value);
@@ -143,6 +170,7 @@ function shift(text: string, places: number): string {
  *  it is not a number of that kind. Thousands separators, spaces, the
  *  currency sign and the percent sign may be typed or left out. */
 export function parseNumber(field: FieldFormat, text: string, f: Formats): string | number | null {
+  if (field.kind === "duration") return parseDuration(text);
   const { group, decimal } = separators(f.locale);
   let clean = text.replace(/[\s  %]/g, "").replace(/−/g, "-");
   if (f.currency) {
@@ -160,7 +188,7 @@ export function parseNumber(field: FieldFormat, text: string, f: Formats): strin
 
 /** The value of a slot, as the backend sends it (runtime `ui::Slot`). */
 export type Slot = {
-  kind: "text" | "integer" | "decimal" | "money" | "date" | "dateTime" | "bool" | "enum";
+  kind: "text" | "integer" | "decimal" | "money" | "date" | "dateTime" | "duration" | "bool" | "enum";
   value: string | number | boolean | null;
   scale?: number;
   format?: string | null;

@@ -504,6 +504,7 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
         "bool" => FieldType::Bool,
         "date" => FieldType::Date,
         "datetime" => FieldType::DateTime,
+        "duration" => FieldType::Duration,
         "email" => FieldType::Email,
         "url" => FieldType::Url,
         "id" => FieldType::Id,

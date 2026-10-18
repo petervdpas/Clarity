@@ -62,6 +62,7 @@ fn cond(value: &Value) -> Cond {
         "oneOf" => Cond::one_of(name(&inner["column"]), values(&inner["values"])),
         "oneOfNumbers" => Cond::one_of_numbers(name(&inner["column"]), values(&inner["values"])),
         "isTrue" => Cond::is_true(name(inner)),
+        "isNone" => Cond::is_none(name(inner)),
         "and" => {
             let (left, right) = pair("and");
             left.and(right)

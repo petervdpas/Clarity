@@ -69,6 +69,18 @@ impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Checks a `require` line of a function or action.
+/// The date where the application runs: Clarity's `today()`.
+pub fn today() -> NaiveDate {
+    chrono::Local::now().date_naive()
+}
+
+/// The date and time where the application runs, to the second: Clarity's `now()`.
+pub fn now() -> NaiveDateTime {
+    use chrono::{SubsecRound, Timelike};
+    let now = chrono::Local::now().naive_local().trunc_subsecs(0);
+    now.with_nanosecond(0).unwrap_or(now)
+}
+
 pub fn require(holds: bool, what: &str) -> Result<()> {
     if holds { Ok(()) } else { Err(Error::Contract(what.to_string())) }
 }

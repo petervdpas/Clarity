@@ -188,6 +188,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `bool` | true or false |
 | `date` | a calendar date |
 | `datetime` | a date with a time |
+| `duration` | a length of time in whole seconds, shown and typed as `3:45` or `1:02:03` everywhere |
 | `email` | an e-mail address |
 | `url` | a web address |
 | `id` | the id of a record |
@@ -716,6 +717,7 @@ A name that is both data and a part in the same window is an error.
 | `error` | inputs | text | yes; `""` clears it |
 | `readonly` | inputs | bool | yes |
 | `text` | text boxes, memos and password inputs that are not bound | text: what the user typed | yes |
+| `checked` | checkboxes and switches that are not bound | bool: whether it is on | yes |
 | `selected` | tables, lists | the record of the selected row | no |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
@@ -816,7 +818,8 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `"Saved {customer.name}"` | text with slots, for text that is shown; see [Text with slots](#text-with-slots) |
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
 | `Business`, `CustomerKind.Business` | enum values |
-| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items |
+| `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `today()` the date and `now()` the date and time where the application runs |
 | `(expr)` | grouping |
 | `-x` | negation |
 | `a * b`, `a / b` | multiplication and division |
@@ -864,7 +867,7 @@ code Customers
 
 - `find c in Customer` names each record `c`. The name exists only inside the query, so `c.name` is never confused with a part or local that is also called `name`.
 - `where` is optional. Without it, `find` reads every record.
-- The condition combines, with `and`, `or`, `not` and parentheses, comparisons between a field of the record and a value: `c.name == x`, `c.total > 100`, `c.name contains x`, `c.kind in [Private, Business]`. A bool field stands on its own: `c.active`, `not c.active`. A reference field is compared with a record: `o.customer == customer`.
+- The condition combines, with `and`, `or`, `not` and parentheses, comparisons between a field of the record and a value: `c.name == x`, `c.total > 100`, `c.name contains x`, `c.kind in [Private, Business]`. A bool field stands on its own: `c.active`, `not c.active`. A reference field is compared with a record: `o.customer == customer`. A date or reference field compared with `none` finds the records where it is empty: `l.returned_on == none`.
 - The value side can be anything that does not use the record: a literal, a local, the window's data, a part property.
 - Only the record's own fields can be compared. `o.customer.name` goes through a reference and is not allowed yet.
 - `order by` takes one or more fields, each optionally followed by `desc`. Without it, records come in the order they were stored.
@@ -881,6 +884,7 @@ The types of values follow the data dictionary:
 | `decimal` | decimal, money |
 | `bool` | bool |
 | `date`, `datetime` | date, datetime |
+| `duration` | duration; durations add up (`+`, `-`), scale by a number (`*`, `/`), compare, and take a number of seconds: `let total: duration = 0` |
 | an enum | that enum |
 | a record | an entity, a `ref` |
 | a list of records | `list<Entity>`, a list in the window's data |

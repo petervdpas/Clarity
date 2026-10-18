@@ -223,3 +223,15 @@ fn a_written_step_is_the_next_file_in_the_folder() {
     assert!(clarity_spec::write_step(&dir, "main", "Second", &[]).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A duration is stored as whole seconds, like an integer: an integer field
+/// that becomes a duration under another name is proposed as a rename.
+#[test]
+fn an_integer_that_becomes_a_duration_is_a_rename() {
+    let first = "migration \"Tracks\"\n    add entity Track\n        title: text(80)\n        seconds: integer\n";
+    let now = "module music\n\nentity Track\n    title: text(80)\n    length: duration\n";
+    let project = load_with_migrations([("music.clarity", now)], [("0001.clarity", first)]);
+    let proposed = migrate::proposed_renames(&project, "main");
+    assert_eq!(proposed, [Rename { entity: Some("Track".into()), from: "seconds".into(), to: "length".into() }]);
+    assert_eq!(pending(&project, &proposed), ["rename field Track.seconds to length", "change field Track.length: duration"]);
+}

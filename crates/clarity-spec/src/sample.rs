@@ -97,6 +97,8 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
             Value::String(format_decimal(bounded(field, (i as i64 + 1) * 125_050), 2))
         }
         FieldType::Bool => Value::Bool(i % 3 != 2),
+        // Lengths of songs: 3:05 and up.
+        FieldType::Duration => Value::from(bounded(field, 185 + (i as i64 * 37) % 240)),
         FieldType::Date => {
             Value::String(format!("2026-{:02}-{:02}", (i % 12) + 1, (i * 3 % 28) + 1))
         }

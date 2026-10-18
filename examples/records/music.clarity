@@ -37,14 +37,14 @@ entity Track
     album: ref Album, required
     number: integer, min 1, label "No."
     title: text(120), required
-    seconds: integer, min 0, label "Length (s)"
+    length: duration, min 0
 
-// The length of a set of tracks, in seconds.
-function total_seconds(tracks: list<Track>) -> integer
+// The length of a set of tracks.
+function total_length(tracks: list<Track>) -> duration
     ensure result >= 0
-    let total = 0
+    let total: duration = 0
     for track in tracks
-        total = total + track.seconds
+        total = total + track.length
     return total
 
 page AlbumBrowse: window
@@ -84,7 +84,7 @@ page AlbumForm: window
         pane
             tabs at 1,1 span 6 rows 9
                 tab "Tracks"
-                    table name track_grid at 1,1 span 6 rows 6 bind tracks columns number, title, seconds on open: track_opened
+                    table name track_grid at 1,1 span 6 rows 6 bind tracks columns number, title, length on open: track_opened
                     label name length at 1,7 span 4
                     button "Add track" at 5,7 span 2 on click: add_track_clicked
                 tab "Purchase"
@@ -114,8 +114,8 @@ page TrackDialog: dialog
     number name number at 4,1 span 2 bind track.number
     label "Title" at 1,2 span 3 for title
     textbox name title at 4,2 span 9 bind track.title
-    label "Length (s)" at 1,3 span 3 for seconds
-    number name seconds at 4,3 span 3 bind track.seconds
+    label "Length" at 1,3 span 3 for length
+    number name length at 4,3 span 3 bind track.length placeholder "3:45"
     button "Delete" name delete_button at 1,5 span 2 on click: delete_clicked
     button "Save" at 9,5 span 2 style primary default on click: save_clicked
     button "Cancel" at 11,5 span 2 cancel on click -> close
@@ -181,9 +181,9 @@ code AlbumBrowse
 code AlbumForm
     handler album_opened
         tracks = find t in Track where t.album == album order by t.number
-        let seconds = total_seconds(tracks)
+        let total = total_length(tracks)
         let count = count(tracks)
-        length.caption = "{count} tracks, {seconds} seconds"
+        length.caption = "{count} tracks, {total}"
 
     handler track_opened
         open TrackDialog with album = album, track = track_grid.selected
@@ -256,7 +256,7 @@ code GenreDialog
 
 code Track
     before save
-        if track.seconds > 7200
+        if track.length > 7200
             refuse "Track {track.number} is longer than two hours"
 
 code Genre

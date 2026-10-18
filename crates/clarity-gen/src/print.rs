@@ -9,6 +9,7 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Str { value } => format!("{value:?}"),
         ExprKind::Text { parts } => format!("{:?}", clarity_spec::code::template(parts)),
         ExprKind::Bool { value } => value.to_string(),
+        ExprKind::Empty => "none".to_string(),
         ExprKind::Name { name } => name.clone(),
         ExprKind::Member { object, member } => format!("{}.{}", expr(object), member.name),
         ExprKind::Unary { op: UnaryOp::Not, operand } => format!("not {}", expr(operand)),

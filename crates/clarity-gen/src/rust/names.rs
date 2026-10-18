@@ -33,7 +33,7 @@ pub fn snake(name: &str) -> String {
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url => "String".into(),
-        FieldType::Integer | FieldType::Id => "i64".into(),
+        FieldType::Integer | FieldType::Id | FieldType::Duration => "i64".into(),
         FieldType::Decimal { .. } | FieldType::Money => "Decimal".into(),
         FieldType::Bool => "bool".into(),
         FieldType::Date => "Option<NaiveDate>".into(),
@@ -48,7 +48,7 @@ pub fn field_type(ty: &FieldType) -> String {
 pub fn value_type(ty: &TypeInfo) -> String {
     match ty {
         TypeInfo::Text => "String".into(),
-        TypeInfo::Integer => "i64".into(),
+        TypeInfo::Integer | TypeInfo::Duration => "i64".into(),
         TypeInfo::Decimal | TypeInfo::Money => "Decimal".into(),
         TypeInfo::Bool => "bool".into(),
         TypeInfo::Date => "Option<NaiveDate>".into(),

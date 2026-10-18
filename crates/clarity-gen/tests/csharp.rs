@@ -106,6 +106,7 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "Clarity.Avalonia/Shell.cs",
             "Clarity.Avalonia/Themes.cs",
             "Clarity.Avalonia/WindowViewModel.cs",
+            "Clarity.Runtime/Clock.cs",
             "Clarity.Runtime/Db.cs",
             "Clarity.Runtime/Dialect.cs",
             "Clarity.Runtime/Errors.cs",
@@ -365,4 +366,45 @@ fn a_reference_field_takes_a_record() {
     let source = format!("{SALES}\naction assign(order: Order, customer: Customer)\n    effects db.write\n    order.customer = customer\n    save order\n");
     let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Sales.cs"), "order.Customer = customer.Id;");
+}
+
+/// `none`, the empty value of a date or reference (X2).
+#[test]
+fn none_is_null() {
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Sales.cs");
+    for line in ["(order.Customer == null)", "!(db.Load<Customer>(order.Customer).Since == null)", "customer.Since = null;", "order.Customer = null;", "Cond.IsNone(\"customer\")"] {
+        has(sales, line);
+    }
+}
+
+/// `today()` and `now()` read the runtime's clock (X2).
+#[test]
+fn today_reads_the_clock() {
+    let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "Sales.cs");
+    has(sales, "customer.Since = Clock.Today();");
+    has(sales, "(customer.Since > Clock.Today())");
+}
+
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number at 1,1 span 3 bind track.length\n    text at 4,1 span 3 bind track.length\n";
+
+/// A duration is whole seconds; its slot and its parts show it as 3:45 (X2).
+#[test]
+fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
+    let project = load_sources([("music.clarity", MUSIC)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let music = file(&files, "Music.cs");
+    has(music, "public long Length");
+    has(music, "long _length = 180L;");
+    has(music, ".With(\"track.length\", Slot.OfDuration(track.Length))");
+    let shown = file(&files, "Shown.cs");
+    has(shown, "public static readonly FormatConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
+    has(shown, "public static readonly EditConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
+    let view = file(&files, "Windows/TracksView.axaml");
+    has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Edit.TrackLength}}\"");
+    has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Shown.TrackLength}}\"");
 }

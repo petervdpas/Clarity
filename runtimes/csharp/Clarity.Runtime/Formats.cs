@@ -21,6 +21,8 @@ public enum FormatKind
     Money,
     Date,
     DateTime,
+    /// <summary>Whole seconds, shown as m:ss or h:mm:ss in every locale.</summary>
+    Duration,
 }
 
 /// <summary>How a value of a field is shown: its kind, its scale (decimals), and the named format the field picks, if any.</summary>
@@ -45,6 +47,8 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
     /// </summary>
     public string Show(FieldFormat field, object? value)
     {
+        if (field.Kind == FormatKind.Duration && value is long or int)
+            return Duration(Convert.ToInt64(value, CultureInfo.InvariantCulture));
         switch (value)
         {
             case null:
@@ -106,6 +110,30 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
         }
     }
 
+    /// <summary>Whole seconds as <c>m:ss</c>, or <c>h:mm:ss</c> from an hour.</summary>
+    static string Duration(long seconds)
+    {
+        var sign = seconds < 0 ? "-" : "";
+        var all = Math.Abs(seconds);
+        var (h, m, s) = (all / 3600, all % 3600 / 60, all % 60);
+        return h > 0 ? $"{sign}{h}:{m:00}:{s:00}" : $"{sign}{m}:{s:00}";
+    }
+
+    /// <summary>Typed text as whole seconds: <c>3:45</c>, <c>1:02:03</c>, or seconds alone.</summary>
+    static long? ReadDuration(string text)
+    {
+        var m = DurationPattern().Match(text.Trim());
+        if (!m.Success)
+            return null;
+        long Part(int i) => m.Groups[i].Success ? long.Parse(m.Groups[i].Value, CultureInfo.InvariantCulture) : 0;
+        var (hours, minutes, seconds) = (m.Groups[1], m.Groups[2], m.Groups[3]);
+        if (minutes.Success && (seconds.Length != 2 || Part(3) > 59))
+            return null;
+        if (hours.Success && (minutes.Length != 2 || Part(2) > 59))
+            return null;
+        return Part(1) * 3600 + Part(2) * 60 + Part(3);
+    }
+
     /// <summary>The decimals a value has without its trailing zeros.</summary>
     static int Digits(decimal value) => (value / 1.000000000000000000000000000000000m).Scale;
 
@@ -164,6 +192,8 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
     /// </summary>
     public object? Read(FieldFormat field, string text)
     {
+        if (field.Kind == FormatKind.Duration)
+            return ReadDuration(text);
         var nf = culture.NumberFormat;
         var clean = new StringBuilder();
         foreach (var c in text)
@@ -243,6 +273,7 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
         SlotKind.Money => FormatKind.Money,
         SlotKind.Date => FormatKind.Date,
         SlotKind.DateTime => FormatKind.DateTime,
+        SlotKind.Duration => FormatKind.Duration,
         _ => FormatKind.Decimal,
     };
 
@@ -282,6 +313,9 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
 
     [GeneratedRegex(@"^-?\d+(\.\d+)?$")]
     private static partial Regex Number();
+
+    [GeneratedRegex(@"^(?:(?:(\d+):)?(\d+):)?(\d+)$")]
+    private static partial Regex DurationPattern();
 
     [GeneratedRegex(@"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?")]
     private static partial Regex MomentPattern();

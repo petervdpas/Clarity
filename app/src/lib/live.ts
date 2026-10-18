@@ -20,6 +20,8 @@ export type PartState = {
   readonly?: boolean;
   /** What an unbound text input holds. */
   text?: string | null;
+  /** Whether an unbound checkbox or switch is on. */
+  checked?: boolean | null;
 };
 
 export interface Live {
@@ -32,6 +34,8 @@ export interface Live {
   select(part: string, row: number): void;
   /** Keeps what the user typed in an unbound text input, for the next event. */
   setText(part: string, text: string): void;
+  /** Keeps whether an unbound checkbox or switch is on, for the next event. */
+  setChecked(part: string, checked: boolean): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
 }

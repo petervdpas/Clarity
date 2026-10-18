@@ -151,6 +151,9 @@
     setText(part: string, text: string) {
       if (current) current.parts[part] = { ...current.parts[part], text };
     },
+    setChecked(part: string, checked: boolean) {
+      if (current) current.parts[part] = { ...current.parts[part], checked };
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {

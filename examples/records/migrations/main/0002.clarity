@@ -1,0 +1,6 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Durations and open loans"
+    remove field Loan.returned
+    rename field Track.seconds to length
+    change field Track.length: duration

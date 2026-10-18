@@ -157,6 +157,7 @@ pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
         "bool" => TypeRefKind::Bool,
         "date" => TypeRefKind::Date,
         "datetime" => TypeRefKind::DateTime,
+        "duration" => TypeRefKind::Duration,
         "list" => {
             cursor.expect(TokenKind::Lt, "'<' after 'list'")?;
             let item = cursor.expect_ident("an entity name")?;
@@ -578,6 +579,9 @@ fn parse_postfix(cursor: &mut Cursor) -> ParseResult<Expr> {
 
 const RESERVED: [&str; 5] = ["and", "or", "not", "in", "contains"];
 
+/// The empty value of a date, a date and time or a reference.
+pub const NONE: &str = "none";
+
 fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
     let Some(token) = cursor.peek() else {
         return Err(cursor.error_here("expected a value"));
@@ -590,6 +594,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "true" || token.text == "false" => ExprKind::Bool {
             value: token.text == "true",
         },
+        TokenKind::Ident if token.text == NONE => ExprKind::Empty,
         TokenKind::Ident if token.text == "find" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_find(cursor);
         }

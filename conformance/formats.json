@@ -1,5 +1,5 @@
 {
-  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. reads: typed text as the value to store, or null when it is not one. fills: text with slots (DESIGN 1.5, I1b) as shown, each slot in its type and format; {{ and }} are braces, and labels gives the label of each enum value.",
+  "about": "How values are shown and read in a locale (DESIGN section 1.5, I1a). Every renderer must give these results: the web renderer tests them in app/src/lib/format.test.ts, and each native toolkit must test them too. shows: a stored value as people read it. durations are whole seconds, shown as m:ss or h:mm:ss in every locale. reads: typed text as the value to store, or null when it is not one. fills: text with slots (DESIGN 1.5, I1b) as shown, each slot in its type and format; {{ and }} are braces, and labels gives the label of each enum value.",
   "shows": [
     {
       "what": "integer",
@@ -795,6 +795,56 @@
       },
       "value": "2026-10-17T09:30:00",
       "shows": "2026-10-17 09:30"
+    },
+    {
+      "what": "duration",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "value": 225,
+      "shows": "3:45"
+    },
+    {
+      "what": "duration under a minute",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "value": 59,
+      "shows": "0:59"
+    },
+    {
+      "what": "duration over an hour",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "value": 3723,
+      "shows": "1:02:03"
+    },
+    {
+      "what": "no duration",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "value": 0,
+      "shows": "0:00"
+    },
+    {
+      "what": "duration",
+      "locale": "de-DE",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "value": 225,
+      "shows": "3:45"
     }
   ],
   "reads": [
@@ -903,6 +953,76 @@
       },
       "typed": "1.5",
       "value": "15"
+    },
+    {
+      "what": "minutes and seconds",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "3:45",
+      "value": 225
+    },
+    {
+      "what": "hours, minutes and seconds",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "1:02:03",
+      "value": 3723
+    },
+    {
+      "what": "with spaces around",
+      "locale": "nl-NL",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": " 3:05 ",
+      "value": 185
+    },
+    {
+      "what": "seconds alone",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "45",
+      "value": 45
+    },
+    {
+      "what": "more than 59 seconds",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "3:75",
+      "value": null
+    },
+    {
+      "what": "one digit of seconds",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "3:4",
+      "value": null
+    },
+    {
+      "what": "not a duration",
+      "locale": "en-US",
+      "currency": "EUR",
+      "field": {
+        "kind": "duration"
+      },
+      "typed": "abc",
+      "value": null
     }
   ],
   "fills": [
@@ -1008,6 +1128,25 @@
         }
       },
       "shows": "Le 17/10/2026 21:05 ()"
+    },
+    {
+      "what": "a duration",
+      "locale": "en-US",
+      "currency": "EUR",
+      "text": {
+        "text": "{count} tracks, {length}",
+        "values": {
+          "count": {
+            "kind": "integer",
+            "value": 12
+          },
+          "length": {
+            "kind": "duration",
+            "value": 2735
+          }
+        }
+      },
+      "shows": "12 tracks, 45:35"
     }
   ]
 }

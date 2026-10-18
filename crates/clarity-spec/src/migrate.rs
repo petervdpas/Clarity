@@ -54,6 +54,13 @@ impl Column {
     fn same_type(&self, other: &Column) -> bool {
         type_text(&self.ty) == type_text(&other.ty)
     }
+
+    /// Whether the values of `other` fit this column as they are: the same
+    /// type, or an integer and a duration (whole seconds).
+    fn stores_alike(&self, other: &Column) -> bool {
+        let seconds = |ty: &FieldType| matches!(ty, FieldType::Integer | FieldType::Duration);
+        self.same_type(other) || (seconds(&self.ty) && seconds(&other.ty))
+    }
 }
 
 /// The stored shape of an entity.
@@ -607,7 +614,7 @@ pub fn proposed_renames(project: &Project, source: &str) -> Vec<Rename> {
             .collect();
         let mut taken = HashSet::new();
         for gone in table.columns.iter().filter(|c| entity.field(&c.name).is_none()) {
-            if let Some(new) = came.iter().find(|c| !taken.contains(&c.name) && c.same_type(gone)) {
+            if let Some(new) = came.iter().find(|c| !taken.contains(&c.name) && c.stores_alike(gone)) {
                 taken.insert(new.name.clone());
                 proposals.push(Rename {
                     entity: Some(entity.name.name.clone()),

@@ -1,5 +1,5 @@
 {
-  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), oneOf and oneOfNumbers (column, values), isTrue (a column), and, or (two conditions), not (one). A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
+  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), oneOf and oneOfNumbers (column, values), isTrue (a column), isNone (a column with no value: an empty date or reference), and, or (two conditions), not (one). A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
   "cases": [
     {
       "name": "every record, in the order stored",
@@ -143,6 +143,19 @@
         "postgres": { "sql": "SELECT \"id\", \"name\" FROM \"customer\" WHERE \"active\" = TRUE ORDER BY \"id\"", "params": [] },
         "mysql": { "sql": "SELECT `id`, `name` FROM `customer` WHERE `active` = 1 ORDER BY `id`", "params": [] },
         "mssql": { "sql": "SELECT [id], [name] FROM [customer] WHERE [active] = 1 ORDER BY [id]", "params": [] }
+      }
+    },
+    {
+      "name": "an empty date, and a reference that is set",
+      "table": "loan",
+      "key": "id",
+      "columns": ["album"],
+      "query": { "filter": { "and": [{ "isNone": "returned_on" }, { "not": { "isNone": "friend" } }] } },
+      "expect": {
+        "sqlite": { "sql": "SELECT \"id\", \"album\" FROM \"loan\" WHERE (\"returned_on\" IS NULL AND NOT (\"friend\" IS NULL)) ORDER BY \"id\"", "params": [] },
+        "postgres": { "sql": "SELECT \"id\", \"album\" FROM \"loan\" WHERE (\"returned_on\" IS NULL AND NOT (\"friend\" IS NULL)) ORDER BY \"id\"", "params": [] },
+        "mysql": { "sql": "SELECT `id`, `album` FROM `loan` WHERE (`returned_on` IS NULL AND NOT (`friend` IS NULL)) ORDER BY `id`", "params": [] },
+        "mssql": { "sql": "SELECT [id], [album] FROM [loan] WHERE ([returned_on] IS NULL AND NOT ([friend] IS NULL)) ORDER BY [id]", "params": [] }
       }
     },
     {

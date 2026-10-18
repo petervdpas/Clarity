@@ -48,6 +48,8 @@ pub enum SlotKind {
     Money,
     Date,
     DateTime,
+    /// Whole seconds, shown as 3:45.
+    Duration,
     Bool,
     Enum,
 }
@@ -69,6 +71,11 @@ fn format_of(format: Option<&str>) -> Option<String> {
 impl Slot {
     pub fn text(value: impl Into<String>) -> Slot {
         slot(SlotKind::Text, Value::String(value.into()))
+    }
+
+    /// A duration, in whole seconds.
+    pub fn duration(seconds: i64) -> Slot {
+        slot(SlotKind::Duration, Value::from(seconds))
     }
 
     pub fn integer(value: i64, format: Option<&str>) -> Slot {
@@ -242,6 +249,9 @@ pub struct PartState {
     /// event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// Whether an unbound checkbox or switch is on; sent like `text`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -368,6 +378,15 @@ impl Ui {
 
     pub fn set_text(&mut self, part: &str, value: String) {
         self.parts.entry(part.to_string()).or_default().text = Some(value);
+    }
+
+    /// Whether an unbound checkbox or switch is on.
+    pub fn checked(&self, part: &str) -> bool {
+        self.parts.get(part).and_then(|p| p.checked).unwrap_or(false)
+    }
+
+    pub fn set_checked(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().checked = Some(value);
     }
 
     /// The selected record of a table or list showing `rows`.

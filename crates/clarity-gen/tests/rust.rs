@@ -604,3 +604,52 @@ fn a_reference_field_takes_a_record() {
     let sales = file(&files, "src/sales.rs");
     assert!(sales.contains("order.customer = Some(customer.id);"), "{sales}");
 }
+
+/// `none`, the empty value of a date or reference (X2).
+#[test]
+fn none_is_an_empty_option() {
+    let source = format!("{SALES}\nfunction unplaced(order: Order) -> bool\n    return order.customer == none or order.customer.since != none\n\naction clear(order: Order, customer: Customer)\n    effects db.write\n    customer.since = none\n    order.customer = none\n    save order\n\nfunction without_customer() -> list<Order>\n    return find o in Order where o.customer == none\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    for line in ["order.customer.is_none()", "!db.load::<Customer>(order.customer)?.since.is_none()", "customer.since = None;", "order.customer = None;", "Cond::is_none(\"customer\")"] {
+        assert!(sales.contains(line), "{line} not in {sales}");
+    }
+}
+
+/// `today()` and `now()` read the runtime's clock (X2).
+#[test]
+fn today_reads_the_clock() {
+    let source = format!("{SALES}\naction stamp(customer: Customer)\n    effects db.write\n    if customer.since == none or customer.since > today()\n        customer.since = today()\n    save customer\n");
+    let files = generate(&load_sources([("sales.clarity", source.as_str())]), &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("customer.since = Some(clarity_runtime::today());"), "{sales}");
+    assert!(sales.contains("(customer.since > Some(clarity_runtime::today()))"), "{sales}");
+}
+
+/// An unbound checkbox holds its own state, sent with the window (X2).
+#[test]
+fn an_unbound_checkbox_is_checked_in_the_window_state() {
+    let source = SALES
+        .replace("    textbox name number_filter at 1,7 span 4 on change: filter_changed\n", "    textbox name number_filter at 1,7 span 4 on change: filter_changed\n    checkbox \"Only mine\" name mine at 5,7 span 3\n")
+        .replace("            number_filter.text = \"\"\n", "            number_filter.text = \"\"\n        if mine.checked\n            mine.checked = false\n");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/sales.rs");
+    assert!(sales.contains("if ui.checked(\"mine\") {"), "{sales}");
+    assert!(sales.contains("ui.set_checked(\"mine\", false);"), "{sales}");
+}
+
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number at 1,1 span 3 bind track.length\n    text at 4,1 span 3 bind track.length\n";
+
+/// A duration is whole seconds; its slot shows it as 3:45 (X2).
+#[test]
+fn a_duration_is_seconds_with_its_own_slot() {
+    let project = load_sources([("music.clarity", MUSIC)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let music = file(&files, "src/music.rs");
+    assert!(music.contains("pub length: i64,"), "{music}");
+    assert!(music.contains("            length: 180i64,"), "{music}");
+    assert!(music.contains(".with(\"track.length\", Slot::duration(track.length))"), "{music}");
+}

@@ -53,6 +53,7 @@ pub enum TypeInfo {
     Bool,
     Date,
     DateTime,
+    Duration,
     Enum(String),
     Record(String),
     List(String),
@@ -171,6 +172,7 @@ impl<'a> Env<'a> {
             TypeRefKind::Bool => Ty::Bool,
             TypeRefKind::Date => Ty::Date,
             TypeRefKind::DateTime => Ty::DateTime,
+            TypeRefKind::Duration => Ty::Duration,
             TypeRefKind::Named { name } => match (self.entity(name), self.enum_decl(name)) {
                 (Some(entity), _) => Ty::Record(entity),
                 (None, Some(decl)) => Ty::Enum(decl),
@@ -201,6 +203,7 @@ impl<'a> Env<'a> {
             FieldType::Bool => Ty::Bool,
             FieldType::Date => Ty::Date,
             FieldType::DateTime => Ty::DateTime,
+            FieldType::Duration => Ty::Duration,
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
             FieldType::Ref { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
@@ -217,6 +220,7 @@ enum Ty<'a> {
     Bool,
     Date,
     DateTime,
+    Duration,
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
@@ -234,6 +238,7 @@ impl Ty<'_> {
             Ty::Bool => TypeInfo::Bool,
             Ty::Date => TypeInfo::Date,
             Ty::DateTime => TypeInfo::DateTime,
+            Ty::Duration => TypeInfo::Duration,
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
@@ -250,6 +255,7 @@ impl Ty<'_> {
             Ty::Bool => "bool".into(),
             Ty::Date => "date".into(),
             Ty::DateTime => "datetime".into(),
+            Ty::Duration => "duration".into(),
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
             Ty::List(e) => format!("list<{}>", e.name.name),
@@ -287,6 +293,8 @@ impl Ty<'_> {
         }
         match self {
             Ty::Decimal | Ty::Money => value.is_numeric(),
+            // A number of seconds.
+            Ty::Duration => matches!(value, Ty::Integer),
             _ => false,
         }
     }
@@ -630,6 +638,11 @@ struct BodyChecker<'e, 'a> {
 /// What a name or path refers to.
 /// The id every record has, which code can read.
 pub const RECORD_ID: &str = "id";
+
+/// The built-in calls of the clock: the date, and the date and time, where
+/// the application runs.
+pub const TODAY: &str = "today";
+pub const NOW: &str = "now";
 
 enum Place<'a> {
     Value { ty: Ty<'a>, writable: Result<(), String> },
@@ -999,7 +1012,9 @@ impl<'a> BodyChecker<'_, 'a> {
                             None
                         }
                     }
-                    Place::Part(Part::Widget(props), name) if m == "text" && props.bind.is_some() && has_text(props) => {
+                    Place::Part(Part::Widget(props), name)
+                        if props.bind.is_some() && ((m == "text" && has_text(props)) || (m == "checked" && has_checked(props))) =>
+                    {
                         let bind = props.bind.as_deref().unwrap_or_default();
                         self.error(
                             format!("{} '{name}' is bound to {bind}; use {bind}", widgets::keyword(props.kind)),
@@ -1035,6 +1050,7 @@ impl<'a> BodyChecker<'_, 'a> {
             "error" if part.is_input() => value(Ty::Text),
             "readonly" if part.is_input() => value(Ty::Bool),
             "text" if matches!(part, Part::Widget(props) if has_text(props)) => value(Ty::Text),
+            "checked" if matches!(part, Part::Widget(props) if has_checked(props)) => value(Ty::Bool),
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List) {
@@ -1113,6 +1129,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Text
             }
             ExprKind::Bool { .. } => Ty::Bool,
+            ExprKind::Empty => self.empty(expected, expr.span),
             ExprKind::Name { name } => {
                 if let Some(Ty::Enum(decl)) = expected
                     && !self.in_scope(name)
@@ -1170,6 +1187,15 @@ impl<'a> BodyChecker<'_, 'a> {
                 _ => self.error("'count' takes one list", expr.span),
             }
             return Some(Ty::Integer);
+        }
+        if function.name == TODAY || function.name == NOW {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            if !args.is_empty() {
+                self.error(format!("'{}' takes no arguments", function.name), expr.span);
+            }
+            return Some(if function.name == TODAY { Ty::Date } else { Ty::DateTime });
         }
         // A handler runs another handler of its window by name.
         if self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name) {
@@ -1423,8 +1449,37 @@ impl<'a> BodyChecker<'_, 'a> {
         ty
     }
 
+    /// `none` where a value of `expected` goes: the empty value of a date,
+    /// a date and time or a reference, and of nothing else.
+    fn empty(&mut self, expected: Option<Ty<'a>>, span: Span) -> Ty<'a> {
+        match expected {
+            Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Unknown)) => ty,
+            Some(Ty::Text) => {
+                self.error("text is never none; empty text is \"\"", span);
+                Ty::Unknown
+            }
+            Some(other) => {
+                self.error(format!("{} is never none; only a date, a date and time or a reference can be", other.name()), span);
+                Ty::Unknown
+            }
+            None => {
+                self.error("'none' needs a date, a date and time or a reference to be the empty value of", span);
+                Ty::Unknown
+            }
+        }
+    }
+
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr) -> Ty<'a> {
         let symbol = op.symbol();
+        // `none == x` reads as `x == none`.
+        if matches!(left.kind, ExprKind::Empty) && !matches!(right.kind, ExprKind::Empty) && is_comparison(op) {
+            return self.binary(op, right, left);
+        }
+        if is_comparison(op) && !matches!(op, BinaryOp::Eq | BinaryOp::NotEq) && matches!(right.kind, ExprKind::Empty) {
+            self.expr(left, None);
+            self.error(format!("'{symbol}' cannot compare with none; use == or !="), right.span);
+            return Ty::Bool;
+        }
         match op {
             BinaryOp::Contains => {
                 let l = self.expr(left, None);
@@ -1452,8 +1507,8 @@ impl<'a> BodyChecker<'_, 'a> {
                 let r = self.expr(right, Some(l));
                 let ordered = !matches!(op, BinaryOp::Eq | BinaryOp::NotEq);
                 let fits = l.comparable(&r)
-                    && l.is_value()
-                    && (!ordered || l.is_unknown() || matches!(l, Ty::Text | Ty::Date | Ty::DateTime) || l.is_numeric());
+                    && (l.is_value() || matches!(right.kind, ExprKind::Empty))
+                    && (!ordered || l.is_unknown() || matches!(l, Ty::Text | Ty::Date | Ty::DateTime | Ty::Duration) || l.is_numeric());
                 if !fits {
                     self.error(format!("cannot compare {} with {}", l.name(), r.name()), join(left.span, right.span));
                 }
@@ -1472,6 +1527,19 @@ impl<'a> BodyChecker<'_, 'a> {
                     }
                     self.error(format!("cannot join {} with {}", l.name(), r.name()), join(left.span, right.span));
                     return Ty::Unknown;
+                }
+                // Durations add up and scale: 3:45 + 0:15, 3:45 * 2, 3:45 / 2.
+                if matches!(l, Ty::Duration) || matches!(r, Ty::Duration) {
+                    let fits = match op {
+                        BinaryOp::Add | BinaryOp::Sub => matches!((l, r), (Ty::Duration | Ty::Integer, Ty::Duration | Ty::Integer)),
+                        BinaryOp::Mul => matches!((l, r), (Ty::Duration, Ty::Integer) | (Ty::Integer, Ty::Duration)),
+                        _ => matches!((l, r), (Ty::Duration, Ty::Integer)),
+                    };
+                    if !fits {
+                        self.error(format!("cannot use '{symbol}' on {} and {}", l.name(), r.name()), join(left.span, right.span));
+                        return Ty::Unknown;
+                    }
+                    return Ty::Duration;
                 }
                 if !(l.is_numeric() && r.is_numeric()) {
                     self.error(
@@ -1529,7 +1597,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
-        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } => false,
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
     }
 }
 
@@ -1540,6 +1608,11 @@ fn path_text(expr: &Expr) -> String {
         ExprKind::Member { object, member } => format!("{}.{}", path_text(object), member.name),
         _ => "...".to_string(),
     }
+}
+
+/// Checkboxes and switches, which hold whether they are on when they are not bound.
+fn has_checked(props: &WidgetProps) -> bool {
+    matches!(props.kind, WidgetKind::Checkbox | WidgetKind::Switch)
 }
 
 /// Text inputs that hold their own text when they are not bound.

@@ -288,13 +288,14 @@
           {id}
           type="checkbox"
           role={p.kind === "switch" ? "switch" : undefined}
-          checked={value === true}
+          checked={bound ? value === true : partState?.checked === true}
           tabindex={p.tabOrder ?? undefined}
           aria-describedby={describedBy}
           aria-invalid={error !== null}
           disabled={disabled || readonly}
           onchange={(e) => {
-            setValue(e.currentTarget.checked);
+            if (bound) setValue(e.currentTarget.checked);
+            else if (live && p.name && !design) live.setChecked(p.name, e.currentTarget.checked);
             fire("change");
           }}
         />

@@ -197,7 +197,7 @@ impl<'a> Window<'a> {
     /// A value of a field with a format, shown in the person's format, else as the runtime shows it.
     fn shown_converter(&self, entity: &Entity, field: &str) -> String {
         match entity.field(field).map(|f| &f.ty) {
-            Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Date | FieldType::DateTime) => {
+            Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration | FieldType::Date | FieldType::DateTime) => {
                 format!("local:Shown.{}{}", entity.name.name, pascal(field))
             }
             _ => "local:Shown.Converter".to_string(),
@@ -530,7 +530,7 @@ impl<'a> Window<'a> {
                     .bind
                     .as_deref()
                     .and_then(|b| self.bound_field(b))
-                    .filter(|(_, f)| matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money));
+                    .filter(|(_, f)| matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration));
                 let value = match (&bound, named, number) {
                     // A number reads and shows in the person's format.
                     (Some(path), _, Some((entity, field))) => {
@@ -551,7 +551,12 @@ impl<'a> Window<'a> {
                 } else {
                     ("CheckBox", format!("Content=\"{}\"", self.text(&caption_text)))
                 };
-                let value = bound.as_deref().map(|b| format!(" IsChecked=\"{{Binding {b}}}\"")).unwrap_or_default();
+                // Unbound, a named checkbox holds its own state.
+                let value = match (bound.as_deref(), named) {
+                    (Some(b), _) => format!(" IsChecked=\"{{Binding {b}}}\""),
+                    (None, Some(n)) => format!(" IsChecked=\"{{Binding {}.IsChecked}}\"", member(n)),
+                    (None, None) => String::new(),
+                };
                 let read_only = if p.readonly { " IsEnabled=\"False\"" } else { "" };
                 let _ = writeln!(out, "{pad}<{control} {at} {label}{value}{read_only}{plain_state}{extra} />");
             }

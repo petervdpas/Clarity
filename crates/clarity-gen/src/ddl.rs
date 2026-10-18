@@ -93,8 +93,8 @@ impl Sql {
         let value = match (&column.ty, default) {
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) => Some(self.text(s)),
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url, _) => Some(self.text("")),
-            (FieldType::Integer | FieldType::Id, Some(Literal::Number(n))) => Some(n.clone()),
-            (FieldType::Integer | FieldType::Id, _) => Some("0".into()),
+            (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
+            (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => Some("0".into()),
             (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(number(n)),
             (FieldType::Decimal { .. } | FieldType::Money, _) => Some(number("0")),
             (FieldType::Bool, Some(Literal::Bool(b))) => Some(self.boolean(*b)),
@@ -131,7 +131,7 @@ impl Sql {
         };
         match (self, ty) {
             // SQLite keeps decimals and dates as text, so nothing is lost.
-            (Sql::Sqlite, FieldType::Integer | FieldType::Id | FieldType::Bool | FieldType::Ref { .. }) => "INTEGER".into(),
+            (Sql::Sqlite, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Bool | FieldType::Ref { .. }) => "INTEGER".into(),
             (Sql::Sqlite, FieldType::List { .. }) => String::new(),
             (Sql::Sqlite, _) => "TEXT".into(),
 
@@ -146,7 +146,7 @@ impl Sql {
             // The longest address there can be.
             (Sql::Mssql, FieldType::Email) => "NVARCHAR(320)".into(),
             (_, FieldType::Email) => "VARCHAR(320)".into(),
-            (_, FieldType::Integer | FieldType::Id | FieldType::Ref { .. }) => "BIGINT".into(),
+            (_, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Ref { .. }) => "BIGINT".into(),
             (_, FieldType::Decimal { precision, scale }) => decimal(*precision, *scale),
             (_, FieldType::Money) => decimal(19, 4),
             (Sql::Mssql, FieldType::Bool) => "BIT".into(),
@@ -328,10 +328,10 @@ EXEC sp_executesql @sql;",
             name.to_string()
         };
         match (self, old, new) {
-            (Sql::Postgres, FieldType::Bool, FieldType::Integer | FieldType::Id | FieldType::Decimal { .. } | FieldType::Money) => {
+            (Sql::Postgres, FieldType::Bool, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Decimal { .. } | FieldType::Money) => {
                 format!("CASE WHEN {name} THEN 1 ELSE 0 END")
             }
-            (Sql::Postgres, FieldType::Integer | FieldType::Id | FieldType::Decimal { .. } | FieldType::Money, FieldType::Bool) => {
+            (Sql::Postgres, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Decimal { .. } | FieldType::Money, FieldType::Bool) => {
                 format!("({name} <> 0)")
             }
             // MySQL converts a value as it stores it.

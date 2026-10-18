@@ -76,6 +76,8 @@ public class QueryTests
                 return Cond.OneOfNumbers(Column(), ToValues(inner.GetProperty("values")));
             case "isTrue":
                 return Cond.IsTrue(inner.GetString()!);
+            case "isNone":
+                return Cond.IsNone(inner.GetString()!);
             case "and":
             {
                 var (left, right) = Pair();

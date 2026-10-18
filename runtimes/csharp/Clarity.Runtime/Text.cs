@@ -15,6 +15,7 @@ public enum SlotKind
     Money,
     Date,
     DateTime,
+    Duration,
     Bool,
     Enum,
 }
@@ -43,6 +44,9 @@ public sealed record Slot(SlotKind Kind, object? Value, int? Scale = null, strin
         new(SlotKind.DateTime, value?.ToString(Sql.DateTimeFormat, CultureInfo.InvariantCulture), Format: format);
 
     public static Slot OfBoolean(bool value) => new(SlotKind.Bool, value);
+
+    /// <summary>A duration, in whole seconds.</summary>
+    public static Slot OfDuration(long seconds) => new(SlotKind.Duration, seconds);
 
     /// <summary>An enum value, by its name; the screen shows its label.</summary>
     public static Slot OfName<E>(E value, string enumName) where E : struct, Enum =>

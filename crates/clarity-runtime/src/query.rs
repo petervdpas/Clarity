@@ -51,6 +51,8 @@ pub enum Cond {
     },
     /// A bool column that is true.
     IsTrue { column: &'static str },
+    /// A column with no value: an empty date or reference (`none`).
+    IsNone { column: &'static str },
     And(Box<Cond>, Box<Cond>),
     Or(Box<Cond>, Box<Cond>),
     Not(Box<Cond>),
@@ -104,6 +106,10 @@ impl Cond {
         Cond::IsTrue { column }
     }
 
+    pub fn is_none(column: &'static str) -> Cond {
+        Cond::IsNone { column }
+    }
+
     pub fn and(self, other: Cond) -> Cond {
         Cond::And(Box::new(self), Box::new(other))
     }
@@ -147,6 +153,7 @@ impl Cond {
                 format!("{} IN ({})", column_sql(dialect, column, *numeric), marks.join(", "))
             }
             Cond::IsTrue { column } => dialect.is_true(column),
+            Cond::IsNone { column } => format!("{} IS NULL", dialect.quote(column)),
             Cond::And(left, right) => format!("({} AND {})", left.sql(dialect, params), right.sql(dialect, params)),
             Cond::Or(left, right) => format!("({} OR {})", left.sql(dialect, params), right.sql(dialect, params)),
             Cond::Not(inner) => format!("NOT ({})", inner.sql(dialect, params)),

@@ -114,7 +114,7 @@ pub fn backing(name: &str) -> String {
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url => "string".into(),
-        FieldType::Integer | FieldType::Id => "long".into(),
+        FieldType::Integer | FieldType::Id | FieldType::Duration => "long".into(),
         FieldType::Decimal { .. } | FieldType::Money => "decimal".into(),
         FieldType::Bool => "bool".into(),
         FieldType::Date => "DateOnly?".into(),
@@ -129,7 +129,7 @@ pub fn field_type(ty: &FieldType) -> String {
 pub fn value_type(ty: &TypeInfo) -> String {
     match ty {
         TypeInfo::Text => "string".into(),
-        TypeInfo::Integer => "long".into(),
+        TypeInfo::Integer | TypeInfo::Duration => "long".into(),
         TypeInfo::Decimal | TypeInfo::Money => "decimal".into(),
         TypeInfo::Bool => "bool".into(),
         TypeInfo::Date => "DateOnly?".into(),

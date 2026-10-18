@@ -176,7 +176,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
     }
     match ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Enum { .. } => k == Kind::Text,
-        FieldType::Integer | FieldType::Id => matches!(k, Kind::Integer | Kind::Number),
+        FieldType::Integer | FieldType::Id | FieldType::Duration => matches!(k, Kind::Integer | Kind::Number),
         FieldType::Decimal { .. } | FieldType::Money => matches!(k, Kind::Number | Kind::Integer),
         FieldType::Bool => matches!(k, Kind::Bool | Kind::Integer),
         FieldType::Date => matches!(k, Kind::Date | Kind::DateTime | Kind::Text),

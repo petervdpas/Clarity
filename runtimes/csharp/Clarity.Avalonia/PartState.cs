@@ -42,6 +42,10 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     public string Text { get => text; set => SetProperty(ref text, value); }
     string text = "";
 
+    /// <summary>Whether an unbound checkbox or switch is on.</summary>
+    public bool IsChecked { get => isChecked; set => SetProperty(ref isChecked, value); }
+    bool isChecked;
+
     /// <summary>The row selected in a table or list; null when none is.</summary>
     public object? SelectedItem { get => selected; set => SetProperty(ref selected, value); }
     object? selected;

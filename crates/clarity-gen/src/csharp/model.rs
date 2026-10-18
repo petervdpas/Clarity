@@ -68,7 +68,7 @@ fn initial(field: &Field) -> Option<String> {
     match (&field.ty, field.modifiers.default.as_ref()) {
         (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) => Some(string(s)),
         (FieldType::Text { .. } | FieldType::Email | FieldType::Url, _) => Some("\"\"".into()),
-        (FieldType::Integer | FieldType::Id, Some(Literal::Number(n))) => Some(format!("{n}L")),
+        (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
@@ -89,7 +89,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
 fn from_sql(field: &Field) -> String {
     match &field.ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url => "GetText".into(),
-        FieldType::Integer | FieldType::Id => "GetInteger".into(),
+        FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
         FieldType::Bool => "GetBoolean".into(),
         FieldType::Date => "GetDate".into(),

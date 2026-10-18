@@ -78,6 +78,7 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
     match &ty.kind {
         TypeRefKind::Text => TypeInfo::Text,
         TypeRefKind::Integer => TypeInfo::Integer,
+        TypeRefKind::Duration => TypeInfo::Duration,
         TypeRefKind::Decimal => TypeInfo::Decimal,
         TypeRefKind::Money => TypeInfo::Money,
         TypeRefKind::Bool => TypeInfo::Bool,
@@ -129,6 +130,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "readonly" => "IsReadOnly",
         "caption" => "Caption",
         "text" => "Text",
+        "checked" => "IsChecked",
         "error" => "Error",
         "selected" => "SelectedItem",
         _ => return None,
@@ -235,8 +237,8 @@ impl<'a> Emitter<'a> {
                 // A record given to a reference field is stored as its id.
                 if self.is_reference_field(target) {
                     let stored = self.stored_reference(target);
-                    let record = self.value(value);
-                    out.push_str(&format!("{pad}{stored} = {record}.Id;\n"));
+                    let record = if matches!(value.kind, ExprKind::Empty) { "null".to_string() } else { format!("{}.Id", self.value(value)) };
+                    out.push_str(&format!("{pad}{stored} = {record};\n"));
                     return;
                 }
                 let place = self.place(target);
@@ -365,6 +367,7 @@ impl<'a> Emitter<'a> {
         match self.types.type_of(expr) {
             TypeInfo::Text => format!("Slot.OfText({value})"),
             TypeInfo::Integer => format!("Slot.OfInteger({value}, {format})"),
+            TypeInfo::Duration => format!("Slot.OfDuration({value})"),
             TypeInfo::Decimal => format!("Slot.OfDecimal({value}, {scale}, {format})"),
             TypeInfo::Money => format!("Slot.OfMoney({value}, {format})"),
             TypeInfo::Date => format!("Slot.OfDate({value}, {format})"),
@@ -482,6 +485,7 @@ impl<'a> Emitter<'a> {
                 String::new()
             }
             ExprKind::Bool { value } => value.to_string(),
+            ExprKind::Empty => "null".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
@@ -509,7 +513,30 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// Whether a date or reference field is empty (`x == none`); a record
+    /// that is no field is none until it is stored.
+    fn is_none(&mut self, expr: &Expr) -> String {
+        if self.is_reference_field(expr) {
+            return format!("({} == null)", self.stored_reference(expr));
+        }
+        if matches!(self.types.type_of(expr), TypeInfo::Record(_)) {
+            return format!("({}.Id == 0)", self.value(expr));
+        }
+        format!("({} == null)", self.value(expr))
+    }
+
     fn binary(&mut self, op: BinaryOp, left: &Expr, right: &Expr, result: &TypeInfo) -> String {
+        if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+            let other = match (&left.kind, &right.kind) {
+                (_, ExprKind::Empty) => Some(left),
+                (ExprKind::Empty, _) => Some(right),
+                _ => None,
+            };
+            if let Some(other) = other {
+                let test = self.is_none(other);
+                return if op == BinaryOp::Eq { test } else { format!("!{test}") };
+            }
+        }
         let symbol = match op {
             BinaryOp::Or => "||",
             BinaryOp::And => "&&",
@@ -528,6 +555,13 @@ impl<'a> Emitter<'a> {
     }
 
     fn call(&mut self, name: &str, args: &[Expr]) -> String {
+        use clarity_spec::code::check::{NOW, TODAY};
+        if name == TODAY {
+            return "Clock.Today()".into();
+        }
+        if name == NOW {
+            return "Clock.Now()".into();
+        }
         if name == "count" {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();
             let simple = list.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
@@ -592,6 +626,10 @@ impl<'a> Emitter<'a> {
                     return String::new();
                 };
                 let name = string(&self.column(entity, &column));
+                if matches!(value.kind, ExprKind::Empty) {
+                    let test = format!("Cond.IsNone({name})");
+                    return if op == BinaryOp::Eq { test } else { format!("{test}.Negated()") };
+                }
                 if op == BinaryOp::Contains {
                     return format!("Cond.Contains({name}, {})", self.value(value));
                 }

@@ -127,6 +127,8 @@ pub enum FieldType {
     Bool,
     Date,
     DateTime,
+    /// A length of time in whole seconds, shown as `3:45`.
+    Duration,
     Email,
     Url,
     Id,
@@ -146,7 +148,7 @@ impl FieldType {
     pub fn is_numeric(&self) -> bool {
         matches!(
             self,
-            Self::Integer | Self::Decimal { .. } | Self::Money | Self::Id
+            Self::Integer | Self::Decimal { .. } | Self::Money | Self::Id | Self::Duration
         )
     }
 

@@ -35,6 +35,8 @@ public abstract record Cond
     /// <summary>A bool column that is true.</summary>
     sealed record IsTrueCond(string Column) : Cond;
 
+    sealed record IsNoneCond(string Column) : Cond;
+
     sealed record AndCond(Cond Left, Cond Right) : Cond;
 
     sealed record OrCond(Cond Left, Cond Right) : Cond;
@@ -54,6 +56,9 @@ public abstract record Cond
     public static Cond OneOfNumbers(string column, IReadOnlyList<object?> values) => new OneOfCond(column, values, true);
 
     public static Cond IsTrue(string column) => new IsTrueCond(column);
+
+    /// <summary>A column with no value: an empty date or reference (<c>none</c>).</summary>
+    public static Cond IsNone(string column) => new IsNoneCond(column);
 
     public Cond And(Cond other) => new AndCond(this, other);
 
@@ -75,6 +80,7 @@ public abstract record Cond
             ContainsCond c => dialect.Contains(c.Column, Param($"%{dialect.EscapeLike(c.Text)}%", false)),
             OneOfCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} IN ({string.Join(", ", c.Values.Select(v => Param(v, c.Numeric)))})",
             IsTrueCond c => dialect.IsTrue(c.Column),
+            IsNoneCond c => $"{dialect.Quote(c.Column)} IS NULL",
             AndCond c => $"({c.Left.Sql(dialect, parameters)} AND {c.Right.Sql(dialect, parameters)})",
             OrCond c => $"({c.Left.Sql(dialect, parameters)} OR {c.Right.Sql(dialect, parameters)})",
             NotCond c => $"NOT ({c.Inner.Sql(dialect, parameters)})",

@@ -284,7 +284,7 @@ const ENTRIES: &[Entry] = &[
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Password, "password", "Password", (4, 1), &["text"], INPUT_EVENTS, TYPED),
-    input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
         caption: Some("Check box"),
         ..input(WidgetKind::Checkbox, "checkbox", "Check box", (3, 1), &["bool"], &[Event::Change], PICKED)
@@ -522,6 +522,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Bool => "bool",
         FieldType::Date => "date",
         FieldType::DateTime => "dateTime",
+        FieldType::Duration => "duration",
         FieldType::Email => "email",
         FieldType::Url => "url",
         FieldType::Id => "id",

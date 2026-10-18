@@ -32,6 +32,7 @@ public class FormatCaseTests
         "money" => FormatKind.Money,
         "date" => FormatKind.Date,
         "dateTime" => FormatKind.DateTime,
+        "duration" => FormatKind.Duration,
         _ => throw new ArgumentException($"unknown kind {kind}"),
     };
 
@@ -75,7 +76,7 @@ public class FormatCaseTests
         {
             var field = Field(c.GetProperty("field"));
             var read = FormatsOf(c).Read(field, c.GetProperty("typed").GetString()!);
-            var expect = Stored(field.Kind == FormatKind.Integer ? FormatKind.Integer : FormatKind.Decimal, c.GetProperty("value"));
+            var expect = Stored(field.Kind is FormatKind.Integer or FormatKind.Duration ? FormatKind.Integer : FormatKind.Decimal, c.GetProperty("value"));
             if (!Equals(read, expect))
                 wrong.Add($"{c.GetProperty("locale")} {c.GetProperty("what")}: [{read}] not [{expect}]");
         }
@@ -95,6 +96,7 @@ public class FormatCaseTests
             "money" => Slot.OfMoney(decimal.Parse(value.GetString()!, CultureInfo.InvariantCulture), format),
             "date" => Slot.OfDate((DateOnly?)Stored(FormatKind.Date, value), format),
             "dateTime" => Slot.OfDateTime((DateTime?)Stored(FormatKind.DateTime, value), format),
+            "duration" => Slot.OfDuration(value.GetInt64()),
             "bool" => Slot.OfBoolean(value.GetBoolean()),
             "enum" => new Slot(SlotKind.Enum, value.GetString(), EnumName: s.GetProperty("enum").GetString()),
             _ => throw new ArgumentException($"unknown slot kind {kind}"),

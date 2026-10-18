@@ -9,6 +9,7 @@ Current state: the designer for windows and the application frame, with every pa
 ```
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
 crates/clarity-project/  the project file: stack, output and data sources
+crates/clarity-vault/    Clarity's vault of secrets and its connections
 crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ application
 crates/clarity-cli/      the `clarity` command
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)

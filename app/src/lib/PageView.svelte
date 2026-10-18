@@ -28,7 +28,6 @@
 
 <style>
   .page {
-    padding: 4px;
     /* Passes the height on, so a fluid window fills it. */
     flex: 1;
     min-height: 0;

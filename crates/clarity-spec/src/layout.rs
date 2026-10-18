@@ -2,6 +2,11 @@
 //! has the same rows and spacing on the web and in Avalonia. The web
 //! renderer writes them in TypeScript; a test keeps those equal to these.
 
+/// The size a window opens at on every stack, and the designer shows it at,
+/// in pixels: the width the columns share and the height growing rows fill.
+pub const WINDOW_WIDTH: u32 = 1100;
+pub const WINDOW_HEIGHT: u32 = 760;
+
 /// The height of a grid row that does not grow, in pixels.
 pub const ROW_HEIGHT: u32 = 36;
 

@@ -36,7 +36,14 @@
   import type { SpecFile } from "./lib/generated/SpecFile";
   import { pageDesigner } from "./lib/pageDesigner.svelte";
   import { findApp, frameForPage } from "./lib/frame";
-  import { appAsPage, findPage, pageData } from "./lib/pages";
+  import { CONTENT_PADDING, WINDOW_HEIGHT, appAsPage, findPage, pageData } from "./lib/pages";
+  import ShownWindow from "./lib/ShownWindow.svelte";
+  import VaultSide from "./lib/VaultSide.svelte";
+  import VaultView from "./lib/VaultView.svelte";
+  import { vault } from "./lib/vaultStore.svelte";
+  import AgentPanel from "./lib/AgentPanel.svelte";
+  import UnlockDialog from "./lib/UnlockDialog.svelte";
+  import { agent } from "./lib/agentStore.svelte";
   import { themeArea, themeOf } from "./lib/model";
   import ThemeStyles from "./lib/ThemeStyles.svelte";
 
@@ -46,11 +53,12 @@
   type Open = Selected;
 
   /** The ribbon tabs. Design and Preview are also the two modes. */
-  type Tab = "project" | "design" | "preview";
+  type Tab = "project" | "design" | "preview" | "vault";
   const TABS: { key: Tab; name: string }[] = [
     { key: "project", name: "Project" },
     { key: "design", name: "Design" },
     { key: "preview", name: "Preview" },
+    { key: "vault", name: "Vault" },
   ];
 
   /** What the sidebar shows while designing. */
@@ -67,6 +75,10 @@
   let loadError = $state<string | null>(null);
   let stack = $state<Open[]>([]);
   let tab = $state<Tab>("preview");
+  // Clarity's vault is read again whenever its tab opens: it may have locked itself.
+  $effect(() => {
+    if (tab === "vault") vault.refresh();
+  });
   let designSide = $state<DesignSide>("parts");
   let history = $state<HistoryCounts>({ undo: 0, redo: 0 });
   let actionError = $state<string | null>(null);
@@ -518,6 +530,16 @@
   }
 
   onMount(() => {
+    // A turn of the agent ends: open what it made, show what it asked for, and offer Undo.
+    agent.onEnded = async (ended) => {
+      if (ended.opened) await openProject(ended.opened);
+      else if (ended.changed) await checkProject();
+      await refreshHistory();
+      if (ended.shown) {
+        stack = [{ kind: "window", name: ended.shown }];
+        tab = "preview";
+      }
+    };
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
     const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
     const unlistenLine = listen<string>("build-line", (e) => {
@@ -570,6 +592,7 @@
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => (tab = t.key)}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
+      <button class="agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
     <div class="ribbon-body">
       {#if tab === "project"}
@@ -645,6 +668,42 @@
           </div>
           <div class="group-name">File</div>
         </div>
+      {:else if tab === "vault"}
+        <div class="group">
+          <div class="buttons">
+            <RibbonButton icon="key" label="Secrets" active={vault.view === "secrets"} onclick={() => (vault.view = "secrets")} />
+            <RibbonButton icon="link" label="Connections" active={vault.view === "connections"} onclick={() => (vault.view = "connections")} />
+          </div>
+          <div class="group-name">Vault</div>
+        </div>
+        {#if vault.view === "secrets"}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="new" label="Add" disabled={!vault.unlocked} onclick={() => vault.startSecret()} />
+              <RibbonButton icon="edit" label="Edit" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.editSecret()} />
+              <RibbonButton icon="delete" label="Delete" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.deleteSecret()} />
+              <RibbonButton icon="copy" label="Copy value" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.copyValue()} />
+              <RibbonButton icon="tag" label="Categories" disabled={!vault.unlocked} onclick={() => (vault.dialog = "categories")} />
+            </div>
+            <div class="group-name">Secrets</div>
+          </div>
+        {:else}
+          <div class="group">
+            <div class="buttons">
+              <RibbonButton icon="new" label="New connection" onclick={() => vault.newConnection()} />
+              <RibbonButton icon="delete" label="Delete" disabled={!vault.draft} onclick={() => vault.removeConnection()} />
+            </div>
+            <div class="group-name">Connections</div>
+          </div>
+        {/if}
+        <div class="group">
+          <div class="buttons">
+            <RibbonButton icon="lock" label="Lock" disabled={!vault.unlocked} onclick={() => vault.lock()} />
+            <RibbonButton icon="key" label="Change password" disabled={!vault.unlocked} onclick={() => (vault.dialog = "password")} />
+            <RibbonButton icon="delete" label="Destroy vault" disabled={!vault.info?.exists} onclick={() => (vault.dialog = "destroy")} />
+          </div>
+          <div class="group-name">Master password</div>
+        </div>
       {:else}
         <div class="group">
           <div class="buttons">
@@ -691,7 +750,7 @@
     </div>
   </header>
 
-  <div class="shell" style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr)">
+  <div class="shell" style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
     <aside>
       {#if tab === "design" && designing}
         <div class="side-tabs" role="tablist">
@@ -750,6 +809,8 @@
           </label>
           <p class="none">Every change is written to the project files at once; Undo and Redo in the ribbon take changes back.</p>
         </section>
+      {:else if tab === "vault"}
+        <VaultSide />
       {:else if tab === "preview"}
         <section class="side-section fill">
           <h2>Run a window</h2>
@@ -757,7 +818,7 @@
         </section>
       {/if}
 
-      {#if preview}
+      {#if preview && tab !== "vault"}
         <section class="diagnostics" class:flash={checkFlash} onanimationend={() => (checkFlash = false)}>
           <h2>
             Problems
@@ -788,7 +849,9 @@
 
     <div class="work">
       <main>
-        {#if !preview}
+        {#if tab === "vault"}
+          <VaultView />
+        {:else if !preview}
           <div class="placeholder">
             <p>Open a project, or create a new one, with the buttons on the Project tab.</p>
           </div>
@@ -835,24 +898,27 @@
         {:else if tab === "design" && page && file}
           <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
         {:else if page}
-          <div class="window {themeArea(themeOf(preview)).class}" data-scheme={themeArea(themeOf(preview)).scheme}>
+          <ShownWindow area={themeArea(themeOf(preview))}>
             <div class="titlebar">
               <span>{page.title ?? page.name.name}</span>
               <code>{page.name.name}: {page.kind}</code>
             </div>
-            <FrameView
-              {preview}
-              {page}
-              frame={frameForPage(preview, page)}
-              data={{ ...appData, ...pageData(preview, page) }}
-              design={false}
-              onnavigate={navigate}
-            >
-              <div class="client">
-                <PageView {preview} {page} onnavigate={navigate} />
-              </div>
-            </FrameView>
-          </div>
+            <!-- The window's client, at the height it opens at. -->
+            <div class="shown" style:height="{WINDOW_HEIGHT}px">
+              <FrameView
+                {preview}
+                {page}
+                frame={frameForPage(preview, page)}
+                data={{ ...appData, ...pageData(preview, page) }}
+                design={false}
+                onnavigate={navigate}
+              >
+                <div class="client" style:padding="{CONTENT_PADDING}px">
+                  <PageView {preview} {page} onnavigate={navigate} />
+                </div>
+              </FrameView>
+            </div>
+          </ShownWindow>
         {:else if openApp}
           <div class="placeholder"><p>The app is designed on the Design tab; Preview runs its main window.</p></div>
         {:else if current}
@@ -882,8 +948,14 @@
       <!-- The code behind panel slides out over the main area. -->
       <div id="code-drawer" class="code-drawer"></div>
     </div>
+    {#if agent.open}
+      <Splitter axis="x" label="Width of the agent" onmove={(d) => layout.resize("agent", -d)} />
+      <AgentPanel />
+    {/if}
   </div>
 </div>
+
+<UnlockDialog />
 
 {#if newData && preview}
   <NameDialog
@@ -1014,6 +1086,18 @@
     background: var(--panel);
     color: var(--text);
     opacity: 1;
+  }
+
+  .ribbon-tabs .agent-toggle {
+    margin: 0 0 0 auto;
+    align-self: center;
+    padding: 3px 12px;
+    border: 1px solid color-mix(in srgb, var(--titlebar-text) 35%, transparent);
+    border-radius: var(--radius);
+  }
+
+  .ribbon-tabs .project-name + .agent-toggle {
+    margin-left: 12px;
   }
 
   .project-name {
@@ -1428,18 +1512,6 @@
 
   /* The preview window fills the main area and resizes with it, like the
      running application does. */
-  .window {
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
-    overflow: hidden;
-    width: 100%;
-    flex: 1;
-    min-height: 360px;
-    display: flex;
-    flex-direction: column;
-  }
 
   .titlebar {
     display: flex;
@@ -1459,8 +1531,12 @@
     opacity: 0.7;
   }
 
+  .shown {
+    display: flex;
+    flex-direction: column;
+  }
+
   .client {
-    padding: 16px;
     flex: 1;
     min-height: 0;
     display: flex;

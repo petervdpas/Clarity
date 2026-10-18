@@ -1,0 +1,12 @@
+[package]
+name = "clarity-agent"
+description = "Clarity's agent: a conversation with a model that works on a project through tools"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ts-rs = { workspace = true }

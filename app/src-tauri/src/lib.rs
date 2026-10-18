@@ -5,6 +5,8 @@ mod build;
 mod external;
 mod themes;
 mod translations;
+mod vault;
+mod agent;
 mod migrations;
 mod pictures;
 
@@ -684,6 +686,8 @@ pub fn run() {
         .manage(WatchState::default())
         .manage(HistoryState::default())
         .manage(build::BuildState::default())
+        .manage(vault::VaultState::default())
+        .manage(agent::AgentState::default())
         .invoke_handler(tauri::generate_handler![
             open_project,
             check_project,
@@ -716,7 +720,25 @@ pub fn run() {
             translations::add_language,
             themes::theme_styles,
             themes::theme_starter,
-            pictures::project_picture
+            pictures::project_picture,
+            vault::vault_info,
+            vault::vault_create,
+            vault::vault_unlock,
+            vault::vault_lock,
+            vault::vault_change_password,
+            vault::vault_destroy,
+            vault::vault_secrets,
+            vault::vault_value,
+            vault::vault_save_secret,
+            vault::vault_delete_secret,
+            vault::vault_categories,
+            vault::vault_save_categories,
+            vault::connections_list,
+            vault::connection_save,
+            vault::connection_remove,
+            agent::agent_send,
+            agent::agent_stop,
+            agent::agent_forget
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

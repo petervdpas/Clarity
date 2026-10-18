@@ -548,3 +548,28 @@ fn a_part_keeps_the_style_it_is_given() {
     let textbox = file.pages[0].widgets.iter().find(|w| w.props.kind == WidgetKind::Textbox).unwrap();
     assert_eq!(textbox.props.style.as_deref(), Some("loud"));
 }
+
+/// The designer resizes a container and scales its parts in one batch: the
+/// container's line changes, and so do the lines inside it.
+#[test]
+fn a_batch_resizes_a_container_and_moves_its_parts() {
+    let (file, _) = parse(PAGE, "");
+    let page = &file.pages[0];
+    let panel = page.widgets.iter().find(|w| w.props.kind == WidgetKind::Panel).unwrap();
+    let inside = &panel.children[0];
+    let mut wider = panel.props.clone();
+    wider.width = 12;
+    let mut moved = inside.props.clone();
+    moved.col = 3;
+    moved.width = 4;
+    let (text, _) = edit(
+        PAGE,
+        Edit::Batch {
+            edits: vec![
+                Edit::UpdateWidget { item: panel.span.start, container: None, props: wider },
+                Edit::UpdateWidget { item: inside.span.start, container: None, props: moved },
+            ],
+        },
+    );
+    assert!(text.contains("    panel \"Box\" at 1,3 span 12 rows 3\n        label \"Inside\" at 3,1 span 4\n"), "{text}");
+}

@@ -8,7 +8,7 @@
   import { styleClass } from "./theme";
   import { editText, parseNumber } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
-  import { GAP, ROW_HEIGHT, allParts, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
+  import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
   import { useLive } from "./live";
   import { provideForm, useForm } from "./form";
@@ -46,6 +46,9 @@
   const partState = $derived(live && p.name ? live.parts[p.name] : undefined);
   const hidden = $derived(partState?.visible === false);
   const disabled = $derived(partState?.enabled === false);
+  // In the designer a text part without text of its own (code fills it in
+  // when the window runs) shows its name, so it can be seen and picked.
+  const unset = $derived(design && !p.caption ? (p.name ?? info.name) : null);
   const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? shownText(preview, partState.caption) : p.caption !== null ? tr(preview, p.caption) : null);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
   const readonly = $derived(partState?.readonly ?? p.readonly);
@@ -186,11 +189,15 @@
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     const cellWidth = (rect.width - GAP * (p.width - 1)) / p.width;
+    // The row grabbed, counted in the grid's own rows: some are taller than others.
+    const grid = el.parentElement?.closest<HTMLElement>("[data-grid]");
+    const gridRect = grid?.getBoundingClientRect();
+    const row = grid && gridRect ? rowAt(grid, e.clientY - gridRect.top, gridRect.height) : p.row;
     const grab = {
       dc: Math.min(p.width - 1, Math.floor((e.clientX - rect.left) / (cellWidth + GAP))),
-      dr: Math.min(p.height - 1, Math.floor((e.clientY - rect.top) / (ROW_HEIGHT + GAP))),
+      dr: Math.min(p.height - 1, Math.max(0, row - p.row)),
     };
-    const from = Number(el.parentElement?.closest<HTMLElement>("[data-grid]")?.dataset.grid);
+    const from = Number(grid?.dataset.grid);
     pageDesigner.press(e, { kind: "move", item: offset, from, props: p, grab, label: info.name }, () => {
       pageDesigner.selected = offset;
     });
@@ -234,14 +241,14 @@
   <div class="content {p.kind === 'button' ? '' : (partClass ?? '')}" class:inert={design && !info.container}>
     {#if p.kind === "label"}
       <label class="label-text" for={p.for ? partId(p.for) : undefined}
-        >{caption ?? ""}{#if targetField?.modifiers.required}<span class="required" title="Required">*</span>{/if}</label
+        >{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}{#if targetField?.modifiers.required}<span class="required" title="Required">*</span>{/if}</label
       >
     {:else if p.kind === "help"}
       <span class="help-text" class:error={targetError !== null} id={p.for ? helpId(p.for) : undefined} aria-live="polite"
         >{targetError ?? caption ?? (targetField?.modifiers.help ? tr(preview, targetField.modifiers.help) : "")}</span
       >
     {:else if p.kind === "heading"}
-      <h2 class="heading-text">{caption ?? ""}</h2>
+      <h2 class="heading-text">{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}</h2>
     {:else if p.kind === "text"}
       <span class="text-value" {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
     {:else if p.kind === "textbox" || p.kind === "password"}
@@ -962,5 +969,11 @@
       linear-gradient(-45deg, transparent 75%, var(--panel-alt) 75%);
     background-size: 16px 16px;
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+
+  .unset {
+    color: var(--text-muted);
+    font-style: italic;
+    font-weight: 400;
   }
 </style>

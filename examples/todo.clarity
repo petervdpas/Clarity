@@ -1,0 +1,5 @@
+project Todo
+    title "Todo"
+    stack csharp avalonia desktop
+    output "out"
+    datasource main sqlite "data/todo.db"

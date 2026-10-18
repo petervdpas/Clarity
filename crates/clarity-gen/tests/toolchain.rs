@@ -49,11 +49,12 @@ fn go_builds_with_go_build() {
     let settings = shop(Backend::Go, Ui::Web);
     let debug = clarity_gen::toolchain(&settings, false).unwrap();
     assert_eq!(debug.tool, "go");
-    assert_eq!(debug.args, ["build", "-o", "bin/shop", "."]);
+    // -v names each package as it is built, so a long first build shows progress.
+    assert_eq!(debug.args, ["build", "-v", "-o", "bin/shop", "."]);
     assert_eq!(debug.program, exe("bin/shop"));
     let release = clarity_gen::toolchain(&settings, true).unwrap();
     // Wails' production build, without debug information.
-    assert_eq!(release.args, ["build", "-tags", "production", "-trimpath", "-ldflags=-s -w", "-o", "bin/shop", "."]);
+    assert_eq!(release.args, ["build", "-v", "-tags", "production", "-trimpath", "-ldflags=-s -w", "-o", "bin/shop", "."]);
     assert!(debug.missing.contains("Go"), "{}", debug.missing);
 }
 

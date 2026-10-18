@@ -151,6 +151,8 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // The command first, so the output says what runs where.
+    let _ = app.emit(BUILD_LINE, format!("{} {} (in {})", toolchain.tool, toolchain.args.join(" "), out.display()));
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => return failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing)),

@@ -56,6 +56,18 @@
       <circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
     {:else if icon === "check"}
       <path d="M5 12l5 5 9-10" />
+    {:else if icon === "key"}
+      <circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" />
+    {:else if icon === "link"}
+      <path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1" /><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1" />
+    {:else if icon === "lock"}
+      <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    {:else if icon === "edit"}
+      <path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13 7l4 4" />
+    {:else if icon === "copy"}
+      <rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+    {:else if icon === "tag"}
+      <path d="M3 12V4h8l10 10-8 8z" /><circle cx="7.5" cy="8.5" r="1.5" />
     {/if}
   </svg>
   <span>{label}</span>

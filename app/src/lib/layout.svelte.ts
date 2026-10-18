@@ -8,9 +8,10 @@ type Sizes = {
   properties: number;
   codePanel: number;
   output: number;
+  agent: number;
 };
 
-const DEFAULTS: Sizes = { sidebar: 300, properties: 280, codePanel: 640, output: 240 };
+const DEFAULTS: Sizes = { sidebar: 300, properties: 280, codePanel: 640, output: 240, agent: 380 };
 
 /** The smallest and largest size of each panel, in pixels. */
 const LIMITS: Record<keyof Sizes, [number, number]> = {
@@ -18,6 +19,7 @@ const LIMITS: Record<keyof Sizes, [number, number]> = {
   properties: [220, 560],
   codePanel: [360, 1400],
   output: [100, 700],
+  agent: [280, 900],
 };
 
 function read(): Sizes {

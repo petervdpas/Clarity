@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import FrameView from "./FrameView.svelte";
   import GridBox from "./GridBox.svelte";
+  import ShownWindow from "./ShownWindow.svelte";
   import PageOutline from "./PageOutline.svelte";
   import PageProperties from "./PageProperties.svelte";
   import CodePanel from "./CodePanel.svelte";
@@ -23,7 +24,19 @@
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
   import { describeType, themeArea, themeOf } from "./model";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesigner.svelte";
-  import { appAsPage, findPage, locateInnerPage, locateWidget, pageData, widgetForField, widgetInfo, withProps } from "./pages";
+  import {
+    CONTENT_PADDING,
+    WINDOW_HEIGHT,
+    appAsPage,
+    resizeEdits,
+    findPage,
+    locateInnerPage,
+    locateWidget,
+    pageData,
+    widgetForField,
+    widgetInfo,
+    withProps,
+  } from "./pages";
 
   let {
     preview: savedPreview,
@@ -152,12 +165,12 @@
       case "resize": {
         const p = source.props;
         if (at.width === p.width && at.height === p.height) return;
-        await apply({
-          op: "updateWidget",
-          item: source.item,
-          container: null,
-          props: withProps(p, { width: at.width, height: at.height }),
-        });
+        // A container's parts scale across with it, in the same edit.
+        const found = locateWidget(preview, page, source.item);
+        const edits = found
+          ? resizeEdits(found.widget, at.width, at.height)
+          : [{ op: "updateWidget" as const, item: source.item, container: null, props: withProps(p, { width: at.width, height: at.height }) }];
+        await apply(edits.length === 1 ? edits[0] : { op: "batch", edits });
         break;
       }
     }
@@ -288,8 +301,7 @@
 
 <div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.folded.properties ? 'auto' : layout.sizes.properties + 'px'}">
   <div class="stage">
-
-    <div class="window {area.class}" data-scheme={area.scheme}>
+    <ShownWindow {area}>
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}
@@ -300,9 +312,15 @@
         <span>{page.title ?? page.name.name}</span>
         <code>{app ? "app " + app.name.name : page.name.name + ": " + page.kind + " | " + page.columns + " columns"}</code>
       </div>
-      <div class="client" bind:this={canvas} onpointerdown={() => (pageDesigner.selected = null)} role="presentation">
+      <div
+        class="client"
+        style:height="{WINDOW_HEIGHT}px"
+        bind:this={canvas}
+        onpointerdown={() => (pageDesigner.selected = null)}
+        role="presentation"
+      >
         <FrameView {preview} {page} {frame} {data} design={true} onnavigate={() => {}}>
-          <div class="body">
+          <div class="body" style:padding="{CONTENT_PADDING}px">
             {#if app}
               <p class="main-hint">
                 Each window's content goes here{app.main ? "; the app starts with " + app.main.name : ""}. Drag menus,
@@ -323,7 +341,7 @@
           </div>
         </FrameView>
       </div>
-    </div>
+    </ShownWindow>
   </div>
 
   {#if layout.folded.properties}
@@ -419,13 +437,6 @@
   }
 
 
-  .window {
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
-    overflow: hidden;
-  }
 
   .titlebar {
     display: flex;
@@ -449,9 +460,15 @@
     opacity: 0.7;
   }
 
+  /* As the running window's client: its grid fills the height. */
   .body {
-    padding: 16px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
   }
+
 
   .main-hint {
     margin: 40px auto;
@@ -462,7 +479,6 @@
   }
 
   .client {
-    min-height: 360px;
     display: flex;
     flex-direction: column;
     user-select: none;

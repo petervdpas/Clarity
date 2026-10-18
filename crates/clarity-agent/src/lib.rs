@@ -1,0 +1,201 @@
+//! Clarity's agent: a conversation with a model that works on a project
+//! through tools. The model answers, asks for tools (read a file, write
+//! one, check the project), gets their results and goes on, until it has
+//! answered or a turn reaches its limit of steps.
+//!
+//! The loop knows no model and no project: a model is anything that
+//! implements [`Model`] (Anthropic's comes with it), and the tools are
+//! whatever implements [`Tools`]. Clarity's app gives the tools that work on
+//! the open project.
+
+pub mod anthropic;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+/// A piece of a message: text, a tool call, or a tool's result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Block {
+    Text {
+        text: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        content: String,
+        #[serde(default)]
+        is_error: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    pub role: Role,
+    pub content: Vec<Block>,
+}
+
+/// A tool as the model is told of it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolDef {
+    pub name: String,
+    pub description: String,
+    /// The JSON Schema of its input.
+    pub input_schema: Value,
+}
+
+/// What a model is asked: its instructions, the conversation and the tools.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Request {
+    pub system: String,
+    pub messages: Vec<Message>,
+    pub tools: Vec<ToolDef>,
+}
+
+/// Why a model stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StopReason {
+    EndTurn,
+    ToolUse,
+    MaxTokens,
+    Other(String),
+}
+
+/// A model's answer: its blocks, and why it stopped.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelReply {
+    pub content: Vec<Block>,
+    pub stop: StopReason,
+}
+
+/// A model to ask. `on_text` gets the answer's text as it comes.
+pub trait Model {
+    fn reply(&mut self, request: &Request, on_text: &mut dyn FnMut(&str)) -> Result<ModelReply, String>;
+}
+
+/// What a tool gives back to the model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolResult {
+    pub text: String,
+    pub is_error: bool,
+}
+
+/// The tools the model may use.
+pub trait Tools {
+    fn definitions(&self) -> Vec<ToolDef>;
+    fn call(&mut self, name: &str, input: &Value) -> ToolResult;
+}
+
+/// What happens during a turn, for the screen.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export, rename = "AgentEvent")]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Event {
+    /// A piece of the answer's text.
+    Text { text: String },
+    /// A tool is called with this input.
+    ToolStart {
+        id: String,
+        name: String,
+        #[ts(type = "unknown")]
+        input: Value,
+    },
+    /// A tool gave this back.
+    ToolDone {
+        id: String,
+        name: String,
+        text: String,
+        #[serde(rename = "isError")]
+        #[ts(rename = "isError")]
+        is_error: bool,
+    },
+    /// The model has answered.
+    Finished,
+    /// The person stopped the turn.
+    Stopped,
+    /// The turn ended on an error.
+    Failed { message: String },
+}
+
+/// How the agent works: its instructions and its limit of steps per turn.
+pub struct Agent {
+    pub system: String,
+    pub max_steps: usize,
+}
+
+impl Agent {
+    /// One turn: `user` joins the conversation, and the model answers with
+    /// tools until it is done, `stop` is set, or the steps run out. The
+    /// conversation keeps every message, ready for the next turn.
+    pub fn run(
+        &self,
+        model: &mut dyn Model,
+        tools: &mut dyn Tools,
+        conversation: &mut Vec<Message>,
+        user: &str,
+        stop: &AtomicBool,
+        events: &mut dyn FnMut(Event),
+    ) -> Result<(), String> {
+        conversation.push(Message { role: Role::User, content: vec![Block::Text { text: user.into() }] });
+        let definitions = tools.definitions();
+        for _ in 0..self.max_steps {
+            if stop.load(Ordering::SeqCst) {
+                events(Event::Stopped);
+                return Ok(());
+            }
+            let request = Request { system: self.system.clone(), messages: conversation.clone(), tools: definitions.clone() };
+            let reply = match model.reply(&request, &mut |text| events(Event::Text { text: text.into() })) {
+                Ok(reply) => reply,
+                Err(message) => {
+                    events(Event::Failed { message: message.clone() });
+                    return Err(message);
+                }
+            };
+            conversation.push(Message { role: Role::Assistant, content: reply.content.clone() });
+            let calls: Vec<(String, String, Value)> = reply
+                .content
+                .iter()
+                .filter_map(|b| match b {
+                    Block::ToolUse { id, name, input } => Some((id.clone(), name.clone(), input.clone())),
+                    _ => None,
+                })
+                .collect();
+            if calls.is_empty() {
+                events(match reply.stop {
+                    StopReason::MaxTokens => Event::Failed { message: "the answer reached its length limit".into() },
+                    _ => Event::Finished,
+                });
+                return Ok(());
+            }
+            // Every call gets its result, so the conversation stays whole even when stopped.
+            let mut results = Vec::new();
+            for (id, name, input) in calls {
+                events(Event::ToolStart { id: id.clone(), name: name.clone(), input: input.clone() });
+                let result = tools.call(&name, &input);
+                events(Event::ToolDone { id: id.clone(), name, text: result.text.clone(), is_error: result.is_error });
+                results.push(Block::ToolResult { tool_use_id: id, content: result.text, is_error: result.is_error });
+            }
+            conversation.push(Message { role: Role::User, content: results });
+        }
+        if stop.load(Ordering::SeqCst) {
+            events(Event::Stopped);
+            return Ok(());
+        }
+        events(Event::Failed { message: format!("stopped after {} steps; ask again to go on", self.max_steps) });
+        Ok(())
+    }
+}

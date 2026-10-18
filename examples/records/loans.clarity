@@ -48,9 +48,9 @@ page LoanDialog: dialog
     on open: dialog_opened
 
     label "Album" at 1,1 span 3 for album
-    dropdown name album at 4,1 span 6 bind loan.album
+    dropdown name album at 4,1 span 9 bind loan.album
     label "Friend" at 1,2 span 3 for friend
-    dropdown name friend at 4,2 span 6 bind loan.friend
+    dropdown name friend at 4,2 span 9 bind loan.friend
     label "Lent on" at 1,3 span 3 for lent_on
     date name lent_on at 4,3 span 4 bind loan.lent_on
     label "Returned on" at 1,4 span 3 for returned_on
@@ -73,11 +73,11 @@ page FriendDialog: dialog
     data friend: Friend
 
     label "Name" at 1,1 span 3 for name
-    textbox name name at 4,1 span 6 bind friend.name
+    textbox name name at 4,1 span 9 bind friend.name
     label "Phone" at 1,2 span 3 for phone
     textbox name phone at 4,2 span 4 bind friend.phone
     label "E-mail" at 1,3 span 3 for email
-    textbox name email at 4,3 span 6 bind friend.email
+    textbox name email at 4,3 span 9 bind friend.email
     button "Save" at 9,5 span 2 style primary default on click: save_clicked
     button "Cancel" at 11,5 span 2 cancel on click -> close
 

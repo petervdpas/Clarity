@@ -2,12 +2,23 @@
 //! renderer writes them in TypeScript, the generators read them here, and
 //! this test keeps the two equal.
 
-use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, SIDEBAR_COLUMN};
+use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, SIDEBAR_COLUMN, WINDOW_HEIGHT, WINDOW_WIDTH};
 
-const PAGES_TS: &str = include_str!("../../../app/src/lib/pages.ts");
+const GRID_TS: &str = include_str!("../../../app/src/lib/grid.ts");
 const RUNTIME_SVELTE: &str = include_str!("../../../app/src/runtime/Runtime.svelte");
 const FRAME_VIEW: &str = include_str!("../../../app/src/lib/FrameView.svelte");
 const RENDER_CSS: &str = include_str!("../../../app/src/render.css");
+const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte");
+const PAGE_DESIGNER: &str = include_str!("../../../app/src/lib/PageDesigner.svelte");
+const APP: &str = include_str!("../../../app/src/App.svelte");
+
+/// The shells of the stacks whose runtime opens the window itself.
+const SHELLS: [(&str, &str); 4] = [
+    ("Go", include_str!("../../../runtimes/go/shell/shell.go")),
+    ("Avalonia", include_str!("../../../runtimes/csharp/Clarity.Avalonia/Shell.cs")),
+    ("C", include_str!("../../../runtimes/c/shell/shell.c")),
+    ("C++", include_str!("../../../runtimes/cpp/shell/shell.cpp")),
+];
 
 /// The number a `const NAME = 123;` line in `source` gives.
 fn constant(source: &str, name: &str) -> u32 {
@@ -20,8 +31,11 @@ fn constant(source: &str, name: &str) -> u32 {
 
 #[test]
 fn the_web_renderer_uses_the_shared_values() {
-    assert_eq!(constant(PAGES_TS, "ROW_HEIGHT"), ROW_HEIGHT);
-    assert_eq!(constant(PAGES_TS, "GAP"), GAP);
+    assert_eq!(constant(GRID_TS, "ROW_HEIGHT"), ROW_HEIGHT);
+    assert_eq!(constant(GRID_TS, "GAP"), GAP);
+    assert_eq!(constant(GRID_TS, "WINDOW_WIDTH"), WINDOW_WIDTH);
+    assert_eq!(constant(GRID_TS, "WINDOW_HEIGHT"), WINDOW_HEIGHT);
+    assert_eq!(constant(GRID_TS, "CONTENT_PADDING"), CONTENT_PADDING);
     assert_eq!(constant(RUNTIME_SVELTE, "MESSAGE_MS"), MESSAGE_MS);
     assert_eq!(constant(FRAME_VIEW, "SIDEBAR_COLUMN_PX"), SIDEBAR_COLUMN);
     // The space around a running window's grid, written in its CSS.
@@ -34,4 +48,19 @@ fn the_web_renderer_pads_parts_by_the_shared_multiples() {
     // Beside the text of a button and of an input: a multiple of the theme's padding.
     assert!(RENDER_CSS.contains(&format!("padding: var(--padding) calc(var(--padding) * {BUTTON_SIDES});")), "button");
     assert!(RENDER_CSS.contains(&format!("padding: var(--padding) calc(var(--padding) * {INPUT_SIDES});")), "input");
+}
+
+/// The designer shows a window at the size it opens at, so what is placed
+/// there is what the running window shows: every shell opens at that size.
+#[test]
+fn every_window_opens_at_the_size_the_designer_shows() {
+    for (stack, shell) in SHELLS {
+        assert!(shell.contains(&WINDOW_WIDTH.to_string()) && shell.contains(&WINDOW_HEIGHT.to_string()), "{stack}");
+    }
+    assert!(SHOWN_WINDOW.contains("WINDOW_WIDTH"));
+    // The designer and the preview both show the window so, with its height
+    // and the running window's padding around its grid.
+    for (name, view) in [("designer", PAGE_DESIGNER), ("preview", APP)] {
+        assert!(view.contains("<ShownWindow") && view.contains("WINDOW_HEIGHT") && view.contains("CONTENT_PADDING"), "{name}");
+    }
 }

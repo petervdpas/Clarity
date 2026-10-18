@@ -15,9 +15,7 @@ import type { WidgetProps } from "./generated/WidgetProps";
 import { frameGrids } from "./frame";
 import { findEntity, type Row } from "./model";
 
-/** Height of one grid row and the gap between cells, in pixels. */
-export const ROW_HEIGHT = 36;
-export const GAP = 8;
+export { CONTENT_PADDING, GAP, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, resizeEdits, rowAt, rowIn, scaledColumns } from "./grid";
 
 export function allPages(preview: Preview): Page[] {
   return preview.project.files.flatMap((f) => f.pages);

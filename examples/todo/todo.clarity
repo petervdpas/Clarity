@@ -1,0 +1,54 @@
+module todo
+
+entity Task
+    title: text(120), required, label "Task"
+    done: bool, default false, label "Done"
+
+app Todo
+    title "Todo"
+    main Main
+
+page Main: window
+    title "Todo"
+    data tasks: list<Task>
+    on open: window_opened
+
+    label "New task" at 1,1 span 2 for new_title
+    textbox name new_title at 3,1 span 8 placeholder "What needs to be done?"
+    button "Add" name add_button at 11,1 span 2 default on click: add_clicked
+    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done on select: row_selected on open: toggle_clicked
+    help "Double-click a task, or press Enter on it, to toggle done." at 1,10 span 7
+    button "Toggle done" name toggle_button at 8,10 span 3 on click: toggle_clicked
+    button "Delete" name delete_button at 11,10 span 2 on click: delete_clicked
+
+code Main
+    handler window_opened
+        toggle_button.enabled = false
+        delete_button.enabled = false
+
+    handler row_selected
+        toggle_button.enabled = true
+        delete_button.enabled = true
+
+    handler add_clicked
+        if new_title.text == ""
+            message warning "Please type a task first"
+            return
+        let task = new Task
+        task.title = new_title.text
+        save task
+        new_title.text = ""
+        reload tasks
+
+    handler toggle_clicked
+        let task = grid.selected
+        task.done = not task.done
+        save task
+        reload tasks
+
+    handler delete_clicked
+        let task = grid.selected
+        delete task
+        reload tasks
+        toggle_button.enabled = false
+        delete_button.enabled = false

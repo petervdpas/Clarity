@@ -227,7 +227,9 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         }
         Backend::Go => {
             let program = format!("bin/{}", go::module_name(settings));
-            let mut args = vec!["build".to_string()];
+            // -v names each package as it is built: a first build compiles
+            // WebKit's bindings for minutes, and is silent otherwise.
+            let mut args = vec!["build".to_string(), "-v".to_string()];
             if release {
                 // Wails' production build, without debug information.
                 args.extend(["-tags", "production", "-trimpath", "-ldflags=-s -w"].map(String::from));

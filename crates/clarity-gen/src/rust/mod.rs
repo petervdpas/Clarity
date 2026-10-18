@@ -168,7 +168,7 @@ fn tauri_conf(title: &str, crate_name: &str) -> String {
         "identifier": format!("app.clarity.{}", crate_name.replace('_', "-")),
         "build": { "frontendDist": "ui" },
         "app": {
-            "windows": [{ "title": title, "width": 1100, "height": 760 }],
+            "windows": [{ "title": title, "width": clarity_spec::layout::WINDOW_WIDTH, "height": clarity_spec::layout::WINDOW_HEIGHT }],
             "security": { "csp": null }
         },
         "bundle": { "active": false }
@@ -190,7 +190,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     let (apart_code, apart_manage, apart_events, apart_commands) = if apart {
-        (APART.replace("{title}", &format!("{title:?}")), "\n        .manage(Apart::default())", APART_EVENTS, "\n            open_apart,\n            apart_start,\n            close_apart,")
+        (APART.replace("{title}", &format!("{title:?}")).replace("{width}", &clarity_spec::layout::WINDOW_WIDTH.to_string()).replace("{height}", &clarity_spec::layout::WINDOW_HEIGHT.to_string()), "\n        .manage(Apart::default())", APART_EVENTS, "\n            open_apart,\n            apart_start,\n            close_apart,")
     } else {
         (String::new(), "", "", "")
     };
@@ -501,7 +501,7 @@ fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tau
     };
     tauri::WebviewWindowBuilder::new(&handle, &label, tauri::WebviewUrl::App("index.html".into()))
         .title(TITLE)
-        .inner_size(1100.0, 760.0)
+        .inner_size({width}.0, {height}.0)
         .build()
         .map_err(|err| Value::from(err.to_string()))?;
     Ok(())

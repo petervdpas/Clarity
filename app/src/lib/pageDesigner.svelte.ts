@@ -8,7 +8,8 @@ import type { Preview } from "./generated/Preview";
 import type { RegionKind } from "./generated/RegionKind";
 import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetProps } from "./generated/WidgetProps";
-import { GAP, ROW_HEIGHT } from "./pages";
+import { GAP, rowAt } from "./pages";
+
 
 export type PageDragSource =
   | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string }
@@ -175,7 +176,7 @@ class PageDesigner {
     const rect = grid.getBoundingClientRect();
     const colWidth = (rect.width - GAP * (columns - 1)) / columns;
     const cellCol = Math.min(columns, Math.max(1, Math.floor((x - rect.left) / (colWidth + GAP)) + 1));
-    const cellRow = Math.max(1, Math.floor((y - rect.top) / (ROW_HEIGHT + GAP)) + 1);
+    const cellRow = rowAt(grid, y - rect.top, rect.height);
 
     if (source.kind === "resize") {
       const p = source.props;

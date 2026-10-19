@@ -101,3 +101,7 @@ Type-check the frontend:
 cd app
 npm run check
 ```
+
+## License
+
+MIT; see [LICENSE](LICENSE). The C and C++ runtimes include cJSON and webview under their own MIT licenses (`runtimes/c/third_party`, `runtimes/cpp/third_party`).

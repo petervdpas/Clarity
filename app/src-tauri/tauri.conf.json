@@ -35,7 +35,7 @@
     "publisher": "Peter van de Pas",
     "copyright": "Copyright (c) 2026 Peter van de Pas",
     "homepage": "https://github.com/petervdpas/Clarity",
-    "license": "MIT OR Apache-2.0",
+    "license": "MIT",
     "category": "DeveloperTool",
     "shortDescription": "Design an application once, generate it for every stack",
     "longDescription": "Clarity is a designer and a language for desktop applications: windows, data and logic are designed once and generated as real code for Rust, C# with Avalonia, Go, C and C++.",

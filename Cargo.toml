@@ -5,7 +5,7 @@ members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db",
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [workspace.dependencies]
 clarity-spec = { path = "crates/clarity-spec" }

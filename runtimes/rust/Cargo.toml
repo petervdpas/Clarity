@@ -13,7 +13,7 @@ keywords = ["clarity", "codegen", "database", "tauri"]
 categories = ["database", "development-tools"]
 # The library and its README; the tests read Clarity's shared cases, which
 # live outside the crate.
-include = ["src/**", "README.md"]
+include = ["src/**", "README.md", "LICENSE"]
 
 # One feature per database; a generated application turns on the ones its
 # data sources use.

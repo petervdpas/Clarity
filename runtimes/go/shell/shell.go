@@ -44,8 +44,10 @@ type Options struct {
 	// Name is the program's name; Title the title of its window until a
 	// Clarity window gives its own.
 	Name, Title string
-	// Main is the window the application opens with.
-	Main string
+	// Main is the window the application opens with; Width and Height the
+	// size its desktop window opens at (zero for the standard size).
+	Main          string
+	Width, Height int
 	// Model is the windows, frame and data dictionary the renderer draws from.
 	Model []byte
 	// Assets are the renderer's files: index.html, its script, styles and themes.
@@ -128,6 +130,8 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	var a struct {
 		Window  string              `json:"window"`
 		With    map[string]any      `json:"with"`
+		Width   int                 `json:"width"`
+		Height  int                 `json:"height"`
 		State   clarity.WindowState `json:"state"`
 		Handler string              `json:"handler"`
 		Entity  string              `json:"entity"`
@@ -192,7 +196,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		}
 		return Answer{}
 	case "open_apart":
-		return c.openApart(caller(ctx), a.Window, a.With)
+		return c.openApart(caller(ctx), a.Window, a.With, a.Width, a.Height)
 	case "apart_start":
 		window := caller(ctx)
 		if window == nil {
@@ -212,13 +216,24 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	return Answer{Error: "there is no command " + command}
 }
 
-// window is a desktop window showing the renderer.
-func (c *Service) window(name string) *application.WebviewWindow {
+// size is the size a desktop window opens at: its window's, or the
+// standard size when the window says none.
+func size(width, height int) (int, int) {
+	if width <= 0 || height <= 0 {
+		return 1100, 760
+	}
+	return width, height
+}
+
+// window is a desktop window showing the renderer, at the size of the
+// Clarity window it shows first.
+func (c *Service) window(name string, width, height int) *application.WebviewWindow {
+	width, height = size(width, height)
 	return c.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:   name,
 		Title:  c.options.Title,
-		Width:  1100,
-		Height: 760,
+		Width:  width,
+		Height: height,
 		URL:    "/",
 	})
 }
@@ -226,14 +241,14 @@ func (c *Service) window(name string) *application.WebviewWindow {
 // openApart opens a Clarity window in a desktop window of its own, as the
 // design marks it. When it closes, the window that opened it is told, so
 // it can reload its data.
-func (c *Service) openApart(opener application.Window, window string, with map[string]any) Answer {
+func (c *Service) openApart(opener application.Window, window string, with map[string]any, width, height int) Answer {
 	if c.app == nil || opener == nil {
 		return Answer{Error: "a window of its own needs the desktop"}
 	}
 	c.next++
 	name := fmt.Sprintf("apart-%d", c.next)
 	c.apart[name] = apart{window, with, opener.Name()}
-	desktop := c.window(name)
+	desktop := c.window(name, width, height)
 	desktop.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		c.mu.Lock()
 		start := c.apart[name]
@@ -262,6 +277,6 @@ func Run(options Options, bind func(*Service) application.Service) error {
 		Assets:   application.AssetOptions{Handler: application.AssetFileServerFS(options.Assets)},
 		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 	})
-	service.window("main")
+	service.window("main", options.Width, options.Height)
 	return service.app.Run()
 }

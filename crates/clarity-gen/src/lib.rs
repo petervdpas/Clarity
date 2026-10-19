@@ -80,6 +80,46 @@ fn check_stores(project: &Project, settings: &Settings) -> Result<(), Vec<String
     if missing.is_empty() { Ok(()) } else { Err(missing) }
 }
 
+/// The size the window `name` opens at, in pixels: its own (`size 320 x
+/// 460`), or the standard size every stack shares.
+pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
+    project
+        .pages()
+        .find(|p| p.name.name == name)
+        .and_then(|p| p.size)
+        .map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |s| (s.width, s.height))
+}
+
+/// The calls with values a window's parts wire, each once, in the order of
+/// the design: `digit(7)`, `digit(8)`. A backend dispatches each by its
+/// written form (widgets::handler_call), which the renderer sends, with
+/// the values compiled in.
+pub(crate) fn wired_calls(page: &clarity_spec::model::Page) -> Vec<&clarity_spec::model::Handler> {
+    use clarity_spec::model::Widget;
+    fn walk<'a>(widgets: &'a [Widget], out: &mut Vec<&'a clarity_spec::model::Handler>) {
+        for widget in widgets {
+            for h in widget.props.handlers.iter().filter(|h| !h.args.is_empty()) {
+                if !out.iter().any(|o| o.handler == h.handler && o.args == h.args) {
+                    out.push(h);
+                }
+            }
+            walk(&widget.children, out);
+            for page in &widget.pages {
+                walk(&page.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&page.widgets, &mut out);
+    for sidebar in &page.frame.sidebars {
+        walk(&sidebar.widgets, &mut out);
+    }
+    if let Some(footer) = &page.frame.footer {
+        walk(&footer.widgets, &mut out);
+    }
+    out
+}
+
 /// The named tables and lists of a page that show the rows of its data, by
 /// the data's name. When a handler replaces those rows (`reload`, or a new
 /// list), they are other records, so these parts lose their selected row: on

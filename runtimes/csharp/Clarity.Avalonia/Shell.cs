@@ -78,6 +78,7 @@ public sealed class Shell : Window
     public static Shell Start(WindowViewModel first, Func<WindowViewModel, Control> view, TimeSpan? infoDuration = null)
     {
         var shell = new Shell(view, infoDuration ?? TimeSpan.FromSeconds(5));
+        shell.Fit(first);
         desktops.Add(shell);
         shell.Push(first);
         shell.Show();
@@ -88,9 +89,17 @@ public sealed class Shell : Window
     void OpenApart(WindowViewModel first, WindowViewModel from)
     {
         var shell = new Shell(view, infoDuration) { opener = from };
+        shell.Fit(first);
         desktops.Add(shell);
         shell.Push(first);
         shell.Show();
+    }
+
+    /// <summary>Opens at the size of the window it shows first, or the standard size.</summary>
+    void Fit(WindowViewModel first)
+    {
+        if (first.WindowSize is { } size)
+            (Width, Height) = (size.Width, size.Height);
     }
 
     void Push(WindowViewModel model)
@@ -154,7 +163,10 @@ public sealed class Shell : Window
         {
             Title = other.Title,
             Content = DialogContent(other),
-            SizeToContent = SizeToContent.WidthAndHeight,
+            // A dialog fits its content, unless it says its size.
+            SizeToContent = other.WindowSize is null ? SizeToContent.WidthAndHeight : SizeToContent.Manual,
+            Width = other.WindowSize?.Width ?? double.NaN,
+            Height = other.WindowSize?.Height ?? double.NaN,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };

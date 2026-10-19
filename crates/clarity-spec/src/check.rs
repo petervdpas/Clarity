@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::diagnostic::Diagnostic;
 use crate::frame;
 use crate::model::{
-    App, Command, CommandKind, DataDecl, Entity, Field, FieldType, Frame, Ident, Project,
+    App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Frame, Ident, Project,
     Literal, MAX_PAGE_COLUMNS, Page, PageKind, SpecFile, Widget,
     WidgetProps,
 };
@@ -17,7 +17,36 @@ use crate::widgets::{self, BindTarget, ContainerKind, WidgetKind};
 /// Data declarations of the page being checked: name -> (entity, is list).
 /// The entity is `None` when it did not resolve; that error is reported once.
 struct PageContext<'a> {
-    data: HashMap<&'a str, (Option<&'a Entity>, bool)>,
+    data: HashMap<&'a str, Held<'a>>,
+}
+
+/// What a window's data holds, as its parts bind it. An entity that does
+/// not resolve is None, reported once where it is declared.
+#[derive(Clone)]
+enum Held<'a> {
+    Record(Option<&'a Entity>),
+    List(Option<&'a Entity>),
+    /// A plain value, with the field type a part shows it as.
+    Value(FieldType),
+}
+
+/// The field type a part shows a plain value of `ty` as, for the types a
+/// part accepts; None for a type no part shows (a list).
+fn shown_as(ty: &crate::code::TypeRefKind) -> Option<FieldType> {
+    use crate::code::TypeRefKind as T;
+    Some(match ty {
+        T::Text => FieldType::Text { max_length: None },
+        T::Integer => FieldType::Integer,
+        // A plain decimal keeps the digits it has; only the kind matters here.
+        T::Decimal => FieldType::Decimal { precision: 0, scale: 0 },
+        T::Money => FieldType::Money,
+        T::Bool => FieldType::Bool,
+        T::Date => FieldType::Date,
+        T::DateTime => FieldType::DateTime,
+        T::Duration => FieldType::Duration,
+        T::Named { name } => FieldType::Enum { name: Ident { name: name.clone(), span: crate::span::Span::default() } },
+        T::File | T::List { .. } => return None,
+    })
 }
 
 fn overlaps(a: &WidgetProps, b: &WidgetProps) -> bool {
@@ -291,6 +320,11 @@ impl<'a> Checker<'a> {
     // -- pages ------------------------------------------------------------
 
     fn check_page(&mut self, file: usize, page: &'a Page) {
+        if let Some(size) = page.size
+            && !crate::layout::window_size_fits(size.width, size.height)
+        {
+            self.error(file, crate::layout::window_size_problem(), page.name.span);
+        }
         if page.columns == 0 || page.columns > MAX_PAGE_COLUMNS {
             self.error(
                 file,
@@ -323,12 +357,41 @@ impl<'a> Checker<'a> {
     }
 
     fn data_context(&mut self, file: usize, decls: &'a [DataDecl]) -> PageContext<'a> {
-        let mut data: HashMap<&str, (Option<&'a Entity>, bool)> = HashMap::new();
+        let mut data: HashMap<&str, Held<'a>> = HashMap::new();
         for decl in decls {
-            let entity = self
-                .resolve(file, &decl.entity, DeclKind::Entity)
-                .map(|(f, i)| &self.files[f].entities[i]);
-            if data.insert(&decl.name.name, (entity, decl.list)).is_some() {
+            let held = match &decl.of {
+                DataKind::Record { entity } | DataKind::List { entity } => {
+                    let found = if self.decls.contains_key(entity.name.as_str()) {
+                        self.resolve(file, entity, DeclKind::Entity).map(|(f, i)| &self.files[f].entities[i])
+                    } else {
+                        self.error(file, format!("unknown entity or enum '{}'", entity.name), entity.span);
+                        None
+                    };
+                    if decl.is_list() { Held::List(found) } else { Held::Record(found) }
+                }
+                DataKind::Value { ty, default } => {
+                    if let crate::code::TypeRefKind::Named { name } = &ty.kind {
+                        let ident = Ident { name: name.clone(), span: ty.span };
+                        let is_entity = self.decls.get(name.as_str()).is_some_and(|ds| ds.iter().any(|d| d.kind == DeclKind::Entity));
+                        if is_entity && default.is_some() {
+                            self.error(
+                                file,
+                                format!("'{}' is a record, which starts new; only a plain value has a default", decl.name.name),
+                                ty.span,
+                            );
+                        } else if self.decls.contains_key(name.as_str()) {
+                            self.resolve(file, &ident, DeclKind::Enum);
+                        } else {
+                            self.error(file, format!("unknown entity or enum '{name}'"), ty.span);
+                        }
+                    }
+                    match shown_as(&ty.kind) {
+                        Some(shown) => Held::Value(shown),
+                        None => continue,
+                    }
+                }
+            };
+            if data.insert(&decl.name.name, held).is_some() {
                 self.error(
                     file,
                     format!("duplicate data '{}'", decl.name.name),
@@ -726,13 +789,35 @@ impl<'a> Checker<'a> {
             Some((d, f)) => (d, Some(f)),
             None => (bind.as_str(), None),
         };
-        let Some(&(entity, list)) = page.data.get(data_name) else {
+        let Some(held) = page.data.get(data_name).cloned() else {
             self.error(
                 file,
                 format!("{at}: unknown data '{data_name}'"),
                 widget.span,
             );
             return;
+        };
+        let (entity, list) = match held {
+            Held::Record(entity) => (entity, false),
+            Held::List(entity) => (entity, true),
+            Held::Value(shown) => {
+                let problem = match info.bind {
+                    _ if field_name.is_some() => Some(format!("'{data_name}' is a plain value; bind it as '{data_name}'")),
+                    BindTarget::Nothing => None,
+                    BindTarget::Record => Some(format!("a {name} binds to one record, as in 'bind customer'")),
+                    BindTarget::Collection => Some(format!("a {name} binds to a list, as in 'data orders: list<Order>'")),
+                    BindTarget::Field if !widgets::accepts(p.kind, &shown) => Some(format!(
+                        "'{data_name}' is {}; a {name} shows {}",
+                        widgets::field_type_tag(&shown),
+                        widgets::accepted_types(p.kind).join(", ")
+                    )),
+                    BindTarget::Field => None,
+                };
+                if let Some(problem) = problem {
+                    self.error(file, format!("{at}: {problem}"), widget.span);
+                }
+                return;
+            }
         };
         let Some(entity) = entity else { return };
 

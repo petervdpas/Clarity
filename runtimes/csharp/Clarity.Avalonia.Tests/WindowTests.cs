@@ -31,10 +31,11 @@ public class TestApp : Application
 }
 
 /// A window as Clarity generates one: data, parts and handlers.
-sealed class CardViewModel(Db db, string title = "Card", bool dialog = false) : WindowViewModel(db)
+sealed class CardViewModel(Db db, string title = "Card", bool dialog = false, global::Avalonia.Size? size = null) : WindowViewModel(db)
 {
     public override string Title => title;
     public override bool IsDialog => dialog;
+    public override global::Avalonia.Size? WindowSize => size;
     public List<string> Rows { get; set; } = ["a", "b"];
     public PartState Grid { get; } = new("grid");
     public PartState Save { get; } = new("save", caption: "Save");
@@ -51,6 +52,7 @@ sealed class CardViewModel(Db db, string title = "Card", bool dialog = false) : 
     public string Picked() => Selected<string>(Grid);
     public void OpenChild() => Handle(() => Open(Child = new CardViewModel(Db, "Child")));
     public void OpenDialog() => Handle(() => Open(Child = new CardViewModel(Db, "Ask", dialog: true)));
+    public void OpenSizedApart() => Handle(() => Open(Child = new CardViewModel(Db, "Small", size: new(400, 300)), newWindow: true));
     public void SaveAndClose() => Handle(() =>
     {
         Say(Level.Info, Text.Plain("Saved"));
@@ -61,6 +63,27 @@ sealed class CardViewModel(Db db, string title = "Card", bool dialog = false) : 
 
 public class WindowTests
 {
+    [AvaloniaFact]
+    public void ADesktopWindowOpensAtTheSizeOfTheWindowItShowsFirst()
+    {
+        using var db = Db.Memory();
+        var calculator = new CardViewModel(db, "Calculator", size: new(320, 460));
+        var shell = Shell.Start(calculator, View);
+        Assert.Equal((320d, 460d), (shell.Width, shell.Height));
+        // A window of its own takes its window's size.
+        calculator.OpenSizedApart();
+        var apart = Shell.Desktops[^1];
+        Assert.NotSame(shell, apart);
+        Assert.Equal((400d, 300d), (apart.Width, apart.Height));
+        apart.Close();
+        shell.Close();
+
+        // A window without a size opens at the standard one.
+        var card = Shell.Start(new CardViewModel(db), View);
+        Assert.Equal((1100d, 760d), (card.Width, card.Height));
+        card.Close();
+    }
+
     [AvaloniaFact]
     public void HandlersShowWhatWentWrongAsAnErrorMessage()
     {

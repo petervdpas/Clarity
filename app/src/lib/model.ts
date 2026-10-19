@@ -12,6 +12,7 @@ import { pickLanguage, translate, translateText } from "./translate";
 import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
 import { scheme, themeChoice } from "./scheme.svelte";
+import { keepsItsDigits } from "./windowData";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -65,7 +66,7 @@ export function fieldFormat(field: Field): FieldFormat | null {
     case "duration":
       return { kind: "duration" };
     case "decimal":
-      return { kind: "decimal", scale: t.scale, format };
+      return { kind: "decimal", scale: keepsItsDigits(t) ? undefined : t.scale, format };
     default:
       return null;
   }
@@ -112,7 +113,7 @@ export function describeType(field: Field): string {
     case "text":
       return t.maxLength === null ? "text" : `text(${t.maxLength})`;
     case "decimal":
-      return `decimal(${t.precision}, ${t.scale})`;
+      return keepsItsDigits(t) ? "decimal" : `decimal(${t.precision}, ${t.scale})`;
     case "dateTime":
       return "datetime";
     case "enum":

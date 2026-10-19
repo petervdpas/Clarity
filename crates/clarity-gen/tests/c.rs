@@ -192,3 +192,89 @@ fn rows_read_again_lose_their_selected_row() {
     has(&code, "clarity_ui_deselect(ui, \"grid\");");
     assert_eq!(code.matches("deselect").count(), 1, "{code}");
 }
+
+/// The desktop window opens at the main window's size.
+#[test]
+fn the_desktop_window_opens_at_the_main_windows_size() {
+    let code: String = files().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.as_str()).collect();
+    has(&code, "page_model(), page_html(), db, &windows, 1100, 760};");
+    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
+    assert_ne!(sized, SALES);
+    let project = load_sources([("sales.clarity", sized.as_str())]);
+    let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".c")).map(|f| f.text.clone()).collect();
+    has(&code, "page_model(), page_html(), db, &windows, 640, 480};");
+}
+
+/// A click can pass values to its handler: each written call is a case of
+/// its own, with its values written into the code.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = SALES
+        .replace(
+            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n",
+            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
+        )
+        .replace(
+            "    handler refresh_clicked\n",
+            "    handler digit(d: integer)\n        approve_button.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refresh_clicked\n",
+        );
+    assert_ne!(source, SALES);
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let app = file(&files, "src/app.h");
+    has(app, "bool order_form_window_digit(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w, int64_t d);");
+    has(app, "bool order_form_window_scale(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w, ClarityDecimal by, const char* word, OrderStatus status);");
+    let sales = file(&files, "src/modules/sales.c");
+    has(sales, "if (!order_form_window_digit(db, ui, w, 3)) return false;");
+    let main = file(&files, "src/main.c");
+    has(main, "else if (strcmp(handler, \"digit(7)\") == 0) ok = order_form_window_digit(db, ui, &w, 7);");
+    // A handler that takes values is only called with them.
+    assert!(!main.contains("(strcmp(handler, \"digit\") == 0)"), "{main}");
+    has(main, "else if (strcmp(handler, \"scale(0.5, \\\"half\\\", Approved)\") == 0) ok = order_form_window_scale(db, ui, &w, clarity_decimal(5, 1), \"half\", ORDER_STATUS_APPROVED);");
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A window holds plain values: fields of its data, at their default or
+/// empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SALES}{CALC}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "src/app.h"), "typedef struct {\n    ClarityDecimal shown;\n    OrderStatus pending;\n    bool fresh;\n    const char* word;\n    int64_t count;\n    ClarityDecimal rate;\n} CalcWindow;");
+    let sales = file(&files, "src/modules/sales.c");
+    for load in ["    w->shown = (ClarityDecimal){0};\n", "    w->fresh = true;\n", "    w->word = \"hi\";\n", "    w->count = 2;\n", "    w->rate = clarity_decimal(5, 1);\n"] {
+        has(sales, load);
+    }
+    has(sales, "cJSON_AddItemToObject(out, \"fresh\", clarity_json_bool(w->fresh));");
+    has(sales, "cJSON_AddItemToObject(out, \"pending\", clarity_json_text(order_status_name(w->pending)));");
+    has(sales, "if (!clarity_json_get_decimal(in, \"shown\", &w->shown)) return false;");
+    has(sales, "if (pending_name) w->pending = order_status_from(pending_name);");
+    has(sales, "w->fresh = false;\n");
+    has(sales, "w->pending = ORDER_STATUS_APPROVED;\n");
+}

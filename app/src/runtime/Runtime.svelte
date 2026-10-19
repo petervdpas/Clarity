@@ -16,7 +16,8 @@
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
-  import { findPage, type PageData } from "../lib/pages";
+  import { findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
+  import { dataEntity, isList } from "../lib/windowData";
   import { Navigator } from "../lib/navigator";
 
   /** One open window, as the backend sends it. */
@@ -54,11 +55,18 @@
     const out: PageData = {};
     if (!model || !page || !current) return out;
     for (const decl of page.data) {
-      const entity = model.project.files.flatMap((f) => f.entities).find((e) => e.name.name === decl.entity.name);
       const value = current.data[decl.name.name];
-      if (!entity || value === undefined) continue;
-      const rows = (decl.list ? value : [value]) as Row[];
-      out[decl.name.name] = { entity, list: decl.list, rows };
+      if (value === undefined) continue;
+      // A plain value is read and written in the window's data itself.
+      if (decl.of.kind === "value") {
+        const entry = valueEntry(decl, current.data as Row);
+        if (entry) out[decl.name.name] = entry;
+        continue;
+      }
+      const entity = model.project.files.flatMap((f) => f.entities).find((e) => e.name.name === dataEntity(decl));
+      if (!entity) continue;
+      const rows = (isList(decl) ? value : [value]) as Row[];
+      out[decl.name.name] = { entity, list: isList(decl), rows };
     }
     return out;
   });
@@ -99,7 +107,12 @@
       open: (window, withData) => invoke<Reply>("open_window", { window, with: withData }),
       close: (state) => invoke<Reply>("close_window", { state: $state.snapshot(state) }),
       returnTo: (state) => invoke<Reply>("return_to", { state: $state.snapshot(state) }),
-      openApart: (window, withData) => invoke("open_apart", { window, with: withData }),
+      // A desktop window of its own opens at the size of the window it shows.
+      openApart: (window, withData) => {
+        const target = model ? findPage(model, window) : undefined;
+        const size = target ? windowSize(target) : undefined;
+        return invoke("open_apart", { window, with: withData, width: size?.width, height: size?.height });
+      },
       // The main window ends the application; a window of its own just closes.
       quit: () => invoke(apart ? "close_apart" : "quit_app"),
     },

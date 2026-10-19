@@ -79,6 +79,8 @@ pub enum Edit {
     },
     /// Set the number of grid columns of a page.
     SetGrid { page: u32, columns: u32 },
+    /// Set the size a window opens at, in pixels; none for the standard size.
+    SetSize { page: u32, width: Option<u32>, height: Option<u32> },
     /// Add an empty page at the end of the file.
     AddPage { name: String, kind: PageKind },
     /// Add a window at the end of the file, blank or from a template.
@@ -783,6 +785,7 @@ impl Doc {
                 list,
             } => self.add_data(*page, name, entity, *list),
             Edit::SetGrid { page, columns } => self.set_grid(*page, *columns),
+            Edit::SetSize { page, width, height } => self.set_size(*page, *width, *height),
             Edit::AddPage { name, kind } => self.add_page(name, *kind),
             Edit::AddWindow { .. } | Edit::PlaceField { .. } => {
                 fail("this edit needs the whole project and cannot be part of a batch")
@@ -1142,6 +1145,32 @@ impl Doc {
                 let rest = node.text[rest_start..].to_string();
                 node.set_text(text + &rest);
             }
+            None => {
+                let indent = self.node(&path).child_indent();
+                let line = self.fresh_node(indent, text);
+                let index = self.settings_end(&path);
+                self.node_mut(&path).children.insert(index, line);
+            }
+        }
+        Ok(Some(page))
+    }
+
+    fn set_size(&mut self, page: u32, width: Option<u32>, height: Option<u32>) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(page, "a page", |k| k == Kind::Page)?;
+        let existing = self.node(&path).children.iter().position(|c| starts_with_keyword(&c.tokens, "size", Some(TokenKind::Number)));
+        let Some((width, height)) = width.zip(height) else {
+            // The standard size: the line goes.
+            if let Some(index) = existing {
+                self.node_mut(&path).children.remove(index);
+            }
+            return Ok(Some(page));
+        };
+        if !crate::layout::window_size_fits(width, height) {
+            return fail(crate::layout::window_size_problem());
+        }
+        let text = format!("size {width} x {height}");
+        match existing {
+            Some(index) => self.node_mut(&path).children[index].set_text(text),
             None => {
                 let indent = self.node(&path).child_indent();
                 let line = self.fresh_node(indent, text);

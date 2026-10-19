@@ -4,7 +4,7 @@ How the code behind a window works: handlers wired to events, part properties, m
 
 ## The code behind a window
 
-A window's handlers live in a `code` block with the window's name, in the same file as the window. A handler has a name and no parameters. It runs when an event wired to it happens.
+A window's handlers live in a `code` block with the window's name, in the same file as the window. A handler has a name, and parameters when a part gives it values. It runs when an event wired to it happens.
 
 ```
 code CustomerForm
@@ -23,11 +23,31 @@ code CustomerForm
 
 A part wires an event with `on click: save_clicked`; a window wires its own with `on open:`, `on close:` and `on return:`. The app's handlers, such as `on start`, are in a `code` block named after the app. A handler that is wired but not written is an error; one that is written but wired nowhere is a warning.
 
+## Values from a click
+
+One handler can serve many parts when each gives it a value. The ten digit buttons of a calculator share one handler:
+
+```
+    button "7" at 1,4 span 1 on click: digit(7)
+    button "8" at 2,4 span 1 on click: digit(8)
+    button "+" at 4,6 span 1 on click: operation(Add)
+
+code Main
+    handler digit(d: integer)
+        shown = shown * 10 + d
+
+    handler operation(op: Operation)
+        pending = op
+```
+
+A parameter is `text`, `integer`, `decimal`, `money`, `bool` or an enum, and a value is written as in code: `7`, `0.5`, `"text"`, `true`, or a value of the enum. The checker says when a part gives too few or too many values, or one of the wrong type. A handler that takes values runs only from parts that give them, so the window's own events (`on open`) wire handlers without parameters. Another handler runs it with values too: `digit(3)`.
+
 Handlers run in the backend. The window sends its data with the event, the handler runs, and the window then shows what changed: data, part properties, messages, and windows to open or close.
 
 ## What a handler can use
 
-- The window's data, by its `data` names: `customer`, `orders`.
+- The window's data, by its `data` names: `customer`, `orders`, and its plain values: `shown`.
+- Its parameters, by name.
 - The window's parts, by their names: `save`, `vat_number`.
 - Its own locals, made with `let`.
 - Functions and actions of its module and of the modules it uses; see [Functions and actions](code.functions.md).

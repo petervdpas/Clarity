@@ -34,11 +34,13 @@ fn parses_names_and_handlers() {
         vec![
             Handler {
                 event: Event::Change,
-                handler: "name_changed".into()
+                handler: "name_changed".into(),
+                args: Vec::new()
             },
             Handler {
                 event: Event::Leave,
-                handler: "name_left".into()
+                handler: "name_left".into(),
+                args: Vec::new()
             },
         ]
     );
@@ -54,6 +56,7 @@ fn writes_name_after_the_caption_and_handlers_last() {
     props.handlers.push(Handler {
         event: Event::Click,
         handler: "save_clicked".into(),
+        args: Vec::new(),
     });
     assert_eq!(
         widget_line(&props),
@@ -73,6 +76,7 @@ fn rejects_events_a_part_does_not_have() {
     props.handlers.push(Handler {
         event: Event::Click,
         handler: "a".into(),
+        args: Vec::new(),
     });
     props.on_click = Some("Card".into());
     assert!(validate_props(&props).unwrap_err().contains("wired twice"));

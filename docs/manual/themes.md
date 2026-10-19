@@ -40,6 +40,17 @@ theme Shop
 
 A look sets `background`, `text` and `border` to a theme color by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas.
 
+A style also sets how its text shows: `size n` in pixels, `font text`, `font heading` or `font mono` (a font of the theme), and `align left`, `center` or `right`. Aligned text keeps an input's padding from the edge. A calculator's display, large and on the right in an LCD green:
+
+```
+theme Calculator
+    color lcd "#c7d3a8" dark "#1d2618"
+    color lcd_text "#1f2a14" dark "#a8e890"
+    style display background lcd, text lcd_text, border none, size 40, font mono, align right
+```
+
+and on the window: `text name display at 1,1 span 4 rows 2 bind shown style display`.
+
 ## Themes in the designer
 
 Themes are listed under Themes in the project tree. Clarity's own theme opens read only, as the reference of every value. **New theme** adds a full copy of it to a module and opens it. A theme opens in its own view: its text, checked as you type, beside a sample window drawn with it.

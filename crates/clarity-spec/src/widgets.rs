@@ -609,6 +609,25 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
 }
 
 /// Writes widget properties as one canonical spec line, in a fixed order.
+/// A wired handler as written: `digit` or with its values, `digit(7)`.
+pub fn handler_call(h: &crate::model::Handler) -> String {
+    if h.args.is_empty() {
+        return h.handler.clone();
+    }
+    let values: Vec<String> = h.args.iter().map(literal_text).collect();
+    format!("{}({})", h.handler, values.join(", "))
+}
+
+/// A value as it is written in Clarity.
+pub fn literal_text(value: &crate::model::Literal) -> String {
+    use crate::model::Literal;
+    match value {
+        Literal::Number(n) | Literal::Ident(n) => n.clone(),
+        Literal::Str(s) => quote(s),
+        Literal::Bool(b) => b.to_string(),
+    }
+}
+
 pub fn widget_line(props: &WidgetProps) -> String {
     let mut parts = vec![keyword(props.kind).to_string()];
     if let Some(caption) = &props.caption {
@@ -681,7 +700,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push("cancel".to_string());
     }
     for h in &props.handlers {
-        parts.push(format!("on {}: {}", h.event.keyword(), h.handler));
+        parts.push(format!("on {}: {}", h.event.keyword(), handler_call(h)));
     }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));

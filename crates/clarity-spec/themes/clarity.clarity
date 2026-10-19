@@ -38,7 +38,7 @@ theme Clarity
 
     font "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     font heading "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-    font mono "ui-monospace, JetBrains Mono, Cascadia Code, Menlo, monospace"
+    font mono "ui-monospace, JetBrains Mono, Cascadia Code, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, monospace"
     size 14
     size small 12
     size heading 18

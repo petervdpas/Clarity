@@ -286,11 +286,15 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         let _ = writeln!(events, "        // The app's own events run whatever window is given.\n        if (event == {}) return {};", string(event), string(handler));
     }
     let mut dispatch = String::new();
-    for w in windows.iter().filter(|w| !w.handlers.is_empty()) {
+    for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = writeln!(dispatch, "        if (state.window == {}) {{\n            auto w = state.data.get<{}>();", string(&w.name), w.struct_name);
-        for (i, (handler, method)) in w.handlers.iter().enumerate() {
+        // The handlers by name, then the calls with values its parts wire,
+        // by their written form.
+        let plain = w.handlers.iter().map(|(handler, method)| (handler, method, String::new()));
+        let calls = w.calls.iter().map(|(call, method, values)| (call, method, values.iter().map(|v| format!(", {v}")).collect()));
+        for (i, (handler, method, values)) in plain.chain(calls).enumerate() {
             let keyword = if i == 0 { "if" } else { "else if" };
-            let _ = writeln!(dispatch, "            {keyword} (handler == {}) w.{method}(db, ui);", string(handler));
+            let _ = writeln!(dispatch, "            {keyword} (handler == {}) w.{method}(db, ui{values});", string(handler));
         }
         let _ = writeln!(dispatch, "            else throw clarity::InvalidError(state.window + \" has no handler \" + handler);\n            return ui.reply(state.window, w);\n        }}");
     }
@@ -392,7 +396,7 @@ int main(int argc, char** argv) {{
             }}
         }}
         {program}::AppWindows windows;
-        return clarity::shell::run({{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows}});
+        return clarity::shell::run({{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows, {{{width}, {height}}}}});
     }} catch (const std::exception& e) {{
         std::cerr << e.what() << "\n";
         return 1;
@@ -402,6 +406,9 @@ int main(int argc, char** argv) {{
         sources = sources.join(", "),
         stores = stores.join(", "),
         name = string(program),
-        main = string(main_window)
+        main = string(main_window),
+        // The desktop window opens at the main window's size.
+        width = crate::window_size(project, main_window).0,
+        height = crate::window_size(project, main_window).1
     )
 }

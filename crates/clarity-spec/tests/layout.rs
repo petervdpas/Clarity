@@ -58,9 +58,9 @@ fn every_window_opens_at_the_size_the_designer_shows() {
         assert!(shell.contains(&WINDOW_WIDTH.to_string()) && shell.contains(&WINDOW_HEIGHT.to_string()), "{stack}");
     }
     assert!(SHOWN_WINDOW.contains("WINDOW_WIDTH"));
-    // The designer and the preview both show the window so, with its height
-    // and the running window's padding around its grid.
+    // The designer and the preview both show the window so, at its own size
+    // (or the standard one) and with the running window's padding around its grid.
     for (name, view) in [("designer", PAGE_DESIGNER), ("preview", APP)] {
-        assert!(view.contains("<ShownWindow") && view.contains("WINDOW_HEIGHT") && view.contains("CONTENT_PADDING"), "{name}");
+        assert!(view.contains("<ShownWindow") && view.contains("clientWidth={windowSize(page).width}") && view.contains("windowSize(page).height") && view.contains("CONTENT_PADDING"), "{name}");
     }
 }

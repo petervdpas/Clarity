@@ -53,6 +53,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         files.push(file);
         diagnostics.extend(file_diagnostics);
     }
+    resolve_data(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
     Project {
@@ -65,6 +66,27 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         images: None,
         stores: None,
         translations: BTreeMap::new(),
+    }
+}
+
+/// Window data read as a record (`data pending: Operation`) whose type is
+/// an enum, and no entity, becomes a plain value: the parser reads one file
+/// and cannot tell.
+fn resolve_data(files: &mut [model::SpecFile]) {
+    use model::DataKind;
+    let enums: std::collections::HashSet<String> = files.iter().flat_map(|f| &f.enums).map(|e| e.name.name.clone()).collect();
+    let entities: std::collections::HashSet<String> = files.iter().flat_map(|f| &f.entities).map(|e| e.name.name.clone()).collect();
+    for file in files.iter_mut() {
+        let data = file.pages.iter_mut().flat_map(|p| &mut p.data).chain(file.apps.iter_mut().flat_map(|a| &mut a.data));
+        for decl in data {
+            if let DataKind::Record { entity } = &decl.of
+                && enums.contains(&entity.name)
+                && !entities.contains(&entity.name)
+            {
+                let ty = code::TypeRef { kind: code::TypeRefKind::Named { name: entity.name.clone() }, span: entity.span };
+                decl.of = DataKind::Value { ty, default: None };
+            }
+        }
     }
 }
 

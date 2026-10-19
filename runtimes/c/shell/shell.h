@@ -35,7 +35,13 @@ typedef struct {
     const char* html;
     ClarityDb* db;
     const ClarityWindows* windows;
+    /// The size the main window's desktop window opens at; zero for the standard size.
+    int width, height;
 } ClarityShellOptions;
+
+/// The size a desktop window opens at: its window's, or the standard size
+/// when `width` or `height` is not above zero.
+void clarity_window_size(int* width, int* height);
 
 /// A desktop window, as the commands of the renderer in it see it.
 typedef struct ClarityDesktop ClarityDesktop;
@@ -54,9 +60,10 @@ void clarity_service_free(ClarityService* service);
 /// Tauri shell has. Answers `{"value": ...}` or `{"error": ...}`, in the scratch arena.
 cJSON* clarity_service_invoke(ClarityService* service, const char* command, const cJSON* args, ClarityDesktop* caller);
 /// What the service asks of the desktop, set by clarity_shell_run: ending
-/// the program, and opening a desktop window of its own, named `name`, for the opener.
+/// the program, and opening a desktop window of its own, named `name`, for
+/// the opener, at `width` x `height` (the window's size, or the standard one).
 void clarity_service_on_desktop(ClarityService* service, void (*quit)(void* context),
-                                void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name), void* context);
+                                void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name, int width, int height), void* context);
 /// A desktop window of its own closed: gives its opener's name, so it can
 /// reload its data, or NULL. The name stays until the service is freed.
 const char* clarity_service_closed(ClarityService* service, const char* name);

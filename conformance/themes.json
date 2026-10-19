@@ -33,14 +33,20 @@
             "text": "@text",
             "border": "none",
             "radius": null,
-            "weight": null
+            "weight": null,
+            "size": null,
+            "font": null,
+            "align": null
           },
           "primary": {
             "background": "#2f6fdf",
             "text": "#ffffff",
             "border": null,
             "radius": null,
-            "weight": null
+            "weight": null,
+            "size": null,
+            "font": null,
+            "align": null
           }
         }
       }
@@ -74,7 +80,10 @@
             "text": null,
             "border": null,
             "radius": 4,
-            "weight": null
+            "weight": null,
+            "size": null,
+            "font": null,
+            "align": null
           }
         },
         "styles": {
@@ -83,7 +92,10 @@
             "text": null,
             "border": "#f5c400",
             "radius": null,
-            "weight": "bold"
+            "weight": "bold",
+            "size": null,
+            "font": null,
+            "align": null
           }
         }
       }
@@ -108,6 +120,37 @@
         "shadow": null,
         "parts": {},
         "styles": {}
+      }
+    },
+    {
+      "what": "a style that sets how its text shows: a calculator's display",
+      "dark": false,
+      "theme": {
+        "mode": "light",
+        "source": "theme Calc\n    mode light\n    style display background \"#c9d8b0\", text \"#1b2414\", size 36, font mono, align right\n"
+      },
+      "gives": {
+        "dark": false,
+        "colors": {},
+        "fonts": {},
+        "sizes": {},
+        "radii": {},
+        "padding": null,
+        "border": null,
+        "shadow": null,
+        "parts": {},
+        "styles": {
+          "display": {
+            "background": "#c9d8b0",
+            "text": "#1b2414",
+            "border": null,
+            "radius": null,
+            "weight": null,
+            "size": 36,
+            "font": "mono",
+            "align": "right"
+          }
+        }
       }
     }
   ]

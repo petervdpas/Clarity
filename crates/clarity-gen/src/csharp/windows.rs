@@ -13,7 +13,7 @@ use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
 use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT, SIDEBAR_COLUMN};
-use clarity_spec::model::{App, Command, CommandKind, Entity, Field, FieldType, Page, PageKind, Widget, WidgetProps};
+use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
 
@@ -128,8 +128,10 @@ struct Window<'a> {
     page: &'a Page,
     app: Option<&'a App>,
     frame: ShownFrame<'a>,
-    /// The window's data with the app's: name, entity and whether it is a list.
+    /// The window's records and lists with the app's: name, entity and whether it is a list.
     data: Vec<(String, String, bool)>,
+    /// The window's plain values with the app's: `data shown: decimal`.
+    values: Vec<&'a DataDecl>,
     /// Every part the window shows: its grid, nested parts, the sidebars and the footer.
     parts: Vec<&'a Widget>,
     commands: Vec<&'a Command>,
@@ -137,6 +139,42 @@ struct Window<'a> {
     /// The control of each command that picks the language or theme, by the
     /// command's address: `picker1`.
     pickers: HashMap<usize, String>,
+    /// The calls with values its parts wire, each with the command that
+    /// makes it: `digit(7)` with `Digit7`.
+    calls: Vec<(&'a Handler, String)>,
+}
+
+/// A shortcut as Avalonia names its keys: `7` as `D7`, `Backspace` as
+/// `Back`; modifiers and the other keys are named alike.
+fn gesture(shortcut: &str) -> String {
+    let (modifiers, key) = shortcut.rsplit_once('+').map_or(("", shortcut), |(m, k)| (m, k));
+    let key = match key {
+        "Backspace" => "Back".to_string(),
+        digit if digit.len() == 1 && digit.chars().all(|c| c.is_ascii_digit()) => format!("D{digit}"),
+        other => other.to_string(),
+    };
+    if modifiers.is_empty() { key } else { format!("{modifiers}+{key}") }
+}
+
+/// The command of a call with values, named after it: `digit(7)` as
+/// `Digit7`, `scale(0.5, "half")` as `Scale0_5Half`.
+fn call_command(h: &Handler) -> String {
+    use clarity_spec::model::Literal;
+    let mut name = pascal(&h.handler);
+    for value in &h.args {
+        let part = match value {
+            Literal::Number(n) => n.replace('-', "Minus").replace('.', "_"),
+            Literal::Str(text) => {
+                let words: String = text.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
+                let word = pascal(&words);
+                if word.is_empty() { "Text".into() } else { word }
+            }
+            Literal::Bool(b) => if *b { "True" } else { "False" }.into(),
+            Literal::Ident(v) => pascal(v),
+        };
+        name.push_str(&part);
+    }
+    name
 }
 
 fn address(command: &Command) -> usize {
@@ -146,9 +184,15 @@ fn address(command: &Command) -> usize {
 impl<'a> Window<'a> {
     fn new(project: &'a Project, page: &'a Page, app: Option<&'a App>, frame: ShownFrame<'a>, texts: &'a Texts) -> Self {
         let mut data: Vec<(String, String, bool)> = Vec::new();
+        let mut values: Vec<&DataDecl> = Vec::new();
         for d in page.data.iter().chain(app.map(|a| a.data.as_slice()).unwrap_or_default()) {
-            if !data.iter().any(|(n, _, _)| *n == d.name.name) {
-                data.push((d.name.name.clone(), d.entity.name.clone(), d.list));
+            let seen = data.iter().any(|(n, _, _)| *n == d.name.name) || values.iter().any(|v| v.name.name == d.name.name);
+            if seen {
+                continue;
+            }
+            match d.entity() {
+                Some(entity) => data.push((d.name.name.clone(), entity.name.clone(), d.is_list())),
+                None => values.push(d),
             }
         }
         let mut parts = all_parts(&page.widgets);
@@ -176,17 +220,42 @@ impl<'a> Window<'a> {
             .enumerate()
             .map(|(i, c)| (address(c), format!("picker{}", i + 1)))
             .collect();
+        // A command for each call with values, named after it; a name that
+        // is taken already gets a number.
+        let mut taken: BTreeSet<String> = project.files.iter().flat_map(|f| &f.code).flat_map(|b| &b.handlers).map(|h| pascal(&h.name.name)).collect();
+        let mut calls = Vec::new();
+        for h in crate::wired_calls(page) {
+            let base = call_command(h);
+            let mut name = base.clone();
+            let mut n = 2;
+            while !taken.insert(name.clone()) {
+                name = format!("{base}{n}");
+                n += 1;
+            }
+            calls.push((h, name));
+        }
         Window {
             project,
             page,
             app,
             frame,
             data,
+            values,
             parts,
             commands,
             texts,
             pickers,
+            calls,
         }
+    }
+
+    /// The command a part's handler runs: the handler's own, or, for a call
+    /// with values, the command made for it.
+    fn command(&self, h: &Handler) -> String {
+        if h.args.is_empty() {
+            return pascal(&h.handler);
+        }
+        self.calls.iter().find(|(c, _)| c.handler == h.handler && c.args == h.args).map(|(_, name)| name.clone()).unwrap_or_else(|| call_command(h))
     }
 
     /// A text of the project as an attribute value, in the language shown.
@@ -247,6 +316,15 @@ impl<'a> Window<'a> {
         }
     }
 
+    /// The enum of a plain value, as `pending` of `data pending: Operation`.
+    fn value_enum(&self, data: &str) -> Option<String> {
+        let ty = self.values.iter().find(|v| v.name.name == data)?.value()?;
+        match logic::type_ref_info(self.project, ty) {
+            clarity_spec::code::check::TypeInfo::Enum(e) => Some(e),
+            _ => None,
+        }
+    }
+
     fn entity_of(&self, data: &str) -> Option<&'a Entity> {
         let (_, entity, _) = self.data.iter().find(|(n, _, _)| n == data)?;
         self.project.entity(entity)
@@ -276,8 +354,8 @@ impl<'a> Window<'a> {
     }
 
     /// The handler of `widget` for `event`.
-    fn handler(widget: &Widget, event: Event) -> Option<&str> {
-        widget.props.handlers.iter().find(|h| h.event == event).map(|h| h.handler.as_str())
+    fn handler(widget: &Widget, event: Event) -> Option<&Handler> {
+        widget.props.handlers.iter().find(|h| h.event == event)
     }
 
     /// The help a named input shows while it has no error: a help part's
@@ -296,9 +374,9 @@ impl<'a> Window<'a> {
 
     /// The command a click runs: a handler, or opening a window, in place or,
     /// where the design says so, in a desktop window of its own.
-    fn click_command(&self, handler: Option<&str>, on_click: Option<&str>, new_window: bool) -> Option<String> {
-        if let Some(handler) = handler {
-            return Some(format!("{}Command", pascal(handler)));
+    fn click_command(&self, command: Option<String>, on_click: Option<&str>, new_window: bool) -> Option<String> {
+        if let Some(command) = command {
+            return Some(format!("{command}Command"));
         }
         match on_click? {
             QUIT => Some("QuitCommand".into()),
@@ -411,9 +489,9 @@ impl<'a> Window<'a> {
             None => format!("Header=\"{header}\""),
         };
         if let Some(key) = &item.props.shortcut {
-            let _ = write!(attrs, " InputGesture=\"{key}\" HotKey=\"{key}\"", key = attr(key));
+            let _ = write!(attrs, " InputGesture=\"{key}\" HotKey=\"{key}\"", key = attr(&gesture(key)));
         }
-        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref(), item.props.new_window) {
+        if let Some(command) = self.click_command(item.props.handler.as_deref().map(pascal), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
         let _ = writeln!(out, "{pad}<MenuItem {attrs} />");
@@ -431,7 +509,7 @@ impl<'a> Window<'a> {
             Some(picker) => format!("x:Name=\"{picker}\" Content=\"{content}\""),
             None => format!("Content=\"{content}\""),
         };
-        if let Some(command) = self.click_command(item.props.handler.as_deref(), item.props.on_click.as_deref(), item.props.new_window) {
+        if let Some(command) = self.click_command(item.props.handler.as_deref().map(pascal), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
         let _ = writeln!(out, "{pad}<Button {attrs} />");
@@ -611,6 +689,8 @@ impl<'a> Window<'a> {
                 // An enum's values (never an empty one), or the records a reference can point at after an empty one.
                 let choices = match p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty) {
                     Some(FieldType::Enum { name }) => format!(" Choices=\"{{x:Static local:Choices.{}}}\"", name.name),
+                    // A plain value of an enum: `data pending: Operation`.
+                    None if let Some(e) = p.bind.as_deref().and_then(|b| self.value_enum(b)) => format!(" Choices=\"{{x:Static local:Choices.{e}}}\""),
                     Some(FieldType::Ref { entity }) => format!(" Choices=\"{{Binding {}Choices}}\"", entity.name),
                     _ => String::new(),
                 };
@@ -634,7 +714,7 @@ impl<'a> Window<'a> {
                     None => self.text(&caption_text),
                 };
                 let mut attrs = format!("Content=\"{content}\"");
-                if let Some(command) = self.click_command(Self::handler(widget, Event::Click), p.on_click.as_deref(), p.new_window) {
+                if let Some(command) = self.click_command(Self::handler(widget, Event::Click).map(|h| self.command(h)), p.on_click.as_deref(), p.new_window) {
                     let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
                 }
                 if p.default_button {
@@ -644,7 +724,11 @@ impl<'a> Window<'a> {
                     attrs.push_str(" IsCancel=\"True\"");
                 }
                 if let Some(key) = &p.shortcut {
-                    let _ = write!(attrs, " HotKey=\"{}\"", attr(key));
+                    let _ = write!(attrs, " HotKey=\"{}\"", attr(&gesture(key)));
+                    // The number pad's digit presses it too, as in a browser.
+                    if key.len() == 1 && key.chars().all(|c| c.is_ascii_digit()) {
+                        let _ = write!(attrs, " c:Keys.Also=\"NumPad{key}\"");
+                    }
                 }
                 let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra} />");
             }
@@ -764,7 +848,7 @@ impl<'a> Window<'a> {
             let Some(name) = &widget.props.name else { continue };
             let control = control(name);
             for h in &widget.props.handlers {
-                let run = format!("Vm.{}Command.Execute(null)", pascal(&h.handler));
+                let run = format!("Vm.{}Command.Execute(null)", self.command(h));
                 let kind = widget.props.kind;
                 // Every input of the library tells when the person changed its value.
                 let input = matches!(
@@ -868,6 +952,19 @@ public partial class {name}View : UserControl
                 );
             }
         }
+        // A plain value starts at its default, or empty.
+        for d in &self.values {
+            let DataKind::Value { ty, default } = &d.of else { continue };
+            let info = logic::type_ref_info(self.project, ty);
+            let ty_name = super::names::value_type(&info);
+            let start = match (default, &info) {
+                (Some(value), _) => logic::literal(self.project, ty, value),
+                (None, clarity_spec::code::check::TypeInfo::Text) => "\"\"".into(),
+                (None, _) => "default".into(),
+            };
+            let (prop, field) = (member(&d.name.name), backing(&d.name.name));
+            let _ = write!(properties, "    public {ty_name} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    {ty_name} {field} = {start};\n\n");
+        }
         // The picture each picture field shows when the record has one stored.
         let mut fetches: BTreeMap<String, (&str, String)> = BTreeMap::new();
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Image) {
@@ -953,6 +1050,10 @@ public partial class {name}View : UserControl
         for decl in &own {
             let method = pascal(&decl.name.name);
             match logic::handler(self.project, types, &ctx, decl) {
+                // One that takes values runs through the commands of its calls.
+                Ok(body) if !decl.params.is_empty() => {
+                    let _ = writeln!(handlers, "{body}");
+                }
                 Ok(body) => {
                     let _ = write!(handlers, "    [RelayCommand]\n    void {method}() => Handle(On{method});\n\n{body}\n");
                 }
@@ -1002,6 +1103,12 @@ public partial class {name}View : UserControl
                 let _ = write!(clicks, "    [RelayCommand]\n    void Open{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
             }
         }
+        // The calls with values its parts wire, a command each.
+        for (call, command) in &self.calls {
+            let Some(decl) = own.iter().find(|d| d.name.name == call.handler) else { continue };
+            let values: Vec<String> = call.args.iter().zip(&decl.params).map(|(v, p)| logic::literal(self.project, &p.ty, v)).collect();
+            let _ = write!(clicks, "    [RelayCommand]\n    void {command}() => Handle(() => On{}({}));\n\n", pascal(&call.handler), values.join(", "));
+        }
         if quit {
             clicks.push_str("    [RelayCommand]\n    void Quit() => Handle(QuitApplication);\n\n");
         }
@@ -1015,6 +1122,9 @@ public partial class {name}View : UserControl
         let mut identity = format!("    public override string Title => {};\n", self.texts.code(&title));
         if self.page.kind == PageKind::Dialog {
             identity.push_str("\n    public override bool IsDialog => true;\n");
+        }
+        if let Some(size) = self.page.size {
+            identity.push_str(&format!("\n    public override global::Avalonia.Size? WindowSize => new({}, {});\n", size.width, size.height));
         }
         let body = format!("{identity}\n{properties}{parts}\n{events}{clicks}{handlers}");
         Ok(format!(

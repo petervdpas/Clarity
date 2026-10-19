@@ -180,3 +180,83 @@ fn rows_read_again_lose_their_selected_row() {
     has(&code, "ui.deselect(\"grid\");");
     assert_eq!(code.matches("deselect").count(), 1, "{code}");
 }
+
+/// The desktop window opens at the main window's size.
+#[test]
+fn the_desktop_window_opens_at_the_main_windows_size() {
+    let code: String = files().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.as_str()).collect();
+    has(&code, "::page(), &db, &windows, {1100, 760}});");
+    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
+    assert_ne!(sized, SALES);
+    let project = load_sources([("sales.clarity", sized.as_str())]);
+    let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.clone()).collect();
+    has(&code, "::page(), &db, &windows, {640, 480}});");
+}
+
+/// A click can pass values to its handler: each written call is a case of
+/// its own, with its values written into the code.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = SALES
+        .replace(
+            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n",
+            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
+        )
+        .replace(
+            "    handler refresh_clicked\n",
+            "    handler digit(d: integer)\n        approve_button.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refresh_clicked\n",
+        );
+    assert_ne!(source, SALES);
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let app = file(&files, "src/app.hpp");
+    has(app, "    void digit(clarity::Db& db, clarity::Ui& ui, int64_t d);");
+    has(app, "    void scale(clarity::Db& db, clarity::Ui& ui, clarity::Decimal by, std::string word, OrderStatus status);");
+    let sales = file(&files, "src/modules/sales.cpp");
+    has(sales, "void OrderFormWindow::digit(clarity::Db& db, clarity::Ui& ui, int64_t d) {");
+    has(sales, "    digit(db, ui, int64_t{3});\n");
+    let main = file(&files, "src/main.cpp");
+    has(main, "else if (handler == \"digit(7)\") w.digit(db, ui, 7);");
+    has(main, "else if (handler == \"scale(0.5, \\\"half\\\", Approved)\") w.scale(db, ui, clarity::Decimal::parse(\"0.5\"), \"half\", OrderStatus::Approved);");
+    // A handler that takes values is only called with them.
+    assert!(!main.contains("(handler == \"digit\")"), "{main}");
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A window holds plain values: fields of its data, at their default or
+/// empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SALES}{CALC}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "src/app.hpp"), "struct CalcWindow {\n    clarity::Decimal shown{};\n    OrderStatus pending{};\n    bool fresh = true;\n    std::string word = \"hi\";\n    int64_t count = 2;\n    clarity::Decimal rate = clarity::Decimal::parse(\"0.5\");\n");
+    let sales = file(&files, "src/modules/sales.cpp");
+    has(sales, "    fresh = false;\n");
+    has(sales, "    pending = OrderStatus::Approved;\n");
+}

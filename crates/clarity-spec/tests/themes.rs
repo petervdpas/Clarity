@@ -59,7 +59,7 @@ fn colors_and_styles_are_checked() {
         .replace("style quiet border none", "style quiet border none, shadow big")
         .replace("text text, border accent", "text nothing");
     assert_eq!(errors(&project(&bad, &["Shop"])), [
-        "a style sets background, text, border, radius and weight, not 'shadow'",
+        "a style sets background, text, border, radius, weight, size, font and align, not 'shadow'",
         "'yellow' is not a color; write it as \"#rrggbb\" or \"#rgb\"",
         "style 'loud' uses color 'nothing', which theme Shop does not have; its colors are background, panel, raised, text, muted, border, strong_border, accent, accent_soft, on_accent, selection, focus, input, frame, frame_text, error, error_soft, warning, warning_soft, success, success_soft and brand",
     ]);
@@ -251,4 +251,33 @@ fn a_new_theme_starts_as_a_copy_of_clarity_s_own() {
     // The designer shows Clarity's own theme too.
     let preview = clarity_spec::Preview::new(project);
     assert_eq!(preview.base_theme.name.name, "Clarity");
+}
+
+/// A style sets how its text shows too: its size, a font of the theme and
+/// where it sits, as a calculator's display: large, monospace, on the right.
+#[test]
+fn a_style_sets_the_size_font_and_alignment_of_its_text() {
+    use clarity_spec::model::Align;
+    let theme = "theme Calc
+    style display background \"#c9d8b0\", size 36, font mono, align right
+";
+    let project = project(theme, &["Calc"]);
+    assert!(errors(&project).is_empty(), "{:#?}", errors(&project));
+    let decl = &project.files[0].themes[0];
+    let look = &decl.styles[0].look;
+    assert_eq!((look.size, look.font.as_deref(), look.align), (Some(36), Some("mono"), Some(Align::Right)));
+    let resolved = themes::resolve(decl, false);
+    let display = &resolved.styles["display"];
+    assert_eq!((display.size, display.font.as_deref(), display.align), (Some(36), Some("mono"), Some(Align::Right)));
+
+    let bad = |line: &str| errors(&project_of(&format!("theme Calc\n    {line}\n")));
+    assert_eq!(bad("style display font fancy"), ["unknown font 'fancy'; a style takes a font of the theme: text, heading or mono"]);
+    assert_eq!(bad("style display align middle"), ["unknown alignment 'middle'; text aligns left, center or right"]);
+    assert_eq!(bad("style display size 0"), ["a text size is 6 to 200 pixels"]);
+    // A part keeps to its kind's own text; a style sets it.
+    assert_eq!(bad("part button size 20"), ["a part sets background, text, border, radius and weight; size, font and align belong in a style"]);
+}
+
+fn project_of(text: &str) -> Project {
+    project(text, &["Calc"])
 }

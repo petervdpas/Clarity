@@ -16,6 +16,7 @@ use crate::model::{
     Literal, Menu, Modifiers, Orientation, Page, PageKind, Ribbon, RibbonGroup,
     RibbonTab, Side, Sidebar, SpecFile, Surface,
     Toolbar, Widget, WidgetPage, WidgetProps, default_label,
+    WindowSize,
 };
 use crate::span::Span;
 use crate::widgets::{self, APP_EVENTS, BindTarget, ContainerKind, Event, WINDOW_EVENTS, WidgetKind, WidgetProperty};
@@ -637,9 +638,10 @@ pub(crate) fn starts_with_keyword(
 // ---------------------------------------------------------------------------
 // Pages
 
-/// Page settings (`title`, `data`, `grid`) as opposed to widget lines.
+/// Page settings (`title`, `size`, `data`, `grid`) as opposed to widget lines.
 pub(crate) fn is_page_setting(tokens: &[Token]) -> bool {
     starts_with_keyword(tokens, "title", Some(TokenKind::Str))
+        || starts_with_keyword(tokens, "size", Some(TokenKind::Number))
         || starts_with_keyword(tokens, "data", Some(TokenKind::Ident))
         || starts_with_keyword(tokens, "grid", Some(TokenKind::Number))
         || starts_with_keyword(tokens, "on", Some(TokenKind::Ident))
@@ -673,6 +675,7 @@ fn parse_page(
         name,
         kind,
         title: None,
+        size: None,
         data: Vec::new(),
         columns: DEFAULT_PAGE_COLUMNS,
         widgets: Vec::new(),
@@ -720,6 +723,7 @@ fn parse_owner_event(
     handlers.push(Handler {
         event,
         handler: handler.name,
+        args: Vec::new(),
     });
     Ok(())
 }
@@ -734,6 +738,17 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
                 return Err(Diagnostic::error("duplicate 'title'", node.line.span));
             }
             page.title = Some(cursor.expect_string("a title string")?);
+        }
+        "size" => {
+            if page.size.is_some() {
+                return Err(Diagnostic::error("duplicate 'size'", node.line.span));
+            }
+            let width = cursor.expect_number("a width in pixels")?;
+            if !cursor.eat_keyword("x") {
+                return Err(cursor.error_here("expected 'x' and a height, as in 'size 320 x 460'"));
+            }
+            let height = cursor.expect_number("a height in pixels, as in 'size 320 x 460'")?;
+            page.size = Some(WindowSize { width, height });
         }
         "data" => {
             page.data.push(parse_data(&mut cursor, node.line.span)?);
@@ -763,27 +778,52 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
     cursor.expect_end()
 }
 
-/// `name: Entity` or `name: list<Entity>`, after the `data` keyword.
+/// `name: Entity`, `name: list<Entity>` or `name: type, default value`,
+/// after the `data` keyword. A name is a record here; once every file is
+/// read, one that names an enum becomes a plain value (`resolve_data`).
 fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
+    use crate::code::TypeRefKind;
+    use crate::model::DataKind;
     let name = cursor.expect_ident("a data name")?;
     cursor.expect(
         TokenKind::Colon,
-        "':' and an entity, as in 'data customer: Customer'",
+        "':' and an entity or a type, as in 'data customer: Customer'",
     )?;
-    let (entity, list) = if cursor.eat_keyword("list") {
-        cursor.expect(TokenKind::Lt, "'<' after 'list'")?;
-        let entity = cursor.expect_ident("an entity name")?;
-        cursor.expect(TokenKind::Gt, "'>'")?;
-        (entity, true)
+    let ty = crate::code::parse::parse_type_ref(cursor)?;
+    let default = if cursor.eat(TokenKind::Comma) {
+        if !cursor.eat_keyword("default") {
+            return Err(cursor.error_here("expected 'default' and a value, as in 'data fresh: bool, default true'"));
+        }
+        Some(parse_literal(cursor)?)
     } else {
-        (cursor.expect_ident("an entity name")?, false)
+        None
     };
-    Ok(DataDecl {
-        name,
-        entity,
-        list,
-        span,
-    })
+    let of = match ty.kind {
+        TypeRefKind::List { item } if crate::code::parse::is_type_word(&item) => {
+            return Err(Diagnostic::error("a list holds records, as in 'list<Order>'", ty.span));
+        }
+        TypeRefKind::List { .. } if default.is_some() => {
+            return Err(Diagnostic::error(
+                format!("'{}' is a list, which starts with every record; only a plain value has a default", name.name),
+                ty.span,
+            ));
+        }
+        TypeRefKind::List { item } => {
+            // The entity's name sits between the angle brackets.
+            let start = ty.span.end - 1 - item.len() as u32;
+            let col = ty.span.col + (start - ty.span.start);
+            DataKind::List { entity: Ident { name: item, span: Span { start, end: ty.span.end - 1, line: ty.span.line, col } } }
+        }
+        TypeRefKind::File => {
+            return Err(Diagnostic::error(
+                "a window holds records, lists and plain values; a file belongs to a record",
+                ty.span,
+            ));
+        }
+        TypeRefKind::Named { name: entity } if default.is_none() => DataKind::Record { entity: Ident { name: entity, span: ty.span } },
+        _ => DataKind::Value { ty, default },
+    };
+    Ok(DataDecl { name, of, span })
 }
 
 // ---------------------------------------------------------------------------
@@ -1341,7 +1381,18 @@ fn parse_widget_props(
                         ));
                     }
                     let handler = cursor.expect_ident("a handler name")?.name;
-                    props.handlers.push(Handler { event, handler });
+                    // `digit(7)`: the values the handler runs with.
+                    let mut args = Vec::new();
+                    if cursor.eat(TokenKind::LParen) && !cursor.eat(TokenKind::RParen) {
+                        loop {
+                            args.push(parse_literal(cursor)?);
+                            if cursor.eat(TokenKind::RParen) {
+                                break;
+                            }
+                            cursor.expect(TokenKind::Comma, "',' or ')' after a value")?;
+                        }
+                    }
+                    props.handlers.push(Handler { event, handler, args });
                     continue;
                 }
                 // `on click -> Window` opens a window.

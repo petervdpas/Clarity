@@ -18,7 +18,7 @@
   --warning-soft: #fff4d6;
   --selection: #d6e4fb;
   --radius: 6px;
-  --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+  --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, Menlo, "DejaVu Sans Mono", "Noto Sans Mono", monospace;
   color-scheme: light;
 }
 

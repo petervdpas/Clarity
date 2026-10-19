@@ -9,10 +9,12 @@
   import type { Surface } from "./generated/Surface";
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
+  import { WINDOW_HEIGHT, WINDOW_WIDTH } from "./grid";
   import { layout } from "./layout.svelte";
   import { cellEdits, describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
+  import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
 
   let {
     preview,
@@ -48,17 +50,23 @@
   const fieldOptions = $derived.by(() => {
     if (!info || info.bind !== "field") return [];
     return page.data
-      .filter((d) => !d.list)
+      .filter((d) => !isList(d))
       .flatMap((d) => {
-        const entity = entities.find((e) => e.name.name === d.entity.name);
+        // A plain value binds by its name.
+        const value = valueField(d);
+        if (value) {
+          const fits = info.fieldTypes.length === 0 || info.fieldTypes.includes(value.type.kind);
+          return fits ? [{ value: d.name.name, label: `${d.name.name} (${dataType(d)})` }] : [];
+        }
+        const entity = entities.find((e) => e.name.name === dataEntity(d));
         return (entity?.fields ?? [])
           .filter((f) => info.fieldTypes.length === 0 || info.fieldTypes.includes(f.type.kind))
           .map((f) => ({ value: `${d.name.name}.${f.name.name}`, label: `${d.name.name}.${f.name.name} (${describeType(f)})` }));
       });
   });
 
-  const listOptions = $derived(page.data.filter((d) => d.list).map((d) => d.name.name));
-  const recordOptions = $derived(page.data.filter((d) => !d.list).map((d) => d.name.name));
+  const listOptions = $derived(page.data.filter(isList).map((d) => d.name.name));
+  const recordOptions = $derived(page.data.filter((d) => d.of.kind === "record").map((d) => d.name.name));
 
   /** Named inputs of the window, which a label or help text can belong to. */
   const inputNames = $derived(
@@ -71,7 +79,7 @@
   const collectionFields = $derived.by(() => {
     if (!p?.bind || p.bind.includes(".")) return [];
     const decl = page.data.find((d) => d.name.name === p.bind);
-    const entity = entities.find((e) => e.name.name === decl?.entity.name);
+    const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
     return (entity?.fields ?? []).filter((f) => f.type.kind !== "list");
   });
 
@@ -117,6 +125,14 @@
     return collectionFields.map((f) => f.name.name).filter((n) => next.includes(n));
   }
 
+  /** Sets the window's size; an emptied field goes back to the standard size. */
+  function setSize(width: string | number, height: string | number) {
+    const w = Math.floor(Number(width));
+    const h = Math.floor(Number(height));
+    const standard = String(width).trim() === "" || String(height).trim() === "";
+    onedit({ op: "setSize", page: page.span.start, width: standard ? null : w, height: standard ? null : h });
+  }
+
   function numberOf(e: Event): number {
     return Math.max(1, Math.floor(Number((e.currentTarget as HTMLInputElement).value) || 1));
   }
@@ -141,13 +157,17 @@
 
   // New data declaration form.
   let dataName = $state("");
-  let dataEntity = $state("");
+  /** What new data holds: an entity's name, an enum's, or a plain type. */
+  let dataOf = $state("");
   let dataList = $state(false);
+  const enums = $derived(preview.project.files.flatMap((f) => f.enums).map((e) => e.name.name));
+  /** Only records come as a list. */
+  const listable = $derived(entities.some((e) => e.name.name === dataOf));
 
   function addData() {
     const name = dataName.trim();
-    if (!name || !dataEntity) return;
-    onedit({ op: "addData", page: page.span.start, name, entity: dataEntity, list: dataList });
+    if (!name || !dataOf) return;
+    onedit({ op: "addData", page: page.span.start, name, entity: dataOf, list: dataList && listable });
     dataName = "";
   }
 </script>
@@ -476,28 +496,45 @@
       <span>Grid columns</span>
       <input type="number" min="1" max="24" value={page.columns} onchange={(e) => onedit({ op: "setGrid", page: page.span.start, columns: numberOf(e) })} />
     </label>
+    <!-- The size its desktop window opens at; both empty for the standard size. -->
+    <div class="prop size">
+      <span>Size</span>
+      <input type="number" min="200" max="3840" aria-label="Width in pixels" placeholder={String(WINDOW_WIDTH)} value={page.size?.width ?? ""} onchange={(e) => setSize(e.currentTarget.value, page.size?.height ?? WINDOW_HEIGHT)} />
+      <span class="times">x</span>
+      <input type="number" min="150" max="2160" aria-label="Height in pixels" placeholder={String(WINDOW_HEIGHT)} value={page.size?.height ?? ""} onchange={(e) => setSize(page.size?.width ?? WINDOW_WIDTH, e.currentTarget.value)} />
+    </div>
     {/if}
 
     <fieldset class="checks">
       <legend>Data</legend>
       {#each page.data as decl (decl.span.start)}
         <div class="data-row">
-          <code>{decl.name.name}: {decl.list ? `list<${decl.entity.name}>` : decl.entity.name}</code>
+          <code>{decl.name.name}: {dataType(decl)}</code>
           <button class="small" onclick={() => onedit({ op: "remove", item: decl.span.start })}>Remove</button>
         </div>
       {:else}
-        <p class="hint">No data yet. Widgets bind to the data declared here.</p>
+          <p class="hint">No data yet. Parts bind to the records, lists and values declared here.</p>
       {/each}
       <div class="add-data">
         <input bind:value={dataName} placeholder="name" />
-        <select bind:value={dataEntity}>
-          <option value="" disabled>entity</option>
-          {#each entities as entity (entity.name.name)}
-            <option value={entity.name.name}>{entity.name.name}</option>
-          {/each}
+        <select bind:value={dataOf} aria-label="What it holds">
+          <option value="" disabled>holds</option>
+          <optgroup label="Records">
+            {#each entities as entity (entity.name.name)}
+              <option value={entity.name.name}>{entity.name.name}</option>
+            {/each}
+          </optgroup>
+          <optgroup label="Values">
+            {#each PLAIN_TYPES as type (type)}
+              <option value={type}>{type}</option>
+            {/each}
+            {#each enums as name (name)}
+              <option value={name}>{name}</option>
+            {/each}
+          </optgroup>
         </select>
-        <label class="inline"><input type="checkbox" bind:checked={dataList} /> list</label>
-        <button class="small" onclick={addData} disabled={!dataName.trim() || !dataEntity}>Add</button>
+        <label class="inline"><input type="checkbox" bind:checked={dataList} disabled={!listable} /> list</label>
+        <button class="small" onclick={addData} disabled={!dataName.trim() || !dataOf}>Add</button>
       </div>
     </fieldset>
 
@@ -592,6 +629,22 @@
     gap: 2px;
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  /* Width x height on one line under the label. */
+  .prop.size {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 6px;
+  }
+
+  .prop.size > span:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .prop.size input {
+    min-width: 0;
   }
 
   .position {

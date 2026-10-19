@@ -1,4 +1,6 @@
 use clarity_spec::code::{BinaryOp, ExprKind, MessageLevel, StmtKind};
+use clarity_spec::model::Literal;
+use clarity_spec::widgets::widget_line;
 use clarity_spec::parser::parse;
 use clarity_spec::{Severity, load_sources};
 
@@ -349,4 +351,90 @@ fn a_button_can_close_its_window() {
     let source = format!("{base}{CODE}");
     let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert_eq!(problems, ["'theme' picks in a menu or a toolbar; a button can close its window or quit"]);
+}
+
+/// A click passes values to its handler: `on click: digit(7)` runs
+/// `handler digit(d: integer)` with 7. Literal values only: numbers, text,
+/// true and false, an enum's value.
+const PAD: &str = "
+page Pad: window
+    button \"7\" name d7 at 1,1 span 1 on click: digit(7)
+    button \"8\" name d8 at 2,1 span 1 on click: digit(8)
+    button \"Hi\" name hi at 3,1 span 1 on click: say(\"hi\", true, Business)
+
+code Pad
+    handler digit(d: integer)
+        let next = d * 10
+
+    handler say(t: text, loud: bool, kind: CustomerKind)
+        message \"{t}\"
+";
+
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    assert_eq!(problems(&format!("{CODE}{PAD}")), [], "the pad is fine");
+
+    let file = load_sources([("shop.clarity", format!("{BASE}{CODE}{PAD}").as_str())]).files.remove(0);
+    let pad = file.pages.iter().find(|p| p.name.name == "Pad").unwrap();
+    let hi = &pad.widgets[2].props.handlers[0];
+    assert_eq!(hi.handler, "say");
+    assert_eq!(hi.args, [Literal::Str("hi".into()), Literal::Bool(true), Literal::Ident("Business".into())]);
+    // The designer writes the line back with its values.
+    assert!(widget_line(&pad.widgets[2].props).ends_with("on click: say(\"hi\", true, Business)"), "{}", widget_line(&pad.widgets[2].props));
+    let code = file.code.iter().find(|b| b.name.name == "Pad").unwrap();
+    assert_eq!(code.handlers[0].params.len(), 1);
+    assert_eq!(code.handlers[0].params[0].name.name, "d");
+}
+
+#[test]
+fn a_clicks_values_must_fit_its_handler() {
+    let wrong = |from: &str, to: &str| errors(&format!("{CODE}{}", PAD.replace(from, to)));
+    assert_eq!(wrong("digit(8)", "digit()"), ["'on click: digit' gives 0 values; handler digit takes 1 (d: integer)"]);
+    assert_eq!(wrong("digit(8)", "digit(8, 9)"), ["'on click: digit(8, 9)' gives 2 values; handler digit takes 1 (d: integer)"]);
+    assert_eq!(wrong("digit(8)", "digit(\"8\")"), ["'on click: digit(\"8\")': d is an integer, not text"]);
+    assert_eq!(wrong("Business)", "Teleport)"), ["'on click: say(\"hi\", true, Teleport)': CustomerKind has no value Teleport"]);
+    // A window's own events have no values to give.
+    let opened = PAD.replace("page Pad: window\n", "page Pad: window\n    on open: digit\n");
+    assert_eq!(errors(&format!("{CODE}{opened}")), ["handler digit takes values (d: integer); 'on open' has none to give"]);
+}
+
+/// A wired handler with its values is written as every stack writes it
+/// (conformance/calls.json): the renderer sends it, the backends dispatch on it.
+#[test]
+fn a_wired_call_is_written_as_every_stack_writes_it() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/calls.json")).unwrap();
+    for case in cases["cases"].as_array().unwrap() {
+        let handler = clarity_spec::model::Handler {
+            event: clarity_spec::widgets::Event::Click,
+            handler: case["handler"].as_str().unwrap().into(),
+            args: serde_json::from_value(case["args"].clone()).unwrap(),
+        };
+        assert_eq!(clarity_spec::widgets::handler_call(&handler), case["text"].as_str().unwrap());
+    }
+}
+
+/// Handlers read and change a window's plain values like locals.
+#[test]
+fn handlers_change_a_windows_plain_values() {
+    let base = BASE.replace(
+        "page CustomerForm: window\n    data customer: Customer\n",
+        "page CustomerForm: window\n    data customer: Customer\n    data shown: decimal\n    data chosen: CustomerKind\n    data fresh: bool, default true\n",
+    );
+    assert_ne!(base, BASE);
+    let errors = |body: &str| -> Vec<String> {
+        let source = format!("{base}{}", form(body));
+        load_sources([("shop.clarity", source.as_str())])
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.severity == Severity::Error)
+            .map(|d| d.message)
+            .collect()
+    };
+    let fine = errors("if fresh\n    shown = 0\nshown = shown * 10 + 7\nchosen = Business\nfresh = not fresh\ncustomer.credit_limit = shown\n");
+    assert!(fine.is_empty(), "{fine:#?}");
+    assert!(errors("fresh = 3\n").iter().any(|e| e.contains("bool")), "{:#?}", errors("fresh = 3\n"));
+    assert!(errors("chosen = Teleport\n").iter().any(|e| e.contains("Teleport")), "{:#?}", errors("chosen = Teleport\n"));
+    assert!(errors("let x = shown.digits\n").iter().any(|e| e.contains("digits")), "{:#?}", errors("let x = shown.digits\n"));
+    // Only records and lists are read again.
+    assert!(errors("reload shown\n").iter().any(|e| e.contains("'shown' is a plain value; only records and lists are read again")), "{:#?}", errors("reload shown\n"));
 }

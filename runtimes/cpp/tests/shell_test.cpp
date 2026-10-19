@@ -67,9 +67,19 @@ TEST(the_shell_answers_the_renderers_commands) {
     service.invoke("set_title", {{"title", "Customer card"}}, &main);
     CHECK_EQ(main.title, "Customer card");
     std::string opened_name;
-    service.open_desktop = [&](shell::Desktop&, const std::string& name) { opened_name = name; };
+    shell::Size opened_size{};
+    service.open_desktop = [&](shell::Desktop&, const std::string& name, shell::Size size) {
+        opened_name = name;
+        opened_size = size;
+    };
     service.invoke("open_apart", {{"window", "Card"}, {"with", {{"name", "Linus"}}}}, &main);
     CHECK_EQ(opened_name, "apart-1");
+    // Without a size from the renderer, the standard one; with one, that.
+    CHECK_EQ(opened_size.width, 1100);
+    CHECK_EQ(opened_size.height, 760);
+    service.invoke("open_apart", {{"window", "Card"}, {"with", json::object()}, {"width", 320}, {"height", 460}}, &main);
+    CHECK_EQ(opened_size.width, 320);
+    CHECK_EQ(opened_size.height, 460);
     CHECK(service.closed("apart-1") == std::optional<std::string>("main"));
     service.invoke("close_apart", json::object(), &main);
     CHECK(main.closed);

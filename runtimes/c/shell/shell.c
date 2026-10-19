@@ -27,7 +27,7 @@ struct ClarityService {
     size_t apart_count;
     int next;
     void (*quit)(void* context);
-    void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name);
+    void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name, int width, int height);
     void* context;
 };
 
@@ -50,7 +50,14 @@ void clarity_service_free(ClarityService* service) {
     free(service);
 }
 
-void clarity_service_on_desktop(ClarityService* service, void (*quit)(void*), void (*open_desktop)(void*, ClarityDesktop*, const char*), void* context) {
+void clarity_window_size(int* width, int* height) {
+    if (*width <= 0 || *height <= 0) {
+        *width = 1100;
+        *height = 760;
+    }
+}
+
+void clarity_service_on_desktop(ClarityService* service, void (*quit)(void*), void (*open_desktop)(void*, ClarityDesktop*, const char*, int, int), void* context) {
     service->quit = quit;
     service->open_desktop = open_desktop;
     service->context = context;
@@ -164,7 +171,11 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         Apart* a = &s->apart[s->apart_count++];
         *a = (Apart){clarity_lasting(clarity_format("apart-%d", ++s->next)), clarity_lasting(text_of(args, "window")),
                      clarity_lasting(cJSON_PrintUnformatted(with)), clarity_lasting(caller->name), false};
-        s->open_desktop(s->context, caller, a->name);
+        const cJSON* w = cJSON_GetObjectItemCaseSensitive(args, "width");
+        const cJSON* h = cJSON_GetObjectItemCaseSensitive(args, "height");
+        int width = cJSON_IsNumber(w) ? (int)w->valuedouble : 0, height = cJSON_IsNumber(h) ? (int)h->valuedouble : 0;
+        clarity_window_size(&width, &height);
+        s->open_desktop(s->context, caller, a->name, width, height);
         return value(NULL);
     }
     if (strcmp(command, "apart_start") == 0) {
@@ -234,7 +245,7 @@ static void on_invoke(const char* id, const char* request, void* arg) {
     clarity_scratch_reset();
 }
 
-static Window* open_window(Desktop* desktop, const char* name) {
+static Window* open_window(Desktop* desktop, const char* name, int width, int height) {
     Window* w = calloc(1, sizeof *w);
     if (!w) return NULL;
     snprintf(w->desktop.name, sizeof w->desktop.name, "%s", name);
@@ -243,7 +254,7 @@ static Window* open_window(Desktop* desktop, const char* name) {
     w->service = desktop->service;
     w->view = webview_create(0, NULL);
     webview_set_title(w->view, desktop->options->title);
-    webview_set_size(w->view, 1100, 760, WEBVIEW_HINT_NONE);
+    webview_set_size(w->view, width, height, WEBVIEW_HINT_NONE);
     webview_bind(w->view, "clarityInvoke", on_invoke, w);
     webview_set_html(w->view, desktop->options->html);
     w->next = desktop->windows;
@@ -276,10 +287,10 @@ static void on_destroy(GtkWidget* widget, gpointer data) {
 }
 #endif
 
-static void open_desktop(void* context, ClarityDesktop* opener, const char* name) {
+static void open_desktop(void* context, ClarityDesktop* opener, const char* name, int width, int height) {
     (void)opener;
     Desktop* desktop = context;
-    Window* w = open_window(desktop, name);
+    Window* w = open_window(desktop, name, width, height);
 #if defined(__linux__)
     Closing* c = calloc(1, sizeof *c);
     if (w && c) {
@@ -301,7 +312,9 @@ int clarity_shell_run(const ClarityShellOptions* options) {
     Desktop desktop = {clarity_service_new(options), options, NULL};
     if (!desktop.service) return 1;
     clarity_service_on_desktop(desktop.service, quit, open_desktop, &desktop);
-    Window* first = open_window(&desktop, "main");
+    int width = options->width, height = options->height;
+    clarity_window_size(&width, &height);
+    Window* first = open_window(&desktop, "main", width, height);
     if (!first) return 1;
     webview_run(first->view);
     for (Window* w = desktop.windows; w;) {

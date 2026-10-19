@@ -6,7 +6,7 @@
 //! designer gets the same CSS for its canvas.
 
 use base64::Engine as _;
-use clarity_spec::model::{Look, Shadow, ThemeDecl, ThemeValue, Weight};
+use clarity_spec::model::{Align, Look, Shadow, ThemeDecl, ThemeValue, Weight};
 use clarity_spec::{Preview, Project};
 
 use crate::OutFile;
@@ -141,6 +141,25 @@ fn look_rules(look: &Look) -> Vec<String> {
     }
     if let Some(v) = look.weight {
         lines.push(format!("font-weight: {}", weight_value(v)));
+    }
+    if let Some(v) = look.size {
+        lines.push(format!("font-size: {v}px"));
+    }
+    if let Some(role) = &look.font
+        && let Some((_, variable)) = FONT_VARIABLES.iter().find(|(r, _)| r == role)
+    {
+        lines.push(format!("font-family: var({variable})"));
+    }
+    // A part lays its content out in a row; the text moves along it.
+    if let Some(align) = look.align {
+        let (text, along) = match align {
+            Align::Left => ("left", "flex-start"),
+            Align::Center => ("center", "center"),
+            Align::Right => ("right", "flex-end"),
+        };
+        lines.push(format!("text-align: {text}"));
+        lines.push(format!("justify-content: {along}"));
+        lines.push("padding-inline: calc(var(--padding) * 2)".into());
     }
     lines
 }

@@ -36,6 +36,15 @@ public:
     virtual std::optional<Bytes> picture(Db& db, const std::string& entity, int64_t id, const std::string& field) = 0;
 };
 
+/// A desktop window's size in pixels.
+struct Size {
+    int width = 0;
+    int height = 0;
+};
+
+/// The size a desktop window opens at: `size`, or the standard size when it says none.
+Size window_size(Size size);
+
 struct Options {
     /// The program's name; `title` the title of its window until a Clarity window gives its own.
     std::string name;
@@ -48,6 +57,8 @@ struct Options {
     std::string html;
     Db* db = nullptr;
     Windows* windows = nullptr;
+    /// The size the main window's desktop window opens at; zero for the standard size.
+    Size size;
 };
 
 /// A desktop window, as the commands of the renderer in it see it.
@@ -70,8 +81,9 @@ public:
 
     /// Ends the program; set by `run`.
     std::function<void()> quit;
-    /// Opens a desktop window of its own, named `name`, for the opener; set by `run`.
-    std::function<void(Desktop& opener, const std::string& name)> open_desktop;
+    /// Opens a desktop window of its own, named `name`, for the opener, at
+    /// `size` (its window's, or the standard one); set by `run`.
+    std::function<void(Desktop& opener, const std::string& name, Size size)> open_desktop;
     /// A desktop window of its own closed: its opener is told, so it can reload its data.
     std::optional<std::string> closed(const std::string& name);
 

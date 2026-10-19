@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { GAP, ROW_HEIGHT, rowIn } from "./grid.ts";
+import { GAP, ROW_HEIGHT, rowIn, windowSize } from "./grid.ts";
 
 test("a point is in the row whose height it falls in, gaps counting to the row above", () => {
   const tracks = [ROW_HEIGHT, 200, ROW_HEIGHT];
@@ -58,4 +58,9 @@ test("resizing a panel scales what is inside it, all in one batch of edits", () 
   ]);
   // A height change alone moves nothing inside.
   assert.equal(resizeEdits(panel, 6, 3).length, 1);
+});
+
+test("a window opens at its own size, or at the standard one", () => {
+  assert.deepEqual(windowSize({ size: { width: 320, height: 460 } }), { width: 320, height: 460 });
+  assert.deepEqual(windowSize({ size: null }), { width: 1100, height: 760 });
 });

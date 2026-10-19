@@ -334,6 +334,14 @@ fn adds_tabs_data_grid_and_pages() {
     assert!(text.contains("    grid 8 columns\n") && !text.contains("16"));
     assert!(error(PAGE, Edit::SetGrid { page, columns: 40 }).contains("1 to 24"));
 
+    // The window's size: set, changed, and removed for the standard one.
+    let (text, _) = edit(PAGE, Edit::SetSize { page, width: Some(320), height: Some(460) });
+    assert!(text.contains("    data c: Customer\n    size 320 x 460\n"), "{text}");
+    let (text, _) = edit(&text, Edit::SetSize { page: at(&text, "page Card"), width: Some(400), height: Some(300) });
+    assert!(text.contains("    size 400 x 300\n") && !text.contains("320"), "{text}");
+    let (text, _) = edit(&text, Edit::SetSize { page: at(&text, "page Card"), width: None, height: None });
+    assert!(!text.contains("size"), "{text}");
+
     let (text, focus) = edit(
         PAGE,
         Edit::AddPage {

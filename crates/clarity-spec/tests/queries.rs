@@ -144,7 +144,7 @@ fn unbound_text_inputs_have_text() {
 #[test]
 fn handlers_run_other_handlers_of_their_window() {
     let args = with("        filter_changed()\n", "        filter_changed(1)\n");
-    assert_has(&errors(&args), "handler 'filter_changed' takes no arguments");
+    assert_has(&errors(&args), "handler 'filter_changed' takes 0 values, not 1");
 
     let value = with("let all = find c in Customer\n", "let all = filter_changed()\n");
     assert_has(&errors(&value), "handler 'filter_changed' does not return a value");

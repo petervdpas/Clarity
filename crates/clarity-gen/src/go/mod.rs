@@ -269,6 +269,10 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         ("github.com/wailsapp/wails/v3/pkg/application".to_string(), String::new()),
     ];
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
+    // A decimal value a click gives is written into the dispatch.
+    if owners.iter().flat_map(|o| &o.calls).flat_map(|(_, _, values)| values).any(|v| v.starts_with("decimal.")) {
+        imports.push(("github.com/shopspring/decimal".to_string(), String::new()));
+    }
     imports.sort();
     let imports: String = imports.iter().map(|(path, name)| format!("\t{name}\"{path}\"\n")).collect();
     let sources = databases
@@ -314,12 +318,21 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         app_events.push_str(&format!("\tcase {}:\n\t\treturn {}, true\n", string(event), string(handler)));
     }
     let mut dispatch = String::new();
-    for w in windows.iter().filter(|w| !w.handlers.is_empty()) {
+    for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         dispatch.push_str(&format!("\tcase {}:\n\t\tswitch handler {{\n", string(&w.name)));
         for (handler, method) in &w.handlers {
             dispatch.push_str(&format!(
                 "\t\tcase {}:\n\t\t\tw := &{}{{}}\n\t\t\tif err := state.Decode(w); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\tif err := w.{method}(db, ui); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\treturn ui.Reply(state.Window, w)\n",
                 string(handler),
+                w.struct_name
+            ));
+        }
+        // The calls with values its parts wire, by their written form.
+        for (call, method, values) in &w.calls {
+            let values: String = values.iter().map(|v| format!(", {v}")).collect();
+            dispatch.push_str(&format!(
+                "\t\tcase {}:\n\t\t\tw := &{}{{}}\n\t\t\tif err := state.Decode(w); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\tif err := w.{method}(db, ui{values}); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\treturn ui.Reply(state.Window, w)\n",
+                string(call),
                 w.struct_name
             ));
         }
@@ -349,6 +362,8 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         ));
     }
     let title = string(&clarity_project::title(settings));
+    // The desktop window opens at the main window's size.
+    let (width, height) = crate::window_size(project, main_window);
     let main_window = string(main_window);
     let module_text = string(module);
     format!(
@@ -473,7 +488,7 @@ func main() {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Model: model, Assets: assets, Db: db, Windows: windows{{}}}}, bind); err != nil {{
+\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}}}, bind); err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}

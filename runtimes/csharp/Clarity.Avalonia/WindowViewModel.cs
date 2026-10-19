@@ -19,6 +19,9 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>A dialog opens in a desktop window of its own; other windows open in place.</summary>
     public virtual bool IsDialog => false;
 
+    /// <summary>The size its desktop window opens at (<c>size 320 x 460</c>); none for the standard size.</summary>
+    public virtual global::Avalonia.Size? WindowSize => null;
+
     /// <summary>The messages on screen, newest last; the shell's, once it shows the window.</summary>
     public ObservableCollection<Message> Messages { get; internal set; } = [];
 

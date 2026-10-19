@@ -15,14 +15,14 @@ For every part, its own properties, events and binding rules are in [the languag
 - `label`: a caption for an input; `for name` ties it to the input, and clicking it focuses that input. No events.
 - `help`: a help text for an input; without a caption it shows the field's `help`, and it shows the error a handler sets.
 - `heading`: a heading.
-- `text`: shows the value of a field of any type: `bind customer.name`.
+- `text`: shows the value of a field of any type, `bind customer.name`, or a plain value of the window, `bind shown`.
 
 ## Basic input
 
 - `textbox` binds to text, email or url; `memo` to text, over several lines; `password` to text, hidden while typed. Events: `change`, `enter`, `leave`.
 - `number` binds to integer, decimal, money, id or duration. Events: `change`, `enter`, `leave`.
 - `checkbox` and `switch` bind to bool; `dropdown` to an enum or a `ref`; `radio` to an enum, one button per value; `date` to date or datetime. Event: `change`.
-- `button` binds to nothing. Event: `click`. It can have a `key`, and be the `default` (Enter) or `cancel` (Escape) button.
+- `button` binds to nothing. Event: `click`. It can have a `key` (a digit takes the number pad's digit too), and be the `default` (Enter) or `cancel` (Escape) button. With `on click: digit(7)` it gives its handler values; see [Handlers](code.handlers.md).
 
 `change` fires only when the person changes the value to one that differs. Typed text counts when the input is left or Enter is pressed.
 

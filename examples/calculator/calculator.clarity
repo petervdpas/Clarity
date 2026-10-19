@@ -4,163 +4,118 @@ app Calculator
     title "Calculator"
     main Main
 
-entity Calc
-    shown: decimal(18, 8), default 0
-    entry: decimal(18, 8), default 0
-    acc: decimal(18, 8), default 0
-    op: text(1)
-    factor: decimal(18, 8), default 1
-    fresh: bool, default true
+theme Calculator
+    title "Calculator"
+    mode system
+    color lcd "#c7d3a8" dark "#1d2618"
+    color lcd_text "#1f2a14" dark "#a8e890"
+    style display background lcd, text lcd_text, border none, radius 6, size 40, font mono, align right
+    style operator background accent_soft, text accent, weight bold
+    style equals background accent, text on_accent, weight bold
 
-function calculate(a: decimal, op: text, b: decimal) -> decimal
-    if op == "+"
+enum Operation
+    Nothing
+    Add
+    Subtract
+    Multiply
+    Divide
+
+function calculate(a: decimal, op: Operation, b: decimal) -> decimal
+    if op == Add
         return a + b
-    if op == "-"
+    if op == Subtract
         return a - b
-    if op == "*"
+    if op == Multiply
         return a * b
-    if op == "/"
+    if op == Divide
         if b == 0
             refuse "Cannot divide by zero"
         return a / b
     return b
 
-action press_digit(calc: Calc, d: integer)
-    if calc.fresh
-        calc.entry = 0
-        calc.factor = 1
-        calc.fresh = false
-    if calc.factor == 1
-        calc.entry = calc.entry * 10 + d
-    else
-        calc.entry = calc.entry + d * calc.factor
-        calc.factor = calc.factor / 10
-    calc.shown = calc.entry
-
-action press_point(calc: Calc)
-    if calc.fresh
-        calc.entry = 0
-        calc.fresh = false
-        calc.factor = 0.1
-        calc.shown = 0
-    else if calc.factor == 1
-        calc.factor = 0.1
-
-action press_op(calc: Calc, op: text)
-    if calc.op == ""
-        calc.acc = calc.entry
-    else if not calc.fresh
-        let result = calculate(calc.acc, calc.op, calc.entry)
-        calc.acc = result
-    calc.shown = calc.acc
-    calc.op = op
-    calc.fresh = true
-
-action press_equals(calc: Calc)
-    if calc.op != ""
-        let result = calculate(calc.acc, calc.op, calc.entry)
-        calc.entry = result
-        calc.acc = result
-        calc.shown = result
-        calc.op = ""
-    calc.fresh = true
-
-action press_clear(calc: Calc)
-    calc.shown = 0
-    calc.entry = 0
-    calc.acc = 0
-    calc.op = ""
-    calc.factor = 1
-    calc.fresh = true
-
-action press_sign(calc: Calc)
-    calc.entry = -calc.entry
-    calc.shown = calc.entry
-
-action press_percent(calc: Calc)
-    calc.entry = calc.entry / 100
-    calc.shown = calc.entry
-
 page Main: window
     title "Calculator"
-    data calc: Calc
+    size 320 x 340
+    data shown: decimal
+    data entry: decimal
+    data total: decimal
+    data pending: Operation
+    data factor: decimal, default 1
+    data fresh: bool, default true
     grid 4 columns
 
-    text name display at 1,1 span 4 bind calc.shown
-    button "C" name clear at 1,2 span 1 key "Escape" on click: clear_clicked
-    button "+/-" name sign at 2,2 span 1 on click: sign_clicked
-    button "%" name percent at 3,2 span 1 on click: percent_clicked
-    button "÷" name divide at 4,2 span 1 on click: divide_clicked
-    button "7" name d7 at 1,3 span 1 key "7" on click: d7_clicked
-    button "8" name d8 at 2,3 span 1 key "8" on click: d8_clicked
-    button "9" name d9 at 3,3 span 1 key "9" on click: d9_clicked
-    button "×" name multiply at 4,3 span 1 on click: multiply_clicked
-    button "4" name d4 at 1,4 span 1 key "4" on click: d4_clicked
-    button "5" name d5 at 2,4 span 1 key "5" on click: d5_clicked
-    button "6" name d6 at 3,4 span 1 key "6" on click: d6_clicked
-    button "−" name subtract at 4,4 span 1 on click: subtract_clicked
-    button "1" name d1 at 1,5 span 1 key "1" on click: d1_clicked
-    button "2" name d2 at 2,5 span 1 key "2" on click: d2_clicked
-    button "3" name d3 at 3,5 span 1 key "3" on click: d3_clicked
-    button "+" name add at 4,5 span 1 on click: add_clicked
-    button "0" name d0 at 1,6 span 2 key "0" on click: d0_clicked
-    button "." name point at 3,6 span 1 on click: point_clicked
-    button "=" name equals at 4,6 span 1 default on click: equals_clicked
+    text name display at 1,1 span 4 rows 2 bind shown style display
+    button "C" at 1,3 span 1 key "Escape" on click: clear
+    button "+/-" at 2,3 span 1 on click: change_sign
+    button "%" at 3,3 span 1 on click: percent
+    button "÷" at 4,3 span 1 style operator on click: operation(Divide)
+    button "7" at 1,4 span 1 key "7" on click: digit(7)
+    button "8" at 2,4 span 1 key "8" on click: digit(8)
+    button "9" at 3,4 span 1 key "9" on click: digit(9)
+    button "×" at 4,4 span 1 style operator on click: operation(Multiply)
+    button "4" at 1,5 span 1 key "4" on click: digit(4)
+    button "5" at 2,5 span 1 key "5" on click: digit(5)
+    button "6" at 3,5 span 1 key "6" on click: digit(6)
+    button "−" at 4,5 span 1 style operator on click: operation(Subtract)
+    button "1" at 1,6 span 1 key "1" on click: digit(1)
+    button "2" at 2,6 span 1 key "2" on click: digit(2)
+    button "3" at 3,6 span 1 key "3" on click: digit(3)
+    button "+" at 4,6 span 1 style operator on click: operation(Add)
+    button "0" at 1,7 span 2 key "0" on click: digit(0)
+    button "." at 3,7 span 1 on click: point
+    button "=" at 4,7 span 1 style equals default on click: equals
 
 code Main
-    handler d0_clicked
-        press_digit(calc, 0)
+    handler digit(d: integer)
+        if fresh
+            entry = 0
+            factor = 1
+            fresh = false
+        if factor == 1
+            entry = entry * 10 + d
+        else
+            entry = entry + d * factor
+            factor = factor / 10
+        shown = entry
 
-    handler d1_clicked
-        press_digit(calc, 1)
+    handler point
+        if fresh
+            entry = 0
+            shown = 0
+            fresh = false
+            factor = 0.1
+        else if factor == 1
+            factor = 0.1
 
-    handler d2_clicked
-        press_digit(calc, 2)
+    handler operation(op: Operation)
+        if pending == Nothing
+            total = entry
+        else if not fresh
+            total = calculate(total, pending, entry)
+        shown = total
+        pending = op
+        fresh = true
 
-    handler d3_clicked
-        press_digit(calc, 3)
+    handler equals
+        if pending != Nothing
+            entry = calculate(total, pending, entry)
+            total = entry
+            shown = entry
+            pending = Nothing
+        fresh = true
 
-    handler d4_clicked
-        press_digit(calc, 4)
+    handler clear
+        shown = 0
+        entry = 0
+        total = 0
+        pending = Nothing
+        factor = 1
+        fresh = true
 
-    handler d5_clicked
-        press_digit(calc, 5)
+    handler change_sign
+        entry = -entry
+        shown = entry
 
-    handler d6_clicked
-        press_digit(calc, 6)
-
-    handler d7_clicked
-        press_digit(calc, 7)
-
-    handler d8_clicked
-        press_digit(calc, 8)
-
-    handler d9_clicked
-        press_digit(calc, 9)
-
-    handler point_clicked
-        press_point(calc)
-
-    handler add_clicked
-        press_op(calc, "+")
-
-    handler subtract_clicked
-        press_op(calc, "-")
-
-    handler multiply_clicked
-        press_op(calc, "*")
-
-    handler divide_clicked
-        press_op(calc, "/")
-
-    handler equals_clicked
-        press_equals(calc)
-
-    handler clear_clicked
-        press_clear(calc)
-
-    handler sign_clicked
-        press_sign(calc)
-
-    handler percent_clicked
-        press_percent(calc)
+    handler percent
+        entry = entry / 100
+        shown = entry

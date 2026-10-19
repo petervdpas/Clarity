@@ -464,3 +464,110 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     has(code, "grid.Edited += _ => Vm.TaskChangedCommand.Execute(null);");
     has(code, "addedPick.ValueChanged += (_, _) => Vm.TaskChangedCommand.Execute(null);");
 }
+
+/// A window that says its size opens at it: its view model tells the shell.
+#[test]
+fn a_window_opens_at_its_size() {
+    let vm = file(&files(), "Windows/OrderFormViewModel.cs").to_string();
+    assert!(!vm.contains("WindowSize"), "{vm}");
+    let sized = SHOP.replace("page OrderForm: window\n", "page OrderForm: window\n    size 640 x 480\n");
+    assert_ne!(sized, SHOP);
+    let project = load_sources([("shop.clarity", sized.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Windows/OrderFormViewModel.cs"), "    public override global::Avalonia.Size? WindowSize => new(640, 480);\n");
+}
+
+/// A click can pass values to its handler: each written call is a command of
+/// its own, with its values written into the code.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = SHOP
+        .replace(
+            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
+            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n    textbox name one at 7,10 span 1 on change: digit(1)\n",
+        )
+        .replace(
+            "    handler grid_selected\n",
+            "    handler digit(d: integer)\n        number_input.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler grid_selected\n",
+        );
+    assert_ne!(source, SHOP);
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "    void OnDigit(long d)\n");
+    has(vm, "    void OnScale(decimal by, string word, OrderStatus status)\n");
+    has(vm, "        OnDigit(3L);\n");
+    has(vm, "    [RelayCommand]\n    void Digit7() => Handle(() => OnDigit(7L));");
+    has(vm, "    [RelayCommand]\n    void Digit1() => Handle(() => OnDigit(1L));");
+    has(vm, "    [RelayCommand]\n    void Scale0_5HalfApproved() => Handle(() => OnScale(0.5m, \"half\", OrderStatus.Approved));");
+    // A handler that takes values is only run with them.
+    assert!(!vm.contains("void Digit() =>"), "{vm}");
+    let axaml = file(&files, "Windows/OrderFormView.axaml");
+    has(axaml, "Command=\"{Binding Digit7Command}\"");
+    has(axaml, "Command=\"{Binding Scale0_5HalfApprovedCommand}\"");
+    has(file(&files, "Windows/OrderFormView.axaml.cs"), "Vm.Digit1Command.Execute(null)");
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A window holds plain values: properties of its ViewModel, at their
+/// default or empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SHOP}{CALC}");
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/CalcViewModel.cs");
+    has(vm, "    public decimal Shown { get => _shown; set => SetProperty(ref _shown, value); }\n    decimal _shown = default;\n");
+    for start in ["    OrderStatus _pending = default;\n", "    bool _fresh = true;\n", "    string _word = \"hi\";\n", "    long _count = 2L;\n", "    decimal _rate = 0.5m;\n"] {
+        has(vm, start);
+    }
+    has(vm, "        Fresh = false;\n");
+    has(vm, "        Pending = OrderStatus.Approved;\n");
+    has(file(&files, "Windows/CalcView.axaml"), "Text=\"{Binding Shown, Converter={x:Static local:Shown.Converter}}\"");
+}
+
+/// A key is written as Avalonia names it: the digit 7 is `D7`, and the
+/// number pad presses the same button, as in a browser.
+#[test]
+fn keys_are_written_as_avalonia_names_them() {
+    let source = SHOP.replace(
+        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
+        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 key \"7\" on click: approve_clicked\n    button \"Back\" name back at 6,10 span 1 key \"Backspace\" on click: approve_clicked\n    button \"Save\" name keep at 7,10 span 1 key \"Ctrl+S\" on click: approve_clicked\n",
+    );
+    assert_ne!(source, SHOP);
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let axaml = file(&files, "Windows/OrderFormView.axaml");
+    has(axaml, "HotKey=\"D7\"");
+    has(axaml, "HotKey=\"Back\"");
+    has(axaml, "HotKey=\"Ctrl+S\"");
+    assert!(!axaml.contains("HotKey=\"7\""), "{axaml}");
+    has(axaml, "HotKey=\"D7\" c:Keys.Also=\"NumPad7\"");
+}

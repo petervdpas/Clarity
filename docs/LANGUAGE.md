@@ -424,14 +424,17 @@ An application has one desktop window, on every stack. `open` shows a window in 
 | Setting | Meaning |
 |---|---|
 | `title "text"` | The window's title. |
+| `size W x H` | The size its desktop window opens at, in pixels, like `size 320 x 460`: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
 | `data name: Entity` | One record the window works on. |
 | `data name: list<Entity>` | A list of records the window works on. |
+| `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration` or an enum. It is no record and is never stored; it lives as long as the window. |
+| `data name: type, default value` | A plain value that starts at `value`: `data fresh: bool, default true`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
 | `grid N columns` | The number of grid columns, 1 to 24. The default is 12. |
 | `on open: handler` | Runs when the window has opened and its data is loaded. |
 | `on close: handler` | Runs when the window is about to close. |
 | `on return: handler` | Runs when a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record. |
 
-The window's data is what its parts bind to and what its handlers work on. When a window is opened with `open CustomerForm with customer = ...`, the data is filled by name. Data that is not filled starts as a new, empty record, or for a list, as all records of the entity.
+The window's data is what its parts bind to and what its handlers work on. When a window is opened with `open CustomerForm with customer = ...`, the data is filled by name. Data that is not filled starts as a new, empty record, for a list as all records of the entity, and for a plain value at its default. A plain value cannot be read again with `reload`.
 
 ### The grid
 
@@ -463,8 +466,9 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts `button1`, `textbox2` and so on; templates name inputs after their field. |
 | `at col,row`, `span n`, `rows n` | Place and size on the grid; see [the grid](#the-grid). |
 | `tooltip "text"` | Shown when the pointer rests on the part. |
-| `style name` | A style of the project's theme: its background, text and border colors. See [Themes](#themes). |
+| `style name` | A style of the project's theme: its colors, and the size, font and alignment of its text. See [Themes](#themes). |
 | `on event: handler` | Runs `handler` in the window's code behind when `event` happens. Each event is wired at most once per part. |
+| `on event: handler(values)` | Runs `handler` with these values, one per parameter of the handler: `on click: digit(7)`, `on click: operation(Add)`. A value is a number, text in quotes, `true`, `false` or a value of the parameter's enum. |
 
 ### The catalog
 
@@ -543,7 +547,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 `bind` connects a part to the window's data:
 
-- An input or `text` binds to one field of a single record: `bind customer.name`. The field's type must be one the part accepts; a checkbox needs a `bool`.
+- An input or `text` binds to one field of a single record: `bind customer.name`, or to a plain value by its name: `bind shown`. The type must be one the part accepts; a checkbox needs a `bool`. A plain `decimal` shows the digits it has.
 - A `table` or `list` binds to a list: `bind orders`. Its `columns` or `show` name fields of the listed entity.
 - A `form` binds to a single record: `bind customer`.
 
@@ -579,7 +583,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 | `cancel` | buttons | Escape clicks this button. One per window. |
 | `horizontal`, `vertical` | radio, splitter | Side by side or stacked. |
 
-A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`.
+A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`. A digit also takes the same digit of the number pad.
 
 ### Clicking to open a window
 
@@ -718,7 +722,13 @@ theme Shop
 | `part kind [state] look` | How a kind of part looks: `button`, `input`, `header` (of a table), `tab` or `menu`; with `hover`, `pressed` or `focus`, in that state. |
 | `style name look` | A named style that parts pick with `style name`. |
 
-A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas.
+A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas. A style also sets how its text shows: `size n` in pixels (6 to 200), `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:
+
+```
+theme Calculator
+    color lcd "#c7d3a8" dark "#1d2618"
+    style display background lcd, size 40, font mono, align right
+```
 
 The colors a theme can set by role, which the application itself uses:
 
@@ -758,7 +768,8 @@ code CustomerForm
         close
 ```
 
-- `handler name` declares a handler. It has no parameters. It runs when an event wired to it happens.
+- `handler name` declares a handler. It runs when an event wired to it happens.
+- `handler name(param: type, ...)` declares a handler that takes values, which a part gives it: `button "7" on click: digit(7)` runs `handler digit(d: integer)` with `d` 7. Each parameter is `text`, `integer`, `decimal`, `money`, `bool` or an enum. The values must fit: as many as it has parameters, each of its type. Events of the window itself (`on open`) give no values, so their handlers take none.
 - A handler that is wired but not written is an error. A handler that is written but not wired anywhere is a warning.
 - Handlers run in the backend. The window sends its data with the event, the handler runs, and the window shows what changed: data, part properties, messages, and windows to open or close.
 
@@ -863,7 +874,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
 | `for item in list` | Runs the block once per item of a list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
-| `handler_name()` | Runs another handler of the same window or app. | handlers |
+| `handler_name()`, `handler_name(values)` | Runs another handler of the same window or app, with values for its parameters. | handlers |
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
 | `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. | handlers |
@@ -1122,7 +1133,8 @@ modifier      = "required" | "unique" | "owned" | "computed"
 
 page          = "page" Name ":" ("window" | "dialog" | "view")
                     (page-setting | region | part)*
-page-setting  = "title" String | "data" name ":" (Entity | "list" "<" Entity ">")
+page-setting  = "title" String | "size" n "x" n
+              | "data" name ":" (Entity | "list" "<" Entity ">" | type-ref ["," "default" value])
               | "grid" n "columns" | "on" ("open" | "close" | "return") ":" handler
 part          = kind [String] property*
                     (part | "tab" String | "pane")*        // containers only
@@ -1130,7 +1142,7 @@ property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" pa
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
               | "columns" names | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word | "renderer" Name
-              | "on" event ":" handler | "on" "click" "->" Target ["in" "new" "window"]
+              | "on" event ":" handler ["(" [value ("," value)*] ")"] | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name
                     ("title" String | "main" Window | "data" ... | "on" "start" ":" handler | region)*
@@ -1139,7 +1151,7 @@ command       = ("item" | "button" | "separator") [String]
                 ("name" name | "icon" String | "key" String | "large" | "on" "click" (":" handler | "->" Target ["in" "new" "window"]))*
 
 code          = "code" (Window | App)
-                    ("handler" name
+                    ("handler" name ["(" [param ("," param)*] ")"]
                         statement*)*
               | "code" Entity
                     (("before" | "after") ("save" | "delete")
@@ -1157,6 +1169,7 @@ theme         = "theme" Name
                     | "shadow" ("none" | "flat" | "raised")
                     | "part" kind [state] look | "style" name look)*
 look          = ("background" | "text" | "border") (name | String) | "radius" n | "weight" ("bold" | "normal")
+                    | "size" n | "font" role | "align" ("left" | "center" | "right")
                     ("," look)*
 translation   = "translation" language
                     (String String)*

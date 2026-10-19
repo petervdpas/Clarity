@@ -1,0 +1,10 @@
+{
+  "about": "How a wired handler with its values is written, the same in the spec (widgets::handler_call), in the renderer (which sends it as the handler to run) and in every backend's dispatch: the handler's name, then its values in parentheses. Numbers as written, text in double quotes with backslash, quote and newline escaped, true and false, an enum value by its name. Without values, the name alone.",
+  "cases": [
+    { "handler": "save_clicked", "args": [], "text": "save_clicked" },
+    { "handler": "digit", "args": [{ "kind": "number", "value": "7" }], "text": "digit(7)" },
+    { "handler": "add", "args": [{ "kind": "number", "value": "0.25" }, { "kind": "number", "value": "100" }], "text": "add(0.25, 100)" },
+    { "handler": "say", "args": [{ "kind": "str", "value": "hi" }, { "kind": "bool", "value": true }, { "kind": "ident", "value": "Business" }], "text": "say(\"hi\", true, Business)" },
+    { "handler": "quote", "args": [{ "kind": "str", "value": "a \"b\" \\ c\nd" }], "text": "quote(\"a \\\"b\\\" \\\\ c\\nd\")" }
+  ]
+}

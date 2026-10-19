@@ -1,4 +1,4 @@
-use clarity_spec::model::{PageKind, Widget};
+use clarity_spec::model::{PageKind, Widget, WindowSize};
 use clarity_spec::parser::parse;
 use clarity_spec::widgets::{WidgetKind, widget_line};
 use clarity_spec::{Severity, load_sources};
@@ -74,7 +74,7 @@ fn example_page_is_clean() {
     assert_eq!(page.name.name, "CustomerCard");
     assert_eq!(page.kind, PageKind::Window);
     assert_eq!(page.data.len(), 2);
-    assert!(page.data[1].list);
+    assert!(page.data[1].is_list());
     let problems: Vec<_> = project
         .diagnostics
         .iter()
@@ -254,6 +254,26 @@ fn checks_containers_and_grid_size() {
     assert_has(&errs, "exactly two 'pane'");
 }
 
+/// A window opens at the size it says, in pixels: `size 320 x 460`. Without
+/// it, at the standard size every stack shares.
+#[test]
+fn a_window_says_its_size() {
+    let (file, diags) = parse("module p\npage Calc: window\n    size 320 x 460\n", "p.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.pages[0].size, Some(WindowSize { width: 320, height: 460 }));
+    let (file, _) = parse("module p\npage P: window\n", "p.clarity");
+    assert_eq!(file.pages[0].size, None);
+
+    let (_, diags) = parse("module p\npage P: window\n    size 320 x 460\n    size 400 x 300\n", "p.clarity");
+    assert!(diags.iter().any(|d| d.message.contains("duplicate 'size'")), "{diags:#?}");
+    let (_, diags) = parse("module p\npage P: window\n    size 320\n", "p.clarity");
+    assert!(diags.iter().any(|d| d.message.contains("'size 320 x 460'")), "{diags:#?}");
+
+    // Small enough to fit a screen, large enough to hold a part.
+    assert_has(&errors("page P: window\n    size 100 x 460\n"), "200 to 3840 pixels wide and 150 to 2160 high");
+    assert_has(&errors("page P: window\n    size 4000 x 460\n"), "200 to 3840 pixels wide");
+}
+
 #[test]
 fn page_names_share_the_namespace() {
     let errs = errors(
@@ -270,4 +290,52 @@ page A: view
 ",
     );
     assert_has(&errs, "'A' is already declared");
+}
+
+/// A window holds plain values besides records: a number it shows, a value
+/// of an enum, a flag. Each starts at its default, or empty.
+#[test]
+fn a_window_holds_plain_values() {
+    use clarity_spec::code::TypeRefKind;
+    use clarity_spec::model::{DataKind, Literal};
+    let page = "page Calc: window
+    data shown: decimal
+    data pending: Kind
+    data fresh: bool, default true
+    data customer: Customer
+    data customers: list<Customer>
+";
+    let source = format!("module p\nuse c\n{page}");
+    let project = load_sources([("c.clarity", CUSTOMERS), ("p.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let data = &project.files[1].pages[0].data;
+    let of: Vec<&DataKind> = data.iter().map(|d| &d.of).collect();
+    assert!(matches!(of[0], DataKind::Value { ty, default: None } if ty.kind == TypeRefKind::Decimal), "{of:#?}");
+    // A name is a plain value when it names an enum, a record when it names an entity.
+    assert!(matches!(of[1], DataKind::Value { ty, default: None } if ty.kind == TypeRefKind::Named { name: "Kind".into() }), "{of:#?}");
+    assert!(matches!(of[2], DataKind::Value { ty, default: Some(Literal::Bool(true)) } if ty.kind == TypeRefKind::Bool), "{of:#?}");
+    assert!(matches!(of[3], DataKind::Record { entity } if entity.name == "Customer"), "{of:#?}");
+    assert!(matches!(of[4], DataKind::List { entity } if entity.name == "Customer"), "{of:#?}");
+
+    // A default fits its type, and only a plain value has one.
+    assert_has(&errors("page P: window\n    data fresh: bool, default 3\n"), "'fresh' is bool, not 3");
+    assert_has(&errors("page P: window\n    data pending: Kind, default C\n"), "Kind has no value C");
+    assert_has(&errors("page P: window\n    data customer: Customer, default 1\n"), "'customer' is a record, which starts new; only a plain value has a default");
+    assert_has(&errors("page P: window\n    data x: Teleport\n"), "unknown entity or enum 'Teleport'");
+    assert_has(&errors("page P: window\n    data x: list<decimal>\n"), "a list holds records, as in 'list<Order>'");
+}
+
+/// A part binds a plain value by its name, when it shows that type.
+#[test]
+fn a_part_binds_a_plain_value() {
+    let page = "page P: window
+    data shown: decimal
+    data pending: Kind
+    data fresh: bool
+";
+    let ok = format!("{page}    text at 1,1 span 4 bind shown\n    dropdown at 1,2 span 4 bind pending\n    checkbox \"Fresh\" at 1,3 span 4 bind fresh\n    number at 1,4 span 4 bind shown\n");
+    assert!(errors(&ok).is_empty(), "{:#?}", errors(&ok));
+    assert_has(&errors(&format!("{page}    textbox at 1,1 span 4 bind fresh\n")), "'fresh' is bool; a textbox shows");
+    assert_has(&errors(&format!("{page}    text at 1,1 span 4 bind shown.digits\n")), "'shown' is a plain value; bind it as 'shown'");
+    assert_has(&errors(&format!("{page}    table at 1,1 span 4 rows 3 bind shown columns name\n")), "a table binds to a list");
 }

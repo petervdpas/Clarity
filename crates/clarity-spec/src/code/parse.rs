@@ -64,21 +64,7 @@ pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut 
         FunctionKind::Event => "an event",
     })?;
     cursor.expect(TokenKind::LParen, "'(' and the parameters")?;
-    let mut params = Vec::new();
-    if !cursor.eat(TokenKind::RParen) {
-        loop {
-            let name = cursor.expect_ident("a parameter name")?;
-            cursor.expect(TokenKind::Colon, "':' and a type")?;
-            params.push(Param {
-                name,
-                ty: parse_type_ref(&mut cursor)?,
-            });
-            if cursor.eat(TokenKind::RParen) {
-                break;
-            }
-            cursor.expect(TokenKind::Comma, "',' or ')'")?;
-        }
-    }
+    let params = parse_params(&mut cursor)?;
     let returns = if cursor.eat(TokenKind::Arrow) {
         Some(parse_type_ref(&mut cursor)?)
     } else {
@@ -144,6 +130,12 @@ fn parse_clause(node: &Node, decl: &mut FunctionDecl) -> ParseResult<()> {
     no_children(node)
 }
 
+/// Whether `word` is a type of the language rather than a name:
+/// `decimal`, not `Order`.
+pub(crate) fn is_type_word(word: &str) -> bool {
+    matches!(word, "text" | "integer" | "decimal" | "money" | "bool" | "date" | "datetime" | "duration" | "file")
+}
+
 /// `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`,
 /// `list<Entity>`, or the name of an entity or enum.
 pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
@@ -171,15 +163,35 @@ pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
     Ok(TypeRef { kind, span })
 }
 
+/// The parameters after `(`, to and with `)`: `a: T, b: T)`.
+fn parse_params(cursor: &mut Cursor) -> ParseResult<Vec<Param>> {
+    let mut params = Vec::new();
+    if cursor.eat(TokenKind::RParen) {
+        return Ok(params);
+    }
+    loop {
+        let name = cursor.expect_ident("a parameter name")?;
+        cursor.expect(TokenKind::Colon, "':' and a type")?;
+        params.push(Param { name, ty: parse_type_ref(cursor)? });
+        if cursor.eat(TokenKind::RParen) {
+            return Ok(params);
+        }
+        cursor.expect(TokenKind::Comma, "',' or ')'")?;
+    }
+}
+
+/// `handler name`, or with the values a click gives: `handler digit(d: integer)`.
 fn parse_handler(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<HandlerDecl> {
     let mut cursor = Cursor::new(node.line);
     if !cursor.eat_keyword("handler") {
         return Err(cursor.error_here("expected 'handler <name>'"));
     }
     let name = cursor.expect_ident("a handler name")?;
+    let params = if cursor.eat(TokenKind::LParen) { parse_params(&mut cursor)? } else { Vec::new() };
     cursor.expect_end()?;
     Ok(HandlerDecl {
         name,
+        params,
         body: parse_block(&node.children, diagnostics),
         span: node.span(),
     })

@@ -391,7 +391,7 @@ fn a_wails_application_with_the_web_renderer() {
     has(main, "\tassets, err := fs.Sub(renderer, \"ui\")");
     // The renderer calls the service the program binds: main.Clarity.Invoke.
     has(main, "type Clarity struct {\n\t*shell.Service\n}");
-    has(main, "shell.Run(shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Model: model, Assets: assets, Db: db, Windows: windows{}}, bind)");
+    has(main, "shell.Run(shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}, bind)");
     has(main, "func bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}");
 }
 
@@ -497,4 +497,90 @@ fn rows_read_again_lose_their_selected_row() {
     has(shop, ".Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n\tui.Deselect(\"grid\")\n");
     has(shop, "\tw.Orders = v1\n\tui.Deselect(\"grid\")\n\tif w.Order.ID != 0 {");
     assert_eq!(shop.matches("ui.Deselect(").count(), 2, "{shop}");
+}
+
+/// The desktop window opens at the main window's size.
+#[test]
+fn the_desktop_window_opens_at_the_main_windows_size() {
+    has(file(&windows(), "main.go"), "Main: \"OrderForm\", Width: 1100, Height: 760,");
+    let sized = WINDOWS.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
+    let project = load_sources([("shop.clarity", sized.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    has(file(&generate(&project, &settings()).unwrap(), "main.go"), "Main: \"OrderForm\", Width: 640, Height: 480,");
+}
+
+/// A click passes values: each written call is dispatched with its values
+/// compiled in, and a handler may call another with values.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = WINDOWS
+        .replace(
+            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
+            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n",
+        )
+        .replace(
+            "    handler grid_selected\n",
+            "    handler digit(d: integer)\n        number_input.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler grid_selected\n",
+        );
+    assert_ne!(source, WINDOWS);
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let shop = file(&files, "shop_module.go");
+    has(shop, "func (w *OrderFormWindow) digit(db *clarity.Db, ui *clarity.Ui, d int64) error {");
+    has(shop, "func (w *OrderFormWindow) scale(db *clarity.Db, ui *clarity.Ui, by decimal.Decimal, word string, status OrderStatus) error {");
+    has(shop, "if err := w.digit(db, ui, 3); err != nil {");
+    let main = file(&files, "main.go");
+    has(main, "\t\tcase \"digit(7)\":\n");
+    // A handler that takes values is only called with them.
+    assert!(!main.contains("\t\tcase \"digit\":\n"), "{main}");
+    has(main, "if err := w.digit(db, ui, 7); err != nil {");
+    has(main, "\t\tcase \"scale(0.5, \\\"half\\\", Approved)\":\n");
+    has(main, "if err := w.scale(db, ui, decimal.RequireFromString(\"0.5\"), \"half\", OrderStatusApproved); err != nil {");
+    // The dispatch writes a decimal, so main.go imports it.
+    has(main, "\t\"github.com/shopspring/decimal\"\n");
+    assert!(!file(&windows(), "main.go").contains("shopspring/decimal"));
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A window holds plain values: fields of its data, at their default or
+/// empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SALES}{CALC}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().filter(|f| f.path.ends_with("_module.go")).map(|f| f.text.as_str()).collect();
+    for field in [["Shown", "decimal.Decimal", "`json:\"shown\"`"], ["Pending", "OrderStatus", "`json:\"pending\"`"], ["Fresh", "bool", "`json:\"fresh\"`"], ["Word", "string", "`json:\"word\"`"], ["Count", "int64", "`json:\"count\"`"]] {
+        assert!(code.lines().any(|l| l.split_whitespace().eq(field)), "{field:?} in {code}");
+    }
+    for load in ["\tw.Fresh = true\n", "\tw.Word = \"hi\"\n", "\tw.Count = 2\n", "\tw.Rate = decimal.RequireFromString(\"0.5\")\n", "\tw.Pending = OrderStatusPending\n"] {
+        has(&code, load);
+    }
+    has(&code, "w.Fresh = false\n");
+    has(&code, "w.Pending = OrderStatusApproved\n");
 }

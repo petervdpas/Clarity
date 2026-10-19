@@ -227,6 +227,7 @@ fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> St
         input.handlers.push(Handler {
             event: Event::Change,
             handler: FILTER_HANDLER.to_string(),
+            args: Vec::new(),
         });
         lines.push(widget_line(&input));
     }

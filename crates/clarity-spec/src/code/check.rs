@@ -12,7 +12,7 @@ use super::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::model::{
-    Command, CommandKind, CommandProps, DataDecl, Entity, EnumDecl, FieldType, Frame, Ident, Page, SpecFile,
+    Command, CommandKind, CommandProps, DataDecl, DataKind, Entity, EnumDecl, FieldType, Frame, Ident, Literal, Page, SpecFile,
     Widget, WidgetProps,
 };
 use crate::span::Span;
@@ -193,11 +193,10 @@ impl<'a> Env<'a> {
     }
 
     fn data_type(&self, decl: &DataDecl) -> Ty<'a> {
-        match self.entity(&decl.entity.name) {
-            Some(entity) if decl.list => Ty::List(entity),
-            Some(entity) => Ty::Record(entity),
-            // Reported by the main checker.
-            None => Ty::Unknown,
+        match &decl.of {
+            DataKind::Value { ty, .. } => self.type_ref(ty).unwrap_or(Ty::Unknown),
+            DataKind::List { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::List),
+            DataKind::Record { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
         }
     }
 
@@ -361,7 +360,18 @@ struct Owner<'a> {
     data: &'a [DataDecl],
     parts: HashMap<&'a str, Part<'a>>,
     /// Handlers wired to events, with the span of the part that wires them.
-    wired: Vec<(&'a str, Span)>,
+    wired: Vec<Wired<'a>>,
+}
+
+/// A handler wired to an event: `on click: digit(7)`.
+struct Wired<'a> {
+    handler: &'a str,
+    /// The values it is run with.
+    args: &'a [Literal],
+    /// The event's word, like `click`; a window's own events give no values.
+    event: &'static str,
+    own_event: bool,
+    span: Span,
 }
 
 fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
@@ -370,7 +380,7 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
             owner.parts.insert(name, Part::Widget(&widget.props));
         }
         for handler in &widget.props.handlers {
-            owner.wired.push((&handler.handler, widget.span));
+            owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, span: widget.span });
         }
         collect_widgets(&widget.children, owner);
         for page in &widget.pages {
@@ -385,7 +395,7 @@ fn collect_commands<'a>(commands: &'a [Command], owner: &mut Owner<'a>) {
             owner.parts.insert(name, Part::Command(&command.props));
         }
         if let Some(handler) = &command.props.handler {
-            owner.wired.push((handler, command.span));
+            owner.wired.push(Wired { handler, args: &[], event: "click", own_event: false, span: command.span });
         }
         collect_commands(&command.items, owner);
     }
@@ -420,7 +430,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
-        owner.wired.extend(page.handlers.iter().map(|h| (h.handler.as_str(), page.span)));
+        owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
         owners.push(owner);
@@ -432,7 +442,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
-        owner.wired.extend(app.handlers.iter().map(|h| (h.handler.as_str(), app.span)));
+        owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, span: app.span }));
         collect_frame(&app.frame, &mut owner);
         owners.push(owner);
     }
@@ -442,6 +452,9 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
 fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_functions(env, file, out);
     let owners = owners(file);
+    for owner in &owners {
+        check_defaults(env, owner, out);
+    }
     let mut seen: Vec<&str> = Vec::new();
     for block in &file.code {
         let name = block.name.name.as_str();
@@ -471,15 +484,97 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     for owner in &owners {
         let block = file.code.iter().find(|b| b.name.name == owner.name);
         let mut reported: Vec<&str> = Vec::new();
-        for (handler, span) in &owner.wired {
-            let written = block.is_some_and(|b| b.handlers.iter().any(|h| h.name.name == *handler));
-            if !written && !reported.contains(handler) {
-                reported.push(handler);
-                out.push(Diagnostic::warning(
-                    format!("handler '{handler}' is wired but not written yet"),
-                    *span,
-                ));
+        for wired in &owner.wired {
+            match block.and_then(|b| b.handlers.iter().find(|h| h.name.name == wired.handler)) {
+                Some(decl) => check_values(env, wired, decl, out),
+                None if !reported.contains(&wired.handler) => {
+                    reported.push(wired.handler);
+                    out.push(Diagnostic::warning(
+                        format!("handler '{}' is wired but not written yet", wired.handler),
+                        wired.span,
+                    ));
+                }
+                None => {}
             }
+        }
+    }
+}
+
+/// The values an event gives a handler fit its parameters: as many, each
+/// of the parameter's type. A window's own events give none.
+fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) {
+    let params = || {
+        let each: Vec<String> = decl
+            .params
+            .iter()
+            .map(|p| format!("{}: {}", p.name.name, env.type_ref(&p.ty).map_or_else(|_| "?".into(), |t| t.name())))
+            .collect();
+        format!("({})", each.join(", "))
+    };
+    let call = format!(
+        "on {}: {}",
+        wired.event,
+        crate::widgets::handler_call(&crate::model::Handler {
+            event: crate::widgets::Event::Click,
+            handler: wired.handler.to_string(),
+            args: wired.args.to_vec(),
+        })
+    );
+    if wired.own_event {
+        if !decl.params.is_empty() {
+            out.push(Diagnostic::error(
+                format!("handler {} takes values {}; 'on {}' has none to give", wired.handler, params(), wired.event),
+                wired.span,
+            ));
+        }
+        return;
+    }
+    if wired.args.len() != decl.params.len() {
+        out.push(Diagnostic::error(
+            format!("'{call}' gives {} values; handler {} takes {} {}", wired.args.len(), wired.handler, decl.params.len(), params()),
+            wired.span,
+        ));
+        return;
+    }
+    for (value, param) in wired.args.iter().zip(&decl.params) {
+        let Ok(ty) = env.type_ref(&param.ty) else { continue };
+        if let Some(problem) = misfit(value, &ty, &param.name.name) {
+            out.push(Diagnostic::error(format!("'{call}': {problem}"), wired.span));
+        }
+    }
+}
+
+/// Why a value written in the design does not fit `ty`, said of `who`:
+/// "d is an integer, not text"; None when it fits.
+fn misfit(value: &Literal, ty: &Ty, who: &str) -> Option<String> {
+    match (value, ty) {
+        (_, Ty::Unknown) => None,
+        (Literal::Number(n), Ty::Integer) if !n.contains('.') => None,
+        (Literal::Number(_), Ty::Decimal | Ty::Money | Ty::Duration) => None,
+        (Literal::Str(_), Ty::Text) => None,
+        (Literal::Bool(_), Ty::Bool) => None,
+        (Literal::Ident(v), Ty::Enum(e)) if e.variants.iter().any(|x| x.name.name == *v) => None,
+        (Literal::Ident(v), Ty::Enum(e)) => Some(format!("{} has no value {v}", e.name.name)),
+        (value, ty) => Some(format!(
+            "{who} is {}, not {}",
+            described(ty),
+            match value {
+                Literal::Number(n) => n.clone(),
+                Literal::Str(_) => "text".into(),
+                Literal::Bool(_) => "a bool".into(),
+                Literal::Ident(v) => v.clone(),
+            }
+        )),
+    }
+}
+
+/// The defaults of a window's plain values fit their types.
+fn check_defaults(env: &Env, owner: &Owner, out: &mut Output) {
+    for decl in owner.data {
+        let DataKind::Value { ty, default: Some(value) } = &decl.of else { continue };
+        let Ok(ty) = env.type_ref(ty) else { continue };
+        if let Some(problem) = misfit(value, &ty, &format!("'{}'", decl.name.name)) {
+            out.push(Diagnostic::error(problem, decl.span));
         }
     }
 }
@@ -499,7 +594,7 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
             out.push(Diagnostic::error(format!("handler '{name}' is written twice"), handler.name.span));
             continue;
         }
-        if !owner.wired.iter().any(|(w, _)| *w == name) {
+        if !owner.wired.iter().any(|w| w.handler == name) {
             out.push(Diagnostic::warning(
                 format!("handler '{name}' is not wired to any event"),
                 handler.name.span,
@@ -528,6 +623,15 @@ fn check_events(env: &Env, block: &CodeBlock, out: &mut Output) {
 }
 
 fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &HandlerDecl, out: &mut Output) {
+    // The values a click gives are names in its body.
+    let mut scope = HashMap::new();
+    for param in &handler.params {
+        let ty = env.type_ref(&param.ty).unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, param.ty.span));
+            Ty::Unknown
+        });
+        scope.insert(param.name.name.clone(), ty);
+    }
     let mut checker = BodyChecker {
         env,
         owner: Some(owner),
@@ -535,7 +639,7 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
         decl: None,
         event: None,
         returns: None,
-        scopes: vec![HashMap::new()],
+        scopes: vec![scope],
         saves_reported: false,
         out,
     };
@@ -799,9 +903,15 @@ impl<'a> BodyChecker<'_, 'a> {
             StmtKind::Close => self.ui_only("close", stmt.span),
             StmtKind::Reload { data } => {
                 self.ui_only("reload", stmt.span);
-                if self.decl.is_none() && self.data(&data.name).is_none() {
-                    let owner = self.owner.map(|o| o.name).unwrap_or("");
-                    self.error(format!("{owner} has no data '{}'", data.name), data.span);
+                match self.data(&data.name) {
+                    None if self.decl.is_none() => {
+                        let owner = self.owner.map(|o| o.name).unwrap_or("");
+                        self.error(format!("{owner} has no data '{}'", data.name), data.span);
+                    }
+                    Some(decl) if decl.value().is_some() => {
+                        self.error(format!("'{}' is a plain value; only records and lists are read again", data.name), data.span);
+                    }
+                    _ => {}
                 }
             }
             StmtKind::Message { text, .. } => {
@@ -1283,14 +1393,25 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(if function.name == TODAY { Ty::Date } else { Ty::DateTime });
         }
         // A handler runs another handler of its window by name.
-        if self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name) {
+        if self.decl.is_none()
+            && let Some(handler) = self.handlers.iter().find(|h| h.name.name == function.name)
+        {
             self.name_is(expr, NameKind::Handler);
             let name = &function.name;
-            for arg in args {
-                self.expr(arg, None);
-            }
-            if !args.is_empty() {
-                self.error(format!("handler '{name}' takes no arguments"), expr.span);
+            if args.len() != handler.params.len() {
+                for arg in args {
+                    self.expr(arg, None);
+                }
+                let n = handler.params.len();
+                self.error(format!("handler '{name}' takes {n} value{}, not {}", if n == 1 { "" } else { "s" }, args.len()), expr.span);
+            } else {
+                for (arg, param) in args.iter().zip(&handler.params) {
+                    let expected = self.env.type_ref(&param.ty).unwrap_or(Ty::Unknown);
+                    let ty = self.expr(arg, Some(expected));
+                    if !expected.accepts(&ty) {
+                        self.error(format!("value '{}' of handler {name} is {}, not {}", param.name.name, described(&expected), ty.name()), arg.span);
+                    }
+                }
             }
             if !statement {
                 self.error(format!("handler '{name}' does not return a value"), expr.span);

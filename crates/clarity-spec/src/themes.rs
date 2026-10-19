@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use crate::diagnostic::Diagnostic;
 use crate::lexer::TokenKind;
 use crate::model::{
-    Ident, Look, Project, Shadow, SpecFile, ThemeColor, ThemeDecl, ThemeMode, ThemePart, ThemeStyle, ThemeValue, Weight, Widget,
+    Ident, Look, Project, Shadow, SpecFile, ThemeColor, ThemeDecl, ThemeMode, ThemePart, ThemeStyle, ThemeValue, Weight, Widget, Align,
 };
 use crate::parser::{Cursor, Node, ParseResult, first_word, no_children};
 
@@ -62,6 +62,8 @@ pub const STATES: [&str; 3] = ["hover", "pressed", "focus"];
 
 /// What a style or a part look sets.
 const LOOK_WORDS: [&str; 5] = ["background", "text", "border", "radius", "weight"];
+/// What only a style sets: how its text shows.
+const TEXT_WORDS: [&str; 3] = ["size", "font", "align"];
 
 /// The source of Clarity's own theme, which sets every value.
 pub const BUILT_IN: &str = include_str!("../themes/clarity.clarity");
@@ -130,10 +132,45 @@ fn listed_str(words: &[&str]) -> String {
 
 /// `background accent, text on_accent, radius 6, weight bold`.
 fn parse_look(cursor: &mut Cursor, what: &str) -> ParseResult<Look> {
+    let style = what == "a style";
+    let words: Vec<&str> = if style { LOOK_WORDS.iter().chain(&TEXT_WORDS).copied().collect() } else { LOOK_WORDS.to_vec() };
     let mut look = Look::default();
     loop {
-        let word = cursor.expect_ident(&format!("what {what} sets: {}", listed_str(&LOOK_WORDS)))?;
+        let word = cursor.expect_ident(&format!("what {what} sets: {}", listed_str(&words)))?;
         match word.name.as_str() {
+            text if !style && TEXT_WORDS.contains(&text) => {
+                return Err(Diagnostic::error(
+                    format!("a part sets {}; size, font and align belong in a style", listed_str(&LOOK_WORDS)),
+                    word.span,
+                ));
+            }
+            "size" => {
+                let at = cursor.peek().map(|t| t.span).unwrap_or(word.span);
+                let size = number(cursor, "a text size in pixels")?;
+                if !(6..=200).contains(&size) {
+                    return Err(Diagnostic::error("a text size is 6 to 200 pixels", at));
+                }
+                look.size = Some(size);
+            }
+            "font" => {
+                let role = cursor.expect_ident("a font of the theme: text, heading or mono")?;
+                if !FONTS.contains(&role.name.as_str()) {
+                    return Err(Diagnostic::error(
+                        format!("unknown font '{}'; a style takes a font of the theme: text, heading or mono", role.name),
+                        role.span,
+                    ));
+                }
+                look.font = Some(role.name);
+            }
+            "align" => {
+                let value = cursor.expect_ident("left, center or right")?;
+                look.align = Some(match value.name.as_str() {
+                    "left" => Align::Left,
+                    "center" => Align::Center,
+                    "right" => Align::Right,
+                    other => return Err(Diagnostic::error(format!("unknown alignment '{other}'; text aligns left, center or right"), value.span)),
+                });
+            }
             "background" | "text" | "border" => {
                 let value = match cursor.peek() {
                     Some(t) if matches!(t.kind, TokenKind::Ident | TokenKind::Str) => {
@@ -160,7 +197,7 @@ fn parse_look(cursor: &mut Cursor, what: &str) -> ParseResult<Look> {
             }
             other => {
                 return Err(Diagnostic::error(
-                    format!("{what} sets {}, not '{other}'", listed_str(&LOOK_WORDS)),
+                    format!("{what} sets {}, not '{other}'", listed_str(&words)),
                     word.span,
                 ));
             }
@@ -254,7 +291,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
             }
             // A word that is not what a look sets is the state.
             let state = match cursor.peek() {
-                Some(t) if t.kind == TokenKind::Ident && !LOOK_WORDS.contains(&t.text.as_str()) => {
+                Some(t) if t.kind == TokenKind::Ident && !LOOK_WORDS.contains(&t.text.as_str()) && !TEXT_WORDS.contains(&t.text.as_str()) => {
                     cursor.next();
                     if !STATES.contains(&t.text.as_str()) {
                         return Err(Diagnostic::error(
@@ -428,6 +465,10 @@ pub struct ResolvedLook {
     pub border: Option<String>,
     pub radius: Option<u32>,
     pub weight: Option<Weight>,
+    pub size: Option<u32>,
+    /// A font role of the theme: `mono`.
+    pub font: Option<String>,
+    pub align: Option<Align>,
 }
 
 /// A theme for light or dark mode: what every stack shows, whatever its
@@ -490,6 +531,9 @@ pub fn resolve(theme: &ThemeDecl, system_dark: bool) -> Resolved {
         border: color(&l.border),
         radius: l.radius,
         weight: l.weight,
+        size: l.size,
+        font: l.font.clone(),
+        align: l.align,
     };
     let numbers = |values: &[ThemeValue]| values.iter().filter_map(|v| Some((v.role.clone(), v.value.parse().ok()?))).collect();
     let parts = theme

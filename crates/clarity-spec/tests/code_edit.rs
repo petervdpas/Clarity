@@ -96,6 +96,7 @@ fn wiring_an_event_writes_its_handler_in_the_same_edit() {
     props.handlers = vec![Handler {
         event: Event::Click,
         handler: "store_clicked".into(),
+        args: Vec::new(),
     }];
     let edit = Edit::Batch {
         edits: vec![

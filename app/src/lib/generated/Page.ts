@@ -6,12 +6,18 @@ import type { Ident } from "./Ident";
 import type { PageKind } from "./PageKind";
 import type { Span } from "./Span";
 import type { Widget } from "./Widget";
+import type { WindowSize } from "./WindowSize";
 
 /**
  * A widget-first page: widgets placed on a snap grid (see the widget
  * catalog in `widgets`).
  */
-export type Page = { name: Ident, kind: PageKind, title: string | null, data: Array<DataDecl>, 
+export type Page = { name: Ident, kind: PageKind, title: string | null, 
+/**
+ * The size its desktop window opens at (`size 320 x 460`); none for
+ * the standard size (layout::WINDOW_WIDTH and WINDOW_HEIGHT).
+ */
+size: WindowSize | null, data: Array<DataDecl>, 
 /**
  * Number of grid columns.
  */

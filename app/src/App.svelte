@@ -39,7 +39,7 @@
   import type { SpecFile } from "./lib/generated/SpecFile";
   import { pageDesigner } from "./lib/pageDesignerStore.svelte";
   import { findApp, frameForPage } from "./lib/frame";
-  import { CONTENT_PADDING, WINDOW_HEIGHT, appAsPage, findPage, pageData } from "./lib/pages";
+  import { CONTENT_PADDING, appAsPage, findPage, pageData, windowSize } from "./lib/pages";
   import ShownWindow from "./lib/ShownWindow.svelte";
   import VaultSide from "./lib/VaultSide.svelte";
   import VaultView from "./lib/VaultView.svelte";
@@ -914,13 +914,13 @@
         {:else if tab === "design" && page && file}
           <PageDesigner {preview} {page} {file} onapplied={applyPreview} />
         {:else if page}
-          <ShownWindow area={themeArea(themeOf(preview))}>
+          <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
             <div class="titlebar">
               <span>{page.title ?? page.name.name}</span>
               <code>{page.name.name}: {page.kind}</code>
             </div>
             <!-- The window's client, at the height it opens at. -->
-            <div class="shown" style:height="{WINDOW_HEIGHT}px">
+            <div class="shown" style:height="{windowSize(page).height}px">
               <FrameView
                 {preview}
                 {page}

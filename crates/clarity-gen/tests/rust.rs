@@ -570,6 +570,28 @@ fn only_a_target_in_new_window_makes_a_second_desktop_window() {
     assert!(!file(&files(), "src/main.rs").contains("open_apart"));
 }
 
+/// A window opens at the size it says: the desktop window Tauri opens takes
+/// the main window's, and a desktop window of its own takes the size the
+/// renderer asks for (the window it shows first), else the standard one.
+#[test]
+fn a_window_opens_at_its_size() {
+    let conf: serde_json::Value = serde_json::from_str(file(&files(), "tauri.conf.json")).unwrap();
+    assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(1100), Some(760)));
+
+    let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n").replace(
+        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
+        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"Again\" at 3,6 span 2 on click -> OrderForm in new window",
+    );
+    let project = load_sources([("sales.clarity", sized.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap();
+    let conf: serde_json::Value = serde_json::from_str(file(&files, "tauri.conf.json")).unwrap();
+    assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(640), Some(480)));
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("width: Option<f64>, height: Option<f64>"), "{main}");
+    assert!(main.contains(".inner_size(width.unwrap_or(1100.0), height.unwrap_or(760.0))"), "{main}");
+}
+
 /// A record's id, which code can read, is the record's `id`.
 #[test]
 fn a_record_s_id_reads_as_its_id() {
@@ -705,4 +727,78 @@ fn the_selected_row_is_saved_and_deleted_as_it_is() {
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("    db.save(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
     assert!(sales.contains("    db.delete(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
+}
+
+/// A click passes values: each written call is dispatched with its values
+/// compiled in, and a handler may call another with values.
+#[test]
+fn a_click_passes_values_to_its_handler() {
+    let source = SALES
+        .replace(
+            "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
+            "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"7\" name d7 at 3,6 span 1 on click: digit(7)\n    button \"Half\" name half at 4,6 span 1 on click: scale(0.5, \"half\", true)\n    button \"Ok\" name ok at 5,6 span 1 on click: mark(Approved)",
+        )
+        .replace(
+            "    handler order_submitted\n",
+            "    handler digit(d: integer)\n        number_filter.text = \"\"\n\n    handler scale(by: decimal, word: text, loud: bool)\n        digit(3)\n\n    handler mark(status: OrderStatus)\n        digit(1)\n\n    handler order_submitted\n",
+        );
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("pub fn order_form__digit(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, d: i64) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("pub fn order_form__scale(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, by: Decimal, word: String, loud: bool) -> Result<()> {"), "{sales}");
+    assert!(sales.contains("    order_form__digit(db, w, ui, 3i64)?;\n"), "{sales}");
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("(\"OrderForm\", \"digit(7)\") => {"), "{main}");
+    assert!(main.contains("sales::order_form__digit(db, &mut w, &mut ui, 7i64)?;"), "{main}");
+    assert!(main.contains("(\"OrderForm\", \"scale(0.5, \\\"half\\\", true)\") => {"), "{main}");
+    // main.rs reaches the module's types by their paths.
+    assert!(main.contains("sales::order_form__scale(db, &mut w, &mut ui, clarity_runtime::Decimal::new(5, 1), String::from(\"half\"), true)?;"), "{main}");
+    assert!(main.contains("sales::order_form__mark(db, &mut w, &mut ui, modules::sales::OrderStatus::Approved)?;"), "{main}");
+    // A handler that takes values is only called with them.
+    assert!(!main.contains("(\"OrderForm\", \"digit\")"), "{main}");
+}
+
+/// A window with plain values besides records, as each stack's tests use it.
+const CALC: &str = "
+page Calc: window
+    title \"Calc\"
+    data shown: decimal
+    data pending: OrderStatus
+    data fresh: bool, default true
+    data word: text, default \"hi\"
+    data count: integer, default 2
+    data rate: decimal, default 0.5
+    text name display at 1,1 span 4 bind shown
+    button \"7\" name d7 at 1,2 span 1 on click: digit(7)
+
+code Calc
+    handler digit(d: integer)
+        if fresh
+            shown = 0
+            fresh = false
+        shown = shown * 10 + d
+        pending = Approved
+        count = count + 1
+        word = \"x\"
+";
+
+/// A window holds plain values: fields of its data, at their default or
+/// empty when it opens, read and changed by its handlers.
+#[test]
+fn a_window_holds_plain_values() {
+    let source = format!("{SALES}{CALC}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    for field in ["pub shown: Decimal,", "pub pending: OrderStatus,", "pub fresh: bool,", "pub word: String,", "pub count: i64,", "pub rate: Decimal,"] {
+        assert!(sales.contains(field), "{field} in {sales}");
+    }
+    for load in ["shown: Default::default(),", "pending: Default::default(),", "fresh: true,", "word: String::from(\"hi\"),", "count: 2i64,", "rate: Decimal::new(5, 1),"] {
+        assert!(sales.contains(load), "{load} in {sales}");
+    }
+    assert!(sales.contains("w.fresh = false;"), "{sales}");
+    assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
 }

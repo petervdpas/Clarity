@@ -54,7 +54,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let mut files = vec![
         text("Cargo.toml", cargo_toml(&crate_name, &features)),
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
-        text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name)),
+        text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))),
         text("src/model.json", crate::web::model_json(project)),
     ];
     files.extend(crate::web::renderer_files(project));
@@ -144,7 +144,8 @@ tauri-build = {{ version = "2", features = [] }}
     )
 }
 
-fn tauri_conf(title: &str, crate_name: &str) -> String {
+/// Tauri's settings: the one desktop window it opens, at the main window's size.
+fn tauri_conf(title: &str, crate_name: &str, (width, height): (u32, u32)) -> String {
     let conf = serde_json::json!({
         "$schema": "https://schema.tauri.app/config/2",
         "productName": title,
@@ -152,7 +153,7 @@ fn tauri_conf(title: &str, crate_name: &str) -> String {
         "identifier": format!("app.clarity.{}", crate_name.replace('_', "-")),
         "build": { "frontendDist": "ui" },
         "app": {
-            "windows": [{ "title": title, "width": clarity_spec::layout::WINDOW_WIDTH, "height": clarity_spec::layout::WINDOW_HEIGHT }],
+            "windows": [{ "title": title, "width": width, "height": height }],
             "security": { "csp": null }
         },
         "bundle": { "active": false }
@@ -225,6 +226,24 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
 ",
                 o.name,
                 handler,
+                m = o.module,
+                s = o.struct_name
+            ));
+        }
+    }
+    // The calls with values the parts wire, by their written form.
+    for o in owners.iter().filter(|o| !o.is_app) {
+        for (call, function, values) in &o.calls {
+            let values: String = values.iter().map(|v| format!(", {v}")).collect();
+            dispatch.push_str(&format!(
+                "        ({:?}, {:?}) => {{
+            let mut w: {m}::{s} = from_data(state.data.clone())?;
+            {m}::{function}(db, &mut w, &mut ui{values})?;
+            Ok(ui.reply(&state.window, to_data(&w)?))
+        }}
+",
+                o.name,
+                call,
                 m = o.module,
                 s = o.struct_name
             ));
@@ -473,9 +492,10 @@ const TITLE: &str = {title};
 #[derive(Default)]
 struct Apart(Mutex<(u32, std::collections::HashMap<String, (String, Map<String, Value>, String)>)>);
 
-/// Opens a Clarity window in a desktop window of its own, as the design marks it.
+/// Opens a Clarity window in a desktop window of its own, as the design
+/// marks it, at the size the renderer asks for: the window's own.
 #[tauri::command]
-fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tauri::State<Apart>, window: String, with: Map<String, Value>) -> Answer<()> {
+fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tauri::State<Apart>, window: String, with: Map<String, Value>, width: Option<f64>, height: Option<f64>) -> Answer<()> {
     let label = {
         let mut open = apart.0.lock().map_err(|_| Value::from("the windows are not available"))?;
         open.0 += 1;
@@ -485,7 +505,7 @@ fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tau
     };
     tauri::WebviewWindowBuilder::new(&handle, &label, tauri::WebviewUrl::App("index.html".into()))
         .title(TITLE)
-        .inner_size({width}.0, {height}.0)
+        .inner_size(width.unwrap_or({width}.0), height.unwrap_or({height}.0))
         .build()
         .map_err(|err| Value::from(err.to_string()))?;
     Ok(())

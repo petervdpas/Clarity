@@ -11,6 +11,11 @@ export const GAP = 8;
 /** The size a window opens at on every stack, which the designer shows, and the space around its grid. */
 export const WINDOW_WIDTH = 1100;
 export const WINDOW_HEIGHT = 760;
+
+/** The size a window opens at: its own (`size 320 x 460`), or the standard one. */
+export function windowSize(page: { size: { width: number; height: number } | null }): { width: number; height: number } {
+  return page.size ?? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
+}
 export const CONTENT_PADDING = 12;
 
 /**

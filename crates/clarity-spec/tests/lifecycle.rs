@@ -70,6 +70,7 @@ fn parses_window_and_app_events() {
     let handler = |event, handler: &str| Handler {
         event,
         handler: handler.into(),
+        args: Vec::new(),
     };
     assert_eq!(file.apps[0].handlers, [handler(Event::Start, "app_started")]);
     assert_eq!(

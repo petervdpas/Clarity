@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use clarity_spec::layout::{BUTTON_SIDES, INPUT_SIDES};
-use clarity_spec::model::{Shadow, ThemeDecl, ThemeMode, Weight};
+use clarity_spec::model::{Align, Shadow, ThemeDecl, ThemeMode, Weight};
 use clarity_spec::themes::{ResolvedLook, built_in, is_dark, resolve};
 
 use super::HEADER;
@@ -53,6 +53,9 @@ fn merged(theme: &ThemeDecl, system_dark: bool) -> Merged {
         border: fix(&l.border),
         radius: l.radius,
         weight: l.weight,
+        size: l.size,
+        font: l.font.clone(),
+        align: l.align,
     };
     let mut radii = BTreeMap::new();
     for source in [&base, &own] {
@@ -68,7 +71,7 @@ fn merged(theme: &ThemeDecl, system_dark: bool) -> Merged {
     let mut parts: BTreeMap<String, ResolvedLook> = base.parts.iter().map(|(k, l)| (k.clone(), fixed(l))).collect();
     for (key, look) in &own.parts {
         let look = fixed(look);
-        let entry = parts.entry(key.clone()).or_insert(ResolvedLook { background: None, text: None, border: None, radius: None, weight: None });
+        let entry = parts.entry(key.clone()).or_insert(ResolvedLook { background: None, text: None, border: None, radius: None, weight: None, size: None, font: None, align: None });
         entry.background = look.background.or(entry.background.take());
         entry.text = look.text.or(entry.text.take());
         entry.border = look.border.or(entry.border.take());
@@ -107,6 +110,10 @@ impl Merged {
             border: pick(|l| l.border.clone()),
             radius: stated.and_then(|l| l.radius).or_else(|| plain.and_then(|l| l.radius)),
             weight: stated.and_then(|l| l.weight).or_else(|| plain.and_then(|l| l.weight)),
+            // Only a style sets how its text shows.
+            size: None,
+            font: None,
+            align: None,
         }
     }
 
@@ -220,6 +227,15 @@ pub fn style_properties(themes: &[&ThemeDecl]) -> StyleProperties {
             if l.weight.is_some() {
                 set.insert("weight");
             }
+            if l.size.is_some() {
+                set.insert("size");
+            }
+            if l.font.is_some() {
+                set.insert("font");
+            }
+            if l.align.is_some() {
+                set.insert("align");
+            }
         }
     }
     out
@@ -269,8 +285,32 @@ fn mode(m: &Merged, styles: &StyleProperties) -> String {
                     let radius = own.and_then(|l| l.radius).unwrap_or(m.radius_of("button"));
                     let _ = writeln!(out, "      <CornerRadius x:Key=\"{key}Radius\">{radius}</CornerRadius>");
                 }
-                _ => {
+                "weight" => {
                     let _ = writeln!(out, "      <FontWeight x:Key=\"{key}Weight\">{}</FontWeight>", weight(own.and_then(|l| l.weight)));
+                }
+                // What a theme leaves out is the text as a part shows it.
+                "size" => {
+                    let size = own.and_then(|l| l.size).or(m.sizes.get("text").copied()).unwrap_or(14);
+                    let _ = writeln!(out, "      <x:Double x:Key=\"{key}Size\">{size}</x:Double>");
+                }
+                "font" => {
+                    let role = own.and_then(|l| l.font.as_deref()).unwrap_or("text");
+                    let families = m.fonts.get(role).or(m.fonts.get("text")).map(String::as_str).unwrap_or("Inter");
+                    let _ = writeln!(out, "      <FontFamily x:Key=\"{key}Font\">{}</FontFamily>", font(families));
+                }
+                _ => {
+                    let align = own.and_then(|l| l.align);
+                    let (text, content) = match align {
+                        Some(Align::Center) => ("Center", "Center"),
+                        Some(Align::Right) => ("Right", "Right"),
+                        Some(Align::Left) => ("Left", "Left"),
+                        None => ("Left", "Center"),
+                    };
+                    // Aligned text keeps an input's padding from the edge.
+                    let side = if align.is_some() { m.padding * INPUT_SIDES } else { 0 };
+                    let _ = writeln!(out, "      <TextAlignment x:Key=\"{key}Align\">{text}</TextAlignment>");
+                    let _ = writeln!(out, "      <HorizontalAlignment x:Key=\"{key}Content\">{content}</HorizontalAlignment>");
+                    let _ = writeln!(out, "      <Thickness x:Key=\"{key}Padding\">{side},0</Thickness>");
                 }
             }
         }
@@ -389,6 +429,7 @@ pub fn style_classes(styles: &StyleProperties) -> String {
         let mut templated = String::new();
         let mut text = String::new();
         let mut presenter = String::new();
+        let mut content = String::new();
         for p in properties {
             match *p {
                 "background" => {
@@ -410,15 +451,31 @@ pub fn style_classes(styles: &StyleProperties) -> String {
                     templated.push_str(&setter("CornerRadius", "Radius"));
                     presenter.push_str(&setter("CornerRadius", "Radius"));
                 }
-                _ => {
+                "weight" => {
                     templated.push_str(&setter("FontWeight", "Weight"));
                     text.push_str(&setter("FontWeight", "Weight"));
+                }
+                "size" => {
+                    templated.push_str(&setter("FontSize", "Size"));
+                    text.push_str(&setter("FontSize", "Size"));
+                }
+                "font" => {
+                    templated.push_str(&setter("FontFamily", "Font"));
+                    text.push_str(&setter("FontFamily", "Font"));
+                }
+                _ => {
+                    content.push_str(&setter("HorizontalContentAlignment", "Content"));
+                    text.push_str(&setter("TextAlignment", "Align"));
+                    text.push_str(&setter("Padding", "Padding"));
                 }
             }
         }
         let _ = write!(out, "    <!-- Style {name}: its values come from the theme shown. -->\n    <Style Selector=\":is(TemplatedControl).{class}\">\n{templated}    </Style>\n");
         if !text.is_empty() {
             let _ = write!(out, "    <Style Selector=\"TextBlock.{class}\">\n{text}    </Style>\n");
+        }
+        if !content.is_empty() {
+            let _ = write!(out, "    <Style Selector=\":is(ContentControl).{class}\">\n{content}    </Style>\n");
         }
         if !presenter.is_empty() {
             for state in ["pointerover", "pressed"] {

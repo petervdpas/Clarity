@@ -1,25 +1,28 @@
 <script lang="ts">
   // A window as the designer and the preview show it: at the size it opens
-  // at on every stack, so its columns share the same width and its growing
-  // rows the same height as when it runs. It is scaled down to fit the room
-  // it has, never up. The children are its title bar and its client, which
-  // is WINDOW_HEIGHT tall.
+  // at on every stack (its own `size`, or WINDOW_WIDTH by WINDOW_HEIGHT), so
+  // its columns share the same width and its growing rows the same height as
+  // when it runs. It is scaled down to fit the room it has, never up. The
+  // children are its title bar and its client, as tall as the window.
   import type { Snippet } from "svelte";
   import { WINDOW_WIDTH } from "./grid";
 
   let {
     area,
+    clientWidth = WINDOW_WIDTH,
     children,
   }: {
     /** The theme's class and light or dark scheme. */
     area: { class: string; scheme: string };
+    /** The window's width, without its border. */
+    clientWidth?: number;
     children: Snippet;
   } = $props();
 
   let room = $state(0);
   let height = $state(0);
   // The window's border, one pixel on each side.
-  const width = WINDOW_WIDTH + 2;
+  const width = $derived(clientWidth + 2);
   const scale = $derived(room > 0 ? Math.min(1, room / width) : 1);
 </script>
 

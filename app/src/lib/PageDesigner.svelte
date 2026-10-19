@@ -23,10 +23,12 @@
   import type { WidgetInfo } from "./generated/WidgetInfo";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
   import { describeType, themeArea, themeOf } from "./model";
+  import { dataEntity, dataType, isList, valueField } from "./windowData";
+  import type { WidgetKind } from "./generated/WidgetKind";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
   import {
     CONTENT_PADDING,
-    WINDOW_HEIGHT,
+    windowSize,
     appAsPage,
     resizeEdits,
     findPage,
@@ -134,12 +136,13 @@
         // A list arrives as a table. A field arrives as its input, with a
         // label for it and its help text when there is room; the backend
         // lays these out the same way the form template does.
+        // A list or a plain value arrives as one part bound to it by name.
         const room = at.columns - at.col + 1;
-        if (source.widget === "table") {
+        if (source.bind && !source.bind.includes(".")) {
           await apply({
             op: "createWidget",
             container: at.container,
-            kind: "table",
+            kind: source.widget,
             col: at.col,
             row: at.row,
             width: Math.min(source.width, room),
@@ -178,6 +181,20 @@
 
   function pressPalette(e: PointerEvent, info: WidgetInfo) {
     pageDesigner.press(e, { kind: "new", widget: info.kind, width: info.width, height: info.height, label: info.name });
+  }
+
+  /** A plain value arrives as one part bound to it. */
+  function pressValue(e: PointerEvent, dataName: string, kind: WidgetKind) {
+    const info = widgetInfo(preview, kind);
+    pageDesigner.press(e, {
+      kind: "field",
+      widget: kind,
+      bind: dataName,
+      caption: dataName,
+      width: info.width,
+      height: info.height,
+      label: dataName,
+    });
   }
 
   function pressField(e: PointerEvent, dataName: string, fieldName: string, label: string, list: boolean) {
@@ -272,10 +289,19 @@
   {/each}
 
   {#each page.data as decl (decl.span.start)}
-    {@const entity = entities.find((x) => x.name.name === decl.entity.name)}
-    <h4>Data <code>{decl.name.name}: {decl.list ? `list<${decl.entity.name}>` : decl.entity.name}</code></h4>
+    {@const entity = entities.find((x) => x.name.name === dataEntity(decl))}
+    {@const value = valueField(decl)}
+    <h4>Data <code>{decl.name.name}: {dataType(decl)}</code></h4>
     <div class="tiles">
-      {#if decl.list}
+      {#if value}
+        <PartTile
+          kind={widgetForField(preview, value)}
+          name={decl.name.name}
+          detail={dataType(decl)}
+          title="Drag onto the window: a part bound to this value"
+          onpointerdown={(e) => pressValue(e, decl.name.name, widgetForField(preview, value))}
+        />
+      {:else if isList(decl)}
         <PartTile kind="table" name="Table of {decl.name.name}" onpointerdown={(e) => pressField(e, decl.name.name, "", decl.name.name, true)} />
       {:else}
         {#each (entity?.fields ?? []).filter((f) => f.type.kind !== "list") as field (field.name.name)}
@@ -301,7 +327,7 @@
 
 <div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.folded.properties ? 'auto' : layout.sizes.properties + 'px'}">
   <div class="stage">
-    <ShownWindow {area}>
+    <ShownWindow {area} clientWidth={windowSize(page).width}>
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}
@@ -314,7 +340,7 @@
       </div>
       <div
         class="client"
-        style:height="{WINDOW_HEIGHT}px"
+        style:height="{windowSize(page).height}px"
         bind:this={canvas}
         onpointerdown={() => (pageDesigner.selected = null)}
         role="presentation"

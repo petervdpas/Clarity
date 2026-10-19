@@ -61,7 +61,7 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             if (!caller || !open_desktop) return {{"error", "a window of its own needs the desktop"}};
             std::string name = "apart-" + std::to_string(++next_);
             apart_[name] = {text_of(args, "window"), with, caller->name()};
-            open_desktop(*caller, name);
+            open_desktop(*caller, name, window_size({args.value("width", 0), args.value("height", 0)}));
             return value(nullptr);
         }
         if (command == "apart_start") {
@@ -79,6 +79,11 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
     }
 }
 
+Size window_size(Size size) {
+    if (size.width <= 0 || size.height <= 0) return {1100, 760};
+    return size;
+}
+
 std::optional<std::string> Service::closed(const std::string& name) {
     std::lock_guard lock(mutex_);
     auto found = apart_.find(name);
@@ -93,9 +98,9 @@ namespace {
 /// A desktop window with a webview showing the renderer.
 class Window final : public Desktop {
 public:
-    Window(std::string name, Service& service, const Options& options) : name_(std::move(name)), view_(false, nullptr) {
+    Window(std::string name, Service& service, const Options& options, Size size) : name_(std::move(name)), view_(false, nullptr) {
         view_.set_title(options.title);
-        view_.set_size(1100, 760, WEBVIEW_HINT_NONE);
+        view_.set_size(size.width, size.height, WEBVIEW_HINT_NONE);
         // The renderer calls clarityInvoke(command, args); it answers like the Go shell.
         view_.bind("clarityInvoke", [this, &service](const std::string& request) {
             json args = json::parse(request);
@@ -131,10 +136,10 @@ int run(const Options& options) {
 #endif
     Service service(options);
     std::map<std::string, std::unique_ptr<Window>> windows;
-    windows["main"] = std::make_unique<Window>("main", service, options);
+    windows["main"] = std::make_unique<Window>("main", service, options, window_size(options.size));
     service.quit = [&] { windows["main"]->view().terminate(); };
-    service.open_desktop = [&](Desktop&, const std::string& name) {
-        auto& window = windows[name] = std::make_unique<Window>(name, service, options);
+    service.open_desktop = [&](Desktop&, const std::string& name, Size size) {
+        auto& window = windows[name] = std::make_unique<Window>(name, service, options, size);
 #if defined(__linux__)
         // When it closes, its opener is told, so it can reload its data.
         struct Closing {

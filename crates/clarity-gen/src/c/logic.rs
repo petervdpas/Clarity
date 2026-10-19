@@ -21,7 +21,7 @@ use clarity_spec::code::{
     BinaryOp, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp, path_text,
     template,
 };
-use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
+use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
 use super::names::{constant, decimal, ident, list_type, param_type, prefix, snake, string, value_type, zero};
 use crate::print;
@@ -190,6 +190,8 @@ pub struct WindowCtx {
     pub showing: std::collections::BTreeMap<String, Vec<String>>,
     /// The prefix of its functions: `customer_form_window`.
     pub prefix: String,
+    /// The types of the values each handler takes, by handler.
+    pub params: HashMap<String, Vec<TypeRef>>,
 }
 
 impl WindowCtx {
@@ -244,8 +246,11 @@ pub struct Owner {
     pub struct_name: String,
     /// The prefix of its functions: `customer_form_window`.
     pub prefix: String,
-    /// Handlers by Clarity name, with their function names.
+    /// The handlers called by name (those taking no values), with their function names.
     pub handlers: Vec<(String, String)>,
+    /// The calls with values its parts wire: as written (`digit(7)`), the
+    /// function, and the values as C.
+    pub calls: Vec<(String, String, Vec<String>)>,
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
@@ -273,17 +278,65 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             ctx.frame(&app.frame);
             events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
-        ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
+        ctx.data = data.iter().filter_map(|d| d.entity().map(|e| (d.name.name.clone(), e.name.clone(), d.is_list()))).collect();
         ctx.showing = crate::rows_shown(page);
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        ctx.params = written.iter().map(|h| (h.name.name.clone(), h.params.iter().map(|p| p.ty.clone()).collect())).collect();
+        // Each call with values the parts wire, with its values as C.
+        let calls: Vec<(String, String, Vec<String>)> = page
+            .map(crate::wired_calls)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|h| {
+                let decl = written.iter().find(|d| d.name.name == h.handler)?;
+                let values = h.args.iter().zip(&decl.params).map(|(v, p)| literal(project, &p.ty, v)).collect();
+                Some((clarity_spec::widgets::handler_call(h), format!("{p}_{}", snake(&h.handler)), values))
+            })
+            .collect();
 
         let mut fields = String::new();
         let mut load = String::new();
         let mut to = String::new();
         let mut from = String::new();
         for d in data {
-            let (member, entity, key) = (ident(&d.name.name), &d.entity.name, string(&d.name.name));
+            let (member, key) = (ident(&d.name.name), string(&d.name.name));
+            if let DataKind::Value { ty, default } = &d.of {
+                // A plain value: at its default, or empty, until the JSON gives one.
+                let info = type_ref_info(project, ty);
+                let start = match default {
+                    Some(value) => literal(project, ty, value),
+                    None => zero(&info),
+                };
+                let (write, read) = match &info {
+                    TypeInfo::Text => ("clarity_json_text(w->{m})".to_string(), "text"),
+                    TypeInfo::Integer | TypeInfo::Duration => ("clarity_json_integer(w->{m})".into(), "integer"),
+                    TypeInfo::Decimal | TypeInfo::Money => ("clarity_json_decimal(w->{m})".into(), "decimal"),
+                    TypeInfo::Bool => ("clarity_json_bool(w->{m})".into(), "bool"),
+                    TypeInfo::Date => ("clarity_json_date(w->{m})".into(), "date"),
+                    TypeInfo::DateTime => ("clarity_json_date_time(w->{m})".into(), "date_time"),
+                    TypeInfo::Enum(e) => (format!("clarity_json_text({}_name(w->{{m}}))", prefix(e)), "enum"),
+                    other => {
+                        errors.push(format!("data '{}' of {name}: a plain value of {other:?} is not generated yet for C", d.name.name));
+                        continue;
+                    }
+                };
+                let _ = writeln!(fields, "    {} {member};", value_type(&info));
+                let _ = writeln!(load, "    w->{member} = {start};");
+                let _ = writeln!(to, "    cJSON_AddItemToObject(out, {key}, {});", write.replace("{m}", &member));
+                if let TypeInfo::Enum(e) = &info {
+                    let _ = writeln!(
+                        from,
+                        "    w->{member} = {start};\n    const char* {member}_name = NULL;\n    if (!clarity_json_get_text(in, {key}, &{member}_name)) return false;\n    if ({member}_name) w->{member} = {}_from({member}_name);",
+                        prefix(e)
+                    );
+                } else {
+                    let _ = writeln!(from, "    w->{member} = {start};\n    if (!clarity_json_get_{read}(in, {key}, &w->{member})) return false;");
+                }
+                continue;
+            }
+            let entity = &d.entity().expect("a record or a list").name;
             let e = prefix(entity);
-            if d.list {
+            if d.is_list() {
                 let _ = writeln!(fields, "    {} {member};", list_type(entity));
                 let _ = writeln!(load, "    if (!{e}_all(db, &w->{member})) return false;");
                 let _ = writeln!(to, "    cJSON_AddItemToObject(out, {key}, {e}_list_json(&w->{member}));");
@@ -310,12 +363,23 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             if !code.trim_end().ends_with("return true;") {
                 code.push_str("return true;\n");
             }
-            let code = unused(&code, &["db", "ui", "w"]);
+            // The values a click gives it, typed.
+            let values: String = handler
+                .params
+                .iter()
+                .map(|p| format!(", {} {}", value_type(&type_ref_info(project, &p.ty)), ident(&p.name.name)))
+                .collect();
+            let mut names = vec!["db".to_string(), "ui".into(), "w".into()];
+            names.extend(handler.params.iter().map(|p| ident(&p.name.name)));
+            let code = unused(&code, &names.iter().map(String::as_str).collect::<Vec<_>>());
             if emitter.errors.is_empty() {
-                let signature = format!("bool {function}(ClarityDb* db, ClarityUi* ui, {struct_name}* w)");
+                let signature = format!("bool {function}(ClarityDb* db, ClarityUi* ui, {struct_name}* w{values})");
                 let _ = writeln!(declarations, "{signature};");
                 let _ = write!(source, "{signature} {{\n{}}}\n\n", indent(&code, 1));
-                handlers.push((handler.name.name.clone(), function));
+                // One that takes values is called with them, through the calls.
+                if handler.params.is_empty() {
+                    handlers.push((handler.name.name.clone(), function));
+                }
             } else {
                 errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
             }
@@ -323,9 +387,9 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
         let what = if app.is_some() { "the app" } else { name.as_str() };
         let _ = write!(
             header,
-            "/// The data of {what}, as its handlers see it.\ntypedef struct {{\n{fields}}} {struct_name};\n/// The data when it opens: every record of a list, a new record otherwise.\nbool {p}_load(ClarityDb* db, {struct_name}* w);\ncJSON* {p}_json(const {struct_name}* w);\nbool {p}_from_json(const cJSON* in, {struct_name}* w);\n{declarations}\n"
+            "/// The data of {what}, as its handlers see it.\ntypedef struct {{\n{fields}}} {struct_name};\n/// The data when it opens: every record of a list, a new record otherwise, each value at its default.\nbool {p}_load(ClarityDb* db, {struct_name}* w);\ncJSON* {p}_json(const {struct_name}* w);\nbool {p}_from_json(const cJSON* in, {struct_name}* w);\n{declarations}\n"
         );
-        let value = if from.is_empty() { "" } else { "    const cJSON* value;\n" };
+        let value = if from.contains("(value = ") { "    const cJSON* value;\n" } else { "" };
         let load = unused(&format!("*w = ({struct_name}){{0}};\n{}return true;\n", dedent(&load)), &["db"]);
         let to = unused(&format!("cJSON* out = cJSON_CreateObject();\n{}return out;\n", dedent(&to)), &["w"]);
         let from = unused(&format!("*w = ({struct_name}){{0}};\n{}{}return true;\n", dedent(value), dedent(&from)), &["in"]);
@@ -336,9 +400,22 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             indent(&to, 1),
             indent(&from, 1)
         );
-        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, is_app: app.is_some(), events });
+        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, calls, is_app: app.is_some(), events });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
+}
+
+/// A value written in the design as C, of the parameter's type.
+fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
+    use clarity_spec::model::Literal;
+    match (type_ref_info(project, ty), value) {
+        (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => decimal(n),
+        (_, Literal::Number(n)) => n.clone(),
+        (_, Literal::Str(text)) => string(text),
+        (_, Literal::Bool(b)) => b.to_string(),
+        (TypeInfo::Enum(e), Literal::Ident(v)) => constant(&e, v),
+        (_, Literal::Ident(v)) => v.clone(),
+    }
 }
 
 struct Emitter<'a> {
@@ -619,7 +696,15 @@ impl<'a> Emitter<'a> {
                 // A handler runs another handler of its window.
                 if self.types.name_of(call) == Some(&NameKind::Handler) {
                     let prefix = self.window.map(|w| w.prefix.clone()).unwrap_or_default();
-                    let _ = writeln!(out, "if (!{prefix}_{}(db, ui, w)) return false;", snake(&function.name));
+                    let params = self.window.and_then(|w| w.params.get(&function.name).cloned()).unwrap_or_default();
+                    let mut values = String::new();
+                    for (arg, param) in args.iter().zip(&params) {
+                        let ty = type_ref_info(self.project, param);
+                        let value = if is_decimal(&ty) { self.decimal(arg, &mut pre) } else { self.value(arg, &mut pre) };
+                        let _ = write!(values, ", {}", bare(value));
+                    }
+                    out.push_str(&pre);
+                    let _ = writeln!(out, "if (!{prefix}_{}(db, ui, w{values})) return false;", snake(&function.name));
                     return;
                 }
                 let returns = self.callee(&function.name).and_then(|f| f.returns.as_ref()).map(|r| type_ref_info(self.project, r));
@@ -884,10 +969,11 @@ impl<'a> Emitter<'a> {
                     let local = ident(name);
                     if self.record_values.contains(&local) { format!("&{local}") } else { local }
                 }
-                Some(NameKind::Data) if self.window.is_some() => {
-                    let list = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| n == name)).is_some_and(|(_, _, list)| *list);
-                    if list { format!("w->{}", ident(name)) } else { format!("&w->{}", ident(name)) }
-                }
+                // A record is a pointer to it; a list and a plain value are themselves.
+                Some(NameKind::Data) if self.window.is_some() => match self.window.and_then(|w| w.data.iter().find(|(n, _, _)| n == name)) {
+                    Some((_, _, false)) => format!("&w->{}", ident(name)),
+                    _ => format!("w->{}", ident(name)),
+                },
                 Some(NameKind::EnumValue(e)) => constant(e, name),
                 _ => {
                     self.errors.push(format!("'{name}' is not generated yet for C"));

@@ -77,6 +77,15 @@ pub fn rename(
             .into_iter()
             .map(|i| (i.span.start as usize, i.span.end as usize, old.to_string(), new.to_string()))
             .collect();
+        if kind == RenameKind::Enum {
+            // A window's plain values of the enum: `data pending: Operation`.
+            let data = file.pages.iter().flat_map(|p| &p.data).chain(file.apps.iter().flat_map(|a| &a.data));
+            for ty in data.filter_map(DataDecl::value) {
+                if matches!(&ty.kind, crate::code::TypeRefKind::Named { name } if name == old) {
+                    spans.push((ty.span.start as usize, ty.span.end as usize, old.to_string(), new.to_string()));
+                }
+            }
+        }
         if kind == RenameKind::Entity {
             let (was, now) = (crate::code::record_name(old), crate::code::record_name(new));
             spans.extend(
@@ -128,7 +137,7 @@ fn references<'f>(file: &'f SpecFile, kind: RenameKind, name: &str) -> Vec<&'f I
             .iter()
             .flat_map(|p| &p.data)
             .chain(file.apps.iter().flat_map(|a| &a.data));
-        out.extend(data.map(|d: &DataDecl| &d.entity));
+        out.extend(data.filter_map(|d: &DataDecl| d.entity()));
         // The code block of the entity, with its data events.
         out.extend(file.code.iter().map(|b| &b.name));
     }

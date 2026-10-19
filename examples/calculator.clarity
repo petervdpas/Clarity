@@ -2,3 +2,4 @@ project Calculator
     stack go web desktop
     output "out"
     datasource main sqlite "data/calculator.db"
+    theme Calculator

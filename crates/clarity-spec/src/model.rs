@@ -211,6 +211,9 @@ pub struct Page {
     pub name: Ident,
     pub kind: PageKind,
     pub title: Option<String>,
+    /// The size its desktop window opens at (`size 320 x 460`); none for
+    /// the standard size (layout::WINDOW_WIDTH and WINDOW_HEIGHT).
+    pub size: Option<WindowSize>,
     pub data: Vec<DataDecl>,
     /// Number of grid columns.
     pub columns: u32,
@@ -222,17 +225,61 @@ pub struct Page {
     pub span: Span,
 }
 
+/// A window's size in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+
 pub const DEFAULT_PAGE_COLUMNS: u32 = 12;
 pub const MAX_PAGE_COLUMNS: u32 = 24;
 
-/// `data customer: Customer` or `data orders: list<Order>`.
+/// What a window holds: `data customer: Customer`, `data orders:
+/// list<Order>`, `data shown: decimal`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct DataDecl {
     pub name: Ident,
-    pub entity: Ident,
-    pub list: bool,
+    pub of: DataKind,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum DataKind {
+    /// One record, new when the window opens: `data customer: Customer`.
+    Record { entity: Ident },
+    /// Records, every one when the window opens: `data orders: list<Order>`.
+    List { entity: Ident },
+    /// A plain value, at its default or empty when the window opens: `data
+    /// shown: decimal`, `data pending: Operation`, `data fresh: bool,
+    /// default true`. Its type is written as in code.
+    Value { ty: crate::code::TypeRef, default: Option<Literal> },
+}
+
+impl DataDecl {
+    /// The entity of a record or of a list; None for a plain value.
+    pub fn entity(&self) -> Option<&Ident> {
+        match &self.of {
+            DataKind::Record { entity } | DataKind::List { entity } => Some(entity),
+            DataKind::Value { .. } => None,
+        }
+    }
+
+    pub fn is_list(&self) -> bool {
+        matches!(self.of, DataKind::List { .. })
+    }
+
+    /// The type of a plain value; None for a record or a list.
+    pub fn value(&self) -> Option<&crate::code::TypeRef> {
+        match &self.of {
+            DataKind::Value { ty, .. } => Some(ty),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -321,12 +368,15 @@ pub struct WidgetProps {
 }
 
 /// `on change: name_changed`: the handler in the code behind that runs
-/// when the event happens.
+/// when the event happens, with the values it is given: `on click: digit(7)`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Handler {
     pub event: Event,
     pub handler: String,
+    /// The values the handler is run with, in the order of its parameters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<Literal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -739,6 +789,21 @@ pub struct Look {
     pub border: Option<String>,
     pub radius: Option<u32>,
     pub weight: Option<Weight>,
+    /// The size of a style's text, in pixels.
+    pub size: Option<u32>,
+    /// A font of the theme for a style's text, by role: `mono`.
+    pub font: Option<String>,
+    /// Where a style's text sits across its part.
+    pub align: Option<Align>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Align {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]

@@ -17,7 +17,7 @@ use clarity_spec::code::{
     BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp,
     path_text, template,
 };
-use clarity_spec::model::{Command, FieldType, Frame, SpecFile, Widget};
+use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
 use super::model::{constant, decimal_literal};
 use super::names::{field, local, pascal, string, value_type, zero};
@@ -142,6 +142,8 @@ pub struct WindowCtx {
     pub data: Vec<(String, String, bool)>,
     /// The named tables and lists showing each list data (`crate::rows_shown`).
     pub showing: std::collections::BTreeMap<String, Vec<String>>,
+    /// The parameter types of each handler that takes values, by name.
+    pub params: HashMap<String, Vec<TypeRef>>,
 }
 
 impl WindowCtx {
@@ -188,14 +190,30 @@ impl WindowCtx {
     }
 }
 
+/// A value written in the design as Go, of the parameter's type.
+fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
+    use clarity_spec::model::Literal;
+    match (type_ref_info(project, ty), value) {
+        (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => super::model::decimal_literal(n),
+        (_, Literal::Number(n)) => n.clone(),
+        (_, Literal::Str(text)) => string(text),
+        (_, Literal::Bool(b)) => b.to_string(),
+        (TypeInfo::Enum(e), Literal::Ident(v)) => super::model::constant(&e, v),
+        (_, Literal::Ident(v)) => v.clone(),
+    }
+}
+
 /// A window or the app, as main.go dispatches to it.
 #[derive(Debug, Clone)]
 pub struct Owner {
     pub name: String,
     /// The struct holding its data: `CustomerFormWindow`, `ShopApp`.
     pub struct_name: String,
-    /// Handlers by Clarity name, with their method names.
+    /// The handlers called by name (those taking no values), with their method names.
     pub handlers: Vec<(String, String)>,
+    /// The calls with values its parts wire: as written (`digit(7)`), the
+    /// method, and the values as Go.
+    pub calls: Vec<(String, String, Vec<String>)>,
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
@@ -221,34 +239,72 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             ctx.frame(&app.frame);
             events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
-        ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
+        ctx.data = data.iter().filter_map(|d| d.entity().map(|e| (d.name.name.clone(), e.name.clone(), d.is_list()))).collect();
         ctx.showing = crate::rows_shown(page);
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        ctx.params = written.iter().map(|h| (h.name.name.clone(), h.params.iter().map(|p| p.ty.clone()).collect())).collect();
+        // Each call with values the parts wire, with its values as Go.
+        let calls: Vec<(String, String, Vec<String>)> = page
+            .map(crate::wired_calls)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|h| {
+                let decl = written.iter().find(|d| d.name.name == h.handler)?;
+                let values = h.args.iter().zip(&decl.params).map(|(v, p)| literal(project, &p.ty, v)).collect();
+                Some((clarity_spec::widgets::handler_call(h), local(&h.handler), values))
+            })
+            .collect();
 
         let rows: Vec<Vec<String>> = data
             .iter()
             .map(|d| {
-                let ty = if d.list { format!("[]{}", d.entity.name) } else { format!("*{}", d.entity.name) };
+                let ty = match &d.of {
+                    DataKind::Record { entity } => format!("*{}", entity.name),
+                    DataKind::List { entity } => format!("[]{}", entity.name),
+                    DataKind::Value { ty, .. } => super::names::value_type(&type_ref_info(project, ty)),
+                };
                 vec![pascal(&d.name.name), ty, format!("`json:\"{}\"`", d.name.name)]
             })
             .collect();
         let mut load = String::new();
         for d in data {
-            let (local_name, field_name, entity) = (local(&d.name.name), pascal(&d.name.name), &d.entity.name);
-            if d.list {
-                let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tw.{field_name} = {local_name}\n");
-            } else {
-                let _ = write!(load, "\t{local_name} := New{entity}()\n\tw.{field_name} = &{local_name}\n");
+            let (local_name, field_name) = (local(&d.name.name), pascal(&d.name.name));
+            match &d.of {
+                DataKind::List { entity } => {
+                    let entity = &entity.name;
+                    let _ = write!(load, "\t{local_name}, err := clarity.All[{entity}](db)\n\tif err != nil {{\n\t\treturn nil, err\n\t}}\n\tw.{field_name} = {local_name}\n");
+                }
+                DataKind::Record { entity } => {
+                    let _ = write!(load, "\t{local_name} := New{}()\n\tw.{field_name} = &{local_name}\n", entity.name);
+                }
+                DataKind::Value { ty, default: Some(value) } => {
+                    let _ = writeln!(load, "\tw.{field_name} = {}", literal(project, ty, value));
+                }
+                // An enum starts at its first value; the rest at Go's zero value.
+                DataKind::Value { ty, default: None } => {
+                    if let TypeInfo::Enum(e) = type_ref_info(project, ty)
+                        && let Some(first) = project.enum_decl(&e).and_then(|d| d.variants.first())
+                    {
+                        let _ = writeln!(load, "\tw.{field_name} = {}", super::model::constant(&e, &first.name.name));
+                    }
+                }
             }
         }
         let body = if rows.is_empty() { String::new() } else { super::model::aligned(&rows, "\t") };
         let _ = write!(
             out,
-            "// {struct_name} is the data of {name}, as its handlers see it.\ntype {struct_name} struct {{\n{body}}}\n\n// load{struct_name} is the data when {name} opens: every record of a list, a new record otherwise.\nfunc load{struct_name}(db *clarity.Db) (*{struct_name}, error) {{\n\tw := &{struct_name}{{}}\n{load}\treturn w, nil\n}}\n\n"
+            "// {struct_name} is the data of {name}, as its handlers see it.\ntype {struct_name} struct {{\n{body}}}\n\n// load{struct_name} is the data when {name} opens: every record of a list, a new record otherwise, each value at its default.\nfunc load{struct_name}(db *clarity.Db) (*{struct_name}, error) {{\n\tw := &{struct_name}{{}}\n{load}\treturn w, nil\n}}\n\n"
         );
 
         let mut handlers = Vec::new();
         for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
             let method = local(&handler.name.name);
+            // The values a click gives it, typed.
+            let values: String = handler
+                .params
+                .iter()
+                .map(|p| format!(", {} {}", local(&p.name.name), super::names::value_type(&type_ref_info(project, &p.ty))))
+                .collect();
             let mut emitter = Emitter::new(project, types, None, Some(&ctx));
             let mut code = String::new();
             emitter.block(&handler.body, &mut code);
@@ -256,13 +312,17 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 code.push_str("return nil\n");
             }
             if emitter.errors.is_empty() {
-                let _ = write!(out, "func (w *{struct_name}) {method}(db *clarity.Db, ui *clarity.Ui) error {{\n{}}}\n\n", indent(&code, 1));
-                handlers.push((handler.name.name.clone(), method));
+                let _ = write!(out, "func (w *{struct_name}) {method}(db *clarity.Db, ui *clarity.Ui{values}) error {{\n{}}}\n\n", indent(&code, 1));
+                // One that takes values is called with them, through the calls.
+                if handler.params.is_empty() {
+                    handlers.push((handler.name.name.clone(), method));
+                }
             } else {
                 errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
             }
         }
-        owners.push(Owner { name: name.clone(), struct_name, handlers, is_app: app.is_some(), events });
+        owners.push(Owner {
+            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
 }
@@ -511,7 +571,15 @@ impl<'a> Emitter<'a> {
                 };
                 // A handler runs another handler of its window.
                 if self.types.name_of(call) == Some(&NameKind::Handler) {
-                    out.push_str(&format!("if err := w.{}(db, ui); err != nil {{\n\treturn err\n}}\n", local(&function.name)));
+                    let params = self.window.and_then(|w| w.params.get(&function.name).cloned()).unwrap_or_default();
+                    let mut values = String::new();
+                    for (arg, param) in args.iter().zip(&params) {
+                        let ty = type_ref_info(self.project, param);
+                        let value = if is_decimal(&ty) { self.decimal(arg, &mut pre) } else { self.value(arg, &mut pre) };
+                        values.push_str(&format!(", {}", bare(value)));
+                    }
+                    out.push_str(&pre);
+                    out.push_str(&format!("if err := w.{}(db, ui{values}); err != nil {{\n\treturn err\n}}\n", local(&function.name)));
                     return;
                 }
                 let call_code = self.call_code(&function.name, args, &mut pre);

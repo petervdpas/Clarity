@@ -296,7 +296,7 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
         let _ = writeln!(events, "    // The app's own events run whatever window is given.\n    if (strcmp(event, {}) == 0) return {};", string(event), string(handler));
     }
     let mut dispatch = String::new();
-    for w in windows.iter().filter(|w| !w.handlers.is_empty()) {
+    for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = write!(
             dispatch,
             "    if (strcmp(state->window, {}) == 0) {{\n        {} w = {{0}};\n        if (!{}_from_json(state->data, &w)) return false;\n        bool ok = false;\n",
@@ -304,9 +304,13 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
             w.struct_name,
             w.prefix
         );
-        for (i, (handler, function)) in w.handlers.iter().enumerate() {
+        // The handlers by name, then the calls with values its parts wire, by
+        // their written form.
+        let plain = w.handlers.iter().map(|(handler, function)| (handler, function, String::new()));
+        let calls = w.calls.iter().map(|(call, function, values)| (call, function, values.iter().map(|v| format!(", {v}")).collect()));
+        for (i, (handler, function, values)) in plain.chain(calls).enumerate() {
             let keyword = if i == 0 { "if" } else { "else if" };
-            let _ = writeln!(dispatch, "        {keyword} (strcmp(handler, {}) == 0) ok = {function}(db, ui, &w);", string(handler));
+            let _ = writeln!(dispatch, "        {keyword} (strcmp(handler, {}) == 0) ok = {function}(db, ui, &w{values});", string(handler));
         }
         let _ = write!(
             dispatch,
@@ -433,7 +437,7 @@ int main(int argc, char** argv) {{
             return 0;
         }}
     }}
-    ClarityShellOptions options = {{{name}, {title}, {main}, page_model(), page_html(), db, &windows}};
+    ClarityShellOptions options = {{{name}, {title}, {main}, page_model(), page_html(), db, &windows, {width}, {height}}};
     int status = clarity_shell_run(&options);
     clarity_db_close(db);
     return status;
@@ -442,6 +446,9 @@ int main(int argc, char** argv) {{
         sources = sources.join("\n"),
         stores = stores.join("\n"),
         name = string(program),
-        main = string(main_window)
+        main = string(main_window),
+        // The desktop window opens at the main window's size.
+        width = crate::window_size(project, main_window).0,
+        height = crate::window_size(project, main_window).1
     )
 }

@@ -70,11 +70,26 @@ pub fn handler(project: &Project, types: &FileTypes, ctx: &WindowCtx, decl: &Han
     if !emitter.errors.is_empty() {
         return Err(emitter.errors);
     }
-    Ok(format!("    void On{}()\n    {{\n{body}    }}\n", pascal(&decl.name.name)))
+    // The values a click gives it, typed.
+    let params: Vec<String> = decl.params.iter().map(|p| format!("{} {}", value_type(&type_ref_info(project, &p.ty)), camel(&p.name.name))).collect();
+    Ok(format!("    void On{}({})\n    {{\n{body}    }}\n", pascal(&decl.name.name), params.join(", ")))
+}
+
+/// A value written in the design as C#, of the parameter's type.
+pub fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
+    use clarity_spec::model::Literal;
+    match (type_ref_info(project, ty), value) {
+        (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => format!("{n}m"),
+        (_, Literal::Number(n)) => format!("{n}L"),
+        (_, Literal::Str(text)) => string(text),
+        (_, Literal::Bool(b)) => b.to_string(),
+        (TypeInfo::Enum(e), Literal::Ident(v)) => format!("{e}.{v}"),
+        (_, Literal::Ident(v)) => v.clone(),
+    }
 }
 
 /// What a `TypeRef` names, as a checker type.
-fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
+pub(crate) fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
     match &ty.kind {
         TypeRefKind::Text => TypeInfo::Text,
         TypeRefKind::Integer => TypeInfo::Integer,
@@ -526,10 +541,8 @@ impl<'a> Emitter<'a> {
                 format!("new {}[] {{ {} }}.Contains({v})", value_type(&common), opts.join(", "))
             }
             ExprKind::Call { function, args } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
-                if !args.is_empty() {
-                    self.errors.push(format!("handler '{}' takes no arguments", function.name));
-                }
-                format!("On{}()", pascal(&function.name))
+                let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+                format!("On{}({})", pascal(&function.name), values.join(", "))
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),

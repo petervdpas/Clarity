@@ -13,9 +13,11 @@ import type { WidgetInfo } from "./generated/WidgetInfo";
 import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetProps } from "./generated/WidgetProps";
 import { frameGrids } from "./frame";
-import { findEntity, type Row } from "./model";
+import { findEntity, findEnum, type Row } from "./model";
+import { dataEntity, isList, startValue, valueField } from "./windowData";
+import type { DataDecl } from "./generated/DataDecl";
 
-export { CONTENT_PADDING, GAP, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, resizeEdits, rowAt, rowIn, scaledColumns } from "./grid";
+export { CONTENT_PADDING, GAP, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, resizeEdits, rowAt, rowIn, scaledColumns, windowSize } from "./grid";
 
 export function allPages(preview: Preview): Page[] {
   return preview.project.files.flatMap((f) => f.pages);
@@ -34,6 +36,7 @@ export function appAsPage(app: App): Page {
     name: app.name,
     kind: "window",
     title: app.title,
+    size: null,
     data: app.data,
     columns: 12,
     widgets: [],
@@ -126,26 +129,50 @@ export function overlaps(a: Rect, b: Rect): boolean {
 // ---------------------------------------------------------------------------
 // Data
 
-/** Sample data a page shows: one record or a list of records per data declaration. */
-export type PageData = Record<string, { entity: Entity; list: boolean; rows: Row[] }>;
+/** The data a page shows, by name: one record or a list of records, or a
+ *  plain value. A plain value is a record of one field named after it, and
+ *  `value` is set. */
+export type PageData = Record<string, { entity: Entity; list: boolean; rows: Row[]; value?: boolean }>;
 
+/** A plain value as a record of one field, in `row`. */
+export function valueEntry(decl: DataDecl, row: Row): PageData[string] | null {
+  const field = valueField(decl);
+  if (!field) return null;
+  const entity: Entity = { name: decl.name, fields: [field], table: null, key: null, span: decl.span };
+  return { entity, list: false, rows: [row], value: true };
+}
+
+/** The first value of an enum, where a plain value of it starts. */
+export function firstValue(preview: Preview, decl: DataDecl): string | null {
+  if (decl.of.kind !== "value" || decl.of.ty.kind.kind !== "named") return null;
+  return findEnum(preview, decl.of.ty.kind.name)?.variants[0]?.name.name ?? null;
+}
+
+/** Sample data a page shows in the designer. */
 export function pageData(preview: Preview, page: Page): PageData {
   const data: PageData = {};
   for (const decl of page.data) {
-    const entity = findEntity(preview, decl.entity.name);
+    const name = dataEntity(decl);
+    if (name === null) {
+      const entry = valueEntry(decl, { [decl.name.name]: startValue(decl, firstValue(preview, decl)) });
+      if (entry) data[decl.name.name] = entry;
+      continue;
+    }
+    const entity = findEntity(preview, name);
     if (!entity) continue;
     const rows = preview.samples[entity.name.name] ?? [];
-    data[decl.name.name] = { entity, list: decl.list, rows: decl.list ? rows : rows.slice(0, 1) };
+    data[decl.name.name] = { entity, list: isList(decl), rows: isList(decl) ? rows : rows.slice(0, 1) };
   }
   return data;
 }
 
-/** The field a `data.field` binding points at, if it resolves. */
+/** The field a binding points at, if it resolves: `data.field`, or a plain value by its name. */
 export function boundField(data: PageData, bind: string | null): { record: Row; field: Field } | null {
   if (!bind) return null;
   const [name, fieldName] = bind.split(".");
   const entry = data[name];
-  const field = fieldName ? entry?.entity.fields.find((f) => f.name.name === fieldName) : undefined;
+  const wanted = fieldName ?? (entry?.value ? name : undefined);
+  const field = wanted ? entry?.entity.fields.find((f) => f.name.name === wanted) : undefined;
   const record = entry?.rows[0];
   return field && record ? { record, field } : null;
 }

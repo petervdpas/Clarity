@@ -27,9 +27,23 @@ To add one, click **New window** on the Project or Design tab. Give it a name an
 
 ## Data and events
 
-`data name: Entity` is one record the window works on; `data name: list<Entity>` is a list. Parts bind to the data and handlers read and change it. In the designer, add data under The window in the properties panel: a name, an entity, and list ticked or not.
+`data name: Entity` is one record the window works on; `data name: list<Entity>` is a list. Parts bind to the data and handlers read and change it.
 
-Data that is not filled when the window opens starts as a new, empty record, or, for a list, as all records of the entity.
+A window can also hold plain values, which are no records and are never stored: a number it shows, a choice, a flag. They live as long as the window:
+
+```
+page Main: window
+    data shown: decimal
+    data pending: Operation
+    data fresh: bool, default true
+    text name display at 1,1 span 4 bind shown
+```
+
+A plain value is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration` or an enum, and starts at its `default`, or empty (0, empty text, false, or the enum's first value). A part binds it by its name, `bind shown`, and handlers read and change it like a local. A plain `decimal` shows the digits it has.
+
+In the designer, add data under The window in the properties panel: a name, and what it holds: an entity (with list ticked or not) under Records, or a type or enum under Values. Each data item is listed in the Parts panel, to drag onto the window: a record's fields, a list as a table, a plain value as one part bound to it.
+
+Data that is not filled when the window opens starts as a new, empty record, for a list as all records of the entity, and for a plain value at its default.
 
 A window has three events of its own, listed under Events in The window:
 
@@ -38,6 +52,10 @@ A window has three events of its own, listed under Events in The window:
 - `on close`: the window is about to close.
 
 **Wire** fills in a handler name (`window_opened`, `window_returned`, `window_closed`), writes an empty handler and opens it in the Code panel. See [Handlers](code.handlers.md).
+
+## Size
+
+`size 320 x 460` is the size the window's desktop window opens at, in pixels: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. The desktop window takes the size of the window it shows first; a window opened in place keeps the size it has. Set it as Size under The window in the properties; the designer shows the window at its size.
 
 ## The grid
 

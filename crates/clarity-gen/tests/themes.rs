@@ -107,7 +107,7 @@ fn clarity_s_own_theme_is_the_base_every_theme_starts_from() {
         ".clarity-app {\n",
         "  --panel-alt: #f6f7f9;\n",
         "  --font: system-ui, -apple-system, \"Segoe UI\", \"Roboto\", sans-serif;\n",
-        "  --mono: ui-monospace, \"JetBrains Mono\", \"Cascadia Code\", \"Menlo\", monospace;\n",
+        "  --mono: ui-monospace, \"JetBrains Mono\", \"Cascadia Code\", \"Consolas\", \"Menlo\", \"DejaVu Sans Mono\", \"Noto Sans Mono\", monospace;\n",
         "  --font-size-small: 12px;\n",
         "  --padding: 4px;\n",
         "  --border-width: 1px;\n",
@@ -143,4 +143,18 @@ fn every_application_gets_the_base_first() {
     let plain = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Card: window\n    data customer: Customer\n")]);
     let files = generate(&plain, &starter("Shop", "shop")).unwrap();
     assert!(files.iter().any(|f| f.path == "ui/themes/clarity.css"));
+}
+
+/// A style that sets how its text shows: size, a font of the theme and
+/// alignment, which keeps the text an input's padding from the edge.
+#[test]
+fn a_style_sets_the_size_font_and_alignment_of_its_text() {
+    let source = "module calc\n\ntheme Calc\n    style display background \"#c9d8b0\", size 36, font mono, align right\n";
+    let project = load_sources([("calc.clarity", source)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let css = clarity_gen::theme_css(&project.files[0].themes[0]);
+    assert!(
+        css.contains(".clarity-app.theme-calc .style-display {\n  background: #c9d8b0;\n  font-size: 36px;\n  font-family: var(--mono);\n  text-align: right;\n  justify-content: flex-end;\n  padding-inline: calc(var(--padding) * 2);\n}\n"),
+        "{css}"
+    );
 }

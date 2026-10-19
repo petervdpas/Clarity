@@ -53,14 +53,18 @@ typedef struct {
     const char* title;
     bool closed;
     const char* opened;
+    int width, height;
 } Fake;
 
 static void fake_title(ClarityDesktop* desktop, const char* title) { ((Fake*)desktop)->title = clarity_copy(title); }
 static void fake_close(ClarityDesktop* desktop) { ((Fake*)desktop)->closed = true; }
 
-static void fake_open(void* context, ClarityDesktop* opener, const char* name) {
+static void fake_open(void* context, ClarityDesktop* opener, const char* name, int width, int height) {
     (void)opener;
-    ((Fake*)context)->opened = clarity_copy(name);
+    Fake* fake = context;
+    fake->opened = clarity_copy(name);
+    fake->width = width;
+    fake->height = height;
 }
 
 static cJSON* invoked(ClarityService* s, const char* command, const char* args, ClarityDesktop* caller) {
@@ -88,18 +92,25 @@ void the_shell_answers_the_renderers_commands(void) {
                "{\"value\":{\"state\":{\"window\":\"\",\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],\"open\":[],\"close\":false}}");
 
     // The window a command came from takes its title, and a window of its own starts where it was opened.
-    Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL};
+    Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL, 0, 0};
     invoked(s, "set_title", "{\"title\":\"Customer card\"}", &main.desktop);
     CHECK_TEXT(main.title, "Customer card");
     clarity_service_on_desktop(s, NULL, fake_open, &main);
     invoked(s, "open_apart", "{\"window\":\"Card\",\"with\":{\"name\":\"Linus\"}}", &main.desktop);
     CHECK_TEXT(main.opened, "apart-1");
-    Fake apart = {{"apart-1", fake_title, fake_close}, NULL, false, NULL};
+    // Without a size from the renderer, the standard one.
+    CHECK_INT(main.width, 1100);
+    CHECK_INT(main.height, 760);
+    Fake apart = {{"apart-1", fake_title, fake_close}, NULL, false, NULL, 0, 0};
     CHECK_JSON(invoked(s, "apart_start", "{}", &apart.desktop), "{\"value\":{\"window\":\"Card\",\"with\":{\"name\":\"Linus\"}}}");
     CHECK_TEXT(clarity_service_closed(s, "apart-1"), "main");
     CHECK(!clarity_service_closed(s, "apart-1"));
     invoked(s, "close_apart", "{}", &main.desktop);
     CHECK(main.closed);
+    // A window of its own opens at the size of the window it shows.
+    invoked(s, "open_apart", "{\"window\":\"Card\",\"with\":{},\"width\":320,\"height\":460}", &main.desktop);
+    CHECK_INT(main.width, 320);
+    CHECK_INT(main.height, 460);
     clarity_service_free(s);
     clarity_db_close(db);
 }

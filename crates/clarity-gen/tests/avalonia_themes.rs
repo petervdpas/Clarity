@@ -89,6 +89,17 @@ fn a_theme_resolves_on_avalonia_as_the_conformance_cases_say() {
             if look["weight"].as_str() == Some("bold") {
                 has(mode, &format!("<FontWeight x:Key=\"{key}Weight\">SemiBold</FontWeight>"));
             }
+            // How its text shows: a size, a font of the theme, where it sits.
+            if let Some(size) = look["size"].as_u64() {
+                has(mode, &format!("<x:Double x:Key=\"{key}Size\">{size}</x:Double>"));
+            }
+            if look["font"].as_str().is_some() {
+                has(mode, &format!("<FontFamily x:Key=\"{key}Font\">"));
+            }
+            if let Some(align) = look["align"].as_str() {
+                has(mode, &format!("<TextAlignment x:Key=\"{key}Align\">{}</TextAlignment>", pascal(align)));
+                has(mode, &format!("<HorizontalAlignment x:Key=\"{key}Content\">{}</HorizontalAlignment>", pascal(align)));
+            }
         }
         if let Some(font) = gives["fonts"]["text"].as_str() {
             has(&axaml, &format!("<FontFamily x:Key=\"ClarityFont\">{font}, $Default</FontFamily>"));
@@ -234,4 +245,23 @@ fn every_key_is_in_a_dictionary_once() {
             assert!(seen.insert(key), "{key} twice in\n{part}");
         }
     }
+}
+
+/// A style's text: its size, font and alignment reach a text part and a button alike.
+#[test]
+fn a_style_sets_how_its_text_shows() {
+    let source = SHOP.replace("style primary background accent, text \"#fff\", weight bold", "style primary background accent, text \"#fff\", weight bold, size 36, font mono, align right");
+    let mut project = load_sources([("shop.clarity", source.as_str())]);
+    use_themes(&mut project, &["Shop", "NightOwl"]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let app = file(&files, "App.axaml");
+    for (property, resource) in [("FontSize", "Size"), ("FontFamily", "Font"), ("TextAlignment", "Align"), ("Padding", "Padding")] {
+        has(app, &format!("<Setter Property=\"{property}\" Value=\"{{DynamicResource ClarityStylePrimary{resource}}}\" />"));
+    }
+    has(app, "<Style Selector=\":is(ContentControl).primary\">\n      <Setter Property=\"HorizontalContentAlignment\" Value=\"{DynamicResource ClarityStylePrimaryContent}\" />");
+    // A theme that leaves them out shows the text as a part does.
+    let night = file(&files, "Themes/NightOwl.axaml");
+    has(night, "<TextAlignment x:Key=\"ClarityStylePrimaryAlign\">Left</TextAlignment>");
+    has(night, "<HorizontalAlignment x:Key=\"ClarityStylePrimaryContent\">Center</HorizontalAlignment>");
 }

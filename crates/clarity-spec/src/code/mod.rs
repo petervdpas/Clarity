@@ -28,6 +28,8 @@ pub struct CodeBlock {
 #[ts(export)]
 pub struct HandlerDecl {
     pub name: Ident,
+    /// The values a click gives it: `handler digit(d: integer)`.
+    pub params: Vec<Param>,
     pub body: Vec<Stmt>,
     pub span: Span,
 }

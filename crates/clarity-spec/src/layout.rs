@@ -4,8 +4,27 @@
 
 /// The size a window opens at on every stack, and the designer shows it at,
 /// in pixels: the width the columns share and the height growing rows fill.
+/// A window that says its own `size` opens at that instead.
 pub const WINDOW_WIDTH: u32 = 1100;
 pub const WINDOW_HEIGHT: u32 = 760;
+
+/// The smallest and largest size a window may say, in pixels: room for a
+/// part, and no larger than a large screen.
+pub const WINDOW_MIN: (u32, u32) = (200, 150);
+pub const WINDOW_MAX: (u32, u32) = (3840, 2160);
+
+/// Whether `width` x `height` is a size a window may have.
+pub fn window_size_fits(width: u32, height: u32) -> bool {
+    (WINDOW_MIN.0..=WINDOW_MAX.0).contains(&width) && (WINDOW_MIN.1..=WINDOW_MAX.1).contains(&height)
+}
+
+/// What is said when a size does not fit.
+pub fn window_size_problem() -> String {
+    format!(
+        "a window is {} to {} pixels wide and {} to {} high",
+        WINDOW_MIN.0, WINDOW_MAX.0, WINDOW_MIN.1, WINDOW_MAX.1
+    )
+}
 
 /// The height of a grid row that does not grow, in pixels.
 pub const ROW_HEIGHT: u32 = 36;

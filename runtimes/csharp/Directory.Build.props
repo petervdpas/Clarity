@@ -1,9 +1,21 @@
 <!-- What every project of Clarity's C# runtime shares: the version and the
-     author of its NuGet packages (Clarity.Runtime and Clarity.Avalonia),
-     which always go out together. The test projects are not packed. -->
+     package settings of its NuGet packages (Clarity.Runtime and
+     Clarity.Avalonia), which always go out together. The test projects are
+     not packed. -->
 <Project>
   <PropertyGroup>
     <Version>0.1.0</Version>
     <Authors>Peter van de Pas</Authors>
+    <PackageLicenseFile>assets/LICENSE.txt</PackageLicenseFile>
+    <PackageIcon>assets/icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/petervdpas/Clarity</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <EnableSourceLink>true</EnableSourceLink>
+    <DebugType>embedded</DebugType>
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
   </PropertyGroup>
 </Project>

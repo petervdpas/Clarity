@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Clarity.Avalonia.Tests/Clarity.Avalonia.Tests.csproj" />
+  <Project Path="Clarity.Avalonia/Clarity.Avalonia.csproj" />
+  <Project Path="Clarity.Runtime.Tests/Clarity.Runtime.Tests.csproj" />
+  <Project Path="Clarity.Runtime/Clarity.Runtime.csproj" />
+</Solution>

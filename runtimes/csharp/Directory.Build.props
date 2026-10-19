@@ -1,0 +1,9 @@
+<!-- What every project of Clarity's C# runtime shares: the version and the
+     author of its NuGet packages (Clarity.Runtime and Clarity.Avalonia),
+     which always go out together. The test projects are not packed. -->
+<Project>
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>Peter van de Pas</Authors>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,166 @@
+module calculator
+
+app Calculator
+    title "Calculator"
+    main Main
+
+entity Calc
+    shown: decimal(18, 8), default 0
+    entry: decimal(18, 8), default 0
+    acc: decimal(18, 8), default 0
+    op: text(1)
+    factor: decimal(18, 8), default 1
+    fresh: bool, default true
+
+function calculate(a: decimal, op: text, b: decimal) -> decimal
+    if op == "+"
+        return a + b
+    if op == "-"
+        return a - b
+    if op == "*"
+        return a * b
+    if op == "/"
+        if b == 0
+            refuse "Cannot divide by zero"
+        return a / b
+    return b
+
+action press_digit(calc: Calc, d: integer)
+    if calc.fresh
+        calc.entry = 0
+        calc.factor = 1
+        calc.fresh = false
+    if calc.factor == 1
+        calc.entry = calc.entry * 10 + d
+    else
+        calc.entry = calc.entry + d * calc.factor
+        calc.factor = calc.factor / 10
+    calc.shown = calc.entry
+
+action press_point(calc: Calc)
+    if calc.fresh
+        calc.entry = 0
+        calc.fresh = false
+        calc.factor = 0.1
+        calc.shown = 0
+    else if calc.factor == 1
+        calc.factor = 0.1
+
+action press_op(calc: Calc, op: text)
+    if calc.op == ""
+        calc.acc = calc.entry
+    else if not calc.fresh
+        let result = calculate(calc.acc, calc.op, calc.entry)
+        calc.acc = result
+    calc.shown = calc.acc
+    calc.op = op
+    calc.fresh = true
+
+action press_equals(calc: Calc)
+    if calc.op != ""
+        let result = calculate(calc.acc, calc.op, calc.entry)
+        calc.entry = result
+        calc.acc = result
+        calc.shown = result
+        calc.op = ""
+    calc.fresh = true
+
+action press_clear(calc: Calc)
+    calc.shown = 0
+    calc.entry = 0
+    calc.acc = 0
+    calc.op = ""
+    calc.factor = 1
+    calc.fresh = true
+
+action press_sign(calc: Calc)
+    calc.entry = -calc.entry
+    calc.shown = calc.entry
+
+action press_percent(calc: Calc)
+    calc.entry = calc.entry / 100
+    calc.shown = calc.entry
+
+page Main: window
+    title "Calculator"
+    data calc: Calc
+    grid 4 columns
+
+    text name display at 1,1 span 4 bind calc.shown
+    button "C" name clear at 1,2 span 1 key "Escape" on click: clear_clicked
+    button "+/-" name sign at 2,2 span 1 on click: sign_clicked
+    button "%" name percent at 3,2 span 1 on click: percent_clicked
+    button "÷" name divide at 4,2 span 1 on click: divide_clicked
+    button "7" name d7 at 1,3 span 1 key "7" on click: d7_clicked
+    button "8" name d8 at 2,3 span 1 key "8" on click: d8_clicked
+    button "9" name d9 at 3,3 span 1 key "9" on click: d9_clicked
+    button "×" name multiply at 4,3 span 1 on click: multiply_clicked
+    button "4" name d4 at 1,4 span 1 key "4" on click: d4_clicked
+    button "5" name d5 at 2,4 span 1 key "5" on click: d5_clicked
+    button "6" name d6 at 3,4 span 1 key "6" on click: d6_clicked
+    button "−" name subtract at 4,4 span 1 on click: subtract_clicked
+    button "1" name d1 at 1,5 span 1 key "1" on click: d1_clicked
+    button "2" name d2 at 2,5 span 1 key "2" on click: d2_clicked
+    button "3" name d3 at 3,5 span 1 key "3" on click: d3_clicked
+    button "+" name add at 4,5 span 1 on click: add_clicked
+    button "0" name d0 at 1,6 span 2 key "0" on click: d0_clicked
+    button "." name point at 3,6 span 1 on click: point_clicked
+    button "=" name equals at 4,6 span 1 default on click: equals_clicked
+
+code Main
+    handler d0_clicked
+        press_digit(calc, 0)
+
+    handler d1_clicked
+        press_digit(calc, 1)
+
+    handler d2_clicked
+        press_digit(calc, 2)
+
+    handler d3_clicked
+        press_digit(calc, 3)
+
+    handler d4_clicked
+        press_digit(calc, 4)
+
+    handler d5_clicked
+        press_digit(calc, 5)
+
+    handler d6_clicked
+        press_digit(calc, 6)
+
+    handler d7_clicked
+        press_digit(calc, 7)
+
+    handler d8_clicked
+        press_digit(calc, 8)
+
+    handler d9_clicked
+        press_digit(calc, 9)
+
+    handler point_clicked
+        press_point(calc)
+
+    handler add_clicked
+        press_op(calc, "+")
+
+    handler subtract_clicked
+        press_op(calc, "-")
+
+    handler multiply_clicked
+        press_op(calc, "*")
+
+    handler divide_clicked
+        press_op(calc, "/")
+
+    handler equals_clicked
+        press_equals(calc)
+
+    handler clear_clicked
+        press_clear(calc)
+
+    handler sign_clicked
+        press_sign(calc)
+
+    handler percent_clicked
+        press_percent(calc)

@@ -26,7 +26,7 @@ The agent cannot reach files outside the project's folder, and it writes only Cl
 
 Changes are written at once. One **Undo** takes a whole turn back, however many files it wrote. A project the agent made during a turn opens with a history of its own.
 
-**Stop** ends a running turn after the step it is in. A turn also ends after 40 steps; ask again to go on.
+**Stop** ends a running turn after the step it is in. A turn also ends after 40 steps, and when it has spent its budget of tokens (200k at full price, unless its connection says otherwise; see [Connections](ai.connections.md)). The turn finishes the step it is in first, so nothing is left half done; ask again to go on.
 
 **New** forgets the conversation and starts a fresh one. It is not available while a turn runs.
 
@@ -39,7 +39,7 @@ This turn 48.2k in (41k from the cache), 1.3k out. Session 210.4k in, 6.8k out.
 ```
 
 - `in` is everything sent to the model: your words, the conversation so far, the instructions and the tool results.
-- `from the cache` is the part of `in` the model had seen before and served from its cache, which costs about a tenth.
+- `from the cache` is the part of `in` the model had seen before and served from its cache, which costs a tenth of the full price or less, depending on the model.
 - `out` is what the model wrote: its answers and its tool calls.
 
 The turn counts restart with each request. The session counts add up the whole conversation; **New** sets them back to zero.

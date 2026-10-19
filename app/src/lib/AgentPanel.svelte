@@ -73,7 +73,7 @@
   </div>
 
   {#if usageLine(agent.turnUsage, agent.sessionUsage)}
-    <p class="usage" title="Tokens sent to the model (in) and written by it (out); what the cache served costs a tenth">{usageLine(agent.turnUsage, agent.sessionUsage)}</p>
+    <p class="usage" title="Tokens sent to the model (in) and written by it (out); what the cache served costs a tenth or less">{usageLine(agent.turnUsage, agent.sessionUsage)}</p>
   {/if}
 
   <footer>

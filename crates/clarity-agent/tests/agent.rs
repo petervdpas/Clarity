@@ -61,7 +61,7 @@ fn answer(text: &str) -> ModelReply {
 }
 
 fn agent() -> Agent {
-    Agent { system: "You work on Clarity projects.".into(), max_steps: 10 }
+    Agent { system: "You work on Clarity projects.".into(), max_steps: 10, budget: None }
 }
 
 #[test]
@@ -162,4 +162,28 @@ fn every_answer_tells_its_tokens() {
     assert_eq!(first + second, Usage { input: 70, cache_write: 2120, cache_read: 2000, output: 70 });
     // The whole prompt is the uncached part plus what the cache wrote and read.
     assert_eq!(second.prompt(), 2160);
+}
+
+/// A turn stops when the tokens it spent at full price reach its budget:
+/// after the step that reached it, with every tool call answered, so the
+/// conversation can go on in the next turn.
+#[test]
+fn a_turn_stops_at_its_budget() {
+    // Each step: 1,000 written to the cache and 200 written by the model, so
+    // 1,200 at full price; 50,000 read from the cache, which counts not.
+    let step = Usage { input: 0, cache_write: 1000, cache_read: 50_000, output: 200 };
+    assert_eq!(step.billed(), 1200);
+    let mut model = Script {
+        replies: (0..5).map(|i| ModelReply { usage: step, ..tool_use(&format!("t{i}"), "write_file", json!({"path": "a.clarity", "text": "module a"})) }).collect(),
+        asked: vec![],
+    };
+    let mut conversation = Vec::new();
+    let mut events = Vec::new();
+    let agent = Agent { budget: Some(3000), ..agent() };
+    agent.run(&mut model, &mut Files::default(), &mut conversation, "Go", &AtomicBool::new(false), &mut |e| events.push(e)).unwrap();
+    // Steps of 1,200: after the third the turn has spent 3,600 of 3,000.
+    assert_eq!(model.asked.len(), 3);
+    assert_eq!(events.last(), Some(&Event::OverBudget { spent: 3600, budget: 3000 }));
+    // The last step's tool call has its result.
+    assert!(matches!(conversation.last().unwrap().content[0], Block::ToolResult { .. }));
 }

@@ -1,7 +1,7 @@
 //! The Anthropic client: the request it sends and the streamed reply it
 //! reads, from a recorded stream, so the test needs no network.
 
-use clarity_agent::anthropic::{body, read_stream};
+use clarity_agent::anthropic::{Cache, body, read_stream};
 use clarity_agent::Usage;
 use clarity_agent::{Block, Message, Request, Role, StopReason, ToolDef};
 use serde_json::json;
@@ -13,19 +13,30 @@ fn the_request_carries_the_instructions_cached_the_tools_and_the_conversation() 
         messages: vec![Message { role: Role::User, content: vec![Block::Text { text: "Make a todo app".into() }] }],
         tools: vec![ToolDef { name: "check".into(), description: "Checks the project.".into(), input_schema: json!({"type": "object"}) }],
     };
-    let sent = body(&request, "claude-sonnet-5-5", 16384);
+    let sent = body(&request, "claude-sonnet-5-5", 16384, Cache::Minutes);
     assert_eq!(
         sent,
         json!({
             "model": "claude-sonnet-5-5",
             "max_tokens": 16384,
             "stream": true,
-            // The instructions are the same every turn, so they are cached.
+            // The instructions are the same every turn: cached on their own.
             "system": [{ "type": "text", "text": "You work on Clarity projects.", "cache_control": { "type": "ephemeral" } }],
             "tools": [{ "name": "check", "description": "Checks the project.", "input_schema": { "type": "object" } }],
-            "messages": [{ "role": "user", "content": [{ "type": "text", "text": "Make a todo app" }] }]
+            "messages": [{ "role": "user", "content": [{ "type": "text", "text": "Make a todo app" }] }],
+            // The conversation so far is cached too, up to its end, so each
+            // step of a turn reads what came before at the cache's price.
+            "cache_control": { "type": "ephemeral" }
         })
     );
+    // An hour's cache, for turns further apart than five minutes, on both marks.
+    let long = body(&request, "claude-sonnet-5-5", 16384, Cache::Hour);
+    assert_eq!(long["cache_control"], json!({ "type": "ephemeral", "ttl": "1h" }));
+    assert_eq!(long["system"][0]["cache_control"], json!({ "type": "ephemeral", "ttl": "1h" }));
+    assert_eq!(Cache::from_field("1h"), Some(Cache::Hour));
+    assert_eq!(Cache::from_field(" 5m "), Some(Cache::Minutes));
+    assert_eq!(Cache::from_field(""), Some(Cache::Minutes));
+    assert_eq!(Cache::from_field("forever"), None);
 }
 
 const STREAM: &str = r#"event: message_start

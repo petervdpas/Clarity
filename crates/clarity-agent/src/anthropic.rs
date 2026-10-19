@@ -12,16 +12,46 @@ use crate::{Block, Model, ModelReply, Request, StopReason, Usage};
 const API_VERSION: &str = "2023-06-01";
 
 /// A model behind Anthropic's API, as a connection describes it.
+/// How long the model's cache keeps the conversation between requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cache {
+    /// Five minutes, renewed by every request that reads it: enough within
+    /// a turn, whose steps follow each other. The cheaper one to write.
+    Minutes,
+    /// An hour, for turns that are further apart; it costs twice as much to
+    /// write as reading the conversation uncached would.
+    Hour,
+}
+
+impl Cache {
+    /// The connection's `cacheTtl` field: `5m` (the default when it is empty) or `1h`.
+    pub fn from_field(text: &str) -> Option<Cache> {
+        match text.trim() {
+            "" | "5m" => Some(Cache::Minutes),
+            "1h" => Some(Cache::Hour),
+            _ => None,
+        }
+    }
+
+    fn mark(self) -> Value {
+        match self {
+            Cache::Minutes => json!({ "type": "ephemeral" }),
+            Cache::Hour => json!({ "type": "ephemeral", "ttl": "1h" }),
+        }
+    }
+}
+
 pub struct Anthropic {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
     pub max_tokens: u32,
+    pub cache: Cache,
     client: reqwest::blocking::Client,
 }
 
 impl Anthropic {
-    pub fn new(base_url: &str, api_key: &str, model: &str, max_tokens: u32) -> Result<Anthropic, String> {
+    pub fn new(base_url: &str, api_key: &str, model: &str, max_tokens: u32, cache: Cache) -> Result<Anthropic, String> {
         let client = reqwest::blocking::Client::builder()
             // A long answer streams for a while; only the connection itself has a limit.
             .connect_timeout(std::time::Duration::from_secs(20))
@@ -33,6 +63,7 @@ impl Anthropic {
             api_key: api_key.to_string(),
             model: model.to_string(),
             max_tokens,
+            cache,
             client,
         })
     }
@@ -45,7 +76,7 @@ impl Model for Anthropic {
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", API_VERSION)
-            .json(&body(request, &self.model, self.max_tokens))
+            .json(&body(request, &self.model, self.max_tokens, self.cache))
             .send()
             .map_err(|err| format!("cannot reach {}: {err}", self.base_url))?;
         let status = response.status();
@@ -61,16 +92,19 @@ impl Model for Anthropic {
     }
 }
 
-/// The request as the API takes it, streamed. The instructions are the
-/// same every turn, so they are marked for caching.
-pub fn body(request: &Request, model: &str, max_tokens: u32) -> Value {
+/// The request as the API takes it, streamed. Two cache marks: one on the
+/// instructions, the same every turn, and one at the end of the
+/// conversation (the request's own), which moves along as it grows, so every
+/// step reads what came before from the cache.
+pub fn body(request: &Request, model: &str, max_tokens: u32, cache: Cache) -> Value {
     json!({
         "model": model,
         "max_tokens": max_tokens,
         "stream": true,
-        "system": [{ "type": "text", "text": request.system, "cache_control": { "type": "ephemeral" } }],
+        "system": [{ "type": "text", "text": request.system, "cache_control": cache.mark() }],
         "tools": request.tools,
         "messages": request.messages,
+        "cache_control": cache.mark(),
     })
 }
 

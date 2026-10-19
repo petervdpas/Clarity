@@ -26,6 +26,10 @@ test("text pieces join the answer, and tools show with their results", () => {
 test("a stop and a failure leave a note", () => {
   assert.deepEqual(applyEvent([], { kind: "stopped" }), [{ kind: "note", text: "Stopped." }]);
   assert.deepEqual(applyEvent([], { kind: "failed", message: "the model refused" }), [{ kind: "error", text: "the model refused" }]);
+  // A turn that spent its budget says so, and how to go on.
+  assert.deepEqual(applyEvent([], { kind: "overBudget", spent: 213_400, budget: 200_000 }), [
+    { kind: "note", text: "Stopped at the turn's budget: 213.4k tokens at full price, of 200k. Ask again to go on." },
+  ]);
 });
 
 test("a tool line says what the tool did to what", () => {

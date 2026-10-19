@@ -102,6 +102,12 @@ impl Usage {
         self.input + self.cache_write + self.cache_read
     }
 
+    /// What costs full price: the prompt not read from the cache, and the
+    /// answer. What a turn's budget counts.
+    pub fn billed(&self) -> u64 {
+        self.input + self.cache_write + self.output
+    }
+
     /// Whether the model told anything.
     pub fn is_empty(&self) -> bool {
         *self == Usage::default()
@@ -176,14 +182,24 @@ pub enum Event {
     Finished,
     /// The person stopped the turn.
     Stopped,
+    /// The turn spent its budget of tokens at full price (`Usage::billed`).
+    #[serde(rename_all = "camelCase")]
+    OverBudget {
+        #[ts(type = "number")]
+        spent: u64,
+        #[ts(type = "number")]
+        budget: u64,
+    },
     /// The turn ended on an error.
     Failed { message: String },
 }
 
-/// How the agent works: its instructions and its limit of steps per turn.
+/// How the agent works: its instructions, and the limits of a turn: its
+/// steps, and the tokens it may spend at full price.
 pub struct Agent {
     pub system: String,
     pub max_steps: usize,
+    pub budget: Option<u64>,
 }
 
 impl Agent {
@@ -201,6 +217,7 @@ impl Agent {
     ) -> Result<(), String> {
         conversation.push(Message { role: Role::User, content: vec![Block::Text { text: user.into() }] });
         let definitions = tools.definitions();
+        let mut spent = 0;
         for _ in 0..self.max_steps {
             if stop.load(Ordering::SeqCst) {
                 events(Event::Stopped);
@@ -217,6 +234,7 @@ impl Agent {
             if !reply.usage.is_empty() {
                 events(Event::Usage { usage: reply.usage });
             }
+            spent += reply.usage.billed();
             conversation.push(Message { role: Role::Assistant, content: reply.content.clone() });
             let calls: Vec<(String, String, Value)> = reply
                 .content
@@ -242,6 +260,13 @@ impl Agent {
                 results.push(Block::ToolResult { tool_use_id: id, content: result.text, is_error: result.is_error });
             }
             conversation.push(Message { role: Role::User, content: results });
+            // Every call has its result, so the next turn can go on from here.
+            if let Some(budget) = self.budget
+                && spent >= budget
+            {
+                events(Event::OverBudget { spent, budget });
+                return Ok(());
+            }
         }
         if stop.load(Ordering::SeqCst) {
             events(Event::Stopped);

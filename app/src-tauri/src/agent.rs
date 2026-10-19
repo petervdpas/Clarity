@@ -410,7 +410,38 @@ fn model_of(app: &AppHandle, connection: &str) -> Result<clarity_agent::anthropi
         return Err(format!("the connection {connection} names no model"));
     }
     let max_tokens = field("maxTokens")?.trim().parse().unwrap_or(16384);
-    clarity_agent::anthropic::Anthropic::new(&base_url, &api_key, &model, max_tokens)
+    // How long the model keeps the conversation cached: 5m (the default) or 1h.
+    let ttl = field("cacheTtl")?;
+    let cache = clarity_agent::anthropic::Cache::from_field(&ttl).ok_or_else(|| format!("the connection {connection} has cacheTtl {ttl}; use 5m or 1h"))?;
+    clarity_agent::anthropic::Anthropic::new(&base_url, &api_key, &model, max_tokens, cache)
+}
+
+/// The budget of a turn when the connection names none: tokens at full
+/// price (cache reads are not counted).
+const DEFAULT_BUDGET: u64 = 200_000;
+
+/// A connection's `turnBudget`: tokens like `250000`, `80k` or `1.5M`, the
+/// default when empty, or `none` for no budget.
+fn turn_budget(text: &str) -> Result<Option<u64>, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(Some(DEFAULT_BUDGET));
+    }
+    if text.eq_ignore_ascii_case("none") {
+        return Ok(None);
+    }
+    let (number, scale) = match text.chars().last() {
+        Some('k' | 'K') => (&text[..text.len() - 1], 1_000.0),
+        Some('m' | 'M') => (&text[..text.len() - 1], 1_000_000.0),
+        _ => (text, 1.0),
+    };
+    number
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|n| *n > 0.0)
+        .map(|n| Some((n * scale).round() as u64))
+        .ok_or_else(|| format!("turnBudget {text} is no number of tokens; write it like 200k, 250000 or none"))
 }
 
 /// Starts a turn: the person's words go to the model, which works on the
@@ -419,6 +450,10 @@ fn model_of(app: &AppHandle, connection: &str) -> Result<clarity_agent::anthropi
 pub fn agent_send(text: String, connection: String, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
     // The key is read before the turn starts, so a locked vault asks for its password first.
     let mut model = model_of(&app, &connection)?;
+    let budget = {
+        let vault = app.state::<super::vault::VaultState>();
+        turn_budget(&super::vault::resolve(&vault, &connection, "turnBudget")?).map_err(|err| format!("the connection {connection}: {err}"))?
+    };
     if agent.running.swap(true, Ordering::SeqCst) {
         return Err("the agent is still working; stop it first".into());
     }
@@ -433,7 +468,7 @@ pub fn agent_send(text: String, connection: String, app: AppHandle, agent: State
         let state = app.state::<AgentState>();
         let mut tools = ProjectTools::new(project, projects_folder);
         let mut conversation = state.conversation.lock().map(|c| c.clone()).unwrap_or_default();
-        let agent = Agent { system: instructions(), max_steps: MAX_STEPS };
+        let agent = Agent { system: instructions(), max_steps: MAX_STEPS, budget };
         let _ = agent.run(&mut model, &mut tools, &mut conversation, &text, &stop, &mut |event| {
             let _ = app.emit(AGENT_EVENT, &event);
         });
@@ -571,6 +606,16 @@ mod tests {
         assert!(told.contains("manual tool") && told.contains("reference tool") && told.contains("write_file"));
         // Small enough for every message: the whole reference was some 18,000 tokens.
         assert!(told.len() < 16_000, "the instructions are {} bytes", told.len());
+    }
+
+    #[test]
+    fn a_turn_budget_reads_as_tokens() {
+        assert_eq!(turn_budget(""), Ok(Some(200_000)));
+        assert_eq!(turn_budget("250000"), Ok(Some(250_000)));
+        assert_eq!(turn_budget(" 80k "), Ok(Some(80_000)));
+        assert_eq!(turn_budget("1.5M"), Ok(Some(1_500_000)));
+        assert_eq!(turn_budget("none"), Ok(None));
+        assert!(turn_budget("lots").unwrap_err().contains("lots"));
     }
 
     #[test]

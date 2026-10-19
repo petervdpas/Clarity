@@ -17,6 +17,8 @@ The agent looks for a connection named `anthropic` unless you pick another. Its 
 - `apikey`: your Anthropic API key. Required. Take it from the vault.
 - `baseUrl`: the address of the API. Leave it out for `https://api.anthropic.com`.
 - `maxTokens`: the most the model may write in one answer. Leave it out for 16384.
+- `cacheTtl`: how long the model keeps the conversation in its cache between requests: `5m` (leave it out for this) or `1h`. Within a turn the steps follow each other, so five minutes is enough and cheaper. Choose `1h` when you often take longer than five minutes between your requests: without it, the next request sends the whole conversation again at the full price. An hour's cache costs more to write, so check the token line under the conversation to see which pays off for you.
+- `turnBudget`: the most one turn may spend, in tokens at full price: what the model reads without its cache, writes to its cache, and writes as its answer (what it reads from its cache is not counted, as that costs a tenth or less). Write it like `200k`, `250000` or `1.5M`; leave it out for 200k, or write `none` for no budget.
 
 A typical connection, as the Vault tab shows it:
 

@@ -27,6 +27,8 @@ export function applyEvent(items: Item[], event: AgentEvent): Item[] {
       return [...items, { kind: "note", text: "Stopped." }];
     case "failed":
       return [...items, { kind: "error", text: event.message }];
+    case "overBudget":
+      return [...items, { kind: "note", text: `Stopped at the turn's budget: ${tokens(event.spent)} tokens at full price, of ${tokens(event.budget)}. Ask again to go on.` }];
     default:
       return items;
   }

@@ -4,4 +4,4 @@ import type { Usage } from "./Usage";
 /**
  * What happens during a turn, for the screen.
  */
-export type AgentEvent = { "kind": "text", text: string, } | { "kind": "usage", usage: Usage, } | { "kind": "toolStart", id: string, name: string, input: unknown, } | { "kind": "toolDone", id: string, name: string, text: string, isError: boolean, } | { "kind": "finished" } | { "kind": "stopped" } | { "kind": "failed", message: string, };
+export type AgentEvent = { "kind": "text", text: string, } | { "kind": "usage", usage: Usage, } | { "kind": "toolStart", id: string, name: string, input: unknown, } | { "kind": "toolDone", id: string, name: string, text: string, isError: boolean, } | { "kind": "finished" } | { "kind": "stopped" } | { "kind": "overBudget", spent: number, budget: number, } | { "kind": "failed", message: string, };

@@ -59,33 +59,44 @@ const RUNTIME_FILES: [(&str, &str); 28] = [
     ("Clarity.Runtime/Text.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime/Text.cs")),
 ];
 
-/// What a server database brings into a project: the symbol that compiles
-/// its driver in, the driver, and the runtime's packages it needs.
+/// What a server database brings into a project: its package of the
+/// runtime (the driver and the class whose Use() turns it on), and that
+/// package's project file, whose packages the application takes over.
 struct Server {
     sql: Sql,
-    constant: &'static str,
-    driver: (&'static str, &'static str),
-    packages: &'static [&'static str],
+    /// The class whose Use() turns the driver on, like `PostgreSql`.
+    class: &'static str,
+    files: [(&'static str, &'static str); 2],
+    project: &'static str,
 }
 
 const SERVERS: [Server; 3] = [
     Server {
         sql: Sql::Postgres,
-        constant: "CLARITY_POSTGRES",
-        driver: ("Clarity.Runtime/PostgresDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime/PostgresDriver.cs")),
-        packages: &["Npgsql"],
+        class: "PostgreSql",
+        files: [
+            ("Clarity.Runtime.PostgreSql/PostgresDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.PostgreSql/PostgresDriver.cs")),
+            ("Clarity.Runtime.PostgreSql/PostgreSql.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.PostgreSql/PostgreSql.cs")),
+        ],
+        project: include_str!("../../../../runtimes/csharp/Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj"),
     },
     Server {
         sql: Sql::Mysql,
-        constant: "CLARITY_MYSQL",
-        driver: ("Clarity.Runtime/MysqlDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime/MysqlDriver.cs")),
-        packages: &["MySqlConnector"],
+        class: "MySql",
+        files: [
+            ("Clarity.Runtime.MySql/MysqlDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.MySql/MysqlDriver.cs")),
+            ("Clarity.Runtime.MySql/MySql.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.MySql/MySql.cs")),
+        ],
+        project: include_str!("../../../../runtimes/csharp/Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj"),
     },
     Server {
         sql: Sql::Mssql,
-        constant: "CLARITY_MSSQL",
-        driver: ("Clarity.Runtime/MssqlDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime/MssqlDriver.cs")),
-        packages: &["Microsoft.Data.SqlClient", "System.Security.Cryptography.Pkcs"],
+        class: "SqlServer",
+        files: [
+            ("Clarity.Runtime.SqlServer/MssqlDriver.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.SqlServer/MssqlDriver.cs")),
+            ("Clarity.Runtime.SqlServer/SqlServer.cs", include_str!("../../../../runtimes/csharp/Clarity.Runtime.SqlServer/SqlServer.cs")),
+        ],
+        project: include_str!("../../../../runtimes/csharp/Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj"),
     },
 ];
 
@@ -125,7 +136,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !servers.is_empty() {
         files.push(text(SERVER_DRIVER.0, SERVER_DRIVER.1.to_string()));
     }
-    files.extend(servers.iter().map(|s| text(s.driver.0, s.driver.1.to_string())));
+    files.extend(servers.iter().flat_map(|s| s.files.iter().map(|(path, body)| text(path, body.to_string()))));
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -147,7 +158,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(errors);
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
-    files.push(text("Program.cs", program_cs(&name, &databases, settings)));
+    files.push(text("Program.cs", program_cs(&name, &databases, &servers, settings)));
     files.push(text("App.axaml.cs", app_cs(project, &name, &main_window)));
     files.push(text("Views.cs", views_cs(project, &name)));
     files.push(text("Shown.cs", shown_cs(project, &name)));
@@ -192,26 +203,15 @@ fn main_window(project: &Project) -> Option<String> {
 }
 
 /// The project file, with the runtime's packages at the versions it is
-/// tested with: those of the server databases only where a data source is one.
+/// tested with, and those of the server databases its data sources are.
 fn csproj(name: &str, servers: &[&Server], pictures: bool) -> String {
-    let unused: Vec<String> = SERVERS
-        .iter()
-        .filter(|s| !servers.iter().any(|used| used.sql == s.sql))
-        .flat_map(|s| s.packages.iter().map(|p| format!("Include=\"{p}\"")))
-        .collect();
     let packages: String = RUNTIME_PROJECTS
         .iter()
+        .chain(servers.iter().map(|s| &s.project))
         .flat_map(|p| p.lines())
         .filter(|l| l.trim_start().starts_with("<PackageReference "))
-        .filter(|l| !unused.iter().any(|u| l.contains(u.as_str())))
         .map(|l| format!("    {}\n", l.trim()))
         .collect();
-    let constants = if servers.is_empty() {
-        String::new()
-    } else {
-        let names: String = servers.iter().map(|s| format!(";{}", s.constant)).collect();
-        format!("\n    <DefineConstants>$(DefineConstants){names}</DefineConstants>")
-    };
     // The pictures of the project's images folder, embedded.
     let resources = if pictures { "  <ItemGroup>\n    <AvaloniaResource Include=\"images/**\" />\n  </ItemGroup>\n" } else { "" };
     format!(
@@ -224,7 +224,7 @@ fn csproj(name: &str, servers: &[&Server], pictures: bool) -> String {
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>{name}</RootNamespace>
     <AssemblyName>{name}</AssemblyName>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>{constants}
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
 {packages}  </ItemGroup>
@@ -285,7 +285,9 @@ public static class Schema
 
 /// The program: it opens the database of every data source, brings Clarity's
 /// own up to date, and starts the windows; `--check` stops after the databases.
-fn program_cs(name: &str, databases: &[(String, Sql, String)], settings: &Settings) -> String {
+fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings) -> String {
+    // The server databases, each turned on by its package before the databases open.
+    let turned_on: String = servers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
     let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
     let databases = databases
         .iter()
@@ -310,7 +312,7 @@ public static class Program
     /// <summary>Opens every database and applies the migration steps it has not had yet.</summary>
     public static Db OpenDatabases()
     {{
-        var db = Db.Connect(Databases);
+{turned_on}        var db = Db.Connect(Databases);
         foreach (var (source, steps) in Schema.Sources)
             db.MigrateSource(source, steps);
         foreach (var (name, at) in Stores)

@@ -291,7 +291,9 @@ fn every_csharp_runtime_source_file_is_copied() {
 }
 
 /// A project holds the drivers of the databases its data sources are, with
-/// their packages, and no others (as the Rust output enables cargo features).
+/// their packages, and no others: each server database is a package of its
+/// own (Clarity.Runtime.PostgreSql and the others), which the program turns
+/// on before it opens its databases.
 #[test]
 fn a_project_gets_the_drivers_of_its_databases_only() {
     let project = load_sources([("sales.clarity", SALES)]);
@@ -299,24 +301,28 @@ fn a_project_gets_the_drivers_of_its_databases_only() {
     let csproj = file(&plain, "Shop.csproj");
     assert!(!csproj.contains("Npgsql") && !csproj.contains("DefineConstants"), "{csproj}");
     assert!(!plain.iter().any(|f| f.path.ends_with("Driver.cs") && !f.path.ends_with("SqliteDriver.cs")));
+    assert!(!file(&plain, "Program.cs").contains(".Use();"));
 
-    for (kind, constant, package, driver) in [
-        (SourceKind::Postgres, "CLARITY_POSTGRES", "Include=\"Npgsql\"", "PostgresDriver.cs"),
-        (SourceKind::Mysql, "CLARITY_MYSQL", "Include=\"MySqlConnector\"", "MysqlDriver.cs"),
-        (SourceKind::Mssql, "CLARITY_MSSQL", "Include=\"Microsoft.Data.SqlClient\"", "MssqlDriver.cs"),
+    for (kind, package, folder, driver, turned_on) in [
+        (SourceKind::Postgres, "Include=\"Npgsql\"", "Clarity.Runtime.PostgreSql", "PostgresDriver.cs", "PostgreSql.Use();"),
+        (SourceKind::Mysql, "Include=\"MySqlConnector\"", "Clarity.Runtime.MySql", "MysqlDriver.cs", "MySql.Use();"),
+        (SourceKind::Mssql, "Include=\"Microsoft.Data.SqlClient\"", "Clarity.Runtime.SqlServer", "MssqlDriver.cs", "SqlServer.Use();"),
     ] {
         let mut settings = settings();
         settings.datasources[0].kind = kind;
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = generate(&project, &settings).unwrap();
         let csproj = file(&files, "Shop.csproj");
-        has(csproj, &format!("<DefineConstants>$(DefineConstants);{constant}</DefineConstants>"));
+        assert!(!csproj.contains("DefineConstants"), "{csproj}");
         has(csproj, package);
         let others = ["Include=\"Npgsql\"", "Include=\"MySqlConnector\"", "Include=\"Microsoft.Data.SqlClient\""];
         assert_eq!(others.iter().filter(|p| csproj.contains(*p)).count(), 1, "{csproj}");
-        assert!(files.iter().any(|f| f.path == format!("Clarity.Runtime/{driver}")));
+        assert!(files.iter().any(|f| f.path == format!("{folder}/{driver}")), "{folder}/{driver}");
         assert_eq!(files.iter().filter(|f| f.path.ends_with("Driver.cs")).count(), 3, "SQLite, the server's own and their base");
-        has(file(&files, "Program.cs"), "\"env:SHOP_DATABASE\")];");
+        let program = file(&files, "Program.cs");
+        has(program, "\"env:SHOP_DATABASE\")];");
+        // The driver is turned on before the databases open.
+        has(program, &format!("        {turned_on}\n        var db = Db.Connect(Databases);"));
     }
     // SQL Server's package comes with the fix of its vulnerable dependency.
     let mut settings = settings();
@@ -355,7 +361,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     has(erp_cs, "Cond.Contains(\"InvNo\", \"INV\")");
     has(erp_cs, ".Order(\"InvNo\", false)");
     // Its database's driver comes along, though Clarity owns no table there.
-    has(file(&files, "Shop.csproj"), "<DefineConstants>$(DefineConstants);CLARITY_MSSQL</DefineConstants>");
+    has(file(&files, "Program.cs"), "        SqlServer.Use();\n");
 }
 
 /// A record's id, which code can read, is the record's `Id`.

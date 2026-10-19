@@ -13,6 +13,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The cases every stack's runtime shares. -->

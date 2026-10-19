@@ -1,6 +1,9 @@
 <Solution>
   <Project Path="Clarity.Avalonia.Tests/Clarity.Avalonia.Tests.csproj" />
   <Project Path="Clarity.Avalonia/Clarity.Avalonia.csproj" />
+  <Project Path="Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
+  <Project Path="Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />
+  <Project Path="Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />
   <Project Path="Clarity.Runtime.Tests/Clarity.Runtime.Tests.csproj" />
   <Project Path="Clarity.Runtime/Clarity.Runtime.csproj" />
 </Solution>

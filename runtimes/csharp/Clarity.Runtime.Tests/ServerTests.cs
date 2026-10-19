@@ -252,6 +252,10 @@ public class ServerTests
 
     static void OnServer(string variable, Dialect dialect, string database)
     {
+        // Each server database is a package of its own, turned on as a generated program does.
+        PostgreSql.Use();
+        MySql.Use();
+        SqlServer.Use();
         if (Environment.GetEnvironmentVariable(variable) is not { Length: > 0 } at)
         {
             Assert.Skip($"{variable} is not set");

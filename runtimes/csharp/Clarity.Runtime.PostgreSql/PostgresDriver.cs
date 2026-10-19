@@ -2,7 +2,6 @@
 // TIMESTAMP, bools BOOLEAN. A migration step runs in one transaction, so a
 // step that fails leaves the database as it was.
 
-#if CLARITY_POSTGRES
 using System.Data.Common;
 using Npgsql;
 
@@ -24,4 +23,3 @@ internal sealed class PostgresDriver(NpgsqlConnection conn) : ServerDriver(conn)
 
     protected override bool IsReference(DbException e) => e is PostgresException { SqlState: ForeignKey };
 }
-#endif

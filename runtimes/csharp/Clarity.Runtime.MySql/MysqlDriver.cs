@@ -3,7 +3,6 @@
 // migration step that fails halfway keeps what ran before the failure, and
 // says so.
 
-#if CLARITY_MYSQL
 using System.Data.Common;
 using MySqlConnector;
 
@@ -47,4 +46,3 @@ internal sealed class MysqlDriver(MySqlConnection conn) : ServerDriver(conn)
         Batch(Store.Applied(version));
     }
 }
-#endif

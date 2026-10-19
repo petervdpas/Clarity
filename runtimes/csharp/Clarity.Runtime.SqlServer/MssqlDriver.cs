@@ -1,7 +1,6 @@
 // SQL Server through Microsoft.Data.SqlClient: decimals are DECIMAL, dates
 // DATE and DATETIME2, bools BIT. A migration step runs in one transaction.
 
-#if CLARITY_MSSQL
 using System.Data.Common;
 using Microsoft.Data.SqlClient;
 
@@ -25,4 +24,3 @@ internal sealed class MssqlDriver(SqlConnection conn) : ServerDriver(conn)
 
     protected override bool IsReference(DbException e) => e is SqlException { Number: ForeignKey };
 }
-#endif

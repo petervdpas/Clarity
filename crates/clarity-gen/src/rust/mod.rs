@@ -44,6 +44,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let crate_name = crate_name(settings);
     let (databases, owned) = crate::databases(project, settings, "Rust")?;
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
+    if !crate::engines(project).is_empty() {
+        features.push("engines");
+    }
     features.sort();
     features.dedup();
     let Some(main_window) = main_window(project) else {
@@ -96,8 +99,34 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let declared: String = modules.iter().map(|m| format!("pub mod {m};\n")).collect();
     files.push(text("src/modules.rs", format!("{HEADER}\n{declared}")));
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
+    files.extend(crate::engine_files(project, "engines"));
+    if !crate::engines(project).is_empty() {
+        files.push(text("src/engines.rs", engines_rs(project)));
+    }
     files.push(text("src/main.rs", main_rs(project, settings, &owners, &databases, &main_window)));
     Ok(files)
+}
+
+/// The engines of the application (DESIGN 5.11): each loaded once from its
+/// file, and every one checked when the application starts.
+fn engines_rs(project: &Project) -> String {
+    let mut out = format!(
+        "{HEADER}\n//! The engines of the application: each loaded once from its file, every one checked when the application starts.\n\nuse std::sync::OnceLock;\n\nuse clarity_runtime::{{Error, Result}};\nuse clarity_runtime::engine::Engine;\n\ntype Loaded = OnceLock<std::result::Result<Engine, String>>;\n\nfn loaded(cell: &'static Loaded, name: &str, bytes: &[u8], functions: &[&str]) -> Result<&'static Engine> {{\n    cell.get_or_init(|| Engine::load(name, bytes, functions).map_err(|e| e.to_string())).as_ref().map_err(|e| Error::Engine(e.clone()))\n}}\n"
+    );
+    let mut checks = String::new();
+    for engine in crate::engines(project) {
+        let function = snake(&engine.name.name);
+        let names: Vec<String> = engine.functions.iter().map(|f| format!("{:?}", f.name.name)).collect();
+        out.push_str(&format!(
+            "\n/// Engine {name}, from {file}.\npub fn {function}() -> Result<&'static Engine> {{\n    static ENGINE: Loaded = OnceLock::new();\n    loaded(&ENGINE, {name:?}, include_bytes!(\"../engines/{file}\"), &[{}])\n}}\n",
+            names.join(", "),
+            name = engine.name.name,
+            file = engine.file,
+        ));
+        checks.push_str(&format!("    {function}()?;\n"));
+    }
+    out.push_str(&format!("\n/// Loads every engine, so one whose file does not fit stops the application at start.\npub fn check() -> Result<()> {{\n{checks}    Ok(())\n}}\n"));
+    out
 }
 
 fn text(path: &str, body: String) -> OutFile {
@@ -172,6 +201,12 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
+    // An engine whose file does not fit its declaration stops the application at start, not at its first call.
+    let (engines_mod, check_engines) = if crate::engines(project).is_empty() {
+        ("", "")
+    } else {
+        ("mod engines;\n", "    if let Err(problem) = engines::check() {\n        eprintln!(\"{problem}\");\n        std::process::exit(1);\n    }\n")
+    };
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     let (apart_code, apart_manage, apart_events, apart_commands) = if apart {
@@ -317,7 +352,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         r#"{HEADER}{ALLOW}
 mod schema;
 mod modules;
-
+{engines_mod}
 use std::sync::Mutex;
 
 use clarity_runtime::ui::{{RefOption, Reply, Ui, WindowState, from_data, to_data}};
@@ -489,7 +524,7 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
 }}
 {apart_code}
 fn main() {{
-    let mut db = Db::connect(DATABASES).expect("cannot open the databases");
+{check_engines}    let mut db = Db::connect(DATABASES).expect("cannot open the databases");
     for (source, steps) in schema::SOURCES {{
         db.migrate_source(source, steps).expect("cannot bring the database up to date");
     }}

@@ -14,6 +14,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/shopspring/decimal v1.4.0
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.84
 	modernc.org/sqlite v1.54.0
 )

@@ -47,7 +47,7 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
 }
 
 /// What a `TypeRef` names, as a checker type.
-fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
+pub(crate) fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
     match &ty.kind {
         TypeRefKind::Text => TypeInfo::Text,
         TypeRefKind::Integer => TypeInfo::Integer,
@@ -943,6 +943,25 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadText { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadText({file})"), pre)
+            }
+            // A function of an engine, through its typed function in engines.go (DESIGN 5.11).
+            ExprKind::EngineCall { engine, function, args } => {
+                let params: Vec<clarity_spec::code::TypeRef> = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
+                    .map(|f| f.params.iter().map(|p| p.ty.clone()).collect())
+                    .unwrap_or_default();
+                let mut values = Vec::new();
+                for (arg, param) in args.iter().zip(&params) {
+                    let ty = type_ref_info(self.project, param);
+                    values.push(bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) }));
+                }
+                let call = format!("{}({})", super::engine_function(&engine.name, &function.name), values.join(", "));
+                self.lift(call, pre)
             }
             ExprKind::New { entity } => format!("clarity.New(New{}())", entity.name),
         }

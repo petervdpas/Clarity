@@ -66,6 +66,13 @@ const SHELL_FILES: [(&str, &str); 5] = [
     ("third_party/webview/webview.h", include_str!("../../../../runtimes/cpp/third_party/webview/webview.h")),
 ];
 
+/// Engines (DESIGN 5.11): the host, copied with wasm3 (shared with the C
+/// runtime) only into an application that declares an engine.
+const ENGINE_FILES: [(&str, &str); 2] = [
+    ("engine/engine.cpp", include_str!("../../../../runtimes/cpp/engine/engine.cpp")),
+    ("engine/engine.hpp", include_str!("../../../../runtimes/cpp/engine/engine.hpp")),
+];
+
 /// The name of the generated program, and of its namespace.
 pub fn program_name(settings: &Settings) -> String {
     let name = snake(&settings.name);
@@ -89,11 +96,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);
     };
+    let engines = !crate::engines(project).is_empty();
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program)),
+        text("CMakeLists.txt", cmake_lists(&program, engines)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
-    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES) {
+    let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
+    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -130,10 +139,16 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(errors);
     }
     let app = format!("{declarations}\n{windows}");
+    let engines_include = if engines { "#include \"engines.hpp\"\n" } else { "" };
     files.push(text(
         "src/app.hpp",
-        namespaced(&program, "#pragma once\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/code.hpp\"\n#include \"clarity/ui.hpp\"\n#include \"records.hpp\"\n", &app),
+        namespaced(&program, &format!("#pragma once\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/code.hpp\"\n#include \"clarity/ui.hpp\"\n{engines_include}#include \"records.hpp\"\n"), &app),
     ));
+    if engines {
+        let (header, source) = engines_cpp(project);
+        files.push(text("src/engines.hpp", namespaced(&program, "#pragma once\n\n#include \"engine/engine.hpp\"\n", &header)));
+        files.push(text("src/engines.cpp", namespaced(&program, "#include <iterator>\n\n#include \"engines.hpp\"\n", &source)));
+    }
     files.push(text("src/schema.hpp", namespaced(&program, "#pragma once\n\n#include <string>\n#include <vector>\n\n#include \"clarity/db.hpp\"\n", SCHEMA_HPP)));
     files.push(text("src/schema.cpp", schema_cpp(project, &program, &owned)?));
     files.push(text("src/page.cpp", page_cpp(project, &program)));
@@ -156,7 +171,38 @@ fn namespaced(program: &str, includes: &str, body: &str) -> String {
     format!("{HEADER}\n{includes}\nnamespace {program} {{\n\n{}\n}}  // namespace {program}\n", body.trim_end())
 }
 
-fn cmake_lists(program: &str) -> String {
+/// The engines of the application (DESIGN 5.11): each file as bytes in the
+/// program, loaded once on first use, and `check`, which loads every one so
+/// an engine whose file does not fit stops the application at start.
+/// Returns the header and the source, both in namespace `engines`.
+fn engines_cpp(project: &Project) -> (String, String) {
+    let mut header = String::from("namespace engines {\n\n");
+    let mut source = String::from("namespace engines {\n\n");
+    let mut checks = String::new();
+    for engine in crate::engines(project) {
+        let var = snake(&engine.name.name);
+        let bytes = project.engines.as_deref().unwrap_or_default().iter().find(|f| f.name == engine.file).map(|f| f.bytes.as_slice()).unwrap_or_default();
+        let rows: Vec<String> = bytes.chunks(20).map(|row| row.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ")).collect();
+        let functions: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
+        let _ = write!(header, "/// Engine {}, from {}.\nconst clarity::Engine& {var}();\n\n", engine.name.name, engine.file);
+        let _ = write!(
+            source,
+            "/// Engine {name}, from {file}.\nconst unsigned char {var}_wasm[] = {{\n    {rows}\n}};\n\nconst clarity::Engine& {var}() {{\n    static const clarity::Engine engine = clarity::Engine::load({quoted}, std::vector<uint8_t>(std::begin({var}_wasm), std::end({var}_wasm)), {{{functions}}});\n    return engine;\n}}\n\n",
+            name = engine.name.name,
+            file = engine.file,
+            rows = rows.join(",\n    "),
+            quoted = string(&engine.name.name),
+            functions = functions.join(", "),
+        );
+        let _ = writeln!(checks, "    {var}();");
+    }
+    header.push_str("/// Loads every engine, so one whose file does not fit stops the application at start.\nvoid check();\n\n}  // namespace engines\n");
+    let _ = write!(source, "void check() {{\n{checks}}}\n\n}}  // namespace engines\n");
+    (header, source)
+}
+
+fn cmake_lists(program: &str, engines: bool) -> String {
+    let engine = if engines { " clarity_engine" } else { "" };
     format!(
         "# Generated by Clarity. Do not edit: change the project in Clarity instead.
 #
@@ -174,7 +220,7 @@ include(clarity-runtime/clarity.cmake)
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
-target_link_libraries({program} PRIVATE clarity clarity_shell)
+target_link_libraries({program} PRIVATE clarity clarity_shell{engine})
 "
     )
 }
@@ -341,6 +387,8 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         );
     }
     let ready = string(&format!("{}: the databases are ready.", names::pascal(&settings.name)));
+    // An engine whose file does not fit its declaration stops the application at start.
+    let check_engines = if crate::engines(project).is_empty() { String::new() } else { format!("        {program}::engines::check();\n") };
     let title = string(&clarity_project::title(settings));
     format!(
         r#"{HEADER}
@@ -402,7 +450,7 @@ public:
 
 int main(int argc, char** argv) {{
     try {{
-        clarity::Db db({program}::databases);
+{check_engines}        clarity::Db db({program}::databases);
         for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);
         for (const auto& [name, at] : {program}::stores) db.add_store(name, at);
         // --check opens and migrates the databases without windows, for builds and scripts.

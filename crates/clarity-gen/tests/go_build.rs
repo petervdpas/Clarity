@@ -202,3 +202,62 @@ fn the_shop_example_builds_and_migrates_on_every_server_database_in_go() {
         std::fs::remove_dir_all(&out).unwrap();
     }
 }
+
+/// The test engine of conformance/engines.json in a generated application:
+/// every function called from Clarity code, its values crossing as JSON.
+const ENGINE_SHOP: &str = include_str!("../../../conformance/engines/shop.clarity");
+const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
+
+const ENGINE_TEST: &str = r#"package main
+
+import (
+	"testing"
+
+	"github.com/shopspring/decimal"
+)
+
+func TestEveryEngineFunctionAnswersFromClarityCode(t *testing.T) {
+	if err := checkEngines(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Answer(nil, 2); err != nil || got != 42 {
+		t.Fatal(got, err)
+	}
+	if got, err := Greeting(nil, "Grüße"); err != nil || got != "Hello, Grüße!" {
+		t.Fatal(got, err)
+	}
+	lines := []Line{{Price: decimal.RequireFromString("9.95"), Count: 3}, {Price: decimal.RequireFromString("0.10"), Count: 1}}
+	if got, err := Sum(nil, lines); err != nil || !got.Equal(decimal.RequireFromString("29.95")) {
+		t.Fatal(got, err)
+	}
+	if got, err := SizeClass(nil, 12); err != nil || got != SizeLarge {
+		t.Fatal(got, err)
+	}
+	order := &Order{ID: 7, Number: "ORD-7", Total: decimal.RequireFromString("100.05")}
+	if got, err := Cheaper(nil, order); err != nil || got.ID != 7 || !got.Total.Equal(decimal.RequireFromString("90.05")) {
+		t.Fatal(got, err)
+	}
+	// The engine's own error reads as a refusal, in its words.
+	if _, err := Refused(nil, "no stock"); err == nil || err.Error() != "no stock" {
+		t.Fatal(err)
+	}
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_answers_in_the_generated_application_in_go() {
+    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = clarity_project::Backend::Go;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::env::temp_dir().join(format!("clarity-gen-go-engine-{}", std::process::id()));
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    std::fs::write(out.join("engine_test.go"), ENGINE_TEST).unwrap();
+    run(&out, "go", &["test", "./..."]);
+    std::fs::remove_dir_all(&out).unwrap();
+}

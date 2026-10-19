@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{
-    BinaryOp, CodeBlock, DataEvent, EFFECTS, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
+    BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -161,6 +161,10 @@ impl<'a> Env<'a> {
 
     fn page(&self, name: &str) -> Option<&'a Page> {
         self.visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name)
+    }
+
+    fn engine(&self, name: &str) -> Option<&'a EngineDecl> {
+        self.visible.iter().flat_map(|f| &f.engines).find(|e| e.name.name == name)
     }
 
     fn function(&self, name: &str) -> Option<&'a FunctionDecl> {
@@ -451,6 +455,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
 
 fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_functions(env, file, out);
+    check_engines(env, file, out);
     let owners = owners(file);
     for owner in &owners {
         check_defaults(env, owner, out);
@@ -645,6 +650,42 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
         out,
     };
     checker.block(&handler.body);
+}
+
+/// The engines of a file: a .wasm file each, and functions that take and
+/// give values (DESIGN 5.11).
+fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
+    let mut seen: Vec<&str> = Vec::new();
+    for engine in &file.engines {
+        if seen.contains(&engine.name.name.as_str()) {
+            out.push(Diagnostic::error(format!("there is already an engine {}", engine.name.name), engine.name.span));
+        }
+        seen.push(&engine.name.name);
+        if !engine.file.ends_with(".wasm") {
+            out.push(Diagnostic::error("an engine is a .wasm file in the engines folder", engine.span));
+        }
+        let mut names: Vec<&str> = Vec::new();
+        for function in &engine.functions {
+            if names.contains(&function.name.name.as_str()) {
+                out.push(Diagnostic::error(format!("engine {} has function {} twice", engine.name.name, function.name.name), function.name.span));
+            }
+            names.push(&function.name.name);
+            let types = function.params.iter().map(|p| &p.ty).chain(&function.returns);
+            for ty in types {
+                match env.type_ref(ty) {
+                    Err(message) => out.push(Diagnostic::error(message, ty.span)),
+                    Ok(Ty::File | Ty::Files) => out.push(Diagnostic::error(
+                        format!("an engine takes values, records and lists of records, not {}", if matches!(ty.kind, TypeRefKind::File) { "file" } else { "files" }),
+                        ty.span,
+                    )),
+                    Ok(_) => {}
+                }
+            }
+            if function.returns.is_none() {
+                out.push(Diagnostic::error(format!("engine function {} gives a value: write its type after '->'", function.name.name), function.span));
+            }
+        }
+    }
 }
 
 /// Checks the functions and actions of a file: their names, effects,
@@ -1497,6 +1538,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Bool
             }
             ExprKind::Call { .. } => self.call(expr, false).unwrap_or(Ty::Unknown),
+            ExprKind::EngineCall { engine, function, args } => self.engine_call(expr, engine, function, args),
             ExprKind::Find { var, entity, filter, order } => self.find(var, entity, filter.as_deref(), order),
             ExprKind::Files { var, filter, order, .. } => self.files(var, filter.as_deref(), order, expr.span),
             ExprKind::ReadText { file } => {
@@ -1515,6 +1557,45 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             },
         }
+    }
+
+    /// A call to a function of an engine: checked against its signature
+    /// like a call to a function (DESIGN 5.11).
+    fn engine_call(&mut self, expr: &Expr, engine: &Ident, function: &Ident, args: &[Expr]) -> Ty<'a> {
+        let Some(decl) = self.env.engine(&engine.name) else {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            self.error(format!("unknown engine '{}'", engine.name), engine.span);
+            return Ty::Unknown;
+        };
+        let Some(callee) = decl.functions.iter().find(|f| f.name.name == function.name) else {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            self.error(format!("engine {} has no function {}", engine.name, function.name), function.span);
+            return Ty::Unknown;
+        };
+        let called = format!("{}.{}", engine.name, function.name);
+        if args.len() != callee.params.len() {
+            let n = callee.params.len();
+            self.error(format!("{called} takes {n} argument{}, not {}", if n == 1 { "" } else { "s" }, args.len()), expr.span);
+            for arg in args {
+                self.expr(arg, None);
+            }
+        } else {
+            for (arg, param) in args.iter().zip(&callee.params) {
+                let expected = self.env.type_ref(&param.ty).unwrap_or(Ty::Unknown);
+                let ty = self.expr(arg, Some(expected));
+                if !expected.accepts(&ty) {
+                    self.error(
+                        format!("argument '{}' of {called} is {} {}, not {}", param.name.name, article(&expected.name()), expected.name(), ty.name()),
+                        arg.span,
+                    );
+                }
+            }
+        }
+        callee.returns.as_ref().map_or(Ty::Unknown, |r| self.env.type_ref(r).unwrap_or(Ty::Unknown))
     }
 
     /// Checks a call. Returns its result type; None when it returns
@@ -2043,7 +2124,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::Unary { operand, .. } => mentions(operand, var),
         ExprKind::Binary { left, right, .. } => mentions(left, var) || mentions(right, var),
         ExprKind::In { value, options } => mentions(value, var) || options.iter().any(|o| mentions(o, var)),
-        ExprKind::Call { args, .. } => args.iter().any(|a| mentions(a, var)),
+        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => args.iter().any(|a| mentions(a, var)),
         // An inner query has its own record name.
         ExprKind::Find { var: inner, filter, .. } | ExprKind::Files { var: inner, filter, .. } => {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
@@ -2292,7 +2373,7 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(option, found);
             }
         }
-        ExprKind::Call { args, .. } => {
+        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => {
             for arg in args {
                 each_expr(arg, found);
             }

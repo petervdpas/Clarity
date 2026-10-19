@@ -577,6 +577,21 @@ impl<'a> Emitter<'a> {
                 let db = self.db;
                 format!("{db}.ReadText({})", self.value(file))
             }
+            // A function of an engine, through the runtime's host (DESIGN 5.11).
+            ExprKind::EngineCall { engine, function, args } => {
+                let returns = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
+                    .and_then(|f| f.returns.as_ref())
+                    .map(|r| value_type(&type_ref_info(self.project, r)))
+                    .unwrap_or_else(|| "object".into());
+                let values: Vec<String> = std::iter::once(string(&function.name)).chain(args.iter().map(|a| self.value(a))).collect();
+                format!("Engines.{}.Call<{returns}>({})", pascal(&engine.name), values.join(", "))
+            }
             ExprKind::New { entity } => format!("new {}()", entity.name),
         }
     }

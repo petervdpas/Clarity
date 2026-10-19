@@ -309,3 +309,41 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(main, "clarity::Reply redraw([[maybe_unused]] clarity::Db& db, clarity::Reply reply) override {");
     has(main, "            ui.begin_drawing(\"dial\");\n            w.draw_dial(db, ui);");
 }
+
+/// An application with an engine (DESIGN 5.11): the host and wasm3 copied
+/// in, the engine's bytes in the program, checked at start, and a call in
+/// code that gives the value as its declared type.
+fn engine_files() -> Vec<OutFile> {
+    let mut project = load_sources([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
+    let bytes = include_bytes!("../../../conformance/engines/test.wasm").to_vec();
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"))
+}
+
+#[test]
+fn an_engine_brings_its_host_and_wasm3() {
+    let files = engine_files();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes");
+    for (folder, from) in [("engine", root.join("cpp/engine")), ("third_party/wasm3", root.join("c/third_party/wasm3"))] {
+        for entry in std::fs::read_dir(from).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().to_string();
+            assert!(files.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
+        }
+    }
+    has(file(&files, "CMakeLists.txt"), "clarity_shell clarity_engine)");
+    // Without an engine, neither comes along.
+    assert!(!self::files().iter().any(|f| f.path.contains("engine") || f.path.contains("wasm3")));
+}
+
+#[test]
+fn an_engine_call_gives_its_declared_type() {
+    let files = engine_files();
+    let engines = file(&files, "src/engines.cpp");
+    has(engines, "const clarity::Engine& pricing()");
+    has(engines, "clarity::Engine::load(\"Pricing\"");
+    has(engines, "void check()");
+    has(file(&files, "src/modules/shop.cpp"), "return engines::pricing().call_as<int64_t>(\"add\", nlohmann::json::array({a, int64_t{40}}));");
+    has(file(&files, "src/modules/shop.cpp"), "engines::pricing().call_as<clarity::Decimal>(\"total\", nlohmann::json::array({lines}))");
+    has(file(&files, "src/main.cpp"), "shop::engines::check();");
+}

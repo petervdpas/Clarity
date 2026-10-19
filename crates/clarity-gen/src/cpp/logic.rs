@@ -18,7 +18,7 @@ use clarity_spec::code::{
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
 use super::model::constant;
-use super::names::{decimal, ident, param_type, string, value_type};
+use super::names::{decimal, ident, param_type, snake, string, value_type};
 use crate::print;
 
 /// What a `TypeRef` names, as a checker type.
@@ -736,6 +736,24 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
+            ExprKind::EngineCall { engine, function, args } => {
+                let returns = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
+                    .and_then(|f| f.returns.as_ref())
+                    .map(|r| value_type(&type_ref_info(self.project, r)));
+                let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+                let call = match returns {
+                    Some(ty) => format!("call_as<{ty}>"),
+                    None => "call".to_string(),
+                };
+                let args = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
+                format!("engines::{}().{call}({}, {args})", snake(&engine.name), string(&function.name))
+            }
             ExprKind::New { entity } => format!("{}{{}}", entity.name),
         }
     }

@@ -221,7 +221,7 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(option, name, found);
             }
         }
-        ExprKind::Call { args, .. } => {
+        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => {
             for arg in args {
                 expr(arg, name, found);
             }

@@ -155,3 +155,69 @@ fn the_shop_example_builds_and_migrates_on_every_server_database() {
         std::fs::remove_dir_all(&out).unwrap();
     }
 }
+
+/// The test engine of conformance/engines.json in a generated application:
+/// every function called from Clarity code, its values crossing as JSON.
+const ENGINE_SHOP: &str = include_str!("../../../conformance/engines/shop.clarity");
+const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
+
+/// A program beside the generated one that calls its functions.
+const ENGINE_CHECK: &str = r#"using Clarity.Runtime;
+using Shop;
+
+static void Expect(bool holds, string what)
+{
+    if (!holds)
+        throw new Exception(what);
+}
+
+Engines.Check();
+Expect(Logic.Answer(null!, 2) == 42, "answer");
+Expect(Logic.Greeting(null!, "Grüße") == "Hello, Grüße!", "greeting");
+var lines = new List<Line> { new() { Price = 9.95m, Count = 3 }, new() { Price = 0.10m, Count = 1 } };
+Expect(Logic.Sum(null!, lines) == 29.95m, "sum");
+Expect(Logic.SizeClass(null!, 12) == Size.Large, "size");
+var cheaper = Logic.Cheaper(null!, new Order { Id = 7, Number = "ORD-7", Total = 100.05m });
+Expect(cheaper.Id == 7 && cheaper.Total == 90.05m, "cheaper");
+try
+{
+    Logic.Refused(null!, "no stock");
+    Expect(false, "refused");
+}
+catch (RefusedException e)
+{
+    Expect(e.Message == "no stock", "refused in its words");
+}
+Console.WriteLine("every engine function answered");
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_answers_in_the_generated_application_in_csharp() {
+    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let root = std::env::temp_dir().join(format!("clarity-gen-csharp-engine-{}", std::process::id()));
+    let (out, check) = (root.join("Shop"), root.join("Check"));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+
+    std::fs::create_dir_all(&check).unwrap();
+    std::fs::write(check.join("Program.cs"), ENGINE_CHECK).unwrap();
+    std::fs::write(
+        check.join("Check.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>\n  </PropertyGroup>\n  <ItemGroup>\n    <ProjectReference Include=\"../Shop/Shop.csproj\" />\n  </ItemGroup>\n</Project>\n",
+    )
+    .unwrap();
+    let ran = dotnet(&check, &["run", "--nologo"], Runtime::Local).output().unwrap();
+    let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
+    assert!(ran.status.success() && said.contains("every engine function answered"), "{said}\nin {}", root.display());
+    std::fs::remove_dir_all(&root).unwrap();
+}

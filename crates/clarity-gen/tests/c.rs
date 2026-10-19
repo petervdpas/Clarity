@@ -328,3 +328,23 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(main, "        clarity_ui_begin_drawing(ui, \"dial\");\n        if (!dial_window_draw_dial(db, ui, &w)) return false;");
     has(main, "picture, redraw};");
 }
+
+/// An application with an engine gets the host and wasm3; one without, neither.
+#[test]
+fn an_engine_brings_its_host_and_wasm3() {
+    let mut project = clarity_spec::load_sources([("shop.clarity", include_str!("../../../conformance/engines/shop.clarity"))]);
+    let bytes = include_bytes!("../../../conformance/engines/test.wasm").to_vec();
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes }]);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = clarity_project::Backend::C;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let with = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/c");
+    for folder in ["engine", "third_party/wasm3"] {
+        for entry in std::fs::read_dir(root.join(folder)).unwrap() {
+            let name = entry.unwrap().file_name().to_string_lossy().to_string();
+            assert!(with.iter().any(|f| f.path == format!("clarity-runtime/{folder}/{name}")), "{folder}/{name} is not copied");
+        }
+    }
+    assert!(!files().iter().any(|f| f.path.contains("engine") || f.path.contains("wasm3")));
+}

@@ -5,6 +5,8 @@
 //! generated project depends on.
 
 pub mod dialect;
+#[cfg(feature = "engines")]
+pub mod engine;
 pub mod files;
 pub mod picture;
 pub mod query;
@@ -87,6 +89,8 @@ pub enum Error {
     /// A data event refused a save or delete, or code refused to go on, in
     /// its own words.
     Refused(ui::Text),
+    /// An engine could not load, or failed while it ran (DESIGN 5.11).
+    Engine(String),
 }
 
 impl fmt::Display for Error {
@@ -99,6 +103,7 @@ impl fmt::Display for Error {
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
             Error::Refused(what) => f.write_str(&what.show()),
+            Error::Engine(what) => f.write_str(what),
         }
     }
 }

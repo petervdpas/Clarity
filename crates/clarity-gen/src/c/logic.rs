@@ -1143,6 +1143,29 @@ impl<'a> Emitter<'a> {
                 let file = bare(self.value(file, pre));
                 self.lift("const char*", &format!("clarity_read_text(db, {file}, {{out}})"), pre)
             }
+            // A function of an engine, through its typed function in engines.c (DESIGN 5.11).
+            ExprKind::EngineCall { engine, function, args } => {
+                let callee = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name));
+                let params: Vec<TypeRef> = callee.map(|f| f.params.iter().map(|p| p.ty.clone()).collect()).unwrap_or_default();
+                let returns = callee.and_then(|f| f.returns.as_ref()).map_or(TypeInfo::Unknown, |r| type_ref_info(self.project, r));
+                let mut values = Vec::new();
+                for (arg, param) in args.iter().zip(&params) {
+                    let ty = type_ref_info(self.project, param);
+                    values.push(bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) }));
+                }
+                values.push("{out}".into());
+                let call = format!("{}({})", super::engine_function(&engine.name, &function.name), values.join(", "));
+                match returns {
+                    TypeInfo::Record(entity) => self.lift_record(&entity, &call, pre),
+                    other => self.lift(&value_type(&other), &call, pre),
+                }
+            }
             ExprKind::New { entity } => {
                 let fresh = self.temp();
                 let _ = writeln!(pre, "{} {fresh} = {}_new();", entity.name, prefix(&entity.name));

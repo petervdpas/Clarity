@@ -39,6 +39,8 @@ pub struct SpecFile {
     pub code: Vec<crate::code::CodeBlock>,
     /// Functions and actions declared in this module.
     pub functions: Vec<crate::code::FunctionDecl>,
+    /// Its engines (DESIGN 5.11).
+    pub engines: Vec<crate::code::EngineDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -598,6 +600,11 @@ pub struct Project {
     /// The pictures of the project's `images` folder, by name. None when
     /// the project was loaded without its folder.
     pub images: Option<Vec<crate::images::ProjectImage>>,
+    /// The files of the project's `engines` folder, by name. None when the
+    /// project was loaded without its folder.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub engines: Option<Vec<crate::engines::EngineFile>>,
     /// The file stores of the project settings, by name. None when the
     /// project was loaded without its settings.
     #[serde(skip)]

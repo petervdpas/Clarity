@@ -63,3 +63,85 @@ fn the_records_example_builds_and_runs_in_cpp() {
 fn the_todo_example_builds_and_runs_in_cpp() {
     builds_and_runs_in_cpp("todo", "Todo");
 }
+
+/// The test engine of conformance/engines.json in a generated application:
+/// every function called from Clarity code, its values crossing as JSON.
+const ENGINE_SHOP: &str = include_str!("../../../conformance/engines/shop.clarity");
+const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
+
+/// A program beside the generated one that calls its functions.
+const ENGINE_CHECK: &str = r#"#include <iostream>
+
+#include "app.hpp"
+
+#define EXPECT(holds, what)                                  \
+    do {                                                     \
+        if (!(holds)) {                                      \
+            std::cerr << "failed: " << (what) << "\n";       \
+            return 1;                                        \
+        }                                                    \
+    } while (0)
+
+int main() {
+    using namespace shop;
+    try {
+        engines::check();
+        clarity::Db db({{"main", clarity::Dialect::Sqlite, ":memory:"}});
+        EXPECT(answer(db, 2) == 42, "answer");
+        EXPECT(greeting(db, "Grüße") == "Hello, Grüße!", "greeting");
+        std::vector<Line> lines{{0, clarity::Decimal::parse("9.95"), 3}, {0, clarity::Decimal::parse("0.10"), 1}};
+        EXPECT(sum(db, lines) == clarity::Decimal::parse("29.95"), "sum");
+        EXPECT(size_class(db, 12) == Size::Large, "size");
+        Order order{7, "ORD-7", clarity::Decimal::parse("100.05")};
+        auto less = cheaper(db, order);
+        EXPECT(less.id == 7 && less.total == clarity::Decimal::parse("90.05"), "cheaper");
+    } catch (const std::exception& e) {
+        std::cerr << "failed: " << e.what() << "\n";
+        return 1;
+    }
+    // The engine's own error reads as a refusal, in its words.
+    try {
+        clarity::Db db({{"main", clarity::Dialect::Sqlite, ":memory:"}});
+        refused(db, "no stock");
+        EXPECT(false, "refused");
+    } catch (const clarity::RefusedError& e) {
+        EXPECT(std::string(e.what()) == "no stock", "refused");
+    }
+    std::cout << "every engine function answered\n";
+    return 0;
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_answers_in_the_generated_application_in_cpp() {
+    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = Backend::Cpp;
+    settings.stack.ui = Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::env::temp_dir().join(format!("clarity-gen-cpp-engine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["build"]).unwrap();
+    // The check program: every source of the application but its main.
+    std::fs::create_dir_all(out.join("check")).unwrap();
+    std::fs::write(out.join("check/engine_check.cpp"), ENGINE_CHECK).unwrap();
+    let lists = std::fs::read_to_string(out.join("CMakeLists.txt")).unwrap();
+    std::fs::write(
+        out.join("CMakeLists.txt"),
+        format!("{lists}\nset(CHECK_SOURCES ${{PROGRAM_SOURCES}})\nlist(FILTER CHECK_SOURCES EXCLUDE REGEX \"src/main.cpp$\")\nadd_executable(engine_check ${{CHECK_SOURCES}} check/engine_check.cpp)\ntarget_include_directories(engine_check PRIVATE src)\ntarget_link_libraries(engine_check PRIVATE clarity clarity_shell clarity_engine)\n"),
+    )
+    .unwrap();
+    let built = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = built.lines().filter(|l| l.contains("warning") && (l.contains("/src/") || l.contains("/engine/"))).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    let said = run(&out, &out.join("build/debug/engine_check").display().to_string(), &[]);
+    assert!(said.contains("every engine function answered"), "{said}");
+    // The program itself checks its engines at start, then opens.
+    let said = run(&out, &out.join("build/debug/shop").display().to_string(), &["--check"]);
+    assert!(said.contains("the databases are ready"), "{said}");
+    std::fs::remove_dir_all(&out).unwrap();
+}

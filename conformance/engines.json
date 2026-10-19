@@ -1,0 +1,140 @@
+{
+  "about": "Engines (DESIGN 5.11): processing modules compiled once to WebAssembly that every stack hosts alike. An engine is a plain WebAssembly module that exports its `memory`, `clarity_alloc(len) -> place` and `clarity_free(place, len)`, and each of its functions under its own name as `(place, len) -> i64`. To call one, the host writes the arguments as a JSON array (UTF-8) into room from clarity_alloc and calls the function with its place and length; the engine takes that room over. The function gives the place and length of its answer packed in an i64 (place in the high 32 bits), `{\"value\": ...}` or `{\"error\": \"why\"}`, which the host reads and gives back with clarity_free. Values are JSON as everywhere in Clarity: integers as numbers, decimals and money as exact text, enums by name, records as objects of their fields. An engine imports nothing, and a host refuses a module that imports anything, that is no WebAssembly, or that lacks the interface or a declared function, when it loads it. `engine` is test.wasm, built from engines/test.",
+  "engine": "engines/test.wasm",
+  "functions": [
+    "add",
+    "greet",
+    "total",
+    "size_of",
+    "discounted",
+    "fail"
+  ],
+  "calls": [
+    {
+      "function": "add",
+      "args": [
+        2,
+        40
+      ],
+      "gives": {
+        "value": 42
+      }
+    },
+    {
+      "function": "add",
+      "args": [
+        -7,
+        7
+      ],
+      "gives": {
+        "value": 0
+      }
+    },
+    {
+      "function": "greet",
+      "args": [
+        "Grüße, 世界"
+      ],
+      "gives": {
+        "value": "Hello, Grüße, 世界!"
+      }
+    },
+    {
+      "function": "total",
+      "args": [
+        [
+          {
+            "price": "9.95",
+            "count": 3
+          },
+          {
+            "price": "0.10",
+            "count": 1
+          }
+        ]
+      ],
+      "gives": {
+        "value": "29.95"
+      }
+    },
+    {
+      "function": "total",
+      "args": [
+        []
+      ],
+      "gives": {
+        "value": "0"
+      }
+    },
+    {
+      "function": "size_of",
+      "args": [
+        3
+      ],
+      "gives": {
+        "value": "Small"
+      }
+    },
+    {
+      "function": "size_of",
+      "args": [
+        12
+      ],
+      "gives": {
+        "value": "Large"
+      }
+    },
+    {
+      "function": "discounted",
+      "args": [
+        {
+          "id": 7,
+          "number": "ORD-7",
+          "total": "100.05"
+        }
+      ],
+      "gives": {
+        "value": {
+          "id": 7,
+          "number": "ORD-7",
+          "total": "90.05"
+        }
+      }
+    },
+    {
+      "function": "fail",
+      "args": [
+        "no stock"
+      ],
+      "gives": {
+        "error": "no stock"
+      }
+    }
+  ],
+  "refused": [
+    {
+      "what": "no WebAssembly",
+      "bytes": "00010203",
+      "message": "is no WebAssembly module"
+    },
+    {
+      "what": "an import",
+      "bytes": "0061736d01000000010401600000020b0103656e76036e6f770000",
+      "message": "imports env.now; an engine imports nothing"
+    },
+    {
+      "what": "no interface",
+      "bytes": "0061736d01000000",
+      "message": "lacks clarity_alloc"
+    },
+    {
+      "what": "a declared function it lacks",
+      "engine": "engines/test.wasm",
+      "functions": [
+        "add",
+        "teleport"
+      ],
+      "message": "has no function teleport"
+    }
+  ]
+}

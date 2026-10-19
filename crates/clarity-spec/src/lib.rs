@@ -6,6 +6,7 @@ pub mod diagnostic;
 pub mod dictionary;
 pub mod edit;
 pub mod formats;
+pub mod engines;
 pub mod images;
 pub mod themes;
 pub mod translations;
@@ -64,6 +65,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         locale: model::Locale::default(),
         themes: Vec::new(),
         images: None,
+        engines: None,
         stores: None,
         translations: BTreeMap::new(),
     }
@@ -260,6 +262,8 @@ pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[
     if let Some(found) = images::image_files(dir)? {
         images::attach(&mut project, found);
     }
+    // A declared engine needs its file, so the folder is read even when it is missing.
+    engines::attach(&mut project, engines::engine_files(dir)?.unwrap_or_default());
     Ok(project)
 }
 

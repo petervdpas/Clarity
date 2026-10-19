@@ -80,6 +80,8 @@ typedef enum {
     /// A statement broke a reference between records; the database turns
     /// it into CLARITY_INVALID or CLARITY_IN_USE.
     CLARITY_REFERENCE,
+    /// An engine could not load, or failed while it ran (DESIGN 5.11).
+    CLARITY_ENGINE,
 } ClarityErrorKind;
 
 typedef struct ClarityText ClarityText;

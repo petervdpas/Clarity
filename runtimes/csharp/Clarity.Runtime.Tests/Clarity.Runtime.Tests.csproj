@@ -16,9 +16,11 @@
     <ProjectReference Include="../Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />
     <ProjectReference Include="../Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
     <ProjectReference Include="../Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.Engines/Clarity.Runtime.Engines.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The cases every stack's runtime shares. -->
     <None Include="../../../conformance/*.json" LinkBase="conformance" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../conformance/engines/*.wasm" LinkBase="conformance/engines" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -288,6 +288,12 @@ pub enum ExprKind {
         function: Ident,
         args: Vec<Expr>,
     },
+    /// A function of an engine: `Pricing.total(lines)` (DESIGN 5.11).
+    EngineCall {
+        engine: Ident,
+        function: Ident,
+        args: Vec<Expr>,
+    },
     /// `find c in Customer where c.active order by c.name`: the records of
     /// an entity that meet the condition, in order. `var` names the record
     /// inside the condition and the order.
@@ -445,6 +451,29 @@ pub struct FunctionDecl {
     /// Effects an action may have, such as `db.write`.
     pub effects: Vec<Ident>,
     pub body: Vec<Stmt>,
+    pub span: Span,
+}
+
+/// An engine (DESIGN 5.11): a processing module compiled to WebAssembly,
+/// its file in the project's `engines` folder, and its functions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct EngineDecl {
+    pub name: Ident,
+    /// The file in the `engines` folder: `pricing.wasm`.
+    pub file: String,
+    pub functions: Vec<EngineFunction>,
+    pub span: Span,
+}
+
+/// A function of an engine: values in, a value out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct EngineFunction {
+    pub name: Ident,
+    pub params: Vec<Param>,
+    /// None while it is not written; the checker asks for it.
+    pub returns: Option<TypeRef>,
     pub span: Span,
 }
 

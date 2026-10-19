@@ -366,3 +366,56 @@ fn the_output_folder_holds_only_the_current_stacks_project() {
     assert!(dir.join("bin/Debug/Shop.dll").exists(), "C#'s build output stays");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The test engine of conformance/engines.json in a generated application:
+/// every function called from Clarity code, its values crossing as JSON.
+const ENGINE_SHOP: &str = include_str!("../../../conformance/engines/shop.clarity");
+const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.wasm");
+
+const ENGINE_TEST: &str = r#"
+#[path = "../src/modules/shop.rs"]
+mod shop;
+#[path = "../src/engines.rs"]
+mod engines;
+
+use clarity_runtime::{Db, Decimal, Error};
+use shop::*;
+
+#[test]
+fn every_engine_function_answers_from_clarity_code() {
+    let db = Db::memory().unwrap();
+    engines::check().unwrap();
+    assert_eq!(answer(&db, 2).unwrap(), 42);
+    assert_eq!(greeting(&db, "Grüße".into()).unwrap(), "Hello, Grüße!");
+    let lines = vec![Line { price: Decimal::new(995, 2), count: 3, ..Line::default() }, Line { price: Decimal::new(10, 2), count: 1, ..Line::default() }];
+    assert_eq!(sum(&db, &lines).unwrap(), Decimal::new(2995, 2));
+    assert_eq!(size_class(&db, 12).unwrap(), Size::Large);
+    let mut order = Order { id: 7, number: "ORD-7".into(), total: Decimal::new(10005, 2) };
+    let cheaper = cheaper(&db, &mut order).unwrap();
+    assert_eq!((cheaper.id, cheaper.total), (7, Decimal::new(9005, 2)));
+    // The engine's own error reads as a refusal, in its words.
+    let Err(Error::Refused(why)) = refused(&db, "no stock".into()) else { panic!("not refused") };
+    assert_eq!(why.show(), "no stock");
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_answers_in_the_generated_application() {
+    let mut project = clarity_spec::load_sources([("shop.clarity", ENGINE_SHOP)]);
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = clarity_gen::generate(&project, &clarity_project::starter("Shop", "shop")).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::env::temp_dir().join(format!("clarity-gen-engine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+    patch(&out);
+    std::fs::create_dir_all(out.join("tests")).unwrap();
+    std::fs::write(out.join("tests/engine.rs"), ENGINE_TEST).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new("cargo").args(["test", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", root.join("target/generated")).output().unwrap();
+    let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "{report}\nthe project is in {}", out.display());
+    std::fs::remove_dir_all(&out).unwrap();
+}

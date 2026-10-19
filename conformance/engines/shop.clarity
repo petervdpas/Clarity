@@ -1,0 +1,42 @@
+module shop
+
+enum Size
+    Small
+    Large
+
+entity Line
+    price: money
+    count: integer
+
+entity Order
+    number: text(12)
+    total: money
+
+engine Pricing from "test.wasm"
+    function add(a: integer, b: integer) -> integer
+    function greet(name: text) -> text
+    function total(lines: list<Line>) -> money
+    function size_of(n: integer) -> Size
+    function discounted(order: Order) -> Order
+    function fail(why: text) -> text
+
+function answer(a: integer) -> integer
+    return Pricing.add(a, 40)
+
+function greeting(name: text) -> text
+    return Pricing.greet(name)
+
+function sum(lines: list<Line>) -> money
+    return Pricing.total(lines)
+
+function size_class(n: integer) -> Size
+    return Pricing.size_of(n)
+
+function cheaper(order: Order) -> Order
+    return Pricing.discounted(order)
+
+function refused(why: text) -> text
+    return Pricing.fail(why)
+
+page Main: window
+    title "Engines"

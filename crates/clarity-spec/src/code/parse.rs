@@ -2,7 +2,7 @@
 //! by indentation) and expressions (precedence climbing on one line).
 
 use super::{
-    Arg, BinaryOp, Branch, CodeBlock, DataEvent, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
+    Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
 use crate::diagnostic::Diagnostic;
@@ -55,6 +55,40 @@ fn parse_event(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Ev
 
 /// `function name(a: T, b: T) -> T` or `action name(...)`, then its
 /// `require`, `ensure` and `effects` lines, then the statements.
+/// `engine Name from "file.wasm"` with its functions below it, each a
+/// signature: `function total(lines: list<Line>) -> money`.
+pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<EngineDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let name = cursor.expect_ident("an engine name")?;
+    if !cursor.eat_keyword("from") {
+        return Err(cursor.error_here("expected 'from' and its file, as in 'engine Pricing from \"pricing.wasm\"'"));
+    }
+    let file = cursor.expect_string("the engine's file in the engines folder")?;
+    cursor.expect_end()?;
+    let mut functions = Vec::new();
+    for child in &node.children {
+        let mut line = Cursor::new(child.line);
+        let parsed = (|| {
+            if !line.eat_keyword("function") {
+                return Err(line.error_here("expected 'function' and its signature, as in 'function total(lines: list<Line>) -> money'"));
+            }
+            let name = line.expect_ident("a function name")?;
+            line.expect(TokenKind::LParen, "'(' and the parameters")?;
+            let params = parse_params(&mut line)?;
+            let returns = if line.eat(TokenKind::Arrow) { Some(parse_type_ref(&mut line)?) } else { None };
+            line.expect_end()?;
+            no_children(child)?;
+            Ok(EngineFunction { name, params, returns, span: child.span() })
+        })();
+        match parsed {
+            Ok(function) => functions.push(function),
+            Err(diag) => diagnostics.push(diag),
+        }
+    }
+    Ok(EngineDecl { name, file, functions, span: node.span() })
+}
+
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {
     let mut cursor = Cursor::new(node.line);
     cursor.next();
@@ -607,6 +641,26 @@ fn parse_unary(cursor: &mut Cursor) -> ParseResult<Expr> {
 }
 
 fn parse_postfix(cursor: &mut Cursor) -> ParseResult<Expr> {
+    // `Pricing.total(lines)`: a function of an engine.
+    if cursor.peek().is_some_and(|t| t.kind == TokenKind::Ident && !RESERVED.contains(&t.text.as_str()))
+        && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Dot)
+        && cursor.peek_at(2).is_some_and(|t| t.kind == TokenKind::Ident)
+        && cursor.peek_at(3).is_some_and(|t| t.kind == TokenKind::LParen)
+    {
+        let engine = cursor.expect_ident("an engine")?;
+        cursor.expect(TokenKind::Dot, "'.'")?;
+        let function = cursor.expect_ident("a function of the engine")?;
+        cursor.expect(TokenKind::LParen, "'('")?;
+        let mut args = Vec::new();
+        if cursor.peek_kind() != Some(TokenKind::RParen) {
+            args.push(parse_expr(cursor)?);
+            while cursor.eat(TokenKind::Comma) {
+                args.push(parse_expr(cursor)?);
+            }
+        }
+        let close = cursor.expect(TokenKind::RParen, "')'")?;
+        return Ok(Expr { span: join(engine.span, close.span), kind: ExprKind::EngineCall { engine, function, args } });
+    }
     let mut expr = parse_primary(cursor)?;
     while cursor.eat(TokenKind::Dot) {
         let member = cursor.expect_ident("a name after '.'")?;

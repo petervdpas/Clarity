@@ -26,7 +26,9 @@
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
     X(show_and_text)                                              \
-    X(files_are_filtered_and_sorted_by_their_details)
+    X(files_are_filtered_and_sorted_by_their_details)            \
+    X(every_engine_call_gives_what_every_host_gives)              \
+    X(a_module_that_is_no_engine_is_refused_when_it_loads)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

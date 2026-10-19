@@ -90,6 +90,22 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
         .map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |s| (s.width, s.height))
 }
 
+/// Every engine the project declares (DESIGN 5.11).
+pub(crate) fn engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
+    project.files.iter().flat_map(|f| &f.engines).collect()
+}
+
+/// The files of the project's engines, in `folder` of the output; the
+/// checker has made sure each declared one is there.
+pub(crate) fn engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
+    let found = project.engines.as_deref().unwrap_or_default();
+    engines(project)
+        .into_iter()
+        .filter_map(|e| found.iter().find(|f| f.name == e.file))
+        .map(|f| OutFile { path: format!("{folder}/{}", f.name), text: String::new(), bytes: Some(std::borrow::Cow::Owned(f.bytes.clone())) })
+        .collect()
+}
+
 /// The canvases of a window that a draw handler draws, by name, with the
 /// handler: `("dial", "draw_dial")`. Each draw starts an empty drawing; the
 /// backend runs them when the window opens and after every other handler.

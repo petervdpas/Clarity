@@ -23,6 +23,8 @@ sqlite = ["dep:rusqlite"]
 postgres = ["dep:postgres", "dep:bytes", "rust_decimal/db-postgres"]
 mysql = ["dep:mysql"]
 mssql = ["dep:tiberius", "dep:tokio", "dep:tokio-util"]
+# Engines (DESIGN 5.11): WebAssembly modules hosted through wasmi.
+engines = ["dep:wasmi"]
 
 [dependencies]
 rust_decimal = { version = "1", features = ["serde-with-str"] }
@@ -38,3 +40,4 @@ mysql = { version = "28", default-features = false, features = ["minimal-rust"],
 tiberius = { version = "0.13", default-features = false, features = ["tds73", "chrono", "rust_decimal", "rustls"], optional = true }
 tokio = { version = "1", features = ["rt", "net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
+wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable"], optional = true }

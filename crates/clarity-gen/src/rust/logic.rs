@@ -574,6 +574,27 @@ impl<'a> Emitter<'a> {
                 format!("{prefix}__{}(db, w, ui{code})?", function.name)
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
+            // A function of an engine: values to JSON and back (DESIGN 5.11).
+            ExprKind::EngineCall { engine, function, args } => {
+                let returns = self
+                    .project
+                    .files
+                    .iter()
+                    .flat_map(|f| &f.engines)
+                    .find(|e| e.name.name == engine.name)
+                    .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
+                    .and_then(|f| f.returns.as_ref())
+                    .map(|r| value_type(&type_ref_info(self.project, r)))
+                    .unwrap_or_else(|| "serde_json::Value".into());
+                let values: Vec<String> = args.iter().map(|a| format!("clarity_runtime::engine::to_value(&{})?", self.value(a))).collect();
+                format!(
+                    "clarity_runtime::engine::from_value::<{returns}>({e:?}, {f:?}, crate::engines::{}()?.call({f:?}, vec![{}])?)?",
+                    super::names::snake(&engine.name),
+                    values.join(", "),
+                    e = engine.name,
+                    f = function.name
+                )
+            }
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),

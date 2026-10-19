@@ -589,6 +589,8 @@ screen Asteroids: canvas
 
 The renderer is hand-written behavior and falls under the normal rules: modularity, TDD (renderers are tested on their scene or draw-list output, not on pixels), and effects.
 
+Built (2026-10-19): the backend renderer, as a draw handler written in Clarity (`on draw`, shapes in the canvas's own units, `conformance/drawing.json`), on every stack. The frontend renderer becomes an engine beside the screen (section 5.11): compiled once to WebAssembly and run in the renderer, with the same shapes.
+
 ### 5.8 Canonical form
 
 `clarity fmt` defines the only valid formatting. The parser keeps comments and blank lines (a lossless syntax tree), so the designer, the formatter and humans can all edit the same file without destroying each other's work.
@@ -700,6 +702,50 @@ action approve(order: Order)
 - **In the designer** a module shows its functions and actions; each opens in the same editor as the code behind, checked while it is typed. New function and New action add a starter.
 
 Superseded by this: section 5.3, where an action only declares its signature and its body is written in the target language.
+
+### 5.11 Engines (2026-10-20)
+
+An engine is a processing module that every stack runs the same way: the logic of a game, document processing (parsing, layout, conversion, rendering a page to shapes), a pricing or scheduling engine, a solver. It is compiled once to WebAssembly, and each generated application hosts that one file, so the engine behaves identically on every stack by construction, not by translation.
+
+**The engine computes; the application does all input and output.** An engine has no database, no files, no network, no windows and no clock of the system. The application reads the records and files, hands them to the engine as values, and stores, writes or shows what the engine gives back. This keeps the sandbox absolute, makes an engine testable on its own with plain values, and keeps every effect where Clarity already checks it: in the handlers and actions of the application (section 5.10, effects in section 9.3).
+
+```
+engine Layout from "layout.wasm"
+    function paginate(text: text, page: PageSize) -> list<PageBox>
+    function measure(text: text, style: TextStyle) -> Extent
+    uses clock
+
+record PageSize
+    width: decimal
+    height: decimal
+```
+
+```
+action export_report(report: Report)
+    effects db.read, files.write
+    let pages = Layout.paginate(report.body, PageSize(210, 297))
+    for page in pages
+        write render_page(page) to exports "report-{page.number}.svg"
+```
+
+**What an engine is.**
+
+- **A declaration and a file.** `engine Name from "file.wasm"` declares its functions with Clarity types; the file lives in the project's `engines` folder, beside `images`, and goes into every generated application like the pictures do.
+- **Written in Clarity, or brought along.** An engine written in Clarity (`engine Scoring` with functions and records below it, no `from`) compiles through the Rust generator to `wasm32-wasip2`, whatever the application's own stack. An engine brought along is any WebAssembly component that matches the declaration: from Rust, C or C++ (Emscripten, clang), Zig, Go (TinyGo) or AssemblyScript. Clarity writes the interface as WIT (the WebAssembly component model's interface language) from the declaration, `clarity engine wit Layout`, so the engine's authors generate their bindings from it.
+- **Values cross, never references.** Parameters and results are plain values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, `bytes` (the content of a file), lists, and records. Entities cross as copies: an engine can read an `Order`, but a changed `Order` it returns is only saved when the application saves it. Records that belong to no table (`record PageSize`) are declared for engines and code alike. A decimal and money cross as exact text, as they travel everywhere else in Clarity.
+- **Its imports are services, never data.** What an engine may call is declared with `uses`, and the host gives it exactly that and nothing else: `clock` (the time, which the application can fix for tests), `random` (seeded per call, so a run can be repeated), `log` (lines into the application's log), and `progress` (how far a long call is, which the screen can show). There is no import for the database, files or network, and none will be added: an engine that needs data gets it as a parameter.
+- **State, when it needs some.** By default an engine is stateless: each call starts fresh. `state per window` keeps one instance for each window that uses it, made when the window opens and dropped when it closes (a game's world, a document being edited); `state per app` keeps one for the application. State lives only inside the engine's memory; what must be kept is returned and saved by the application.
+- **Hooks.** Besides functions it is called with, an engine can export hooks the application calls at set moments: `on tick(ms)` for an engine beside a canvas, or `on open` and `on close` with its state. The application never hands the engine a callback into its own code, so an engine cannot reach the application's data by calling back.
+
+**Where it runs.** On the backend by default, where handlers and actions call it like a function. Each stack hosts it with a WebAssembly runtime: Rust with Wasmtime, Go with wazero (pure Go), C and C++ with WAMR, C# with Wasmtime for .NET. An engine declared `beside the screen` runs in the renderer instead, for work where a round trip per call is too slow, such as a game loop at 60 frames a second: the web renderer (the Rust, Go, C and C++ stacks) runs it in the browser engine's own WebAssembly, Avalonia in Wasmtime in the same process. An engine beside the screen draws through the canvas's shapes (section 5.7, `conformance/drawing.json`) and takes its input events; what it reports back to the window (a score, the end of a game) travels as a value to a handler.
+
+**Limits.** Every call runs with a time and a memory limit (fuel in Wasmtime and WAMR, a context deadline in wazero), set per engine (`limit 2 seconds, 256 MB`) with defaults, so an engine that loops or grows without end fails that call and never hangs or exhausts the application. A failure (a trap, a limit, an engine's own `refuse`) arrives as an error the application shows like a refusal.
+
+**Checked twice.** The checker types every call to an engine against its declaration. When the application starts, the host checks the `.wasm` file against the declaration: the functions it exports with their types, and that it imports nothing beyond its `uses`. A file that does not match is refused at start, never at the first call.
+
+**Alike on every stack.** WebAssembly computes the same on every machine (integers exactly; floating point too, apart from the bits of a NaN), so one shared test engine and `conformance/engines.json` (calls, results, limits, refused imports) run against every host: the four backends, the web renderer and Avalonia.
+
+Not an engine: code that needs the database or files while it works. That is an action, which Clarity already compiles to every stack and checks for its effects; an action can call an engine for the processing in between.
 
 ## 6. Generation
 
@@ -909,6 +955,8 @@ Directive expressions are written in the host language, unlike spec contracts (s
 ### 9.3 Effects vocabulary
 
 `none`, `fs.read`, `fs.write`, `net`, `db.read`, `db.write`, `process`, `env`, `time`, `random`, `ipc`, `ui`.
+
+An engine (section 5.11) has none of these: what it may call is the fixed list of its `uses` (clock, random, log, progress), and data and files reach it only as values from the application.
 
 Each pack maps known APIs to effects (for example in Rust, `std::fs::write` is `fs.write` and `reqwest::*` is `net`). Projects extend the mapping in `clarity.toml` for their own wrappers. A function's effects must cover the effects of everything it calls. In statically typed languages this check is close to exact. In Python and Ruby it is best-effort, and reports say so.
 
@@ -1295,6 +1343,11 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | G3d | The server databases and external sources for Go: pgx, go-sql-driver/mysql and go-mssqldb behind the same runtime calls | done (2026-10-18): a file per database in the runtime (`postgres.go`, `mysql.go`, `mssql.go`) that adds itself to `servers`, over `server.go`, which holds one `*sql.Conn` for the driver's life (the pool resets a connection between calls, which lost the transaction of a save with data events on PostgreSQL and SQL Server). pgx and go-mssqldb read the project's locations as they are; a MySQL URL becomes the driver's settings. The migrations.json scenario and the data event tests pass on SQLite, PostgreSQL 18, MySQL 8.4 and SQL Server 2022 in docker (`CLARITY_TEST_*`, as for the other runtimes). A generated module gets only the driver files of its data sources, and its go.mod and go.sum leave out the modules of the others; `go_build` checks with `go mod tidy -diff` that go.mod is what tidy would write, and builds the shop for each server database and migrates it twice. External sources needed nothing new: `Table`, `Key` and `Source` come from the entity, and only owned sources are in `schema.go` |
 | G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted. The project is a CMake project (`CMakeLists.txt`, built with make or Ninja, the tools P3 checks for), with the README.md every stack gets | G4a (C++) done: the runtime `runtimes/cpp` (C++20; system SQLite 3 and nlohmann-json, webview 0.12.0 copied into `third_party`; errors as exceptions, its own `Decimal`, SHA-256 and base64; drivers in `unique_ptr`, conditions in `shared_ptr<const Node>`, SQLite handles closed by RAII; records as plain structs that meet a `Record` concept) with its own tests on the conformance files; the generator `clarity-gen/src/cpp` writes `CMakeLists.txt`, `CMakePresets.json` (`cmake --workflow --preset debug` or `release`), `src/records.hpp` and `.cpp` with every module's enums and records, `src/modules/<module>.cpp` with each module's functions, actions, data events and windows, `src/app.hpp`, `src/schema.cpp`, `src/page.cpp` with the web renderer inlined, and `src/main.cpp` with `--check`; the program is a native window (webview on WebKitGTK) that talks to the renderer through `clarityInvoke`. Both examples build and run (`cargo test -p clarity-gen --test cpp_build -- --ignored`). SQLite only; the server databases come later. Every stack now writes module files where they cannot overwrite its own files (`src/modules/` in Rust and C++, `Modules/` in C#, `<module>_module.go` in Go, which also keeps a module named `windows` from building on Windows only). G4b (C) done: the runtime `runtimes/c` (C17; system SQLite 3, cJSON 1.7.18 and webview 0.12.0 copied into `third_party`, the webview built from one C++ file). Every call that can fail returns whether it worked and leaves its error, as errno does; values live in a scratch arena the shell empties after each command, so generated code never frees anything (cJSON allocates there too). Records are plain structs described to the runtime by a `ClarityEntity` (table, columns, values, data events); `customer_save`, `customer_find` and the others are typed calls around it. 20 tests of its own on the conformance files, clean under AddressSanitizer and UBSan. The generator `clarity-gen/src/c` lifts each call that can fail into `if (!call(..., &v1)) return false;` (as the Go generator lifts into `if err != nil`), passes records by pointer, gives a function's result through its last parameter, and writes the same files as C++ in C (`records.h`/`.c`, `app.h`, `src/modules/<module>.c`, `schema.c`, `page.c`, `main.c`); the program builds without a warning under `-Wall -Wextra`, debug and release. Both examples build and run (`cargo test -p clarity-gen --test c_build -- --ignored`). `clarity tools` checks the C and C++ libraries too (SQLite, WebKitGTK, nlohmann-json for C++) and, for C, a C++ compiler for the webview. SQLite only; the server databases come later |
 | H1 | Hardware, ideas raised by the user (2026-10-18), not decided. (a) A desktop application that talks to a device such as an Arduino over a serial port: the settings name the device as they name a file store (`serialport arduino "env:ARDUINO_PORT"`), code sends and receives with an effect like `device.write`; every stack can (Rust `serialport`, Go `go.bug.st/serial`, C# `System.IO.Ports`, C `libserialport`). (b) Code that runs on the device itself: Arduino sketches are C++, so a firmware target generated from a small part of the language, without a database or windows | idea |
+| N1 | Engines, first slice (section 5.11): `engine Name from "file.wasm"` with stateless functions on plain values, enums, records and lists; the `engines` folder; WIT written from the declaration; the host checks the file at start; hosted on the backend of all five stacks (Wasmtime, wazero, WAMR, Wasmtime for .NET); a shared test engine and `conformance/engines.json` | |
+| N2 | Engines written in Clarity: `engine Name` with its functions and records, compiled through the Rust generator to `wasm32-wasip2` | |
+| N3 | Imports and limits: `uses clock, random, log, progress`, time and memory limits per call, failures shown as refusals | |
+| N4 | State and hooks: `state per window` and `state per app`, hooks such as `on open` and `on close`; `bytes` for document processing | |
+| N5 | Engines beside the screen: run in the web renderer and in Avalonia, drawing on a canvas with its shapes and input (`on tick`, pointer, key), values back to the window's handlers | |
 | W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |
 | A1 | AI through the MCP server: the whole project and its output readable, changes only as designer edits, proposals inside a project and for Clarity itself (section 1.2) | |
 | S4 | Graphics canvas (section 5.7): `bitmap` and `vector` field types, the standard canvas widget with view and edit modes, the `canvas` screen pattern, backend and frontend renderers | |

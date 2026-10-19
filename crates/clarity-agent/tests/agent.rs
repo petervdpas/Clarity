@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use clarity_agent::{Agent, Block, Event, Message, Model, ModelReply, Request, Role, StopReason, ToolDef, ToolResult, Tools};
+use clarity_agent::{Agent, Block, Event, Message, Model, ModelReply, Request, Role, StopReason, ToolDef, ToolResult, Tools, Usage};
 use serde_json::{Value, json};
 
 /// A model that gives its replies in order, and keeps what it was asked.
@@ -53,11 +53,11 @@ impl Tools for Files {
 }
 
 fn tool_use(id: &str, name: &str, input: Value) -> ModelReply {
-    ModelReply { content: vec![Block::ToolUse { id: id.into(), name: name.into(), input }], stop: StopReason::ToolUse }
+    ModelReply { content: vec![Block::ToolUse { id: id.into(), name: name.into(), input }], stop: StopReason::ToolUse, usage: Usage::default() }
 }
 
 fn answer(text: &str) -> ModelReply {
-    ModelReply { content: vec![Block::Text { text: text.into() }], stop: StopReason::EndTurn }
+    ModelReply { content: vec![Block::Text { text: text.into() }], stop: StopReason::EndTurn, usage: Usage::default() }
 }
 
 fn agent() -> Agent {
@@ -138,4 +138,28 @@ fn a_turn_has_a_limit_of_steps() {
     limited.run(&mut model, &mut Files::default(), &mut Vec::new(), "Go", &AtomicBool::new(false), &mut |e| events.push(e)).unwrap();
     assert_eq!(model.asked.len(), 3);
     assert_eq!(events.last(), Some(&Event::Failed { message: "stopped after 3 steps; ask again to go on".into() }));
+}
+
+/// Each answer of the model tells what it cost, before its tools run, so
+/// the screen can add up a turn and a session.
+#[test]
+fn every_answer_tells_its_tokens() {
+    let first = Usage { input: 30, cache_write: 2000, cache_read: 0, output: 50 };
+    let second = Usage { input: 40, cache_write: 120, cache_read: 2000, output: 20 };
+    let mut model = Script {
+        replies: vec![
+            ModelReply { usage: first, ..tool_use("t1", "write_file", json!({"path": "a.clarity", "text": "module a"})) },
+            ModelReply { usage: second, ..answer("Done.") },
+        ],
+        asked: vec![],
+    };
+    let mut events = Vec::new();
+    agent().run(&mut model, &mut Files::default(), &mut Vec::new(), "Go", &AtomicBool::new(false), &mut |e| events.push(e)).unwrap();
+    let usage: Vec<&Event> = events.iter().filter(|e| matches!(e, Event::Usage { .. })).collect();
+    assert_eq!(usage, [&Event::Usage { usage: first }, &Event::Usage { usage: second }]);
+    // Reported before the tools of the same answer.
+    assert!(matches!(events[0], Event::Usage { .. }) && matches!(events[1], Event::ToolStart { .. }), "{events:?}");
+    assert_eq!(first + second, Usage { input: 70, cache_write: 2120, cache_read: 2000, output: 70 });
+    // The whole prompt is the uncached part plus what the cache wrote and read.
+    assert_eq!(second.prompt(), 2160);
 }

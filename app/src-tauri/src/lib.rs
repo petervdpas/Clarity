@@ -7,6 +7,7 @@ mod themes;
 mod translations;
 mod vault;
 mod agent;
+mod manual;
 mod migrations;
 mod pictures;
 
@@ -680,10 +681,17 @@ fn resolve_dir(dir: &str, start: Option<&Path>) -> String {
     }
 }
 
-/// Clarity's window title: its name and version, the version the release's
-/// tag stamped into tauri.conf.json.
-fn window_title(name: &str, version: &str) -> String {
-    format!("{name} {version}")
+/// Clarity's window title: its name and version. A release says the version
+/// the release pipeline stamped into tauri.conf.json from its tag; a
+/// development build (`dev_release`, the newest `v*` tag it builds on, from
+/// build.rs) says that release with `-dev`, since tauri.conf.json holds only
+/// a placeholder in the repository.
+fn window_title(name: &str, version: &str, dev_release: Option<&str>) -> String {
+    match dev_release.map(|t| t.trim().trim_start_matches('v')) {
+        None => format!("{name} {version}"),
+        Some("") => format!("{name} (development)"),
+        Some(release) => format!("{name} {release}-dev"),
+    }
 }
 
 pub fn run() {
@@ -691,7 +699,17 @@ pub fn run() {
         .setup(|app| {
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
-                window.set_title(&window_title(&info.name, &info.version.to_string()))?;
+                let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
+                window.set_title(&window_title(&info.name, &info.version.to_string(), dev_release))?;
+                // The manual's window closes with Clarity's.
+                let app = app.handle().clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Destroyed = event
+                        && let Some(manual) = app.get_webview_window("manual")
+                    {
+                        manual.close().ok();
+                    }
+                });
             }
             Ok(())
         })
@@ -702,6 +720,9 @@ pub fn run() {
         .manage(vault::VaultState::default())
         .manage(agent::AgentState::default())
         .invoke_handler(tauri::generate_handler![
+            manual::manual_topics,
+            manual::manual_page,
+            manual::open_manual,
             open_project,
             check_project,
             initial_project,
@@ -766,7 +787,12 @@ mod tests {
 
     #[test]
     fn the_window_title_carries_the_version() {
-        assert_eq!(window_title("Clarity", "0.3.0"), "Clarity 0.3.0");
+        // A release says the version its tag stamped in.
+        assert_eq!(window_title("Clarity", "0.3.0", None), "Clarity 0.3.0");
+        // A development build says the newest release it builds on, marked as such.
+        assert_eq!(window_title("Clarity", "0.1.0", Some("v0.3.0")), "Clarity 0.3.0-dev");
+        // Without a release tag to go by, it says it is a development build.
+        assert_eq!(window_title("Clarity", "0.1.0", Some("")), "Clarity (development)");
     }
 
     #[test]

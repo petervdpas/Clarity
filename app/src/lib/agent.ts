@@ -3,6 +3,7 @@
 
 import type { AgentEvent } from "./generated/AgentEvent";
 import type { ConnectionRow } from "./generated/ConnectionRow";
+import type { Usage } from "./generated/Usage";
 
 export type Item =
   | { kind: "user"; text: string }
@@ -31,6 +32,30 @@ export function applyEvent(items: Item[], event: AgentEvent): Item[] {
   }
 }
 
+/** No tokens yet. */
+export const NO_USAGE: Usage = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
+
+export function addUsage(a: Usage, b: Usage): Usage {
+  return { input: a.input + b.input, cacheWrite: a.cacheWrite + b.cacheWrite, cacheRead: a.cacheRead + b.cacheRead, output: a.output + b.output };
+}
+
+/** A number of tokens in a few characters: 950, 18.6k, 1.3M. */
+export function tokens(n: number): string {
+  const short = (value: number, unit: string) => `${value.toFixed(1).replace(/\.0$/, "")}${unit}`;
+  if (n >= 1_000_000) return short(n / 1_000_000, "M");
+  if (n >= 1_000) return short(n / 1_000, "k");
+  return String(n);
+}
+
+/** What the turn and the session cost so far: the whole prompts, what the
+ *  cache served of the turn's, and the answers. Empty before any answer. */
+export function usageLine(turn: Usage, session: Usage): string {
+  if (session.output === 0 && session.input === 0) return "";
+  const prompt = (u: Usage) => u.input + u.cacheWrite + u.cacheRead;
+  const cached = turn.cacheRead > 0 ? ` (${tokens(turn.cacheRead)} from the cache)` : "";
+  return `This turn ${tokens(prompt(turn))} in${cached}, ${tokens(turn.output)} out. Session ${tokens(prompt(session))} in, ${tokens(session.output)} out.`;
+}
+
 const text = (input: unknown, key: string): string => {
   const value = (input as Record<string, unknown> | null)?.[key];
   return typeof value === "string" ? value : "";
@@ -57,6 +82,10 @@ export function toolLine(name: string, input: unknown): string {
       return `Made the project ${text(input, "name")}`;
     case "design":
       return text(input, "section") ? `Read the design: ${text(input, "section")}` : "Read the design's contents";
+    case "manual":
+      return `Read the manual: ${text(input, "topic")}`;
+    case "reference":
+      return text(input, "section") ? `Read the reference: ${text(input, "section")}` : "Read the reference's contents";
     case "show_window":
       return `Showed ${text(input, "name")}`;
     default:

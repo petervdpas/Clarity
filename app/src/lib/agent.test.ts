@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agentConnections, applyEvent, toolLine, type Item } from "./agent.ts";
+import { addUsage, agentConnections, applyEvent, NO_USAGE, tokens, toolLine, usageLine, type Item } from "./agent.ts";
 import type { ConnectionRow } from "./generated/ConnectionRow";
 
 test("text pieces join the answer, and tools show with their results", () => {
@@ -50,4 +50,25 @@ test("the agent picks from connections that name a model kind, anthropic first",
 test("reading the design document shows which part", () => {
   assert.equal(toolLine("design", {}), "Read the design's contents");
   assert.equal(toolLine("design", { section: "roadmap" }), "Read the design: roadmap");
+});
+
+test("tokens add up per turn and per session, and read briefly", () => {
+  const first = { input: 30, cacheWrite: 18000, cacheRead: 0, output: 400 };
+  const second = { input: 50, cacheWrite: 600, cacheRead: 18000, output: 250 };
+  const turn = addUsage(addUsage(NO_USAGE, first), second);
+  assert.deepEqual(turn, { input: 80, cacheWrite: 18600, cacheRead: 18000, output: 650 });
+  assert.equal(tokens(950), "950");
+  assert.equal(tokens(18_600), "18.6k");
+  assert.equal(tokens(2_000), "2k");
+  assert.equal(tokens(1_250_000), "1.3M");
+  // The whole prompt, how much of it the cache served, and the answers.
+  assert.equal(usageLine(turn, addUsage(turn, first)), "This turn 36.7k in (18k from the cache), 650 out. Session 54.7k in, 1.1k out.");
+  // Before any answer there is nothing to tell.
+  assert.equal(usageLine(NO_USAGE, NO_USAGE), "");
+});
+
+test("reading the manual and the reference shows which page", () => {
+  assert.equal(toolLine("manual", { topic: "code.queries" }), "Read the manual: code.queries");
+  assert.equal(toolLine("reference", { section: "Queries" }), "Read the reference: Queries");
+  assert.equal(toolLine("reference", {}), "Read the reference's contents");
 });

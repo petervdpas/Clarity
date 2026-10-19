@@ -6,6 +6,7 @@
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
   import { loadPicturesWith } from "./lib/pictures.svelte";
+  import { topicForTab } from "./lib/manual";
   import FrameView from "./lib/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
   import PageDesigner from "./lib/PageDesigner.svelte";
@@ -510,7 +511,19 @@
     }
   }
 
+  /** Opens the manual on the page about what you are doing: the agent's
+   *  page while the focus is in its panel, else the current tab's. */
+  function openManual() {
+    const inAgent = (document.activeElement as HTMLElement | null)?.closest(".agent");
+    invoke("open_manual", { topic: topicForTab(inAgent ? "agent" : tab) }).catch(() => {});
+  }
+
   function onkeydown(e: KeyboardEvent) {
+    if (e.key === "F1") {
+      e.preventDefault();
+      openManual();
+      return;
+    }
     if (tab !== "design" || !(e.ctrlKey || e.metaKey)) return;
     if ((e.target as HTMLElement | null)?.closest("input, textarea, select")) return;
     const key = e.key.toLowerCase();
@@ -594,7 +607,8 @@
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => (tab = t.key)}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
-      <button class="agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
+      <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
+      <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
     <div class="ribbon-body">
       {#if tab === "project"}
@@ -1090,16 +1104,23 @@
     opacity: 1;
   }
 
-  .ribbon-tabs .agent-toggle {
-    margin: 0 0 0 auto;
+  .ribbon-tabs .corner {
     align-self: center;
     padding: 3px 12px;
     border: 1px solid color-mix(in srgb, var(--titlebar-text) 35%, transparent);
     border-radius: var(--radius);
   }
 
-  .ribbon-tabs .project-name + .agent-toggle {
+  .ribbon-tabs .manual-button {
+    margin: 0 0 0 auto;
+  }
+
+  .ribbon-tabs .project-name + .manual-button {
     margin-left: 12px;
+  }
+
+  .ribbon-tabs .agent-toggle {
+    margin: 0 0 0 8px;
   }
 
   .project-name {

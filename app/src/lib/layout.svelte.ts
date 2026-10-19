@@ -9,9 +9,11 @@ type Sizes = {
   codePanel: number;
   output: number;
   agent: number;
+  /** The list of topics in the manual's window. */
+  manualTopics: number;
 };
 
-const DEFAULTS: Sizes = { sidebar: 300, properties: 280, codePanel: 640, output: 240, agent: 380 };
+const DEFAULTS: Sizes = { sidebar: 300, properties: 280, codePanel: 640, output: 240, agent: 380, manualTopics: 250 };
 
 /** The smallest and largest size of each panel, in pixels. */
 const LIMITS: Record<keyof Sizes, [number, number]> = {
@@ -20,6 +22,7 @@ const LIMITS: Record<keyof Sizes, [number, number]> = {
   codePanel: [360, 1400],
   output: [100, 700],
   agent: [280, 900],
+  manualTopics: [180, 480],
 };
 
 function read(): Sizes {

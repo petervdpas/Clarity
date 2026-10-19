@@ -75,11 +75,58 @@ pub enum StopReason {
     Other(String),
 }
 
-/// A model's answer: its blocks, and why it stopped.
+/// The tokens one answer of a model cost, as the model counts them. The
+/// prompt is three parts: what was read uncached, what was written to the
+/// cache, and what was read from it (the cheap part).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Usage {
+    /// The prompt's tokens read without the cache.
+    #[ts(type = "number")]
+    pub input: u64,
+    /// The prompt's tokens written to the cache.
+    #[ts(type = "number")]
+    pub cache_write: u64,
+    /// The prompt's tokens read from the cache.
+    #[ts(type = "number")]
+    pub cache_read: u64,
+    /// The answer's tokens.
+    #[ts(type = "number")]
+    pub output: u64,
+}
+
+impl Usage {
+    /// The whole prompt, cached or not.
+    pub fn prompt(&self) -> u64 {
+        self.input + self.cache_write + self.cache_read
+    }
+
+    /// Whether the model told anything.
+    pub fn is_empty(&self) -> bool {
+        *self == Usage::default()
+    }
+}
+
+impl std::ops::Add for Usage {
+    type Output = Usage;
+
+    fn add(self, other: Usage) -> Usage {
+        Usage {
+            input: self.input + other.input,
+            cache_write: self.cache_write + other.cache_write,
+            cache_read: self.cache_read + other.cache_read,
+            output: self.output + other.output,
+        }
+    }
+}
+
+/// A model's answer: its blocks, why it stopped, and what it cost.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelReply {
     pub content: Vec<Block>,
     pub stop: StopReason,
+    pub usage: Usage,
 }
 
 /// A model to ask. `on_text` gets the answer's text as it comes.
@@ -107,6 +154,8 @@ pub trait Tools {
 pub enum Event {
     /// A piece of the answer's text.
     Text { text: String },
+    /// What an answer of the model cost, before its tools run.
+    Usage { usage: Usage },
     /// A tool is called with this input.
     ToolStart {
         id: String,
@@ -165,6 +214,9 @@ impl Agent {
                     return Err(message);
                 }
             };
+            if !reply.usage.is_empty() {
+                events(Event::Usage { usage: reply.usage });
+            }
             conversation.push(Message { role: Role::Assistant, content: reply.content.clone() });
             let calls: Vec<(String, String, Value)> = reply
                 .content

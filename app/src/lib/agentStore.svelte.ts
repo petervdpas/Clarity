@@ -1,13 +1,15 @@
 // The agent panel's state: the conversation as shown, the connection it
-// talks through, and whether a turn is running. Turns run in the backend
+// talks through, whether a turn is running, and the tokens the turn and the
+// conversation cost. Turns run in the backend
 // and report through events.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { agentConnections, applyEvent, type Item } from "./agent";
+import { addUsage, agentConnections, applyEvent, NO_USAGE, type Item } from "./agent";
 import type { AgentEnded } from "./generated/AgentEnded";
 import type { AgentEvent } from "./generated/AgentEvent";
 import type { ConnectionRow } from "./generated/ConnectionRow";
+import type { Usage } from "./generated/Usage";
 import { unlock } from "./unlockStore.svelte";
 
 const OPEN_KEY = "clarity.agent.open";
@@ -35,11 +37,21 @@ class AgentStore {
   running = $state(false);
   connections = $state<string[]>([]);
   connection = $state(remembered(CONNECTION_KEY) ?? "anthropic");
+  /** The tokens of the turn that runs or ran last, and of the conversation. */
+  turnUsage = $state<Usage>(NO_USAGE);
+  sessionUsage = $state<Usage>(NO_USAGE);
   /** What the screen does when a turn ends; App sets it. */
   onEnded: (ended: AgentEnded) => void = () => {};
 
   constructor() {
-    listen<AgentEvent>("agent-event", (e) => (this.items = applyEvent(this.items, e.payload)));
+    listen<AgentEvent>("agent-event", (e) => {
+      const event = e.payload;
+      if (event.kind === "usage") {
+        this.turnUsage = addUsage(this.turnUsage, event.usage);
+        this.sessionUsage = addUsage(this.sessionUsage, event.usage);
+      }
+      this.items = applyEvent(this.items, event);
+    });
     listen<AgentEnded>("agent-ended", (e) => {
       this.running = false;
       this.onEnded(e.payload);
@@ -70,6 +82,7 @@ class AgentStore {
     const said = text.trim();
     if (!said || this.running) return false;
     this.items = [...this.items, { kind: "user", text: said }];
+    this.turnUsage = NO_USAGE;
     this.running = true;
     try {
       // The key comes from the vault: a locked vault asks for its password, then the turn starts.
@@ -89,6 +102,8 @@ class AgentStore {
     try {
       await invoke("agent_forget");
       this.items = [];
+      this.turnUsage = NO_USAGE;
+      this.sessionUsage = NO_USAGE;
     } catch (err) {
       this.items = [...this.items, { kind: "error", text: String(err) }];
     }

@@ -1,7 +1,7 @@
 <script lang="ts">
   // The agent: a conversation with a model that works on the open project.
   // It sits right of every tab; what it changes is one Undo step per turn.
-  import { toolLine } from "./agent";
+  import { toolLine, usageLine } from "./agent";
   import { agent } from "./agentStore.svelte";
   import { markdown } from "./markdown";
 
@@ -72,6 +72,10 @@
     {#if agent.running}<p class="note">Working...</p>{/if}
   </div>
 
+  {#if usageLine(agent.turnUsage, agent.sessionUsage)}
+    <p class="usage" title="Tokens sent to the model (in) and written by it (out); what the cache served costs a tenth">{usageLine(agent.turnUsage, agent.sessionUsage)}</p>
+  {/if}
+
   <footer>
     <textarea bind:value={text} onkeydown={keydown} rows="3" placeholder="Make a todo app with a list of tasks and a done flag" aria-label="Message"></textarea>
     {#if agent.running}
@@ -83,6 +87,14 @@
 </section>
 
 <style>
+  .usage {
+    margin: 0;
+    padding: 4px 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
   .agent {
     display: flex;
     flex-direction: column;

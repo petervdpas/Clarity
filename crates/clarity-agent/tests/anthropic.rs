@@ -2,6 +2,7 @@
 //! reads, from a recorded stream, so the test needs no network.
 
 use clarity_agent::anthropic::{body, read_stream};
+use clarity_agent::Usage;
 use clarity_agent::{Block, Message, Request, Role, StopReason, ToolDef};
 use serde_json::json;
 
@@ -28,7 +29,7 @@ fn the_request_carries_the_instructions_cached_the_tools_and_the_conversation() 
 }
 
 const STREAM: &str = r#"event: message_start
-data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"stop_reason":null}}
+data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"stop_reason":null,"usage":{"input_tokens":25,"cache_creation_input_tokens":1200,"cache_read_input_tokens":18000,"output_tokens":1}}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
@@ -58,7 +59,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":42}}
 
 event: message_stop
 data: {"type":"message_stop"}
@@ -70,6 +71,9 @@ fn a_streamed_reply_is_read_with_its_text_as_it_comes_and_its_tool_calls() {
     let reply = read_stream(STREAM.as_bytes(), &mut |t| shown.push_str(t)).unwrap();
     assert_eq!(shown, "I will check it.");
     assert_eq!(reply.stop, StopReason::ToolUse);
+    // What the answer cost: the prompt's uncached part, what was written to
+    // and read from the cache, and the answer (the count message_delta ends with).
+    assert_eq!(reply.usage, Usage { input: 25, cache_write: 1200, cache_read: 18000, output: 42 });
     assert_eq!(
         reply.content,
         [

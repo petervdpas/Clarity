@@ -417,7 +417,7 @@ page CustomerForm: window
 
 Only a `window` has frame regions of its own.
 
-An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. Only a `dialog` opens a desktop window of its own: a new window appears only where the design says so.
+An application has one desktop window, on every stack. `open` shows a window in place, on top of the one that opened it, and `close` goes back to the one below. A desktop window of its own opens only where the design says so: a target marked `in new window` starts one, and a `dialog` may get one too (on Avalonia it does; the web stacks show it on top of the window that opened it).
 
 ### Settings
 

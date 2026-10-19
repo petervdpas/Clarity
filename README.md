@@ -2,7 +2,7 @@
 
 # Clarity
 
-A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. The language is described in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
+A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. How to use it is in [the manual](docs/manual/README.md), one topic per page. The language is described in full in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).
 
 Current state: the designer for windows and the application frame, with every part on a fluid snap grid (S1 to S3e); projects as one file with their settings (P1, P2); handlers in the code behind and functions and actions in modules, written in Clarity (L1, L2); window and app events (E1); forms, labels and help texts (U1a); queries and migrations written in Clarity (D1a, D1b); and the Rust generator, which turns a project into a Tauri desktop application with SQLite that Clarity builds and runs (G1). See the roadmap in docs/DESIGN.md.
 

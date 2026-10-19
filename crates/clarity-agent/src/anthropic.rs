@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Read};
 
 use serde_json::{Value, json};
 
-use crate::{Block, Model, ModelReply, Request, StopReason};
+use crate::{Block, Model, ModelReply, Request, StopReason, Usage};
 
 /// The version of the API this client speaks.
 const API_VERSION: &str = "2023-06-01";
@@ -84,11 +84,14 @@ enum Building {
 pub fn read_stream(stream: impl Read, on_text: &mut dyn FnMut(&str)) -> Result<ModelReply, String> {
     let mut blocks: Vec<Building> = Vec::new();
     let mut stop = StopReason::Other("the stream ended early".into());
+    let mut usage = Usage::default();
     for line in BufReader::new(stream).lines() {
         let line = line.map_err(|err| format!("the answer broke off: {err}"))?;
         let Some(data) = line.strip_prefix("data:") else { continue };
         let event: Value = serde_json::from_str(data.trim()).map_err(|err| format!("the answer is no valid JSON: {err}"))?;
         match event["type"].as_str().unwrap_or_default() {
+            // The prompt's tokens come first; message_delta may repeat them.
+            "message_start" => read_usage(&event["message"]["usage"], &mut usage),
             "content_block_start" => {
                 let block = &event["content_block"];
                 blocks.push(match block["type"].as_str() {
@@ -113,6 +116,7 @@ pub fn read_stream(stream: impl Read, on_text: &mut dyn FnMut(&str)) -> Result<M
                 }
             }
             "message_delta" => {
+                read_usage(&event["usage"], &mut usage);
                 stop = match event["delta"]["stop_reason"].as_str() {
                     Some("end_turn") => StopReason::EndTurn,
                     Some("tool_use") => StopReason::ToolUse,
@@ -147,5 +151,22 @@ pub fn read_stream(stream: impl Read, on_text: &mut dyn FnMut(&str)) -> Result<M
             }
         })
         .collect::<Result<Vec<_>, String>>()?;
-    Ok(ModelReply { content, stop })
+    Ok(ModelReply { content, stop, usage })
+}
+
+/// Takes the counts a usage object has; the answer's count is the total so far.
+fn read_usage(from: &Value, usage: &mut Usage) {
+    let count = |name: &str| from[name].as_u64();
+    if let Some(n) = count("input_tokens") {
+        usage.input = n;
+    }
+    if let Some(n) = count("cache_creation_input_tokens") {
+        usage.cache_write = n;
+    }
+    if let Some(n) = count("cache_read_input_tokens") {
+        usage.cache_read = n;
+    }
+    if let Some(n) = count("output_tokens") {
+        usage.output = n;
+    }
 }

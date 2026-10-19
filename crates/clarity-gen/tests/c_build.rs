@@ -56,3 +56,10 @@ fn the_shop_example_builds_and_runs_in_c() {
 fn the_records_example_builds_and_runs_in_c() {
     builds_and_runs_in_c("records", "Records");
 }
+
+/// The third example: tasks edited in their table, and the people who finish them.
+#[test]
+#[ignore]
+fn the_todo_example_builds_and_runs_in_c() {
+    builds_and_runs_in_c("todo", "Todo");
+}

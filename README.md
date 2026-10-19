@@ -1,3 +1,5 @@
+<p align="center"><img src="app/src-tauri/icons/icon.svg" width="128" alt="Clarity"></p>
+
 # Clarity
 
 A development environment that keeps humans in control of AI-assisted codebases. An application is written in Clarity, its own language: windows are designed visually, the behavior behind them is written in Clarity, and Clarity transpiles both into real frontend and backend code. The language is described in [docs/LANGUAGE.md](docs/LANGUAGE.md), the design and its reasons in [docs/DESIGN.md](docs/DESIGN.md).

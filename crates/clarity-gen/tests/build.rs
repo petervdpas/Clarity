@@ -86,6 +86,13 @@ fn the_records_example_builds() {
     builds_with_cargo("records", Runtime::Local);
 }
 
+/// The third example: tasks edited in their table, and the people who finish them.
+#[test]
+#[ignore]
+fn the_todo_example_builds() {
+    builds_with_cargo("todo", Runtime::Local);
+}
+
 /// The shop example on each server database: the generated project turns
 /// on that database's driver in the runtime and still builds.
 #[test]

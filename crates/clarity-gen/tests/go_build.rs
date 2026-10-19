@@ -150,6 +150,13 @@ fn the_records_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("records", "Records", Runtime::Local);
 }
 
+/// The third example: tasks edited in their table, and the people who finish them.
+#[test]
+#[ignore]
+fn the_todo_example_builds_and_runs_in_go() {
+    builds_and_runs_in_go("todo", "Todo", Runtime::Local);
+}
+
 /// The shop on each server database: the module has only that driver and
 /// its modules, and where a scratch database is named (the variables of
 /// tests/servers.rs) the program migrates it with `--check`, twice.

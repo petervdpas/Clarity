@@ -3,6 +3,8 @@
   import { listen } from "@tauri-apps/api/event";
   import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  // The installers' icon, from the same drawing.
+  import logo from "../src-tauri/icons/icon.svg";
   import { loadPicturesWith } from "./lib/pictures.svelte";
   import FrameView from "./lib/FrameView.svelte";
   import NewWindowDialog from "./lib/NewWindowDialog.svelte";
@@ -587,7 +589,7 @@
 <div class="app">
   <header class="ribbon">
     <div class="ribbon-tabs" role="tablist">
-      <div class="brand"><span class="logo">C</span> Clarity</div>
+      <div class="brand"><img class="logo" src={logo} alt="" /> Clarity</div>
       {#each TABS as t (t.key)}
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => (tab = t.key)}>{t.name}</button>
       {/each}
@@ -1266,19 +1268,9 @@
 
 
   .logo {
-    display: inline-grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    background: var(--brand);
-    color: #20242c;
-    font-weight: 800;
+    width: 24px;
+    height: 24px;
   }
-
-
-
-
 
   .load-error {
     color: var(--error);

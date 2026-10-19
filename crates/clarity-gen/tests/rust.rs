@@ -689,3 +689,20 @@ fn rows_read_again_lose_their_selected_row() {
     // A single record read again keeps what is chosen.
     assert_eq!(sales.matches("ui.deselect(").count(), 2, "{sales}");
 }
+
+/// The record a table shows is saved and deleted as it is, as every stack
+/// does: `save grid.selected` after a cell was edited (LANGUAGE.md, Editing
+/// in a table).
+#[test]
+fn the_selected_row_is_saved_and_deleted_as_it_is() {
+    let source = SALES.replace(
+        "    handler grid_opened\n",
+        "    handler grid_changed\n        save grid.selected\n        delete grid.selected\n\n    handler grid_opened\n",
+    );
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("    db.save(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
+    assert!(sales.contains("    db.delete(&mut ui.selected(\"grid\", &w.orders)?)?;\n"), "{sales}");
+}

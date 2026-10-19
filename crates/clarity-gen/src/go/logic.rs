@@ -715,7 +715,6 @@ impl<'a> Emitter<'a> {
         self.project.entity(entity).map_or_else(|| field_name.to_string(), |e| e.column_of(field_name).to_string())
     }
 
-    /// An expression as a place: what can be assigned or read in place.
     /// After a handler replaced the rows of `data` (`reload`, or a new
     /// list): the tables and lists showing them lose their selected row.
     fn deselect(&self, data: &str) -> String {
@@ -723,6 +722,7 @@ impl<'a> Emitter<'a> {
         parts.map(|part| format!("ui.Deselect({})\n", string(part))).collect()
     }
 
+    /// An expression as a place: what can be assigned or read in place.
     fn place(&mut self, expr: &Expr, pre: &mut String) -> String {
         if self.part_property(expr).is_some() {
             return self.read_part(expr, pre);

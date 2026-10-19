@@ -266,11 +266,11 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::Save { value } => {
-                let record = self.record_mut(value, "save");
+                let record = self.record_mut(value);
                 out.push_str(&format!("{pad}db.save({record})?;\n"));
             }
             StmtKind::Delete { value } => {
-                let record = self.record_mut(value, "delete");
+                let record = self.record_mut(value);
                 out.push_str(&format!("{pad}db.delete({record})?;\n"));
             }
             StmtKind::Refuse { text } => {
@@ -423,22 +423,17 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// The record `save` or `delete` works on: a name holding it.
-    fn record_mut(&mut self, value: &Expr, word: &str) -> String {
+    /// The record `save` or `delete` works on: a name holding it, or the
+    /// record a value is (a table's selected row, as the other stacks save
+    /// it), which lives until the statement ends.
+    fn record_mut(&mut self, value: &Expr) -> String {
         match self.held(value) {
             Some((place, true)) => place,
             Some((place, false)) => format!("&mut {place}"),
-            None => {
-                self.errors.push(format!(
-                    "'{word} {}' needs the record in a name; use 'let' first",
-                    print::expr(value)
-                ));
-                String::new()
-            }
+            None => format!("&mut {}", self.value(value)),
         }
     }
 
-    /// An expression as a place: what can be assigned or borrowed.
     /// After a handler replaced the rows of `data` (`reload`, or a new
     /// list): the tables and lists showing them lose their selected row.
     fn deselect(&self, data: &str, pad: &str) -> String {
@@ -446,6 +441,7 @@ impl<'a> Emitter<'a> {
         parts.map(|part| format!("{pad}ui.deselect({part:?});\n")).collect()
     }
 
+    /// An expression as a place: what can be assigned or borrowed.
     fn place(&mut self, expr: &Expr) -> String {
         match &expr.kind {
             ExprKind::Name { name } => match self.types.name_of(expr) {

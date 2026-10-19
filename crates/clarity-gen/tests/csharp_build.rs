@@ -45,7 +45,8 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str, runtim
     let file = root.join(format!("examples/{name}.clarity"));
     // As Run loads it: with the project file's language, currency and themes.
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    assert!(!project.themes.is_empty() && !project.translations.is_empty(), "the example has themes and translations");
+    // Its translations, whose satellite assembly the build must make.
+    assert!(!project.translations.is_empty(), "the example has translations");
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
@@ -95,6 +96,13 @@ fn the_shop_example_builds_and_runs_on_the_published_packages() {
 #[ignore]
 fn the_records_example_builds_and_runs_in_csharp() {
     builds_and_runs_in_csharp("records", "Records", "de", Runtime::Local);
+}
+
+/// The third example: tasks edited in their table, and the people who finish them.
+#[test]
+#[ignore]
+fn the_todo_example_builds_and_runs_in_csharp() {
+    builds_and_runs_in_csharp("todo", "Todo", "nl", Runtime::Local);
 }
 
 /// The shop on each server database: the project builds with only that

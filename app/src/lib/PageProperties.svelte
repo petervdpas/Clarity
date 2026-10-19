@@ -11,7 +11,7 @@
   import { findFrameElement } from "./frame";
   import { layout } from "./layout.svelte";
   import { cellEdits, describeType, themeStyles } from "./model";
-  import { pageDesigner } from "./pageDesigner.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
 
   let {

@@ -8,7 +8,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Side } from "./generated/Side";
   import type { FrameElement } from "./frame";
-  import { pageDesigner } from "./pageDesigner.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages } from "./pages";
 
   let {

@@ -12,7 +12,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Sidebar } from "./generated/Sidebar";
   import type { ShownFrame } from "./frame";
-  import { pageDesigner } from "./pageDesigner.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import type { PageData } from "./pages";
   import { tr } from "./model";
   import { useLive } from "./live";

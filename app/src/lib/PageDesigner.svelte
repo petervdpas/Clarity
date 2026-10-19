@@ -23,7 +23,7 @@
   import type { WidgetInfo } from "./generated/WidgetInfo";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
   import { describeType, themeArea, themeOf } from "./model";
-  import { pageDesigner, type PageDragSource, type Placement } from "./pageDesigner.svelte";
+  import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
   import {
     CONTENT_PADDING,
     WINDOW_HEIGHT,

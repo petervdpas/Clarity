@@ -16,7 +16,7 @@
   import type { Diagnostic } from "./generated/Diagnostic";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
-  import { pageDesigner, type PanelView } from "./pageDesigner.svelte";
+  import { pageDesigner, type PanelView } from "./pageDesignerStore.svelte";
 
   let {
     file,

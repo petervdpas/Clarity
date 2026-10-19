@@ -21,7 +21,7 @@ use clarity_spec::edit::{self, Edit};
 use clarity_spec::rename::RenameKind;
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use ts_rs::TS;
 
 /// Event sent to the frontend whenever a watched spec file changes.
@@ -680,8 +680,21 @@ fn resolve_dir(dir: &str, start: Option<&Path>) -> String {
     }
 }
 
+/// Clarity's window title: its name and version, the version the release's
+/// tag stamped into tauri.conf.json.
+fn window_title(name: &str, version: &str) -> String {
+    format!("{name} {version}")
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let info = app.package_info();
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_title(&window_title(&info.name, &info.version.to_string()))?;
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .manage(WatchState::default())
         .manage(HistoryState::default())
@@ -750,6 +763,11 @@ mod tests {
     use notify::event::{AccessKind, CreateKind, ModifyKind, RenameMode};
     use notify::{Event, EventKind};
     use clarity_project::{Backend, Target, Ui};
+
+    #[test]
+    fn the_window_title_carries_the_version() {
+        assert_eq!(window_title("Clarity", "0.3.0"), "Clarity 0.3.0");
+    }
 
     #[test]
     fn a_new_project_is_a_file_with_its_folder() {

@@ -34,7 +34,7 @@
   import type { PageTemplate } from "./lib/generated/PageTemplate";
   import type { Preview } from "./lib/generated/Preview";
   import type { SpecFile } from "./lib/generated/SpecFile";
-  import { pageDesigner } from "./lib/pageDesigner.svelte";
+  import { pageDesigner } from "./lib/pageDesignerStore.svelte";
   import { findApp, frameForPage } from "./lib/frame";
   import { CONTENT_PADDING, WINDOW_HEIGHT, appAsPage, findPage, pageData } from "./lib/pages";
   import ShownWindow from "./lib/ShownWindow.svelte";

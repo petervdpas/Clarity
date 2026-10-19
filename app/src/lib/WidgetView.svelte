@@ -16,7 +16,7 @@
   import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { numberEditing } from "./format";
-  import { pageDesigner } from "./pageDesigner.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
   import { useLive } from "./live";

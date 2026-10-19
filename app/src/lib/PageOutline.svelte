@@ -4,7 +4,7 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
-  import { pageDesigner } from "./pageDesigner.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import type { ShownFrame } from "./frame";
   import { widgetInfo } from "./pages";
 

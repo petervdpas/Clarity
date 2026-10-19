@@ -161,6 +161,7 @@ The declarations a module can hold:
 | `app Name` | [7](#7-the-app-and-its-frame), one per project |
 | `code Name` | [8](#8-code-behind) |
 | `function name(...)` and `action name(...)` | [9](#9-functions-and-actions) |
+| `engine Name from "file.wasm"` | [9](#engines) |
 
 ## 4. Data: enums and entities
 
@@ -896,6 +897,33 @@ action approve(order: Order)
 - **An action** can change data. Neither functions nor actions talk to the screen: `message`, `open`, `close` and part properties belong in handlers.
 - A function or action with a result returns a value on every path; the checker reports a path that does not.
 
+### Engines
+
+An engine is a processing module compiled to WebAssembly, which every stack runs the same way: pricing, scheduling, a solver, the logic of a game. A module declares it with its file and the functions it has; code calls those functions like its own.
+
+```
+engine Pricing from "pricing.wasm"
+    function total(lines: list<Line>) -> money
+    function size_of(count: integer) -> Size
+    function discounted(order: Order) -> Order
+```
+
+```
+function order_total(order: Order) -> money
+    return Pricing.total(order.lines)
+```
+
+- **The file** is in the `engines` folder of the module folder (`shop/engines/pricing.wasm`). Every generated application carries it inside the program.
+- **Each function** has a signature like a function's, and always a result: `-> type`. Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`; not `file` or `list<file>`.
+- **A call** is `Engine.function(args)`. The checker types it against the declaration, as it does a call to a function. Handlers, functions and actions can all call an engine: it has no effects.
+- **The engine computes; the application does all input and output.** An engine imports nothing, so it reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
+- **No state.** Each call starts the engine afresh, so nothing carries over from one call to the next.
+- **Checked twice.** The designer reads the file and reports a file that is not in the folder, is no WebAssembly, imports anything, or lacks a declared function. The application checks it again when it starts, and stops there rather than at the first call.
+- **An error** that the engine gives back (its own refusal) reaches code as a refusal, in the engine's words. An engine that fails while it runs is an error that names the engine.
+- The declaration is visible to the modules that `use` the module, like its functions. Two engines of one module have different names, and an engine has each function once.
+
+How to build an engine in another language, and what it exports, is in the manual: [Engines](manual/code.engines.md).
+
 ## 10. Statements and expressions
 
 ### Statements
@@ -1156,7 +1184,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | page | app | theme | code | function | action
+declaration   = enum | entity | page | app | theme | code | function | action | engine
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -1196,6 +1224,10 @@ code          = "code" (Window | App)
 function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" type-ref]
                     ("require" expr | "ensure" expr | "effects" effect ("," effect)*)*
                     statement*
+
+engine        = "engine" Name "from" String
+                    ("function" name "(" [param ("," param)*] ")" "->" type-ref)*
+engine-call   = Engine "." name "(" [expr ("," expr)*] ")"
 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]

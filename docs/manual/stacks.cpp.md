@@ -35,6 +35,8 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 As for C, Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the shell that opens the window, and the webview library. JSON comes from nlohmann_json, which you install on the system.
 
+A project with an [engine](code.engines.md) also gets the engine host and wasm3, which runs engines, in `clarity-runtime/`.
+
 ## What to install
 
 - A C++ compiler: GCC or Clang (on Windows, Visual Studio's Build Tools)

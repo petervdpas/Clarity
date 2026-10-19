@@ -34,6 +34,7 @@ The generated project carries no runtime sources. It references NuGet packages f
 
 - `Clarity.Avalonia`: the windows, parts and shell. It brings `Clarity.Runtime`, which stores records in SQLite.
 - `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per server database, added only when a data source uses it.
+- `Clarity.Runtime.Engines`: runs [engines](code.engines.md) with Wasmtime, added only when the project has one.
 
 To build on the runtime's own projects in Clarity's repository instead (while you work on the runtime itself), name their folder:
 

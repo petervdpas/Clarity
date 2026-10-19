@@ -8,7 +8,8 @@ export function linkTarget(href: string): { topic: string | null; anchor: string
   const [path, anchor = null] = href.split("#");
   if (path === "") return { topic: null, anchor };
   if (path === "../LANGUAGE.md") return { topic: "reference", anchor };
-  const topic = /^([a-z][a-z0-9.-]*)\.md$/.exec(path);
+  // A topic from another topic, or from the reference in the folder above.
+  const topic = /^(?:manual\/)?([a-z][a-z0-9.-]*)\.md$/.exec(path);
   return topic ? { topic: topic[1], anchor } : null;
 }
 

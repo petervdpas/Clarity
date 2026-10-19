@@ -13,6 +13,8 @@ test("a link leads to a topic, the reference, or a heading on the page", () => {
   assert.deepEqual(linkTarget("../LANGUAGE.md#queries"), { topic: "reference", anchor: "queries" });
   assert.deepEqual(linkTarget("../LANGUAGE.md"), { topic: "reference", anchor: null });
   assert.deepEqual(linkTarget("#formats"), { topic: null, anchor: "formats" });
+  // The reference links to manual pages from the folder above them.
+  assert.deepEqual(linkTarget("manual/code.engines.md#writing-an-engine"), { topic: "code.engines", anchor: "writing-an-engine" });
   // Anywhere else is no place the manual's window goes.
   assert.equal(linkTarget("https://example.com"), null);
   assert.equal(linkTarget("../DESIGN.md"), null);

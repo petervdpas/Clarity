@@ -26,6 +26,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Functions and actions](code.functions.md): How to write logic that is not tied to one window: functions and actions in a module, with parameters, results, contracts and effects.
 - [Queries](code.queries.md): How to read records with `find`, and how code lists, reads and writes files in a file store.
 - [Data events](code.data-events.md): How to run code whenever a record is saved or deleted, from any window or action, and how a refusal stops it.
+- [Engines](code.engines.md): How to use a processing engine compiled to WebAssembly: declaring it with its file, calling it from code, and writing one in Rust, C or Zig.
 
 ## Data
 

@@ -35,6 +35,8 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 
 C has no package registry, so Clarity copies its runtime into every project as `clarity-runtime/`. It holds the runtime (records, storage, queries and the binding to the screen), the shell that opens the window, cJSON for JSON, and the webview library. The webview's own code is one C++ file, so you need a C++ compiler for it too.
 
+A project with an [engine](code.engines.md) also gets the engine host and wasm3, which runs engines, in `clarity-runtime/`.
+
 ## What to install
 
 - A C compiler: GCC or Clang (on Windows, Visual Studio's Build Tools)

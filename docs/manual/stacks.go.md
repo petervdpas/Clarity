@@ -32,6 +32,7 @@ The generated module carries no runtime sources. It requires the Go module `gith
 - `clarity`: records, storage (SQLite included), queries, migrations and the binding to the screen.
 - `shell`: the Wails desktop shell.
 - `postgresql`, `mysql` and `sqlserver`: one per server database. A generated module imports only the ones its data sources use, and its go.mod leaves out the others' dependencies.
+- `engine`: runs [engines](code.engines.md) with wazero, imported only when the project has one.
 
 The first build downloads them. To build on the runtime in Clarity's repository instead (while you work on the runtime itself), make a workspace in the output folder:
 

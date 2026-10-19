@@ -39,6 +39,8 @@ clarity-runtime = { path = "<Clarity>/runtimes/rust" }
 
 Clarity keeps the `.cargo` folder when it writes the project again. Remove it to build on the published crate.
 
+A project with an [engine](code.engines.md) also turns on the crate's `engines` feature, which runs engines with wasmi.
+
 ## What to install
 
 - Rust with cargo, from https://rustup.rs

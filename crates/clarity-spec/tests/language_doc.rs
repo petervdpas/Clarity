@@ -32,7 +32,7 @@ fn as_module(block: &str) -> Option<String> {
     let first = block.split_whitespace().next()?;
     match first {
         "module" => Some(block.to_string()),
-        "enum" | "entity" | "page" | "app" | "theme" | "code" | "function" | "action" => {
+        "enum" | "entity" | "page" | "app" | "theme" | "code" | "function" | "action" | "engine" => {
             Some(format!("module doc\n{block}"))
         }
         word if widgets::by_keyword(word).is_some() => {

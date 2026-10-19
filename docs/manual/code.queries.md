@@ -6,7 +6,7 @@ How to read records with `find`, and how code lists, reads and writes files in a
 
 `find` reads the records of an entity that meet a condition, in an order. The result is a list.
 
-```
+```clarity
 code Customers
     handler filter_changed
         customers = find c in Customer where c.name contains name_filter.text and c.active order by c.name
@@ -38,7 +38,7 @@ The database does the work. The condition becomes a query with parameters, so va
 
 A condition and an order can go through reference fields to the record they point at:
 
-```
+```clarity
 albums = find a in Album where a.artist.name contains artist_filter.text order by a.artist.name, a.title
 ```
 
@@ -48,7 +48,7 @@ A record whose reference is empty does not meet such a condition. A query reads 
 
 Assign it to a window's list data, so a table shows it; loop over it with `for`; count it with `count(list)`; or return it from a function.
 
-```
+```clarity
 let tasks = find t in Task where t.finished_by == person
 if count(tasks) > 0
     message error "{person.name} has finished tasks and cannot be deleted"
@@ -61,7 +61,7 @@ A table showing a list that gets new rows has no row selected afterwards. `today
 
 Code reaches files only in the file stores of the project settings (`filestore photos "data/photos"`); see [Pictures and files](data.pictures-files.md).
 
-```
+```clarity
 action export_collection()
     effects files.write
     let lines = ""

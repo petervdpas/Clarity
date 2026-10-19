@@ -6,7 +6,7 @@ How Clarity turns a project into a Go desktop program with Wails v3 and the web 
 
 Name the stack in the project file, or pick it on the Project tab:
 
-```
+```clarity
 stack go web desktop
 ```
 
@@ -36,7 +36,7 @@ The generated module carries no runtime sources. It requires the Go module `gith
 
 The first build downloads them. To build on the runtime in Clarity's repository instead (while you work on the runtime itself), make a workspace in the output folder:
 
-```
+```shell
 go work init .
 go work edit -replace github.com/petervdpas/Clarity/runtimes/go=<Clarity>/runtimes/go
 ```
@@ -54,7 +54,7 @@ Clarity checks for these itself: run `clarity tools`, or look at Build tools on 
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:
 
-```
+```shell
 go build -tags production -trimpath -ldflags="-s -w" -o bin/<name> .
 go run .
 ```

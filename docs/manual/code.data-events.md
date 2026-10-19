@@ -6,7 +6,7 @@ How to run code whenever a record is saved or deleted, from any window or action
 
 Data events live in a `code` block with the entity's name, in the same file as the entity. They run whenever one of its records is saved or deleted: from a handler, an action, a table edit or another data event.
 
-```
+```clarity
 code Order
     before save
         if order.status == Approved and not within_credit(order)

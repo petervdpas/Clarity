@@ -19,7 +19,7 @@ It holds no user interface. The Avalonia half is [Clarity.Avalonia](https://www.
 
 You do not call it by hand: a Clarity project with `stack csharp avalonia desktop` generates a .NET project that references it, with records, migration steps and logic written for your project. For example, a handler written in Clarity as
 
-```
+```clarity
 handler task_changed
     save grid.selected
 ```

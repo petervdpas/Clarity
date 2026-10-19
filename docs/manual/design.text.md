@@ -15,7 +15,7 @@ Every window is plain Clarity text in its module, and you can edit that text wit
 
 In the Design tab, type as you like: move a part by changing its `at`, add a line for a new part, change `: window` to `: dialog`. Shortly after you stop typing, Clarity checks the text. When it is one valid declaration, the canvas shows the window as the text would make it, before you save. A note under the text says so: "The designer shows this text. Save it to keep it, or Revert."
 
-```
+```clarity
 page CustomerForm: dialog
     title "Customer"
     data customer: Customer

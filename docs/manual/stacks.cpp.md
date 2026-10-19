@@ -6,7 +6,7 @@ How Clarity turns a project into a C++20 desktop program that shows the web rend
 
 Name the stack in the project file, or pick it on the Project tab:
 
-```
+```clarity
 stack cpp web desktop
 ```
 
@@ -52,7 +52,7 @@ CMake finds SQLite and nlohmann_json itself and the WebKitGTK libraries through 
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder, one command configures and builds:
 
-```
+```shell
 cmake --workflow --preset debug
 cmake --workflow --preset release
 ```

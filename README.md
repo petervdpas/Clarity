@@ -8,7 +8,7 @@ Current state: the designer for windows and the application frame, with every pa
 
 ## Layout
 
-```
+```text
 crates/clarity-spec/     lexer, parser, checker, neutral model, sample data, structural edits
 crates/clarity-project/  the project file: stack, output and data sources
 crates/clarity-vault/    Clarity's vault of secrets and its connections

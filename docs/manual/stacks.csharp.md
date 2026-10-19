@@ -6,7 +6,7 @@ How Clarity turns a project into a C# desktop program whose windows are native A
 
 Name the stack in the project file, or pick it on the Project tab:
 
-```
+```clarity
 stack csharp avalonia desktop
 ```
 
@@ -38,7 +38,7 @@ The generated project carries no runtime sources. It references NuGet packages f
 
 To build on the runtime's own projects in Clarity's repository instead (while you work on the runtime itself), name their folder:
 
-```
+```shell
 dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp
 ```
 
@@ -54,7 +54,7 @@ Clarity checks for it itself: run `clarity tools`, or look at Build tools on the
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:
 
-```
+```shell
 dotnet build -c Release
 dotnet run
 ```

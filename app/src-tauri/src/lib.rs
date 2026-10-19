@@ -106,10 +106,13 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
     ) && event.paths.iter().any(|p| {
         let folder = p.parent();
         let images = dir.join(clarity_spec::images::IMAGES_DIR);
+        let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
         p == file
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
             || *p == images
             || folder == Some(&images)
+            || *p == engines
+            || folder == Some(&engines)
     })
 }
 
@@ -126,11 +129,12 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    // The migration steps and the pictures too, once the project has them.
+    // The migration steps, the pictures and the engines too, once the project has them.
     let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
     let images = dir.join(clarity_spec::images::IMAGES_DIR);
+    let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
     let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    for extra in [&steps, &images] {
+    for extra in [&steps, &images, &engines] {
         if extra.is_dir() {
             folders.push(extra);
         }
@@ -928,6 +932,15 @@ mod tests {
         assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/images/logo.png"));
         assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/images"));
         assert!(!changes(EventKind::Create(CreateKind::File), "/p/shop/notes.txt"));
+    }
+
+    /// An engine's file added, rebuilt or removed, and the engines folder itself.
+    #[test]
+    fn reacts_to_changes_of_the_engines() {
+        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/engines/pricing.wasm"));
+        assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/engines/pricing.wasm"));
+        assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/engines/pricing.wasm"));
+        assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/engines"));
     }
 
     #[test]

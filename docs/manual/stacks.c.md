@@ -6,7 +6,7 @@ How Clarity turns a project into a C17 desktop program that shows the web render
 
 Name the stack in the project file, or pick it on the Project tab:
 
-```
+```clarity
 stack c web desktop
 ```
 
@@ -52,7 +52,7 @@ CMake finds SQLite itself and the WebKitGTK libraries through pkg-config. Clarit
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder, one command configures and builds:
 
-```
+```shell
 cmake --workflow --preset debug
 cmake --workflow --preset release
 ```

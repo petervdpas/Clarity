@@ -4,6 +4,7 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import SourceEditor from "./SourceEditor.svelte";
+  import { projectEngines, signature } from "./engines";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
@@ -26,6 +27,9 @@
     /** Opens a declaration by kind and name. */
     onopen: (kind: "window" | "app" | "entity" | "enum" | "theme", name: string) => void;
   } = $props();
+
+  /** The engines this module declares, with the errors in their declarations. */
+  const engines = $derived(projectEngines(preview.project).filter((e) => e.module === (file.module?.name ?? "")));
 
   /** The function or action open in the editor, by name. */
   let openFunction = $state<string | null>(null);
@@ -156,6 +160,29 @@
       </div>
     {/if}
   </section>
+
+  {#if engines.length > 0}
+    <section>
+      <h3>Engines</h3>
+      <p class="muted">
+        Processing compiled to WebAssembly, its file in the <code>engines</code> folder. Code calls a function as
+        <code>Engine.function(...)</code>; the engine only computes, and code hands it the records it needs.
+      </p>
+      {#each engines as { engine, problems } (engine.name.name)}
+        <div class="engine">
+          <div><span class="kind">engine</span><strong>{engine.name.name}</strong> <span class="muted">from <code>{engine.file}</code></span></div>
+          {#each problems as problem (problem)}
+            <p class="problem">{problem}</p>
+          {/each}
+          <ul>
+            {#each engine.functions as f (f.name.name)}
+              <li class="signature"><code>{signature(f)}</code></li>
+            {/each}
+          </ul>
+        </div>
+      {/each}
+    </section>
+  {/if}
 
   <section>
     <h3>Themes</h3>
@@ -291,6 +318,20 @@
   li button.active {
     background: var(--panel-alt);
     font-weight: 600;
+  }
+
+  .engine + .engine {
+    margin-top: 10px;
+  }
+
+  .signature {
+    padding: 2px 6px 2px 72px;
+  }
+
+  .problem {
+    color: var(--error);
+    font-size: 12px;
+    margin: 4px 0;
   }
 
   .buttons {

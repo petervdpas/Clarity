@@ -6,7 +6,7 @@ The settings in the project file (stack, output, language, currency, themes, dat
 
 The project file, such as `shop.clarity`, is the file you open. It holds one `project` block:
 
-```
+```clarity
 project Shop
     title "Shop"
     stack rust web desktop
@@ -36,7 +36,7 @@ Only `stack` is required. Each setting appears once, except `datasource` and `fi
 
 A `datasource` line names a data source, its kind and where it is:
 
-```
+```clarity
 datasource main sqlite "data/shop.db"
 datasource sales postgres "env:SHOP_DATABASE"
 datasource erp sqlite "legacy/erp.db" external

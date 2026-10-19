@@ -6,7 +6,7 @@ How to translate an application, let people choose its language, and control how
 
 The project file says which language its texts are written in, and the currency of `money` fields:
 
-```
+```clarity
 project Shop
     stack rust web desktop
     language "en"
@@ -21,7 +21,7 @@ Every text a person sees is in the project already: labels (also those derived f
 
 A file per language, in the `translations` folder of the module folder, gives them in that language:
 
-```
+```clarity
 // shop/translations/nl.clarity
 translation nl
     "Customer card" "Klantkaart"
@@ -49,7 +49,7 @@ The application shows the translation for the locale of the person using it: `nl
 
 To let people choose, give a menu item or a button the click target `language`:
 
-```
+```clarity
 item "Language" on click -> language
 ```
 
@@ -68,7 +68,7 @@ A field can pick a format by name with `format`; the entity editor has a Format 
 | `money` | with the currency and its decimals | `plain`: without the currency |
 | `date`, `datetime` | `short`, in digits | `long`: `17 October 2026`; `iso`: `2026-10-17` everywhere |
 
-```
+```clarity
 entity Invoice
     issued: date, format long
     rate: decimal(5, 4), format percent

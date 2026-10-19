@@ -40,7 +40,7 @@ When a name has a label that people see, Clarity derives it from the name unless
 
 A project is one file, `<name>.clarity`. Next to it is a folder with the same name, which holds the modules, the generated output and the data:
 
-```
+```text
 shop.clarity           the project file: open this one
 shop/
     customers.clarity  modules
@@ -54,7 +54,7 @@ shop/
 
 The project file holds one `project` block:
 
-```
+```clarity
 project Shop
     title "Shop"
     stack rust web desktop
@@ -88,7 +88,7 @@ Every text a person sees is in the project already: labels (written or derived f
 
 A file per language, in the `translations` folder of the module folder, gives them in that language:
 
-```
+```clarity
 // shop/translations/nl.clarity
 translation nl
     "Customer card" "Klantkaart"
@@ -107,7 +107,7 @@ translation nl
 
 The `images` folder of the module folder holds the fixed pictures of the application, such as a logo. An image part shows one by its file name:
 
-```
+```clarity
 // records/images/logo.png
 page AlbumBrowse: window
     image at 12,1 span 1 rows 1 source "logo.png"
@@ -122,7 +122,7 @@ page AlbumBrowse: window
 
 Every other `.clarity` file in the project folder is a module. It starts with `module`, then the modules it uses, then its declarations:
 
-```
+```clarity
 module sales
 
 use customers
@@ -133,7 +133,7 @@ entity Order
 
 A module of entities that live in another database:
 
-```
+```clarity
 module erp
 
 use customers
@@ -169,7 +169,7 @@ The declarations a module can hold:
 
 An enum is a fixed list of values. Each value can have a label; without one, the label is derived from the name.
 
-```
+```clarity
 enum CustomerKind
     Private label "Private person"
     Business
@@ -179,7 +179,7 @@ enum CustomerKind
 
 An entity is a kind of record that is stored in a data source. It is the data dictionary: everything about a field is said once, here, and the windows, the database schema and the validation all follow from it.
 
-```
+```clarity
 entity Customer
     name: text(80), required, label "Name"
     email: email, unique, label "E-mail"
@@ -237,7 +237,7 @@ Each modifier appears at most once per field. The checker reports defaults and l
 
 An `image` field holds a picture, or none. Without `store`, the picture is kept in the database. With `store`, it is a file in a file store, a folder that the project settings name, and the column holds the file's name there:
 
-```
+```clarity
 entity Album
     cover: image, help "The scan of the front cover"
 
@@ -245,7 +245,7 @@ entity Artist
     photo: image, store photos
 ```
 
-```
+```clarity
 // records.clarity
     filestore photos "data/photos"
 ```
@@ -270,7 +270,7 @@ Dates, times, numbers and money show the way the person using the application wr
 | `date` | in digits: `10/17/2026`, `17-10-2026`, `17.10.2026` | `short` (the default), `long`: `17 October 2026`, `iso`: `2026-10-17` everywhere |
 | `datetime` | the date and the time: `10/17/2026 9:30 AM`, `17-10-2026 09:30` | `short`, `long`, `iso` as for dates |
 
-```
+```clarity
 entity Invoice
     issued: date, format long
     rate: decimal(5, 4), format percent
@@ -285,7 +285,7 @@ entity Invoice
 
 A database follows the dictionary through migration steps. Every SQL data source has its own steps, in a folder of the project's `migrations` folder named after the source and numbered in the order the steps run: `migrations/main/0001.clarity`, `migrations/main/0002.clarity`. A step changes only the entities of its source. A step holds one `migration` block with a title and its changes:
 
-```
+```clarity
 migration "Phone and VAT"
     rename field Customer.vat_number to vat
     add field Customer.phone: text(20)
@@ -319,7 +319,7 @@ Fields in a step are written as in an entity. Only what is stored counts: the ty
 
 The same entities and steps work on every SQL database. The generated application carries a driver for each kind of database its data sources are, and writes each step in that database's own SQL.
 
-```
+```clarity
 datasource main postgres "env:SHOP_DATABASE"
 ```
 
@@ -361,13 +361,13 @@ What differs between the databases:
 
 A database that already exists, and that Clarity does not own, is a data source marked `external` in the project file:
 
-```
+```clarity
 datasource erp sqlite "legacy/erp.db" external
 ```
 
 Its entities live in a module with `source erp`, and they map onto the tables and columns that are there:
 
-```
+```clarity
 entity Invoice
     table "tblInvoice"
     key "InvoiceID"
@@ -392,7 +392,7 @@ Clarity reads and writes the records of an external database, but never changes 
 
 A window is a `page` block. Its settings come first, then its parts, which sit on a snap grid.
 
-```
+```clarity
 page CustomerForm: window
     title "Customer"
     data customer: Customer
@@ -453,7 +453,7 @@ The checker reports parts that start outside the grid, run past its last column,
 
 A part is one line: its kind, then an optional caption in quotes, then its properties.
 
-```
+```clarity
 textbox name email at 4,2 span 6 bind customer.email placeholder "name@example.com" on change: email_changed
 ```
 
@@ -559,7 +559,7 @@ What the user types goes into the data, and handlers read and change the data by
 
 A label, its input and the input's help text are three separate parts. `for` ties a label or a help text to an input by the input's name:
 
-```
+```clarity
 form name details at 1,1 span 12 rows 3 bind customer
     label "Name" at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
@@ -591,7 +591,7 @@ A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+S
 
 A button, an image, a menu item, or a toolbar or ribbon button can open a window without code:
 
-```
+```clarity
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 ```
 
@@ -601,7 +601,7 @@ button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 
 A container has its own grid, as many columns wide as its `span`. Its parts are indented below it, and their positions count from its own top-left cell:
 
-```
+```clarity
 tabs at 1,5 span 12 rows 7
     tab "Orders"
         table at 1,1 span 12 rows 5 bind orders columns number, total
@@ -621,7 +621,7 @@ splitter at 1,1 span 12 rows 10 vertical
 
 A project has one `app` block. It names the main window and declares the frame every window shares: a menu, a toolbar, a ribbon, sidebars and a footer.
 
-```
+```clarity
 app Shop
     title "Shop"
     main CustomerCard
@@ -691,7 +691,7 @@ A theme says how the application looks, as named values rather than a style shee
 
 Every theme starts from Clarity's own, the built-in `theme Clarity`, which sets every value below; a theme sets only what it changes, and the rest stays Clarity's. The Module view shows Clarity's own theme, and "New theme" starts from a full copy of it.
 
-```
+```clarity
 theme Shop
     mode system
     color accent "#1f6f5c" dark "#4fb393"
@@ -726,7 +726,7 @@ theme Shop
 
 A look (of a part or a style) sets `background`, `text` and `border` to a color of the theme by name or written out (a border can be `none`), `radius n`, and `weight bold` or `weight normal`, separated by commas. A style also sets how its text shows: `size n` in pixels (6 to 200), `font` with a font of the theme (`text`, `heading` or `mono`), and `align left`, `align center` or `align right`; aligned text keeps an input's padding from the edge. A calculator's display:
 
-```
+```clarity
 theme Calculator
     color lcd "#c7d3a8" dark "#1d2618"
     style display background lcd, size 40, font mono, align right
@@ -754,7 +754,7 @@ Other names are colors of the theme's own, for its parts and styles.
 
 A window's handlers are in a `code` block named after the window, in the same file as the window. The app's handlers are in a `code` block named after the app, and an entity's data events in one named after the entity (see [Data events](#data-events)).
 
-```
+```clarity
 code CustomerForm
     handler kind_changed
         // Only business customers have a VAT number.
@@ -804,7 +804,7 @@ A bound input is changed through its data: `customer.name = "Ada"` changes the t
 
 A canvas is drawn by its draw handler, wired with `on draw`. The handler draws shapes in the canvas's own units (`units 200 x 100`, 100 x 100 without it), x to the right and y down; the canvas scales them to fit the part, in proportion and centered.
 
-```
+```clarity
 page Main: window
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial
@@ -839,7 +839,7 @@ code Main
 
 An entity's code block holds its data events: code that runs whenever one of its records is saved or deleted, from any window, action or other event. The block has the entity's name and is in the same file as the entity.
 
-```
+```clarity
 code Order
     before save
         if order.status == Approved and not within_credit(order)
@@ -871,7 +871,7 @@ code Order
 
 Logic that is not tied to one window goes into functions and actions in a module. Handlers, functions and actions can call them.
 
-```
+```clarity
 function within_credit(order: Order) -> bool
     return order.total <= order.customer.credit_limit
 
@@ -901,14 +901,14 @@ action approve(order: Order)
 
 An engine is a processing module compiled to WebAssembly, which every stack runs the same way: pricing, scheduling, a solver, the logic of a game. A module declares it with its file and the functions it has; code calls those functions like its own.
 
-```
+```clarity
 engine Pricing from "pricing.wasm"
     function total(lines: list<Line>) -> money
     function size_of(count: integer) -> Size
     function discounted(order: Order) -> Order
 ```
 
-```
+```clarity
 function order_total(order: Order) -> money
     return Pricing.total(order.lines)
 ```
@@ -982,7 +982,7 @@ From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `
 
 Text that people read names its values in slots, instead of adding them together, so a translator can move them and each value shows in the person's format:
 
-```
+```clarity
 code OrderForm
     handler approve_clicked
         approve(order)
@@ -1001,7 +1001,7 @@ code OrderForm
 
 `find` reads the records of an entity that meet a condition, in an order. The result is a list, used like any other: assign it to a window's list data, loop over it with `for`, count it, or return it.
 
-```
+```clarity
 code Customers
     handler filter_changed
         customers = find c in Customer where c.name contains name_filter.text and c.active order by c.name
@@ -1023,7 +1023,7 @@ code Customers
 
 Code reaches files only in the file stores of the project settings, the folders that also keep pictures (`filestore photos "data/photos"`). What a program touches on disk is in its settings, and a store that differs per machine comes from an environment variable.
 
-```
+```clarity
 // Photos dropped in the photos folder, named after the artist
 // (Miles Davis.jpg), become the photos of artists that have none.
 action find_artist_photos()
@@ -1076,7 +1076,7 @@ A project file and one module: a customer list with a filter that opens a form, 
 
 `shop.clarity`:
 
-```
+```clarity
 project Shop
     stack rust web desktop
     datasource main sqlite "data/shop.db"
@@ -1084,7 +1084,7 @@ project Shop
 
 `shop/customers.clarity`:
 
-```
+```clarity
 module customers
 
 enum CustomerKind
@@ -1173,7 +1173,7 @@ The full shop example, with orders, a menu and a ribbon, is `examples/shop.clari
 
 A compact view of the grammar. `[x]` is optional, `x*` is zero or more, `a | b` is one of them, and an indented line is a line in the block above it. Words in quotes are written as shown.
 
-```
+```text
 project-file  = "project" Name
                     setting*
 setting       = "title" String | "stack" word word word+ | "output" String | "language" String | "currency" word | "theme" Name+

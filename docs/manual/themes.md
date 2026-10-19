@@ -12,7 +12,7 @@ A theme of your own sets only what it changes; the rest stays Clarity's. Without
 
 A theme is declared in a module:
 
-```
+```clarity
 theme Shop
     title "Shop"
     mode system
@@ -42,7 +42,7 @@ A look sets `background`, `text` and `border` to a theme color by name or writte
 
 A style also sets how its text shows: `size n` in pixels, `font text`, `font heading` or `font mono` (a font of the theme), and `align left`, `center` or `right`. Aligned text keeps an input's padding from the edge. A calculator's display, large and on the right in an LCD green:
 
-```
+```clarity
 theme Calculator
     color lcd "#c7d3a8" dark "#1d2618"
     color lcd_text "#1f2a14" dark "#a8e890"
@@ -59,7 +59,7 @@ Themes are listed under Themes in the project tree. Clarity's own theme opens re
 
 The project file names the themes the application offers; the first is the one it starts with:
 
-```
+```clarity
 project Shop
     stack rust web desktop
     theme Shop Night
@@ -69,7 +69,7 @@ On the Project tab, under **Language, formats and theme**, you tick the themes t
 
 To let people switch, give a menu item or button the click target `theme`:
 
-```
+```clarity
 item "Theme" on click -> theme
 ```
 
@@ -79,7 +79,7 @@ It lists the themes by their titles, switches at once and remembers the choice f
 
 A part picks a style by name, never raw colors:
 
-```
+```clarity
 button "Save" at 9,6 span 2 style primary default on click: save_clicked
 ```
 

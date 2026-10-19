@@ -22,7 +22,7 @@ The agent looks for a connection named `anthropic` unless you pick another. Its 
 
 A typical connection, as the Vault tab shows it:
 
-```
+```text
 Field       From         Value
 kind        Plain text   anthropic
 model       Plain text   (the model's name)

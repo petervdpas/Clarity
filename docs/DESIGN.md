@@ -41,7 +41,7 @@ Superseded by this: the form and browse screen kinds (section 5.5 and later ment
 
 A Clarity project is one file, `<name>.clarity`, with a folder of the same name next to it that holds the modules (the project file is described at the end of this section). The project file names the stack the application is transpiled into:
 
-```
+```clarity
 project Shop
     stack csharp avalonia desktop   // backend (rust, go, csharp, c, cpp), UI (web or a toolkit), targets (desktop, web)
 ```
@@ -90,7 +90,7 @@ Superseded by this: the frontend framework choice (sections 7.2 and 11.4 where t
 
 **The project file (2026-10-16).** A project is one file, `<name>.clarity`, which is what you open, with a folder of the same name next to it that holds the modules, the output and the data. The settings are written in Clarity, so the whole project is one language:
 
-```
+```text
 examples/
   shop.clarity          the project: open this
   shop/
@@ -100,7 +100,7 @@ examples/
     data/
 ```
 
-```
+```clarity
 project Shop
     stack rust web desktop
     output "out"
@@ -115,7 +115,7 @@ The settings are `title` (optional; the name people see, derived from the projec
 
 A project declares where its data lives. The project file lists one or more data sources, in order; the first is the default:
 
-```
+```clarity
 project Shop
     stack rust web desktop
     // sqlite, postgres, mysql, mssql or rest; secrets only as env: or keychain: references
@@ -189,7 +189,7 @@ An application made with Clarity is shipped to people who read another language,
 
 **Text with slots (I1b).** A translator must be able to move the parts of a sentence, so text in code names its values instead of adding them together:
 
-```
+```clarity
 message "Saved {customer.name}"
 refuse "Order {order.number} is over its customer's credit limit"
 ```
@@ -201,7 +201,7 @@ refuse "Order {order.number} is over its customer's credit limit"
 **Translations (I1c).** Every text a person sees is in the project already: labels, help texts, titles, captions, enum labels, menu items, messages and refusals. Clarity collects them; nobody marks them.
 - The text as written is the base language. Translations are one file per language for the whole project (2026-10-17), in the module folder, `translations/nl.clarity`. The same words ("Name", "Save") recur across modules, a translator works through one table, and each stack takes one file per language: `.resx` for .NET, a key map for the web renderer.
 
-  ```
+  ```clarity
   translation nl
       "Customers" "Klanten"
       "Saved {customer.name}" "{customer.name} opgeslagen"
@@ -215,7 +215,7 @@ refuse "Order {order.number} is over its customer's credit limit"
 
 **Themes (T1).** A theme is a set of named values, not a style sheet:
 
-```
+```clarity
 theme Shop
     mode system
     color accent "#2f6fdf"
@@ -298,7 +298,7 @@ Both modes share the rule engine, the gates, the directives and the tuning loop.
 
 ## 4. Architecture overview
 
-```
+```text
  surfaces      CLI | LSP server | MCP server | Desktop app (designer + control room)
                                      |
  spec          parser -> neutral model -> generators (backend, shell, frontend)
@@ -328,7 +328,7 @@ This section records how the language came about. The reference for what it is t
 
 Spec files have the extension `.clarity` and live in the project's folder, next to the project file (section 1.2). Each file starts with the module it belongs to.
 
-```
+```clarity
 module sales
 
 use customers
@@ -340,7 +340,7 @@ use customers
 
 Entities are the data dictionary. Everything about a field is defined here once: type, validation, label, help text, display format. Screens, API types, database schema and frontend validation are all generated from it.
 
-```
+```clarity
 enum OrderStatus
     Pending
     Approved
@@ -371,7 +371,7 @@ Field modifiers: `required`, `unique`, `min`, `max`, `pattern`, `default`, `comp
 
 Actions declare an operation: its signature, contracts and effects. The body is never in the spec.
 
-```
+```clarity
 action approve_order(order: Order) -> Order
     require order.status == Pending
     require order.total <= order.customer.credit_limit
@@ -410,7 +410,7 @@ The result is an ordinary window; the designer changes it like any other. Labels
 
 Windows are built widget-first, the way RAD tools such as Turbo C++ for Windows worked: drag widgets from a palette onto a window, dialog or view, then set their properties and bind them to data.
 
-```
+```clarity
 page CustomerEdit: window
     title "Customer"
     data customer: Customer
@@ -461,7 +461,7 @@ Every part has a name, unique in its window (sidebars, footer, menus and toolbar
 | table, list | `select`, `open` |
 | canvas | `pointer`, `key` |
 
-```
+```clarity
 button "Save" name save at 9,10 span 2 on click: save_clicked
 textbox name email at 4,2 span 6 bind customer.email on change: email_changed
 ```
@@ -472,7 +472,7 @@ textbox name email at 4,2 span 6 bind customer.email on change: email_changed
 
 A label, its input and the input's help text are three separate parts, each placed on the grid like any other. `for` ties a label or help text to an input by its part name:
 
-```
+```clarity
 form name details at 1,1 span 12 rows 4 bind customer
     label "Name" at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
@@ -505,7 +505,7 @@ Dropping a field from the Data panel places the same parts the form template mak
 
 Application chrome is not placed on the grid. It docks to the edges of a window, around the grid, and holds structured items instead of freely placed widgets:
 
-```
+```clarity
 app Shop
     main CustomerCard
     menu
@@ -557,7 +557,7 @@ What the spec declares:
 
 As an element inside a form:
 
-```
+```clarity
 entity Drawing
     name: text(80), required
     image: bitmap, max_size "4MB"
@@ -573,7 +573,7 @@ screen DrawingForm: form Drawing
 
 As a full screen:
 
-```
+```clarity
 screen Asteroids: canvas
     size fill
     surface gpu
@@ -599,7 +599,7 @@ Built (2026-10-19): the backend renderer, as a draw handler written in Clarity (
 
 A window's handlers live in a `code` block with the window's name, in the same file as the window. The designer rewrites only the `page` block, so layout edits never touch the code.
 
-```
+```clarity
 page CustomerForm: window
     title "Customer"
     data customer: Customer
@@ -650,7 +650,7 @@ code CustomerForm
 | `on return: handler` | a window this one opened has closed, and this one is on top again |
 | `on start: handler` (app) | the application starts, before its main window opens |
 
-```
+```clarity
 page CustomerBrowse: window
     data customers: list<Customer>
     on return: window_returned
@@ -675,7 +675,7 @@ Later, with D1 and beyond: queries (`find`, `where`).
 
 Modules hold logic that is not tied to one window: functions and actions, written in Clarity and callable from any handler and from each other through `use`.
 
-```
+```clarity
 function within_credit(order: Order) -> bool
     return order.total <= order.customer.credit_limit
 
@@ -709,7 +709,7 @@ An engine is a processing module that every stack runs the same way: the logic o
 
 **The engine computes; the application does all input and output.** An engine has no database, no files, no network, no windows and no clock of the system. The application reads the records and files, hands them to the engine as values, and stores, writes or shows what the engine gives back. This keeps the sandbox absolute, makes an engine testable on its own with plain values, and keeps every effect where Clarity already checks it: in the handlers and actions of the application (section 5.10, effects in section 9.3).
 
-```
+```clarity
 engine Layout from "layout.wasm"
     function paginate(text: text, page: PageSize) -> list<PageBox>
     function measure(text: text, style: TextStyle) -> Extent
@@ -720,7 +720,7 @@ record PageSize
     height: decimal
 ```
 
-```
+```clarity
 action export_report(report: Report)
     effects db.read, files.write
     let pages = Layout.paginate(report.body, PageSize(210, 297))
@@ -763,7 +763,7 @@ Shape can only come into existence through generation. To add a field, an endpoi
 
 ### 6.2 Neutral model and generators
 
-```
+```text
 spec files -> parser -> neutral model -> backend generator (one per language)
                                       -> shell generator   (one per desktop shell)
                                       -> frontend generator (one per framework)
@@ -777,7 +777,7 @@ Generators are deterministic: the same spec and generator version always produce
 
 Example for Rust + Tauri + Svelte:
 
-```
+```text
 crates/
   model/src/generated/        entities, enums, validation, repository traits
   app/src/generated/          action traits, Tauri commands, wiring
@@ -817,7 +817,7 @@ impl ApproveOrder for Actions {
 
 The frontend contains no business logic. Validation is generated from the dictionary and repeated on the backend. When a screen needs something the standard widgets cannot do, the spec declares a custom widget:
 
-```
+```clarity
 screen ProductForm: form Product
     color: widget ColorPicker
 ```
@@ -1038,7 +1038,7 @@ TDD is a process, and finished code does not show whether the test came first. C
 
 **For AI agents: a strict state machine per task.**
 
-```
+```text
 idle -> test-written -> red -> green -> (refactor) -> done
 ```
 
@@ -1147,7 +1147,7 @@ Packs serve both modes: they power the rule engine for hand-written code, and ba
 
 A pack is mostly data:
 
-```
+```text
 packs/go/
   pack.toml             toolchain commands, file patterns, effect map, shape patterns
   queries/
@@ -1225,7 +1225,7 @@ Later packs: Haxe, Java, Kotlin, Swift, Zig and others. A pack that cannot enfor
 
 ### 17.1 CLI
 
-```
+```text
 clarity init --stack S            create a spec-driven project
 clarity adopt                     set up an existing project, ratchet mode
 clarity fmt                       format spec files canonically
@@ -1270,7 +1270,7 @@ A Tauri app that combines:
 
 Clarity is written in Rust. The workspace:
 
-```
+```text
 Cargo.toml                  workspace
 crates/
   clarity-core/             config model, directive parser, violation types
@@ -1346,7 +1346,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | G3d | The server databases and external sources for Go: pgx, go-sql-driver/mysql and go-mssqldb behind the same runtime calls | done (2026-10-18): a file per database in the runtime (`postgres.go`, `mysql.go`, `mssql.go`) that adds itself to `servers`, over `server.go`, which holds one `*sql.Conn` for the driver's life (the pool resets a connection between calls, which lost the transaction of a save with data events on PostgreSQL and SQL Server). pgx and go-mssqldb read the project's locations as they are; a MySQL URL becomes the driver's settings. The migrations.json scenario and the data event tests pass on SQLite, PostgreSQL 18, MySQL 8.4 and SQL Server 2022 in docker (`CLARITY_TEST_*`, as for the other runtimes). A generated module gets only the driver files of its data sources, and its go.mod and go.sum leave out the modules of the others; `go_build` checks with `go mod tidy -diff` that go.mod is what tidy would write, and builds the shop for each server database and migrates it twice. External sources needed nothing new: `Table`, `Key` and `Source` come from the entity, and only owned sources are in `schema.go` |
 | G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted. The project is a CMake project (`CMakeLists.txt`, built with make or Ninja, the tools P3 checks for), with the README.md every stack gets | G4a (C++) done: the runtime `runtimes/cpp` (C++20; system SQLite 3 and nlohmann-json, webview 0.12.0 copied into `third_party`; errors as exceptions, its own `Decimal`, SHA-256 and base64; drivers in `unique_ptr`, conditions in `shared_ptr<const Node>`, SQLite handles closed by RAII; records as plain structs that meet a `Record` concept) with its own tests on the conformance files; the generator `clarity-gen/src/cpp` writes `CMakeLists.txt`, `CMakePresets.json` (`cmake --workflow --preset debug` or `release`), `src/records.hpp` and `.cpp` with every module's enums and records, `src/modules/<module>.cpp` with each module's functions, actions, data events and windows, `src/app.hpp`, `src/schema.cpp`, `src/page.cpp` with the web renderer inlined, and `src/main.cpp` with `--check`; the program is a native window (webview on WebKitGTK) that talks to the renderer through `clarityInvoke`. Both examples build and run (`cargo test -p clarity-gen --test cpp_build -- --ignored`). SQLite only; the server databases come later. Every stack now writes module files where they cannot overwrite its own files (`src/modules/` in Rust and C++, `Modules/` in C#, `<module>_module.go` in Go, which also keeps a module named `windows` from building on Windows only). G4b (C) done: the runtime `runtimes/c` (C17; system SQLite 3, cJSON 1.7.18 and webview 0.12.0 copied into `third_party`, the webview built from one C++ file). Every call that can fail returns whether it worked and leaves its error, as errno does; values live in a scratch arena the shell empties after each command, so generated code never frees anything (cJSON allocates there too). Records are plain structs described to the runtime by a `ClarityEntity` (table, columns, values, data events); `customer_save`, `customer_find` and the others are typed calls around it. 20 tests of its own on the conformance files, clean under AddressSanitizer and UBSan. The generator `clarity-gen/src/c` lifts each call that can fail into `if (!call(..., &v1)) return false;` (as the Go generator lifts into `if err != nil`), passes records by pointer, gives a function's result through its last parameter, and writes the same files as C++ in C (`records.h`/`.c`, `app.h`, `src/modules/<module>.c`, `schema.c`, `page.c`, `main.c`); the program builds without a warning under `-Wall -Wextra`, debug and release. Both examples build and run (`cargo test -p clarity-gen --test c_build -- --ignored`). `clarity tools` checks the C and C++ libraries too (SQLite, WebKitGTK, nlohmann-json for C++) and, for C, a C++ compiler for the webview. SQLite only; the server databases come later |
 | H1 | Hardware, ideas raised by the user (2026-10-18), not decided. (a) A desktop application that talks to a device such as an Arduino over a serial port: the settings name the device as they name a file store (`serialport arduino "env:ARDUINO_PORT"`), code sends and receives with an effect like `device.write`; every stack can (Rust `serialport`, Go `go.bug.st/serial`, C# `System.IO.Ports`, C `libserialport`). (b) Code that runs on the device itself: Arduino sketches are C++, so a firmware target generated from a small part of the language, without a database or windows | idea |
-| N1 | Engines, first slice (section 5.11): `engine Name from "file.wasm"` with stateless functions on plain values, enums, records and lists; the `engines` folder; the engine interface (JSON over plain memory); the host checks the file at start; hosted on the backend of all five stacks (wasmi, wazero, wasm3, Wasmtime for .NET); a shared test engine and `conformance/engines.json` | done (2026-10-20): see "Built" in section 5.11. The designer checks the file but does not show the `engines` folder yet |
+| N1 | Engines, first slice (section 5.11): `engine Name from "file.wasm"` with stateless functions on plain values, enums, records and lists; the `engines` folder; the engine interface (JSON over plain memory); the host checks the file at start; hosted on the backend of all five stacks (wasmi, wazero, wasm3, Wasmtime for .NET); a shared test engine and `conformance/engines.json` | done (2026-10-20): see "Built" in section 5.11. The designer reloads when the `engines` folder changes, lists the engines in the project tree (marking one that does not fit its file) and shows their functions in the module view |
 | N2 | Engines written in Clarity: `engine Name` with its functions and records, compiled through the Rust generator to `wasm32-unknown-unknown` with the engine interface | |
 | N3 | Imports and limits: `uses clock, random, log, progress`, time and memory limits per call, failures shown as refusals | |
 | N4 | State and hooks: `state per window` and `state per app`, hooks such as `on open` and `on close`; `bytes` for document processing | |

@@ -6,7 +6,7 @@ How a database follows your entities through migration steps, written as Clarity
 
 Each SQL data source has its own steps, in a folder of the project's `migrations` folder named after the source. They are numbered in the order they run:
 
-```
+```text
 shop/
     migrations/
         main/
@@ -16,7 +16,7 @@ shop/
 
 A step holds one `migration` block with a title and its changes. It changes only the entities of its own source.
 
-```
+```clarity
 migration "Phone and VAT"
     rename field Customer.vat_number to vat
     add field Customer.phone: text(20)
@@ -53,7 +53,7 @@ When a field disappears and a field of the same type appears in the same entity,
 
 ## From the command line
 
-```
+```shell
 clarity migrate shop.clarity
 ```
 

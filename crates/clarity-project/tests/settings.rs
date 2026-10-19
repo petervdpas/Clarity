@@ -306,7 +306,8 @@ fn the_language_reference_project_files_are_valid() {
     const DOC: &str = include_str!("../../../docs/LANGUAGE.md");
     let mut found = 0;
     for block in DOC.split("```").skip(1).step_by(2) {
-        let block = block.trim_start_matches('\n');
+        // The line of the opening fence: its language, as `clarity`.
+        let block = block.split_once('\n').map_or("", |(_, code)| code);
         if !block.starts_with("project ") {
             continue;
         }

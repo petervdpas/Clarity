@@ -6,7 +6,7 @@ How Clarity turns a project into a Rust desktop program with Tauri and the web r
 
 Name the stack in the project file, or pick it on the Project tab:
 
-```
+```clarity
 stack rust web desktop
 ```
 
@@ -32,7 +32,7 @@ The generated project carries no runtime sources. It depends on the crate `clari
 
 To build on the runtime in Clarity's repository instead (while you work on the runtime itself), write `.cargo/config.toml` in the output folder:
 
-```
+```toml
 [patch.crates-io]
 clarity-runtime = { path = "<Clarity>/runtimes/rust" }
 ```
@@ -52,7 +52,7 @@ Clarity checks for these itself: run `clarity tools`, or look at Build tools on 
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:
 
-```
+```shell
 cargo build --release
 cargo run
 ```

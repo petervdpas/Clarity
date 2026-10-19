@@ -1,9 +1,10 @@
 <script lang="ts">
-  // The project as one tree: the app, its windows, its data, its themes and the modules
-  // its files form.
+  // The project as one tree: the app, its windows, its data, its themes, its engines and
+  // the modules its files form.
 
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
+  import { projectEngines } from "./engines";
   import { findApp } from "./frame";
   import type { Selected } from "./selection";
 
@@ -49,6 +50,7 @@
   const entities = $derived(files.flatMap((f) => f.entities.map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
+  const engines = $derived(projectEngines(preview.project));
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -135,6 +137,26 @@
       {#if onnewtheme}
         <button class="row add" onclick={onnewtheme}>+ New theme</button>
       {/if}
+    </details>
+
+    <details open={engines.length > 0}>
+      <summary>Engines <span class="count">{engines.length}</span></summary>
+      {#each engines as { engine, module, problems } (engine.name.name)}
+        <button
+          class="row"
+          title={problems.length > 0 ? problems.join("\n") : `${engine.file} in module ${module}`}
+          onclick={() => onselect({ kind: "module", name: module })}
+        >
+          {engine.name.name}
+          {#if problems.length > 0}
+            <span class="note problem">does not fit its file</span>
+          {:else}
+            <span class="note">{engine.functions.length === 1 ? "1 function" : `${engine.functions.length} functions`}</span>
+          {/if}
+        </button>
+      {:else}
+        <p class="empty">No engines. An engine is a .wasm file in the engines folder, declared in a module.</p>
+      {/each}
     </details>
 
     <details>
@@ -243,6 +265,10 @@
     flex-basis: 100%;
     font-size: 11px;
     color: var(--text-muted);
+  }
+
+  .note.problem {
+    color: var(--error);
   }
 
   .empty {

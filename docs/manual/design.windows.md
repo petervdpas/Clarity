@@ -6,7 +6,7 @@ How a window is declared and designed: its kind, its data and events, the snap g
 
 A window is a `page` block in a module. Its settings come first, then its parts:
 
-```
+```clarity
 page CustomerForm: window
     title "Customer"
     data customer: Customer
@@ -31,7 +31,7 @@ To add one, click **New window** on the Project or Design tab. Give it a name an
 
 A window can also hold plain values, which are no records and are never stored: a number it shows, a choice, a flag. They live as long as the window:
 
-```
+```clarity
 page Main: window
     data shown: decimal
     data pending: Operation
@@ -69,7 +69,7 @@ Rows have a fixed height in the designer. In the running application the columns
 
 A button, image, menu item or toolbar button can open a window without code:
 
-```
+```clarity
 button "All customers" at 1,12 span 3 on click -> CustomerBrowse
 button "New customer" at 4,12 span 3 on click -> CustomerForm in new window
 ```

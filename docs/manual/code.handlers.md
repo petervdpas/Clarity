@@ -6,7 +6,7 @@ How the code behind a window works: handlers wired to events, part properties, m
 
 A window's handlers live in a `code` block with the window's name, in the same file as the window. A handler has a name, and parameters when a part gives it values. It runs when an event wired to it happens.
 
-```
+```clarity
 code CustomerForm
     handler kind_changed
         vat_number.enabled = customer.kind == Business
@@ -27,7 +27,7 @@ A part wires an event with `on click: save_clicked`; a window wires its own with
 
 One handler can serve many parts when each gives it a value. The ten digit buttons of a calculator share one handler:
 
-```
+```clarity
     button "7" at 1,4 span 1 on click: digit(7)
     button "8" at 2,4 span 1 on click: digit(8)
     button "+" at 4,6 span 1 on click: operation(Add)
@@ -72,7 +72,7 @@ A bound input changes through its data: `customer.name = "Ada"` changes the text
 
 A canvas is drawn by its draw handler: `canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial`. The handler draws shapes in the canvas's own units, x to the right and y down, 100 x 100 unless the canvas says `units 200 x 100`:
 
-```
+```clarity
 code Main
     handler draw_dial
         let angle = 210 - speed * 240 / 200
@@ -97,7 +97,7 @@ The draw handler runs when the window opens and after every other handler of the
 - `filter_changed()` runs another handler of the same window or app.
 - `save` and `delete` store and remove records; see [Data events](code.data-events.md).
 
-```
+```clarity
 code CustomerBrowse
     handler window_returned
         filter_changed()

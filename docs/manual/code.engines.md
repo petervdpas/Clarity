@@ -31,7 +31,8 @@ engine Pricing from "pricing.wasm"
 
 - Every function gives a value, so each has `-> type`.
 - Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`. Files are not: read the file in code and hand its text in.
-- The designer checks the file against the declaration. It reports a file that is not in the folder, is no WebAssembly, imports anything, or lacks a function you declared.
+- The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports anything, or lacks a function you declared.
+- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with its functions.
 
 ## Calling an engine
 

@@ -6,7 +6,7 @@ How an application shows fixed pictures from the images folder, keeps pictures i
 
 The `images` folder of the module folder holds the application's fixed pictures, such as a logo. An image part shows one by its file name, given as its `source` (the **Source** property in the designer):
 
-```
+```clarity
 // records/images/logo.png
 page AlbumBrowse: window
     image at 12,1 span 1 rows 1 source "logo.png"
@@ -18,7 +18,7 @@ The picture must be in the `images` folder; a name that is not there is an error
 
 An `image` field holds a picture, or none. Without `store`, the picture is kept in the database. With `store`, it is a file in a file store, and the column holds the file's name there.
 
-```
+```clarity
 entity Album
     cover: image, help "The scan of the front cover"
 
@@ -28,7 +28,7 @@ entity Artist
 
 An image part bound to the field shows it, or "No picture" while there is none. While the pointer is on it, it offers a button to load a picture from a file and one to remove it.
 
-```
+```clarity
 image name cover at 1,1 span 4 rows 6 bind album.cover
 ```
 
@@ -38,7 +38,7 @@ A table or list does not show a picture column. Reading records never carries th
 
 A file store is a folder that the project file names with a `filestore` line. A relative folder is in the project's folder; `"env:NAME"` takes it from an environment variable, for a folder that differs per machine.
 
-```
+```clarity
 filestore photos "data/photos"
 filestore exports "env:SHOP_EXPORTS"
 ```
@@ -51,7 +51,7 @@ In a store, a picture's file is named after the SHA-256 of its bytes, so the sam
 
 Code reaches files only in the file stores. `files f in store` lists every file of a store and its folders, and `where` and `order by` work as in `find`. A file has `name`, `path`, `extension`, `size` and `modified`.
 
-```
+```clarity
 action export_collection()
     effects files.write
     let lines = ""

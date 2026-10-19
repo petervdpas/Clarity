@@ -28,7 +28,7 @@ Every value has a type that follows the data dictionary: `text`, `integer`, `dec
 
 Text that people read names its values in braces instead of adding them together:
 
-```
+```clarity
 message "Order {order.number} of {order.total} is approved"
 approve_button.caption = "Approved on {order.ordered_on}"
 ```

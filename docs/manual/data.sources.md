@@ -6,7 +6,7 @@ Where your records live: SQLite and the server databases, keeping passwords out 
 
 A data source is a `datasource` line in the project file: a name, a kind and where the data is. A new project gets one SQLite source named `main`.
 
-```
+```clarity
 datasource main sqlite "data/shop.db"
 datasource sales postgres "env:SHOP_DATABASE"
 ```
@@ -30,7 +30,7 @@ A connection that needs a password is written as `"env:NAME"`. The generated app
 
 Entities live in the first data source unless their module names another with a `source` line. A module has at most one, and it must name a SQL source.
 
-```
+```clarity
 module erp
 
 use customers
@@ -47,13 +47,13 @@ A reference to an entity in another database is stored as its id, without a fore
 
 A database that already exists, and that Clarity does not own, is marked `external`. Add `readonly` when its records may only be read; `save` and `delete` of them are then errors. In Settings these are the **External** and **Read-only** boxes under **Access**.
 
-```
+```clarity
 datasource erp sqlite "legacy/erp.db" external
 ```
 
 Its entities map onto the tables and columns that are there:
 
-```
+```clarity
 entity Invoice
     table "tblInvoice"
     key "InvoiceID"
@@ -67,7 +67,7 @@ Without `table`, the table is the entity's name in snake case; without `key`, th
 
 **Import...** next to an external SQLite source opens the Import panel. It lists the tables; tick the ones you want, name the module and click the **Import** button below them. The tables become entities mapped onto them, in a new module. Foreign keys between imported tables become `ref` fields, `NOT NULL` becomes `required`, and binary columns are left out. From the command line:
 
-```
+```shell
 clarity import shop.clarity erp --tables tblInvoice,tblCustomers
 ```
 

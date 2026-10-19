@@ -10,7 +10,7 @@ The New project dialog asks for the stack: a backend, a UI and one or more targe
 
 Clarity writes three things: the project file, a first module `tasks/tasks.clarity`, and a `.gitignore` that keeps the generated `out/` and `data/` folders out of version control. The module holds an app and its main window:
 
-```
+```clarity
 module tasks
 
 app Tasks
@@ -35,7 +35,7 @@ Open `Main` from the tree and go to the **Design** tab. On the right, under The 
 
 In the sidebar's Parts tab, drag a **Form** from Containers onto the window and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `add_click` and opens the Code panel at it. Fill it in and click **Save**:
 
-```
+```clarity
 code Main
     handler add_click
         save task
@@ -45,7 +45,7 @@ code Main
 
 The window is now text like this; see [Windows](design.windows.md) and [Parts](design.parts.md):
 
-```
+```clarity
 page Main: window
     title "Main"
     data task: Task

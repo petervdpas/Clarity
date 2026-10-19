@@ -21,7 +21,8 @@ export function isList(decl: DataDecl): boolean {
   return decl.of.kind === "list";
 }
 
-function typeText(ty: TypeRefKind): string {
+/** A type as code writes it: `list<Line>`, `datetime`. */
+export function typeText(ty: TypeRefKind): string {
   switch (ty.kind) {
     case "named":
       return ty.name;

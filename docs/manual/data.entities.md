@@ -6,7 +6,7 @@ How you describe your data with entities and enums, the field types and modifier
 
 An entity is a kind of record that is stored in a data source, such as a customer or an order. Everything about a field is said once, in the entity: windows take their labels, inputs and validation from it, and the database schema follows from it through [migrations](data.migrations.md).
 
-```
+```clarity
 entity Customer
     name: text(80), required, label "Name"
     email: email, unique, label "E-mail"
@@ -23,7 +23,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 
 An enum is a fixed list of values. Each value can have a label; without one, the label is derived from the name.
 
-```
+```clarity
 enum CustomerKind
     Private label "Private person"
     Business

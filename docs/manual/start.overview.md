@@ -14,7 +14,7 @@ Nobody edits the generated code. When you want a change, you change the Clarity 
 
 A project is one project file, such as `shop.clarity`, with a folder of the same name next to it:
 
-```
+```text
 shop.clarity           the project file: open this one
 shop/
     customers.clarity  modules

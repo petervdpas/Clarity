@@ -34,7 +34,7 @@ Changes are written at once. One **Undo** takes a whole turn back, however many 
 
 Under the conversation, a line says what the conversation cost, in tokens:
 
-```
+```text
 This turn 48.2k in (41k from the cache), 1.3k out. Session 210.4k in, 6.8k out.
 ```
 

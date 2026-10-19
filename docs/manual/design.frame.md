@@ -6,7 +6,7 @@ The `app` block: the main window, the frame every window shares (menu, toolbar, 
 
 A project has one `app` block, in any module. It names the window the application starts with and declares the frame that every window shows:
 
-```
+```clarity
 app Shop
     title "Shop"
     main CustomerBrowse

@@ -11,7 +11,7 @@ Clarity.Runtime itself only has SQLite. Each server database is a package of its
 
 A Clarity project with a MySQL data source, such as
 
-```
+```clarity
 datasource main mysql "env:SHOP_DATABASE"
 ```
 

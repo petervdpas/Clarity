@@ -84,7 +84,6 @@ fn csharp_reaches_the_files_of_a_store() {
     has(code, "photo.Cover = db.PictureFrom(f, null);");
     has(code, "db.ReadText(n)");
     has(code, "db.WriteText(\"photos\", \"exports/titles.txt\", lines);");
-    assert!(files.iter().any(|f| f.path == "Clarity.Runtime/Files.cs"));
 }
 
 #[test]

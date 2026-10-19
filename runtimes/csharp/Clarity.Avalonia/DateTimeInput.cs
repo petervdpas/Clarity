@@ -12,10 +12,10 @@ using Avalonia.Layout;
 
 namespace Clarity.Avalonia;
 
-public sealed class DateTimeBox : UserControl
+public sealed class DateTimeInput : UserControl, IInput
 {
     public static readonly StyledProperty<DateTime?> ValueProperty =
-        AvaloniaProperty.Register<DateTimeBox, DateTime?>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
+        AvaloniaProperty.Register<DateTimeInput, DateTime?>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
     /// <summary>The moment, or none.</summary>
     public DateTime? Value
@@ -33,7 +33,7 @@ public sealed class DateTimeBox : UserControl
     /// <summary>Set while the parts follow <see cref="Value"/>, so that is no change by the person.</summary>
     bool showing;
 
-    public DateTimeBox()
+    public DateTimeInput()
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 4 };
         Grid.SetColumn(Time, 1);

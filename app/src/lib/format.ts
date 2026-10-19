@@ -169,6 +169,18 @@ function shift(text: string, places: number): string {
  *  store (a number for integers, a decimal string otherwise), or null when
  *  it is not a number of that kind. Thousands separators, spaces, the
  *  currency sign and the percent sign may be typed or left out. */
+/**
+ * How a number input (a form's or a table cell's) shows its value for
+ * editing and reads what is typed: null when it is no number. A number
+ * field always has a value; cleared, it is zero.
+ */
+export function numberEditing(field: FieldFormat, f: Formats): { text: (value: unknown) => string; read: (typed: string) => string | number | null } {
+  return {
+    text: (value) => ((typeof value === "string" && value !== "") || typeof value === "number" ? editText(field, value, f) : String(value ?? "")),
+    read: (typed) => (typed.trim() === "" ? (field.kind === "integer" ? 0 : "0") : parseNumber(field, typed, f)),
+  };
+}
+
 export function parseNumber(field: FieldFormat, text: string, f: Formats): string | number | null {
   if (field.kind === "duration") return parseDuration(text);
   const { group, decimal } = separators(f.locale);

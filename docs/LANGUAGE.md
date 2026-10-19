@@ -517,6 +517,14 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
+`change` fires when the person changes an input's value to one that differs, and only then, on every stack:
+
+- Typed text is taken when the input is left or Enter is pressed; typing alone is no change, and neither is leaving without typing or typing the same text again. In a `memo`, Enter is a new line and the text is taken when it is left.
+- A number reads in the person's format. Text that is no number stays as typed and is marked, and the value stays; a cleared number is zero.
+- A checkbox, switch, dropdown, radio group or date changes when the person ticks or picks another value. An enum offers no empty choice; a `ref` offers one first, for no record.
+- What a handler sets, and a record read again, is never a change.
+- Enter in an input of a `form` takes the input first, then runs the form's `on submit`.
+
 ### Editing in a table
 
 `edit` names the columns whose cells are inputs, so a row can be changed where it is shown:

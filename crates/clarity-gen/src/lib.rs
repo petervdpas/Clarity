@@ -16,7 +16,7 @@ mod rust;
 mod schema;
 mod web;
 
-pub use csharp::avalonia_theme;
+pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 

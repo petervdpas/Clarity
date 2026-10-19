@@ -196,17 +196,6 @@ public class BindingTests
     }
 
     [AvaloniaFact]
-    public void DatesConvertBetweenTheRecordAndThePicker()
-    {
-        var date = Converters.Date;
-        var culture = System.Globalization.CultureInfo.InvariantCulture;
-        Assert.Equal(new DateTime(2026, 10, 17), date.Convert(new DateOnly(2026, 10, 17), typeof(DateTime?), null, culture));
-        Assert.Null(date.Convert(null, typeof(DateTime?), null, culture));
-        Assert.Equal(new DateOnly(2026, 10, 17), date.ConvertBack(new DateTime(2026, 10, 17, 13, 5, 0), typeof(DateOnly?), null, culture));
-        Assert.Null(date.ConvertBack(null, typeof(DateOnly?), null, culture));
-    }
-
-    [AvaloniaFact]
     public void ValuesShowInThePersonsFormatWithEnumLabels()
     {
         Locale.Start("en", [], "EUR", (_, _) => null, (_, v) => v, new System.Globalization.CultureInfo("en-US"));
@@ -230,32 +219,6 @@ public class BindingTests
     }
 
     [AvaloniaFact]
-    public void ARadioButtonIsCheckedForItsValue()
-    {
-        var equal = Converters.Equal;
-        var culture = System.Globalization.CultureInfo.InvariantCulture;
-        Assert.Equal(true, equal.Convert(Kind.Business, typeof(bool?), Kind.Business, culture));
-        Assert.Equal(false, equal.Convert(Kind.Private, typeof(bool?), Kind.Business, culture));
-        Assert.Equal(Kind.Business, equal.ConvertBack(true, typeof(Kind), Kind.Business, culture));
-        Assert.Equal(global::Avalonia.Data.BindingOperations.DoNothing, equal.ConvertBack(false, typeof(Kind), Kind.Business, culture));
-    }
-
-    [AvaloniaFact]
-    public void ARadioGroupChangesWhenAButtonIsChecked()
-    {
-        var first = new RadioButton { IsChecked = true };
-        var second = new RadioButton();
-        var group = new StackPanel { Children = { first, second } };
-        var window = new Window { Content = group };
-        window.Show();
-        var changes = 0;
-        Events.OnChoice(group, () => changes++);
-        second.IsChecked = true;
-        // The button that was unchecked tells nothing.
-        Assert.Equal(1, changes);
-    }
-
-    [AvaloniaFact]
     public void EnterInAFormSubmitsIt()
     {
         var box = new TextBox();
@@ -270,25 +233,9 @@ public class BindingTests
     }
 
     [AvaloniaFact]
-    public void ATextBoxCommitsWhenFocusLeavesIt()
+    public void ADateTimeInputPicksTheDayAndTypesTheTime()
     {
-        var box = new TextBox();
-        var other = new Button();
-        var window = new Window { Content = new StackPanel { Children = { box, other } } };
-        window.Show();
-        var commits = 0;
-        Events.OnCommit(box, () => commits++);
-        box.Focus();
-        box.Text = "Ada";
-        Assert.Equal(0, commits);
-        other.Focus();
-        Assert.Equal(1, commits);
-    }
-
-    [AvaloniaFact]
-    public void ADateTimeBoxPicksTheDayAndTypesTheTime()
-    {
-        var box = new DateTimeBox();
+        var box = new DateTimeInput();
         var other = new Button();
         var window = new Window { Content = new StackPanel { Children = { box, other } } };
         window.Show();
@@ -328,11 +275,11 @@ public class BindingTests
     }
 
     [AvaloniaFact]
-    public void AChoiceBoxWritesOnlyWhatThePersonPicks()
+    public void AChoiceInputWritesOnlyWhatThePersonPicks()
     {
         var people = Choice.Of(new[] { (1L, "Ada"), (2L, "Grace") }, p => p.Item2, p => p.Item1);
         // The value comes before the choices, as a binding to the window may give them.
-        var box = new ChoiceBox { Value = 2L };
+        var box = new ChoiceInput { Value = 2L };
         var window = new Window { Content = box };
         window.Show();
         var changes = 0;

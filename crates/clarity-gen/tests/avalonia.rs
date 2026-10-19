@@ -125,9 +125,10 @@ fn an_avalonia_desktop_application() {
     let project = file(&files, "Shop.csproj");
     has(project, "<OutputType>WinExe</OutputType>");
     has(project, "<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>");
-    has(project, "Include=\"Avalonia.Desktop\"");
-    has(project, "Include=\"CommunityToolkit.Mvvm\"");
-    assert!(files.iter().any(|f| f.path == "Clarity.Avalonia/Shell.cs"));
+    // Avalonia.Desktop and CommunityToolkit.Mvvm come with Clarity.Avalonia.
+    has(project, "<PackageReference Include=\"Clarity.Avalonia\"");
+    // They are not named again.
+    assert!(!project.contains("Include=\"Avalonia.Desktop\""), "{project}");
     has(file(&files, "App.axaml"), "<FluentTheme />");
     has(file(&files, "App.axaml.cs"), "desktop.MainWindow = Shell.Start(new OrderFormViewModel(db), Views.Create, TimeSpan.FromMilliseconds(5000));");
     has(file(&files, "Program.cs"), ".StartWithClassicDesktopLifetime(args)");
@@ -166,26 +167,45 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "<TextBlock Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{x:Static local:Texts.Number}\" /><Run Text=\" *\" /></TextBlock>");
     has(
         window,
-        "<TextBox x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Text=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.ORD1}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
+        "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.ORD1}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
     );
     has(window, "<TextBlock Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
-    has(window, "<TextBox Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Classes=\"number\" Text=\"{Binding Order.Total, Converter={x:Static local:Edit.OrderTotal}}\" />");
-    has(window, "<CheckBox Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\" />");
+    // Clarity's own inputs: each tells when the person changed its value, and only then.
+    has(window, "<c:NumberInput Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Format=\"{x:Static local:Edit.OrderTotal}\" Value=\"{Binding Order.Total}\" />");
+    has(window, "<c:CheckInput Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\" />");
     // The caption beside the switch, as on the web, so it fits its row.
-    has(window, "<ToggleSwitch Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\" />");
-    has(window, "ItemsSource=\"{x:Static local:Choices.OrderStatus}\" DisplayMemberBinding=\"{Binding Label, x:DataType=c:Choice}\" SelectedValueBinding=\"{Binding Value, x:DataType=c:Choice}\" SelectedValue=\"{Binding Order.Status}\"");
-    has(window, "ItemsSource=\"{Binding CustomerChoices}\"");
-    has(window, "SelectedDate=\"{Binding Order.OrderedOn, Converter={x:Static c:Converters.Date}}\"");
+    has(window, "<c:SwitchInput Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\" />");
+    has(window, "<c:ChoiceInput Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\" />");
+    has(window, "<c:ChoiceInput x:Name=\"customerPick\" Grid.Column=\"4\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{Binding CustomerChoices}\" Value=\"{Binding Order.Customer}\"");
+    has(window, "<c:DateInput Grid.Column=\"8\" Grid.Row=\"3\" Grid.ColumnSpan=\"3\" Value=\"{Binding Order.OrderedOn}\" />");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
     has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
     has(window, "<c:TableColumn Field=\"Status\" Header=\"{x:Static local:Texts.Status}\" Kind=\"Choice\" Shown=\"{x:Static local:Shown.Converter}\" />");
     // A value with a format shows in the person's format.
     has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.Total}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
-    has(window, "<TextBox x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Text=\"{Binding NumberFilter.Text}\"");
+    has(window, "<c:TextInput x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Value=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
     has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{x:Static local:Texts.New}\" Command=\"{Binding OpenOrderFormCommand}\" />");
     has(window, "<TabItem Header=\"{x:Static local:Texts.Notes}\">");
-    has(window, "<TextBox Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Text=\"{Binding Order.Number}\" />");
+    has(window, "<c:TextInput Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Value=\"{Binding Order.Number}\" />");
+    // No stock input is placed directly: the library's own decide when `change` runs.
+    for stock in ["<TextBox ", "<CheckBox ", "<ToggleSwitch ", "<ComboBox ", "<CalendarDatePicker ", "<RadioButton "] {
+        assert!(!window.contains(stock), "{stock} in\n{window}");
+    }
+}
+
+/// A radio group is the library's, with the enum's choices.
+#[test]
+fn a_radio_group_picks_an_enum_value() {
+    let source = SHOP.replace("    dropdown at 1,4 span 4 bind order.status\n", "    radio name status_pick at 1,4 span 4 bind order.status vertical on change: filter_changed\n");
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(
+        file(&files, "Windows/OrderFormView.axaml"),
+        "<c:RadioInput x:Name=\"statusPick\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\" Vertical=\"True\"",
+    );
+    has(file(&files, "Windows/OrderFormView.axaml.cs"), "        statusPick.ValueChanged += (_, _) => Vm.FilterChangedCommand.Execute(null);");
 }
 
 #[test]
@@ -248,7 +268,8 @@ fn events_without_a_command_are_wired_in_the_code_behind() {
     let files = files();
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "public partial class OrderFormView : UserControl");
-    has(code, "        Events.OnCommit(numberFilter, () => Vm.FilterChangedCommand.Execute(null));");
+    // Every input of the library tells the same way when the person changed it.
+    has(code, "        numberFilter.ValueChanged += (_, _) => Vm.FilterChangedCommand.Execute(null);");
     has(code, "        grid.Selected += (_, _) => Vm.GridSelectedCommand.Execute(null);");
     has(code, "        grid.Opened += (_, _) => Vm.GridOpenedCommand.Execute(null);");
 }
@@ -333,7 +354,7 @@ fn values_show_and_read_in_the_persons_format() {
     has(shown, "    public static readonly FormatConverter OrderOrderedOn = new(new FieldFormat(FormatKind.Date));");
     has(shown, "    public static readonly FormatConverter OrderDiscount = new(new FieldFormat(FormatKind.Decimal, 4, \"percent\"));");
     has(shown, "public static class Edit\n{");
-    has(shown, "    public static readonly EditConverter OrderTotal = new(new FieldFormat(FormatKind.Money));");
+    has(shown, "    public static readonly FieldFormat OrderTotal = new FieldFormat(FormatKind.Money);");
     // An enum value in text with slots shows its label.
     has(shown, "        \"OrderStatus\" => Enum.TryParse<OrderStatus>(value, out var v) ? Of(v) : value,");
 }
@@ -376,7 +397,7 @@ fn an_unbound_checkbox_is_checked_in_its_state() {
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "Windows/OrderFormView.axaml"), "<CheckBox x:Name=\"mine\" Grid.Column=\"9\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.OnlyMine}\" IsChecked=\"{Binding Mine.IsChecked}\"");
+    has(file(&files, "Windows/OrderFormView.axaml"), "<c:CheckInput x:Name=\"mine\" Grid.Column=\"9\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.OnlyMine}\" IsChecked=\"{Binding Mine.IsChecked}\"");
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "if (Mine.IsChecked)");
     has(vm, "Mine.IsChecked = false;");
@@ -431,14 +452,15 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     has(window, &column("Field=\"Due\" Header=\"{x:Static local:Texts.Due}\" Kind=\"Date\" Edit=\"True\""));
     // A moment is picked as a day and a time, in a cell and in a form alike.
     has(window, &column("Field=\"Added\" Header=\"{x:Static local:Texts.Added}\" Kind=\"Moment\" Edit=\"True\""));
-    has(window, "<c:DateTimeBox x:Name=\"addedPick\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"4\" Value=\"{Binding Task.Added}\"");
+    has(window, "<c:DateTimeInput x:Name=\"addedPick\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"4\" Value=\"{Binding Task.Added}\"");
     has(window, &column("Field=\"Hours\" Header=\"{x:Static local:Texts.Hours}\" Kind=\"Number\" Edit=\"True\" Number=\"{x:Static local:Edit.TaskHours}\""));
     // A reference picks from the records the window reads, as a dropdown in a form does.
     has(window, &column("Field=\"Owner\" Header=\"{x:Static local:Texts.Owner}\" Kind=\"Choice\" Edit=\"True\" ChoicesFrom=\"PersonChoices\""));
     has(file(&files, "Windows/MainViewModel.cs"), "PersonChoices = Choice.Of(Db.All<Person>(), r => ");
     // An edit by the person (not by a handler) selects its row, then the table's change runs.
     let code = file(&files, "Windows/MainView.axaml.cs");
-    has(code, "grid.Handling = () => Vm.IsHandling;");
+    // The cells' own inputs tell what the person edited; a handler's changes never count.
+    assert!(!code.contains("Handling"), "{code}");
     has(code, "grid.Edited += _ => Vm.TaskChangedCommand.Execute(null);");
     has(code, "addedPick.ValueChanged += (_, _) => Vm.TaskChangedCommand.Execute(null);");
 }

@@ -562,37 +562,41 @@ impl<'a> Window<'a> {
                 };
                 let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"value\" Text=\"{text}\"{plain_state}{extra} />");
             }
+            // Clarity's own inputs (Clarity.Avalonia), which tell when the person
+            // changed their value and only then, the same as on the web.
             WidgetKind::Textbox | WidgetKind::Password | WidgetKind::Memo | WidgetKind::Number => {
-                let class = match p.kind {
-                    WidgetKind::Memo => " Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\"",
-                    WidgetKind::Number => " Classes=\"number\"",
-                    WidgetKind::Password => " PasswordChar=\"*\"",
-                    _ => "",
-                };
                 let number = p
                     .bind
                     .as_deref()
                     .and_then(|b| self.bound_field(b))
                     .filter(|(_, f)| matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration));
-                let value = match (&bound, named, number) {
-                    // A number reads and shows in the person's format.
-                    (Some(path), _, Some((entity, field))) => {
-                        format!(" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}}}\"", entity.name.name, pascal(&field.name.name))
-                    }
-                    (Some(path), _, None) => format!(" Text=\"{{Binding {path}}}\""),
-                    (None, Some(n), _) => format!(" Text=\"{{Binding {}.Text}}\"", member(n)),
-                    (None, None, _) => String::new(),
+                let class = match p.kind {
+                    WidgetKind::Memo => " Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\"",
+                    WidgetKind::Number if number.is_none() => " Classes=\"number\"",
+                    WidgetKind::Password => " PasswordChar=\"*\"",
+                    _ => "",
+                };
+                let (control, value) = match (&bound, named, number) {
+                    // A number shows and reads in the person's format.
+                    (Some(path), _, Some((entity, field))) => (
+                        "c:NumberInput",
+                        format!(" Format=\"{{x:Static local:Edit.{}{}}}\" Value=\"{{Binding {path}}}\"", entity.name.name, pascal(&field.name.name)),
+                    ),
+                    (Some(path), _, None) => ("c:TextInput", format!(" Value=\"{{Binding {path}}}\"")),
+                    // Unbound, a named input holds its own text.
+                    (None, Some(n), _) => ("c:TextInput", format!(" Value=\"{{Binding {}.Text}}\"", member(n))),
+                    (None, None, _) => ("c:TextInput", String::new()),
                 };
                 let placeholder = p.placeholder.as_deref().map(|t| format!(" PlaceholderText=\"{}\"", self.text(t))).unwrap_or_default();
                 let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
-                let _ = writeln!(out, "{pad}<TextBox {at}{class}{value}{placeholder}{read_only}{text_state}{extra} />");
+                let _ = writeln!(out, "{pad}<{control} {at}{class}{value}{placeholder}{read_only}{text_state}{extra} />");
             }
             WidgetKind::Checkbox | WidgetKind::Switch => {
                 // A switch's Content is a header above it; its caption goes beside it, as on the web.
                 let (control, label) = if p.kind == WidgetKind::Switch {
-                    ("ToggleSwitch", format!("OnContent=\"{text}\" OffContent=\"{text}\"", text = self.text(&caption_text)))
+                    ("c:SwitchInput", format!("OnContent=\"{text}\" OffContent=\"{text}\"", text = self.text(&caption_text)))
                 } else {
-                    ("CheckBox", format!("Content=\"{}\"", self.text(&caption_text)))
+                    ("c:CheckInput", format!("Content=\"{}\"", self.text(&caption_text)))
                 };
                 // Unbound, a named checkbox holds its own state.
                 let value = match (bound.as_deref(), named) {
@@ -603,51 +607,26 @@ impl<'a> Window<'a> {
                 let read_only = if p.readonly { " IsEnabled=\"False\"" } else { "" };
                 let _ = writeln!(out, "{pad}<{control} {at} {label}{value}{read_only}{plain_state}{extra} />");
             }
-            WidgetKind::Dropdown => {
-                let field = p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty);
-                let items = match field {
-                    Some(FieldType::Enum { name }) => format!("{{x:Static local:Choices.{}}}", name.name),
-                    Some(FieldType::Ref { entity }) => format!("{{Binding {}Choices}}", entity.name),
+            WidgetKind::Dropdown | WidgetKind::Radio => {
+                // An enum's values (never an empty one), or the records a reference can point at after an empty one.
+                let choices = match p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty) {
+                    Some(FieldType::Enum { name }) => format!(" Choices=\"{{x:Static local:Choices.{}}}\"", name.name),
+                    Some(FieldType::Ref { entity }) => format!(" Choices=\"{{Binding {}Choices}}\"", entity.name),
                     _ => String::new(),
                 };
-                let value = bound.as_deref().map(|b| format!(" SelectedValue=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let _ = writeln!(
-                    out,
-                    "{pad}<ComboBox {at} ItemsSource=\"{items}\" DisplayMemberBinding=\"{{Binding Label, x:DataType=c:Choice}}\" SelectedValueBinding=\"{{Binding Value, x:DataType=c:Choice}}\"{value} HorizontalAlignment=\"Stretch\"{plain_state}{extra} />"
-                );
-            }
-            WidgetKind::Radio => {
-                let orientation = match p.orientation {
-                    Some(clarity_spec::model::Orientation::Vertical) => "Vertical",
-                    _ => "Horizontal",
-                };
-                let _ = writeln!(out, "{pad}<StackPanel {at} Orientation=\"{orientation}\" Spacing=\"12\"{plain_state}{extra}>");
-                if let (Some(path), Some(FieldType::Enum { name })) = (&bound, p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty)) {
-                    for variant in self.project.enum_decl(&name.name).map(|e| e.variants.as_slice()).unwrap_or_default() {
-                        let _ = writeln!(
-                            out,
-                            "{pad}  <RadioButton Content=\"{}\" IsChecked=\"{{Binding {path}, Converter={{x:Static c:Converters.Equal}}, ConverterParameter={{x:Static local:{}.{}}}}}\" />",
-                            self.text(&variant.label),
-                            name.name,
-                            variant.name.name
-                        );
-                    }
-                }
-                let _ = writeln!(out, "{pad}</StackPanel>");
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let control = if p.kind == WidgetKind::Radio { "c:RadioInput" } else { "c:ChoiceInput" };
+                let vertical = if p.kind == WidgetKind::Radio && p.orientation == Some(clarity_spec::model::Orientation::Vertical) { " Vertical=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<{control} {at}{choices}{value}{vertical}{plain_state}{extra} />");
             }
             WidgetKind::Date if self.binds_moment(p) => {
                 // A moment is picked as a day and a time of day, as on the web.
                 let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let _ = writeln!(out, "{pad}<c:DateTimeBox {at}{value} HorizontalAlignment=\"Stretch\"{plain_state}{extra} />");
+                let _ = writeln!(out, "{pad}<c:DateTimeInput {at}{value} HorizontalAlignment=\"Stretch\"{plain_state}{extra} />");
             }
             WidgetKind::Date => {
-                let date_only = p.bind.as_deref().and_then(|b| self.bound_field(b)).is_some_and(|(_, f)| f.ty == FieldType::Date);
-                let value = match &bound {
-                    Some(b) if date_only => format!(" SelectedDate=\"{{Binding {b}, Converter={{x:Static c:Converters.Date}}}}\""),
-                    Some(b) => format!(" SelectedDate=\"{{Binding {b}}}\""),
-                    None => String::new(),
-                };
-                let _ = writeln!(out, "{pad}<CalendarDatePicker {at}{value} HorizontalAlignment=\"Stretch\"{plain_state}{extra} />");
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:DateInput {at}{value}{plain_state}{extra} />");
             }
             WidgetKind::Button => {
                 let content = match named {
@@ -784,21 +763,25 @@ impl<'a> Window<'a> {
         for widget in &self.parts {
             let Some(name) = &widget.props.name else { continue };
             let control = control(name);
-            // What a handler changes in the rows is no edit by the person.
-            if widget.props.kind == WidgetKind::Table && !widget.props.edit.is_empty() {
-                out.push(format!("{control}.Handling = () => Vm.IsHandling;"));
-            }
             for h in &widget.props.handlers {
                 let run = format!("Vm.{}Command.Execute(null)", pascal(&h.handler));
                 let kind = widget.props.kind;
-                let text = matches!(kind, WidgetKind::Textbox | WidgetKind::Password | WidgetKind::Memo | WidgetKind::Number);
+                // Every input of the library tells when the person changed its value.
+                let input = matches!(
+                    kind,
+                    WidgetKind::Textbox
+                        | WidgetKind::Password
+                        | WidgetKind::Memo
+                        | WidgetKind::Number
+                        | WidgetKind::Checkbox
+                        | WidgetKind::Switch
+                        | WidgetKind::Dropdown
+                        | WidgetKind::Radio
+                        | WidgetKind::Date
+                );
                 let line = match h.event {
                     Event::Click => continue,
-                    Event::Change if text => format!("Events.OnCommit({control}, () => {run});"),
-                    Event::Change if matches!(kind, WidgetKind::Checkbox | WidgetKind::Switch) => format!("{control}.IsCheckedChanged += (_, _) => {run};"),
-                    Event::Change if kind == WidgetKind::Date && self.binds_moment(&widget.props) => format!("{control}.ValueChanged += (_, _) => {run};"),
-                    Event::Change if kind == WidgetKind::Date => format!("{control}.SelectedDateChanged += (_, _) => {run};"),
-                    Event::Change if kind == WidgetKind::Radio => format!("Events.OnChoice({control}, () => {run});"),
+                    Event::Change if input => format!("{control}.ValueChanged += (_, _) => {run};"),
                     // The table chooses an edited row first, so the handler finds it.
                     Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),
                     Event::Select if kind == WidgetKind::Table => format!("{control}.Selected += (_, _) => {run};"),

@@ -1,0 +1,160 @@
+{
+  "about": "How the inputs of a form behave, the same on every renderer: the web's Svelte parts and the Avalonia controls are both run through these cases. The form shows one record of a task, with one input of each kind, inside a form whose `on submit` is wired. Steps are what the person does (focus a field, type into it, press Enter, leave it, tick a checkbox or switch, pick a choice, a radio choice or a day) or what the code does (a handler sets a field, the record is read again). type puts the text in the field without taking it yet; enter and leave take it. In a moment field, type is the time (hh:mm) and pickDay the day. Expected: the events in order ('change name' after the name was edited, 'submit' when the form is submitted), every value changed (all others stay as they were), the fields marked as holding text that is no value, the text a field shows (a choice: the label of its choice), and the choices of a field by their labels. Numbers, days and moments are written as the backends send them: decimals as text, days as 2026-10-20, moments as 2026-10-20T14:05:00. The person's locale is en-US.",
+  "fields": [
+    { "field": "name", "label": "Task", "kind": "text" },
+    { "field": "notes", "label": "Notes", "kind": "memo" },
+    { "field": "hours", "label": "Hours", "kind": "number", "scale": 1 },
+    { "field": "done", "label": "Done", "kind": "check" },
+    { "field": "urgent", "label": "Urgent", "kind": "switch" },
+    { "field": "priority", "label": "Priority", "kind": "choice", "choices": [["Low", "Low"], ["High", "High"]] },
+    { "field": "owner", "label": "Owner", "kind": "choice", "choices": [[null, ""], [1, "Ada"], [2, "Grace"]] },
+    { "field": "size", "label": "Size", "kind": "radio", "choices": [["Small", "Small"], ["Large", "Large"]] },
+    { "field": "day", "label": "Day", "kind": "date" },
+    { "field": "due", "label": "Due", "kind": "moment" }
+  ],
+  "record": { "name": "Milk", "notes": "two litres", "hours": "1.5", "done": false, "urgent": false, "priority": "Low", "owner": 1, "size": "Small", "day": "2026-10-20", "due": "2026-10-20T14:05:00" },
+  "cases": [
+    {
+      "name": "drawing the form is no change, and every input shows its value",
+      "steps": [],
+      "expect": {
+        "events": [],
+        "shown": [["name", "Milk"], ["hours", "1.5"], ["priority", "Low"], ["owner", "Ada"], ["due", "14:05"]]
+      }
+    },
+    {
+      "name": "typed text is taken when the field is left",
+      "steps": [["type", "name", "Oat milk"], ["leave"]],
+      "expect": { "events": ["change name"], "values": [["name", "Oat milk"]] }
+    },
+    {
+      "name": "typing is no change until it is taken",
+      "steps": [["type", "name", "Oat milk"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "leaving a field without typing is no change",
+      "steps": [["focus", "name"], ["leave"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "the same text again is no change",
+      "steps": [["type", "name", "Milk"], ["leave"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "Enter takes typed text once, then submits the form",
+      "steps": [["type", "name", "Oat milk"], ["enter"], ["leave"]],
+      "expect": { "events": ["change name", "submit"], "values": [["name", "Oat milk"]] }
+    },
+    {
+      "name": "Enter in a memo is no take and no submit",
+      "steps": [["type", "notes", "two litres of oat milk"], ["enter"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "a memo is taken when it is left",
+      "steps": [["type", "notes", "two litres of oat milk"], ["leave"]],
+      "expect": { "events": ["change notes"], "values": [["notes", "two litres of oat milk"]] }
+    },
+    {
+      "name": "a number reads in the person's format",
+      "steps": [["type", "hours", "2.5"], ["leave"]],
+      "expect": { "events": ["change hours"], "values": [["hours", "2.5"]] }
+    },
+    {
+      "name": "text that is no number is marked and the value stays",
+      "steps": [["type", "hours", "lots"], ["leave"]],
+      "expect": { "events": [], "marked": ["hours"], "shown": [["hours", "lots"]] }
+    },
+    {
+      "name": "a cleared number is zero",
+      "steps": [["type", "hours", ""], ["leave"]],
+      "expect": { "events": ["change hours"], "values": [["hours", "0"]] }
+    },
+    {
+      "name": "Enter takes a number, then submits the form",
+      "steps": [["type", "hours", "3"], ["enter"]],
+      "expect": { "events": ["change hours", "submit"], "values": [["hours", "3"]] }
+    },
+    {
+      "name": "ticking a checkbox changes it",
+      "steps": [["tick", "done"]],
+      "expect": { "events": ["change done"], "values": [["done", true]] }
+    },
+    {
+      "name": "a switch flips like a checkbox",
+      "steps": [["tick", "urgent"], ["tick", "urgent"]],
+      "expect": { "events": ["change urgent", "change urgent"] }
+    },
+    {
+      "name": "an enum has no empty choice, a reference has one",
+      "steps": [],
+      "expect": { "events": [], "choices": { "priority": ["Low", "High"], "owner": ["", "Ada", "Grace"], "size": ["Small", "Large"] } }
+    },
+    {
+      "name": "picking a choice changes it",
+      "steps": [["pick", "priority", "High"]],
+      "expect": { "events": ["change priority"], "values": [["priority", "High"]] }
+    },
+    {
+      "name": "picking the choice it has is no change",
+      "steps": [["pick", "priority", "Low"], ["pick", "owner", 1], ["pick", "size", "Small"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "picking the empty choice of a reference empties it",
+      "steps": [["pick", "owner", null]],
+      "expect": { "events": ["change owner"], "values": [["owner", null]], "shown": [["owner", ""]] }
+    },
+    {
+      "name": "picking a radio choice changes it",
+      "steps": [["pick", "size", "Large"]],
+      "expect": { "events": ["change size"], "values": [["size", "Large"]] }
+    },
+    {
+      "name": "picking a date changes it",
+      "steps": [["pickDay", "day", "2026-10-21"]],
+      "expect": { "events": ["change day"], "values": [["day", "2026-10-21"]] }
+    },
+    {
+      "name": "a typed time changes the moment",
+      "steps": [["type", "due", "09:30"], ["leave"]],
+      "expect": { "events": ["change due"], "values": [["due", "2026-10-20T09:30:00"]] }
+    },
+    {
+      "name": "a time that is no time is marked and the moment stays",
+      "steps": [["type", "due", "late"], ["leave"]],
+      "expect": { "events": [], "marked": ["due"] }
+    },
+    {
+      "name": "what a handler sets is no change",
+      "steps": [
+        ["handler", "name", "Rye bread"],
+        ["handler", "hours", "4"],
+        ["handler", "done", true],
+        ["handler", "urgent", true],
+        ["handler", "priority", "High"],
+        ["handler", "owner", 2],
+        ["handler", "size", "Large"],
+        ["handler", "day", "2026-11-01"],
+        ["handler", "due", "2026-11-01T08:00:00"]
+      ],
+      "expect": {
+        "events": [],
+        "values": [["name", "Rye bread"], ["hours", "4"], ["done", true], ["urgent", true], ["priority", "High"], ["owner", 2], ["size", "Large"], ["day", "2026-11-01"], ["due", "2026-11-01T08:00:00"]],
+        "shown": [["name", "Rye bread"], ["hours", "4.0"], ["priority", "High"], ["owner", "Grace"], ["due", "08:00"]]
+      }
+    },
+    {
+      "name": "a handler emptying a reference is no change",
+      "steps": [["handler", "owner", null]],
+      "expect": { "events": [], "values": [["owner", null]], "shown": [["owner", ""]] }
+    },
+    {
+      "name": "a record read again is edited like the first one",
+      "steps": [["reload"], ["tick", "done"], ["type", "name", "Oat milk"], ["leave"]],
+      "expect": { "events": ["change done", "change name"], "values": [["done", true], ["name", "Oat milk"]] }
+    }
+  ]
+}

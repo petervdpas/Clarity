@@ -1,6 +1,6 @@
-// What the generated windows bind with: the choices of a dropdown, the
-// converters between record values and controls, and events that a control
-// has no command for.
+// What the generated windows bind with: the choices of a dropdown or radio
+// group, the converters that show values in the person's format, and the
+// form's submit, which no control has a command for.
 
 using System.ComponentModel;
 using System.Globalization;
@@ -24,28 +24,6 @@ public sealed record Choice(object? Value, string Label)
     /// <summary>The records of an entity as the choices of a reference.</summary>
     public static Choice[] Of<R>(IEnumerable<R> records, Func<R, string> label) where R : IRecord<R> =>
         Of(records, label, r => r.Id);
-}
-
-public static class Converters
-{
-    /// <summary>A record's date (DateOnly?) as a date picker's (DateTime?).</summary>
-    public static readonly IValueConverter Date = new FuncValueConverter<DateOnly?, DateTime?>(
-        d => d?.ToDateTime(TimeOnly.MinValue),
-        t => t is { } v ? DateOnly.FromDateTime(v) : null);
-
-    /// <summary>
-    /// A radio button of one value: checked while the bound value is the
-    /// converter parameter, and setting it when the button is checked.
-    /// </summary>
-    public static readonly IValueConverter Equal = new EqualConverter();
-
-    sealed class EqualConverter : IValueConverter
-    {
-        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => Equals(value, parameter);
-
-        public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-            value is true ? parameter : BindingOperations.DoNothing;
-    }
 }
 
 /// <summary>
@@ -80,61 +58,8 @@ public sealed class FormatConverter(FieldFormat format) : IValueConverter
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => BindingOperations.DoNothing;
 }
 
-/// <summary>
-/// A number input: the value as typed in the person's format (money without
-/// its sign), and what is typed read back the same way. Text that is no
-/// number of the field's kind marks the input, as on the web, and the value
-/// stays; a cleared input is zero, or no value where the field may have none.
-/// </summary>
-public sealed class EditConverter(FieldFormat format) : IValueConverter
-{
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => Locale.Formats.EditText(format, value);
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var text = value as string ?? "";
-        if (text.Trim().Length == 0)
-            return Nullable.GetUnderlyingType(targetType) is not null || !targetType.IsValueType ? null : Zero(targetType);
-        return Locale.Formats.Read(format, text) switch
-        {
-            null => new BindingNotification(new FormatException(""), BindingErrorType.DataValidationError),
-            long n when Underlying(targetType) == typeof(int) => (int)n,
-            var read => read,
-        };
-    }
-
-    static Type Underlying(Type type) => Nullable.GetUnderlyingType(type) ?? type;
-
-    static object Zero(Type type) => Underlying(type) == typeof(decimal) ? 0m : Underlying(type) == typeof(int) ? 0 : 0L;
-}
-
 public static class Events
 {
-    /// <summary>
-    /// Runs <paramref name="commit"/> when an edit of the text box is done: focus
-    /// leaves it, or Enter is pressed. Clarity's <c>change</c> of a text input.
-    /// </summary>
-    public static void OnCommit(TextBox box, Action commit)
-    {
-        box.LostFocus += (_, _) => commit();
-        box.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Enter)
-                commit();
-        };
-    }
-
-    /// <summary>Runs <paramref name="change"/> when a radio button of the group is checked: Clarity's <c>change</c> of a radio group.</summary>
-    public static void OnChoice(Panel group, Action change)
-    {
-        foreach (var button in group.Children.OfType<RadioButton>())
-            button.IsCheckedChanged += (_, _) =>
-            {
-                if (button.IsChecked == true)
-                    change();
-            };
-    }
-
     /// <summary>Runs <paramref name="submit"/> when Enter is pressed in a form: Clarity's <c>submit</c>.</summary>
     public static void OnEnter(Control form, Action submit) =>
         form.AddHandler(InputElement.KeyDownEvent, (_, e) =>

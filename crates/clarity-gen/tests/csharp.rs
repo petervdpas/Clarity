@@ -1,5 +1,5 @@
 //! The C# backend (G2a): the data dictionary, functions, actions and data
-//! events as C#, over the C# runtime copied into the project.
+//! events as C#, over the C# runtime's NuGet packages.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, SourceKind, Ui, starter};
@@ -87,8 +87,15 @@ fn has(text: &str, expected: &str) {
     assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
 }
 
+/// The version of the runtime's packages, as runtimes/csharp/Directory.Build.props sets it.
+fn runtime_version() -> &'static str {
+    let props = include_str!("../../../runtimes/csharp/Directory.Build.props");
+    let start = props.find("<Version>").unwrap() + "<Version>".len();
+    &props[start..start + props[start..].find("</Version>").unwrap()]
+}
+
 #[test]
-fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
+fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
     let files = files();
     let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(
@@ -97,34 +104,6 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "App.axaml",
             "App.axaml.cs",
             "AppThemes.cs",
-            "Clarity.Avalonia/Bindings.cs",
-            "Clarity.Avalonia/ChoiceBox.cs",
-            "Clarity.Avalonia/ClarityTable.cs",
-            "Clarity.Avalonia/DateTimeBox.cs",
-            "Clarity.Avalonia/Locale.cs",
-            "Clarity.Avalonia/Messages.cs",
-            "Clarity.Avalonia/PartState.cs",
-            "Clarity.Avalonia/Pickers.cs",
-            "Clarity.Avalonia/PictureBox.cs",
-            "Clarity.Avalonia/Remembered.cs",
-            "Clarity.Avalonia/Shell.cs",
-            "Clarity.Avalonia/Themes.cs",
-            "Clarity.Avalonia/WindowViewModel.cs",
-            "Clarity.Runtime/Clock.cs",
-            "Clarity.Runtime/Db.cs",
-            "Clarity.Runtime/Dialect.cs",
-            "Clarity.Runtime/Errors.cs",
-            "Clarity.Runtime/Files.cs",
-            "Clarity.Runtime/Formats.cs",
-            "Clarity.Runtime/Languages.cs",
-            "Clarity.Runtime/Locations.cs",
-            "Clarity.Runtime/Pictures.cs",
-            "Clarity.Runtime/Query.cs",
-            "Clarity.Runtime/Record.cs",
-            "Clarity.Runtime/Sql.cs",
-            "Clarity.Runtime/SqliteDriver.cs",
-            "Clarity.Runtime/Store.cs",
-            "Clarity.Runtime/Text.cs",
             "Modules/Sales.cs",
             "Program.cs",
             "README.md",
@@ -143,11 +122,43 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
     let project = file(&files, "Shop.csproj");
     has(project, "<TargetFramework>net10.0</TargetFramework>");
     has(project, "<RootNamespace>Shop</RootNamespace>");
-    // The runtime's packages, at the versions the runtime is tested with.
-    let runtime = include_str!("../../../runtimes/csharp/Clarity.Runtime/Clarity.Runtime.csproj");
-    let sqlite = runtime.lines().find(|l| l.contains("Microsoft.Data.Sqlite")).unwrap().trim();
-    has(project, sqlite);
-    assert_eq!(file(&files, "Clarity.Runtime/Db.cs"), include_str!("../../../runtimes/csharp/Clarity.Runtime/Db.cs"));
+    // Clarity.Avalonia brings Clarity.Runtime and the packages both stand on.
+    has(project, &format!("<PackageReference Include=\"Clarity.Avalonia\" Version=\"{}\" />", runtime_version()));
+    assert!(!project.contains("Include=\"Clarity.Runtime\"") && !project.contains("Microsoft.Data.Sqlite"), "{project}");
+}
+
+/// While working on the runtime, a project builds on the runtime's own
+/// projects instead of the packages: `-p:ClarityRuntime=<runtimes/csharp>`,
+/// or the environment variable CLARITY_RUNTIME.
+#[test]
+fn the_local_runtime_projects_can_stand_in_for_the_packages() {
+    let project = file(&files(), "Shop.csproj").to_string();
+    has(&project, "<ClarityRuntime Condition=\"'$(ClarityRuntime)' == ''\">$(CLARITY_RUNTIME)</ClarityRuntime>");
+    has(
+        &project,
+        &format!(
+            "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
+    <PackageReference Include=\"Clarity.Avalonia\" Version=\"{}\" />
+  </ItemGroup>
+  <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia/Clarity.Avalonia.csproj\" />
+  </ItemGroup>",
+            runtime_version()
+        ),
+    );
+    // Each project it names is there.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
+    for line in project.lines().filter(|l| l.contains("<ProjectReference ")) {
+        let path = line.split("$(ClarityRuntime)/").nth(1).unwrap().split('"').next().unwrap();
+        assert!(root.join(path).exists(), "{path}");
+    }
+}
+
+/// The program builds on the runtime's packages and carries no copy of them.
+#[test]
+fn no_runtime_source_is_copied() {
+    let files = files();
+    assert!(!files.iter().any(|f| f.path.starts_with("Clarity.")), "{:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
 }
 
 #[test]
@@ -271,63 +282,39 @@ fn csharp_needs_avalonia_or_the_web_renderer() {
     assert_eq!(generate(&project, &settings).unwrap_err(), ["C# with the web renderer is not generated yet; C# uses Avalonia"]);
 }
 
-/// A runtime file added later must reach generated projects too.
-#[test]
-fn every_csharp_runtime_source_file_is_copied() {
-    let files = files();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
-    for library in ["Clarity.Runtime", "Clarity.Avalonia"] {
-        for entry in std::fs::read_dir(root.join(library)).unwrap() {
-            let path = entry.unwrap().path();
-            let file = path.file_name().unwrap().to_string_lossy().to_string();
-            // A server driver goes only where a data source uses it (tested below).
-            let driver = ["ServerDriver.cs", "PostgresDriver.cs", "MysqlDriver.cs", "MssqlDriver.cs"].contains(&file.as_str());
-            if path.extension().is_some_and(|e| e == "cs") && !driver {
-                let name = format!("{library}/{file}");
-                assert!(files.iter().any(|f| f.path == name), "{name} is not copied");
-            }
-        }
-    }
-}
-
-/// A project holds the drivers of the databases its data sources are, with
-/// their packages, and no others: each server database is a package of its
-/// own (Clarity.Runtime.PostgreSql and the others), which the program turns
-/// on before it opens its databases.
+/// A project references the package of each server database its data
+/// sources are, and no others (Clarity.Runtime.PostgreSql and the others,
+/// which bring their own clients); the program turns each on before it opens
+/// its databases.
 #[test]
 fn a_project_gets_the_drivers_of_its_databases_only() {
     let project = load_sources([("sales.clarity", SALES)]);
     let plain = generate(&project, &settings()).unwrap();
     let csproj = file(&plain, "Shop.csproj");
-    assert!(!csproj.contains("Npgsql") && !csproj.contains("DefineConstants"), "{csproj}");
-    assert!(!plain.iter().any(|f| f.path.ends_with("Driver.cs") && !f.path.ends_with("SqliteDriver.cs")));
+    assert!(!csproj.contains("Clarity.Runtime."), "{csproj}");
     assert!(!file(&plain, "Program.cs").contains(".Use();"));
 
-    for (kind, package, folder, driver, turned_on) in [
-        (SourceKind::Postgres, "Include=\"Npgsql\"", "Clarity.Runtime.PostgreSql", "PostgresDriver.cs", "PostgreSql.Use();"),
-        (SourceKind::Mysql, "Include=\"MySqlConnector\"", "Clarity.Runtime.MySql", "MysqlDriver.cs", "MySql.Use();"),
-        (SourceKind::Mssql, "Include=\"Microsoft.Data.SqlClient\"", "Clarity.Runtime.SqlServer", "MssqlDriver.cs", "SqlServer.Use();"),
+    let packages = ["Clarity.Runtime.PostgreSql", "Clarity.Runtime.MySql", "Clarity.Runtime.SqlServer"];
+    for (kind, package, turned_on) in [
+        (SourceKind::Postgres, packages[0], "PostgreSql.Use();"),
+        (SourceKind::Mysql, packages[1], "MySql.Use();"),
+        (SourceKind::Mssql, packages[2], "SqlServer.Use();"),
     ] {
         let mut settings = settings();
         settings.datasources[0].kind = kind;
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = generate(&project, &settings).unwrap();
         let csproj = file(&files, "Shop.csproj");
-        assert!(!csproj.contains("DefineConstants"), "{csproj}");
-        has(csproj, package);
-        let others = ["Include=\"Npgsql\"", "Include=\"MySqlConnector\"", "Include=\"Microsoft.Data.SqlClient\""];
-        assert_eq!(others.iter().filter(|p| csproj.contains(*p)).count(), 1, "{csproj}");
-        assert!(files.iter().any(|f| f.path == format!("{folder}/{driver}")), "{folder}/{driver}");
-        assert_eq!(files.iter().filter(|f| f.path.ends_with("Driver.cs")).count(), 3, "SQLite, the server's own and their base");
+        has(csproj, &format!("    <PackageReference Include=\"{package}\" Version=\"{}\" />\n", runtime_version()));
+        has(csproj, &format!("    <ProjectReference Include=\"$(ClarityRuntime)/{package}/{package}.csproj\" />\n"));
+        assert_eq!(packages.iter().filter(|p| csproj.contains(&format!("Include=\"{p}\""))).count(), 1, "{csproj}");
+        // The clients come with the driver's package.
+        assert!(!csproj.contains("Npgsql") && !csproj.contains("MySqlConnector") && !csproj.contains("SqlClient"), "{csproj}");
         let program = file(&files, "Program.cs");
         has(program, "\"env:SHOP_DATABASE\")];");
         // The driver is turned on before the databases open.
         has(program, &format!("        {turned_on}\n        var db = Db.Connect(Databases);"));
     }
-    // SQL Server's package comes with the fix of its vulnerable dependency.
-    let mut settings = settings();
-    settings.datasources[0].kind = SourceKind::Mssql;
-    has(file(&generate(&project, &settings).unwrap(), "Shop.csproj"), "Include=\"System.Security.Cryptography.Pkcs\"");
 }
 
 /// An external source (D1e) on C#: opened with its own driver but never
@@ -415,9 +402,9 @@ fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
     has(music, ".With(\"track.length\", Slot.OfDuration(track.Length))");
     let shown = file(&files, "Shown.cs");
     has(shown, "public static readonly FormatConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
-    has(shown, "public static readonly EditConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
+    has(shown, "public static readonly FieldFormat TrackLength = new FieldFormat(FormatKind.Duration);");
     let view = file(&files, "Windows/TracksView.axaml");
-    has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Edit.TrackLength}}\"");
+    has(view, "Format=\"{x:Static local:Edit.TrackLength}\" Value=\"{Binding Track.Length}\"");
     has(view, "Text=\"{Binding Track.Length, Converter={x:Static local:Shown.TrackLength}}\"");
 }
 

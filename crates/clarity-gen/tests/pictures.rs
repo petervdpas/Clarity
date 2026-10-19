@@ -123,9 +123,6 @@ fn avalonia_shows_a_picture_field_in_a_picture_box() {
     has(view, "EmptyText=\"{x:Static local:Texts.NoPicture}\"");
     let model = text(&files, "Windows/AlbumFormViewModel.cs");
     has(model, "    public Func<byte[]?> AlbumCoverPicture => () => Db.PictureOf<Album>(Album.Id, \"cover\");\n");
-    // The runtime's files come along.
-    assert!(files.iter().any(|f| f.path == "Clarity.Avalonia/PictureBox.cs"));
-    assert!(files.iter().any(|f| f.path == "Clarity.Runtime/Pictures.cs"));
 }
 
 /// A picture linked from a file before its record is saved shows from its store.

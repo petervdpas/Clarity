@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editText, fillText, formatValue, parseNumber, userLocale, type FieldFormat, type ShownText } from "./format.ts";
+import { editText, fillText, formatValue, numberEditing, parseNumber, userLocale, type FieldFormat, type ShownText } from "./format.ts";
 
 type Shows = { what: string; locale: string; currency: string | null; field: FieldFormat; value: string | number; shows: string };
 type Reads = { what: string; locale: string; currency: string | null; field: FieldFormat; typed: string; value: string | number | null };
@@ -74,4 +74,15 @@ test("plain text is shown as it is", () => {
 
 test("a percent without a scale keeps its own digits", () => {
   assert.equal(formatValue({ kind: "decimal", format: "percent" }, "0.125", { locale: "en-US", currency: null }), "12.5%");
+});
+
+test("a number input shows its value for editing and reads what is typed; cleared it is zero", () => {
+  const f = { locale: "en-US", currency: null };
+  const hours = numberEditing({ kind: "decimal", scale: 1 }, f);
+  assert.equal(hours.text("1234.5"), editText({ kind: "decimal", scale: 1 }, "1234.5", f));
+  assert.equal(hours.text(null), "");
+  assert.equal(hours.read("2.5"), "2.5");
+  assert.equal(hours.read("lots"), null);
+  assert.equal(hours.read(" "), "0");
+  assert.equal(numberEditing({ kind: "integer" }, f).read(""), 0);
 });

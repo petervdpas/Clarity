@@ -207,14 +207,20 @@ public sealed class LocaleTests : IDisposable
         Assert.Equal("€ 1.250,50", money.Convert(1250.5m, typeof(string), null, CultureInfo.InvariantCulture));
         Assert.Equal("", money.Convert(null, typeof(string), null, CultureInfo.InvariantCulture));
 
-        var edit = new EditConverter(new FieldFormat(FormatKind.Money));
-        Assert.Equal("1.250,50", edit.Convert(1250.5m, typeof(string), null, CultureInfo.InvariantCulture));
-        Assert.Equal(1250.5m, edit.ConvertBack("1.250,50", typeof(decimal), null, CultureInfo.InvariantCulture));
-        Assert.Null(edit.ConvertBack("", typeof(decimal?), null, CultureInfo.InvariantCulture));
-        var wrong = Assert.IsType<BindingNotification>(edit.ConvertBack("abc", typeof(decimal), null, CultureInfo.InvariantCulture));
-        Assert.Equal(BindingErrorType.DataValidationError, wrong.ErrorType);
+        // A number input shows and reads in the person's format; text that is no number is marked.
+        var edit = new NumberInput { Format = new FieldFormat(FormatKind.Money), Value = 1250.5m };
+        Assert.Equal("1.250,50", edit.Text);
+        edit.Text = "2.000,25";
+        edit.Take();
+        Assert.Equal(2000.25m, edit.Value);
+        edit.Text = "abc";
+        edit.Take();
+        Assert.Equal(2000.25m, edit.Value);
+        Assert.Contains("error", edit.Classes);
 
-        var count = new EditConverter(new FieldFormat(FormatKind.Integer));
-        Assert.Equal(1234L, count.ConvertBack("1.234", typeof(long), null, CultureInfo.InvariantCulture));
+        var count = new NumberInput { Format = new FieldFormat(FormatKind.Integer) };
+        count.Text = "1.234";
+        count.Take();
+        Assert.Equal(1234L, count.Value);
     }
 }

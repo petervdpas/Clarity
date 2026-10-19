@@ -49,6 +49,12 @@ pub fn readme(settings: &Settings) -> String {
         out.push_str(&format!("- {need}\n"));
     }
     out.push_str("\nClarity looks for these itself (`clarity tools`, and Build tools on the Project tab); this list is for building the project without it.\n");
+    if backend == Backend::Csharp {
+        out.push_str(&format!(
+            "\nClarity's runtime comes as NuGet packages (Clarity.Avalonia {}, and the driver of each server database), which the first build fetches from nuget.org. To build on the runtime's own projects instead, while working on them, name their folder in Clarity's repository:\n\n    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n\nor set the environment variable `CLARITY_RUNTIME` to it.\n",
+            crate::csharp::runtime_version()
+        ));
+    }
 
     let (build, run) = commands(settings);
     if !build.is_empty() {

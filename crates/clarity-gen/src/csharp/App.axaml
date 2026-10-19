@@ -56,7 +56,7 @@
       <Setter Property="TextAlignment" Value="Right" />
     </Style>
     <!-- An input in a table cell sits flush in the cell, as in a spreadsheet. -->
-    <Style Selector="TextBox.cell, ComboBox.cell, CalendarDatePicker.cell, c|ChoiceBox.cell ComboBox, c|DateTimeBox.cell CalendarDatePicker, c|DateTimeBox.cell TextBox">
+    <Style Selector="TextBox.cell, ComboBox.cell, CalendarDatePicker.cell, c|ChoiceInput.cell ComboBox, c|DateTimeInput.cell CalendarDatePicker, c|DateTimeInput.cell TextBox">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="MinHeight" Value="0" />
@@ -64,7 +64,7 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
-    <!-- A time typed that is no time, as a number input marks what is no number. -->
+    <!-- Typed text that is no value: no number in a number input, no time in a moment. -->
     <Style Selector="TextBox.error">
       <Setter Property="BorderBrush" Value="{DynamicResource ClarityError}" />
     </Style>

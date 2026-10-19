@@ -4,7 +4,6 @@
 // no value is marked. Generated windows only describe the columns.
 
 using System.Collections;
-using System.ComponentModel;
 using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
@@ -15,6 +14,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.VisualTree;
+using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
 
@@ -47,7 +47,7 @@ public sealed class TableColumn
     /// <summary>A value as the column shows it, when it is not edited.</summary>
     public IValueConverter? Shown { get; set; }
     /// <summary>How a number cell shows its value and reads what is typed.</summary>
-    public IValueConverter? Number { get; set; }
+    public FieldFormat? Number { get; set; }
 }
 
 public sealed class ClarityTable : UserControl
@@ -74,9 +74,6 @@ public sealed class ClarityTable : UserControl
 
     public AvaloniaList<TableColumn> Columns { get; } = [];
 
-    /// <summary>Whether a handler is running: what it changes is no edit by the person.</summary>
-    public Func<bool> Handling { get; set; } = () => false;
-
     /// <summary>Another row was chosen: Clarity's <c>select</c>.</summary>
     public event EventHandler? Selected;
 
@@ -94,7 +91,6 @@ public sealed class ClarityTable : UserControl
         CanUserReorderColumns = false,
     };
 
-    readonly List<INotifyPropertyChanged> watched = [];
     object? chosen;
 
     public ClarityTable()
@@ -111,14 +107,13 @@ public sealed class ClarityTable : UserControl
             }
         };
         Grid.DoubleTapped += (_, _) => Opened?.Invoke(this, EventArgs.Empty);
-        // Enter takes a text cell, as leaving it does, and does nothing else:
-        // the grid would move to the next row, which the web does not.
+        // Enter takes a text cell (the input does that itself), as leaving it
+        // does, and does nothing else: the grid would move to the next row,
+        // which the web does not.
         Grid.AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (e.Key != Key.Enter || e.Source is not TextBox box)
-                return;
-            BindingOperations.GetBindingExpressionBase(box, TextBox.TextProperty)?.UpdateSource();
-            e.Handled = true;
+            if (e.Key == Key.Enter && e.Source is TextBox)
+                e.Handled = true;
         }, RoutingStrategies.Tunnel);
     }
 
@@ -129,7 +124,6 @@ public sealed class ClarityTable : UserControl
         {
             chosen = null;
             Grid.ItemsSource = ItemsSource;
-            Watch();
         }
         else if (change.Property == SelectedItemProperty && !ReferenceEquals(Grid.SelectedItem, SelectedItem))
             Grid.SelectedItem = SelectedItem;
@@ -139,24 +133,10 @@ public sealed class ClarityTable : UserControl
     public Control? CellOf(object row, string field) =>
         Grid.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Tag as string == field && ReferenceEquals(b.DataContext, row));
 
-    /// <summary>The fields that are edited: a change of one by the person is an edit.</summary>
-    HashSet<string> EditedFields() => Columns.Where(c => c.Edit).Select(c => c.Field).ToHashSet();
-
-    void Watch()
+    /// <summary>The person changed a cell's value: its row is chosen, then edited.</summary>
+    void CellEdited(object? row)
     {
-        foreach (var row in watched)
-            row.PropertyChanged -= RowChanged;
-        watched.Clear();
-        foreach (var row in ItemsSource?.OfType<INotifyPropertyChanged>() ?? [])
-        {
-            row.PropertyChanged += RowChanged;
-            watched.Add(row);
-        }
-    }
-
-    void RowChanged(object? row, PropertyChangedEventArgs e)
-    {
-        if (row is null || e.PropertyName is not { } field || !EditedFields().Contains(field) || Handling())
+        if (row is null)
             return;
         if (!ReferenceEquals(Grid.SelectedItem, row))
             Grid.SelectedItem = row;
@@ -174,18 +154,18 @@ public sealed class ClarityTable : UserControl
                 Header = column.Header,
                 // The columns fill the table; a checkbox or switch needs only its own width.
                 Width = column.Kind == CellKind.Bool ? DataGridLength.Auto : new DataGridLength(1, DataGridLengthUnitType.Star),
-                CellTemplate = new FuncDataTemplate<object>((_, _) => new Border { Tag = at.Field, Child = Cell(at, ChoicesOf(at)) }),
+                CellTemplate = new FuncDataTemplate<object>((_, _) =>
+                {
+                    var cell = Cell(at, ChoicesOf(at));
+                    if (cell is IInput input)
+                        input.ValueChanged += (_, _) => CellEdited(cell.DataContext);
+                    return new Border { Tag = at.Field, Child = cell };
+                }),
             });
         }
     }
 
-    static Binding Bound(TableColumn column, IValueConverter? converter = null, bool typed = false) => new(column.Field)
-    {
-        Mode = BindingMode.TwoWay,
-        Converter = converter,
-        // A typed cell is taken when it is left (or on Enter), as on the web.
-        UpdateSourceTrigger = typed ? UpdateSourceTrigger.LostFocus : UpdateSourceTrigger.PropertyChanged,
-    };
+    static Binding Bound(TableColumn column, IValueConverter? converter = null) => new(column.Field) { Mode = BindingMode.TwoWay, Converter = converter };
 
     /// <summary>A choice column's choices: its own, or those its window keeps.</summary>
     IEnumerable<Choice>? ChoicesOf(TableColumn column) =>
@@ -200,21 +180,22 @@ public sealed class ClarityTable : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 [!TextBlock.TextProperty] = new Binding(column.Field) { Converter = column.Shown, Mode = BindingMode.OneWay },
             };
+        // The library's inputs: a cell is edited like the same input in a form.
         return column.Kind switch
         {
-            CellKind.Bool when column.Switch => new ToggleSwitch
+            CellKind.Bool when column.Switch => new SwitchInput
             {
                 Classes = { "cell" },
                 OnContent = null,
                 OffContent = null,
                 [!ToggleSwitch.IsCheckedProperty] = Bound(column),
             },
-            CellKind.Bool => new CheckBox { Classes = { "cell" }, [!CheckBox.IsCheckedProperty] = Bound(column) },
-            CellKind.Choice => new ChoiceBox { Classes = { "cell" }, Choices = choices, [!ChoiceBox.ValueProperty] = Bound(column) },
-            CellKind.Date => new CalendarDatePicker { Classes = { "cell" }, [!CalendarDatePicker.SelectedDateProperty] = Bound(column, Converters.Date) },
-            CellKind.Moment => new DateTimeBox { Classes = { "cell" }, [!DateTimeBox.ValueProperty] = Bound(column) },
-            CellKind.Number => new TextBox { Classes = { "cell", "number" }, [!TextBox.TextProperty] = Bound(column, column.Number, typed: true) },
-            _ => new TextBox { Classes = { "cell" }, [!TextBox.TextProperty] = Bound(column, typed: true) },
+            CellKind.Bool => new CheckInput { Classes = { "cell" }, [!CheckBox.IsCheckedProperty] = Bound(column) },
+            CellKind.Choice => new ChoiceInput { Classes = { "cell" }, Choices = choices, [!ChoiceInput.ValueProperty] = Bound(column) },
+            CellKind.Date => new DateInput { Classes = { "cell" }, [!DateInput.ValueProperty] = Bound(column) },
+            CellKind.Moment => new DateTimeInput { Classes = { "cell" }, [!DateTimeInput.ValueProperty] = Bound(column) },
+            CellKind.Number => new NumberInput { Classes = { "cell" }, Format = column.Number ?? new FieldFormat(FormatKind.Decimal), [!NumberInput.ValueProperty] = Bound(column) },
+            _ => new Clarity.Avalonia.TextInput { Classes = { "cell" }, [!Clarity.Avalonia.TextInput.ValueProperty] = Bound(column) },
         };
     }
 }

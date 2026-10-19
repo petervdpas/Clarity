@@ -2,7 +2,13 @@
 //! `dotnet build` (the AXAML compiler checks every binding), then runs it with
 //! `--check`: the program opens its database, applies the migration steps and
 //! stops before showing a window. Slow (NuGet and the compiler), so it only
-//! runs when asked: `cargo test -p clarity-gen --test csharp_build -- --ignored`.
+//! runs when asked, one at a time:
+//! `cargo test -p clarity-gen --test csharp_build -- --ignored --test-threads=1 --exact <name>`.
+//!
+//! The projects build on the runtime's own projects in runtimes/csharp (the
+//! CLARITY_RUNTIME switch of the generated project file), so a change to the
+//! runtime is tested before it is published; one test builds on the packages
+//! on nuget.org, as a project outside this repository does.
 
 use std::path::Path;
 use std::process::Command;
@@ -12,9 +18,29 @@ use clarity_project::{Backend, SourceKind, Ui};
 mod scratch;
 use scratch::empty;
 
+/// Which runtime a generated project builds on.
+#[derive(Clone, Copy)]
+enum Runtime {
+    /// The runtime's projects in this repository.
+    Local,
+    /// The published packages.
+    Packages,
+}
+
+/// `dotnet` with `args` in `out`, on `runtime`.
+fn dotnet(out: &Path, args: &[&str], runtime: Runtime) -> Command {
+    let mut command = Command::new("dotnet");
+    command.args(args).current_dir(out);
+    match runtime {
+        Runtime::Local => command.env("CLARITY_RUNTIME", Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp")),
+        Runtime::Packages => command.env_remove("CLARITY_RUNTIME"),
+    };
+    command
+}
+
 /// Generates the example `name` (examples/<name>.clarity) as C# with
 /// Avalonia, builds it with warnings as errors and runs `--check`.
-fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
+fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     // As Run loads it: with the project file's language, currency and themes.
@@ -31,11 +57,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
 
-    let built = Command::new("dotnet")
-        .args(["build", "--nologo", "-v", "quiet", "-warnaserror"])
-        .current_dir(&out)
-        .output()
-        .expect("the .NET SDK is installed");
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], runtime).output().expect("the .NET SDK is installed");
     assert!(
         built.status.success(),
         "the generated project does not build; it is in {}\n{}",
@@ -43,7 +65,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
         String::from_utf8_lossy(&built.stdout)
     );
 
-    let ran = Command::new("dotnet").args(["run", "--no-build", "--", "--check"]).current_dir(&out).output().unwrap();
+    let ran = dotnet(&out, &["run", "--no-build", "--", "--check"], runtime).output().unwrap();
     let said = String::from_utf8_lossy(&ran.stdout);
     assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
@@ -57,14 +79,22 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str) {
 #[test]
 #[ignore]
 fn the_shop_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("shop", "Shop", "nl");
+    builds_and_runs_in_csharp("shop", "Shop", "nl", Runtime::Local);
+}
+
+/// The shop on the runtime's packages from nuget.org, at the version the
+/// generator names: what a project outside this repository builds on.
+#[test]
+#[ignore]
+fn the_shop_example_builds_and_runs_on_the_published_packages() {
+    builds_and_runs_in_csharp("shop", "Shop", "nl", Runtime::Packages);
 }
 
 /// The second example: master and detail, dialogs, a tree of genres, loans.
 #[test]
 #[ignore]
 fn the_records_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("records", "Records", "de");
+    builds_and_runs_in_csharp("records", "Records", "de", Runtime::Local);
 }
 
 /// The shop on each server database: the project builds with only that
@@ -93,15 +123,13 @@ fn the_shop_example_builds_and_migrates_on_every_server_database() {
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
         clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
-        let built = Command::new("dotnet").args(["build", "--nologo", "-v", "quiet", "-warnaserror"]).current_dir(&out).output().unwrap();
+        let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
         assert!(built.status.success(), "{variable}: the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
 
         if let Ok(at) = std::env::var(variable) {
             empty(&at, dialect, &tables);
             for _ in 0..2 {
-                let ran = Command::new("dotnet")
-                    .args(["run", "--no-build", "--", "--check"])
-                    .current_dir(&out)
+                let ran = dotnet(&out, &["run", "--no-build", "--", "--check"], Runtime::Local)
                     .env("SHOP_DATABASE", &at)
                     .output()
                     .unwrap();

@@ -10,13 +10,13 @@ using Avalonia.Layout;
 
 namespace Clarity.Avalonia;
 
-public sealed class ChoiceBox : UserControl
+public sealed class ChoiceInput : UserControl, IInput
 {
     public static readonly StyledProperty<object?> ValueProperty =
-        AvaloniaProperty.Register<ChoiceBox, object?>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
+        AvaloniaProperty.Register<ChoiceInput, object?>(nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
-    public static readonly StyledProperty<IEnumerable<Choice>?> ChoicesProperty =
-        AvaloniaProperty.Register<ChoiceBox, IEnumerable<Choice>?>(nameof(Choices));
+    public static readonly StyledProperty<System.Collections.IEnumerable?> ChoicesProperty =
+        AvaloniaProperty.Register<ChoiceInput, System.Collections.IEnumerable?>(nameof(Choices));
 
     /// <summary>The chosen value: an enum value, a record's id, or none.</summary>
     public object? Value
@@ -25,7 +25,8 @@ public sealed class ChoiceBox : UserControl
         set => SetValue(ValueProperty, value);
     }
 
-    public IEnumerable<Choice>? Choices
+    /// <summary>The choices (<see cref="Choice"/>), in order. Untyped, as ItemsSource is, so AXAML can set an array.</summary>
+    public System.Collections.IEnumerable? Choices
     {
         get => GetValue(ChoicesProperty);
         set => SetValue(ChoicesProperty, value);
@@ -38,7 +39,7 @@ public sealed class ChoiceBox : UserControl
 
     bool showing;
 
-    public ChoiceBox()
+    public ChoiceInput()
     {
         Content = Combo;
         Combo.SelectionChanged += (_, _) =>
@@ -60,8 +61,8 @@ public sealed class ChoiceBox : UserControl
             return;
         showing = true;
         if (change.Property == ChoicesProperty)
-            Combo.ItemsSource = Choices?.ToList();
-        Combo.SelectedItem = Choices?.FirstOrDefault(c => Equals(c.Value, Value));
+            Combo.ItemsSource = Choices?.OfType<Choice>().ToList();
+        Combo.SelectedItem = Choices?.OfType<Choice>().FirstOrDefault(c => Equals(c.Value, Value));
         showing = false;
     }
 }

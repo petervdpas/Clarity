@@ -2,13 +2,20 @@
   import { untrack } from "svelte";
   import DateTimeInput from "./ui/DateTimeInput.svelte";
   import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
+  import CheckInput from "./ui/CheckInput.svelte";
+  import ChoiceInput from "./ui/ChoiceInput.svelte";
+  import DateInput from "./ui/DateInput.svelte";
+  import NumberInput from "./ui/NumberInput.svelte";
+  import RadioInput from "./ui/RadioInput.svelte";
+  import TextInput from "./ui/TextInput.svelte";
   import GridBox from "./GridBox.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
+  import type { JsonValue } from "./generated/serde_json/JsonValue";
   import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
-  import { editText, parseNumber } from "./format";
+  import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesigner.svelte";
   import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
@@ -84,8 +91,9 @@
     });
   }
 
-  function submitOnEnter(e: KeyboardEvent) {
-    if (e.key === "Enter" && !design && form?.submit()) e.preventDefault();
+  /** Enter in an input of a form: runs the form's `on submit`; false when there is none. */
+  function submit(): boolean {
+    return !design && !!form?.submit();
   }
 
   // A button's shortcut, and Enter and Escape for the default and cancel
@@ -108,7 +116,7 @@
   // which the running application sends with the next event.
   const shown = $derived(bound || !p.name ? text : (partState?.text ?? ""));
 
-  function setValue(next: string | boolean | number | { data: string } | null) {
+  function setValue(next: JsonValue) {
     if (bound) bound.record[bound.field.name.name] = next;
   }
 
@@ -140,28 +148,12 @@
     setValue(null);
   }
 
-  // A number input shows its value in the locale, and reads what is typed
-  // in the locale too. While typing, the text stays as typed; text that is
-  // no number keeps the last value and marks the input.
+  // A number input shows its value in the person's format and reads what is
+  // typed the same way; unbound, or without a format, it keeps the text.
   const numberFormat = $derived(bound ? fieldFormat(bound.field) : null);
-  let typing = $state<string | null>(null);
-  const numberText = $derived.by(() => {
-    if (typing !== null) return typing;
-    if (!numberFormat || (typeof value !== "string" && typeof value !== "number") || value === "") return text;
-    return editText(numberFormat, value, formatsOf(preview));
-  });
-  const badNumber = $derived(
-    typing !== null && typing.trim() !== "" && numberFormat !== null && parseNumber(numberFormat, typing, formatsOf(preview)) === null,
+  const numbers = $derived(
+    numberFormat ? numberEditing(numberFormat, formatsOf(preview)) : { text: (v: unknown) => String(v ?? ""), read: (typed: string) => typed },
   );
-
-  function typeNumber(next: string) {
-    typing = next;
-    if (!numberFormat) return setValue(next);
-    // A number field always has a value; cleared, it is zero.
-    if (next.trim() === "") return setValue(numberFormat.kind === "integer" ? 0 : "0");
-    const read = parseNumber(numberFormat, next, formatsOf(preview));
-    if (read !== null) setValue(read);
-  }
 
   function setText(next: string) {
     if (bound) setValue(next);
@@ -206,14 +198,7 @@
         switch: p.switches.includes(name),
         shown: (value) => displayValue(preview, field, value),
         choices: kind === "choice" ? choicesOf(field) : undefined,
-        number:
-          kind === "number" && format
-            ? {
-                text: (value) => (typeof value === "string" || typeof value === "number") && value !== "" ? editText(format, value, formatsOf(preview)) : String(value ?? ""),
-                // A number field always has a value; cleared, it is zero.
-                read: (typed) => (typed.trim() === "" ? (format.kind === "integer" ? 0 : "0") : parseNumber(format, typed, formatsOf(preview))),
-              }
-            : undefined,
+        number: kind === "number" && format ? numberEditing(format, formatsOf(preview)) : undefined,
       };
     });
   });
@@ -314,59 +299,45 @@
       <h2 class="heading-text">{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}</h2>
     {:else if p.kind === "text"}
       <span class="text-value" {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
-    {:else if p.kind === "textbox" || p.kind === "password"}
-      <input
+    {:else if p.kind === "textbox" || p.kind === "password" || p.kind === "memo"}
+      <TextInput
         {id}
-        type={p.kind === "password" ? "password" : bound?.field.type.kind === "email" ? "email" : "text"}
+        kind={p.kind === "password" ? "password" : p.kind === "memo" ? "memo" : bound?.field.type.kind === "email" ? "email" : "text"}
         value={shown}
         placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
         tabindex={p.tabOrder ?? undefined}
-        aria-describedby={describedBy}
-        aria-invalid={error !== null}
+        {describedBy}
+        invalid={error !== null}
         {disabled}
         {readonly}
-        oninput={(e) => setText(e.currentTarget.value)}
-        onchange={() => fire("change")}
-        onfocus={() => fire("enter")}
-        onblur={() => fire("leave")}
-        onkeydown={submitOnEnter}
-      />
-    {:else if p.kind === "memo"}
-      <textarea
-        {id}
-        value={shown}
-        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
-        tabindex={p.tabOrder ?? undefined}
-        aria-describedby={describedBy}
-        aria-invalid={error !== null}
-        {disabled}
-        {readonly}
-        oninput={(e) => setText(e.currentTarget.value)}
-        onchange={() => fire("change")}
-        onfocus={() => fire("enter")}
-        onblur={() => fire("leave")}
-      ></textarea>
-    {:else if p.kind === "number"}
-      <input
-        {id}
-        class="numeric"
-        inputmode="decimal"
-        value={numberText}
-        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
-        tabindex={p.tabOrder ?? undefined}
-        aria-describedby={describedBy}
-        aria-invalid={error !== null || badNumber}
-        title={badNumber ? "Not a number" : undefined}
-        {disabled}
-        {readonly}
-        oninput={(e) => typeNumber(e.currentTarget.value)}
-        onchange={() => fire("change")}
-        onfocus={() => fire("enter")}
-        onblur={() => {
-          if (!badNumber) typing = null;
-          fire("leave");
+        onchange={(next) => {
+          setText(next);
+          fire("change");
         }}
-        onkeydown={submitOnEnter}
+        onsubmit={submit}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      />
+    {:else if p.kind === "number"}
+      <NumberInput
+        {id}
+        value={bound ? value : shown}
+        text={numbers.text}
+        read={numbers.read}
+        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else setText(String(next));
+          fire("change");
+        }}
+        onsubmit={submit}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
       />
     {:else if p.kind === "date" && bound?.field.type.kind === "dateTime"}
       <!-- A moment: a day and a 24-hour time, as on every stack. -->
@@ -377,99 +348,75 @@
         {readonly}
         invalid={error !== null}
         {describedBy}
-        onkeydown={submitOnEnter}
+        onkeydown={(e) => {
+          if (e.key === "Enter" && submit()) e.preventDefault();
+        }}
         onchange={(next) => {
           setValue(next);
           fire("change");
         }}
       />
     {:else if p.kind === "date"}
-      <input
+      <DateInput
         {id}
-        type="date"
-        value={text}
+        {value}
         tabindex={p.tabOrder ?? undefined}
-        aria-describedby={describedBy}
-        aria-invalid={error !== null}
+        {describedBy}
+        invalid={error !== null}
         {disabled}
         {readonly}
-        oninput={(e) => setValue(e.currentTarget.value === "" ? null : e.currentTarget.value)}
-        onchange={() => fire("change")}
-        onkeydown={submitOnEnter}
-      />
-    {:else if p.kind === "checkbox" || p.kind === "switch"}
-      <label class={p.kind === "switch" ? "toggle" : "check"}>
-        <input
-          {id}
-          type="checkbox"
-          role={p.kind === "switch" ? "switch" : undefined}
-          checked={bound ? value === true : partState?.checked === true}
-          tabindex={p.tabOrder ?? undefined}
-          aria-describedby={describedBy}
-          aria-invalid={error !== null}
-          disabled={disabled || readonly}
-          onchange={(e) => {
-            if (bound) setValue(e.currentTarget.checked);
-            else if (live && p.name && !design) live.setChecked(p.name, e.currentTarget.checked);
-            fire("change");
-          }}
-        />
-        {#if p.kind === "switch"}<span class="track" aria-hidden="true"></span>{/if}
-        {caption ?? ""}
-      </label>
-    {:else if p.kind === "radio"}
-      <div class="choices {p.orientation ?? 'horizontal'}" role="radiogroup" aria-describedby={describedBy} aria-invalid={error !== null}>
-        {#if bound?.field.type.kind === "enum"}
-          {#each findEnum(preview, bound.field.type.name.name)?.variants ?? [] as v, i (v.name.name)}
-            <label>
-              <input
-                id={i === 0 ? id : undefined}
-                type="radio"
-                name="radio-{offset}"
-                value={v.name.name}
-                checked={text === v.name.name}
-                tabindex={p.tabOrder ?? undefined}
-                disabled={disabled || readonly}
-                onchange={() => {
-                  setValue(v.name.name);
-                  fire("change");
-                }}
-              />
-              {tr(preview, v.label)}
-            </label>
-          {/each}
-        {/if}
-      </div>
-    {:else if p.kind === "dropdown"}
-      <select
-        {id}
-        value={text}
-        tabindex={p.tabOrder ?? undefined}
-        aria-describedby={describedBy}
-        aria-invalid={error !== null}
-        disabled={disabled || readonly}
-        onchange={(e) => {
-          const chosen = e.currentTarget.value;
-          // A reference holds the id of the record it points at.
-          setValue(live && bound?.field.type.kind === "ref" ? (chosen === "" ? null : Number(chosen)) : chosen);
+        onchange={(next) => {
+          setValue(next);
           fire("change");
         }}
-      >
-        {#if bound?.field.type.kind !== "enum"}<option value=""></option>{/if}
-        {#if bound?.field.type.kind === "enum"}
-          {#each findEnum(preview, bound.field.type.name.name)?.variants ?? [] as v (v.name.name)}
-            <option value={v.name.name}>{tr(preview, v.label)}</option>
-          {/each}
-        {:else if bound?.field.type.kind === "ref" && live}
-          {#each live.refOptions(bound.field.type.entity.name) as option (option.id)}
-            <option value={String(option.id)}>{option.text}</option>
-          {/each}
-        {:else if bound?.field.type.kind === "ref"}
-          {#each preview.displays[bound.field.type.entity.name] ?? [] as option (option)}
-            <option value={option}>{option}</option>
-          {/each}
-        {/if}
-      </select>
+        onsubmit={submit}
+      />
+    {:else if p.kind === "checkbox" || p.kind === "switch"}
+      <CheckInput
+        {id}
+        switch={p.kind === "switch"}
+        caption={caption ?? undefined}
+        checked={bound ? value === true : partState?.checked === true}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        disabled={disabled || readonly}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else if (live && p.name && !design) live.setChecked(p.name, next);
+          fire("change");
+        }}
+      />
+    {:else if p.kind === "radio"}
+      <RadioInput
+        {id}
+        name="radio-{offset}"
+        {value}
+        choices={bound ? (choicesOf(bound.field) ?? []) : []}
+        vertical={p.orientation === "vertical"}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        disabled={disabled || readonly}
+        onchange={(next) => {
+          setValue(next);
+          fire("change");
+        }}
+      />
+    {:else if p.kind === "dropdown"}
+      <ChoiceInput
+        {id}
+        {value}
+        choices={bound ? (choicesOf(bound.field) ?? []) : [{ value: null, label: "" }]}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        disabled={disabled || readonly}
+        onchange={(next) => {
+          setValue(next);
+          fire("change");
+        }}
+      />
     {:else if p.kind === "button"}
       <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
         >{caption ?? ""}</button
@@ -713,78 +660,6 @@
   .widget.invalid :global(select),
   .widget.invalid :global(textarea) {
     border-color: var(--error);
-  }
-
-  textarea {
-    width: 100%;
-    height: 100%;
-    resize: none;
-    font: inherit;
-  }
-
-  .check,
-  .toggle {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .toggle input {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-  }
-
-  .track {
-    flex: none;
-    position: relative;
-    width: 32px;
-    height: 18px;
-    border-radius: 9px;
-    background: var(--border-strong);
-    transition: background 0.15s;
-  }
-
-  .track::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--panel);
-    transition: transform 0.15s;
-  }
-
-  .toggle input:checked + .track {
-    background: var(--accent);
-  }
-
-  .toggle input:checked + .track::after {
-    transform: translateX(14px);
-  }
-
-  .toggle input:focus-visible + .track {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  .choices {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 16px;
-  }
-
-  .choices.vertical {
-    flex-direction: column;
-  }
-
-  .choices label {
-    display: flex;
-    gap: 6px;
-    align-items: center;
   }
 
   .push.default {

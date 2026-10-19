@@ -9,10 +9,10 @@ It stands on [Clarity.Runtime](https://www.nuget.org/packages/Clarity.Runtime/),
 
 ## What it does
 
-- **Clarity's own parts.** `ClarityTable` (a table whose cells can be edited: text, numbers, checkboxes, switches, choices, dates and moments), `ChoiceBox` (an enum's values or the records a reference can point at) and `DateTimeBox` (a day and a time on a 24-hour clock). They behave the same as Clarity's web parts; see below.
+- **Clarity's own parts.** `ClarityTable` (a table whose cells can be edited: text, numbers, checkboxes, switches, choices, dates and moments), and the inputs of a form, each telling through `IInput.ValueChanged` when the person changed its value: `TextInput` (text, password, memo), `NumberInput` (in the person's format), `CheckInput`, `SwitchInput`, `ChoiceInput` (an enum's values or the records a reference can point at), `RadioInput`, `DateInput` and `DateTimeInput` (a day and a time on a 24-hour clock). They behave the same as Clarity's web parts; see below.
 - **Windows.** `WindowViewModel` is the base of every generated window's view model: its handlers, its messages, and opening and closing windows. `Shell` shows the windows of an application, in place or in a desktop window of their own, and dialogs.
 - **Languages and themes.** `Locale` shows the application in the person's language and formats, and lets them choose another; `Themes` switches the look.
-- **Binding.** Converters for values in the person's format (`ShownConverter`, `EditConverter`, `FormatConverter`), choices for dropdowns (`Choice`) and state per part (`PartState`).
+- **Binding.** Converters for values in the person's format (`ShownConverter`, `FormatConverter`), choices for dropdowns (`Choice`) and state per part (`PartState`).
 
 ## How it is used
 

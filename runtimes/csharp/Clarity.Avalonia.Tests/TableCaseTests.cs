@@ -108,7 +108,7 @@ public class TableCaseTests
         Choices = c.TryGetProperty("choices", out var choices)
             ? choices.EnumerateArray().Select(p => new Choice(Plain(p[0]), p[1].GetString()!)).ToArray()
             : null,
-        Number = c.GetProperty("kind").GetString() == "number" ? new EditConverter(new FieldFormat(FormatKind.Decimal, c.GetProperty("scale").GetInt32())) : null,
+        Number = c.GetProperty("kind").GetString() == "number" ? new FieldFormat(FormatKind.Decimal, c.GetProperty("scale").GetInt32()) : null,
     }).ToList();
 
     [AvaloniaFact]
@@ -132,8 +132,7 @@ public class TableCaseTests
     {
         var name = @case.GetProperty("name").GetString();
         var rows = Rows();
-        var handling = false;
-        var table = new ClarityTable { ItemsSource = rows, Handling = () => handling };
+        var table = new ClarityTable { ItemsSource = rows };
         foreach (var column in Columns())
             table.Columns.Add(column);
         var elsewhere = new Button { Content = "elsewhere" };
@@ -157,7 +156,7 @@ public class TableCaseTests
             Dispatcher.UIThread.RunJobs();
         }
         TextBox TextOf(int row, string field) =>
-            table.CellOf(rows[row], Pascal(field))?.GetSelfAndVisualDescendants().OfType<DateTimeBox>().FirstOrDefault() is { } moment ? moment.Time : Cell<TextBox>(row, field);
+            table.CellOf(rows[row], Pascal(field))?.GetSelfAndVisualDescendants().OfType<DateTimeInput>().FirstOrDefault() is { } moment ? moment.Time : Cell<TextBox>(row, field);
 
         foreach (var step in @case.GetProperty("steps").EnumerateArray())
         {
@@ -173,7 +172,7 @@ public class TableCaseTests
                     Click(Cell<ToggleButton>(Row(), Field()) is { } box ? box : throw new InvalidOperationException());
                     break;
                 case "pick":
-                    var choices = Cell<ChoiceBox>(Row(), Field());
+                    var choices = Cell<ChoiceInput>(Row(), Field());
                     var wanted = Plain(step[3]);
                     choices.Combo.SelectedItem = choices.Combo.Items.OfType<Choice>().First(c => Equals(c.Value, wanted));
                     break;
@@ -194,9 +193,7 @@ public class TableCaseTests
                     elsewhere.Focus();
                     break;
                 case "handler":
-                    handling = true;
                     typeof(CaseTask).GetProperty(Pascal(Field()))!.SetValue(rows[Row()], Typed(Field(), step[3]));
-                    handling = false;
                     break;
                 case "reload":
                     rows = Rows();
@@ -234,7 +231,7 @@ public class TableCaseTests
             {
                 var (row, field) = (s[0].GetInt32(), s[1].GetString()!);
                 var cell = table.CellOf(rows[row], Pascal(field))!;
-                var text = cell.GetSelfAndVisualDescendants().OfType<DateTimeBox>().FirstOrDefault() is { } moment
+                var text = cell.GetSelfAndVisualDescendants().OfType<DateTimeInput>().FirstOrDefault() is { } moment
                     ? moment.Time.Text
                     : cell.GetSelfAndVisualDescendants().OfType<TextBox>().FirstOrDefault()?.Text ?? cell.GetSelfAndVisualDescendants().OfType<TextBlock>().First().Text;
                 Assert.True(s[2].GetString() == (text ?? ""), $"{name}: {field} of row {row} shows '{text}'");
@@ -242,7 +239,7 @@ public class TableCaseTests
         if (expect.TryGetProperty("choices", out var expectedChoices))
             foreach (var field in expectedChoices.EnumerateObject())
             {
-                var labels = Cell<ChoiceBox>(0, field.Name).Combo.Items.OfType<Choice>().Select(c => c.Label);
+                var labels = Cell<ChoiceInput>(0, field.Name).Combo.Items.OfType<Choice>().Select(c => c.Label);
                 Assert.True(field.Value.EnumerateArray().Select(l => l.GetString()!).SequenceEqual(labels), $"{name}: the choices of {field.Name} are [{string.Join(", ", labels)}]");
             }
         window.Close();

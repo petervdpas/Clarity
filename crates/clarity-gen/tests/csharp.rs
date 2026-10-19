@@ -98,6 +98,8 @@ fn writes_a_complete_dotnet_project_with_the_runtime_copied_in() {
             "App.axaml.cs",
             "AppThemes.cs",
             "Clarity.Avalonia/Bindings.cs",
+            "Clarity.Avalonia/ChoiceBox.cs",
+            "Clarity.Avalonia/DateTimeBox.cs",
             "Clarity.Avalonia/Locale.cs",
             "Clarity.Avalonia/Messages.cs",
             "Clarity.Avalonia/PartState.cs",

@@ -40,6 +40,9 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// What it asks of windows happens when it is done, on every stack alike:
     /// this window closes first, then the windows it opened open.
     /// </summary>
+    /// <summary>Whether a handler is running: what it changes in the data is no edit by the person.</summary>
+    public bool IsHandling => running > 0;
+
     public void Handle(Action handler)
     {
         running++;

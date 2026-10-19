@@ -285,68 +285,90 @@ public class BindingTests
         Assert.Equal(1, commits);
     }
 
-    sealed record Row(string Title);
-
-    [AvaloniaFact]
-    public void AnEditInATableCellTellsItsRow()
+    /// A record as generated: it tells when a field changes.
+    sealed class TaskRow(string title) : System.ComponentModel.INotifyPropertyChanged
     {
-        var first = new Row("Milk");
-        var second = new Row("Bread");
-        var check = new CheckBox { DataContext = second };
-        var choice = new ComboBox { DataContext = first, ItemsSource = new[] { "Low", "High" } };
-        var box = new TextBox { DataContext = first };
-        var other = new Button();
-        var table = new StackPanel { Children = { check, choice, box } };
-        var window = new Window { Content = new StackPanel { Children = { table, other } } };
-        window.Show();
-        var edited = new List<object?>();
-        Events.OnCellEdit(table, row => edited.Add(row));
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        string title = title;
+        bool done;
+        string notes = "";
+        DateTime? due;
+        long? owner;
+        public DateTime? Due { get => due; set => Set(ref due, value); }
+        public long? Owner { get => owner; set => Set(ref owner, value); }
+        public string Title { get => title; set => Set(ref title, value); }
+        public bool Done { get => done; set => Set(ref done, value); }
+        public string Notes { get => notes; set => Set(ref notes, value); }
 
-        // Values the rows show when they are drawn are no edits.
-        check.IsChecked = true;
-        Assert.Empty(edited);
-
-        check.Focus();
-        check.IsChecked = false;
-        choice.Focus();
-        choice.SelectedIndex = 1;
-        box.Focus();
-        box.Text = "Oat milk";
-        other.Focus();
-        Assert.Equal(new object?[] { second, first, first }, edited);
+        void Set<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string name = "")
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+                return;
+            field = value;
+            PropertyChanged?.Invoke(this, new(name));
+        }
     }
 
-    sealed class TaskRow
+    static DataGrid Table(IEnumerable<TaskRow> rows, Control? titleCell = null) => new()
     {
-        public string Title { get; set; } = "";
-        public bool Done { get; set; }
+        ItemsSource = rows,
+        AutoGenerateColumns = false,
+        IsReadOnly = true,
+        Columns =
+        {
+            new DataGridTemplateColumn
+            {
+                Header = "Task",
+                CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) =>
+                    new TextBox { [!TextBox.TextProperty] = new global::Avalonia.Data.Binding("Title") { UpdateSourceTrigger = global::Avalonia.Data.UpdateSourceTrigger.LostFocus } }),
+            },
+            new DataGridTemplateColumn
+            {
+                Header = "Done",
+                CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) =>
+                    new CheckBox { [!global::Avalonia.Controls.Primitives.ToggleButton.IsCheckedProperty] = new global::Avalonia.Data.Binding("Done") }),
+            },
+        },
+    };
+
+    [AvaloniaFact]
+    public void AChangedFieldOfAnEditedColumnIsAnEditOfItsRow()
+    {
+        var milk = new TaskRow("Milk");
+        var bread = new TaskRow("Bread");
+        var grid = Table([milk, bread]);
+        var window = new Window { Content = grid };
+        window.Show();
+        var handling = false;
+        var edited = new List<object?>();
+        Events.OnCellEdit(grid, () => handling, ["Title", "Done"], row => edited.Add(row));
+
+        milk.Done = true;
+        milk.Done = true; // the same value again is no change
+        milk.Notes = "not a column that is edited";
+        handling = true;
+        bread.Done = true; // what a handler changes is no edit
+        handling = false;
+        Assert.Equal(new object?[] { milk }, edited);
+
+        // The data read again: the new rows count, the old ones no longer.
+        var eggs = new TaskRow("Eggs");
+        grid.ItemsSource = new[] { eggs };
+        milk.Done = false;
+        eggs.Title = "Six eggs";
+        Assert.Equal(new object?[] { milk, eggs }, edited);
     }
 
     [AvaloniaFact]
     public void ClickingACheckBoxInATableEditsItsRowAndSelectsIt()
     {
-        var milk = new TaskRow { Title = "Milk" };
-        var bread = new TaskRow { Title = "Bread" };
-        var grid = new DataGrid
-        {
-            ItemsSource = new[] { milk, bread },
-            AutoGenerateColumns = false,
-            IsReadOnly = true,
-            Columns =
-            {
-                new DataGridTextColumn { Header = "Task", Binding = new global::Avalonia.Data.Binding("Title"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
-                new DataGridTemplateColumn
-                {
-                    Header = "Done",
-                    CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) =>
-                        new CheckBox { [!global::Avalonia.Controls.Primitives.ToggleButton.IsCheckedProperty] = new global::Avalonia.Data.Binding("Done") }),
-                },
-            },
-        };
+        var milk = new TaskRow("Milk");
+        var bread = new TaskRow("Bread");
+        var grid = Table([milk, bread]);
         var window = new Window { Width = 400, Height = 300, Content = grid };
         window.Show();
         var edited = new List<object?>();
-        Events.OnCellEdit(grid, row =>
+        Events.OnCellEdit(grid, () => false, ["Title", "Done"], row =>
         {
             grid.SelectedItem = row;
             edited.Add(row);
@@ -361,5 +383,133 @@ public class BindingTests
         Assert.True(bread.Done);
         Assert.Equal(new object?[] { bread }, edited);
         Assert.Same(bread, grid.SelectedItem);
+    }
+
+    [AvaloniaFact]
+    public void ATextCellCommitsOnEnterOnceAsOnTheWeb()
+    {
+        var milk = new TaskRow("Milk");
+        var grid = Table([milk]);
+        var other = new Button();
+        var window = new Window { Width = 400, Height = 300, Content = new StackPanel { Children = { grid, other } } };
+        window.Show();
+        var edited = new List<object?>();
+        Events.OnCellEdit(grid, () => false, ["Title", "Done"], row => edited.Add(row));
+        Dispatcher.UIThread.RunJobs();
+
+        var box = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(grid).OfType<TextBox>().First();
+        box.Focus();
+        box.Text = "Oat milk";
+        Assert.Empty(edited); // typing is no edit yet
+        window.KeyPressQwerty(global::Avalonia.Input.PhysicalKey.Enter, global::Avalonia.Input.RawInputModifiers.None);
+        Assert.Equal("Oat milk", milk.Title);
+        other.Focus();
+        Assert.Equal(new object?[] { milk }, edited);
+    }
+
+    [AvaloniaFact]
+    public void ADateTimeBoxPicksTheDayAndTypesTheTime()
+    {
+        var box = new DateTimeBox();
+        var other = new Button();
+        var window = new Window { Content = new StackPanel { Children = { box, other } } };
+        window.Show();
+        var changes = 0;
+        box.ValueChanged += (_, _) => changes++;
+
+        box.Day.SelectedDate = new DateTime(2026, 10, 19);
+        Assert.Equal(new DateTime(2026, 10, 19, 0, 0, 0), box.Value);
+        Assert.Equal("00:00", box.Time.Text);
+
+        // The time is typed, and taken when the field is left, as a text input is.
+        box.Time.Focus();
+        box.Time.Text = "14:30";
+        Assert.Equal(new DateTime(2026, 10, 19, 0, 0, 0), box.Value);
+        other.Focus();
+        Assert.Equal(new DateTime(2026, 10, 19, 14, 30, 0), box.Value);
+        Assert.Equal(2, changes);
+
+        // A time that is no time is marked, and the moment stays.
+        box.Time.Focus();
+        box.Time.Text = "25:99";
+        other.Focus();
+        Assert.Contains("error", box.Time.Classes);
+        Assert.Equal(new DateTime(2026, 10, 19, 14, 30, 0), box.Value);
+
+        // A value from the data shows in both, and is no change by the person.
+        box.Value = new DateTime(2027, 1, 2, 8, 5, 0);
+        Assert.Equal(new DateTime(2027, 1, 2), box.Day.SelectedDate);
+        Assert.Equal("08:05", box.Time.Text);
+        Assert.DoesNotContain("error", box.Time.Classes);
+        Assert.Equal(2, changes);
+
+        box.Day.SelectedDate = null;
+        Assert.Null(box.Value);
+        Assert.Equal("", box.Time.Text);
+        Assert.Equal(3, changes);
+    }
+
+    [AvaloniaFact]
+    public void AChoiceBoxWritesOnlyWhatThePersonPicks()
+    {
+        var people = Choice.Of(new[] { (1L, "Ada"), (2L, "Grace") }, p => p.Item2, p => p.Item1);
+        // The value comes before the choices, as a binding to the window may give them.
+        var box = new ChoiceBox { Value = 2L };
+        var window = new Window { Content = box };
+        window.Show();
+        var changes = 0;
+        box.ValueChanged += (_, _) => changes++;
+        box.Choices = people;
+        Assert.Equal(2L, box.Value);
+        Assert.Equal("Grace", (box.Combo.SelectedItem as Choice)?.Label);
+
+        box.Combo.SelectedIndex = 1;
+        Assert.Equal(1L, box.Value);
+        box.Combo.SelectedIndex = 0;
+        Assert.Null(box.Value);
+        Assert.Equal(2, changes);
+    }
+
+    [AvaloniaFact]
+    public void DrawingRowsWithPickersAndDropdownsIsNoEdit()
+    {
+        var milk = new TaskRow("Milk") { Due = new DateTime(2026, 10, 20, 9, 30, 0), Owner = 1 };
+        var none = new TaskRow("Report");
+        var people = Choice.Of(new[] { (1L, "Ada"), (2L, "Grace") }, p => p.Item2, p => p.Item1);
+        var grid = new DataGrid
+        {
+            ItemsSource = new[] { milk, none },
+            AutoGenerateColumns = false,
+            IsReadOnly = true,
+            Columns =
+            {
+                new DataGridTemplateColumn
+                {
+                    Header = "Owner",
+                    // The choices come from the window, after the row's value: as generated.
+                    CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) => new ChoiceBox
+                    {
+                        [!ChoiceBox.ValueProperty] = new global::Avalonia.Data.Binding("Owner"),
+                        [!ChoiceBox.ChoicesProperty] = new global::Avalonia.Data.Binding("Tag") { RelativeSource = new global::Avalonia.Data.RelativeSource(global::Avalonia.Data.RelativeSourceMode.FindAncestor) { AncestorType = typeof(DataGrid) } },
+                    }),
+                },
+                new DataGridTemplateColumn
+                {
+                    Header = "Due",
+                    CellTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<TaskRow>((_, _) =>
+                        new DateTimeBox { [!DateTimeBox.ValueProperty] = new global::Avalonia.Data.Binding("Due") }),
+                },
+            },
+        };
+        grid.Tag = people;
+        var window = new Window { Width = 600, Height = 300, Content = grid };
+        var edited = new List<object?>();
+        Events.OnCellEdit(grid, () => false, ["Owner", "Due"], row => edited.Add(row));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(edited);
+        Assert.Equal(new DateTime(2026, 10, 20, 9, 30, 0), milk.Due);
+        Assert.Equal(1L, milk.Owner);
+        Assert.Null(none.Due);
     }
 }

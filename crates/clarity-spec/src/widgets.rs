@@ -538,7 +538,8 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
 }
 
 /// Whether a table cell can edit a field of this type: a checkbox for
-/// bool, a dropdown for an enum, an input for text, numbers and dates.
+/// bool, a dropdown for an enum or a reference, a picker for dates and
+/// moments, an input for text and numbers.
 pub fn cell_edits(ty: &FieldType) -> bool {
     matches!(
         ty,
@@ -550,7 +551,9 @@ pub fn cell_edits(ty: &FieldType) -> bool {
             | FieldType::Money
             | FieldType::Bool
             | FieldType::Date
+            | FieldType::DateTime
             | FieldType::Enum { .. }
+            | FieldType::Ref { .. }
     )
 }
 
@@ -586,6 +589,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         handlers: Vec::new(),
         columns: Vec::new(),
         edit: Vec::new(),
+        switches: Vec::new(),
         show: Vec::new(),
         orientation: has_property(kind, WidgetProperty::Orientation)
             .then_some(Orientation::Horizontal),
@@ -630,7 +634,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push(format!("columns {}", props.columns.join(", ")));
     }
     if !props.edit.is_empty() {
-        parts.push(format!("edit {}", props.edit.join(", ")));
+        let edited: Vec<String> = props
+            .edit
+            .iter()
+            .map(|f| if props.switches.contains(f) { format!("{f} as switch") } else { f.clone() })
+            .collect();
+        parts.push(format!("edit {}", edited.join(", ")));
     }
     if !props.show.is_empty() {
         parts.push(format!("show {}", props.show.join(", ")));
@@ -780,6 +789,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         if present && !has_property(props.kind, property) {
             return Err(format!("'{what}' does not apply to a {name}"));
         }
+    }
+    if let Some(field) = props.switches.iter().find(|f| !props.edit.contains(f)) {
+        return Err(format!("'{field}' is a switch but is not edited"));
     }
     for field in props.columns.iter().chain(&props.edit).chain(&props.show) {
         identifier("field name", field)?;

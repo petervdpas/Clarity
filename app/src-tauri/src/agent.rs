@@ -22,6 +22,50 @@ use super::{FileChange, HistoryState, WatchState, is_spec_file, open_project_of,
 
 /// The language reference, which the model reads before every turn.
 const LANGUAGE: &str = include_str!("../../../docs/LANGUAGE.md");
+/// Clarity's design document: its aims, its stacks and its roadmap. Too long
+/// for every message, so the model reads the sections it needs.
+const DESIGN: &str = include_str!("../../../docs/DESIGN.md");
+
+/// The headings (`##` and `###`) of a Markdown document with their levels
+/// and lines, leaving out what is in code blocks.
+fn headings(doc: &str) -> Vec<(usize, usize, &str)> {
+    let mut code = false;
+    let mut found = Vec::new();
+    for (i, line) in doc.lines().enumerate() {
+        if line.trim_start().starts_with("```") {
+            code = !code;
+        } else if !code {
+            let level = line.chars().take_while(|c| *c == '#').count();
+            if (2..=3).contains(&level) && line[level..].starts_with(' ') {
+                found.push((i, level, line));
+            }
+        }
+    }
+    found
+}
+
+/// The design tool: without `wanted`, the contents; with it, the section
+/// whose number or title it is (or whose title holds it), up to the next
+/// section of its level.
+fn design_section(doc: &str, wanted: &str) -> Result<String, String> {
+    let all = headings(doc);
+    let wanted = wanted.trim().to_lowercase();
+    if wanted.is_empty() {
+        let lines: Vec<&str> = all.iter().map(|(_, _, line)| *line).collect();
+        return Ok(format!("The sections of Clarity's design document; ask for one by its number or title.\n\n{}", lines.join("\n")));
+    }
+    let title = |line: &str| line.trim_start_matches('#').trim().to_lowercase();
+    let number = |line: &str| title(line).split_whitespace().next().unwrap_or_default().trim_end_matches('.').to_string();
+    let found = all
+        .iter()
+        .position(|(_, _, line)| number(line) == wanted)
+        .or_else(|| all.iter().position(|(_, _, line)| title(line).contains(&wanted)))
+        .ok_or_else(|| format!("the design document has no section '{wanted}'; call design without a section for the contents"))?;
+    let (start, level, _) = all[found];
+    let end = all[found + 1..].iter().find(|(_, l, _)| *l <= level).map_or(usize::MAX, |(i, _, _)| *i);
+    let lines: Vec<&str> = doc.lines().skip(start).take(end.saturating_sub(start)).collect();
+    Ok(lines.join("\n").trim_end().to_string())
+}
 
 /// How many steps (model answers) one turn may take.
 const MAX_STEPS: usize = 40;
@@ -46,6 +90,8 @@ parts tool.
 their inputs, buttons sit together at the bottom right.
 - After adding or changing entities, write a migration step with migrate, so the database follows.
 - When a window is done, show it with show_window so the person sees it.
+- When asked what Clarity can do, which stacks support something, or what is planned, read the design document with \
+the design tool (its Stacks and Roadmap sections) rather than guess; never promise what the roadmap says is not built.
 - Say briefly what you did when you finish. Write plain, short sentences.
 
 The Clarity language reference:
@@ -235,6 +281,11 @@ impl Tools for ProjectTools {
             ),
             tool("parts", "The parts a window can hold, with their properties, sizes and events, as JSON.", schema(json!({}), &[])),
             tool(
+                "design",
+                "Reads Clarity's design document: what Clarity aims at, which stacks there are and what each supports, and the roadmap of what is done and what is planned. Without a section it gives the contents.",
+                schema(json!({ "section": { "type": "string", "description": "A section's number (like 19 or 1.2) or a word of its title (like roadmap)." } }), &[]),
+            ),
+            tool(
                 "new_project",
                 "Makes a new project with its first module, an app and a main window, and opens it. Use it when the person asks for a new application.",
                 schema(
@@ -258,6 +309,7 @@ impl Tools for ProjectTools {
             "write_file" => self.write(&text("path"), &text("text")),
             "check" => self.problems(),
             "parts" => serde_json::to_string(&clarity_spec::widgets::catalog()).map_err(|err| err.to_string()),
+            "design" => design_section(DESIGN, &text("section")),
             "new_project" => self.new_project(input),
             "migrate" => self.migrate(input),
             "show_window" => {
@@ -458,10 +510,30 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    const DOC: &str = "# Design\n\nIntro.\n\n## 1. Purpose\n\nWhy.\n\n### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```\n\n### 1.3 Data\n\nSQLite.\n\n## 19. Roadmap\n\nG5 is next.\n\n## 20. Open questions\n\nMany.\n";
+
+    #[test]
+    fn the_design_tool_gives_the_contents_and_a_section() {
+        // Without a section: the headings, to pick from.
+        let contents = design_section(DOC, "").unwrap();
+        assert_eq!(contents.lines().filter(|l| l.starts_with('#')).collect::<Vec<_>>(), ["## 1. Purpose", "### 1.2 Stacks", "### 1.3 Data", "## 19. Roadmap", "## 20. Open questions"]);
+        // By number or by title: the section up to the next one of its level.
+        assert_eq!(design_section(DOC, "19").unwrap(), "## 19. Roadmap\n\nG5 is next.");
+        assert_eq!(design_section(DOC, "roadmap").unwrap(), "## 19. Roadmap\n\nG5 is next.");
+        assert_eq!(design_section(DOC, "1.2").unwrap(), "### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```");
+        // A chapter holds its subsections.
+        assert!(design_section(DOC, "1").unwrap().contains("### 1.3 Data"));
+        assert!(design_section(DOC, "teleport").unwrap_err().contains("no section"));
+        // The real document has its roadmap.
+        assert!(design_section(DESIGN, "roadmap").unwrap().starts_with("## 19. Roadmap"));
+    }
+
     #[test]
     fn the_model_is_told_the_language() {
         let told = instructions();
         assert!(told.contains("# The Clarity language"));
         assert!(told.contains("write_file"));
+        // The design document is there to read, not in every message.
+        assert!(told.contains("design tool") && !told.contains("## 19. Roadmap"));
     }
 }

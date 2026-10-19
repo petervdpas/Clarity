@@ -1,26 +1,64 @@
 module todo
 
+entity Person
+    name: text(80), required, unique, label "Name"
+
 entity Task
     title: text(120), required, label "Task"
     done: bool, default false, label "Done"
+    finished_by: ref Person, label "Finished by"
 
 app Todo
     title "Todo"
     main Main
+    menu
+        item "File"
+            item "Users" on click -> Users
+            separator
+            item "Language" on click -> language
+            separator
+            item "Quit" key "Ctrl+Q" on click -> quit
+    toolbar
+        button "Users" icon "list" on click -> Users
+        separator
+        button "Language" icon "language" on click -> language
 
 page Main: window
     title "Todo"
     data tasks: list<Task>
     on open: window_opened
+    on return: window_returned
 
     label "New task" at 1,1 span 2 for new_title
     textbox name new_title at 3,1 span 8 placeholder "What needs to be done?"
     button "Add" name add_button at 11,1 span 2 default on click: add_clicked
-    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done edit title, done on select: row_selected on change: task_changed
+    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by edit title, done as switch, finished_by on select: row_selected on change: task_changed
+    button "Users" name users_button at 1,10 span 2 on click -> Users
     button "Delete" name delete_button at 11,10 span 2 on click: delete_clicked
+
+page Users: window
+    title "Users"
+    data people: list<Person>
+    data person: Person
+    on open: users_opened
+
+    table name people_grid at 1,1 span 12 rows 6 bind people columns name on select: person_selected
+    form name person_form at 1,7 span 12 rows 1 bind person
+        label "Name" at 1,1 span 2 for name
+        textbox name name at 3,1 span 8 bind person.name placeholder "Full name"
+        help at 11,1 span 2 for name
+    button "New" name new_button at 5,9 span 2 on click: new_clicked
+    button "Save" name save_button at 7,9 span 2 key "Ctrl+S" default on click: save_clicked
+    button "Delete" name delete_person_button at 9,9 span 2 on click: delete_person_clicked
+    button "Close" name close_button at 11,9 span 2 cancel on click: close_clicked
 
 code Main
     handler window_opened
+        delete_button.enabled = false
+
+    handler window_returned
+        // Users may have been added, changed or removed.
+        reload tasks
         delete_button.enabled = false
 
     handler row_selected
@@ -44,3 +82,39 @@ code Main
         delete task
         reload tasks
         delete_button.enabled = false
+
+code Users
+    handler users_opened
+        delete_person_button.enabled = false
+
+    handler person_selected
+        person = people_grid.selected
+        name.error = ""
+        delete_person_button.enabled = true
+
+    handler new_clicked
+        person = new Person
+        name.error = ""
+        delete_person_button.enabled = false
+
+    handler save_clicked
+        name.error = ""
+        if person.name == ""
+            name.error = "Name is required"
+            return
+        save person
+        reload people
+        message "Saved {person.name}"
+
+    handler delete_person_clicked
+        let tasks = find t in Task where t.finished_by == person
+        if count(tasks) > 0
+            message error "{person.name} has finished tasks and cannot be deleted"
+            return
+        delete person
+        reload people
+        person = new Person
+        delete_person_button.enabled = false
+
+    handler close_clicked
+        close

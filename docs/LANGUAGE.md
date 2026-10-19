@@ -505,7 +505,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field, field, ...`; `edit field, ...` | `select`, `open`, `change` |
+| `table` | a list: `bind orders` | `columns field, field, ...`; `edit field [as switch], ...` | `select`, `open`, `change` |
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 
 **Graphics**
@@ -515,7 +515,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the images folder | `click` |
 | `canvas` | nothing | `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `pointer`, `key` |
 
-`select` fires when a row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
+`select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
 ### Editing in a table
 
@@ -526,9 +526,9 @@ Properties may be written in any order. The designer writes them in a fixed orde
     handler task_changed
         save grid.selected
 
-- A `bool` column holds a checkbox and an enum column a dropdown. Text, numbers and dates are edited in place, like a text box, number or date input.
-- An edited column must be one of the `columns`, of one of these types: text, `email`, `url`, `integer`, `decimal`, `money`, `bool`, `date` or an enum. References, pictures, moments (`datetime`) and durations are not edited in a cell.
-- An edit changes the row on screen. Then the row is selected and `on change` runs, so `grid.selected` is the changed record. Saving it is up to the handler, as with a form: `save grid.selected`. When the record breaks a rule, `save` refuses it as anywhere else.
+- A `bool` column holds a checkbox, or a switch when it is written `as switch`: `edit title, done as switch`. An enum column is a dropdown of its values, and a `ref` column a dropdown of the records it can point at, as a dropdown in a form shows them. Dates are picked with a date picker, as in a date input. A moment (`datetime`) is a day from the date picker and a time typed on a 24-hour clock (`14:30`), in a cell and in a date input alike. Text and numbers are edited in place, like a text box or number input.
+- An edited column must be one of the `columns`, of one of these types: text, `email`, `url`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an enum or a `ref`. Pictures and durations are not edited in a cell.
+- Only a value that differs is an edit: a checkbox or dropdown when it changes, a text or number cell when it is left or Enter is pressed. An edit changes the row on screen. Then the row is selected and `on change` runs, so `grid.selected` is the changed record. Saving it is up to the handler, as with a form: `save grid.selected`. When the record breaks a rule, `save` refuses it as anywhere else.
 - A table that edits but has no `on change` is a warning: its edits are lost when the data is read again.
 
 ### Binding
@@ -1121,7 +1121,7 @@ part          = kind [String] property*
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" names | "edit" names | "show" names | "source" String | "surface" word | "renderer" Name
+              | "columns" names | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word | "renderer" Name
               | "on" event ":" handler | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name

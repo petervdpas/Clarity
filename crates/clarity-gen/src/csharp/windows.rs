@@ -13,7 +13,7 @@ use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
 use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT, SIDEBAR_COLUMN};
-use clarity_spec::model::{App, Command, CommandKind, Entity, Field, FieldType, Page, PageKind, Widget};
+use clarity_spec::model::{App, Command, CommandKind, Entity, Field, FieldType, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
 
@@ -195,21 +195,34 @@ impl<'a> Window<'a> {
     }
 
     /// A value of a field with a format, shown in the person's format, else as the runtime shows it.
+    /// Whether a date part is bound to a moment (a datetime field).
+    fn binds_moment(&self, p: &WidgetProps) -> bool {
+        p.bind.as_deref().and_then(|b| self.bound_field(b)).is_some_and(|(_, f)| f.ty == FieldType::DateTime)
+    }
+
     /// The input in an edited cell of a table: what a form would use for the field.
-    fn cell_input(&self, entity: &Entity, field: &clarity_spec::model::Field, path: &str) -> String {
+    fn cell_input(&self, entity: &Entity, field: &clarity_spec::model::Field, path: &str, switch: bool) -> String {
         match &field.ty {
+            FieldType::Bool if switch => format!("<ToggleSwitch Classes=\"cell\" IsChecked=\"{{Binding {path}}}\" OnContent=\"\" OffContent=\"\" />"),
             FieldType::Bool => format!("<CheckBox Classes=\"cell\" IsChecked=\"{{Binding {path}}}\" />"),
-            FieldType::Enum { name } => format!(
-                "<ComboBox Classes=\"cell\" ItemsSource=\"{{x:Static local:Choices.{}}}\" DisplayMemberBinding=\"{{Binding Label, x:DataType=c:Choice}}\" SelectedValueBinding=\"{{Binding Value, x:DataType=c:Choice}}\" SelectedValue=\"{{Binding {path}}}\" />",
-                name.name
+            // A choice box writes only what the person picks, so drawing a row is no edit.
+            FieldType::Enum { name } => format!("<c:ChoiceBox Classes=\"cell\" Choices=\"{{x:Static local:Choices.{}}}\" Value=\"{{Binding {path}}}\" />", name.name),
+            // The window's choices, as a dropdown in a form has them; the cell's own data is the row.
+            FieldType::Ref { entity: target } => format!(
+                "<c:ChoiceBox Classes=\"cell\" Choices=\"{{Binding $parent[DataGrid].((local:{}ViewModel)DataContext).{}Choices}}\" Value=\"{{Binding {path}}}\" />",
+                self.page.name.name,
+                target.name
             ),
             FieldType::Date => format!("<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{{Binding {path}, Converter={{x:Static c:Converters.Date}}}}\" />"),
+            // As the form's date input binds a moment.
+            FieldType::DateTime => format!("<c:DateTimeBox Classes=\"cell\" Value=\"{{Binding {path}}}\" />"),
+            // Text cells write their value when they are left (or on Enter), as on the web.
             FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => format!(
-                "<TextBox Classes=\"cell number\" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}}}\" />",
+                "<TextBox Classes=\"cell number\" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}, UpdateSourceTrigger=LostFocus}}\" />",
                 entity.name.name,
                 pascal(&field.name.name)
             ),
-            _ => format!("<TextBox Classes=\"cell\" Text=\"{{Binding {path}}}\" />"),
+            _ => format!("<TextBox Classes=\"cell\" Text=\"{{Binding {path}, UpdateSourceTrigger=LostFocus}}\" />"),
         }
     }
 
@@ -610,6 +623,11 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</StackPanel>");
             }
+            WidgetKind::Date if self.binds_moment(p) => {
+                // A moment is picked as a day and a time of day, as on the web.
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:DateTimeBox {at}{value} HorizontalAlignment=\"Stretch\"{plain_state}{extra} />");
+            }
             WidgetKind::Date => {
                 let date_only = p.bind.as_deref().and_then(|b| self.bound_field(b)).is_some_and(|(_, f)| f.ty == FieldType::Date);
                 let value = match &bound {
@@ -690,7 +708,7 @@ impl<'a> Window<'a> {
                         // The columns fill the table; a checkbox needs only its own width.
                         let width = if field.ty == FieldType::Bool { "Auto" } else { "*" };
                         if p.edit.contains(column) {
-                            let control = self.cell_input(entity, field, &path);
+                            let control = self.cell_input(entity, field, &path, p.switches.contains(column));
                             let _ = writeln!(
                                 out,
                                 "{pad}    <DataGridTemplateColumn Header=\"{}\" Width=\"{width}\">\n{pad}      <DataGridTemplateColumn.CellTemplate>\n{pad}        <DataTemplate x:DataType=\"local:{}\">\n{pad}          {control}\n{pad}        </DataTemplate>\n{pad}      </DataGridTemplateColumn.CellTemplate>\n{pad}    </DataGridTemplateColumn>",
@@ -783,11 +801,16 @@ impl<'a> Window<'a> {
                     Event::Click => continue,
                     Event::Change if text => format!("Events.OnCommit({control}, () => {run});"),
                     Event::Change if matches!(kind, WidgetKind::Checkbox | WidgetKind::Switch) => format!("{control}.IsCheckedChanged += (_, _) => {run};"),
+                    Event::Change if kind == WidgetKind::Date && self.binds_moment(&widget.props) => format!("{control}.ValueChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Date => format!("{control}.SelectedDateChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Radio => format!("Events.OnChoice({control}, () => {run});"),
                     // An edit in a cell selects its row first, so the handler finds it.
                     Event::Change if kind == WidgetKind::Table => {
-                        format!("Events.OnCellEdit({control}, row => {{ {control}.SelectedItem = row; {run}; }});")
+                        let entity = widget.props.bind.as_deref().and_then(|b| self.entity_of(b));
+                        let columns: Vec<String> = entity
+                            .map(|e| widget.props.edit.iter().map(|f| format!("\"{}\"", property(&e.name.name, f))).collect())
+                            .unwrap_or_default();
+                        format!("Events.OnCellEdit({control}, () => Vm.IsHandling, [{}], row => {{ {control}.SelectedItem = row; {run}; }});", columns.join(", "))
                     }
                     Event::Change | Event::Select => format!("{control}.SelectionChanged += (_, _) => {run};"),
                     Event::Open => format!("{control}.DoubleTapped += (_, _) => {run};"),
@@ -888,9 +911,21 @@ public partial class {name}View : UserControl
             let _ = write!(properties, "    public Func<{ty}> {name} => {fetch};\n\n");
         }
         let mut choices: BTreeMap<String, String> = BTreeMap::new();
-        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Dropdown) {
-            let Some((_, field)) = widget.props.bind.as_deref().and_then(|b| self.bound_field(b)) else { continue };
-            if let FieldType::Ref { entity } = &field.ty
+        let mut referenced: Vec<&FieldType> = Vec::new();
+        for widget in &self.parts {
+            let p = &widget.props;
+            match p.kind {
+                WidgetKind::Dropdown => referenced.extend(p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty)),
+                // A reference edited in a table cell picks from the same choices.
+                WidgetKind::Table => {
+                    let Some(entity) = p.bind.as_deref().and_then(|b| self.entity_of(b)) else { continue };
+                    referenced.extend(p.edit.iter().filter_map(|c| entity.field(c)).map(|f| &f.ty));
+                }
+                _ => {}
+            }
+        }
+        for ty in referenced {
+            if let FieldType::Ref { entity } = ty
                 && let Some(target) = self.project.entity(&entity.name)
             {
                 choices.insert(entity.name.clone(), display(target));

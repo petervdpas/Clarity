@@ -4,6 +4,7 @@
      them all. -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:Clarity.Avalonia"
              x:Class="{namespace}.App"
              RequestedThemeVariant="Default">
   <Application.Styles>
@@ -55,13 +56,22 @@
       <Setter Property="TextAlignment" Value="Right" />
     </Style>
     <!-- An input in a table cell sits flush in the cell, as in a spreadsheet. -->
-    <Style Selector="TextBox.cell, ComboBox.cell, CalendarDatePicker.cell">
+    <Style Selector="TextBox.cell, ComboBox.cell, CalendarDatePicker.cell, c|ChoiceBox.cell ComboBox, c|DateTimeBox.cell CalendarDatePicker, c|DateTimeBox.cell TextBox">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="Padding" Value="4,1" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <!-- A time typed that is no time, as a number input marks what is no number. -->
+    <Style Selector="TextBox.error">
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityError}" />
+    </Style>
+    <Style Selector="ToggleSwitch.cell">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
     </Style>
     <Style Selector="CheckBox.cell">
       <Setter Property="HorizontalAlignment" Value="Center" />

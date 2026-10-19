@@ -214,7 +214,7 @@
     {:else if info.bind === "collection"}
       <label class="prop">
         <span>Bound to</span>
-        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], show: [] })}>
+        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], switches: [], show: [] })}>
           <option value="">(not bound)</option>
           {#each listOptions as name (name)}
             <option value={name}>{name}</option>
@@ -235,7 +235,7 @@
               onchange={(e) =>
                 update(
                   key === "columns" && !e.currentTarget.checked
-                    ? { columns: toggle(p.columns, field.name.name, false), edit: toggle(p.edit, field.name.name, false) }
+                    ? { columns: toggle(p.columns, field.name.name, false), edit: toggle(p.edit, field.name.name, false), switches: toggle(p.switches, field.name.name, false) }
                     : { [key]: toggle(p[key], field.name.name, e.currentTarget.checked) },
                 )}
             />
@@ -256,9 +256,25 @@
             <input
               type="checkbox"
               checked={p.edit.includes(field.name.name)}
-              onchange={(e) => update({ edit: toggle(p.edit, field.name.name, e.currentTarget.checked) })}
+              onchange={(e) =>
+                update(
+                  e.currentTarget.checked
+                    ? { edit: toggle(p.edit, field.name.name, true) }
+                    : { edit: toggle(p.edit, field.name.name, false), switches: toggle(p.switches, field.name.name, false) },
+                )}
             />
             {field.label}
+            {#if field.type.kind === "bool" && p.edit.includes(field.name.name)}
+              <select
+                class="cell-look"
+                aria-label="How {field.label} shows"
+                value={p.switches.includes(field.name.name) ? "switch" : "checkbox"}
+                onchange={(e) => update({ switches: toggle(p.switches, field.name.name, e.currentTarget.value === "switch") })}
+              >
+                <option value="checkbox">Checkbox</option>
+                <option value="switch">Switch</option>
+              </select>
+            {/if}
           </label>
         {:else}
           <p class="hint">None of the columns can be edited in a cell.</p>
@@ -675,5 +691,10 @@
 
   .danger {
     color: var(--error);
+  }
+  .cell-look {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 0 2px;
   }
 </style>

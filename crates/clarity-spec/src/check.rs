@@ -829,11 +829,18 @@ impl<'a> Checker<'a> {
                 continue;
             }
             let Some(f) = entity.field(field) else { continue };
+            if p.switches.contains(field) && f.ty != FieldType::Bool {
+                self.error(
+                    file,
+                    format!("{at}: '{field}' is {}; only a bool column can be a switch", widgets::field_type_tag(&f.ty)),
+                    widget.span,
+                );
+            }
             if !widgets::cell_edits(&f.ty) {
                 self.error(
                     file,
                     format!(
-                        "{at}: '{field}' is {}; a table edits text, numbers, bool, date and enum columns",
+                        "{at}: '{field}' is {}; a table edits text, numbers, bool, dates, enum and ref columns",
                         widgets::field_type_tag(&f.ty)
                     ),
                     widget.span,

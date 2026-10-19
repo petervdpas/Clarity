@@ -42,7 +42,12 @@ handlers: Array<Handler>, columns: Array<string>,
 /**
  * The columns of a table whose cells are inputs: `edit done`.
  */
-edit: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+edit: Array<string>, 
+/**
+ * The edited bool columns shown as a switch instead of a checkbox:
+ * `edit done as switch`.
+ */
+switches: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
 /**
  * The input a label or help text belongs to, by part name.
  */

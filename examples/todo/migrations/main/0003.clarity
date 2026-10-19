@@ -1,0 +1,9 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Finished by a user"
+    add entity Person
+        name: text(80), unique
+    add field Task.finished_by: ref Person
+    remove field Task.alice
+    remove field Task.bob
+    remove field Task.carol

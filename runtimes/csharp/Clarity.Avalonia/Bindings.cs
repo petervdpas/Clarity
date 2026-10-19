@@ -2,6 +2,7 @@
 // converters between record values and controls, and events that a control
 // has no command for.
 
+using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -135,40 +136,43 @@ public static class Events
     }
 
     /// <summary>
-    /// Runs <paramref name="edited"/> with the row whose cell was edited in a
-    /// table: a check box or dropdown changed, or a text cell committed (focus
-    /// leaves it, or Enter). Clarity's <c>change</c> of a table. Only what the
-    /// person does counts: values a row shows as it is drawn are no edits.
+    /// Runs <paramref name="edited"/> with the row whose edited column
+    /// changed: Clarity's <c>change</c> of a table. It watches the records, so
+    /// every kind of cell counts alike and only a value that differs is an
+    /// edit, as on the web: a check box or dropdown when it changes, a text
+    /// cell when it is committed (focus leaves it, or Enter). What a handler
+    /// changes is no edit, and neither is a row being drawn.
     /// </summary>
-    public static void OnCellEdit(Control table, Action<object?> edited)
+    public static void OnCellEdit(DataGrid table, Func<bool> handling, IReadOnlyCollection<string> columns, Action<object> edited)
     {
-        void Edited(object? source)
+        var watched = new List<INotifyPropertyChanged>();
+        void Changed(object? row, PropertyChangedEventArgs e)
         {
-            if (source is Control control && control != table)
-                edited(control.DataContext);
+            if (row is not null && e.PropertyName is { } name && columns.Contains(name) && !handling())
+                edited(row);
         }
-        static bool ByThePerson(object? source) => source is InputElement { IsKeyboardFocusWithin: true };
-
-        table.AddHandler(ToggleButton.IsCheckedChangedEvent, (_, e) =>
+        void Watch(System.Collections.IEnumerable? rows)
         {
-            if (ByThePerson(e.Source))
-                Edited(e.Source);
-        }, RoutingStrategies.Bubble);
-        table.AddHandler(SelectingItemsControl.SelectionChangedEvent, (_, e) =>
+            foreach (var row in watched)
+                row.PropertyChanged -= Changed;
+            watched.Clear();
+            foreach (var row in rows?.OfType<INotifyPropertyChanged>() ?? [])
+            {
+                row.PropertyChanged += Changed;
+                watched.Add(row);
+            }
+        }
+        Watch(table.ItemsSource);
+        table.PropertyChanged += (_, e) =>
         {
-            // The table's own selection is no edit.
-            if (e.Source is ComboBox && ByThePerson(e.Source))
-                Edited(e.Source);
-        }, RoutingStrategies.Bubble);
-        table.AddHandler(InputElement.LostFocusEvent, (_, e) =>
-        {
-            if (e.Source is TextBox)
-                Edited(e.Source);
-        }, RoutingStrategies.Bubble);
+            if (e.Property == DataGrid.ItemsSourceProperty)
+                Watch(table.ItemsSource);
+        };
+        // Enter commits a text cell, as leaving it does.
         table.AddHandler(InputElement.KeyDownEvent, (_, e) =>
         {
-            if (e.Key == Key.Enter && e.Source is TextBox)
-                Edited(e.Source);
+            if (e.Key == Key.Enter && e.Source is TextBox box)
+                BindingOperations.GetBindingExpressionBase(box, TextBox.TextProperty)?.UpdateSource();
         }, RoutingStrategies.Bubble);
     }
 

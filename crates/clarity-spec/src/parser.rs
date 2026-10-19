@@ -1247,6 +1247,7 @@ fn parse_widget_props(
         handlers: Vec::new(),
         columns: Vec::new(),
         edit: Vec::new(),
+        switches: Vec::new(),
         show: Vec::new(),
         orientation: None,
         surface: None,
@@ -1375,11 +1376,20 @@ fn parse_widget_props(
             }
             "edit" => {
                 applies(WidgetProperty::Edit)?;
-                props.edit = cursor
-                    .ident_list("a field name")?
-                    .into_iter()
-                    .map(|i| i.name)
-                    .collect();
+                // `edit title, done as switch`: a bool column can be a switch.
+                loop {
+                    let field = cursor.expect_ident("a field name")?.name;
+                    if cursor.eat_keyword("as") {
+                        if !cursor.eat_keyword("switch") {
+                            return Err(cursor.error_here("expected 'switch', as in 'edit done as switch'".to_string()));
+                        }
+                        props.switches.push(field.clone());
+                    }
+                    props.edit.push(field);
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
             }
             "show" => {
                 applies(WidgetProperty::Show)?;

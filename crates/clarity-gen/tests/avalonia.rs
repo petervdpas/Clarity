@@ -388,16 +388,24 @@ enum Priority
     Low
     High
 
+entity Person
+    name: text(80)
+
 entity Task
     title: text(120), required
     done: bool
     priority: Priority
     due: date
     hours: decimal(5, 1)
+    owner: ref Person
+    added: datetime
+    urgent: bool
 
 page Main: window
     data tasks: list<Task>
-    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority, due, hours edit title, done, priority, due, hours on change: task_changed
+    data task: Task
+    date name added_pick at 1,7 span 4 bind task.added on change: task_changed
+    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority, due, hours, owner, added, urgent edit title, done, priority, due, hours, owner, added, urgent as switch on change: task_changed
 
 code Main
     handler task_changed
@@ -413,25 +421,42 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
     let window = file(&files, "Windows/MainView.axaml");
     let cell = |header: &str, control: &str| {
-        let width = if header == "Done" { "Auto" } else { "*" };
+        let width = if header == "Done" || header == "Urgent" { "Auto" } else { "*" };
         format!(
             "<DataGridTemplateColumn Header=\"{{x:Static local:Texts.{header}}}\" Width=\"{width}\">\n            <DataGridTemplateColumn.CellTemplate>\n              <DataTemplate x:DataType=\"local:Task\">\n                {control}\n              </DataTemplate>\n            </DataGridTemplateColumn.CellTemplate>\n          </DataGridTemplateColumn>"
         )
     };
-    has(window, &cell("Title", "<TextBox Classes=\"cell\" Text=\"{Binding Title}\" />"));
+    // A text cell is committed when it is left, as on the web.
+    has(window, &cell("Title", "<TextBox Classes=\"cell\" Text=\"{Binding Title, UpdateSourceTrigger=LostFocus}\" />"));
     has(window, &cell("Done", "<CheckBox Classes=\"cell\" IsChecked=\"{Binding Done}\" />"));
+    // A bool column written `as switch` is a switch, as the switch part of a form.
+    has(window, &cell("Urgent", "<ToggleSwitch Classes=\"cell\" IsChecked=\"{Binding Urgent}\" OnContent=\"\" OffContent=\"\" />"));
     has(
         window,
         &cell(
             "Priority",
-            "<ComboBox Classes=\"cell\" ItemsSource=\"{x:Static local:Choices.Priority}\" DisplayMemberBinding=\"{Binding Label, x:DataType=c:Choice}\" SelectedValueBinding=\"{Binding Value, x:DataType=c:Choice}\" SelectedValue=\"{Binding Priority}\" />",
+            "<c:ChoiceBox Classes=\"cell\" Choices=\"{x:Static local:Choices.Priority}\" Value=\"{Binding Priority}\" />",
         ),
     );
     has(window, &cell("Due", "<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{Binding Due, Converter={x:Static c:Converters.Date}}\" />"));
-    has(window, &cell("Hours", "<TextBox Classes=\"cell number\" Text=\"{Binding Hours, Converter={x:Static local:Edit.TaskHours}}\" />"));
-    // An edit selects its row, then the table's change runs.
+    // A moment is picked as a day and a time, in a cell and in a form alike.
+    has(window, &cell("Added", "<c:DateTimeBox Classes=\"cell\" Value=\"{Binding Added}\" />"));
+    has(window, "<c:DateTimeBox x:Name=\"addedPick\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"4\" Value=\"{Binding Task.Added}\"");
+    has(window, &cell("Hours", "<TextBox Classes=\"cell number\" Text=\"{Binding Hours, Converter={x:Static local:Edit.TaskHours}, UpdateSourceTrigger=LostFocus}\" />"));
+    // A reference picks from the records the window reads, as a dropdown in a form does.
     has(
-        file(&files, "Windows/MainView.axaml.cs"),
-        "Events.OnCellEdit(grid, row => { grid.SelectedItem = row; Vm.TaskChangedCommand.Execute(null); });",
+        window,
+        &cell(
+            "Owner",
+            "<c:ChoiceBox Classes=\"cell\" Choices=\"{Binding $parent[DataGrid].((local:MainViewModel)DataContext).PersonChoices}\" Value=\"{Binding Owner}\" />",
+        ),
     );
+    has(file(&files, "Windows/MainViewModel.cs"), "PersonChoices = Choice.Of(Db.All<Person>(), r => ");
+    // An edit of an edited column selects its row, then the table's change runs.
+    let code = file(&files, "Windows/MainView.axaml.cs");
+    has(
+        code,
+        "Events.OnCellEdit(grid, () => Vm.IsHandling, [\"Title\", \"Done\", \"Priority\", \"Due\", \"Hours\", \"Owner\", \"Added\", \"Urgent\"], row => { grid.SelectedItem = row; Vm.TaskChangedCommand.Execute(null); });",
+    );
+    has(code, "addedPick.ValueChanged += (_, _) => Vm.TaskChangedCommand.Execute(null);");
 }

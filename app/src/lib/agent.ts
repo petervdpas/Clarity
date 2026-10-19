@@ -55,6 +55,8 @@ export function toolLine(name: string, input: unknown): string {
       return `Wrote a migration step${text(input, "title") ? `: ${text(input, "title")}` : ""}`;
     case "new_project":
       return `Made the project ${text(input, "name")}`;
+    case "design":
+      return text(input, "section") ? `Read the design: ${text(input, "section")}` : "Read the design's contents";
     case "show_window":
       return `Showed ${text(input, "name")}`;
     default:

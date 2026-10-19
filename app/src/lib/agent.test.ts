@@ -46,3 +46,8 @@ test("the agent picks from connections that name a model kind, anthropic first",
   assert.deepEqual(agentConnections(rows), ["anthropic", "local"]);
   assert.deepEqual(agentConnections([]), []);
 });
+
+test("reading the design document shows which part", () => {
+  assert.equal(toolLine("design", {}), "Read the design's contents");
+  assert.equal(toolLine("design", { section: "roadmap" }), "Read the design: roadmap");
+});

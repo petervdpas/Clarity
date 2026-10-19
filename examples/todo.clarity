@@ -2,4 +2,5 @@ project Todo
     title "Todo"
     stack csharp avalonia desktop
     output "out"
+    language "en"
     datasource main sqlite "data/todo.db"

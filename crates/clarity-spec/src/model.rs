@@ -286,6 +286,10 @@ pub struct WidgetProps {
     /// The columns of a table whose cells are inputs: `edit done`.
     #[serde(default)]
     pub edit: Vec<String>,
+    /// The edited bool columns shown as a switch instead of a checkbox:
+    /// `edit done as switch`.
+    #[serde(default)]
+    pub switches: Vec<String>,
     pub show: Vec<String>,
     pub orientation: Option<Orientation>,
     pub surface: Option<Surface>,

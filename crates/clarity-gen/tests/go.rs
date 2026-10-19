@@ -107,9 +107,13 @@ fn writes_a_go_module_on_the_runtime_module() {
     let runtime = include_str!("../../../runtimes/go/go.mod");
     let sqlite = runtime.lines().find(|l| l.contains("modernc.org/sqlite")).unwrap().trim();
     has(module, sqlite);
-    // The sums of the runtime's modules this application needs.
+    // The sums of the runtime's modules this application needs, and those of
+    // the runtime module itself as recorded when it was published.
     let sums = include_str!("../../../runtimes/go/go.sum");
-    assert!(file(&files, "go.sum").lines().all(|l| sums.lines().any(|s| s == l)));
+    let published = include_str!("../src/go/runtime.sum");
+    assert!(file(&files, "go.sum").lines().all(|l| sums.lines().chain(published.lines()).any(|s| s == l)));
+    has(file(&files, "go.sum"), &format!("{RUNTIME} {} h1:", runtime_version()));
+    has(file(&files, "go.sum"), &format!("{RUNTIME} {}/go.mod h1:", runtime_version()));
     has(file(&files, "go.sum"), "modernc.org/sqlite v1.54.0 h1:");
     // The code imports the runtime's packages from the module.
     has(file(&files, "sales_module.go"), &format!("\t\"{RUNTIME}/clarity\"\n"));

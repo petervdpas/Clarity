@@ -1,0 +1,285 @@
+name: Release Clarity
+
+# Push a v* tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) to fire the
+# full pipeline: gate on the tests, build the Windows installers and the Linux
+# packages, install each Linux package on the distributions it is for, then
+# publish one GitHub Release with every artifact attached. The tag minus its
+# leading "v" becomes the app version (stamped into tauri.conf.json and
+# package.json, so the installers carry it). Artifact filenames are
+# version-free; the release tag is the only version disambiguator.
+# The Go runtime's tags (runtimes/go/v*) do not start with "v", so they do not
+# fire this.
+#
+# Tauri builds its own installers: NSIS and MSI on Windows, .deb and .rpm on
+# Linux. Each Linux package is built inside a container of the distribution
+# it is for (.github/scripts/build-linux.sh), so it links that distribution's
+# glibc and WebKitGTK:
+#   Debian 12 bookworm, amd64     -> Debian 12 and 13, Ubuntu 24.04 and newer
+#   Debian 12 bookworm, arm64     -> Raspberry Pi OS (64-bit), Debian on arm64
+#   Fedora 43 and Fedora 44       -> an .rpm each
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "22"
+  # Run JS-based actions on the runner's Node 24, since their pinned versions
+  # still ship a Node 20 runtime that GitHub is retiring.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────
+  # Test gate. Every build job needs: [check] so a red test never
+  # produces a release.
+  # ───────────────────────────────────────────────────────────────
+  check:
+    name: Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Check the renderer
+        working-directory: app
+        run: npm run check
+
+      - name: Test the renderer
+        working-directory: app
+        run: npm test
+
+      # The app's crate embeds the built frontend.
+      - name: Build the frontend
+        working-directory: app
+        run: npm run build
+
+      - name: Test the workspace
+        run: cargo test --workspace
+
+  # ───────────────────────────────────────────────────────────────
+  # Windows: NSIS installer + MSI installer + portable zip.
+  # ───────────────────────────────────────────────────────────────
+  windows:
+    name: Windows (amd64)
+    needs: [check]
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Set version from tag
+        if: github.ref_type == 'tag'
+        working-directory: app
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $conf = "src-tauri/tauri.conf.json"
+          $j = Get-Content $conf -Raw | ConvertFrom-Json
+          $j.version = $ver
+          $j | ConvertTo-Json -Depth 32 | Set-Content $conf
+          npm version $ver --no-git-tag-version --allow-same-version
+          Write-Host "version = $ver"
+
+      - name: Build installers
+        working-directory: app
+        run: npm run tauri build -- --bundles nsis,msi
+
+      # The workspace's target folder is at the repository's root.
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $nsis = Get-ChildItem "target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          $msi  = Get-ChildItem "target/release/bundle/msi/*.msi" | Select-Object -First 1
+          Copy-Item $nsis.FullName "out/Clarity-windows-amd64-setup.exe"
+          Copy-Item $msi.FullName  "out/Clarity-windows-amd64.msi"
+          Compress-Archive -Path "target/release/clarity-app.exe" -DestinationPath "out/Clarity-windows-amd64.zip"
+          Get-ChildItem out
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: out/*
+
+  # ───────────────────────────────────────────────────────────────
+  # Linux: each package built inside its distribution's container.
+  # ubuntu-24.04-arm is a real arm64 runner, so the Raspberry Pi
+  # package is built natively, in an arm64 debian:bookworm.
+  # ───────────────────────────────────────────────────────────────
+  linux:
+    name: Linux ${{ matrix.label }}
+    needs: [check]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Debian (amd64)
+            runner: ubuntu-24.04
+            image: debian:bookworm
+            format: deb
+            artifact: Clarity-linux-amd64
+          - label: Raspberry Pi (arm64)
+            runner: ubuntu-24.04-arm
+            image: debian:bookworm
+            format: deb
+            artifact: Clarity-linux-arm64
+          - label: Fedora 43 (amd64)
+            runner: ubuntu-24.04
+            image: fedora:43
+            format: rpm
+            artifact: Clarity-fedora43-amd64
+          - label: Fedora 44 (amd64)
+            runner: ubuntu-24.04
+            image: fedora:44
+            format: rpm
+            artifact: Clarity-fedora44-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -w /src \
+            -e "VERSION=${{ steps.version.outputs.VERSION }}" \
+            -e "NODE_VERSION=${{ env.NODE_VERSION }}" \
+            ${{ matrix.image }} bash .github/scripts/build-linux.sh ${{ matrix.format }} ${{ matrix.artifact }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact }}
+          path: out/*
+
+  # ───────────────────────────────────────────────────────────────
+  # Each Linux package installed in a clean container of every
+  # distribution it is for: the package manager must find every
+  # dependency, and the program every library.
+  # ───────────────────────────────────────────────────────────────
+  install:
+    name: Install on ${{ matrix.image }} (${{ matrix.artifact }})
+    needs: [linux]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { artifact: Clarity-linux-amd64, package: Clarity-linux-amd64.deb, runner: ubuntu-24.04, image: "debian:bookworm" }
+          - { artifact: Clarity-linux-amd64, package: Clarity-linux-amd64.deb, runner: ubuntu-24.04, image: "debian:trixie" }
+          - { artifact: Clarity-linux-amd64, package: Clarity-linux-amd64.deb, runner: ubuntu-24.04, image: "ubuntu:24.04" }
+          - { artifact: Clarity-linux-arm64, package: Clarity-linux-arm64.deb, runner: ubuntu-24.04-arm, image: "debian:bookworm" }
+          - { artifact: Clarity-linux-arm64, package: Clarity-linux-arm64.deb, runner: ubuntu-24.04-arm, image: "debian:trixie" }
+          - { artifact: Clarity-fedora43-amd64, package: Clarity-fedora43-amd64.rpm, runner: ubuntu-24.04, image: "fedora:43" }
+          - { artifact: Clarity-fedora44-amd64, package: Clarity-fedora44-amd64.rpm, runner: ubuntu-24.04, image: "fedora:44" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the package
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ matrix.artifact }}
+          path: out
+
+      - name: Install in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -w /src/out \
+            ${{ matrix.image }} bash /src/.github/scripts/install-test.sh ${{ matrix.package }}
+
+  # ───────────────────────────────────────────────────────────────
+  # Aggregate every build's artifacts into one GitHub Release.
+  # Only on a real tag push; workflow_dispatch just exercises builds.
+  # ───────────────────────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: [windows, install]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*
+
+      - name: Flatten artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find artifacts -maxdepth 8 -type f -exec cp -v "{}" dist/ \;
+          echo "--- Release assets ---"
+          ls -la dist
+
+      - name: Generate SHA256 checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          rm -f Clarity-*-SHA256SUMS.txt
+          sha256sum * | sort > "Clarity-${{ github.ref_name }}-SHA256SUMS.txt"
+          cat "Clarity-${{ github.ref_name }}-SHA256SUMS.txt"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Clarity ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: dist/*

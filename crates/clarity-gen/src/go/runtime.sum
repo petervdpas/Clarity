@@ -4,3 +4,5 @@
 # pushed (runtimes/go/vX.Y.Z), by
 #   CLARITY_RECORD_GO_SUMS=1 cargo test -p clarity-gen --test go_build -- --ignored --exact the_published_runtime_sums_are_recorded
 # Lines that are no sum (like these) are skipped.
+github.com/petervdpas/Clarity/runtimes/go v0.1.0 h1:ZBuxFjRVMASA6GoiKI9w4ciYJVcU2HRuI6sPD9cfq/Y=
+github.com/petervdpas/Clarity/runtimes/go v0.1.0/go.mod h1:fz8xf5HHf9XZtUrmsi/TKW/ATPY642iPLmsSueWNBqA=

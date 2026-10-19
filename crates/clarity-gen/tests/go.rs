@@ -87,11 +87,22 @@ fn has(text: &str, expected: &str) {
     assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
 }
 
+/// The runtime module's path and version, as runtimes/go names them.
+const RUNTIME: &str = "github.com/petervdpas/Clarity/runtimes/go";
+
+fn runtime_version() -> &'static str {
+    let source = include_str!("../../../runtimes/go/clarity/version.go");
+    let start = source.find("const Version = \"").unwrap() + "const Version = \"".len();
+    &source[start..start + source[start..].find('"').unwrap()]
+}
+
 #[test]
-fn writes_a_go_module_with_the_runtime_copied_in() {
+fn writes_a_go_module_on_the_runtime_module() {
     let files = files();
     let module = file(&files, "go.mod");
     has(module, "module shop\n");
+    // The runtime, at the version this generator is made with.
+    has(module, &format!("\t{RUNTIME} {}\n", runtime_version()));
     // The runtime's requirements, at the versions it is tested with.
     let runtime = include_str!("../../../runtimes/go/go.mod");
     let sqlite = runtime.lines().find(|l| l.contains("modernc.org/sqlite")).unwrap().trim();
@@ -100,58 +111,59 @@ fn writes_a_go_module_with_the_runtime_copied_in() {
     let sums = include_str!("../../../runtimes/go/go.sum");
     assert!(file(&files, "go.sum").lines().all(|l| sums.lines().any(|s| s == l)));
     has(file(&files, "go.sum"), "modernc.org/sqlite v1.54.0 h1:");
-    assert_eq!(file(&files, "clarity/db.go"), include_str!("../../../runtimes/go/clarity/db.go"));
-    // The runtime's own tests stay behind.
-    assert!(!files.iter().any(|f| f.path.ends_with("_test.go")));
+    // The code imports the runtime's packages from the module.
+    has(file(&files, "sales_module.go"), &format!("\t\"{RUNTIME}/clarity\"\n"));
     assert!(files.iter().any(|f| f.path == "README.md"));
 }
 
-/// A runtime file added later must reach generated modules too.
+/// The program builds on the runtime module and carries no copy of it.
 #[test]
-fn every_go_runtime_source_file_is_copied() {
+fn no_runtime_source_is_copied() {
     let files = files();
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go/clarity");
-    for entry in std::fs::read_dir(root).unwrap() {
-        let name = entry.unwrap().file_name().to_string_lossy().to_string();
-        // A server driver goes only where a data source uses it (tested below).
-        let driver = ["server.go", "postgres.go", "mysql.go", "mssql.go"].contains(&name.as_str());
-        if name.ends_with(".go") && !name.ends_with("_test.go") && !driver {
-            assert!(files.iter().any(|f| f.path == format!("clarity/{name}")), "{name} is not copied");
-        }
-    }
+    let copied: Vec<&str> = files.iter().map(|f| f.path.as_str()).filter(|p| p.starts_with("clarity/") || p.starts_with("shell/") || p.ends_with("_test.go")).collect();
+    assert!(copied.is_empty(), "{copied:?}");
 }
 
-/// A module holds the drivers of the databases its data sources are, with
-/// the modules they need, and no others (as the C# output picks packages).
+/// While working on the runtime, a go.work next to the module builds it on
+/// the runtime in this repository; Clarity keeps that file when it writes
+/// the module again.
+#[test]
+fn a_workspace_file_survives_writing_the_module_again() {
+    let kept = clarity_gen::build_output(clarity_project::Backend::Go);
+    assert!(kept.contains(&"go.work") && kept.contains(&"go.work.sum"), "{kept:?}");
+}
+
+/// A module imports the package of each server database its data sources
+/// are, which turns the driver on, with the modules it needs, and no others
+/// (as the C# output picks packages).
 #[test]
 fn a_module_gets_the_drivers_of_its_databases_only() {
     let project = load_sources([("sales.clarity", SALES)]);
     let drivers = [
-        (SourceKind::Postgres, "clarity/postgres.go", "github.com/jackc/pgx/v5 "),
-        (SourceKind::Mysql, "clarity/mysql.go", "github.com/go-sql-driver/mysql "),
-        (SourceKind::Mssql, "clarity/mssql.go", "github.com/microsoft/go-mssqldb "),
+        (SourceKind::Postgres, "postgresql", "github.com/jackc/pgx/v5 "),
+        (SourceKind::Mysql, "mysql", "github.com/go-sql-driver/mysql "),
+        (SourceKind::Mssql, "sqlserver", "github.com/microsoft/go-mssqldb "),
     ];
+    let import = |package: &str| format!("\t_ \"{RUNTIME}/{package}\"\n");
     let plain = generate(&project, &settings()).unwrap();
-    assert!(!plain.iter().any(|f| f.path == "clarity/server.go"));
-    for (_, path, module) in drivers {
-        assert!(!plain.iter().any(|f| f.path == path), "{path}");
+    for (_, package, module) in drivers {
+        assert!(!file(&plain, "main.go").contains(&import(package)), "{package}");
         assert!(!file(&plain, "go.mod").contains(module), "{module}");
         assert!(!file(&plain, "go.sum").contains(module), "{module}");
     }
     // Shared with the SQLite driver and Wails, so it stays.
     has(file(&plain, "go.mod"), "golang.org/x/crypto ");
 
-    for (kind, path, module) in drivers {
+    for (kind, package, module) in drivers {
         let mut settings = settings();
         settings.datasources[0].kind = kind;
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = generate(&project, &settings).unwrap();
-        assert!(files.iter().any(|f| f.path == "clarity/server.go"));
-        assert!(files.iter().any(|f| f.path == path), "{path}");
+        has(file(&files, "main.go"), &import(package));
         has(file(&files, "go.mod"), module);
         has(file(&files, "go.sum"), module);
-        for (_, other, other_module) in drivers.iter().filter(|d| d.1 != path) {
-            assert!(!files.iter().any(|f| f.path == *other), "{other}");
+        for (_, other, other_module) in drivers.iter().filter(|d| d.1 != package) {
+            assert!(!file(&files, "main.go").contains(&import(other)), "{other}");
             assert!(!file(&files, "go.mod").contains(other_module), "{other_module}");
         }
     }
@@ -365,7 +377,7 @@ fn windows() -> Vec<OutFile> {
 #[test]
 fn a_wails_application_with_the_web_renderer() {
     let files = windows();
-    for path in ["ui/index.html", "ui/runtime.js", "ui/runtime.css", "ui/themes/clarity.css", "model.json", "shell/shell.go", "clarity/ui.go"] {
+    for path in ["ui/index.html", "ui/runtime.js", "ui/runtime.css", "ui/themes/clarity.css", "model.json"] {
         assert!(files.iter().any(|f| f.path == path), "no {path}");
     }
     has(file(&files, "go.mod"), "github.com/wailsapp/wails/v3 v3.0.0-alpha.84");
@@ -410,7 +422,7 @@ fn handlers_are_methods_of_their_window() {
     has(shop, "\tv1, err := clarity.Find[Order](db, clarity.Query{}.Filter(clarity.Contains(\"number\", ui.Text(\"number_filter\"))).Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n");
     has(shop, "\tv1, err := clarity.Selected(ui, \"grid\", w.Orders)\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Order = v1\n");
     has(shop, "\tui.Open(\"OrderForm\", map[string]any{\"order\": v1})\n\tui.Close()\n");
-    has(shop, "\tw.Orders = v1\n\tif w.Order.ID != 0 {\n\t\tv2, err := clarity.Get[Order](db, w.Order.ID)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tw.Order = &v2\n\t}\n");
+    has(shop, "\tw.Orders = v1\n\tui.Deselect(\"grid\")\n\tif w.Order.ID != 0 {\n\t\tv2, err := clarity.Get[Order](db, w.Order.ID)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tw.Order = &v2\n\t}\n");
     has(shop, "\tui.SetReadonly(\"number_input\", w.Order.Paid)\n");
 }
 
@@ -456,7 +468,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
     has(erp_go, "clarity.Contains(\"InvNo\", \"INV\")");
     has(erp_go, ".Order(\"InvNo\", false)");
     // Its database's driver comes along, though Clarity owns no table there.
-    assert!(files.iter().any(|f| f.path == "clarity/mssql.go"));
+    has(file(&files, "main.go"), &format!("\t_ \"{RUNTIME}/sqlserver\"\n"));
 }
 
 /// X2: a query through a reference: the condition and the order read the
@@ -470,4 +482,15 @@ fn a_query_goes_through_a_reference() {
     let sales = file(&files, "sales_module.go");
     has(sales, ".Filter(clarity.And(clarity.Through(\"customer\", \"customer\", \"id\", clarity.Contains(\"name\", name)), clarity.Through(\"customer\", \"customer\", \"id\", clarity.Number(\"credit_limit\", clarity.Gt, ");
     has(sales, ".OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"name\", true, false).OrderThrough([]clarity.Hop{{Column: \"customer\", Table: \"customer\", Key: \"id\"}}, \"credit_limit\", false, true)");
+}
+
+/// Rows read again, or replaced by a query, are other records: a table or
+/// list showing them loses its selected row, as on every stack.
+#[test]
+fn rows_read_again_lose_their_selected_row() {
+    let files = windows();
+    let shop = file(&files, "shop_module.go");
+    has(shop, ".Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n\tui.Deselect(\"grid\")\n");
+    has(shop, "\tw.Orders = v1\n\tui.Deselect(\"grid\")\n\tif w.Order.ID != 0 {");
+    assert_eq!(shop.matches("ui.Deselect(").count(), 2, "{shop}");
 }

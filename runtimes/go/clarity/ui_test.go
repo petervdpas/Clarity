@@ -9,6 +9,17 @@ import (
 	"testing"
 )
 
+// An order as a window holds it.
+type order struct {
+	ID       int64
+	Number   string
+	Customer *int64
+	Total    int64
+	Placed   *DateTime
+	Paid     bool
+	Code     string
+}
+
 type cardWindow struct {
 	Order  *order  `json:"order"`
 	Orders []order `json:"orders"`
@@ -68,4 +79,19 @@ func TestAWindowOpensWithItsDataAndWith(t *testing.T) {
 	if _, err := Opened("Card", &cardWindow{}, map[string]any{"order": "not an order"}); err == nil {
 		t.Fatal("an order that is text was taken")
 	}
+}
+
+func TestRowsReadAgainHaveNoSelectedRow(t *testing.T) {
+	ui := NewUi(WindowState{Window: "Orders", Selected: map[string]int{"grid": 1, "other": 0}})
+	rows := []string{"a", "b"}
+	ui.Deselect("grid")
+	if _, err := Selected(ui, "grid", rows); err == nil {
+		t.Fatal("a table read again kept its selected row")
+	}
+	reply, err := ui.Reply("Orders", map[string]any{})
+	must(t, err)
+	if _, ok := reply.State.Selected["grid"]; ok {
+		t.Fatal("the reply kept the selected row")
+	}
+	equal(t, reply.State.Selected["other"], 0)
 }

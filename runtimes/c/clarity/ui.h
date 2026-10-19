@@ -93,6 +93,10 @@ void clarity_ui_set_checked(ClarityUi* ui, const char* part, bool value);
 /// an invalid-value error when none is.
 bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, size_t* index);
 
+/// Forgets the selected row of a table or list, whose rows were read again
+/// or replaced: they are other records.
+void clarity_ui_deselect(ClarityUi* ui, const char* part);
+
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text);
 /// Asks the screen to open `window` with its data filled by name, as the values are now.
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with);

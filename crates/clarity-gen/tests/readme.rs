@@ -77,6 +77,9 @@ fn a_go_project_says_what_it_needs_and_how_to_build_it() {
     has(&text, "- Go, from https://go.dev/dl\n");
     has(&text, "    go build -tags production -trimpath -ldflags=\"-s -w\" -o bin/shop .\n");
     has(&text, "    go run .\n");
+    // The runtime comes as a Go module, or from Clarity's repository while working on it.
+    has(&text, &format!("Clarity's runtime comes as the Go module github.com/petervdpas/Clarity/runtimes/go ({})", clarity_gen::go_runtime_version()));
+    has(&text, "    go work init .\n    go work edit -replace github.com/petervdpas/Clarity/runtimes/go=<Clarity>/runtimes/go\n");
 }
 
 /// A file store says where its pictures are, and which variable names it.

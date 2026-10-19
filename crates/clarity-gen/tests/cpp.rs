@@ -47,6 +47,7 @@ page OrderForm: window
     data orders: list<Order>
     button \"Approve\" name approve_button at 1,1 span 2 on click: approve_clicked
     table name grid at 1,2 span 6 rows 4 bind orders columns number on open: open_clicked
+    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked
 
 code OrderForm
     handler approve_clicked
@@ -56,6 +57,9 @@ code OrderForm
 
     handler open_clicked
         open OrderForm with order = grid.selected
+
+    handler refresh_clicked
+        reload orders
 ";
 
 fn settings() -> Settings {
@@ -165,4 +169,14 @@ fn server_databases_come_later() {
     settings.datasources[0].kind = SourceKind::Postgres;
     settings.datasources[0].url = "env:SHOP_DATABASE".into();
     assert_eq!(generate(&project, &settings).unwrap_err(), ["data source 'main' is a PostgreSQL database; the C++ backend stores records in SQLite for now"]);
+}
+
+/// Rows read again are other records: a table or list showing them loses its
+/// selected row, as on every stack.
+#[test]
+fn rows_read_again_lose_their_selected_row() {
+    let files = files();
+    let code: String = files.iter().filter(|f| f.path.starts_with("src/")).map(|f| f.text.as_str()).collect();
+    has(&code, "ui.deselect(\"grid\");");
+    assert_eq!(code.matches("deselect").count(), 1, "{code}");
 }

@@ -50,6 +50,16 @@ TEST(a_handler_replies_as_the_other_runtimes_do) {
     CHECK_EQ(json(WindowState{"Card"}).dump(), R"({"data":{},"parts":{},"selected":{},"window":"Card"})");
 }
 
+TEST(rows_read_again_have_no_selected_row) {
+    WindowState state = json::parse(R"({"window":"Orders","data":{},"parts":{},"selected":{"grid":1,"other":0}})").get<WindowState>();
+    Ui ui(state);
+    std::vector<Order> orders{{1, "A"}, {2, "B"}};
+    ui.deselect("grid");
+    CHECK_THROWS(InvalidError, ui.selected("grid", orders));
+    CHECK_EQ(ui.selected("other", orders).number, "A");
+    CHECK_EQ(json(ui.reply("Orders", json::object()).state.selected), json::parse(R"({"other":0})"));
+}
+
 TEST(a_window_opens_with_its_data_and_with) {
     WindowState state = opened("Card", {{"order", Order{0, "new"}}}, {{"order", {{"id", 7}, {"number", "ORD-7"}}}});
     CHECK_EQ(state.data["order"].get<Order>().number, "ORD-7");

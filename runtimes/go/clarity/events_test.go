@@ -1,7 +1,7 @@
 // Data events: a record whose entity has them runs them around its save and
 // delete, in one transaction with them, as on the other stacks.
 
-package clarity
+package clarity_test
 
 import (
 	"encoding/json"
@@ -12,6 +12,12 @@ import (
 	"testing"
 
 	"github.com/shopspring/decimal"
+
+	. "github.com/petervdpas/Clarity/runtimes/go/clarity"
+	// The server databases, turned on as an application turns them on.
+	_ "github.com/petervdpas/Clarity/runtimes/go/mysql"
+	_ "github.com/petervdpas/Clarity/runtimes/go/postgresql"
+	_ "github.com/petervdpas/Clarity/runtimes/go/sqlserver"
 )
 
 // logLine is what the events of an account wrote, in order.

@@ -389,6 +389,12 @@ impl Ui {
         self.parts.entry(part.to_string()).or_default().checked = Some(value);
     }
 
+    /// Forgets the selected row of a table or list, whose rows were read
+    /// again or replaced: they are other records.
+    pub fn deselect(&mut self, part: &str) {
+        self.selected.remove(part);
+    }
+
     /// The selected record of a table or list showing `rows`.
     pub fn selected<R: Clone>(&self, part: &str, rows: &[R]) -> Result<R> {
         self.selected
@@ -505,5 +511,19 @@ mod tests {
         let reply = ui.reply("Card", Map::new());
         let json = serde_json::to_value(&reply.state.parts["name"]).unwrap();
         assert_eq!(json, serde_json::json!({ "error": "Name is required", "readonly": false }));
+    }
+
+    #[test]
+    fn rows_read_again_have_no_selected_row() {
+        let mut state = WindowState::new("Orders", Map::new());
+        state.selected.insert("grid".into(), 1);
+        state.selected.insert("other".into(), 0);
+        let mut ui = Ui::from_state(&state);
+        assert_eq!(ui.selected("grid", &["a", "b"]).unwrap(), "b");
+        ui.deselect("grid");
+        assert!(ui.selected("grid", &["a", "b"]).is_err());
+        let reply = ui.reply("Orders", Map::new());
+        assert!(!reply.state.selected.contains_key("grid"));
+        assert_eq!(reply.state.selected.get("other"), Some(&0));
     }
 }

@@ -61,5 +61,12 @@ func open(dialect Dialect, at string) (driver, error) {
 	return nil, &StorageError{What: "this application was built without " + dialect.Label()}
 }
 
-// servers are the server drivers this build has, by dialect.
+// servers are the server drivers this build has, by dialect: those whose
+// package the application imports (UseServer).
 var servers = map[Dialect]func(location string) (driver, error){}
+
+// HasServer tells whether the server database's package is imported.
+func HasServer(dialect Dialect) bool {
+	_, ok := servers[dialect]
+	return ok
+}

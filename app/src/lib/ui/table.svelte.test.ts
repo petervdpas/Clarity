@@ -19,6 +19,7 @@ type Case = {
     marked?: [number, string][];
     shown?: [number, string, string][];
     choices?: Record<string, string[]>;
+    chosen?: number | null;
   };
 };
 
@@ -125,6 +126,7 @@ for (const c of cases.cases as Case[]) {
         case "handler":
           state.rows[row][field] = args[2];
           break;
+        // As every web backend does: rows read again lose their selected row.
         case "reload":
           state.rows = fresh();
           state.selected = null;
@@ -144,6 +146,10 @@ for (const c of cases.cases as Case[]) {
       const td = cell(row, field);
       const input = td.classList.contains("edit") ? textOf(row, field) : null;
       expect(input ? input.value : td.textContent?.trim(), `${field} of row ${row} shows`).toBe(text);
+    }
+    if (c.expect.chosen !== undefined) {
+      const rows = [...target.querySelectorAll("tbody tr")];
+      expect(rows.findIndex((tr) => tr.classList.contains("chosen")), "row chosen").toBe(c.expect.chosen ?? -1);
     }
     for (const [field, labels] of Object.entries(c.expect.choices ?? {})) {
       expect([...cell(0, field).querySelectorAll("option")].map((o) => o.text), `choices of ${field}`).toEqual(labels);

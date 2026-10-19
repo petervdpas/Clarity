@@ -17,6 +17,7 @@ mod schema;
 mod web;
 
 pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
+pub use go::runtime_version as go_runtime_version;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 
@@ -76,6 +77,35 @@ fn check_stores(project: &Project, settings: &Settings) -> Result<(), Vec<String
         })
         .collect();
     if missing.is_empty() { Ok(()) } else { Err(missing) }
+}
+
+/// The named tables and lists of a page that show the rows of its data, by
+/// the data's name. When a handler replaces those rows (`reload`, or a new
+/// list), they are other records, so these parts lose their selected row: on
+/// the web stacks through the runtime's `deselect`, on Avalonia because the
+/// table is given new rows.
+pub(crate) fn rows_shown(page: Option<&clarity_spec::model::Page>) -> std::collections::BTreeMap<String, Vec<String>> {
+    use clarity_spec::model::Widget;
+    use clarity_spec::widgets::WidgetKind;
+    fn walk(widgets: &[Widget], out: &mut std::collections::BTreeMap<String, Vec<String>>) {
+        for widget in widgets {
+            let p = &widget.props;
+            if let (WidgetKind::Table | WidgetKind::List, Some(name), Some(bind)) = (p.kind, &p.name, &p.bind)
+                && !bind.contains('.')
+            {
+                out.entry(bind.clone()).or_default().push(name.clone());
+            }
+            walk(&widget.children, out);
+            for page in &widget.pages {
+                walk(&page.children, out);
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    if let Some(page) = page {
+        walk(&page.widgets, &mut out);
+    }
+    out
 }
 
 /// The image fields of every entity, with the column and store of each.
@@ -270,8 +300,9 @@ pub fn build_output(backend: Backend) -> &'static [&'static str] {
         Backend::Rust => &["target", "data", "gen", "Cargo.lock"],
         // dotnet's `bin` and `obj`.
         Backend::Csharp => &["bin", "obj", "data"],
-        // go build's program.
-        Backend::Go => &["bin", "data"],
+        // go build's program, and a workspace that builds the module on the
+        // runtime in Clarity's repository while working on it.
+        Backend::Go => &["bin", "data", "go.work", "go.work.sum"],
         // CMake's builds.
         Backend::C | Backend::Cpp => &["build", "data"],
     }

@@ -97,5 +97,4 @@ fn go_reaches_the_files_of_a_store() {
     has(code, "db.PictureFrom(f, \"\")");
     has(code, "db.ReadText(n)");
     has(code, "db.WriteText(\"photos\", \"exports/titles.txt\", lines)");
-    assert!(files.iter().any(|f| f.path == "clarity/files.go"));
 }

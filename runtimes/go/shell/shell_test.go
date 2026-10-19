@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"clarity-runtime/clarity"
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
 
 // cards is a project with one window, Card, whose open event and save

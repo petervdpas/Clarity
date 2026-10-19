@@ -17,7 +17,7 @@ import (
 	"runtime"
 	"sync"
 
-	"clarity-runtime/clarity"
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"

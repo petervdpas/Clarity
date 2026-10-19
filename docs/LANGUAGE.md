@@ -873,7 +873,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions, data events |
 | `delete expr` | Removes a record from its data source. | handlers, actions, data events |
 | `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
-| `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). | handlers |
+| `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). A table or list showing a list read again has no row selected afterwards, as when the list is given new rows (`orders = find ...`): they are other records. | handlers |
 | `write expr to store "path"` | Writes text as a file of a file store, at a path inside it, making its folders. See [Files](#files). | handlers, actions with `files.write` |
 
 ### Expressions

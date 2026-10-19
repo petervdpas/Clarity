@@ -48,6 +48,22 @@ void a_handler_replies_as_the_other_runtimes_do(void) {
     CHECK_JSON(clarity_window_state_json(&fresh), "{\"data\":{},\"parts\":{},\"selected\":{},\"window\":\"Card\"}");
 }
 
+void rows_read_again_have_no_selected_row(void) {
+    ClarityWindowState state;
+    REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Orders\",\"data\":{},\"parts\":{},\"selected\":{\"grid\":1,\"other\":0}}"), &state));
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_deselect(ui, "grid");
+    size_t row;
+    CHECK_FAILS(CLARITY_INVALID, clarity_ui_selected(ui, "grid", 2, &row));
+    CHECK_OK(clarity_ui_selected(ui, "other", 2, &row));
+    CHECK_INT(row, 0);
+    CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(ui, "Orders", cJSON_CreateObject())->state),
+               "{\"window\":\"Orders\",\"data\":{},\"parts\":{},\"selected\":{\"other\":0}}");
+    // The handler worked on a copy: the state it came from keeps its rows.
+    CHECK_INT(state.selected_count, 2);
+    CHECK_TEXT(state.selected[0].name, "grid");
+}
+
 void a_window_opens_with_its_data_and_with(void) {
     ClarityWindowState* state =
         clarity_opened("Card", cJSON_Parse("{\"order\":{\"id\":0,\"number\":\"new\"},\"note\":\"\"}"), cJSON_Parse("{\"order\":{\"id\":7,\"number\":\"ORD-7\"}}"));

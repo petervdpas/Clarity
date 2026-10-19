@@ -141,6 +141,8 @@ pub struct WindowCtx {
     pub parts: HashMap<String, PartInfo>,
     /// The window's data: name, entity and whether it is a list.
     pub data: Vec<(String, String, bool)>,
+    /// The named tables and lists showing each list data (`crate::rows_shown`).
+    pub showing: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl WindowCtx {
@@ -222,6 +224,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
         ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
+        ctx.showing = crate::rows_shown(page);
 
         let mut fields = String::new();
         let mut load = String::new();
@@ -374,6 +377,9 @@ impl<'a> Emitter<'a> {
                 }
                 let (place, code) = (self.place(target), self.value(value));
                 let _ = writeln!(out, "{place} = {code};");
+                if let ExprKind::Name { name } = &target.kind {
+                    out.push_str(&self.deselect(name));
+                }
             }
             StmtKind::If { branches, otherwise } => {
                 for (i, branch) in branches.iter().enumerate() {
@@ -449,6 +455,7 @@ impl<'a> Emitter<'a> {
                 match found {
                     Some((name, entity, true)) => {
                         let _ = writeln!(out, "{} = db.all<{entity}>();", ident(&name));
+                        out.push_str(&self.deselect(&name));
                     }
                     Some((name, entity, false)) => {
                         let member = ident(&name);
@@ -538,6 +545,13 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a place: what can be assigned or read in place.
+    /// After a handler replaced the rows of `data` (`reload`, or a new
+    /// list): the tables and lists showing them lose their selected row.
+    fn deselect(&self, data: &str) -> String {
+        let parts = self.window.and_then(|w| w.showing.get(data)).into_iter().flatten();
+        parts.map(|part| format!("ui.deselect({});\n", string(part))).collect()
+    }
+
     fn place(&mut self, expr: &Expr) -> String {
         if self.part_property(expr).is_some() {
             return self.read_part(expr);

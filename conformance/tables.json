@@ -1,5 +1,5 @@
 {
-  "about": "How a table with edited columns behaves (LANGUAGE.md, Editing in a table), the same on every renderer: the web's Svelte part and the Avalonia control are both run through these cases. The table shows rows of a task; its columns are one of each kind of cell. Steps are what the person does (click a row, tick a checkbox or switch, pick a choice or a day, type into a text, number or time field, press Enter, leave the field) or what the code does (a handler sets a value, the data is read again). type puts the text in the field without taking it yet; enter and leave take it. In a moment column, type is the time (hh:mm) and pickDay the day. Expected: the events in order ('select 1' when another row is chosen, 'change 1' after row 1 was edited), every value changed (all others stay as they were), the fields marked as holding text that is no value, the text a field shows, and the choices of a column by their labels. Numbers, days and moments are written as the backends send them: decimals as text, days as 2026-10-20, moments as 2026-10-20T14:05:00. The person's locale is en-US.",
+  "about": "How a table with edited columns behaves (LANGUAGE.md, Editing in a table), the same on every renderer: the web's Svelte part and the Avalonia control are both run through these cases. The table shows rows of a task; its columns are one of each kind of cell. Steps are what the person does (click a row, tick a checkbox or switch, pick a choice or a day, type into a text, number or time field, press Enter, leave the field) or what the code does (a handler sets a value, the data is read again). type puts the text in the field without taking it yet; enter and leave take it. In a moment column, type is the time (hh:mm) and pickDay the day. Expected: the events in order ('select 1' when another row is chosen, 'change 1' after row 1 was edited), every value changed (all others stay as they were), the fields marked as holding text that is no value, the text a field shows, the choices of a column by their labels, and the row chosen (null: none). Rows read again are other records: no row is chosen after them, on the web because the backend forgets it, on Avalonia because the table gets new rows. Numbers, days and moments are written as the backends send them: decimals as text, days as 2026-10-20, moments as 2026-10-20T14:05:00. The person's locale is en-US.",
   "columns": [
     { "field": "title", "label": "Task", "kind": "text", "edit": true },
     { "field": "done", "label": "Done", "kind": "bool", "edit": true },
@@ -45,6 +45,16 @@
       "name": "what a handler changes is no edit",
       "steps": [["handler", 0, "done", true], ["handler", 1, "title", "Rye bread"]],
       "expect": { "events": [], "values": [[0, "done", true], [1, "title", "Rye bread"]] }
+    },
+    {
+      "name": "rows read again have no row chosen",
+      "steps": [["click", 0], ["reload"]],
+      "expect": { "events": ["select 0"], "chosen": null }
+    },
+    {
+      "name": "choosing the same row after the rows were read again is a select",
+      "steps": [["click", 0], ["reload"], ["click", 0]],
+      "expect": { "events": ["select 0", "select 0"], "chosen": 0 }
     },
     {
       "name": "rows read again are edited like the first ones",

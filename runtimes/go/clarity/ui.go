@@ -201,6 +201,10 @@ func Selected[T any](u *Ui, part string, rows []T) (*T, error) {
 	return &row, nil
 }
 
+// Deselect forgets the selected row of a table or list, whose rows were
+// read again or replaced: they are other records.
+func (u *Ui) Deselect(part string) { delete(u.selected, part) }
+
 func (u *Ui) Message(level Level, text Text) { u.messages = append(u.messages, Message{level, text}) }
 
 // Open asks the screen to open window with its data filled by name, as the

@@ -20,6 +20,9 @@ ClarityUi* clarity_ui(const ClarityWindowState* state) {
     ui->state.parts = CLARITY_NEW(ClarityPart, state->part_count);
     if (state->part_count) memcpy(ui->state.parts, state->parts, state->part_count * sizeof *state->parts);
     ui->part_room = state->part_count;
+    // So are the selected rows, which deselect removes.
+    ui->state.selected = CLARITY_NEW(ClaritySelected, state->selected_count);
+    if (state->selected_count) memcpy(ui->state.selected, state->selected, state->selected_count * sizeof *state->selected);
     return ui;
 }
 
@@ -112,6 +115,14 @@ bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, si
         }
     }
     return clarity_fail(CLARITY_INVALID, "no row of %s is selected", part);
+}
+
+void clarity_ui_deselect(ClarityUi* ui, const char* part) {
+    size_t kept = 0;
+    for (size_t i = 0; i < ui->state.selected_count; ++i) {
+        if (strcmp(ui->state.selected[i].name, part) != 0) ui->state.selected[kept++] = ui->state.selected[i];
+    }
+    ui->state.selected_count = kept;
 }
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text) {

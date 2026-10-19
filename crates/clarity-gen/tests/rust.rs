@@ -676,3 +676,15 @@ fn a_loop_changes_and_saves_its_records() {
     assert!(sales.contains("for order in found.iter_mut() {"), "{sales}");
     assert!(sales.contains("for order in found.iter() {"), "{sales}");
 }
+
+/// Rows read again, or replaced by a query, are other records: a table or
+/// list showing them loses its selected row, as on every stack.
+#[test]
+fn rows_read_again_lose_their_selected_row() {
+    let files = files();
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("    w.orders = db.all::<Order>()?;\n    ui.deselect(\"grid\");\n"), "{sales}");
+    assert!(sales.contains(".order(\"number\", false))?;\n    ui.deselect(\"grid\");\n"), "{sales}");
+    // A single record read again keeps what is chosen.
+    assert_eq!(sales.matches("ui.deselect(").count(), 2, "{sales}");
+}

@@ -4,8 +4,9 @@
 // of a save with its data events), values written as the drivers take
 // them, and a broken reference told apart from other failures. Each
 // database adds how it gives the new key, which error is a broken
-// reference, and how it runs a migration step. A generated application
-// keeps the files of the databases it uses; each one adds itself to servers.
+// reference, and how it runs a migration step. Each database is a package of
+// its own (postgresql, mysql, sqlserver), which turns itself on with
+// UseServer when the application imports it.
 
 package clarity
 
@@ -36,6 +37,41 @@ type serverDriver struct {
 	// undoes is whether the database can undo changes to tables, so a
 	// migration step runs in one transaction.
 	undoes bool
+}
+
+// Server is a server database as its package opens it: the database/sql
+// handle, and what differs between databases.
+type Server struct {
+	DB *sql.DB
+	// IsReference tells whether an error means a record refers to one that
+	// is not there, or is referred to.
+	IsReference func(error) bool
+	// Value is a date, a date and time or another value as the database's
+	// driver takes it; AsTime suits most.
+	Value func(any) any
+	// Returning is whether the INSERT gives the new key back as a row.
+	Returning bool
+	// Undoes is whether the database can undo changes to tables, so a
+	// migration step runs in one transaction.
+	Undoes bool
+}
+
+// UseServer turns a server database on: its package calls it when it is
+// imported. open makes the database/sql handle from the location, as the
+// project file writes it.
+func UseServer(dialect Dialect, open func(location string) (Server, error)) {
+	servers[dialect] = func(location string) (driver, error) {
+		s, err := open(location)
+		if err != nil {
+			return nil, &StorageError{What: fmt.Sprintf("cannot connect to %s: %v", dialect.Label(), err), Err: err}
+		}
+		d, err := connect(dialect, s.DB)
+		if err != nil {
+			return nil, err
+		}
+		d.isReference, d.value, d.returning, d.undoes = s.IsReference, s.Value, s.Returning, s.Undoes
+		return d, nil
+	}
 }
 
 // connect opens the one connection of a server database.
@@ -85,8 +121,8 @@ func (d *serverDriver) serverValue(value any) any {
 	return value
 }
 
-// asTime is a date or a date and time as a time in UTC, as most drivers take it.
-func asTime(value any) any {
+// AsTime is a date or a date and time as a time in UTC, as most drivers take it.
+func AsTime(value any) any {
 	switch v := value.(type) {
 	case Date:
 		return time.Date(v.Year, v.Month, v.Day, 0, 0, 0, 0, time.UTC)

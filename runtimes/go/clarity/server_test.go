@@ -1,5 +1,5 @@
 // The generated migration steps (conformance/migrations.json) applied by the
-// Go runtime, with records stored between the steps: the same scenario as
+// Go runtime with its server packages imported, as an application does, with records stored between the steps: the same scenario as
 // the Rust and C# runtimes' server tests. It runs on SQLite always, and on
 // a server database when its variable says where one is to spare:
 //
@@ -7,7 +7,7 @@
 //	CLARITY_TEST_MYSQL="mysql://root:...@localhost:3306/scratch"
 //	CLARITY_TEST_MSSQL="server=tcp:localhost,1433;database=scratch;user=sa;password=...;TrustServerCertificate=true"
 
-package clarity
+package clarity_test
 
 import (
 	"encoding/json"
@@ -18,6 +18,12 @@ import (
 	"testing"
 
 	"github.com/shopspring/decimal"
+
+	. "github.com/petervdpas/Clarity/runtimes/go/clarity"
+	// The server databases, turned on as an application turns them on.
+	_ "github.com/petervdpas/Clarity/runtimes/go/mysql"
+	_ "github.com/petervdpas/Clarity/runtimes/go/postgresql"
+	_ "github.com/petervdpas/Clarity/runtimes/go/sqlserver"
 )
 
 // A customer as the first step stores it.
@@ -334,7 +340,7 @@ func TestTheServerScenarioOnMssql(t *testing.T) {
 // Every server driver is in the runtime; an application keeps the ones it uses.
 func TestEveryServerHasADriver(t *testing.T) {
 	for _, d := range []Dialect{Postgres, Mysql, Mssql} {
-		if _, ok := servers[d]; !ok {
+		if !HasServer(d) {
 			t.Errorf("no driver for %s", d.Label())
 		}
 	}

@@ -55,6 +55,13 @@ pub fn readme(settings: &Settings) -> String {
             crate::csharp::runtime_version()
         ));
     }
+    if backend == Backend::Go {
+        out.push_str(&format!(
+            "\nClarity's runtime comes as the Go module {module} ({}), with a package for each server database the project uses, which the first build fetches. To build on the runtime in Clarity's repository instead, while working on it, make a workspace next to this module:\n\n    go work init .\n    go work edit -replace {module}=<Clarity>/runtimes/go\n\nClarity keeps go.work when it writes the module again; remove it to build on the published module.\n",
+            crate::go::runtime_version(),
+            module = crate::go::RUNTIME_MODULE,
+        ));
+    }
 
     let (build, run) = commands(settings);
     if !build.is_empty() {

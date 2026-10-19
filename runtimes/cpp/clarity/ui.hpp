@@ -93,6 +93,10 @@ public:
     bool checked(const std::string& part) const;
     void set_checked(const std::string& part, bool value) { parts_[part].checked = value; }
 
+    /// Forgets the selected row of a table or list, whose rows were read
+    /// again or replaced: they are other records.
+    void deselect(const std::string& part) { selected_.erase(part); }
+
     /// The selected record of a table or list showing `rows`, as a copy to work on.
     template <typename R>
     R selected(const std::string& part, const std::vector<R>& rows) const {

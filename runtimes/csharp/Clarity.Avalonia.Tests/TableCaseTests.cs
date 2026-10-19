@@ -236,6 +236,11 @@ public class TableCaseTests
                     : cell.GetSelfAndVisualDescendants().OfType<TextBox>().FirstOrDefault()?.Text ?? cell.GetSelfAndVisualDescendants().OfType<TextBlock>().First().Text;
                 Assert.True(s[2].GetString() == (text ?? ""), $"{name}: {field} of row {row} shows '{text}'");
             }
+        if (expect.TryGetProperty("chosen", out var chosen))
+        {
+            var wanted = chosen.ValueKind == JsonValueKind.Null ? null : rows[chosen.GetInt32()];
+            Assert.True(ReferenceEquals(wanted, table.SelectedItem), $"{name}: row {Array.IndexOf(rows, table.SelectedItem)} is chosen");
+        }
         if (expect.TryGetProperty("choices", out var expectedChoices))
             foreach (var field in expectedChoices.EnumerateObject())
             {

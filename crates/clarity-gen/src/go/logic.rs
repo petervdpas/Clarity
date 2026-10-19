@@ -140,6 +140,8 @@ pub struct WindowCtx {
     pub parts: HashMap<String, PartInfo>,
     /// The window's data: name, entity and whether it is a list.
     pub data: Vec<(String, String, bool)>,
+    /// The named tables and lists showing each list data (`crate::rows_shown`).
+    pub showing: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl WindowCtx {
@@ -220,6 +222,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             events.extend(app.handlers.iter().map(|h| (h.event.keyword(), h.handler.clone())));
         }
         ctx.data = data.iter().map(|d| (d.name.name.clone(), d.entity.name.clone(), d.list)).collect();
+        ctx.showing = crate::rows_shown(page);
 
         let rows: Vec<Vec<String>> = data
             .iter()
@@ -465,6 +468,9 @@ impl<'a> Emitter<'a> {
                 let place = self.place(target, &mut pre);
                 out.push_str(&pre);
                 out.push_str(&format!("{place} = {}\n", bare(code)));
+                if let ExprKind::Name { name } = &target.kind {
+                    out.push_str(&self.deselect(name));
+                }
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
             StmtKind::Write { text, store, path } => {
@@ -551,6 +557,7 @@ impl<'a> Emitter<'a> {
                         let all = self.lift(format!("clarity.All[{entity}](db)"), &mut pre);
                         out.push_str(&pre);
                         out.push_str(&format!("w.{} = {all}\n", pascal(&name)));
+                        out.push_str(&self.deselect(&name));
                     }
                     Some((name, entity, false)) => {
                         let field_name = format!("w.{}", pascal(&name));
@@ -709,6 +716,13 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a place: what can be assigned or read in place.
+    /// After a handler replaced the rows of `data` (`reload`, or a new
+    /// list): the tables and lists showing them lose their selected row.
+    fn deselect(&self, data: &str) -> String {
+        let parts = self.window.and_then(|w| w.showing.get(data)).into_iter().flatten();
+        parts.map(|part| format!("ui.Deselect({})\n", string(part))).collect()
+    }
+
     fn place(&mut self, expr: &Expr, pre: &mut String) -> String {
         if self.part_property(expr).is_some() {
             return self.read_part(expr, pre);

@@ -1,0 +1,6 @@
+# The sums of each published version of Clarity's Go runtime module
+# (github.com/petervdpas/Clarity/runtimes/go), which every generated go.sum
+# holds for the version it requires. Recorded after a version is tagged and
+# pushed (runtimes/go/vX.Y.Z), by
+#   CLARITY_RECORD_GO_SUMS=1 cargo test -p clarity-gen --test go_build -- --ignored --exact the_published_runtime_sums_are_recorded
+# Lines that are no sum (like these) are skipped.

@@ -1,0 +1,28 @@
+{
+  "about": "The display part (DESIGN 1.6): a number in seven-segment digits, as on a calculator. `shows` gives the text a value becomes in `digits` digits: rounded half away from zero to fit, without trailing zeros, E when its whole part does not fit. `cells` gives what each of the display's digits + 1 cells shows, from the left: a character (space when dark) and whether its decimal point is lit; the extra cell is for the minus sign. `segments` gives the lit segments of each character: a top, b top right, c bottom right, d bottom, e bottom left, f top left, g middle. The web renderer and Avalonia run these cases.",
+  "shows": [
+    { "value": "0", "digits": 12, "text": "0" },
+    { "value": "42", "digits": 12, "text": "42" },
+    { "value": "123.45", "digits": 12, "text": "123.45" },
+    { "value": "1.50", "digits": 12, "text": "1.5" },
+    { "value": "-2.5", "digits": 12, "text": "-2.5" },
+    { "value": "0.333333333333333333", "digits": 12, "text": "0.33333333333" },
+    { "value": "17.5714285714285714", "digits": 12, "text": "17.5714285714" },
+    { "value": "99.999", "digits": 4, "text": "100" },
+    { "value": "-0.0000000000001", "digits": 12, "text": "0" },
+    { "value": "1234567890123", "digits": 12, "text": "E" },
+    { "value": "999999999999.6", "digits": 12, "text": "E" },
+    { "value": "999999999999.4", "digits": 12, "text": "999999999999" },
+    { "value": "7", "digits": 1, "text": "7" }
+  ],
+  "cells": [
+    { "text": "-2.5", "digits": 4, "cells": [[" ", false], [" ", false], ["-", false], ["2", true], ["5", false]] },
+    { "text": "0", "digits": 3, "cells": [[" ", false], [" ", false], [" ", false], ["0", false]] },
+    { "text": "E", "digits": 2, "cells": [[" ", false], [" ", false], ["E", false]] }
+  ],
+  "segments": {
+    "0": "abcdef", "1": "bc", "2": "abdeg", "3": "abcdg", "4": "bcfg",
+    "5": "acdfg", "6": "acdefg", "7": "abc", "8": "abcdefg", "9": "abcdfg",
+    "-": "g", "E": "adefg", " ": ""
+  }
+}

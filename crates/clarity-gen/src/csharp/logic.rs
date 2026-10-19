@@ -323,6 +323,32 @@ impl<'a> Emitter<'a> {
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
+            // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                let record = match shape.name.as_str() {
+                    "clear" => "Clear",
+                    "line" => "Line",
+                    "rect" => "Rect",
+                    "circle" => "Circle",
+                    "ring" => "Ring",
+                    _ => "Words",
+                };
+                let mut values = Vec::new();
+                for (_, kind, given) in crate::shape_values(&shape.name, args) {
+                    values.push(match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => match self.types.type_of(arg) {
+                            TypeInfo::Decimal | TypeInfo::Money => format!("Numbers.Units({})", self.value(arg)),
+                            _ => format!("(double)({})", self.value(arg)),
+                        },
+                        (ShapeValue::Number, Err(default)) => default.to_string(),
+                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Text, Ok(arg)) => self.shown(arg),
+                    });
+                }
+                out.push_str(&format!("{pad}{}.Draw(new Shape.{record}({}));\n", member(&canvas.name), values.join(", ")));
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",
@@ -603,6 +629,17 @@ impl<'a> Emitter<'a> {
         }
         if name == NOW {
             return "Clock.Now()".into();
+        }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let value = args.first().map(|a| self.value(a)).unwrap_or_default();
+            let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };
+            return format!("Numbers.{function}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("Numbers.Round({})", values.join(", "));
         }
         if name == "count" {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();

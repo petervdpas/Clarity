@@ -49,6 +49,9 @@ public abstract class WindowViewModel(Db db) : ObservableObject
         try
         {
             handler();
+            // The canvases show what the handler left, drawn anew.
+            if (running == 1)
+                Redraw();
         }
         catch (RefusedException e)
         {
@@ -113,6 +116,13 @@ public abstract class WindowViewModel(Db db) : ObservableObject
 
     /// <summary>A window this one opened has closed: the place to reload a list.</summary>
     public void Returned() => Handle(OnReturn);
+
+    /// <summary>
+    /// Draws the window's canvases anew, each by its draw handler on an
+    /// empty drawing (conformance/drawing.json): after every handler, and
+    /// when the window opens.
+    /// </summary>
+    protected virtual void Redraw() { }
 
     protected virtual void OnOpen() { }
 

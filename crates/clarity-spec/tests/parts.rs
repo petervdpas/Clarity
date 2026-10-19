@@ -277,3 +277,20 @@ fn menu_items_and_buttons_take_the_same_keys() {
     assert!(errors(&menu("Ctrl+Shift+F2")).is_empty());
     assert_has(&errors(&menu("Hyper+S")), "'Hyper+S' is not a shortcut");
 }
+
+/// A calculator's keys: the operators, the decimal point and equals are keys
+/// too, alone or with modifiers (`Ctrl++`).
+#[test]
+fn operator_keys_are_keys() {
+    use clarity_spec::widgets::{check_shortcut, shortcut_keys};
+    for key in ["+", "-", "*", "/", ".", ",", "=", "Ctrl++", "Ctrl+-", "Shift+=", "7", "Ctrl+S"] {
+        assert_eq!(check_shortcut(key), Ok(()), "{key}");
+    }
+    for key in ["%", "++", "Ctrl+", "+Ctrl", "Ctrl+Ctrl+S"] {
+        assert!(check_shortcut(key).is_err(), "{key}");
+    }
+    // The modifiers and the key, as every renderer reads them.
+    assert_eq!(shortcut_keys("Ctrl++"), (vec!["Ctrl"], "+"));
+    assert_eq!(shortcut_keys("+"), (vec![], "+"));
+    assert_eq!(shortcut_keys("Ctrl+Shift+F2"), (vec!["Ctrl", "Shift"], "F2"));
+}

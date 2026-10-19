@@ -30,6 +30,15 @@ ClarityDecimal clarity_decimal_from_text(const char* text);
 const char* clarity_decimal_text(ClarityDecimal value);
 /// The value with `scale` decimals, rounded half away from zero.
 ClarityDecimal clarity_decimal_rescaled(ClarityDecimal value, int scale);
+/// `round(value, places)` in code: at most `places` decimals, rounded half
+/// away from zero; a value with fewer stays as it is (conformance/rounding.json).
+ClarityDecimal clarity_decimal_round(ClarityDecimal value, int places);
+/// `sin(degrees)` and `cos(degrees)` in code, rounded to 10 decimals
+/// (conformance/drawing.json).
+ClarityDecimal clarity_decimal_sin(ClarityDecimal degrees);
+ClarityDecimal clarity_decimal_cos(ClarityDecimal degrees);
+/// A value of code as a number a canvas draws with.
+double clarity_units(ClarityDecimal value);
 
 ClarityDecimal clarity_decimal_neg(ClarityDecimal a);
 ClarityDecimal clarity_decimal_add(ClarityDecimal a, ClarityDecimal b);

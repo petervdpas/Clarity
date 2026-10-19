@@ -160,6 +160,12 @@ pub enum StmtKind {
     Call {
         call: Expr,
     },
+    /// A shape on a canvas, in its draw handler: `dial.line(0, 0, 10, 10, "text")`.
+    Draw {
+        canvas: Ident,
+        shape: Ident,
+        args: Vec<Expr>,
+    },
     Message {
         level: MessageLevel,
         text: Expr,

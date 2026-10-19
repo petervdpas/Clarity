@@ -49,6 +49,23 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 	return ui.Reply(state.Window, state.Data)
 }
 
+// Redraw draws the card's canvas: a dot per letter of the name.
+func (c *cards) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {
+	if reply.State.Window != "Card" {
+		return reply, nil
+	}
+	ui := clarity.NewUi(reply.State)
+	ui.BeginDrawing("badge")
+	if name, ok := reply.State.Data["name"].(string); ok {
+		for i := range name {
+			ui.Draw("badge", map[string]any{"op": "circle", "x": float64(i * 10), "y": 5.0, "r": 4.0, "color": "accent"})
+		}
+	}
+	drawn, err := ui.Reply(reply.State.Window, reply.State.Data)
+	reply.State.Parts = drawn.State.Parts
+	return reply, err
+}
+
 func (c *cards) Options(db *clarity.Db, entity string) ([]clarity.RefOption, error) {
 	return []clarity.RefOption{{ID: 1, Text: "Ada"}}, nil
 }
@@ -110,6 +127,12 @@ func TestOpeningAWindowRunsItsOpenHandler(t *testing.T) {
 	back := call(t, c, "return_to", wire(t, map[string]any{"state": reply.State}))
 	if back.Error != nil || back.Value.(clarity.Reply).State.Data["name"] != "Ada" {
 		t.Fatalf("%#v", back)
+	}
+	// Its canvases are drawn anew, opened, after a handler, or with none.
+	for _, r := range []clarity.Reply{reply, back.Value.(clarity.Reply)} {
+		if drawing := r.State.Parts["badge"].Drawing; drawing == nil || len(*drawing) != 3 {
+			t.Fatalf("drawing: %#v", r.State.Parts["badge"])
+		}
 	}
 	if got := wire(t, call(t, c, "open_window", `{"window":"Nope","with":{}}`)); got != `{"error":"invalid value: there is no window Nope"}` {
 		t.Fatal(got)

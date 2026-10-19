@@ -40,4 +40,36 @@ public class KeyTests
         window.KeyPressQwerty(PhysicalKey.NumPad7, RawInputModifiers.None);
         Assert.Equal(2, presses);
     }
+
+    [AvaloniaFact]
+    public void ATypedKeyIsTheCharacterFromTheKeyboardOrTheNumberPad()
+    {
+        var plus = 0;
+        var seven = 0;
+        var add = new Button { Command = new RelayCommand(() => plus++) };
+        Keys.SetTyped(add, "+");
+        var digit = new Button { Command = new RelayCommand(() => seven++) };
+        Keys.SetTyped(digit, "7");
+        var field = new TextBox();
+        var window = new Window { Content = new StackPanel { Children = { field, add, digit } } };
+        window.Show();
+        add.Focus();
+
+        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.None);
+        // Shift and = types + (the headless keyboard does not shift it itself).
+        window.KeyPress(Key.OemPlus, RawInputModifiers.Shift, PhysicalKey.Equal, "+");
+        Assert.Equal(2, plus);
+        window.KeyPressQwerty(PhysicalKey.Digit7, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.NumPad7, RawInputModifiers.None);
+        Assert.Equal(2, seven);
+        // With Ctrl it is another key.
+        window.KeyPressQwerty(PhysicalKey.Digit7, RawInputModifiers.Control);
+        Assert.Equal(2, seven);
+
+        // Typing in a text input is the person's typing, not the buttons'.
+        field.Focus();
+        window.KeyPressQwerty(PhysicalKey.Digit7, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.NumPadAdd, RawInputModifiers.None);
+        Assert.Equal((2, 2), (plus, seven));
+    }
 }

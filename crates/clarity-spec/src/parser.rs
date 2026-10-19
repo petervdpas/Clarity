@@ -1295,6 +1295,8 @@ fn parse_widget_props(
         source: None,
         for_part: None,
         placeholder: None,
+        digits: None,
+        units: None,
         tooltip: None,
         style: None,
         readonly: false,
@@ -1484,6 +1486,28 @@ fn parse_widget_props(
             "for" => {
                 applies(WidgetProperty::For)?;
                 props.for_part = Some(cursor.expect_ident("a part name")?.name);
+            }
+            "units" => {
+                applies(WidgetProperty::Units)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or_default();
+                let width = cursor.expect_number("a width in units")?;
+                if !cursor.eat_keyword("x") {
+                    return Err(cursor.error_here("expected 'x' and a height, as in 'units 200 x 100'"));
+                }
+                let height = cursor.expect_number("a height in units")?;
+                if !widgets::canvas_units_fit(width, height) {
+                    return Err(Diagnostic::error(widgets::CANVAS_UNITS_PROBLEM, at));
+                }
+                props.units = Some(crate::model::CanvasUnits { width, height });
+            }
+            "digits" => {
+                applies(WidgetProperty::Digits)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or_default();
+                let digits = cursor.expect_number("a number of digits")?;
+                if !(1..=widgets::MAX_DIGITS).contains(&digits) {
+                    return Err(Diagnostic::error(format!("a display has 1 to {} digits", widgets::MAX_DIGITS), at));
+                }
+                props.digits = Some(digits);
             }
             "placeholder" => {
                 applies(WidgetProperty::Placeholder)?;

@@ -1,0 +1,80 @@
+// A canvas drawn by code: the shapes its draw handler sends, as the web
+// renderer draws them in SVG, in the canvas's own units
+// (conformance/drawing.json). ui/CanvasView.svelte puts them on screen.
+
+import type { ShownText } from "./format";
+
+/** The units a canvas draws in without `units W x H` (clarity_spec::widgets::DEFAULT_UNITS). */
+export const DEFAULT_UNITS = 100;
+
+/** A shape as the backend sends it: `{ op: "line", x1, y1, ... }`. */
+export type Shape = { op: string; [value: string]: unknown };
+
+/** The CSS variable of each color role, as the theme CSS names them
+ *  (clarity_gen::web COLOR_VARIABLES). */
+const ROLES: Record<string, string> = {
+  background: "--bg",
+  panel: "--panel",
+  raised: "--panel-alt",
+  text: "--text",
+  muted: "--text-muted",
+  border: "--border",
+  strong_border: "--border-strong",
+  accent: "--accent",
+  accent_soft: "--accent-soft",
+  on_accent: "--on-accent",
+  selection: "--selection",
+  focus: "--focus",
+  input: "--input",
+  frame: "--frame",
+  frame_text: "--frame-text",
+  error: "--error",
+  error_soft: "--error-soft",
+  warning: "--warning",
+  warning_soft: "--warning-soft",
+  success: "--success",
+  success_soft: "--success-soft",
+};
+
+/** A color as CSS: written out as is, a role or a color of the project's
+ *  theme by its variable; a name the theme does not have is its text color. */
+export function colorOf(color: unknown): string {
+  const name = typeof color === "string" ? color : "text";
+  if (name.startsWith("#")) return name;
+  const role = ROLES[name];
+  return role ? `var(${role})` : `var(--color-${name.replaceAll("_", "-")}, var(--text))`;
+}
+
+const n = (value: unknown) => (typeof value === "number" ? value : Number(value) || 0);
+
+/** A shape as an SVG element: its tag, its attributes, and its text. */
+export function svgOf(
+  shape: Shape,
+  units: { width: number; height: number },
+  shown: (text: ShownText) => string,
+): { tag: string; attrs: Record<string, string | number>; text?: string } {
+  const color = colorOf(shape.color);
+  switch (shape.op) {
+    case "clear":
+      return { tag: "rect", attrs: { x: 0, y: 0, width: units.width, height: units.height, fill: color } };
+    case "line":
+      return {
+        tag: "line",
+        attrs: { x1: n(shape.x1), y1: n(shape.y1), x2: n(shape.x2), y2: n(shape.y2), stroke: color, "stroke-width": n(shape.width ?? 1), "stroke-linecap": "round" },
+      };
+    case "rect":
+      return { tag: "rect", attrs: { x: n(shape.x), y: n(shape.y), width: n(shape.width), height: n(shape.height), fill: color } };
+    case "circle":
+      return { tag: "circle", attrs: { cx: n(shape.x), cy: n(shape.y), r: n(shape.r), fill: color } };
+    case "ring":
+      return { tag: "circle", attrs: { cx: n(shape.x), cy: n(shape.y), r: n(shape.r), fill: "none", stroke: color, "stroke-width": n(shape.width ?? 1) } };
+    case "text":
+      return {
+        tag: "text",
+        attrs: { x: n(shape.x), y: n(shape.y), fill: color, "font-size": n(shape.size ?? 10), "text-anchor": "middle", "dominant-baseline": "central" },
+        text: shown(shape.text as ShownText),
+      };
+    default:
+      return { tag: "g", attrs: {} };
+  }
+}

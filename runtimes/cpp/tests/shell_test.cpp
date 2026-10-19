@@ -19,6 +19,17 @@ public:
         if (window == "Card" && event == "open") return "opened";
         return std::nullopt;
     }
+    // Draws the card's canvas anew: a dot per letter of its name.
+    Reply redraw(Db&, Reply reply) override {
+        if (reply.state.window != "Card") return reply;
+        Ui ui(reply.state);
+        ui.begin_drawing("badge");
+        auto name = reply.state.data.value("name", std::string());
+        for (size_t i = 0; i < name.size(); ++i) ui.draw("badge", {{"op", "circle"}});
+        reply.state.parts = ui.reply(reply.state.window, reply.state.data).state.parts;
+        return reply;
+    }
+
     Reply dispatch(Db&, const WindowState& state, const std::string& handler) override {
         Ui ui(state);
         if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
@@ -52,6 +63,10 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
     json opened = service.invoke("open_window", {{"window", "Card"}, {"with", {{"name", "Grace"}}}});
     CHECK_EQ(opened["value"]["state"]["parts"]["title"]["caption"], json("Card of Grace"));
+    // Its canvases are drawn anew, when it opens and after every handler.
+    CHECK_EQ(opened["value"]["state"]["parts"]["badge"]["drawing"].size(), size_t(5));
+    json again = service.invoke("dispatch_event", {{"state", {{"window", "Card"}, {"data", {{"name", "Ada"}}}}}, {"handler", "noop"}});
+    CHECK_EQ(again["value"]["state"]["parts"]["badge"]["drawing"].size(), size_t(3));
     // A refusal keeps its slots; other errors are text.
     CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}, {"data", json::object()}}}, {"handler", "save"}}),
              json::parse(R"({"error":{"text":"{name} is taken","values":{"name":{"kind":"text","value":"Ada"}}}})"));

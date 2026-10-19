@@ -21,6 +21,10 @@ typedef struct {
     bool (*options)(ClarityDb* db, const char* entity, cJSON** out);
     /// The picture of image field `field` of record `id` of `entity`; `out->data` is NULL when it has none.
     bool (*picture)(ClarityDb* db, const char* entity, int64_t id, const char* field, ClarityBytes* out);
+    /// Draws the canvases of the window `reply` shows anew, each by its draw
+    /// handler (conformance/drawing.json). The shell redraws after a window
+    /// opens and after every handler.
+    bool (*redraw)(ClarityDb* db, ClarityReply* reply);
 } ClarityWindows;
 
 typedef struct {

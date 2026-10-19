@@ -38,6 +38,24 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>The caption as shown.</summary>
     public string Caption => Locale.Show(CaptionText);
 
+    /// <summary>A canvas's drawing: its shapes, in order (conformance/drawing.json).</summary>
+    public IReadOnlyList<Shape> Drawing { get => drawing; private set => SetProperty(ref drawing, value); }
+    IReadOnlyList<Shape> drawing = [];
+    List<Shape>? drawn;
+
+    /// <summary>Starts an empty drawing, before the canvas's draw handler runs.</summary>
+    public void BeginDrawing() => drawn = [];
+
+    /// <summary>Adds a shape to the drawing being drawn.</summary>
+    public void Draw(Shape shape) => (drawn ??= []).Add(shape);
+
+    /// <summary>Shows the drawing: one change, however many shapes it has.</summary>
+    public void EndDrawing()
+    {
+        Drawing = drawn ?? [];
+        drawn = null;
+    }
+
     /// <summary>The text an unbound input holds.</summary>
     public string Text { get => text; set => SetProperty(ref text, value); }
     string text = "";

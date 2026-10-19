@@ -14,6 +14,7 @@
   import { cellEdits, describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
+  import { DEFAULT_DIGITS } from "./display";
   import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
 
   let {
@@ -328,6 +329,19 @@
             <option value={name}>{name}</option>
           {/each}
         </select>
+      </label>
+    {/if}
+    {#if info.properties.includes("digits")}
+      <label class="prop">
+        <span>Digits</span>
+        <input
+          type="number"
+          min="1"
+          max="24"
+          value={p.digits ?? ""}
+          placeholder={String(DEFAULT_DIGITS)}
+          onchange={(e) => update({ digits: textOf(e) === null ? null : numberOf(e) })}
+        />
       </label>
     {/if}
     {#if info.properties.includes("placeholder")}

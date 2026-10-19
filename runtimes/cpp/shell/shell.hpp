@@ -30,6 +30,10 @@ public:
     virtual std::optional<std::string> handler(const std::string& window, const std::string& event) = 0;
     /// Runs a handler on a window's state.
     virtual Reply dispatch(Db& db, const WindowState& state, const std::string& handler) = 0;
+    /// Draws the canvases of the window `reply` shows anew, each by its draw
+    /// handler (conformance/drawing.json). The shell redraws after a window
+    /// opens and after every handler.
+    virtual Reply redraw(Db& db, Reply reply) = 0;
     /// The records a reference field of `entity` can point at.
     virtual std::vector<RefOption> options(Db& db, const std::string& entity) = 0;
     /// The picture of image field `field` of record `id` of `entity`; none when it has none.
@@ -99,6 +103,8 @@ private:
     int next_ = 0;
 
     Reply on_event(const WindowState& state, const std::string& event);
+    /// Runs a handler, then draws the window's canvases anew.
+    Reply dispatch(const WindowState& state, const std::string& handler);
 };
 
 /// Shows the application's window and runs until its last window closes.

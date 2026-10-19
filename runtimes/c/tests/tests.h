@@ -5,6 +5,9 @@
 #define CLARITY_TESTS(X)                                          \
     X(a_decimal_keeps_its_decimals)                               \
     X(decimals_add_multiply_divide_and_compare_by_value)          \
+    X(every_rounding_case_rounds_as_every_runtime_does)          \
+    X(sin_and_cos_take_degrees_as_every_runtime_does)            \
+    X(a_draw_starts_an_empty_drawing_that_travels_with_the_part)  \
     X(dates_and_times_read_and_write_as_text)                     \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \

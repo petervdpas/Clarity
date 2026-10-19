@@ -278,3 +278,53 @@ fn a_window_holds_plain_values() {
     has(sales, "w->fresh = false;\n");
     has(sales, "w->pending = ORDER_STATUS_APPROVED;\n");
 }
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_sources([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("clarity_decimal_round(x, (int)2)"), "{code}");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
+    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+
+code Dial
+    handler draw_dial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler faster_clicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing; the shell draws the
+/// canvas anew when the window opens and after every handler.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SALES}{DIAL}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "src/modules/sales.c");
+    has(code, "cJSON_AddStringToObject(shape1, \"op\", \"clear\");\n    cJSON_AddStringToObject(shape1, \"color\", \"#101810\");\n    clarity_ui_draw(ui, \"dial\", shape1);");
+    has(code, "cJSON_AddNumberToObject(shape2, \"x1\", (double)(50));");
+    has(code, "clarity_decimal_cos(w->angle)");
+    has(code, "cJSON_AddNumberToObject(shape2, \"width\", (double)(3));");
+    // Left out: the text's color and size.
+    has(code, "cJSON_AddStringToObject(shape3, \"color\", \"text\");\n    cJSON_AddNumberToObject(shape3, \"size\", 10);");
+    let main = file(&files, "src/main.c");
+    has(main, "static bool redraw(ClarityDb* db, ClarityReply* reply) {");
+    has(main, "        clarity_ui_begin_drawing(ui, \"dial\");\n        if (!dial_window_draw_dial(db, ui, &w)) return false;");
+    has(main, "picture, redraw};");
+}

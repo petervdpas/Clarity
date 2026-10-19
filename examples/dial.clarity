@@ -1,0 +1,4 @@
+project Dial
+    stack go web desktop
+    output "out"
+    datasource main sqlite "data/dial.db"

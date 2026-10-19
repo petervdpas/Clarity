@@ -379,6 +379,27 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 value: parse_expr(&mut cursor)?,
             }
         }
+        // `dial.line(...)`: a shape on a canvas.
+        _ if cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Dot)
+            && cursor.peek_at(2).is_some_and(|t| t.kind == TokenKind::Ident)
+            && cursor.peek_at(3).is_some_and(|t| t.kind == TokenKind::LParen) =>
+        {
+            let canvas = cursor.expect_ident("a canvas")?;
+            cursor.expect(TokenKind::Dot, "'.'")?;
+            let shape = cursor.expect_ident("a shape")?;
+            cursor.expect(TokenKind::LParen, "'('")?;
+            let mut args = Vec::new();
+            if cursor.peek_kind() != Some(TokenKind::RParen) {
+                args.push(parse_expr(&mut cursor)?);
+                while cursor.eat(TokenKind::Comma) {
+                    args.push(parse_expr(&mut cursor)?);
+                }
+            }
+            cursor.expect(TokenKind::RParen, "')'")?;
+            cursor.expect_end()?;
+            no_children(node)?;
+            StmtKind::Draw { canvas, shape, args }
+        }
         _ => {
             let target = parse_expr(&mut cursor)?;
             if matches!(target.kind, ExprKind::Call { .. }) && cursor.peek().is_none() {

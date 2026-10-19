@@ -751,10 +751,11 @@ impl<'a> Checker<'a> {
                 }
             }
 
-            if p.kind == WidgetKind::Canvas && p.renderer.is_none() {
+            let draws = p.handlers.iter().any(|h| h.event == widgets::Event::Draw);
+            if p.kind == WidgetKind::Canvas && p.renderer.is_none() && !draws {
                 self.warning(
                     file,
-                    format!("canvas at {},{} has no renderer yet", p.col, p.row),
+                    format!("canvas at {},{} draws nothing yet; wire 'on draw: handler'", p.col, p.row),
                     widget.span,
                 );
             }

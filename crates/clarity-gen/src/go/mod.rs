@@ -317,6 +317,20 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
     for (event, handler) in apps.iter().flat_map(|a| &a.events) {
         app_events.push_str(&format!("\tcase {}:\n\t\treturn {}, true\n", string(event), string(handler)));
     }
+    // Each window that has canvases to draw.
+    let mut redraws = String::new();
+    for w in windows.iter().filter(|w| !w.draws.is_empty()) {
+        let draws: String = w
+            .draws
+            .iter()
+            .map(|(canvas, method)| format!("\t\tui.BeginDrawing({})\n\t\tif err := w.{method}(db, ui); err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n", string(canvas)))
+            .collect();
+        redraws.push_str(&format!(
+            "\tcase {}:\n\t\tw := &{}{{}}\n\t\tif err := reply.State.Decode(w); err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n\t\tui := clarity.NewUi(reply.State)\n{draws}\t\tdrawn, err := ui.Reply(reply.State.Window, w)\n\t\tif err != nil {{\n\t\t\treturn clarity.Reply{{}}, err\n\t\t}}\n\t\treply.State.Parts = drawn.State.Parts\n",
+            string(&w.name),
+            w.struct_name
+        ));
+    }
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         dispatch.push_str(&format!("\tcase {}:\n\t\tswitch handler {{\n", string(&w.name)));
@@ -456,6 +470,14 @@ func (windows) Dispatch(db *clarity.Db, state clarity.WindowState, handler strin
 \tswitch handler {{
 {app_dispatch}\t}}
 \treturn clarity.Reply{{}}, &clarity.InvalidError{{What: state.Window + \" has no handler \" + handler}}
+}}
+
+// Redraw draws the canvases of the window a reply shows anew, each by its
+// draw handler on an empty drawing (conformance/drawing.json).
+func (windows) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {{
+\tswitch reply.State.Window {{
+{redraws}\t}}
+\treturn reply, nil
 }}
 
 // Options are the records a reference field of entity can point at.

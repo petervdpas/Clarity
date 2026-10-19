@@ -58,6 +58,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.readonly) out["readonly"] = *p.readonly;
     if (p.text) out["text"] = *p.text;
     if (p.checked) out["checked"] = *p.checked;
+    if (p.drawing) out["drawing"] = *p.drawing;
 }
 
 void from_json(const nlohmann::json& in, PartState& p) {
@@ -71,6 +72,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("readonly", p.readonly);
     take("text", p.text);
     take("checked", p.checked);
+    if (in.contains("drawing") && in["drawing"].is_array()) p.drawing = in["drawing"];
 }
 
 void to_json(nlohmann::json& out, const WindowState& s) {

@@ -1,4 +1,5 @@
 #include "clarity/decimal.h"
+#include <math.h>
 
 static __int128 power(int n) {
     __int128 p = 1;
@@ -76,6 +77,24 @@ ClarityDecimal clarity_decimal_rescaled(ClarityDecimal value, int scale) {
     if (scale > CLARITY_MAX_SCALE) scale = CLARITY_MAX_SCALE;
     return (ClarityDecimal){shorten(value.units, value.scale - scale), scale};
 }
+
+ClarityDecimal clarity_decimal_round(ClarityDecimal value, int places) {
+    if (places < 0) places = 0;
+    return value.scale <= places ? value : clarity_decimal_rescaled(value, places);
+}
+
+double clarity_units(ClarityDecimal value) { return (double)value.units / (double)power(value.scale); }
+
+/// An angle function of degrees as a decimal with 10 decimals.
+static ClarityDecimal angle(ClarityDecimal degrees, double (*of)(double)) {
+    double radians = clarity_units(degrees) * 3.14159265358979323846 / 180.0;
+    long long units = llround(of(radians) * 1e10);
+    return (ClarityDecimal){units, 10};
+}
+
+ClarityDecimal clarity_decimal_sin(ClarityDecimal degrees) { return angle(degrees, sin); }
+
+ClarityDecimal clarity_decimal_cos(ClarityDecimal degrees) { return angle(degrees, cos); }
 
 ClarityDecimal clarity_decimal_neg(ClarityDecimal a) { return (ClarityDecimal){-a.units, a.scale}; }
 

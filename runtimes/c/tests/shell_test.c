@@ -46,7 +46,19 @@ static bool picture(ClarityDb* db, const char* entity, int64_t id, const char* f
     return true;
 }
 
-static const ClarityWindows cards = {open_card, handler_of, dispatch, options, picture};
+/// Draws the card's canvas anew: a dot per letter of its name.
+static bool redraw(ClarityDb* db, ClarityReply* reply) {
+    (void)db;
+    if (strcmp(reply->state.window, "Card") != 0) return true;
+    ClarityUi* ui = clarity_ui(&reply->state);
+    clarity_ui_begin_drawing(ui, "badge");
+    const cJSON* name = cJSON_GetObjectItem(reply->state.data, "name");
+    for (size_t i = 0; cJSON_IsString(name) && name->valuestring[i]; ++i) clarity_ui_draw(ui, "badge", cJSON_Parse("{\"op\":\"circle\"}"));
+    reply->state = clarity_ui_reply(ui, reply->state.window, reply->state.data)->state;
+    return true;
+}
+
+static const ClarityWindows cards = {open_card, handler_of, dispatch, options, picture, redraw};
 
 typedef struct {
     ClarityDesktop desktop;
@@ -80,6 +92,12 @@ void the_shell_answers_the_renderers_commands(void) {
     cJSON* opened = invoked(s, "open_window", "{\"window\":\"Card\",\"with\":{\"name\":\"Grace\"}}", NULL);
     const cJSON* title = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(opened, "value"), "state"), "parts"), "title"), "caption");
     CHECK_JSON(title, "\"Card of Grace\"");
+    // Its canvases are drawn anew, when it opens and after every handler.
+    const cJSON* badge = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(opened, "value"), "state"), "parts"), "badge");
+    CHECK(cJSON_GetArraySize(cJSON_GetObjectItem(badge, "drawing")) == 5);
+    cJSON* again = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{\"name\":\"Ada\"}},\"handler\":\"noop\"}", NULL);
+    badge = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(again, "value"), "state"), "parts"), "badge");
+    CHECK(cJSON_GetArraySize(cJSON_GetObjectItem(badge, "drawing")) == 3);
     // A refusal keeps its slots; other errors are text.
     CHECK_JSON(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"save\"}", NULL),
                "{\"error\":{\"text\":\"{name} is taken\",\"values\":{\"name\":{\"kind\":\"text\",\"value\":\"Ada\"}}}}");

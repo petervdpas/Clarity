@@ -8,6 +8,10 @@
   import NumberInput from "./ui/NumberInput.svelte";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
+  import SegmentDisplay from "./ui/SegmentDisplay.svelte";
+  import CanvasView from "./ui/CanvasView.svelte";
+  import { DEFAULT_DIGITS } from "./display";
+  import { DEFAULT_UNITS } from "./drawing";
   import GridBox from "./GridBox.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
@@ -97,6 +101,13 @@
     return !design && !!form?.submit();
   }
 
+  /** Whether a key press lands in a field the person types in. */
+  function typingIn(target: EventTarget | null): boolean {
+    if (target instanceof HTMLTextAreaElement) return true;
+    if (target instanceof HTMLElement && target.isContentEditable) return true;
+    return target instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"].includes(target.type);
+  }
+
   // A button's shortcut, and Enter and Escape for the default and cancel
   // buttons, work anywhere in the running window.
   function windowKey(e: KeyboardEvent) {
@@ -105,7 +116,7 @@
     const inTextArea = e.target instanceof HTMLTextAreaElement;
     const onButton = e.target instanceof HTMLButtonElement;
     const hit =
-      (p.shortcut !== null && matchesShortcut(e, p.shortcut)) ||
+      (p.shortcut !== null && matchesShortcut(e, p.shortcut, typingIn(e.target))) ||
       (p.default && plain && e.key === "Enter" && !inTextArea && !onButton) ||
       (p.cancel && plain && e.key === "Escape");
     if (!hit) return;
@@ -301,6 +312,8 @@
       <h2 class="heading-text">{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}</h2>
     {:else if p.kind === "text"}
       <span class="text-value" {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
+    {:else if p.kind === "display"}
+      <SegmentDisplay {id} value={bound ? value : null} digits={p.digits ?? DEFAULT_DIGITS} />
     {:else if p.kind === "textbox" || p.kind === "password" || p.kind === "memo"}
       <TextInput
         {id}
@@ -512,6 +525,13 @@
           <code>{p.source ?? "no source"}</code>
         </div>
       {/if}
+    {:else if p.kind === "canvas" && partState?.drawing}
+      <CanvasView
+        {id}
+        drawing={partState.drawing}
+        units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
+        shown={(text) => shownText(preview, text)}
+      />
     {:else if p.kind === "canvas"}
       <div class="placeholder canvas">
         <span>Canvas ({p.surface ?? "svg"})</span>

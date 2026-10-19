@@ -70,6 +70,14 @@ const char* clarity_ui_caption(const ClarityUi* ui, const char* part, const char
 
 void clarity_ui_set_caption(ClarityUi* ui, const char* part, const ClarityText* value) { part_of(ui, part)->caption = value; }
 
+void clarity_ui_begin_drawing(ClarityUi* ui, const char* part) { part_of(ui, part)->drawing = cJSON_CreateArray(); }
+
+void clarity_ui_draw(ClarityUi* ui, const char* part, cJSON* shape) {
+    ClarityPart* p = part_of(ui, part);
+    if (!p->drawing) p->drawing = cJSON_CreateArray();
+    cJSON_AddItemToArray(p->drawing, shape);
+}
+
 const char* clarity_ui_error(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return p && p->error ? clarity_text_show(p->error) : "";
@@ -172,6 +180,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_readonly) cJSON_AddBoolToObject(out, "readonly", p->readonly);
     if (p->text) cJSON_AddStringToObject(out, "text", p->text);
     if (p->has_checked) cJSON_AddBoolToObject(out, "checked", p->checked);
+    if (p->drawing) cJSON_AddItemToObject(out, "drawing", cJSON_Duplicate(p->drawing, true));
     return out;
 }
 
@@ -183,6 +192,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "readonly"))) p->has_readonly = true, p->readonly = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "checked"))) p->has_checked = true, p->checked = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "text"))) p->text = clarity_copy(v->valuestring);
+    if (cJSON_IsArray(v = cJSON_GetObjectItemCaseSensitive(in, "drawing"))) p->drawing = cJSON_Duplicate(v, true);
     ClarityText* text;
     v = cJSON_GetObjectItemCaseSensitive(in, "caption");
     if (v && !cJSON_IsNull(v)) {

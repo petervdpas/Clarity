@@ -1,0 +1,23 @@
+{
+  "about": "A canvas drawn by code (DESIGN 5.7, backend renderer). The draw handler of a canvas runs when its window opens and after every other handler of the window; each run starts an empty drawing, which the backend sends as the canvas part's `drawing`, a list of shapes in the canvas's own units (`units W x H`, 100 x 100 without it, x to the right and y down). A renderer scales the units to fit the part, keeping their proportion, centered, and draws the shapes in order. A color is a color of the theme by name (`accent`, `text`) or written out (`#rrggbb`); a name the theme does not have is its text color. Widths and sizes are in units too. `text` is centered on its point, horizontally and vertically, its text filled in the person's format like any shown text. `shapes` gives the code each shape is drawn by and what it sends. `angles` gives sin and cos of degrees, rounded to 10 decimals, as every runtime computes them.",
+  "shapes": [
+    { "code": "dial.clear(\"#101810\")", "sends": { "op": "clear", "color": "#101810" } },
+    { "code": "dial.line(10, 20, 30, 40, \"accent\", 3)", "sends": { "op": "line", "x1": 10, "y1": 20, "x2": 30, "y2": 40, "color": "accent", "width": 3 } },
+    { "code": "dial.line(10, 20, 30, 40, \"accent\")", "sends": { "op": "line", "x1": 10, "y1": 20, "x2": 30, "y2": 40, "color": "accent", "width": 1 } },
+    { "code": "dial.rect(5, 5, 20, 10, \"text\")", "sends": { "op": "rect", "x": 5, "y": 5, "width": 20, "height": 10, "color": "text" } },
+    { "code": "dial.circle(50, 50, 40, \"accent\")", "sends": { "op": "circle", "x": 50, "y": 50, "r": 40, "color": "accent" } },
+    { "code": "dial.ring(50, 50, 40, \"border\", 2)", "sends": { "op": "ring", "x": 50, "y": 50, "r": 40, "color": "border", "width": 2 } },
+    { "code": "dial.ring(50, 50, 40, \"border\")", "sends": { "op": "ring", "x": 50, "y": 50, "r": 40, "color": "border", "width": 1 } },
+    { "code": "dial.text(50, 90, \"km/h\", \"muted\", 8)", "sends": { "op": "text", "x": 50, "y": 90, "text": "km/h", "color": "muted", "size": 8 } },
+    { "code": "dial.text(50, 90, \"km/h\")", "sends": { "op": "text", "x": 50, "y": 90, "text": "km/h", "color": "text", "size": 10 } }
+  ],
+  "angles": [
+    { "degrees": "0", "sin": "0", "cos": "1" },
+    { "degrees": "30", "sin": "0.5", "cos": "0.8660254038" },
+    { "degrees": "45", "sin": "0.7071067812", "cos": "0.7071067812" },
+    { "degrees": "90", "sin": "1", "cos": "0" },
+    { "degrees": "180", "sin": "0", "cos": "-1" },
+    { "degrees": "-30", "sin": "-0.5", "cos": "0.8660254038" },
+    { "degrees": "22.5", "sin": "0.3826834324", "cos": "0.9238795325" }
+  ]
+}

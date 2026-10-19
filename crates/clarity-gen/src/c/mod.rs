@@ -295,6 +295,22 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
     for (event, handler) in apps.iter().flat_map(|a| &a.events) {
         let _ = writeln!(events, "    // The app's own events run whatever window is given.\n    if (strcmp(event, {}) == 0) return {};", string(event), string(handler));
     }
+    // Each window that has canvases to draw.
+    let mut redraws = String::new();
+    for w in windows.iter().filter(|w| !w.draws.is_empty()) {
+        let draws: String = w
+            .draws
+            .iter()
+            .map(|(canvas, function)| format!("        clarity_ui_begin_drawing(ui, {});\n        if (!{function}(db, ui, &w)) return false;\n", string(canvas)))
+            .collect();
+        let _ = write!(
+            redraws,
+            "    if (strcmp(reply->state.window, {}) == 0) {{\n        {} w = {{0}};\n        if (!{}_from_json(reply->state.data, &w)) return false;\n        ClarityUi* ui = clarity_ui(&reply->state);\n{draws}        reply->state = clarity_ui_reply(ui, reply->state.window, reply->state.data)->state;\n        return true;\n    }}\n",
+            string(&w.name),
+            w.struct_name,
+            w.prefix
+        );
+    }
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = write!(
@@ -410,8 +426,16 @@ static bool picture(ClarityDb* db, const char* entity, int64_t id, const char* f
 {pictures}    return clarity_fail(CLARITY_INVALID, "%s has no picture %s", entity, field);
 }}
 
+/// Draws the canvases of the window `reply` shows anew, each by its draw
+/// handler on an empty drawing (conformance/drawing.json).
+static bool redraw(ClarityDb* db, ClarityReply* reply) {{
+{redraws}    (void)db;
+    (void)reply;
+    return true;
+}}
+
 /// What the shell asks of the application's windows.
-static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture}};
+static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw}};
 
 /// Says what went wrong, and ends the program.
 static int failed(ClarityDb* db) {{

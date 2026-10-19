@@ -67,6 +67,6 @@ Parentheses group.
 
 ## Expressions
 
-Besides values, names and operators: calls (`within_credit(order)`, `count(list)`, `today()`, `now()`), `new Entity` for a new record with its defaults, `find` and `files` queries, and `read text of f`.
+Besides values, names and operators: calls (`within_credit(order)`, `count(list)`, `round(total, 2)`, `today()`, `now()`; `round` keeps at most that many decimals, rounding half away from zero), `new Entity` for a new record with its defaults, `find` and `files` queries, and `read text of f`.
 
 The full grammar is in [the language reference](../LANGUAGE.md#12-grammar-summary), with every statement under [Statements](../LANGUAGE.md#statements) and every expression under [Expressions](../LANGUAGE.md#expressions).

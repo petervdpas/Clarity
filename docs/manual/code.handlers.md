@@ -68,6 +68,25 @@ A name that is both data and a part in the same window is an error.
 
 A bound input changes through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`. When you set an input's `error`, its help text shows the message and the input is marked.
 
+## Drawing on a canvas
+
+A canvas is drawn by its draw handler: `canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial`. The handler draws shapes in the canvas's own units, x to the right and y down, 100 x 100 unless the canvas says `units 200 x 100`:
+
+```
+code Main
+    handler draw_dial
+        let angle = 210 - speed * 240 / 200
+        dial.clear("panel")
+        dial.ring(50, 50, 42, "border", 3)
+        dial.line(50, 50, 50 + 34 * cos(angle), 50 - 34 * sin(angle), "accent", 3)
+        dial.circle(50, 50, 4, "accent")
+        dial.text(50, 72, "{speed} km/h")
+```
+
+The shapes are `clear(color)`, `line(x1, y1, x2, y2, color, width)`, `rect(x, y, width, height, color)`, `circle(x, y, r, color)`, `ring(x, y, r, color, width)` and `text(x, y, text, color, size)`; a width can be left out (1), and so can a text's color and size (`"text"`, 10). A color is a color of the theme by name or written out, `"#101810"`. `sin` and `cos` take degrees.
+
+The draw handler runs when the window opens and after every other handler of the window, each time on an empty canvas, so it only says what the canvas shows for the data as it is. Only a canvas's own draw handler draws on it. The canvas scales its units to fit the part, keeping their proportion, on every stack alike.
+
 ## Messages, windows and data
 
 - `message "Saved {customer.name}"` shows a message. Write `message warning ...` or `message error ...` for another level; the default is info. Values go in slots, see [The language](code.language.md).

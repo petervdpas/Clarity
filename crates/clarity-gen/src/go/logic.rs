@@ -217,6 +217,8 @@ pub struct Owner {
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
+    /// The canvases its draw handlers draw, with their methods.
+    pub draws: Vec<(String, String)>,
 }
 
 /// The struct, its loading and the handlers of every window and the app in `file`.
@@ -321,8 +323,9 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                 errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
             }
         }
+        let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, local(&handler))).collect();
         owners.push(Owner {
-            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events });
+            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events, draws });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
 }
@@ -601,6 +604,26 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
+            }
+            // A shape on a canvas, as conformance/drawing.json sends it.
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                let mut fields = vec![format!("\"op\": {}", string(&shape.name))];
+                for (key, kind, given) in crate::shape_values(&shape.name, args) {
+                    let value = match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => match self.types.type_of(arg) {
+                            TypeInfo::Decimal | TypeInfo::Money => format!("clarity.Units({})", bare(self.value(arg, &mut pre))),
+                            _ => format!("float64({})", bare(self.value(arg, &mut pre))),
+                        },
+                        (ShapeValue::Number, Err(default)) => format!("{default}.0"),
+                        (ShapeValue::Color, Ok(arg)) => bare(self.value(arg, &mut pre)),
+                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Text, Ok(arg)) => self.shown(arg, &mut pre),
+                    };
+                    fields.push(format!("{}: {value}", string(key)));
+                }
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Draw({}, map[string]any{{{}}})\n", string(&canvas.name), fields.join(", ")));
             }
             StmtKind::Message { level, text } => {
                 let level = match level {
@@ -1040,6 +1063,22 @@ impl<'a> Emitter<'a> {
         }
         if name == NOW {
             return "clarity.Now()".into();
+        }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let arg = args.first();
+            let value = match arg.map(|a| self.types.type_of(a)) {
+                Some(TypeInfo::Decimal | TypeInfo::Money) => bare(self.value(arg.unwrap(), pre)),
+                Some(_) => format!("decimal.NewFromInt({})", bare(self.value(arg.unwrap(), pre))),
+                None => String::new(),
+            };
+            let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };
+            return format!("clarity.{function}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            return format!("clarity.Round({})", values.join(", "));
         }
         if name == "count" {
             let list = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();

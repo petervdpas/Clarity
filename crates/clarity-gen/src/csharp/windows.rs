@@ -144,16 +144,22 @@ struct Window<'a> {
     calls: Vec<(&'a Handler, String)>,
 }
 
-/// A shortcut as Avalonia names its keys: `7` as `D7`, `Backspace` as
-/// `Back`; modifiers and the other keys are named alike.
+/// A shortcut as Avalonia names its keys: `Backspace` as `Back`, `Ctrl++`
+/// as `Ctrl+OemPlus`, `7` as `D7`; modifiers and the other keys are named alike.
 fn gesture(shortcut: &str) -> String {
-    let (modifiers, key) = shortcut.rsplit_once('+').map_or(("", shortcut), |(m, k)| (m, k));
+    let (modifiers, key) = clarity_spec::widgets::shortcut_keys(shortcut);
     let key = match key {
         "Backspace" => "Back".to_string(),
+        "+" | "=" => "OemPlus".to_string(),
+        "-" => "OemMinus".to_string(),
+        "." => "OemPeriod".to_string(),
+        "," => "OemComma".to_string(),
+        "*" => "Multiply".to_string(),
+        "/" => "Divide".to_string(),
         digit if digit.len() == 1 && digit.chars().all(|c| c.is_ascii_digit()) => format!("D{digit}"),
         other => other.to_string(),
     };
-    if modifiers.is_empty() { key } else { format!("{modifiers}+{key}") }
+    if modifiers.is_empty() { key } else { format!("{}+{key}", modifiers.join("+")) }
 }
 
 /// The command of a call with values, named after it: `digit(7)` as
@@ -630,6 +636,12 @@ impl<'a> Window<'a> {
             WidgetKind::Heading => {
                 let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"heading\" Text=\"{}\"{plain_state}{extra} />", self.text(&caption_text));
             }
+            // A number in seven-segment digits, drawn by the runtime.
+            WidgetKind::Display => {
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let digits = p.digits.unwrap_or(clarity_spec::widgets::DEFAULT_DIGITS);
+                let _ = writeln!(out, "{pad}<c:SegmentDisplay {at}{value} Digits=\"{digits}\"{plain_state}{extra} />");
+            }
             WidgetKind::Text => {
                 let text = match (bound.as_deref(), p.bind.as_deref().and_then(|b| self.bound_field(b))) {
                     (Some(path), Some((entity, field))) => {
@@ -724,10 +736,11 @@ impl<'a> Window<'a> {
                     attrs.push_str(" IsCancel=\"True\"");
                 }
                 if let Some(key) = &p.shortcut {
-                    let _ = write!(attrs, " HotKey=\"{}\"", attr(&gesture(key)));
-                    // The number pad's digit presses it too, as in a browser.
-                    if key.len() == 1 && key.chars().all(|c| c.is_ascii_digit()) {
-                        let _ = write!(attrs, " c:Keys.Also=\"NumPad{key}\"");
+                    // A character is what is typed, from the keyboard or the number pad.
+                    if key.chars().count() == 1 {
+                        let _ = write!(attrs, " c:Keys.Typed=\"{}\"", attr(key));
+                    } else {
+                        let _ = write!(attrs, " HotKey=\"{}\"", attr(&gesture(key)));
                     }
                 }
                 let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra} />");
@@ -826,6 +839,15 @@ impl<'a> Window<'a> {
             WidgetKind::Image if p.source.is_some() => {
                 let source = p.source.as_deref().unwrap_or_default();
                 let _ = writeln!(out, "{pad}<Image {at} Source=\"/images/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
+            }
+            // A canvas drawn by its draw handler, through the runtime.
+            WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {
+                let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:CanvasView {at} Drawing=\"{{Binding {}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
+                    member(named.unwrap_or_default())
+                );
             }
             WidgetKind::Image | WidgetKind::Canvas => {
                 let what = if p.kind == WidgetKind::Image { "Image" } else { "Canvas" };
@@ -1071,6 +1093,15 @@ public partial class {name}View : UserControl
                 _ => continue,
             };
             let _ = write!(events, "    protected override void {hook}() => On{}();\n\n", pascal(&h.handler));
+        }
+        // The canvases, drawn anew by their draw handlers after every handler.
+        let draws = crate::canvas_draws(self.page);
+        if !draws.is_empty() {
+            let body: String = draws
+                .iter()
+                .map(|(canvas, handler)| format!("        {c}.BeginDrawing();\n        On{}();\n        {c}.EndDrawing();\n", pascal(handler), c = member(canvas)))
+                .collect();
+            let _ = write!(events, "    protected override void Redraw()\n    {{\n{body}    }}\n\n");
         }
 
         // Windows opened by a click, and the built-in targets.

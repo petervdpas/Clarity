@@ -32,6 +32,17 @@ public:
 
     /// The value with `scale` decimals, rounded half away from zero.
     Decimal rescaled(int scale) const;
+    /// `round(value, places)` in code: at most `places` decimals, rounded
+    /// half away from zero; a value with fewer stays as it is
+    /// (conformance/rounding.json).
+    Decimal rounded(int places) const;
+    /// `units` with `scale` decimals: of(125050, 2) is 1250.50.
+    static Decimal of(int64_t units, int scale) {
+        Decimal d;
+        d.units_ = units;
+        d.scale_ = scale;
+        return d;
+    }
 
     Decimal operator-() const;
     friend Decimal operator+(const Decimal& a, const Decimal& b);
@@ -52,5 +63,12 @@ private:
 };
 
 std::ostream& operator<<(std::ostream& out, const Decimal& value);
+
+/// `sin(degrees)` and `cos(degrees)` in code, rounded to 10 decimals
+/// (conformance/drawing.json).
+Decimal sin(const Decimal& degrees);
+Decimal cos(const Decimal& degrees);
+/// A value of code as a number a canvas draws with.
+double units(const Decimal& value);
 
 }  // namespace clarity

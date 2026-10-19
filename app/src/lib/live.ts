@@ -4,6 +4,7 @@
 // backend's state (a part hidden, disabled or renamed by a handler) reaches
 // the parts.
 
+import type { Shape } from "./drawing";
 import { getContext, setContext } from "svelte";
 import type { Event as PartEvent } from "./generated/Event";
 import type { ShownText } from "./format";
@@ -22,6 +23,8 @@ export type PartState = {
   text?: string | null;
   /** Whether an unbound checkbox or switch is on. */
   checked?: boolean | null;
+  /** A canvas's drawing: the shapes its draw handler sent (conformance/drawing.json). */
+  drawing?: Shape[] | null;
 };
 
 export interface Live {

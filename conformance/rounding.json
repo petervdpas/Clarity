@@ -1,0 +1,18 @@
+{
+  "about": "round(value, places) in code: a decimal or money value with at most `places` decimals, rounded half away from zero, the way a calculator and a bill round. A value with fewer decimals stays as it is; places below 0 count as 0. `gives` is compared as a number, so 12 and 12.00 are alike. Every runtime runs these cases.",
+  "cases": [
+    { "value": "2.5", "places": 0, "gives": "3" },
+    { "value": "-2.5", "places": 0, "gives": "-3" },
+    { "value": "3.5", "places": 0, "gives": "4" },
+    { "value": "0.125", "places": 2, "gives": "0.13" },
+    { "value": "-0.125", "places": 2, "gives": "-0.13" },
+    { "value": "1.005", "places": 2, "gives": "1.01" },
+    { "value": "99.995", "places": 2, "gives": "100" },
+    { "value": "17.571428571428571428", "places": 8, "gives": "17.57142857" },
+    { "value": "0.333333333333333333", "places": 4, "gives": "0.3333" },
+    { "value": "0.0000000049", "places": 8, "gives": "0" },
+    { "value": "12", "places": 2, "gives": "12" },
+    { "value": "12.3", "places": 5, "gives": "12.3" },
+    { "value": "1.5", "places": -1, "gives": "2" }
+  ]
+}

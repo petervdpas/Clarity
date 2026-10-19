@@ -236,6 +236,15 @@ pub struct WindowSize {
 pub const DEFAULT_PAGE_COLUMNS: u32 = 12;
 pub const MAX_PAGE_COLUMNS: u32 = 24;
 
+/// The space a canvas draws in, in its own units: `units 200 x 100`. The
+/// renderer scales it to fit the part, keeping its proportion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct CanvasUnits {
+    pub width: u32,
+    pub height: u32,
+}
+
 /// What a window holds: `data customer: Customer`, `data orders:
 /// list<Order>`, `data shown: decimal`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -348,6 +357,10 @@ pub struct WidgetProps {
     pub for_part: Option<String>,
     /// Text shown in an empty input.
     pub placeholder: Option<String>,
+    /// The digits a display shows: `digits 12`.
+    pub digits: Option<u32>,
+    /// The units a canvas draws in: `units 200 x 100`.
+    pub units: Option<CanvasUnits>,
     /// Text shown when the pointer rests on the part.
     pub tooltip: Option<String>,
     /// A named style of the project's theme: `style primary`.

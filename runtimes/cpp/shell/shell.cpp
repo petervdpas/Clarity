@@ -23,8 +23,12 @@ std::string text_of(const json& args, const char* key) { return args.contains(ke
 }  // namespace
 
 Reply Service::on_event(const WindowState& state, const std::string& event) {
-    if (auto handler = options_.windows->handler(state.window, event)) return options_.windows->dispatch(*options_.db, state, *handler);
-    return Ui(state).reply(state.window, state.data);
+    if (auto handler = options_.windows->handler(state.window, event)) return dispatch(state, *handler);
+    return options_.windows->redraw(*options_.db, Ui(state).reply(state.window, state.data));
+}
+
+Reply Service::dispatch(const WindowState& state, const std::string& handler) {
+    return options_.windows->redraw(*options_.db, options_.windows->dispatch(*options_.db, state, handler));
 }
 
 json Service::invoke(const std::string& command, const json& args, Desktop* caller) {
@@ -38,7 +42,7 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         if (command == "close_window") return value(on_event(state, "close"));
         if (command == "return_to") return value(on_event(state, "return"));
         if (command == "start_app") return value(on_event(WindowState{}, "start"));
-        if (command == "dispatch_event") return value(options_.windows->dispatch(db, state, text_of(args, "handler")));
+        if (command == "dispatch_event") return value(dispatch(state, text_of(args, "handler")));
         if (command == "ref_options") return value(options_.windows->options(db, text_of(args, "entity")));
         if (command == "picture") {
             // A picture of a record, fetched on its own, as the page shows it.

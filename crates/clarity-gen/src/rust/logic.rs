@@ -280,6 +280,26 @@ impl<'a> Emitter<'a> {
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
                 self.errors.push("messages and windows belong in handlers".into());
             }
+            // A shape on a canvas, as conformance/drawing.json sends it.
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                let mut fields = vec![format!("\"op\": {:?}", shape.name)];
+                for (key, kind, given) in crate::shape_values(&shape.name, args) {
+                    let value = match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => match self.types.type_of(arg) {
+                            TypeInfo::Decimal | TypeInfo::Money => format!("clarity_runtime::units({})", self.value(arg)),
+                            _ => format!("({}) as f64", self.value(arg)),
+                        },
+                        (ShapeValue::Number, Err(default)) => format!("{default}.0"),
+                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color, Err(default)) => format!("{default:?}"),
+                        (ShapeValue::Text, Ok(arg)) => format!("serde_json::to_value({}).unwrap_or_default()", self.shown(arg)),
+                        (ShapeValue::Text, Err(default)) => format!("{default:?}"),
+                    };
+                    fields.push(format!("\"{key}\": {value}"));
+                }
+                out.push_str(&format!("{pad}ui.draw({:?}, serde_json::json!({{{}}}));\n", canvas.name, fields.join(", ")));
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",
@@ -801,6 +821,21 @@ impl<'a> Emitter<'a> {
         if name == TODAY || name == NOW {
             return format!("Some(clarity_runtime::{name}())");
         }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let arg = args.first();
+            let value = match arg.map(|a| self.types.type_of(a)) {
+                Some(TypeInfo::Decimal | TypeInfo::Money) => self.value(arg.unwrap()),
+                Some(_) => format!("Decimal::from({})", self.value(arg.unwrap())),
+                None => String::new(),
+            };
+            return format!("clarity_runtime::{name}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("round({})", values.join(", "));
+        }
         if name == "count" {
             let list = match args.first() {
                 Some(arg) => match self.held(arg) {
@@ -929,6 +964,8 @@ pub struct Owner {
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
+    /// The canvases its draw handlers draw, with their Rust functions.
+    pub draws: Vec<(String, String)>,
 }
 
 /// The struct and handlers of every window and the app in `file`.
@@ -1047,6 +1084,12 @@ impl {struct_name} {{
                 errors.extend(emitter.errors.into_iter().map(|e| format!("handler '{}' of {name}: {e}", handler.name.name)));
             }
         }
+        let draws = page
+            .map(crate::canvas_draws)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(canvas, handler)| (canvas, format!("{}__{handler}", super::names::snake(name))))
+            .collect();
         owners.push(Owner {
             name: name.clone(),
             struct_name,
@@ -1055,6 +1098,7 @@ impl {struct_name} {{
             calls,
             is_app: app.is_some(),
             events,
+            draws,
         });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }

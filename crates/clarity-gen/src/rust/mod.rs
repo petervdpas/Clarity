@@ -194,6 +194,24 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             .unwrap_or_default()
     };
 
+    // Each window that has canvases to draw.
+    let redraws: String = owners
+        .iter()
+        .filter(|o| !o.is_app && !o.draws.is_empty())
+        .map(|o| {
+            let draws: String = o
+                .draws
+                .iter()
+                .map(|(canvas, function)| format!("            ui.begin_drawing({canvas:?});\n            {}::{function}(db, &mut w, &mut ui)?;\n", o.module))
+                .collect();
+            format!(
+                "        {:?} => {{\n            let mut w: {m}::{s} = from_data(reply.state.data.clone())?;\n            let mut ui = Ui::from_state(&reply.state);\n{draws}            reply.state.parts = ui.reply(&reply.state.window, Map::new()).state.parts;\n        }}\n",
+                o.name,
+                m = o.module,
+                s = o.struct_name
+            )
+        })
+        .collect();
     let opens: String = owners
         .iter()
         .filter(|o| !o.is_app)
@@ -344,7 +362,7 @@ fn on_event(db: &Db, state: WindowState, event: &str) -> Result<Reply> {{
         Some(handler) => dispatch(db, state, handler),
         None => {{
             let data = state.data.clone();
-            Ok(Ui::from_state(&state).reply(&state.window, data))
+            redraw(db, Ui::from_state(&state).reply(&state.window, data))
         }}
     }}
 }}
@@ -357,8 +375,24 @@ fn check(state: &WindowState) -> Result<()> {{
     Ok(())
 }}
 
-/// Runs a handler on a window's state.
+/// Runs a handler on a window's state, then draws its canvases anew.
 fn dispatch(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
+    let reply = run(db, state, handler)?;
+    redraw(db, reply)
+}}
+
+/// Draws each canvas of the window the reply shows: its draw handler on an
+/// empty drawing (conformance/drawing.json).
+#[allow(unused_variables, unused_mut)]
+fn redraw(db: &Db, mut reply: Reply) -> Result<Reply> {{
+    match reply.state.window.as_str() {{
+{redraws}        _ => {{}}
+    }}
+    Ok(reply)
+}}
+
+/// Runs a handler on a window's state.
+fn run(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
     let mut ui = Ui::from_state(&state);
     match (state.window.as_str(), handler) {{
 {dispatch}        _ => Err(Error::Invalid(format!("{{}} has no handler {{handler}}", state.window))),

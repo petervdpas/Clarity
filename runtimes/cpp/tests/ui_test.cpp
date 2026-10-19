@@ -68,3 +68,16 @@ TEST(a_window_opens_with_its_data_and_with) {
     CHECK_EQ(json(*Date::parse("2026-10-17")), json("2026-10-17"));
     CHECK_THROWS(InvalidError, json("17-10-2026").get<Date>());
 }
+
+TEST(a_draw_starts_an_empty_drawing_that_travels_with_the_part) {
+    Ui ui(WindowState{"Main", json::object(), {}, {}});
+    ui.begin_drawing("dial");
+    ui.draw("dial", {{"op", "clear"}, {"color", "#101810"}});
+    ui.draw("dial", {{"op", "circle"}, {"r", 40.5}});
+    auto reply = ui.reply("Main", json::object());
+    CHECK_EQ(json(reply.state)["parts"]["dial"]["drawing"], json::parse(R"([{"op":"clear","color":"#101810"},{"op":"circle","r":40.5}])"));
+    // The next draw starts anew.
+    Ui again(reply.state);
+    again.begin_drawing("dial");
+    CHECK_EQ(json(again.reply("Main", json::object()).state)["parts"]["dial"]["drawing"], json::array());
+}

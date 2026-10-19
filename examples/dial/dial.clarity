@@ -1,0 +1,30 @@
+module dial
+
+app Dial
+    title "Dial"
+    main Main
+
+page Main: window
+    title "Dial"
+    size 360 x 360
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial
+    button "Slower" at 1,8 span 6 key "-" on click: change(-10)
+    button "Faster" at 7,8 span 6 key "+" on click: change(10)
+
+code Main
+    // The needle turns from 210 degrees at 0 km/h to -30 at 200.
+    handler draw_dial
+        let angle = 210 - speed * 240 / 200
+        dial.clear("panel")
+        dial.ring(50, 50, 42, "border", 3)
+        dial.line(50 + 36 * cos(210), 50 - 36 * sin(210), 50 + 42 * cos(210), 50 - 42 * sin(210), "muted", 2)
+        dial.line(50, 14, 50, 8, "muted", 2)
+        dial.line(50 + 36 * cos(-30), 50 - 36 * sin(-30), 50 + 42 * cos(-30), 50 - 42 * sin(-30), "muted", 2)
+        dial.line(50, 50, 50 + 34 * cos(angle), 50 - 34 * sin(angle), "accent", 3)
+        dial.circle(50, 50, 4, "accent")
+        dial.text(50, 72, "{speed} km/h", "text", 9)
+
+    handler change(by: integer)
+        if speed + by >= 0 and speed + by <= 200
+            speed = speed + by

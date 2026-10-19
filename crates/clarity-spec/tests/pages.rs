@@ -225,7 +225,7 @@ fn unbound_inputs_are_fine_and_unknown_click_targets_warn() {
 ";
     let warns = warnings(page);
     assert_has(&warns, "'save_customer' is not a window");
-    assert_has(&warns, "canvas at 1,3 has no renderer yet");
+    assert_has(&warns, "canvas at 1,3 draws nothing yet; wire 'on draw: handler'");
     assert_eq!(warns.len(), 2, "{warns:#?}");
     let errs = errors(page);
     assert_has(

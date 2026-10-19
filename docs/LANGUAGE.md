@@ -517,7 +517,8 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the images folder | `click` |
-| `canvas` | nothing | `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `pointer`, `key` |
+| `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `draw`, `pointer`, `key` |
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
@@ -583,7 +584,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 | `cancel` | buttons | Escape clicks this button. One per window. |
 | `horizontal`, `vertical` | radio, splitter | Side by side or stacked. |
 
-A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`. A digit also takes the same digit of the number pad.
+A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+Shift+F2"`, `"Alt+Delete"`. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. The key is a letter, a digit, one of `+ - * / . , =`, `F1` to `F12`, or one of `Enter`, `Escape`, `Tab`, `Space`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`; `"Ctrl++"` is Ctrl and `+`. A key without Ctrl, Alt or Meta that is a character (`"7"`, `"+"`) is what is typed, from the keyboard or the number pad, on any keyboard layout; while the person types in a text input it is their typing and presses nothing.
 
 ### Clicking to open a window
 
@@ -798,6 +799,41 @@ A name that is both data and a part in the same window is an error.
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
 
+### Drawing on a canvas
+
+A canvas is drawn by its draw handler, wired with `on draw`. The handler draws shapes in the canvas's own units (`units 200 x 100`, 100 x 100 without it), x to the right and y down; the canvas scales them to fit the part, in proportion and centered.
+
+```
+page Main: window
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial
+    button "Faster" at 7,8 span 6 key "+" on click: change(10)
+
+code Main
+    handler draw_dial
+        let angle = 210 - speed * 240 / 200
+        dial.clear("panel")
+        dial.ring(50, 50, 42, "border", 3)
+        dial.line(50, 50, 50 + 34 * cos(angle), 50 - 34 * sin(angle), "accent", 3)
+        dial.text(50, 72, "{speed} km/h")
+
+    handler change(by: integer)
+        speed = speed + by
+```
+
+| Shape | Values | What it draws |
+|---|---|---|
+| `canvas.clear(color)` | | Fills the whole canvas. |
+| `canvas.line(x1, y1, x2, y2, color, width)` | width 1 when left out | A line with round ends. |
+| `canvas.rect(x, y, width, height, color)` | | A filled rectangle. |
+| `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
+| `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
+| `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
+
+- A color is a color of the theme by name (`"accent"`, `"text"`, a color the theme declares) or written out (`"#101810"`); a name the theme does not have is its text color.
+- The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it.
+- `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
+
 ### Data events
 
 An entity's code block holds its data events: code that runs whenever one of its records is saved or deleted, from any window, action or other event. The block has the entity's name and is in the same file as the entity.
@@ -875,6 +911,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `for item in list` | Runs the block once per item of a list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
 | `handler_name()`, `handler_name(values)` | Runs another handler of the same window or app, with values for its parameters. | handlers |
+| `canvas.shape(values)` | Draws a shape on a canvas; see [Drawing on a canvas](#drawing-on-a-canvas). | its draw handler |
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
 | `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. | handlers |
@@ -896,7 +933,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
-| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `today()` the date and `now()` the date and time where the application runs |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
 | `(expr)` | grouping |
 | `-x` | negation |
 | `a * b`, `a / b` | multiplication and division |

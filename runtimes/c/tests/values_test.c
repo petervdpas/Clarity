@@ -106,3 +106,50 @@ void show_and_text(void) {
     CHECK(clarity_text_contains("Ada Lovelace", "LOVE"));
     CHECK(!clarity_text_contains("Ada", "Grace"));
 }
+
+void every_rounding_case_rounds_as_every_runtime_does(void) {
+    cJSON* file = conformance("rounding.json");
+    const cJSON* cases = cJSON_GetObjectItemCaseSensitive(file, "cases");
+    REQUIRE(cJSON_GetArraySize(cases) > 0);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cases) {
+        const char* value = cJSON_GetObjectItemCaseSensitive(c, "value")->valuestring;
+        int places = cJSON_GetObjectItemCaseSensitive(c, "places")->valueint;
+        ClarityDecimal gives = d(cJSON_GetObjectItemCaseSensitive(c, "gives")->valuestring);
+        ClarityDecimal rounded = clarity_decimal_round(d(value), places);
+        CHECK(clarity_decimal_compare(rounded, gives) == 0);
+    }
+    cJSON_Delete(file);
+}
+
+void sin_and_cos_take_degrees_as_every_runtime_does(void) {
+    cJSON* file = conformance("drawing.json");
+    const cJSON* angles = cJSON_GetObjectItemCaseSensitive(file, "angles");
+    REQUIRE(cJSON_GetArraySize(angles) > 0);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, angles) {
+        ClarityDecimal degrees = d(cJSON_GetObjectItemCaseSensitive(c, "degrees")->valuestring);
+        CHECK(clarity_decimal_compare(clarity_decimal_sin(degrees), d(cJSON_GetObjectItemCaseSensitive(c, "sin")->valuestring)) == 0);
+        CHECK(clarity_decimal_compare(clarity_decimal_cos(degrees), d(cJSON_GetObjectItemCaseSensitive(c, "cos")->valuestring)) == 0);
+    }
+    cJSON_Delete(file);
+}
+
+void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
+    ClarityWindowState state;
+    REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_begin_drawing(ui, "dial");
+    clarity_ui_draw(ui, "dial", cJSON_Parse("{\"op\":\"clear\",\"color\":\"#101810\"}"));
+    cJSON* circle = cJSON_CreateObject();
+    cJSON_AddStringToObject(circle, "op", "circle");
+    cJSON_AddNumberToObject(circle, "r", clarity_units(d("40.5")));
+    clarity_ui_draw(ui, "dial", circle);
+    CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state),
+               "{\"window\":\"Main\",\"data\":{},\"parts\":{\"dial\":{\"drawing\":[{\"op\":\"clear\",\"color\":\"#101810\"},{\"op\":\"circle\",\"r\":40.5}]}},\"selected\":{}}");
+    // The next draw starts anew.
+    ClarityUi* again = clarity_ui(&state);
+    clarity_ui_begin_drawing(again, "dial");
+    CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(again, "Main", cJSON_CreateObject())->state),
+               "{\"window\":\"Main\",\"data\":{},\"parts\":{\"dial\":{\"drawing\":[]}},\"selected\":{}}");
+}

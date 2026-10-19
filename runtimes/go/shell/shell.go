@@ -33,6 +33,10 @@ type Windows interface {
 	Handler(window, event string) (string, bool)
 	// Dispatch runs a handler on a window's state.
 	Dispatch(db *clarity.Db, state clarity.WindowState, handler string) (clarity.Reply, error)
+	// Redraw draws the canvases of the window a reply shows anew, each by
+	// its draw handler (conformance/drawing.json). The shell redraws after
+	// a window opens and after every handler.
+	Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error)
 	// Options are the records a reference field of entity can point at.
 	Options(db *clarity.Db, entity string) ([]clarity.RefOption, error)
 	// Picture is the picture of image field field of record id of entity;
@@ -119,9 +123,22 @@ func caller(ctx context.Context) application.Window {
 // it is when the window has none.
 func (c *Service) onEvent(state clarity.WindowState, event string) (clarity.Reply, error) {
 	if handler, ok := c.options.Windows.Handler(state.Window, event); ok {
-		return c.options.Windows.Dispatch(c.options.Db, state, handler)
+		return c.dispatch(state, handler)
 	}
-	return clarity.NewUi(state).Reply(state.Window, state.Data)
+	reply, err := clarity.NewUi(state).Reply(state.Window, state.Data)
+	if err != nil {
+		return reply, err
+	}
+	return c.options.Windows.Redraw(c.options.Db, reply)
+}
+
+// dispatch runs a handler, then draws the window's canvases anew.
+func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.Reply, error) {
+	reply, err := c.options.Windows.Dispatch(c.options.Db, state, handler)
+	if err != nil {
+		return reply, err
+	}
+	return c.options.Windows.Redraw(c.options.Db, reply)
 }
 
 // Invoke runs a command of the renderer: the same commands, with the same
@@ -168,7 +185,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	case "start_app":
 		return answer(c.onEvent(clarity.NewWindowState("", nil), "start"))
 	case "dispatch_event":
-		return answer(c.options.Windows.Dispatch(db, a.State, a.Handler))
+		return answer(c.dispatch(a.State, a.Handler))
 	case "ref_options":
 		return answer(c.options.Windows.Options(db, a.Entity))
 	case "picture":

@@ -252,6 +252,9 @@ pub struct PartState {
     /// Whether an unbound checkbox or switch is on; sent like `text`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checked: Option<bool>,
+    /// A canvas's drawing: its shapes, in order (conformance/drawing.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<Vec<Value>>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -339,6 +342,16 @@ impl Ui {
 
     pub fn set_enabled(&mut self, part: &str, value: bool) {
         self.parts.entry(part.to_string()).or_default().enabled = Some(value);
+    }
+
+    /// Starts an empty drawing on a canvas, before its draw handler runs.
+    pub fn begin_drawing(&mut self, part: &str) {
+        self.parts.entry(part.to_string()).or_default().drawing = Some(Vec::new());
+    }
+
+    /// Adds a shape to a canvas's drawing: `{"op": "line", ...}`.
+    pub fn draw(&mut self, part: &str, shape: Value) {
+        self.parts.entry(part.to_string()).or_default().drawing.get_or_insert_with(Vec::new).push(shape);
     }
 
     /// The caption a handler set, or the one from the design.

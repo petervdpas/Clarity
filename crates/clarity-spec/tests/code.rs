@@ -438,3 +438,19 @@ fn handlers_change_a_windows_plain_values() {
     // Only records and lists are read again.
     assert!(errors("reload shown\n").iter().any(|e| e.contains("'shown' is a plain value; only records and lists are read again")), "{:#?}", errors("reload shown\n"));
 }
+
+/// round(value, places) rounds a decimal or money half away from zero.
+#[test]
+fn round_takes_a_number_and_its_decimals() {
+    let fine = errors(&form("let a = round(customer.credit_limit, 2)\ncustomer.credit_limit = a\nlet b = round(1.25, 1) + 1\n"));
+    assert!(fine.is_empty(), "{fine:#?}");
+    // It keeps the type it is given: money stays money.
+    assert!(errors(&form("let a = round(customer.credit_limit, 2)\ncustomer.active = a\n")).iter().any(|e| e.contains("money")));
+    assert_has(&errors(&form("let a = round(customer.name, 2)\n")), "'round' needs a decimal or money, not text");
+    assert_has(&errors(&form("let a = round(1.5)\n")), "'round' takes a number and its decimals, as in round(total, 2)");
+    assert_has(&errors(&form("let a = round(1.5, 0.5)\n")), "the decimals of 'round' are an integer, not decimal");
+}
+
+fn assert_has(messages: &[String], needle: &str) {
+    assert!(messages.iter().any(|m| m.contains(needle)), "missing {needle:?} in {messages:#?}");
+}

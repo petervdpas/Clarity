@@ -21,6 +21,9 @@ typedef struct {
     const char* text;
     /// Whether an unbound checkbox or switch is on.
     bool has_checked, checked;
+    /// A canvas's drawing: an array of its shapes, in order (NULL: none;
+    /// conformance/drawing.json).
+    cJSON* drawing;
 } ClarityPart;
 
 /// The selected row of a table or list.
@@ -76,6 +79,10 @@ void clarity_ui_set_enabled(ClarityUi* ui, const char* part, bool value);
 /// The caption a handler set, or `design`.
 const char* clarity_ui_caption(const ClarityUi* ui, const char* part, const char* design);
 void clarity_ui_set_caption(ClarityUi* ui, const char* part, const ClarityText* value);
+/// Starts an empty drawing on a canvas, before its draw handler runs.
+void clarity_ui_begin_drawing(ClarityUi* ui, const char* part);
+/// Adds a shape to a canvas's drawing: {"op": "line", ...}; it takes `shape`.
+void clarity_ui_draw(ClarityUi* ui, const char* part, cJSON* shape);
 /// The message a handler set on an input, or "".
 const char* clarity_ui_error(const ClarityUi* ui, const char* part);
 void clarity_ui_set_error(ClarityUi* ui, const char* part, const ClarityText* value);

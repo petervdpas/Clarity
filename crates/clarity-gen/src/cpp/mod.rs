@@ -285,6 +285,17 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     for (event, handler) in apps.iter().flat_map(|a| &a.events) {
         let _ = writeln!(events, "        // The app's own events run whatever window is given.\n        if (event == {}) return {};", string(event), string(handler));
     }
+    // Each window that has canvases to draw.
+    let mut redraws = String::new();
+    for w in windows.iter().filter(|w| !w.draws.is_empty()) {
+        let draws: String = w.draws.iter().map(|(canvas, method)| format!("            ui.begin_drawing({});\n            w.{method}(db, ui);\n", string(canvas))).collect();
+        let _ = write!(
+            redraws,
+            "        if (reply.state.window == {}) {{\n            auto w = reply.state.data.get<{}>();\n            clarity::Ui ui(reply.state);\n{draws}            reply.state.parts = ui.reply(reply.state.window, reply.state.data).state.parts;\n        }}\n",
+            string(&w.name),
+            w.struct_name
+        );
+    }
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = writeln!(dispatch, "        if (state.window == {}) {{\n            auto w = state.data.get<{}>();", string(&w.name), w.struct_name);
@@ -367,6 +378,12 @@ public:
     clarity::Reply dispatch([[maybe_unused]] clarity::Db& db, const clarity::WindowState& state, const std::string& handler) override {{
         clarity::Ui ui(state);
 {dispatch}        throw clarity::InvalidError(state.window + " has no handler " + handler);
+    }}
+
+    // Draws the canvases of the window `reply` shows anew, each by its draw
+    // handler on an empty drawing (conformance/drawing.json).
+    clarity::Reply redraw([[maybe_unused]] clarity::Db& db, clarity::Reply reply) override {{
+{redraws}        return reply;
     }}
 
     std::vector<clarity::RefOption> options([[maybe_unused]] clarity::Db& db, [[maybe_unused]] const std::string& entity) override {{

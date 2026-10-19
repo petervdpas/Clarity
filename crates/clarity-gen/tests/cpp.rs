@@ -260,3 +260,52 @@ fn a_window_holds_plain_values() {
     has(sales, "    fresh = false;\n");
     has(sales, "    pending = OrderStatus::Approved;\n");
 }
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_sources([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("x.rounded(int(int64_t{2}))"), "{code}");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
+    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+
+code Dial
+    handler draw_dial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler faster_clicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing; the shell draws the
+/// canvas anew when the window opens and after every handler.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SALES}{DIAL}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "src/modules/sales.cpp");
+    has(code, "ui.draw(\"dial\", nlohmann::json{{\"op\", \"clear\"}, {\"color\", ");
+    has(code, "{\"x1\", double(int64_t{50})}");
+    has(code, "clarity::cos(angle)");
+    has(code, "{\"width\", double(int64_t{3})}});");
+    // Left out: the text's color and size.
+    has(code, "{\"color\", \"text\"}, {\"size\", 10.0}});");
+    let main = file(&files, "src/main.cpp");
+    has(main, "clarity::Reply redraw([[maybe_unused]] clarity::Db& db, clarity::Reply reply) override {");
+    has(main, "            ui.begin_drawing(\"dial\");\n            w.draw_dial(db, ui);");
+}

@@ -34,6 +34,7 @@ pub enum WidgetKind {
     Table,
     List,
     Image,
+    Display,
     Canvas,
 }
 
@@ -75,6 +76,9 @@ pub enum Event {
     Start,
     /// Enter is pressed in an input of a form.
     Submit,
+    /// A canvas is drawn: when its window opens and after every other
+    /// handler of the window.
+    Draw,
 }
 
 /// The events a window has, in the order the designer lists them.
@@ -98,6 +102,7 @@ impl Event {
             Event::Return => "return",
             Event::Start => "start",
             Event::Submit => "submit",
+            Event::Draw => "draw",
         }
     }
 
@@ -115,6 +120,7 @@ impl Event {
             "return" => Some(Event::Return),
             "start" => Some(Event::Start),
             "submit" => Some(Event::Submit),
+            "draw" => Some(Event::Draw),
             _ => None,
         }
     }
@@ -167,6 +173,8 @@ pub enum WidgetProperty {
     Shortcut,
     Default,
     Cancel,
+    Digits,
+    Units,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -416,6 +424,22 @@ const ENTRIES: &[Entry] = &[
         properties: &[WidgetProperty::Show],
     },
     Entry {
+        kind: WidgetKind::Display,
+        keyword: "display",
+        name: "Display",
+        category: Category::Graphics,
+        size: (4, 2),
+        caption: None,
+        // A number in seven-segment digits, as on a calculator.
+        bind: BindTarget::Field,
+        field_types: &["integer", "decimal", "money"],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::Digits],
+    },
+    Entry {
         kind: WidgetKind::Image,
         keyword: "image",
         name: "Image",
@@ -445,8 +469,9 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Surface, WidgetProperty::Renderer],
+        // Drawn by its draw handler (`on draw`), or by a hand-written renderer.
+        events: &[Event::Draw, Event::Pointer, Event::Key],
+        properties: &[WidgetProperty::Units, WidgetProperty::Surface, WidgetProperty::Renderer],
     },
 ];
 
@@ -598,6 +623,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         source: None,
         for_part: None,
         placeholder: None,
+        digits: None,
+        units: None,
         tooltip: None,
         style: None,
         readonly: false,
@@ -648,6 +675,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(bind) = &props.bind {
         parts.push(format!("bind {bind}"));
+    }
+    if let Some(digits) = props.digits {
+        parts.push(format!("digits {digits}"));
+    }
+    if let Some(units) = props.units {
+        parts.push(format!("units {} x {}", units.width, units.height));
     }
     if !props.columns.is_empty() {
         parts.push(format!("columns {}", props.columns.join(", ")));
@@ -803,11 +836,19 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Shortcut, props.shortcut.is_some(), "key"),
         (WidgetProperty::Default, props.default_button, "default"),
         (WidgetProperty::Cancel, props.cancel, "cancel"),
+        (WidgetProperty::Digits, props.digits.is_some(), "digits"),
+        (WidgetProperty::Units, props.units.is_some(), "units"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
             return Err(format!("'{what}' does not apply to a {name}"));
         }
+    }
+    if props.digits.is_some_and(|d| !(1..=MAX_DIGITS).contains(&d)) {
+        return Err(format!("a display has 1 to {MAX_DIGITS} digits"));
+    }
+    if props.units.is_some_and(|u| !canvas_units_fit(u.width, u.height)) {
+        return Err(CANVAS_UNITS_PROBLEM.to_string());
     }
     if let Some(field) = props.switches.iter().find(|f| !props.edit.contains(f)) {
         return Err(format!("'{field}' is a switch but is not edited"));
@@ -830,19 +871,46 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     Ok(())
 }
 
+/// The units a canvas draws in without `units W x H`.
+pub const DEFAULT_UNITS: (u32, u32) = (100, 100);
+pub const CANVAS_UNITS_PROBLEM: &str = "a canvas is 1 to 10000 units wide and high";
+
+pub fn canvas_units_fit(width: u32, height: u32) -> bool {
+    (1..=10000).contains(&width) && (1..=10000).contains(&height)
+}
+
+/// The digits a display has without `digits n`, and the most it can have.
+pub const DEFAULT_DIGITS: u32 = 12;
+pub const MAX_DIGITS: u32 = 24;
+
 /// Keys a shortcut can hold besides its modifiers, by name.
 const NAMED_KEYS: [&str; 15] = [
     "Enter", "Escape", "Tab", "Space", "Backspace", "Delete", "Insert", "Home", "End", "PageUp",
     "PageDown", "Up", "Down", "Left", "Right",
 ];
 
-/// `Ctrl+S`, `Ctrl+Shift+F2`: modifiers, then one key.
+/// Characters that are keys of their own: a calculator's operators, the
+/// decimal point and equals.
+pub const SYMBOL_KEYS: [&str; 7] = ["+", "-", "*", "/", ".", ",", "="];
+
+/// The modifiers of a shortcut and its key: `Ctrl++` is Ctrl and `+`.
+pub fn shortcut_keys(shortcut: &str) -> (Vec<&str>, &str) {
+    let (modifiers, key) = match shortcut.strip_suffix("++") {
+        // `Ctrl++`: the last `+` is the key.
+        Some(rest) if !rest.is_empty() => (rest, "+"),
+        _ if shortcut == "+" => ("", "+"),
+        _ => shortcut.rsplit_once('+').unwrap_or(("", shortcut)),
+    };
+    let modifiers = if modifiers.is_empty() { Vec::new() } else { modifiers.split('+').collect() };
+    (modifiers, key)
+}
+
+/// `Ctrl+S`, `Ctrl+Shift+F2`, `+`: modifiers, then one key.
 pub fn check_shortcut(shortcut: &str) -> Result<(), String> {
     let not = || Err(format!("'{shortcut}' is not a shortcut, as in 'Ctrl+S'"));
-    let mut keys: Vec<&str> = shortcut.split('+').collect();
-    let Some(key) = keys.pop() else { return not() };
-    for (i, modifier) in keys.iter().enumerate() {
-        if !["Ctrl", "Alt", "Shift", "Meta"].contains(modifier) || keys[..i].contains(modifier) {
+    let (modifiers, key) = shortcut_keys(shortcut);
+    for (i, modifier) in modifiers.iter().enumerate() {
+        if !["Ctrl", "Alt", "Shift", "Meta"].contains(modifier) || modifiers[..i].contains(modifier) {
             return not();
         }
     }
@@ -851,7 +919,7 @@ pub fn check_shortcut(shortcut: &str) -> Result<(), String> {
         .strip_prefix('F')
         .and_then(|n| n.parse::<u32>().ok())
         .is_some_and(|n| (1..=12).contains(&n));
-    if single || function || NAMED_KEYS.contains(&key) {
+    if single || function || NAMED_KEYS.contains(&key) || SYMBOL_KEYS.contains(&key) {
         Ok(())
     } else {
         not()

@@ -22,6 +22,8 @@ type PartState struct {
 	Text *string `json:"text,omitempty"`
 	// Checked is whether an unbound checkbox or switch is on.
 	Checked *bool `json:"checked,omitempty"`
+	// Drawing is a canvas's drawing: its shapes, in order (conformance/drawing.json).
+	Drawing *[]map[string]any `json:"drawing,omitempty"`
 }
 
 // WindowState is one open window: its data by name, its parts' properties
@@ -141,6 +143,21 @@ func (u *Ui) Caption(part, design string) string {
 		return c.Show()
 	}
 	return design
+}
+
+// BeginDrawing starts an empty drawing on a canvas, before its draw handler runs.
+func (u *Ui) BeginDrawing(part string) {
+	u.part(part, func(p *PartState) { p.Drawing = &[]map[string]any{} })
+}
+
+// Draw adds a shape to a canvas's drawing: {"op": "line", ...}.
+func (u *Ui) Draw(part string, shape map[string]any) {
+	u.part(part, func(p *PartState) {
+		if p.Drawing == nil {
+			p.Drawing = &[]map[string]any{}
+		}
+		*p.Drawing = append(*p.Drawing, shape)
+	})
 }
 
 func (u *Ui) SetCaption(part string, value Text) {

@@ -205,6 +205,8 @@ pub struct Owner {
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
+    /// The canvases its draw handlers draw, with their member functions.
+    pub draws: Vec<(String, String)>,
 }
 
 /// The struct of every window and the app in `file`, for the header, and
@@ -307,7 +309,8 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             source,
             "{struct_name} {struct_name}::load([[maybe_unused]] clarity::Db& db) {{\n    {struct_name} w;\n{load}    return w;\n}}\n\nvoid to_json(nlohmann::json& out, [[maybe_unused]] const {struct_name}& w) {{\n    out = nlohmann::json::object();\n{to}}}\n\nvoid from_json([[maybe_unused]] const nlohmann::json& in, [[maybe_unused]] {struct_name}& w) {{\n{from}}}\n\n"
         );
-        owners.push(Owner { name: name.clone(), struct_name, handlers, calls, is_app: app.is_some(), events });
+        let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, ident(&handler))).collect();
+        owners.push(Owner { name: name.clone(), struct_name, handlers, calls, is_app: app.is_some(), events, draws });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
 }
@@ -497,6 +500,25 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
+            }
+            // A shape on a canvas, as conformance/drawing.json sends it.
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                let mut fields = vec![format!("{{\"op\", {}}}", string(&shape.name))];
+                for (key, kind, given) in crate::shape_values(&shape.name, args) {
+                    let value = match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => match self.types.type_of(arg) {
+                            TypeInfo::Decimal | TypeInfo::Money => format!("clarity::units({})", self.value(arg)),
+                            _ => format!("double({})", self.value(arg)),
+                        },
+                        (ShapeValue::Number, Err(default)) => format!("{default}.0"),
+                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Text, Ok(arg)) => format!("nlohmann::json({})", self.shown(arg)),
+                    };
+                    fields.push(format!("{{{}, {value}}}", string(key)));
+                }
+                let _ = writeln!(out, "ui.draw({}, nlohmann::json{{{}}});", string(&canvas.name), fields.join(", "));
             }
             StmtKind::Message { level, text } => {
                 let level = match level {
@@ -782,6 +804,23 @@ impl<'a> Emitter<'a> {
         }
         if name == NOW {
             return "std::optional<clarity::DateTime>(clarity::now())".into();
+        }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let value = match args.first() {
+                Some(arg) if is_decimal(&self.types.type_of(arg)) => self.value(arg),
+                Some(arg) => format!("clarity::Decimal({})", self.value(arg)),
+                None => String::new(),
+            };
+            return format!("clarity::{name}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let value = args.first().map(|a| self.value(a)).unwrap_or_default();
+            let places = args.get(1).map(|a| self.value(a)).unwrap_or_default();
+            let simple = value.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+            let value = if simple { value } else { format!("clarity::Decimal({value})") };
+            return format!("{value}.rounded(int({places}))");
         }
         if name == "count" {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();

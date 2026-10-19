@@ -2,6 +2,7 @@
 // slots as it travels to the screen.
 
 #include "check.hpp"
+#include "conformance.hpp"
 #include "clarity/errors.hpp"
 #include "clarity/text.hpp"
 
@@ -58,4 +59,24 @@ TEST(text_travels_as_the_other_runtimes_send_it) {
     CHECK_EQ(saved.show(), "Saved Ada on 2026-10-17: 1250.50, yes, Business");
     CHECK_EQ(nlohmann::json(saved).get<Text>().show(), saved.show());
     CHECK_EQ(Text("{{braces}} and }").show(), "{braces} and }");
+}
+
+TEST(every_rounding_case_rounds_as_every_runtime_does) {
+    auto cases = conformance("rounding.json")["cases"];
+    CHECK(!cases.empty());
+    for (const auto& c : cases) {
+        auto rounded = Decimal::parse(c["value"].get<std::string>()).rounded(c["places"].get<int>());
+        CHECK(rounded == Decimal::parse(c["gives"].get<std::string>()));
+    }
+}
+
+TEST(sin_and_cos_take_degrees_as_every_runtime_does) {
+    auto angles = conformance("drawing.json")["angles"];
+    CHECK(!angles.empty());
+    for (const auto& c : angles) {
+        auto degrees = Decimal::parse(c["degrees"].get<std::string>());
+        CHECK(clarity::sin(degrees) == Decimal::parse(c["sin"].get<std::string>()));
+        CHECK(clarity::cos(degrees) == Decimal::parse(c["cos"].get<std::string>()));
+    }
+    CHECK(units(Decimal::parse("40.5")) == 40.5);
 }

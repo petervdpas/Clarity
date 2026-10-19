@@ -90,6 +90,53 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
         .map_or((clarity_spec::layout::WINDOW_WIDTH, clarity_spec::layout::WINDOW_HEIGHT), |s| (s.width, s.height))
 }
 
+/// The canvases of a window that a draw handler draws, by name, with the
+/// handler: `("dial", "draw_dial")`. Each draw starts an empty drawing; the
+/// backend runs them when the window opens and after every other handler.
+pub(crate) fn canvas_draws(page: &clarity_spec::model::Page) -> Vec<(String, String)> {
+    use clarity_spec::model::Widget;
+    use clarity_spec::widgets::{Event, WidgetKind};
+    fn walk(widgets: &[Widget], out: &mut Vec<(String, String)>) {
+        for widget in widgets {
+            let p = &widget.props;
+            if p.kind == WidgetKind::Canvas
+                && let (Some(name), Some(h)) = (&p.name, p.handlers.iter().find(|h| h.event == Event::Draw))
+            {
+                out.push((name.clone(), h.handler.clone()));
+            }
+            walk(&widget.children, out);
+            for page in &widget.pages {
+                walk(&page.children, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&page.widgets, &mut out);
+    for sidebar in &page.frame.sidebars {
+        walk(&sidebar.widgets, &mut out);
+    }
+    if let Some(footer) = &page.frame.footer {
+        walk(&footer.widgets, &mut out);
+    }
+    out
+}
+
+/// Each value of a shape as a draw statement gives it: its key on the
+/// wire, what it is, and the argument written, or the value it has when
+/// left out (conformance/drawing.json).
+pub(crate) fn shape_values<'a>(
+    shape: &str,
+    args: &'a [clarity_spec::code::Expr],
+) -> Vec<(&'static str, clarity_spec::code::check::ShapeValue, Result<&'a clarity_spec::code::Expr, &'static str>)> {
+    let Some(found) = clarity_spec::code::check::shape(shape) else { return Vec::new() };
+    found
+        .values
+        .iter()
+        .enumerate()
+        .map(|(i, (key, kind, default))| (*key, *kind, args.get(i).ok_or(default.unwrap_or(""))))
+        .collect()
+}
+
 /// The calls with values a window's parts wire, each once, in the order of
 /// the design: `digit(7)`, `digit(8)`. A backend dispatches each by its
 /// written form (widgets::handler_call), which the renderer sends, with

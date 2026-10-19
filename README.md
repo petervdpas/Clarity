@@ -23,13 +23,15 @@ conformance/             cases every runtime and renderer must pass alike
 app/                     Clarity: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build
   src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
-examples/shop.clarity    example project: customers and orders
-examples/shop/           its modules
-examples/records.clarity example project: a record collection, with albums, tracks and loans
-examples/records/        its modules
+examples/                example projects, each a project file with a folder of its modules:
+  shop                   customers and orders
+  records                a record collection, with albums, tracks and loans
+  todo                   tasks with a done flag, edited in their table
+  calculator             a calculator: values in clicks, plain window data, a seven-segment display
+  dial                   a speed dial drawn on a canvas by code
 ```
 
-Each runtime is copied into every application generated for its stack, so the application builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Runtime`, `Clarity.Avalonia`). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
 
 ## Requirements
 

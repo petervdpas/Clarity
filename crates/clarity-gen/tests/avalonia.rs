@@ -552,22 +552,83 @@ fn a_window_holds_plain_values() {
     has(file(&files, "Windows/CalcView.axaml"), "Text=\"{Binding Shown, Converter={x:Static local:Shown.Converter}}\"");
 }
 
-/// A key is written as Avalonia names it: the digit 7 is `D7`, and the
-/// number pad presses the same button, as in a browser.
+/// A character key (`7`, `+`) is what is typed, from the keyboard or the
+/// number pad; a key with modifiers is a gesture, as Avalonia names keys.
 #[test]
 fn keys_are_written_as_avalonia_names_them() {
     let source = SHOP.replace(
         "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
-        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 key \"7\" on click: approve_clicked\n    button \"Back\" name back at 6,10 span 1 key \"Backspace\" on click: approve_clicked\n    button \"Save\" name keep at 7,10 span 1 key \"Ctrl+S\" on click: approve_clicked\n",
+        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 1,13 span 1 key \"7\" on click: approve_clicked\n    button \"+\" name plus at 2,13 span 1 key \"+\" on click: approve_clicked\n    button \"Back\" name back at 3,13 span 1 key \"Backspace\" on click: approve_clicked\n    button \"Save\" name keep at 4,13 span 1 key \"Ctrl+S\" on click: approve_clicked\n    button \"Zoom\" name zoom at 5,13 span 1 key \"Ctrl++\" on click: approve_clicked\n",
     );
     assert_ne!(source, SHOP);
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let axaml = file(&files, "Windows/OrderFormView.axaml");
-    has(axaml, "HotKey=\"D7\"");
+    has(axaml, "c:Keys.Typed=\"7\"");
+    has(axaml, "c:Keys.Typed=\"+\"");
     has(axaml, "HotKey=\"Back\"");
     has(axaml, "HotKey=\"Ctrl+S\"");
-    assert!(!axaml.contains("HotKey=\"7\""), "{axaml}");
-    has(axaml, "HotKey=\"D7\" c:Keys.Also=\"NumPad7\"");
+    has(axaml, "HotKey=\"Ctrl+OemPlus\"");
+    assert!(!axaml.contains("HotKey=\"7\"") && !axaml.contains("HotKey=\"D7\""), "{axaml}");
+}
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SHOP}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_sources([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("Numbers.Round(x, 2L)"), "{code}");
+}
+
+/// A display draws its number in seven-segment digits through the runtime.
+#[test]
+fn a_display_is_the_runtimes_segment_display() {
+    let source = format!("{SHOP}{CALC}").replace(
+        "    text name display at 1,1 span 4 bind shown\n",
+        "    display name screen at 1,1 span 4 rows 1 bind shown digits 10\n",
+    );
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "Windows/CalcView.axaml"), "<c:SegmentDisplay x:Name=\"screen\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Shown}\" Digits=\"10\"");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
+    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+
+code Dial
+    handler draw_dial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler faster_clicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing, which the runtime's
+/// CanvasView shows; the window draws it anew after every handler.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SHOP}{DIAL}");
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/DialViewModel.cs");
+    has(vm, "        Dial.Draw(new Shape.Clear(\"#101810\"));");
+    has(vm, "Dial.Draw(new Shape.Line((double)(50L), (double)(50L), Numbers.Units((50L + (35L * Numbers.Cos(Angle))))");
+    has(vm, "\"text\", (double)(3L)));");
+    // Left out: the text's color and size.
+    has(vm, ", \"text\", 10));");
+    has(vm, "    protected override void Redraw()\n    {\n        Dial.BeginDrawing();\n        OnDrawDial();\n        Dial.EndDrawing();\n    }");
+    has(file(&files, "Windows/DialView.axaml"), "<c:CanvasView x:Name=\"dial\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"6\" Drawing=\"{Binding Dial.Drawing}\" UnitsWidth=\"200\" UnitsHeight=\"100\"");
 }

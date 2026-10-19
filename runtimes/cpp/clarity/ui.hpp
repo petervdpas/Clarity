@@ -29,6 +29,8 @@ struct PartState {
     std::optional<std::string> text;
     /// Whether an unbound checkbox or switch is on.
     std::optional<bool> checked;
+    /// A canvas's drawing: its shapes, in order (conformance/drawing.json).
+    std::optional<nlohmann::json> drawing;
 };
 
 /// One open window: its data by name, its parts' properties and the
@@ -80,6 +82,14 @@ public:
     /// The caption a handler set, or `design`.
     std::string caption(const std::string& part, const std::string& design) const;
     void set_caption(const std::string& part, Text value) { parts_[part].caption = std::move(value); }
+    /// Starts an empty drawing on a canvas, before its draw handler runs.
+    void begin_drawing(const std::string& part) { parts_[part].drawing = nlohmann::json::array(); }
+    /// Adds a shape to a canvas's drawing: {"op": "line", ...}.
+    void draw(const std::string& part, nlohmann::json shape) {
+        auto& drawing = parts_[part].drawing;
+        if (!drawing) drawing = nlohmann::json::array();
+        drawing->push_back(std::move(shape));
+    }
     /// The message a handler set on an input, or empty text.
     std::string error(const std::string& part) const;
     void set_error(const std::string& part, Text value) { parts_[part].error = std::move(value); }

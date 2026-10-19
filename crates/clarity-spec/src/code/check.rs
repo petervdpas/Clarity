@@ -637,6 +637,7 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
         owner: Some(owner),
         handlers,
         decl: None,
+        handler: Some(&handler.name.name),
         event: None,
         returns: None,
         scopes: vec![scope],
@@ -700,6 +701,7 @@ fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, 
         owner: None,
         handlers: &[],
         decl: Some(decl),
+        handler: None,
         event,
         returns,
         scopes: vec![scope],
@@ -747,6 +749,8 @@ struct BodyChecker<'e, 'a> {
     handlers: &'e [HandlerDecl],
     /// The function, action or data event being checked; None for a handler.
     decl: Option<&'e FunctionDecl>,
+    /// The handler being checked, by name.
+    handler: Option<&'e str>,
     /// The data event being checked, if it is one.
     event: Option<DataEvent>,
     returns: Option<Ty<'a>>,
@@ -763,12 +767,101 @@ pub const RECORD_ID: &str = "id";
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
 pub const TODAY: &str = "today";
+pub const NOW: &str = "now";
+
+/// The built-in `round(value, places)`: a decimal or money with at most
+/// `places` decimals, rounded half away from zero (conformance/rounding.json).
+pub const ROUND: &str = "round";
+
+/// The built-in `sin(degrees)` and `cos(degrees)`, rounded to 10 decimals
+/// (conformance/drawing.json).
+pub const SIN: &str = "sin";
+pub const COS: &str = "cos";
+
+/// What a value of a shape is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeValue {
+    Number,
+    /// A color of the theme by name, or `#rrggbb`.
+    Color,
+    /// Text shown in the person's format, with slots.
+    Text,
+}
+
+/// A shape a draw handler draws on its canvas: its name and its values, in
+/// order, each with the value it has when left out (conformance/drawing.json).
+pub struct Shape {
+    pub name: &'static str,
+    pub values: &'static [(&'static str, ShapeValue, Option<&'static str>)],
+}
+
+pub const SHAPES: [Shape; 6] = [
+    Shape { name: "clear", values: &[("color", ShapeValue::Color, None)] },
+    Shape {
+        name: "line",
+        values: &[
+            ("x1", ShapeValue::Number, None),
+            ("y1", ShapeValue::Number, None),
+            ("x2", ShapeValue::Number, None),
+            ("y2", ShapeValue::Number, None),
+            ("color", ShapeValue::Color, None),
+            ("width", ShapeValue::Number, Some("1")),
+        ],
+    },
+    Shape {
+        name: "rect",
+        values: &[
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("width", ShapeValue::Number, None),
+            ("height", ShapeValue::Number, None),
+            ("color", ShapeValue::Color, None),
+        ],
+    },
+    Shape {
+        name: "circle",
+        values: &[("x", ShapeValue::Number, None), ("y", ShapeValue::Number, None), ("r", ShapeValue::Number, None), ("color", ShapeValue::Color, None)],
+    },
+    Shape {
+        name: "ring",
+        values: &[
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("r", ShapeValue::Number, None),
+            ("color", ShapeValue::Color, None),
+            ("width", ShapeValue::Number, Some("1")),
+        ],
+    },
+    Shape {
+        name: "text",
+        values: &[
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("text", ShapeValue::Text, None),
+            ("color", ShapeValue::Color, Some("text")),
+            ("size", ShapeValue::Number, Some("10")),
+        ],
+    },
+];
+
+/// The shape `name`, if a canvas draws it.
+pub fn shape(name: &str) -> Option<&'static Shape> {
+    SHAPES.iter().find(|s| s.name == name)
+}
+
+/// "a, b and c".
+fn and_list(words: &[&str]) -> String {
+    match words {
+        [] => String::new(),
+        [one] => one.to_string(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
 
 /// What a file of a file store has: its name (`photo.jpg`), its path inside
 /// the store (`2024/photo.jpg`), its extension in lower case without the
 /// dot (`jpg`), its size in bytes and when it was last changed.
 pub const FILE_MEMBERS: [&str; 5] = ["name", "path", "extension", "size", "modified"];
-pub const NOW: &str = "now";
 
 enum Place<'a> {
     Value { ty: Ty<'a>, writable: Result<(), String> },
@@ -783,6 +876,61 @@ impl<'a> BodyChecker<'_, 'a> {
 
     fn data(&self, name: &str) -> Option<&'a DataDecl> {
         self.owner.and_then(|o| o.data.iter().find(|d| d.name.name == name))
+    }
+
+    /// A shape on a canvas, in the canvas's own draw handler.
+    fn draw(&mut self, canvas: &Ident, shape: &Ident, args: &[Expr]) {
+        match self.part(&canvas.name) {
+            Some((_, Part::Widget(p))) if p.kind == crate::widgets::WidgetKind::Canvas => {
+                let draws = p.handlers.iter().find(|h| h.event == crate::widgets::Event::Draw).map(|h| h.handler.as_str());
+                match draws {
+                    None => self.error(format!("'{}' has no draw handler; wire 'on draw: handler'", canvas.name), canvas.span),
+                    Some(draws) if Some(draws) != self.handler => {
+                        self.error(format!("'{}' is drawn only by its draw handler, {draws}", canvas.name), canvas.span)
+                    }
+                    Some(_) => {}
+                }
+            }
+            Some((_, part)) => self.error(format!("'{}' is a {}; only a canvas draws", canvas.name, part.keyword()), canvas.span),
+            None => self.error(format!("unknown canvas '{}'", canvas.name), canvas.span),
+        }
+        let Some(found) = self::shape(&shape.name) else {
+            let names: Vec<&str> = SHAPES.iter().map(|s| s.name).collect();
+            self.error(format!("a canvas draws {}, not '{}'", and_list(&names), shape.name), shape.span);
+            for arg in args {
+                self.expr(arg, None);
+            }
+            return;
+        };
+        let needed = found.values.iter().filter(|(_, _, default)| default.is_none()).count();
+        if args.len() < needed || args.len() > found.values.len() {
+            let names: Vec<&str> = found.values.iter().map(|(n, _, _)| *n).collect();
+            let optional: Vec<&str> = found.values.iter().filter(|(_, _, d)| d.is_some()).map(|(n, _, _)| *n).collect();
+            let left_out = match optional.len() {
+                0 => String::new(),
+                1 => format!(" ({} can be left out)", optional[0]),
+                _ => format!(" ({} can be left out)", and_list(&optional)),
+            };
+            self.error(format!("'{}' takes {}{left_out}", shape.name, and_list(&names)), shape.span);
+        }
+        for (arg, (name, kind, _)) in args.iter().zip(found.values.iter()) {
+            let ty = match kind {
+                ShapeValue::Text => self.shown_text(arg),
+                _ => self.expr(arg, None),
+            };
+            let problem = match kind {
+                ShapeValue::Number if !matches!(ty, Ty::Integer | Ty::Decimal | Ty::Money | Ty::Unknown) => Some("a number"),
+                ShapeValue::Color if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
+                ShapeValue::Text if !ty.is_value() => Some("text or a value"),
+                _ => None,
+            };
+            if let Some(wanted) = problem {
+                self.error(format!("{name} of '{}' is {wanted}, not {}", shape.name, ty.name()), arg.span);
+            }
+        }
+        for arg in args.iter().skip(found.values.len()) {
+            self.expr(arg, None);
+        }
     }
 
     fn part(&self, name: &str) -> Option<(&'a str, Part<'a>)> {
@@ -897,6 +1045,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.scopes.pop();
             }
             StmtKind::Return { value } => self.check_return(value.as_ref(), stmt.span),
+            StmtKind::Draw { canvas, shape, args } => self.draw(canvas, shape, args),
             StmtKind::Call { call } => {
                 self.call(call, true);
             }
@@ -1382,6 +1531,32 @@ impl<'a> BodyChecker<'_, 'a> {
                 _ => self.error("'count' takes one list", expr.span),
             }
             return Some(Ty::Integer);
+        }
+        if function.name == SIN || function.name == COS {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            match tys.as_slice() {
+                [Ty::Integer | Ty::Decimal | Ty::Money | Ty::Unknown] => {}
+                [other] => self.error(format!("'{}' takes degrees, a number, not {}", function.name, other.name()), args[0].span),
+                _ => self.error(format!("'{}' takes degrees, as in {}(45)", function.name, function.name), expr.span),
+            }
+            return Some(Ty::Decimal);
+        }
+        if function.name == ROUND {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            let [value, places] = tys.as_slice() else {
+                self.error("'round' takes a number and its decimals, as in round(total, 2)", expr.span);
+                return Some(Ty::Decimal);
+            };
+            if !matches!(places, Ty::Integer | Ty::Unknown) {
+                self.error(format!("the decimals of 'round' are an integer, not {}", places.name()), args[1].span);
+            }
+            return Some(match value {
+                Ty::Decimal | Ty::Money | Ty::Unknown => *value,
+                other => {
+                    self.error(format!("'round' needs a decimal or money, not {}", other.name()), args[0].span);
+                    Ty::Decimal
+                }
+            });
         }
         if function.name == TODAY || function.name == NOW {
             for arg in args {
@@ -2080,6 +2255,11 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_stmt_expr(body, found);
             }
             StmtKind::Call { call } => each_expr(call, found),
+            StmtKind::Draw { args, .. } => {
+                for arg in args {
+                    each_expr(arg, found);
+                }
+            }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => {
                 for arg in with {

@@ -802,3 +802,52 @@ fn a_window_holds_plain_values() {
     assert!(sales.contains("w.fresh = false;"), "{sales}");
     assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
 }
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_sources([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("round(x, 2i64)"), "{code}");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
+    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+
+code Dial
+    handler draw_dial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler faster_clicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing; every handler of the
+/// window, and opening it, draws the canvas anew.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SALES}{DIAL}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("ui.draw(\"dial\", serde_json::json!({\"op\": \"clear\", \"color\": "), "{sales}");
+    assert!(sales.contains("\"op\": \"line\", \"x1\": (50i64) as f64, \"y1\": (50i64) as f64, \"x2\": clarity_runtime::units("), "{sales}");
+    assert!(sales.contains("clarity_runtime::cos(w.angle)"), "{sales}");
+    assert!(sales.contains("\"width\": (3i64) as f64}));"), "{sales}");
+    // Left out: the text's color and size.
+    assert!(sales.contains("\"color\": \"text\", \"size\": 10.0}));"), "{sales}");
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("ui.begin_drawing(\"dial\");\n            modules::sales::dial__draw_dial(db, &mut w, &mut ui)?;"), "{main}");
+    assert!(main.contains("redraw(db, "), "{main}");
+}

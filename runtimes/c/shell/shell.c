@@ -93,11 +93,16 @@ static const char* text_of(const cJSON* args, const char* key) {
 }
 
 /// A window's own event: its handler runs when it has one.
+/// Runs a handler, then draws the window's canvases anew.
+static bool dispatched(ClarityService* s, const ClarityWindowState* state, const char* handler, ClarityReply** out) {
+    return s->options.windows->dispatch(s->options.db, state, handler, out) && s->options.windows->redraw(s->options.db, *out);
+}
+
 static bool on_event(ClarityService* s, const ClarityWindowState* state, const char* event, ClarityReply** out) {
     const char* handler = s->options.windows->handler(state->window, event);
-    if (handler) return s->options.windows->dispatch(s->options.db, state, handler, out);
+    if (handler) return dispatched(s, state, handler, out);
     *out = clarity_ui_reply(clarity_ui(state), state->window, state->data);
-    return true;
+    return s->options.windows->redraw(s->options.db, *out);
 }
 
 static cJSON* replied(ClarityService* s, const ClarityWindowState* state, const char* event) {
@@ -131,7 +136,7 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
     if (strcmp(command, "start_app") == 0) return replied(s, &state, "start");
     if (strcmp(command, "dispatch_event") == 0) {
         ClarityReply* reply;
-        if (!windows->dispatch(db, &state, text_of(args, "handler"), &reply)) return failed();
+        if (!dispatched(s, &state, text_of(args, "handler"), &reply)) return failed();
         return value(clarity_reply_json(reply));
     }
     if (strcmp(command, "ref_options") == 0) {

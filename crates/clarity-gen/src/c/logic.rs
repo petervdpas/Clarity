@@ -254,6 +254,8 @@ pub struct Owner {
     pub is_app: bool,
     /// Its own events (open, close, return, start) with their handlers.
     pub events: Vec<(&'static str, String)>,
+    /// The canvases its draw handlers draw, with their functions.
+    pub draws: Vec<(String, String)>,
 }
 
 /// The struct of every window and the app in `file`, for the header, and
@@ -400,7 +402,8 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             indent(&to, 1),
             indent(&from, 1)
         );
-        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, calls, is_app: app.is_some(), events });
+        let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, format!("{p}_{}", snake(&handler)))).collect();
+        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, calls, is_app: app.is_some(), events, draws });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
 }
@@ -434,11 +437,13 @@ struct Emitter<'a> {
     ensuring: bool,
     /// Locals that hold a record of their own, rather than point at one.
     record_values: HashSet<String>,
+    /// Shapes drawn so far, for the names of their JSON: `shape1`.
+    shapes: usize,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, record_values: HashSet::new() }
+        Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, record_values: HashSet::new(), shapes: 0 }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -738,6 +743,34 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
+            }
+            // A shape on a canvas, as conformance/drawing.json sends it.
+            StmtKind::Draw { canvas, shape, args } => {
+                use clarity_spec::code::check::ShapeValue;
+                self.shapes += 1;
+                let json = format!("shape{}", self.shapes);
+                let mut lines = vec![format!("cJSON* {json} = cJSON_CreateObject();"), format!("cJSON_AddStringToObject({json}, \"op\", {});", string(&shape.name))];
+                for (key, kind, given) in crate::shape_values(&shape.name, args) {
+                    let key = string(key);
+                    lines.push(match (kind, given) {
+                        (ShapeValue::Number, Ok(arg)) => {
+                            let value = match self.types.type_of(arg) {
+                                TypeInfo::Decimal | TypeInfo::Money => format!("clarity_units({})", bare(self.decimal(arg, &mut pre))),
+                                _ => format!("(double)({})", bare(self.value(arg, &mut pre))),
+                            };
+                            format!("cJSON_AddNumberToObject({json}, {key}, {value});")
+                        }
+                        (ShapeValue::Number, Err(default)) => format!("cJSON_AddNumberToObject({json}, {key}, {default});"),
+                        (ShapeValue::Color, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
+                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
+                        (ShapeValue::Text, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_text_json({}));", self.shown(arg, &mut pre)),
+                    });
+                }
+                lines.push(format!("clarity_ui_draw(ui, {}, {json});", string(&canvas.name)));
+                out.push_str(&pre);
+                for line in lines {
+                    let _ = writeln!(out, "{line}");
+                }
             }
             StmtKind::Message { level, text } => {
                 let level = match level {
@@ -1248,6 +1281,17 @@ impl<'a> Emitter<'a> {
         }
         if name == NOW {
             return "clarity_now()".into();
+        }
+        // round(value, places), as every runtime rounds (conformance/rounding.json).
+        // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
+            let value = args.first().map(|a| bare(self.decimal(a, pre))).unwrap_or_default();
+            return format!("clarity_decimal_{name}({value})");
+        }
+        if name == clarity_spec::code::check::ROUND {
+            let value = args.first().map(|a| bare(self.decimal(a, pre))).unwrap_or_default();
+            let places = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            return format!("clarity_decimal_round({value}, (int){places})");
         }
         if name == "count" {
             let list = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();

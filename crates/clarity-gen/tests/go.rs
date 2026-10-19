@@ -584,3 +584,52 @@ fn a_window_holds_plain_values() {
     has(&code, "w.Fresh = false\n");
     has(&code, "w.Pending = OrderStatusApproved\n");
 }
+
+/// round(value, places) rounds through the runtime, as every stack does.
+#[test]
+fn round_rounds_through_the_runtime() {
+    let source = format!("{SALES}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
+    let project = load_sources([("m.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(code.contains("clarity.Round(x, 2)"), "{code}");
+}
+
+/// A window with a canvas its draw handler draws, as each stack's tests use it.
+const DIAL: &str = "
+page Dial: window
+    data angle: decimal, default 30
+    data speed: integer, default 80
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
+    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+
+code Dial
+    handler draw_dial
+        dial.clear(\"#101810\")
+        dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
+        dial.text(50, 90, \"{speed} km/h\")
+
+    handler faster_clicked
+        speed = speed + 10
+";
+
+/// A draw handler adds shapes to its canvas's drawing; the shell draws the
+/// canvas anew when the window opens and after every handler.
+#[test]
+fn a_canvas_is_drawn_by_its_draw_handler() {
+    let source = format!("{SALES}{DIAL}");
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "sales_module.go");
+    has(code, "ui.Draw(\"dial\", map[string]any{\"op\": \"clear\", \"color\": \"#101810\"})");
+    has(code, "\"op\": \"line\", \"x1\": float64(50), \"y1\": float64(50), \"x2\": clarity.Units(");
+    has(code, "clarity.Cos(w.Angle)");
+    has(code, "\"width\": float64(3)})");
+    // Left out: the text's color and size.
+    has(code, "\"color\": \"text\", \"size\": 10.0})");
+    let main = file(&files, "main.go");
+    has(main, "func (windows) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {");
+    has(main, "\t\tui.BeginDrawing(\"dial\")\n\t\tif err := w.drawDial(db, ui); err != nil {");
+}

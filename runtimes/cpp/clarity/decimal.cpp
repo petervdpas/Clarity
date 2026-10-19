@@ -1,5 +1,7 @@
 #include "clarity/decimal.hpp"
 
+#include <cmath>
+
 #include <algorithm>
 #include <ostream>
 
@@ -74,6 +76,11 @@ Decimal Decimal::rescaled(int scale) const {
     return d;
 }
 
+Decimal Decimal::rounded(int places) const {
+    places = std::max(places, 0);
+    return scale_ <= places ? *this : rescaled(places);
+}
+
 Decimal Decimal::operator-() const {
     Decimal d = *this;
     d.units_ = -d.units_;
@@ -121,5 +128,21 @@ std::strong_ordering operator<=>(const Decimal& a, const Decimal& b) {
 }
 
 std::ostream& operator<<(std::ostream& out, const Decimal& value) { return out << value.str(); }
+
+double units(const Decimal& value) { return std::stod(value.str()); }
+
+namespace {
+
+/// An angle function of degrees as a decimal with 10 decimals.
+Decimal angle(const Decimal& degrees, double (*of)(double)) {
+    double radians = units(degrees) * 3.14159265358979323846 / 180.0;
+    return Decimal::of(std::llround(of(radians) * 1e10), 10);
+}
+
+}  // namespace
+
+Decimal sin(const Decimal& degrees) { return angle(degrees, [](double x) { return std::sin(x); }); }
+
+Decimal cos(const Decimal& degrees) { return angle(degrees, [](double x) { return std::cos(x); }); }
 
 }  // namespace clarity

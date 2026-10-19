@@ -70,7 +70,6 @@ fn rust_reaches_the_files_of_a_store() {
     has(code, "photo.cover = Some(db.picture_from(&f, None)?);");
     has(code, "db.read_text(&n)?");
     has(code, "db.write_text(\"photos\", &String::from(\"exports/titles.txt\"), &lines)?;");
-    assert!(files.iter().any(|f| f.path == "clarity-runtime/src/files.rs"));
 }
 
 #[test]

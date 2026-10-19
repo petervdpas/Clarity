@@ -39,6 +39,9 @@ fn a_rust_project_says_what_it_needs_and_how_to_build_it() {
     has(&text, "    cargo run\n");
     has(&text, "target/release/shop");
     has(&text, "data/shop.db");
+    // The runtime comes from crates.io, or from Clarity's repository while working on it.
+    has(&text, &format!("Clarity's runtime comes as the crate clarity-runtime ({})", clarity_gen::rust_runtime_version()));
+    has(&text, "    [patch.crates-io]\n    clarity-runtime = { path = \"<Clarity>/runtimes/rust\" }\n");
 }
 
 #[test]

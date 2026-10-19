@@ -103,19 +103,6 @@ fn writes_a_complete_cargo_project() {
             "Cargo.toml",
             "README.md",
             "build.rs",
-            "clarity-runtime/Cargo.toml",
-            "clarity-runtime/src/dialect.rs",
-            "clarity-runtime/src/files.rs",
-            "clarity-runtime/src/lib.rs",
-            "clarity-runtime/src/mssql.rs",
-            "clarity-runtime/src/mysql.rs",
-            "clarity-runtime/src/picture.rs",
-            "clarity-runtime/src/postgres.rs",
-            "clarity-runtime/src/query.rs",
-            "clarity-runtime/src/sql.rs",
-            "clarity-runtime/src/sqlite.rs",
-            "clarity-runtime/src/store.rs",
-            "clarity-runtime/src/ui.rs",
             "icons/icon.png",
             "src/main.rs",
             "src/model.json",
@@ -131,9 +118,12 @@ fn writes_a_complete_cargo_project() {
     );
     let cargo = file(&files, "Cargo.toml");
     assert!(cargo.contains("name = \"shop\""), "{cargo}");
-    assert!(cargo.contains("clarity-runtime = { path = \"clarity-runtime\", default-features = false, features = [\"sqlite\"] }"), "{cargo}");
-    let runtime = file(&files, "clarity-runtime/Cargo.toml");
-    assert!(runtime.contains("edition = \"2024\"") && !runtime.contains("workspace"), "{runtime}");
+    // The runtime crate from crates.io, at the version this generator is made
+    // with, with the features of the project's databases only.
+    let dependency = format!("clarity-runtime = {{ version = \"{}\", default-features = false, features = [\"sqlite\"] }}", runtime_version());
+    assert!(cargo.contains(&dependency), "{cargo}");
+    // A project of its own, not in a workspace around it.
+    assert!(cargo.contains("\n[workspace]\n"), "{cargo}");
     assert!(file(&files, "src/main.rs").contains("mod modules;"));
     assert!(file(&files, "src/modules.rs").contains("pub mod sales;"));
 }
@@ -294,15 +284,26 @@ fn queries_become_database_queries() {
     assert!(sales.contains("    order_form__filter_changed(db, w, ui)?;\n"), "{sales}");
 }
 
+/// The version of the runtime crate, as runtimes/rust/Cargo.toml names it.
+fn runtime_version() -> &'static str {
+    let manifest = include_str!("../../../runtimes/rust/Cargo.toml");
+    let start = manifest.find("\nversion = \"").unwrap() + "\nversion = \"".len();
+    &manifest[start..start + manifest[start..].find('"').unwrap()]
+}
+
+/// The program builds on the runtime crate and carries no copy of it.
 #[test]
-fn every_runtime_source_file_is_copied() {
-    let files = files();
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../runtimes/rust/src");
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let name = entry.unwrap().file_name().into_string().unwrap();
-        let path = format!("clarity-runtime/src/{name}");
-        assert!(files.iter().any(|f| f.path == path), "{path} is not copied into generated projects");
-    }
+fn no_runtime_source_is_copied() {
+    let copied: Vec<String> = files().into_iter().map(|f| f.path).filter(|p| p.starts_with("clarity-runtime/")).collect();
+    assert!(copied.is_empty(), "{copied:?}");
+}
+
+/// While working on the runtime, `.cargo/config.toml` in the project patches
+/// the crate with the runtime in this repository; Clarity keeps that folder
+/// when it writes the project again.
+#[test]
+fn a_cargo_patch_survives_writing_the_project_again() {
+    assert!(clarity_gen::build_output(clarity_project::Backend::Rust).contains(&".cargo"));
 }
 
 /// SALES as it was: a `limit`, an integer total, a note, no unique number.

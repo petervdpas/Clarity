@@ -1,15 +1,39 @@
 //! Generates the shop example and builds it with cargo. Slow (it
-//! compiles SQLite and Tauri the first time), so it only runs when asked:
-//! `cargo test -p clarity-gen --test build -- --ignored`.
+//! compiles SQLite and Tauri the first time), so it only runs when asked,
+//! one at a time:
+//! `cargo test -p clarity-gen --test build -- --ignored --test-threads=1 --exact <name>`.
+//!
+//! The projects build on the runtime in runtimes/rust through a
+//! `.cargo/config.toml` patch (the switch a developer of the runtime uses),
+//! so a change to the runtime is tested before it is published; one test
+//! builds on the crate from crates.io, as a project outside this repository
+//! does.
 
 use std::path::Path;
 use std::process::Command;
 
 use clarity_project::SourceKind;
 
+/// Which runtime a generated project builds on.
+#[derive(Clone, Copy, PartialEq)]
+enum Runtime {
+    /// The runtime in this repository, through a patch.
+    Local,
+    /// The published crate.
+    Published,
+}
+
+/// Points the project in `out` at the runtime in this repository, as
+/// `.cargo/config.toml` does for a developer of the runtime.
+fn patch(out: &Path) {
+    let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap();
+    std::fs::create_dir_all(out.join(".cargo")).unwrap();
+    std::fs::write(out.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())).unwrap();
+}
+
 /// Generates the example `name` (examples/<name>.clarity) as Rust with
-/// Tauri and builds it with cargo.
-fn builds_with_cargo(name: &str) {
+/// Tauri and builds it with cargo, on `runtime`.
+fn builds_with_cargo(name: &str, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
@@ -22,6 +46,9 @@ fn builds_with_cargo(name: &str) {
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+    if runtime == Runtime::Local {
+        patch(&out);
+    }
 
     // One target folder for every run, so SQLite compiles only once.
     let target = root.join("target/generated");
@@ -41,14 +68,22 @@ fn builds_with_cargo(name: &str) {
 #[test]
 #[ignore]
 fn the_shop_example_builds() {
-    builds_with_cargo("shop");
+    builds_with_cargo("shop", Runtime::Local);
+}
+
+/// The shop on the runtime crate from crates.io, at the version the
+/// generator requires: what a project outside this repository builds on.
+#[test]
+#[ignore]
+fn the_shop_example_builds_on_the_published_crate() {
+    builds_with_cargo("shop", Runtime::Published);
 }
 
 /// The second example, whose project file names C#: on Rust it builds too.
 #[test]
 #[ignore]
 fn the_records_example_builds() {
-    builds_with_cargo("records");
+    builds_with_cargo("records", Runtime::Local);
 }
 
 /// The shop example on each server database: the generated project turns
@@ -76,6 +111,7 @@ fn the_shop_example_builds_for_every_database() {
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
         clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+        patch(&out);
         let status = Command::new("cargo")
             .args(["build", "--quiet"])
             .current_dir(&out)
@@ -227,6 +263,7 @@ fn generated_logic_runs() {
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+    patch(&out);
     std::fs::create_dir_all(out.join("tests")).unwrap();
     std::fs::write(out.join("tests/logic.rs"), LOGIC_TEST).unwrap();
 

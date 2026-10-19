@@ -18,6 +18,7 @@ mod web;
 
 pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
 pub use go::runtime_version as go_runtime_version;
+pub use rust::runtime_version as rust_runtime_version;
 pub use rust::migration_sql;
 pub use web::{APP_CLASS, base_css, theme_css, theme_file};
 
@@ -296,8 +297,9 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
 /// the build output of another stack goes when a project changes stack.
 pub fn build_output(backend: Backend) -> &'static [&'static str] {
     match backend {
-        // cargo's `target` and lock file, and Tauri's `gen`.
-        Backend::Rust => &["target", "data", "gen", "Cargo.lock"],
+        // cargo's `target` and lock file, Tauri's `gen`, and the patch that
+        // builds on the runtime in Clarity's repository while working on it.
+        Backend::Rust => &["target", "data", "gen", "Cargo.lock", ".cargo"],
         // dotnet's `bin` and `obj`.
         Backend::Csharp => &["bin", "obj", "data"],
         // go build's program, and a workspace that builds the module on the

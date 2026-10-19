@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 
 namespace Clarity.Avalonia;
@@ -45,11 +46,12 @@ public sealed class DateTimeBox : UserControl
                 Take(Day.SelectedDate?.Date + (Value?.TimeOfDay ?? TimeSpan.Zero));
         };
         Time.LostFocus += (_, _) => TypedTime();
-        Time.KeyDown += (_, e) =>
+        // Also when a table took the Enter already, so it does not move rows.
+        Time.AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Key.Enter)
                 TypedTime();
-        };
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

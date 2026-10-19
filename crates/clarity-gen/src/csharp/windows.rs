@@ -200,30 +200,42 @@ impl<'a> Window<'a> {
         p.bind.as_deref().and_then(|b| self.bound_field(b)).is_some_and(|(_, f)| f.ty == FieldType::DateTime)
     }
 
-    /// The input in an edited cell of a table: what a form would use for the field.
-    fn cell_input(&self, entity: &Entity, field: &clarity_spec::model::Field, path: &str, switch: bool) -> String {
-        match &field.ty {
-            FieldType::Bool if switch => format!("<ToggleSwitch Classes=\"cell\" IsChecked=\"{{Binding {path}}}\" OnContent=\"\" OffContent=\"\" />"),
-            FieldType::Bool => format!("<CheckBox Classes=\"cell\" IsChecked=\"{{Binding {path}}}\" />"),
-            // A choice box writes only what the person picks, so drawing a row is no edit.
-            FieldType::Enum { name } => format!("<c:ChoiceBox Classes=\"cell\" Choices=\"{{x:Static local:Choices.{}}}\" Value=\"{{Binding {path}}}\" />", name.name),
-            // The window's choices, as a dropdown in a form has them; the cell's own data is the row.
-            FieldType::Ref { entity: target } => format!(
-                "<c:ChoiceBox Classes=\"cell\" Choices=\"{{Binding $parent[DataGrid].((local:{}ViewModel)DataContext).{}Choices}}\" Value=\"{{Binding {path}}}\" />",
-                self.page.name.name,
-                target.name
-            ),
-            FieldType::Date => format!("<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{{Binding {path}, Converter={{x:Static c:Converters.Date}}}}\" />"),
-            // As the form's date input binds a moment.
-            FieldType::DateTime => format!("<c:DateTimeBox Classes=\"cell\" Value=\"{{Binding {path}}}\" />"),
-            // Text cells write their value when they are left (or on Enter), as on the web.
-            FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => format!(
-                "<TextBox Classes=\"cell number\" Text=\"{{Binding {path}, Converter={{x:Static local:Edit.{}{}}}, UpdateSourceTrigger=LostFocus}}\" />",
-                entity.name.name,
-                pascal(&field.name.name)
-            ),
-            _ => format!("<TextBox Classes=\"cell\" Text=\"{{Binding {path}, UpdateSourceTrigger=LostFocus}}\" />"),
+    /// A column of a table part: the field, what kind of cell holds it, and
+    /// whether and how it is edited.
+    fn table_column(&self, entity: &Entity, field: &Field, edit: bool, switch: bool) -> String {
+        let kind = match &field.ty {
+            FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => "Number",
+            FieldType::Bool => "Bool",
+            FieldType::Enum { .. } | FieldType::Ref { .. } => "Choice",
+            FieldType::Date => "Date",
+            FieldType::DateTime => "Moment",
+            _ => "Text",
+        };
+        let mut attributes = format!(
+            "Field=\"{}\" Header=\"{}\" Kind=\"{kind}\"",
+            property(&entity.name.name, &field.name.name),
+            self.text(&field.label)
+        );
+        if !edit {
+            let _ = write!(attributes, " Shown=\"{{x:Static {}}}\"", self.shown_converter(entity, &field.name.name));
+            return format!("<c:TableColumn {attributes} />");
         }
+        attributes.push_str(" Edit=\"True\"");
+        match &field.ty {
+            FieldType::Bool if switch => attributes.push_str(" Switch=\"True\""),
+            FieldType::Enum { name } => {
+                let _ = write!(attributes, " Choices=\"{{x:Static local:Choices.{}}}\"", name.name);
+            }
+            // The records it can point at, which the window reads.
+            FieldType::Ref { entity: target } => {
+                let _ = write!(attributes, " ChoicesFrom=\"{}Choices\"", target.name);
+            }
+            FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => {
+                let _ = write!(attributes, " Number=\"{{x:Static local:Edit.{}{}}}\"", entity.name.name, pascal(&field.name.name));
+            }
+            _ => {}
+        }
+        format!("<c:TableColumn {attributes} />")
     }
 
     fn shown_converter(&self, entity: &Entity, field: &str) -> String {
@@ -693,40 +705,19 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}</Grid>");
             }
             WidgetKind::Table => {
+                // Clarity's own table part: it owns how cells behave, the same as on the web.
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let selected = named.map(|n| format!(" SelectedItem=\"{{Binding {}.SelectedItem}}\"", member(n))).unwrap_or_default();
                 let items = bound.as_deref().map(|b| format!(" ItemsSource=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let _ = writeln!(
-                    out,
-                    "{pad}<DataGrid {at}{items}{selected} AutoGenerateColumns=\"False\" IsReadOnly=\"True\" GridLinesVisibility=\"Horizontal\"{plain_state}{extra}>"
-                );
-                let _ = writeln!(out, "{pad}  <DataGrid.Columns>");
+                let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{plain_state}{extra}>");
+                let _ = writeln!(out, "{pad}  <c:ClarityTable.Columns>");
                 if let Some(entity) = entity {
                     for column in &p.columns {
                         let Some(field) = entity.field(column) else { continue };
-                        let path = property(&entity.name.name, column);
-                        // The columns fill the table; a checkbox needs only its own width.
-                        let width = if field.ty == FieldType::Bool { "Auto" } else { "*" };
-                        if p.edit.contains(column) {
-                            let control = self.cell_input(entity, field, &path, p.switches.contains(column));
-                            let _ = writeln!(
-                                out,
-                                "{pad}    <DataGridTemplateColumn Header=\"{}\" Width=\"{width}\">\n{pad}      <DataGridTemplateColumn.CellTemplate>\n{pad}        <DataTemplate x:DataType=\"local:{}\">\n{pad}          {control}\n{pad}        </DataTemplate>\n{pad}      </DataGridTemplateColumn.CellTemplate>\n{pad}    </DataGridTemplateColumn>",
-                                self.text(&field.label),
-                                entity.name.name
-                            );
-                            continue;
-                        }
-                        let _ = writeln!(
-                            out,
-                            "{pad}    <DataGridTextColumn Header=\"{}\" Width=\"{width}\" Binding=\"{{Binding {path}, Converter={{x:Static {}}}}}\" x:DataType=\"local:{}\" />",
-                            self.text(&field.label),
-                            self.shown_converter(entity, &field.name.name),
-                            entity.name.name
-                        );
+                        let _ = writeln!(out, "{pad}    {}", self.table_column(entity, field, p.edit.contains(column), p.switches.contains(column)));
                     }
                 }
-                let _ = writeln!(out, "{pad}  </DataGrid.Columns>\n{pad}</DataGrid>");
+                let _ = writeln!(out, "{pad}  </c:ClarityTable.Columns>\n{pad}</c:ClarityTable>");
             }
             WidgetKind::List => {
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
@@ -793,6 +784,10 @@ impl<'a> Window<'a> {
         for widget in &self.parts {
             let Some(name) = &widget.props.name else { continue };
             let control = control(name);
+            // What a handler changes in the rows is no edit by the person.
+            if widget.props.kind == WidgetKind::Table && !widget.props.edit.is_empty() {
+                out.push(format!("{control}.Handling = () => Vm.IsHandling;"));
+            }
             for h in &widget.props.handlers {
                 let run = format!("Vm.{}Command.Execute(null)", pascal(&h.handler));
                 let kind = widget.props.kind;
@@ -804,14 +799,10 @@ impl<'a> Window<'a> {
                     Event::Change if kind == WidgetKind::Date && self.binds_moment(&widget.props) => format!("{control}.ValueChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Date => format!("{control}.SelectedDateChanged += (_, _) => {run};"),
                     Event::Change if kind == WidgetKind::Radio => format!("Events.OnChoice({control}, () => {run});"),
-                    // An edit in a cell selects its row first, so the handler finds it.
-                    Event::Change if kind == WidgetKind::Table => {
-                        let entity = widget.props.bind.as_deref().and_then(|b| self.entity_of(b));
-                        let columns: Vec<String> = entity
-                            .map(|e| widget.props.edit.iter().map(|f| format!("\"{}\"", property(&e.name.name, f))).collect())
-                            .unwrap_or_default();
-                        format!("Events.OnCellEdit({control}, () => Vm.IsHandling, [{}], row => {{ {control}.SelectedItem = row; {run}; }});", columns.join(", "))
-                    }
+                    // The table chooses an edited row first, so the handler finds it.
+                    Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),
+                    Event::Select if kind == WidgetKind::Table => format!("{control}.Selected += (_, _) => {run};"),
+                    Event::Open if kind == WidgetKind::Table => format!("{control}.Opened += (_, _) => {run};"),
                     Event::Change | Event::Select => format!("{control}.SelectionChanged += (_, _) => {run};"),
                     Event::Open => format!("{control}.DoubleTapped += (_, _) => {run};"),
                     Event::Enter => format!("{control}.GotFocus += (_, _) => {run};"),

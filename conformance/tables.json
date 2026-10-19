@@ -1,0 +1,140 @@
+{
+  "about": "How a table with edited columns behaves (LANGUAGE.md, Editing in a table), the same on every renderer: the web's Svelte part and the Avalonia control are both run through these cases. The table shows rows of a task; its columns are one of each kind of cell. Steps are what the person does (click a row, tick a checkbox or switch, pick a choice or a day, type into a text, number or time field, press Enter, leave the field) or what the code does (a handler sets a value, the data is read again). type puts the text in the field without taking it yet; enter and leave take it. In a moment column, type is the time (hh:mm) and pickDay the day. Expected: the events in order ('select 1' when another row is chosen, 'change 1' after row 1 was edited), every value changed (all others stay as they were), the fields marked as holding text that is no value, the text a field shows, and the choices of a column by their labels. Numbers, days and moments are written as the backends send them: decimals as text, days as 2026-10-20, moments as 2026-10-20T14:05:00. The person's locale is en-US.",
+  "columns": [
+    { "field": "title", "label": "Task", "kind": "text", "edit": true },
+    { "field": "done", "label": "Done", "kind": "bool", "edit": true },
+    { "field": "urgent", "label": "Urgent", "kind": "bool", "edit": true, "switch": true },
+    { "field": "priority", "label": "Priority", "kind": "choice", "edit": true, "choices": [["Low", "Low"], ["High", "High"]] },
+    { "field": "owner", "label": "Owner", "kind": "choice", "edit": true, "choices": [[null, ""], [1, "Ada"], [2, "Grace"]] },
+    { "field": "due", "label": "Due", "kind": "moment", "edit": true },
+    { "field": "day", "label": "Day", "kind": "date", "edit": true },
+    { "field": "hours", "label": "Hours", "kind": "number", "scale": 1, "edit": true },
+    { "field": "notes", "label": "Notes", "kind": "text", "edit": false }
+  ],
+  "rows": [
+    { "title": "Milk", "done": false, "urgent": false, "priority": "Low", "owner": 1, "due": "2026-10-20T14:05:00", "day": "2026-10-20", "hours": "1.5", "notes": "two litres" },
+    { "title": "Bread", "done": true, "urgent": false, "priority": "High", "owner": null, "due": null, "day": null, "hours": "0", "notes": "" }
+  ],
+  "cases": [
+    {
+      "name": "drawing the rows is no edit",
+      "steps": [],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "ticking a checkbox selects its row, then changes it",
+      "steps": [["tick", 0, "done"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "done", true]] }
+    },
+    {
+      "name": "ticking in the row already chosen only changes it",
+      "steps": [["click", 0], ["tick", 0, "done"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "done", true]] }
+    },
+    {
+      "name": "a switch flips like a checkbox",
+      "steps": [["tick", 1, "urgent"]],
+      "expect": { "events": ["select 1", "change 1"], "values": [[1, "urgent", true]] }
+    },
+    {
+      "name": "clicking the chosen row again is no select",
+      "steps": [["click", 1], ["click", 1], ["click", 0]],
+      "expect": { "events": ["select 1", "select 0"] }
+    },
+    {
+      "name": "what a handler changes is no edit",
+      "steps": [["handler", 0, "done", true], ["handler", 1, "title", "Rye bread"]],
+      "expect": { "events": [], "values": [[0, "done", true], [1, "title", "Rye bread"]] }
+    },
+    {
+      "name": "rows read again are edited like the first ones",
+      "steps": [["reload"], ["tick", 1, "done"]],
+      "expect": { "events": ["select 1", "change 1"], "values": [[1, "done", false]] }
+    },
+    {
+      "name": "typed text is taken when the field is left",
+      "steps": [["type", 0, "title", "Oat milk"], ["leave"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "title", "Oat milk"]] }
+    },
+    {
+      "name": "typing is no edit until it is taken",
+      "steps": [["type", 0, "title", "Oat milk"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "Enter takes typed text once",
+      "steps": [["type", 0, "title", "Oat milk"], ["enter"], ["leave"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "title", "Oat milk"]] }
+    },
+    {
+      "name": "the same text again is no edit",
+      "steps": [["type", 0, "title", "Milk"], ["leave"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "a number reads in the person's format",
+      "steps": [["type", 0, "hours", "2.5"], ["leave"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "hours", "2.5"]] }
+    },
+    {
+      "name": "text that is no number is marked and the value stays",
+      "steps": [["type", 0, "hours", "lots"], ["leave"]],
+      "expect": { "events": [], "marked": [[0, "hours"]], "shown": [[0, "hours", "lots"]] }
+    },
+    {
+      "name": "an enum has no empty choice, a reference has one",
+      "steps": [],
+      "expect": { "events": [], "choices": { "priority": ["Low", "High"], "owner": ["", "Ada", "Grace"] } }
+    },
+    {
+      "name": "picking a choice edits the row",
+      "steps": [["pick", 0, "priority", "High"], ["pick", 0, "owner", null]],
+      "expect": { "events": ["select 0", "change 0", "change 0"], "values": [[0, "priority", "High"], [0, "owner", null]] }
+    },
+    {
+      "name": "picking the choice it has is no edit",
+      "steps": [["pick", 1, "priority", "High"]],
+      "expect": { "events": [] }
+    },
+    {
+      "name": "a moment shows its time on a 24-hour clock",
+      "steps": [],
+      "expect": { "events": [], "shown": [[0, "due", "14:05"], [1, "due", ""], [0, "hours", "1.5"]] }
+    },
+    {
+      "name": "a typed time changes the moment",
+      "steps": [["type", 0, "due", "9:30"], ["leave"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "due", "2026-10-20T09:30:00"]], "shown": [[0, "due", "09:30"]] }
+    },
+    {
+      "name": "Enter takes a typed time",
+      "steps": [["type", 0, "due", "9:30"], ["enter"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "due", "2026-10-20T09:30:00"]] }
+    },
+    {
+      "name": "a time that is no time is marked and the moment stays",
+      "steps": [["type", 0, "due", "25:99"], ["leave"]],
+      "expect": { "events": [], "marked": [[0, "due"]] }
+    },
+    {
+      "name": "picking another day keeps the time",
+      "steps": [["pickDay", 0, "due", "2026-10-22"]],
+      "expect": { "events": ["select 0", "change 0"], "values": [[0, "due", "2026-10-22T14:05:00"]] }
+    },
+    {
+      "name": "a day for an empty moment starts at midnight",
+      "steps": [["pickDay", 1, "due", "2026-10-22"]],
+      "expect": { "events": ["select 1", "change 1"], "values": [[1, "due", "2026-10-22T00:00:00"]] }
+    },
+    {
+      "name": "picking a date edits the row",
+      "steps": [["pickDay", 1, "day", "2026-11-01"]],
+      "expect": { "events": ["select 1", "change 1"], "values": [[1, "day", "2026-11-01"]] }
+    },
+    {
+      "name": "a column that is not edited shows its value",
+      "steps": [],
+      "expect": { "events": [], "shown": [[0, "notes", "two litres"]] }
+    }
+  ]
+}

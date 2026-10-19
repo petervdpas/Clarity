@@ -3,7 +3,7 @@
   // typed as hh:mm on a 24-hour clock, as on Avalonia. The time is taken when
   // it is left or Enter is pressed; a time that is no time is marked and the
   // moment stays.
-  import { joinMoment, readTime, splitMoment } from "./moment";
+  import { joinMoment, readTime, splitMoment } from "../moment";
 
   let {
     value,

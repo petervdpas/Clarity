@@ -253,6 +253,17 @@ theme Shop
 
 **Order.** Formats first, since they fix visible gaps (dates as raw text, money with four decimals). Then text with slots, since it changes the language and is cheapest to settle while little code is written the old way. Then translations, which build on both. Themes stand apart and can come at any point; they mostly touch the renderer.
 
+### 1.6 One behavior on every renderer: the Clarity UI library (2026-10-19)
+
+Clarity has two renderers: the web renderer, which the Rust, Go, C and C++ stacks share (they cannot differ from each other), and Avalonia for C#. A part must behave the same on both, not only work on both: what it can pick, when `change` and `select` run, which empty choices it offers, how text that is no value is marked. Stock controls each bring habits of their own (a grid that moves to the next row on Enter, a dropdown that clears its value while it is drawn), so generated windows do not use them directly.
+
+- **The library.** Each renderer has Clarity's own parts, with one contract: the web's in `app/src/lib/ui/` (Svelte), Avalonia's in `Clarity.Avalonia` (`ClarityTable`, `ChoiceBox`, `DateTimeBox`). A generator only places parts and describes them (a table's columns); how they behave is the library's.
+- **The cases.** Every part has cases in `conformance/` (`tables.json` for the table), written once: what the person or the code does, and what must come out (events, values, marks, what a field shows). Both renderers run them against their real controls: the web part in a simulated page (`npm test`, vitest with jsdom), the Avalonia control headless (`dotnet test runtimes/csharp/Clarity.Avalonia.Tests`). A difference fails the build of whichever renderer has it.
+- **The rule.** A part is done when its cases pass on both renderers. A new behavior gets its case first.
+- **Packages.** `Clarity.Runtime` and `Clarity.Avalonia` are packable as NuGet packages (0.1.0); generated projects still carry copies of their sources until the packages are published.
+
+Done: the table, with every kind of cell (text, number, checkbox, switch, choice, date, moment). Next: the parts of a form.
+
 ## 2. Goals and non-goals
 
 ### Goals

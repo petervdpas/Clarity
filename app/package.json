@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:runtime": "vite build --config vite.runtime.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts",
+    "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts && vitest run --config vitest.parts.config.ts",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -19,9 +19,11 @@
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@tauri-apps/cli": "2.12.3",
     "@tsconfig/svelte": "5.0.8",
+    "jsdom": "29.1.1",
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
     "typescript": "6.0.3",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
   }
 }

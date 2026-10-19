@@ -177,10 +177,10 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "ItemsSource=\"{Binding CustomerChoices}\"");
     has(window, "SelectedDate=\"{Binding Order.OrderedOn, Converter={x:Static c:Converters.Date}}\"");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
-    has(window, "<DataGrid x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
-    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Status}\" Width=\"*\" Binding=\"{Binding Status, Converter={x:Static local:Shown.Converter}}\" x:DataType=\"local:Order\" />");
+    has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
+    has(window, "<c:TableColumn Field=\"Status\" Header=\"{x:Static local:Texts.Status}\" Kind=\"Choice\" Shown=\"{x:Static local:Shown.Converter}\" />");
     // A value with a format shows in the person's format.
-    has(window, "<DataGridTextColumn Header=\"{x:Static local:Texts.Total}\" Width=\"*\" Binding=\"{Binding Total, Converter={x:Static local:Shown.OrderTotal}}\" x:DataType=\"local:Order\" />");
+    has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.Total}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
     has(window, "<TextBox x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Text=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
     has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{x:Static local:Texts.New}\" Command=\"{Binding OpenOrderFormCommand}\" />");
@@ -249,8 +249,8 @@ fn events_without_a_command_are_wired_in_the_code_behind() {
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "public partial class OrderFormView : UserControl");
     has(code, "        Events.OnCommit(numberFilter, () => Vm.FilterChangedCommand.Execute(null));");
-    has(code, "        grid.SelectionChanged += (_, _) => Vm.GridSelectedCommand.Execute(null);");
-    has(code, "        grid.DoubleTapped += (_, _) => Vm.GridOpenedCommand.Execute(null);");
+    has(code, "        grid.Selected += (_, _) => Vm.GridSelectedCommand.Execute(null);");
+    has(code, "        grid.Opened += (_, _) => Vm.GridOpenedCommand.Execute(null);");
 }
 
 /// One desktop window (DESIGN.md, Page kinds): the runtime's shell is the only
@@ -420,43 +420,25 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     settings.name = "Todo".into();
     let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
     let window = file(&files, "Windows/MainView.axaml");
-    let cell = |header: &str, control: &str| {
-        let width = if header == "Done" || header == "Urgent" { "Auto" } else { "*" };
-        format!(
-            "<DataGridTemplateColumn Header=\"{{x:Static local:Texts.{header}}}\" Width=\"{width}\">\n            <DataGridTemplateColumn.CellTemplate>\n              <DataTemplate x:DataType=\"local:Task\">\n                {control}\n              </DataTemplate>\n            </DataGridTemplateColumn.CellTemplate>\n          </DataGridTemplateColumn>"
-        )
-    };
-    // A text cell is committed when it is left, as on the web.
-    has(window, &cell("Title", "<TextBox Classes=\"cell\" Text=\"{Binding Title, UpdateSourceTrigger=LostFocus}\" />"));
-    has(window, &cell("Done", "<CheckBox Classes=\"cell\" IsChecked=\"{Binding Done}\" />"));
+    // The table is Clarity's own part: the window only describes its columns.
+    has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"6\" ItemsSource=\"{Binding Tasks}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
+    let column = |attributes: &str| format!("<c:TableColumn {attributes} />");
+    has(window, &column("Field=\"Title\" Header=\"{x:Static local:Texts.Title}\" Kind=\"Text\" Edit=\"True\""));
+    has(window, &column("Field=\"Done\" Header=\"{x:Static local:Texts.Done}\" Kind=\"Bool\" Edit=\"True\""));
     // A bool column written `as switch` is a switch, as the switch part of a form.
-    has(window, &cell("Urgent", "<ToggleSwitch Classes=\"cell\" IsChecked=\"{Binding Urgent}\" OnContent=\"\" OffContent=\"\" />"));
-    has(
-        window,
-        &cell(
-            "Priority",
-            "<c:ChoiceBox Classes=\"cell\" Choices=\"{x:Static local:Choices.Priority}\" Value=\"{Binding Priority}\" />",
-        ),
-    );
-    has(window, &cell("Due", "<CalendarDatePicker Classes=\"cell\" SelectedDate=\"{Binding Due, Converter={x:Static c:Converters.Date}}\" />"));
+    has(window, &column("Field=\"Urgent\" Header=\"{x:Static local:Texts.Urgent}\" Kind=\"Bool\" Edit=\"True\" Switch=\"True\""));
+    has(window, &column("Field=\"Priority\" Header=\"{x:Static local:Texts.Priority}\" Kind=\"Choice\" Edit=\"True\" Choices=\"{x:Static local:Choices.Priority}\""));
+    has(window, &column("Field=\"Due\" Header=\"{x:Static local:Texts.Due}\" Kind=\"Date\" Edit=\"True\""));
     // A moment is picked as a day and a time, in a cell and in a form alike.
-    has(window, &cell("Added", "<c:DateTimeBox Classes=\"cell\" Value=\"{Binding Added}\" />"));
+    has(window, &column("Field=\"Added\" Header=\"{x:Static local:Texts.Added}\" Kind=\"Moment\" Edit=\"True\""));
     has(window, "<c:DateTimeBox x:Name=\"addedPick\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"4\" Value=\"{Binding Task.Added}\"");
-    has(window, &cell("Hours", "<TextBox Classes=\"cell number\" Text=\"{Binding Hours, Converter={x:Static local:Edit.TaskHours}, UpdateSourceTrigger=LostFocus}\" />"));
+    has(window, &column("Field=\"Hours\" Header=\"{x:Static local:Texts.Hours}\" Kind=\"Number\" Edit=\"True\" Number=\"{x:Static local:Edit.TaskHours}\""));
     // A reference picks from the records the window reads, as a dropdown in a form does.
-    has(
-        window,
-        &cell(
-            "Owner",
-            "<c:ChoiceBox Classes=\"cell\" Choices=\"{Binding $parent[DataGrid].((local:MainViewModel)DataContext).PersonChoices}\" Value=\"{Binding Owner}\" />",
-        ),
-    );
+    has(window, &column("Field=\"Owner\" Header=\"{x:Static local:Texts.Owner}\" Kind=\"Choice\" Edit=\"True\" ChoicesFrom=\"PersonChoices\""));
     has(file(&files, "Windows/MainViewModel.cs"), "PersonChoices = Choice.Of(Db.All<Person>(), r => ");
-    // An edit of an edited column selects its row, then the table's change runs.
+    // An edit by the person (not by a handler) selects its row, then the table's change runs.
     let code = file(&files, "Windows/MainView.axaml.cs");
-    has(
-        code,
-        "Events.OnCellEdit(grid, () => Vm.IsHandling, [\"Title\", \"Done\", \"Priority\", \"Due\", \"Hours\", \"Owner\", \"Added\", \"Urgent\"], row => { grid.SelectedItem = row; Vm.TaskChangedCommand.Execute(null); });",
-    );
+    has(code, "grid.Handling = () => Vm.IsHandling;");
+    has(code, "grid.Edited += _ => Vm.TaskChangedCommand.Execute(null);");
     has(code, "addedPick.ValueChanged += (_, _) => Vm.TaskChangedCommand.Execute(null);");
 }

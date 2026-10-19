@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import DateTimeInput from "./DateTimeInput.svelte";
+  import DateTimeInput from "./ui/DateTimeInput.svelte";
+  import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
   import GridBox from "./GridBox.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
@@ -187,32 +188,67 @@
     if (other) fire("select");
   }
 
-  /** A cell of an edited column changed: the row takes the value, is
-   *  selected, and the table's `on change` runs with it. */
-  function editCell(index: number, column: string, next: string | number | boolean | null) {
-    const row = collection?.rows[index];
-    if (!row || design) return;
-    // Only a value that differs is an edit, as on every stack.
-    if (row[column] === next) return;
-    row[column] = next;
-    selectRow(index);
-    fire("change");
-  }
-
-  /** Number cells whose text is no number, by row and column, with what was typed. */
-  let badCells = $state<Record<string, string>>({});
-  // Rows read again are other records: their cells start over.
-  $effect(() => {
-    void collection?.rows;
-    untrack(() => (badCells = {}));
+  /** The table's columns for the library part: how each field shows and is edited. */
+  const tableColumns = $derived.by((): TableColumn[] => {
+    if (p.kind !== "table" || !collection) return [];
+    const entity = collection.entity;
+    return p.columns.map((name) => {
+      const field = findField(entity, name);
+      const label = field ? tr(preview, field.label) : name;
+      if (!field) return { field: name, label, kind: "text", edit: false };
+      const kind = cellKind(field.type.kind);
+      const format = fieldFormat(field);
+      return {
+        field: name,
+        label,
+        kind,
+        edit: p.edit.includes(name),
+        switch: p.switches.includes(name),
+        shown: (value) => displayValue(preview, field, value),
+        choices: kind === "choice" ? choicesOf(field) : undefined,
+        number:
+          kind === "number" && format
+            ? {
+                text: (value) => (typeof value === "string" || typeof value === "number") && value !== "" ? editText(format, value, formatsOf(preview)) : String(value ?? ""),
+                // A number field always has a value; cleared, it is zero.
+                read: (typed) => (typed.trim() === "" ? (format.kind === "integer" ? 0 : "0") : parseNumber(format, typed, formatsOf(preview))),
+              }
+            : undefined,
+      };
+    });
   });
 
-  /** What a number cell's text reads as, or null when it is no number. */
-  function cellNumber(field: NonNullable<ReturnType<typeof findField>>, typed: string): string | number | null {
-    const format = fieldFormat(field);
-    if (!format) return typed;
-    if (typed.trim() === "") return format.kind === "integer" ? 0 : "0";
-    return parseNumber(format, typed, formatsOf(preview));
+  /** What a cell of a field's type holds. */
+  function cellKind(kind: string): CellKind {
+    switch (kind) {
+      case "integer":
+      case "decimal":
+      case "money":
+        return "number";
+      case "bool":
+        return "bool";
+      case "enum":
+      case "ref":
+        return "choice";
+      case "date":
+        return "date";
+      case "dateTime":
+        return "moment";
+      default:
+        return "text";
+    }
+  }
+
+  /** An enum's values (never empty), or the records a reference can point at after an empty choice. */
+  function choicesOf(field: NonNullable<ReturnType<typeof findField>>): TableColumn["choices"] {
+    const type = field.type;
+    if (type.kind === "enum") return (findEnum(preview, type.name.name)?.variants ?? []).map((v) => ({ value: v.name.name, label: tr(preview, v.label) }));
+    if (type.kind !== "ref") return [];
+    // Running, a reference holds the id of its record; in the designer, the sample's text.
+    const records = live
+      ? live.refOptions(type.entity.name).map((o) => ({ value: o.id, label: o.text }))
+      : (preview.displays[type.entity.name] ?? []).map((text) => ({ value: text, label: text }));
+    return [{ value: null, label: "" }, ...records];
   }
 
   function pressMove(e: PointerEvent) {
@@ -246,10 +282,6 @@
     if (design) pageDesigner.selected = tabOffset;
   }
 
-  function columnLabel(name: string): string {
-    const label = collection && findField(collection.entity, name)?.label;
-    return label ? tr(preview, label) : name;
-  }
 </script>
 
 <svelte:window onkeydown={windowKey} />
@@ -476,90 +508,17 @@
         {/each}
       </div>
     {:else if p.kind === "table"}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {#each p.columns as column (column)}<th>{columnLabel(column)}</th>{/each}
-            </tr>
-          </thead>
-          <tbody>
-            {#each collection?.rows ?? [] as row, i (i)}
-              <tr class:chosen={selectedRow === i} onclick={() => selectRow(i)} ondblclick={() => fire("open")}>
-                {#each p.columns as column (column)}
-                  {@const field = collection ? findField(collection.entity, column) : undefined}
-                  {@const cell = row[column]}
-                  {#if field && p.edit.includes(column)}
-                    <td class="edit" class:numeric={isNumeric(field)}>
-                      {#if field.type.kind === "bool" && p.switches.includes(column)}
-                        <!-- `as switch`: the switch of a form, without its caption. -->
-                        <label class="toggle cell-switch">
-                          <input type="checkbox" role="switch" aria-label={columnLabel(column)} checked={cell === true} disabled={design || disabled || readonly}
-                            onchange={(e) => editCell(i, column, e.currentTarget.checked)} />
-                          <span class="track" aria-hidden="true"></span>
-                        </label>
-                      {:else if field.type.kind === "bool"}
-                        <input type="checkbox" aria-label={columnLabel(column)} checked={cell === true} disabled={design || disabled || readonly}
-                          onchange={(e) => editCell(i, column, e.currentTarget.checked)} />
-                      {:else if field.type.kind === "enum"}
-                        <!-- An enum always has a value, on every stack: no empty choice. -->
-                        <select aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled || readonly}
-                          onchange={(e) => editCell(i, column, e.currentTarget.value)}>
-                          {#each findEnum(preview, field.type.name.name)?.variants ?? [] as v (v.name.name)}
-                            <option value={v.name.name}>{tr(preview, v.label)}</option>
-                          {/each}
-                        </select>
-                      {:else if field.type.kind === "ref"}
-                        <!-- Running, a reference holds the id of its record; in the designer, the sample's text. -->
-                        <select aria-label={columnLabel(column)} value={cell === null || cell === undefined ? "" : String(cell)} disabled={design || disabled || readonly}
-                          onchange={(e) => editCell(i, column, e.currentTarget.value === "" ? null : Number(e.currentTarget.value))}>
-                          <option value=""></option>
-                          {#if live}
-                            {#each live.refOptions(field.type.entity.name) as option (option.id)}
-                              <option value={String(option.id)}>{option.text}</option>
-                            {/each}
-                          {:else}
-                            {#each preview.displays[field.type.entity.name] ?? [] as option (option)}
-                              <option value={option}>{option}</option>
-                            {/each}
-                          {/if}
-                        </select>
-                      {:else if field.type.kind === "dateTime"}
-                        <DateTimeInput value={cell} label={columnLabel(column)} disabled={design || disabled} {readonly} onchange={(next) => editCell(i, column, next)} />
-                      {:else if field.type.kind === "date"}
-                        <input type="date" aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled} {readonly}
-                          onchange={(e) => editCell(i, column, e.currentTarget.value === "" ? null : e.currentTarget.value)} />
-                      {:else if isNumeric(field)}
-                        {@const format = fieldFormat(field)}
-                        {@const key = `${i}:${column}`}
-                        <!-- Text that is no number stays as typed and is marked; the value stays, as in a number input. -->
-                        <input aria-label={columnLabel(column)} inputmode="decimal" disabled={design || disabled} {readonly}
-                          class:bad={key in badCells} aria-invalid={key in badCells}
-                          value={badCells[key] ?? (format && (typeof cell === "string" || typeof cell === "number") && cell !== "" ? editText(format, cell, formatsOf(preview)) : String(cell ?? ""))}
-                          onchange={(e) => {
-                            const typed = e.currentTarget.value;
-                            const read = cellNumber(field, typed);
-                            if (read === null) badCells[key] = typed;
-                            else {
-                              delete badCells[key];
-                              editCell(i, column, read);
-                            }
-                          }} />
-                      {:else}
-                        <input aria-label={columnLabel(column)} value={cell ?? ""} disabled={design || disabled} {readonly}
-                          onchange={(e) => editCell(i, column, e.currentTarget.value)} />
-                      {/if}
-                    </td>
-                  {:else}
-                    <td class:numeric={field ? isNumeric(field) : false}>{field ? displayValue(preview, field, cell) : ""}</td>
-                  {/if}
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-        {#if p.columns.length === 0}<div class="empty">Choose columns in the properties</div>{/if}
-      </div>
+      <Table
+        columns={tableColumns}
+        rows={collection?.rows ?? []}
+        selected={selectedRow ?? null}
+        {design}
+        {disabled}
+        {readonly}
+        onselect={(row) => selectRow(row)}
+        onopen={() => fire("open")}
+        onedit={() => fire("change")}
+      />
     {:else if p.kind === "list"}
       <ul class="list">
         {#each collection?.rows ?? [] as row, i (i)}
@@ -629,7 +588,6 @@
     opacity: 0.55;
   }
 
-  tr.chosen td,
   li.chosen {
     background: var(--selection);
   }
@@ -999,96 +957,6 @@
   .splitter.vertical .divider {
     width: auto;
     height: 4px;
-  }
-
-  .table-wrap {
-    flex: 1;
-    overflow: auto;
-    border: var(--border-width) solid var(--border-strong);
-    border-radius: var(--radius-panel);
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--font-size);
-  }
-
-  th {
-    position: sticky;
-    top: 0;
-    background: var(--header-bg);
-    color: var(--header-text);
-    font-weight: var(--header-weight, 600);
-    text-align: left;
-    padding: var(--padding) calc(var(--padding) * 2);
-    border-bottom: var(--border-width) solid var(--border-strong);
-  }
-
-  td {
-    padding: calc(var(--padding) - 1px) calc(var(--padding) * 2);
-    border-bottom: var(--border-width) solid var(--border);
-    white-space: nowrap;
-  }
-
-  /* An edited cell holds its input flush in the cell, as a spreadsheet does. */
-  td.edit {
-    padding: 0 calc(var(--padding) * 2 - 4px);
-  }
-
-  td.edit input:not([type="checkbox"]),
-  td.edit :global(.moment input),
-  td.edit select {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    font: inherit;
-    padding: 1px 4px;
-    border: 1px solid transparent;
-    background-color: transparent;
-    color: inherit;
-  }
-
-  td.edit input:not([type="checkbox"]):focus,
-  td.edit select:focus,
-  td.edit :global(.moment input:focus),
-  td.edit :global(.moment input:hover),
-  td.edit input:not([type="checkbox"]):hover,
-  td.edit select:hover {
-    border-color: var(--border-strong);
-    background-color: var(--input-bg);
-  }
-
-  td.edit.numeric input {
-    text-align: right;
-  }
-
-  td.edit input.bad {
-    border-color: var(--error);
-  }
-
-  td.edit :global(.moment input.time) {
-    width: 64px;
-  }
-
-  td.edit :global(.moment input.bad) {
-    border-color: var(--error);
-  }
-
-  .cell-switch {
-    display: inline-flex;
-    vertical-align: middle;
-  }
-
-  td.edit input[type="checkbox"] {
-    margin: 0 4px;
-    vertical-align: middle;
-  }
-
-  .empty {
-    padding: 8px;
-    color: var(--text-muted);
-    font-size: var(--font-size-small);
   }
 
   .list {

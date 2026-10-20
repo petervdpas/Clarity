@@ -20,7 +20,7 @@ use clarity_spec::code::{
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
 use super::model::{constant, decimal_literal};
-use super::names::{field, local, pascal, string, value_type, zero};
+use super::names::{field, function as function_name, local, pascal, string, value_type, zero};
 use crate::print;
 
 /// The functions of `file`'s functions, actions and data events.
@@ -369,7 +369,7 @@ impl<'a> Emitter<'a> {
         for param in &decl.params {
             params.push(format!("{} {}", local(&param.name.name), value_type(&type_ref_info(self.project, &param.ty))));
         }
-        let name = if decl.kind == FunctionKind::Event { local(&decl.name.name) } else { pascal(&decl.name.name) };
+        let name = if decl.kind == FunctionKind::Event { local(&decl.name.name) } else { function_name(self.project, &decl.name.name) };
         let ret = self.returns().map(|r| format!("({}, error)", value_type(&r))).unwrap_or_else(|| "error".into());
         let mut body = String::new();
         for condition in &decl.requires {
@@ -1072,7 +1072,7 @@ impl<'a> Emitter<'a> {
             let value = if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) };
             code.push(bare(value));
         }
-        format!("{}({})", pascal(name), code.join(", "))
+        format!("{}({})", function_name(self.project, name), code.join(", "))
     }
 
     fn call(&mut self, name: &str, args: &[Expr], pre: &mut String) -> String {

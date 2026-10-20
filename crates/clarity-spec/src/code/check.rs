@@ -664,6 +664,21 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
         if !engine.file.ends_with(".wasm") {
             out.push(Diagnostic::error("an engine is a .wasm file in the engines folder", engine.span));
         }
+        let mut used: Vec<&str> = Vec::new();
+        for service in &engine.uses {
+            if !crate::engines::SERVICES.contains(&service.name.as_str()) {
+                out.push(Diagnostic::error(format!("'{}' is no service; an engine uses clock, random or log", service.name), service.span));
+            } else if used.contains(&service.name.as_str()) {
+                out.push(Diagnostic::error(format!("engine {} uses {} twice", engine.name.name, service.name), service.span));
+            }
+            used.push(&service.name);
+        }
+        if engine.seconds.is_some_and(|s| s == 0 || s > crate::engines::MAX_SECONDS) {
+            out.push(Diagnostic::error(format!("an engine's time limit is between 1 and {} seconds", crate::engines::MAX_SECONDS), engine.span));
+        }
+        if engine.megabytes.is_some_and(|m| m == 0 || m > crate::engines::MAX_MEGABYTES) {
+            out.push(Diagnostic::error(format!("an engine's memory limit is between 1 and {} MB", crate::engines::MAX_MEGABYTES), engine.span));
+        }
         let mut names: Vec<&str> = Vec::new();
         for function in &engine.functions {
             if names.contains(&function.name.name.as_str()) {

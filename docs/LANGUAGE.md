@@ -903,6 +903,8 @@ An engine is a processing module compiled to WebAssembly, which every stack runs
 
 ```clarity
 engine Pricing from "pricing.wasm"
+    uses clock, random
+    limit 2 seconds, 64 MB
     function total(lines: list<Line>) -> money
     function size_of(count: integer) -> Size
     function discounted(order: Order) -> Order
@@ -916,9 +918,11 @@ function order_total(order: Order) -> money
 - **The file** is in the `engines` folder of the module folder (`shop/engines/pricing.wasm`). Every generated application carries it inside the program.
 - **Each function** has a signature like a function's, and always a result: `-> type`. Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`; not `file` or `list<file>`.
 - **A call** is `Engine.function(args)`. The checker types it against the declaration, as it does a call to a function. Handlers, functions and actions can all call an engine: it has no effects.
-- **The engine computes; the application does all input and output.** An engine imports nothing, so it reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
+- **The engine computes; the application does all input and output.** An engine reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
+- **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number) and `log` (a line in the application's log). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
+- **`limit`** says what one call may take: `limit 2 seconds`, `limit 64 MB` or both, `limit 2 seconds, 64 MB`. A call that runs longer is stopped, and fails with an error that says so; the engine never gets more memory than its limit. Without a limit line, a call may take 5 seconds and the engine 256 MB. A time limit is between 1 and 3600 seconds, a memory limit between 1 and 4096 MB.
 - **No state.** Each call starts the engine afresh, so nothing carries over from one call to the next.
-- **Checked twice.** The designer reads the file and reports a file that is not in the folder, is no WebAssembly, imports anything, or lacks a declared function. The application checks it again when it starts, and stops there rather than at the first call.
+- **Checked twice.** The designer reads the file and reports a file that is not in the folder, is no WebAssembly, imports what the engine does not use, or lacks a declared function. The application checks it again when it starts, and stops there rather than at the first call.
 - **An error** that the engine gives back (its own refusal) reaches code as a refusal, in the engine's words. An engine that fails while it runs is an error that names the engine.
 - The declaration is visible to the modules that `use` the module, like its functions. Two engines of one module have different names, and an engine has each function once.
 
@@ -1226,7 +1230,10 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
                     statement*
 
 engine        = "engine" Name "from" String
+                    ["uses" service ("," service)*]
+                    ["limit" n ("seconds" | "MB") ["," n ("seconds" | "MB")]]
                     ("function" name "(" [param ("," param)*] ")" "->" type-ref)*
+service       = "clock" | "random" | "log"
 engine-call   = Engine "." name "(" [expr ("," expr)*] ")"
 
 find          = "find" name "in" Entity ["where" condition]

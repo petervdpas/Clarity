@@ -28,7 +28,7 @@ clarity-runtime = { version = "0.3.0", default-features = false, features = ["sq
 
 ## Engines
 
-The feature `engines` hosts engines with [wasmi](https://crates.io/crates/wasmi): plain WebAssembly modules that import nothing, called with JSON values through Clarity's engine interface. A generated application turns it on only when the project declares an engine.
+The feature `engines` hosts engines with [wasmi](https://crates.io/crates/wasmi): plain WebAssembly modules that import only the services of Clarity they use (`clock`, `random`, `log`), called with JSON values through Clarity's engine interface, each call within the engine's time and memory limits. A generated application turns it on only when the project declares an engine.
 
 ## Working on the runtime
 

@@ -24,6 +24,8 @@ Then declare it in a module, with each function it has:
 
 ```clarity
 engine Pricing from "pricing.wasm"
+    uses clock, random
+    limit 2 seconds, 64 MB
     function total(lines: list<Line>) -> money
     function size_of(count: integer) -> Size
     function discounted(order: Order) -> Order
@@ -31,8 +33,30 @@ engine Pricing from "pricing.wasm"
 
 - Every function gives a value, so each has `-> type`.
 - Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`. Files are not: read the file in code and hand its text in.
-- The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports anything, or lacks a function you declared.
-- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with its functions.
+- `uses` and `limit` are optional; see [Services](#services) and [Limits](#limits) below.
+- The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports a service the engine does not use (or anything else), or lacks a function you declared.
+- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with what it uses, its limit and its functions.
+
+## Services
+
+An engine reaches nothing by itself. `uses` names the services of Clarity it may call:
+
+| Service | What the engine gets |
+|---|---|
+| `clock` | The time, in milliseconds since 1970-01-01 UTC. |
+| `random` | A random number. Every call starts a fresh random sequence; the sequence is the same on every stack for the same start. |
+| `log` | A line in the application's log, written as `engine Pricing: <the line>` to the standard error. |
+
+There is no service for the database, files or the network, and there won't be: an engine that needs data gets it as a value from your code.
+
+## Limits
+
+Every call runs within limits, so an engine that loops without end, or grows without end, can't hang or exhaust your application:
+
+- **Time:** a call that runs longer than its limit is stopped. Code gets an error such as `engine Pricing failed in total: it ran longer than 2 seconds`, which a handler shows like any error.
+- **Memory:** the engine never gets more memory than its limit. Most engines then fail, with an error that names the engine and the function.
+
+Write `limit 2 seconds`, `limit 64 MB`, or both: `limit 2 seconds, 64 MB`. Without a limit line, a call may run 5 seconds and the engine may use 256 MB. A time limit is between 1 and 3600 seconds; a memory limit between 1 and 4096 MB.
 
 ## Calling an engine
 
@@ -56,7 +80,7 @@ handler discount_clicked
 
 ## Writing an engine
 
-Any language that compiles to plain WebAssembly can make an engine, as long as the module imports nothing. Build for a target without an operating system: Rust's `wasm32-unknown-unknown`, clang's `--target=wasm32` without a C library, Zig's `wasm32-freestanding`. A target such as WASI adds imports, and Clarity refuses the module.
+Any language that compiles to plain WebAssembly can make an engine, as long as the module imports nothing but the services it uses. Build for a target without an operating system: Rust's `wasm32-unknown-unknown`, clang's `--target=wasm32` without a C library, Zig's `wasm32-freestanding`. A target such as WASI adds imports of its own, and Clarity refuses the module.
 
 The module exports:
 
@@ -102,6 +126,25 @@ pub extern "C" fn add(at: i32, len: i32) -> i64 {
 }
 ```
 
+The services are functions the module imports from module `clarity`:
+
+| Import | Type |
+|---|---|
+| `clarity.clock` | `() -> i64` |
+| `clarity.random` | `() -> i64` |
+| `clarity.log` | `(place: i32, len: i32)`, the place and length of UTF-8 text in the engine's memory |
+
+In Rust:
+
+```rust
+#[link(wasm_import_module = "clarity")]
+unsafe extern "C" {
+    fn clock() -> i64;
+    fn random() -> i64;
+    fn log(at: *const u8, len: i32);
+}
+```
+
 The test engine in Clarity's repository, `conformance/engines/test`, is a complete example with `clarity_alloc` and `clarity_free`. Build it with `cargo build --release --target wasm32-unknown-unknown`.
 
 ## How each stack runs it
@@ -122,7 +165,6 @@ The generated program carries the engine inside it: embedded on Rust, Go and C#,
 These are designed but not built:
 
 - Engines written in Clarity itself.
-- Services an engine may ask for: the clock, random numbers, a log and progress.
-- Time and memory limits per call. Until then, an engine that never finishes holds up the handler that called it.
+- The service `progress`, which would let a long call show on the screen how far it is.
 - Engines that keep state per window or per application, and hooks such as `on tick`.
 - Engines that run beside the screen, drawing on a canvas.

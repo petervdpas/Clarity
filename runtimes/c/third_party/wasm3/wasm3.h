@@ -276,6 +276,9 @@ d_m3ErrorConst  (trapStackOverflow,             "[trap] stack overflow")
 //-------------------------------------------------------------------------------------------------------------------------------
     M3Result            m3_Yield                    (void);
 
+    // Clarity: when set, m3_Yield asks it, and a call stops with what it returns.
+    extern M3Result     (* m3_YieldHook)            (void);
+
     // o_function is valid during the lifetime of the originating runtime
     M3Result            m3_FindFunction             (IM3Function *          o_function,
                                                      IM3Runtime             i_runtime,

@@ -13,6 +13,8 @@ entity Order
     total: money
 
 engine Pricing from "test.wasm"
+    uses clock, random, log
+    limit 2 seconds, 64 MB
     function add(a: integer, b: integer) -> integer
     function greet(name: text) -> text
     function total(lines: list<Line>) -> money

@@ -111,15 +111,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 /// file, and every one checked when the application starts.
 fn engines_rs(project: &Project) -> String {
     let mut out = format!(
-        "{HEADER}\n//! The engines of the application: each loaded once from its file, every one checked when the application starts.\n\nuse std::sync::OnceLock;\n\nuse clarity_runtime::{{Error, Result}};\nuse clarity_runtime::engine::Engine;\n\ntype Loaded = OnceLock<std::result::Result<Engine, String>>;\n\nfn loaded(cell: &'static Loaded, name: &str, bytes: &[u8], functions: &[&str]) -> Result<&'static Engine> {{\n    cell.get_or_init(|| Engine::load(name, bytes, functions).map_err(|e| e.to_string())).as_ref().map_err(|e| Error::Engine(e.clone()))\n}}\n"
+        "{HEADER}\n//! The engines of the application: each loaded once from its file, every one checked when the application starts.\n\nuse std::sync::OnceLock;\n\nuse clarity_runtime::{{Error, Result}};\nuse clarity_runtime::engine::{{Engine, Limits}};\n\ntype Loaded = OnceLock<std::result::Result<Engine, String>>;\n\nfn loaded(cell: &'static Loaded, name: &str, bytes: &[u8], functions: &[&str], uses: &[&str], limits: Limits) -> Result<&'static Engine> {{\n    cell.get_or_init(|| Engine::load(name, bytes, functions, uses, limits).map_err(|e| e.to_string())).as_ref().map_err(|e| Error::Engine(e.clone()))\n}}\n"
     );
     let mut checks = String::new();
     for engine in crate::engines(project) {
         let function = snake(&engine.name.name);
         let names: Vec<String> = engine.functions.iter().map(|f| format!("{:?}", f.name.name)).collect();
         out.push_str(&format!(
-            "\n/// Engine {name}, from {file}.\npub fn {function}() -> Result<&'static Engine> {{\n    static ENGINE: Loaded = OnceLock::new();\n    loaded(&ENGINE, {name:?}, include_bytes!(\"../engines/{file}\"), &[{}])\n}}\n",
+            "\n/// Engine {name}, from {file}.\npub fn {function}() -> Result<&'static Engine> {{\n    static ENGINE: Loaded = OnceLock::new();\n    loaded(&ENGINE, {name:?}, include_bytes!(\"../engines/{file}\"), &[{}], &[{uses}], Limits {{ seconds: {seconds}, megabytes: {megabytes} }})\n}}\n",
             names.join(", "),
+            uses = engine.uses.iter().map(|u| format!("{:?}", u.name)).collect::<Vec<_>>().join(", "),
+            seconds = engine.seconds(),
+            megabytes = engine.megabytes(),
             name = engine.name.name,
             file = engine.file,
         ));

@@ -258,10 +258,13 @@ fn engines_cs(project: &Project, name: &str) -> String {
         let member = pascal(&engine.name.name);
         let functions: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
         members.push_str(&format!(
-            "    static readonly Lazy<Engine> {field} = new(() => Engine.Load({}, Read({}), [{}]));\n\n    /// <summary>Engine {}, from {}.</summary>\n    public static Engine {member} => {field}.Value;\n\n",
+            "    static readonly Lazy<Engine> {field} = new(() => Engine.Load({}, Read({}), [{}], [{}], new EngineLimits({}, {})));\n\n    /// <summary>Engine {}, from {}.</summary>\n    public static Engine {member} => {field}.Value;\n\n",
             string(&engine.name.name),
             string(&engine.file),
             functions.join(", "),
+            engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+            engine.seconds(),
+            engine.megabytes(),
             engine.name.name,
             engine.file,
             field = format!("_{}", camel(&engine.name.name)),

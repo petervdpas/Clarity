@@ -9,6 +9,17 @@ use std::str::FromStr;
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
 
+// The services of Clarity an engine may use (`uses clock, random, log`).
+#[link(wasm_import_module = "clarity")]
+unsafe extern "C" {
+    /// Milliseconds since 1970-01-01 UTC.
+    fn clock() -> i64;
+    /// The next number of the call's random sequence (splitmix64).
+    fn random() -> i64;
+    /// A line of UTF-8 text into the application's log.
+    fn log(at: *const u8, len: i32);
+}
+
 /// Room in the engine's memory for the host to write into.
 #[unsafe(no_mangle)]
 pub extern "C" fn clarity_alloc(len: i32) -> i32 {
@@ -93,3 +104,35 @@ function!(discounted, |args| {
 
 // fail(why: text) -> text: refuses, with the reason given.
 function!(fail, |args| Err(text(&args[0])?.to_string()));
+
+// spin() -> integer: never finishes, so only a time limit stops it.
+function!(spin, |_args| {
+    let mut turns: u64 = 0;
+    loop {
+        turns = std::hint::black_box(turns.wrapping_add(1));
+    }
+});
+
+// grow(mb: integer) -> integer: holds mb megabytes at once, so a memory
+// limit below that stops it.
+function!(grow, |args| {
+    let mb = integer(&args[0])? as usize;
+    let held = std::hint::black_box(vec![1u8; mb * 1024 * 1024]);
+    Ok(json!(held.len() / (1024 * 1024)))
+});
+
+// now() -> integer: the clock of the host.
+function!(now, |_args| Ok(json!(unsafe { clock() })));
+
+// dice(n: integer, sides: integer) -> list<integer>: n throws of a die.
+function!(dice, |args| {
+    let (n, sides) = (integer(&args[0])?, integer(&args[1])? as u64);
+    Ok(json!((0..n).map(|_| (unsafe { random() } as u64 % sides) + 1).collect::<Vec<_>>()))
+});
+
+// note(text: text) -> bool: writes the text into the log.
+function!(note, |args| {
+    let line = text(&args[0])?;
+    unsafe { log(line.as_ptr(), line.len() as i32) };
+    Ok(json!(true))
+});

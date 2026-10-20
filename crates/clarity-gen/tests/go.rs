@@ -633,3 +633,22 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(main, "func (windows) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {");
     has(main, "\t\tui.BeginDrawing(\"dial\")\n\t\tif err := w.drawDial(db, ui); err != nil {");
 }
+
+/// A function whose Go name another top-level name already has (a type,
+/// an enum value, a constructor, a window) takes a trailing `_`, in its
+/// declaration and in every call.
+#[test]
+fn a_function_never_takes_the_name_of_a_type() {
+    let project = load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "shop_module.go");
+    for declared in ["func Size_(", "func SizeSmall_(", "func NewOrder_(", "func MainWindow_(", "func Sources_("] {
+        has(code, declared);
+    }
+    has(code, "Size_(db, 1)");
+    has(code, "MainWindow_(db)");
+    // The types keep their own names.
+    has(code, "type Size string");
+    has(code, "func NewOrder() Order");
+}

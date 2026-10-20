@@ -257,11 +257,15 @@ fn engines_c(project: &Project) -> (String, String) {
         let rows: Vec<String> = bytes.chunks(16).map(|row| row.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ")).collect();
         let names: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
         source.push_str(&format!(
-            "\n/// Engine {name}, from {file}.\nstatic const uint8_t {var}_wasm[] = {{\n    {}\n}};\nstatic const char* const {var}_functions[] = {{{}}};\nstatic ClarityEngine* {var}_engine = NULL;\n\nstatic bool {var}_loaded(void) {{\n    return {var}_engine || clarity_engine_load({}, {var}_wasm, sizeof {var}_wasm, {}, {var}_functions, &{var}_engine);\n}}\n",
+            "\n/// Engine {name}, from {file}.\nstatic const uint8_t {var}_wasm[] = {{\n    {}\n}};\nstatic const char* const {var}_functions[] = {{{}}};\nstatic const char* const {var}_uses[] = {{{uses}}};\nstatic ClarityEngine* {var}_engine = NULL;\n\nstatic bool {var}_loaded(void) {{\n    return {var}_engine || clarity_engine_load({}, {var}_wasm, sizeof {var}_wasm, {}, {var}_functions, {use_count}, {var}_uses, (ClarityEngineLimits){{{seconds}, {megabytes}}}, &{var}_engine);\n}}\n",
             rows.join(",\n    "),
             names.join(", "),
             string(&engine.name.name),
             names.len(),
+            uses = if engine.uses.is_empty() { "NULL".to_string() } else { engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", ") },
+            use_count = engine.uses.len(),
+            seconds = engine.seconds(),
+            megabytes = engine.megabytes(),
             name = engine.name.name,
             file = engine.file,
         ));

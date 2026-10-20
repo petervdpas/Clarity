@@ -1,5 +1,5 @@
 {
-  "about": "Engines (DESIGN 5.11): processing modules compiled once to WebAssembly that every stack hosts alike. An engine is a plain WebAssembly module that exports its `memory`, `clarity_alloc(len) -> place` and `clarity_free(place, len)`, and each of its functions under its own name as `(place, len) -> i64`. To call one, the host writes the arguments as a JSON array (UTF-8) into room from clarity_alloc and calls the function with its place and length; the engine takes that room over. The function gives the place and length of its answer packed in an i64 (place in the high 32 bits), `{\"value\": ...}` or `{\"error\": \"why\"}`, which the host reads and gives back with clarity_free. Values are JSON as everywhere in Clarity: integers as numbers, decimals and money as exact text, enums by name, records as objects of their fields. An engine imports nothing, and a host refuses a module that imports anything, that is no WebAssembly, or that lacks the interface or a declared function, when it loads it. `engine` is test.wasm, built from engines/test.",
+  "about": "Engines (DESIGN 5.11): processing modules compiled once to WebAssembly that every stack hosts alike. An engine is a plain WebAssembly module that exports its `memory`, `clarity_alloc(len) -> place` and `clarity_free(place, len)`, and each of its functions under its own name as `(place, len) -> i64`. To call one, the host writes the arguments as a JSON array (UTF-8) into room from clarity_alloc and calls the function with its place and length; the engine takes that room over. The function gives the place and length of its answer packed in an i64 (place in the high 32 bits), `{\"value\": ...}` or `{\"error\": \"why\"}`, which the host reads and gives back with clarity_free. Values are JSON as everywhere in Clarity: integers as numbers, decimals and money as exact text, enums by name, records as objects of their fields. An engine imports only the services of Clarity it declares with `uses` (`uses`), from module `clarity`: `clock() -> i64` (milliseconds since 1970-01-01 UTC), `random() -> i64` (the next number of splitmix64, seeded afresh for every call), and `log(place, len)` (a line of UTF-8 text, which the host writes to the application's log as `engine <Name>: <text>`). A host refuses a module that imports anything else, that is no WebAssembly, or that lacks the interface or a declared function, when it loads it. `engine` is test.wasm, built from engines/test. Each engine has limits per call (`limits`: seconds and megabytes). A call that runs longer than its time limit is stopped by the host and fails with exactly `engine <Name> failed in <function>: it ran longer than <n> second(s)`. An engine never gets more memory than its memory limit; growing past it fails as the engine's own allocator reports, most often as a failure of the call, `engine <Name> failed in <function>: ...` in the host's words. `limited` lists calls under the file's limits: `gives` an answer, or `fails` with a message that starts as given. `services` fixes the clock and the seed for `served`, the calls of the services; `log` lists the lines a call writes. A refused case loads with the file's `uses` unless it gives its own.",
   "engine": "engines/test.wasm",
   "functions": [
     "add",
@@ -7,7 +7,12 @@
     "total",
     "size_of",
     "discounted",
-    "fail"
+    "fail",
+    "spin",
+    "grow",
+    "now",
+    "dice",
+    "note"
   ],
   "calls": [
     {
@@ -120,7 +125,7 @@
     {
       "what": "an import",
       "bytes": "0061736d01000000010401600000020b0103656e76036e6f770000",
-      "message": "imports env.now; an engine imports nothing"
+      "message": "imports env.now; an engine imports only the services it uses"
     },
     {
       "what": "no interface",
@@ -135,6 +140,109 @@
         "teleport"
       ],
       "message": "has no function teleport"
+    },
+    {
+      "uses": [],
+      "message": "imports clarity.clock; an engine imports only the services it uses"
+    }
+  ],
+  "limits": {
+    "seconds": 1,
+    "megabytes": 16
+  },
+  "limited": [
+    {
+      "function": "spin",
+      "args": [],
+      "fails": "engine Test failed in spin: it ran longer than 1 second"
+    },
+    {
+      "function": "grow",
+      "args": [
+        4
+      ],
+      "gives": {
+        "value": 4
+      }
+    },
+    {
+      "function": "grow",
+      "args": [
+        64
+      ],
+      "fails": "engine Test failed in grow: "
+    },
+    {
+      "function": "add",
+      "args": [
+        1,
+        2
+      ],
+      "gives": {
+        "value": 3
+      }
+    }
+  ],
+  "uses": [
+    "clock",
+    "random",
+    "log"
+  ],
+  "services": {
+    "clock": 1767225600000,
+    "seed": 42
+  },
+  "served": [
+    {
+      "function": "now",
+      "args": [],
+      "gives": {
+        "value": 1767225600000
+      }
+    },
+    {
+      "function": "dice",
+      "args": [
+        5,
+        6
+      ],
+      "gives": {
+        "value": [
+          2,
+          2,
+          1,
+          1,
+          5
+        ]
+      }
+    },
+    {
+      "function": "dice",
+      "args": [
+        5,
+        6
+      ],
+      "gives": {
+        "value": [
+          2,
+          2,
+          1,
+          1,
+          5
+        ]
+      }
+    },
+    {
+      "function": "note",
+      "args": [
+        "hello, wereld"
+      ],
+      "gives": {
+        "value": true
+      },
+      "log": [
+        "engine Test: hello, wereld"
+      ]
     }
   ]
 }

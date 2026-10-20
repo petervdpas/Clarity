@@ -154,9 +154,12 @@ fn engines_go(project: &Project) -> String {
         let var = names::local(&engine.name.name);
         let names: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
         body.push_str(&format!(
-            "//go:embed engines/{file}\nvar {var}Wasm []byte\n\n// {var} is engine {name}, from {file}.\nvar {var} = sync.OnceValues(func() (*engine.Engine, error) {{\n\treturn engine.Load({}, {var}Wasm, []string{{{}}})\n}})\n\n",
+            "//go:embed engines/{file}\nvar {var}Wasm []byte\n\n// {var} is engine {name}, from {file}.\nvar {var} = sync.OnceValues(func() (*engine.Engine, error) {{\n\treturn engine.Load({}, {var}Wasm, []string{{{}}}, []string{{{uses}}}, engine.Limits{{Seconds: {seconds}, Megabytes: {megabytes}}})\n}})\n\n",
             string(&engine.name.name),
             names.join(", "),
+            uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+            seconds = engine.seconds(),
+            megabytes = engine.megabytes(),
             file = engine.file,
             name = engine.name.name
         ));

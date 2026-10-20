@@ -2,6 +2,7 @@
 //! writes them: `CreditLimit` for a field, `creditLimit` for a local,
 //! `WithinCredit` for a function.
 
+use clarity_spec::Project;
 use clarity_spec::code::check::TypeInfo;
 use clarity_spec::model::FieldType;
 
@@ -15,6 +16,29 @@ const KEYWORDS: [&str; 77] = [
     "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort",
     "using", "virtual", "void", "volatile", "while",
 ];
+
+/// Classes and namespaces that generated code names by their simple name:
+/// the program's own and the runtime's. A method of `Logic` with one of
+/// these names would hide it there.
+const TYPE_NAMES: [&str; 37] = [
+    "App", "AppThemes", "Choices", "Edit", "Labels", "Logic", "Program", "Schema", "Shown", "Texts", "Views", "Engines",
+    "Clarity", "CommunityToolkit", "Microsoft", "System", "Avalonia", "Clock", "Cond", "Contracts", "Db", "Dialect", "Engine",
+    "Files", "IRecord", "Numbers", "Op", "Picture", "Query", "RefusedException", "Show", "Slot", "Sql", "Text", "Math", "List",
+    "Enum",
+];
+
+/// A function or action as a method of `Logic`: `within_credit` as
+/// `WithinCredit`. A name that a type already has (an enum, a record, a
+/// window's classes, a class of the program or the runtime) takes a
+/// trailing `_`: `size` beside `enum Size` is `Size_`.
+pub fn function(project: &Project, name: &str) -> String {
+    let cs = pascal(name);
+    let types = project.entities().map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
+    let windows = project.pages().flat_map(|p| [format!("{}View", p.name.name), format!("{}ViewModel", p.name.name)]);
+    let apps = project.apps().map(|a| a.name.name.clone());
+    let taken = TYPE_NAMES.contains(&cs.as_str()) || types.chain(windows).chain(apps).any(|n| n == cs);
+    if taken { format!("{cs}_") } else { cs }
+}
 
 /// Names the generated code uses itself, for locals.
 const TAKEN: [&str; 1] = ["db"];

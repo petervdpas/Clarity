@@ -15,7 +15,7 @@ use clarity_spec::code::{
 };
 use clarity_spec::model::FieldType;
 
-use super::names::{camel, member, pascal, property, string, value_type};
+use super::names::{camel, function as function_name, member, pascal, property, string, value_type};
 use crate::print;
 
 /// The methods of `file`'s functions, actions and data events.
@@ -190,7 +190,7 @@ impl<'a> Emitter<'a> {
             params.push(format!("{} {}", value_type(&info), camel(&param.name.name)));
         }
         let ret = self.returns().map(|r| value_type(&r)).unwrap_or_else(|| "void".into());
-        let mut out = format!("    public static {ret} {}({})\n    {{\n", pascal(&decl.name.name), params.join(", "));
+        let mut out = format!("    public static {ret} {}({})\n    {{\n", function_name(self.project, &decl.name.name), params.join(", "));
         for condition in &decl.requires {
             let holds = self.value(condition);
             out.push_str(&format!("        Contracts.Require({holds}, {});\n", string(&print::expr(condition))));
@@ -669,7 +669,7 @@ impl<'a> Emitter<'a> {
         code.extend(args.iter().map(|a| self.value(a)));
         // A ViewModel reaches the functions through `Logic`.
         let owner = if self.window.is_some() { "Logic." } else { "" };
-        format!("{owner}{}({})", pascal(name), code.join(", "))
+        format!("{owner}{}({})", function_name(self.project, name), code.join(", "))
     }
 
     /// `find c in Entity where ... order by ...` as a database query. The

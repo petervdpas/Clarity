@@ -67,8 +67,48 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let file = cursor.expect_string("the engine's file in the engines folder")?;
     cursor.expect_end()?;
     let mut functions = Vec::new();
+    let (mut seconds, mut megabytes, mut limited) = (None, None, false);
+    let mut uses = Vec::new();
     for child in &node.children {
         let mut line = Cursor::new(child.line);
+        if line.eat_keyword("uses") {
+            let parsed = (|| {
+                uses.extend(line.ident_list("the services it uses, as in 'uses clock, random, log'")?);
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
+        if line.eat_keyword("limit") {
+            let parsed = (|| {
+                if limited {
+                    return Err(line.error_here("an engine has one limit line, as in 'limit 2 seconds, 64 MB'"));
+                }
+                limited = true;
+                loop {
+                    let n = line.expect_number("a number of seconds or megabytes, as in 'limit 2 seconds, 64 MB'")?;
+                    if line.eat_keyword("seconds") || line.eat_keyword("second") {
+                        seconds = Some(n);
+                    } else if line.eat_keyword("MB") {
+                        megabytes = Some(n);
+                    } else {
+                        return Err(line.error_here("expected 'seconds' or 'MB', as in 'limit 2 seconds, 64 MB'"));
+                    }
+                    if !line.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
         let parsed = (|| {
             if !line.eat_keyword("function") {
                 return Err(line.error_here("expected 'function' and its signature, as in 'function total(lines: list<Line>) -> money'"));
@@ -86,7 +126,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             Err(diag) => diagnostics.push(diag),
         }
     }
-    Ok(EngineDecl { name, file, functions, span: node.span() })
+    Ok(EngineDecl { name, file, uses, seconds, megabytes, functions, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {

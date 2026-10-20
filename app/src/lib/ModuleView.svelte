@@ -170,7 +170,15 @@
       </p>
       {#each engines as { engine, problems } (engine.name.name)}
         <div class="engine">
-          <div><span class="kind">engine</span><strong>{engine.name.name}</strong> <span class="muted">from <code>{engine.file}</code></span></div>
+          <div>
+            <span class="kind">engine</span><strong>{engine.name.name}</strong> <span class="muted">from <code>{engine.file}</code></span>
+            {#if engine.uses.length > 0}
+              <span class="muted">, uses {engine.uses.map((u) => u.name).join(", ")}</span>
+            {/if}
+            {#if engine.seconds !== null || engine.megabytes !== null}
+              <span class="muted">, limit {[engine.seconds !== null ? `${engine.seconds} ${engine.seconds === 1 ? "second" : "seconds"}` : null, engine.megabytes !== null ? `${engine.megabytes} MB` : null].filter(Boolean).join(", ")}</span>
+            {/if}
+          </div>
           {#each problems as problem (problem)}
             <p class="problem">{problem}</p>
           {/each}

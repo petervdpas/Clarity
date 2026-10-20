@@ -28,7 +28,9 @@
     X(show_and_text)                                              \
     X(files_are_filtered_and_sorted_by_their_details)            \
     X(every_engine_call_gives_what_every_host_gives)              \
-    X(a_module_that_is_no_engine_is_refused_when_it_loads)
+    X(a_module_that_is_no_engine_is_refused_when_it_loads)        \
+    X(a_call_keeps_to_the_limits_of_its_engine)                   \
+    X(an_engine_uses_the_services_it_declares)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

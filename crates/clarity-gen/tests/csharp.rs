@@ -420,3 +420,19 @@ fn a_query_goes_through_a_reference() {
     has(sales, ".Filter(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Contains(\"name\", name)).And(Cond.Through(\"customer\", \"customer\", \"id\", Cond.Number(\"credit_limit\", Op.Gt, ");
     has(sales, ".OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"name\", true, false).OrderThrough([new Hop(\"customer\", \"customer\", \"id\")], \"credit_limit\", false, true)");
 }
+
+/// A function whose C# name a type already has (an enum, a record, a
+/// window's classes, a class the program or the runtime has) takes a
+/// trailing `_`, so the method never hides the type inside `Logic`.
+#[test]
+fn a_function_never_takes_the_name_of_a_type() {
+    let project = load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "Modules/Shop.cs");
+    for declared in ["Size Size_(", "long Sources(", "Size SizeSmall("] {
+        has(code, declared);
+    }
+    has(code, "Size_(db, 1L)");
+    has(code, "return Size.Small;");
+}

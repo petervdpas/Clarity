@@ -20,6 +20,7 @@ entity Line
     count: integer
 
 engine Pricing from \"test.wasm\"
+    uses clock, random, log
     function add(a: integer, b: integer) -> integer
     function total(lines: list<Line>) -> money
     function size_of(n: integer) -> Size
@@ -85,9 +86,49 @@ fn the_engine_file_is_checked_against_its_declaration() {
     assert_has(&errors(SHOP, Vec::new()), "engine Pricing: 'test.wasm' is not in the engines folder");
     let lacking = SHOP.replace("    function discounted(line: Line) -> Line\n", "    function discounted(line: Line) -> Line\n    function teleport(n: integer) -> integer\n");
     assert_has(&errors(&lacking, test_engine()), "engine Pricing: 'test.wasm' has no function teleport");
-    // An engine that imports anything is refused: it would reach out of its sandbox.
+    // An engine that imports anything but Clarity's services is refused: it would reach out of its sandbox.
     let importing = vec![EngineFile { name: "test.wasm".into(), bytes: vec![0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, 1, 4, 1, 0x60, 0, 0, 2, 0x0b, 1, 3, b'e', b'n', b'v', 3, b'n', b'o', b'w', 0, 0] }];
-    assert_has(&errors(SHOP, importing), "engine Pricing: 'test.wasm' imports env.now; an engine imports nothing");
+    assert_has(&errors(SHOP, importing), "engine Pricing: 'test.wasm' imports env.now; an engine imports only the services it uses");
     let junk = vec![EngineFile { name: "test.wasm".into(), bytes: vec![0, 1, 2, 3] }];
     assert_has(&errors(SHOP, junk), "engine Pricing: 'test.wasm' is no WebAssembly module");
+}
+
+/// `limit 2 seconds, 64 MB`: what one call of the engine may take, each
+/// part optional, the defaults for what is not written.
+#[test]
+fn an_engine_may_limit_its_calls() {
+    let source = |limit: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log\n{limit}    function add(a: integer, b: integer) -> integer\n");
+    let limits = |limit: &str| {
+        let (file, diags) = parse(&source(limit), "shop.clarity");
+        assert!(diags.is_empty(), "{diags:#?}");
+        let e = &file.engines[0];
+        (e.seconds(), e.megabytes())
+    };
+    assert_eq!(limits(""), (engines::DEFAULT_SECONDS, engines::DEFAULT_MEGABYTES));
+    assert_eq!(limits("    limit 2 seconds, 64 MB\n"), (2, 64));
+    assert_eq!(limits("    limit 1 second\n"), (1, engines::DEFAULT_MEGABYTES));
+    assert_eq!(limits("    limit 32 MB\n"), (engines::DEFAULT_SECONDS, 32));
+
+    let wrong = |limit: &str| errors(&source(limit), test_engine());
+    assert_has(&wrong("    limit 0 seconds\n"), "between 1 and 3600 seconds");
+    assert_has(&wrong("    limit 5000 MB\n"), "between 1 and 4096 MB");
+    assert_has(&wrong("    limit 2 minutes\n"), "seconds");
+    assert_has(&wrong("    limit 2 seconds\n    limit 3 seconds\n"), "one limit");
+}
+
+/// `uses clock, random, log`: the services of Clarity an engine may import;
+/// the file may import those and nothing else.
+#[test]
+fn an_engine_declares_the_services_it_uses() {
+    let source = |uses: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n{uses}    function add(a: integer, b: integer) -> integer\n");
+    let (file, diags) = parse(&source("    uses clock, random, log\n"), "shop.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let uses: Vec<&str> = file.engines[0].uses.iter().map(|u| u.name.as_str()).collect();
+    assert_eq!(uses, ["clock", "random", "log"]);
+    assert!(errors(&source("    uses clock, random, log\n"), test_engine()).is_empty());
+
+    // The test engine imports all three, so leaving one out is an error.
+    assert_has(&errors(&source("    uses clock, log\n"), test_engine()), "imports clarity.random; an engine imports only the services it uses");
+    assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random or log");
+    assert_has(&errors(&source("    uses clock, clock, random, log\n"), test_engine()), "uses clock twice");
 }

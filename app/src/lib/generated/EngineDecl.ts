@@ -11,4 +11,18 @@ export type EngineDecl = { name: Ident,
 /**
  * The file in the `engines` folder: `pricing.wasm`.
  */
-file: string, functions: Array<EngineFunction>, span: Span, };
+file: string, 
+/**
+ * `uses clock, random, log`: the services of Clarity it may import.
+ */
+uses: Array<Ident>, 
+/**
+ * `limit 2 seconds, 64 MB`: how long one call may run; none written
+ * keeps the default (`engines::DEFAULT_SECONDS`).
+ */
+seconds: number | null, 
+/**
+ * How much memory the engine may grow to; none written keeps the
+ * default (`engines::DEFAULT_MEGABYTES`).
+ */
+megabytes: number | null, functions: Array<EngineFunction>, span: Span, };

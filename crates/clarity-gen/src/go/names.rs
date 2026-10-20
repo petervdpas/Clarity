@@ -2,6 +2,7 @@
 //! writes them: `CreditLimit` for an exported field, `creditLimit` for a
 //! local, `WithinCredit` for a function.
 
+use clarity_spec::Project;
 use clarity_spec::code::check::TypeInfo;
 use clarity_spec::model::FieldType;
 
@@ -35,6 +36,23 @@ pub fn pascal(name: &str) -> String {
         out.insert(0, 'N');
     }
     out
+}
+
+/// Top-level names every generated program declares itself.
+const PROGRAM_NAMES: [&str; 3] = ["Clarity", "Sources", "SourceSteps"];
+
+/// A function or action as a Go function: `within_credit` as `WithinCredit`.
+/// A name that another top-level declaration of the program already has (a
+/// type, an enum value, a `NewX` constructor, a window's struct) takes a
+/// trailing `_`: `size` beside `enum Size` is `Size_`.
+pub fn function(project: &Project, name: &str) -> String {
+    let go = pascal(name);
+    let types = project.entities().map(|e| e.name.name.clone()).chain(project.enums().map(|e| e.name.name.clone()));
+    let constructors = project.entities().map(|e| format!("New{}", e.name.name));
+    let constants = project.enums().flat_map(|e| e.variants.iter().map(|v| super::model::constant(&e.name.name, &v.name.name)));
+    let windows = project.pages().map(|p| format!("{}Window", p.name.name)).chain(project.apps().map(|a| format!("{}App", a.name.name)));
+    let taken = PROGRAM_NAMES.iter().map(|n| n.to_string()).chain(types).chain(constructors).chain(constants).chain(windows).any(|n| n == go);
+    if taken { format!("{go}_") } else { go }
 }
 
 /// A Clarity name as a Go local or parameter: `credit_limit` as `creditLimit`.

@@ -18,10 +18,14 @@ void m3_Abort(const char* message) {
     abort();
 }
 
+// Clarity: the host may stop a call that runs too long through this hook,
+// which every call and every turn of a loop asks.
+M3Result (* m3_YieldHook) (void) = NULL;
+
 M3_WEAK
 M3Result m3_Yield ()
 {
-    return m3Err_none;
+    return m3_YieldHook ? m3_YieldHook () : m3Err_none;
 }
 
 #if d_m3FixedHeap

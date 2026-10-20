@@ -462,8 +462,28 @@ pub struct EngineDecl {
     pub name: Ident,
     /// The file in the `engines` folder: `pricing.wasm`.
     pub file: String,
+    /// `uses clock, random, log`: the services of Clarity it may import.
+    pub uses: Vec<Ident>,
+    /// `limit 2 seconds, 64 MB`: how long one call may run; none written
+    /// keeps the default (`engines::DEFAULT_SECONDS`).
+    pub seconds: Option<u32>,
+    /// How much memory the engine may grow to; none written keeps the
+    /// default (`engines::DEFAULT_MEGABYTES`).
+    pub megabytes: Option<u32>,
     pub functions: Vec<EngineFunction>,
     pub span: Span,
+}
+
+impl EngineDecl {
+    /// How long one call may run, in seconds.
+    pub fn seconds(&self) -> u32 {
+        self.seconds.unwrap_or(crate::engines::DEFAULT_SECONDS)
+    }
+
+    /// How much memory the engine may grow to, in megabytes.
+    pub fn megabytes(&self) -> u32 {
+        self.megabytes.unwrap_or(crate::engines::DEFAULT_MEGABYTES)
+    }
 }
 
 /// A function of an engine: values in, a value out.

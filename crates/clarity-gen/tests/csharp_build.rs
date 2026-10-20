@@ -221,3 +221,23 @@ fn an_engine_answers_in_the_generated_application_in_csharp() {
     assert!(ran.status.success() && said.contains("every engine function answered"), "{said}\nin {}", root.display());
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// Functions named like a type, an enum value, a constructor or a window
+/// build beside them, with `-warnaserror` (tests/fixtures/name_clash.clarity).
+#[test]
+#[ignore]
+fn functions_named_like_types_build_in_csharp() {
+    let project = clarity_spec::load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::env::temp_dir().join(format!("clarity-gen-csharp-names-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    std::fs::remove_dir_all(&out).unwrap();
+}

@@ -261,3 +261,39 @@ fn an_engine_answers_in_the_generated_application_in_go() {
     run(&out, "go", &["test", "./..."]);
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// Functions named like a type, an enum value, a constructor or a window
+/// build beside them, and are called by their own names.
+const NAME_CLASH_TEST: &str = r#"package main
+
+import "testing"
+
+func TestEveryFunctionKeepsItsOwnName(t *testing.T) {
+	if s, err := Size_(nil, 12); err != nil || s != SizeLarge {
+		t.Fatalf("Size_(12) = %v, %v", s, err)
+	}
+	if s, err := SizeSmall_(nil); err != nil || s != SizeSmall {
+		t.Fatalf("SizeSmall_() = %v, %v", s, err)
+	}
+	if n, err := Sources_(nil); err != nil || n != 1 {
+		t.Fatalf("Sources_() = %v, %v", n, err)
+	}
+}
+"#;
+
+#[test]
+#[ignore]
+fn functions_named_like_types_build_in_go() {
+    let project = clarity_spec::load_sources([("shop.clarity", include_str!("fixtures/name_clash.clarity"))]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Shop", "shop");
+    settings.stack.backend = clarity_project::Backend::Go;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::env::temp_dir().join(format!("clarity-gen-go-names-{}", std::process::id()));
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    std::fs::write(out.join("names_test.go"), NAME_CLASH_TEST).unwrap();
+    run(&out, "go", &["test", "./..."]);
+    std::fs::remove_dir_all(&out).unwrap();
+}

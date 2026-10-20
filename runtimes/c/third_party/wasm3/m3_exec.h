@@ -1186,6 +1186,10 @@ d_m3Op  (ContinueLoop)
 {
     m3StackCheck();
 
+    // Clarity: every turn of a loop yields, so the host can stop a call that runs too long.
+    m3ret_t possible_trap = m3_Yield ();
+    if (UNLIKELY(possible_trap)) return possible_trap;
+
     // TODO: this is where execution can "escape" the M3 code and callback to the client / fiber switch
     // OR it can go in the Loop operation. I think it's best to do here. adding code to the loop operation
     // has the potential to increase its native-stack usage. (don't forget ContinueLoopIf too.)
@@ -1202,6 +1206,9 @@ d_m3Op  (ContinueLoopIf)
 
     if (condition)
     {
+        // Clarity: every turn of a loop yields (see ContinueLoop).
+        m3ret_t possible_trap = m3_Yield ();
+        if (UNLIKELY(possible_trap)) return possible_trap;
         return loopId;
     }
     else nextOp ();

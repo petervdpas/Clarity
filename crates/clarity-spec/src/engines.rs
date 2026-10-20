@@ -12,6 +12,19 @@ use crate::model::Project;
 /// The folder of engines in a project's folder.
 pub const ENGINES_DIR: &str = "engines";
 
+/// The services of Clarity an engine may use (`uses clock, random, log`):
+/// functions of module `clarity` its file may import.
+pub const SERVICES: [&str; 3] = ["clock", "random", "log"];
+
+/// How long one call of an engine may run when its declaration says nothing.
+pub const DEFAULT_SECONDS: u32 = 5;
+/// How much memory an engine may grow to when its declaration says nothing.
+pub const DEFAULT_MEGABYTES: u32 = 256;
+/// The longest time limit a declaration may give.
+pub const MAX_SECONDS: u32 = 3600;
+/// The largest memory limit a declaration may give: all a WebAssembly module can address.
+pub const MAX_MEGABYTES: u32 = 4096;
+
 /// What an engine exports besides its functions: the engine interface.
 pub const INTERFACE: [&str; 2] = ["clarity_alloc", "clarity_free"];
 
@@ -83,12 +96,32 @@ pub fn read_module(bytes: &[u8]) -> Result<Module, String> {
         let mut inner = at;
         match section {
             2 => {
-                // The first import is enough to refuse the module; the rest
-                // of the section is not read.
-                if leb(&mut inner)? > 0 {
+                for _ in 0..leb(&mut inner)? {
                     let from = name(&mut inner)?;
                     let what = name(&mut inner)?;
                     module.imports.push(format!("{from}.{what}"));
+                    // What it imports: a function's type, a table, a memory or a global.
+                    let byte = |at: &mut usize| -> Result<u8, String> {
+                        let b = *bytes.get(*at).ok_or_else(not)?;
+                        *at += 1;
+                        Ok(b)
+                    };
+                    match byte(&mut inner)? {
+                        0 => {
+                            leb(&mut inner)?;
+                        }
+                        kind @ (1 | 2) => {
+                            if kind == 1 {
+                                byte(&mut inner)?;
+                            }
+                            let flags = byte(&mut inner)?;
+                            leb(&mut inner)?;
+                            if flags & 1 != 0 {
+                                leb(&mut inner)?;
+                            }
+                        }
+                        _ => inner += 2,
+                    }
                 }
             }
             7 => {
@@ -125,8 +158,9 @@ pub fn attach(project: &mut Project, files: Vec<EngineFile>) {
             match read_module(&bytes.bytes) {
                 Err(message) => found.push(at(message)),
                 Ok(module) => {
-                    if let Some(import) = module.imports.first() {
-                        found.push(at(format!("imports {import}; an engine imports nothing")));
+                    let used = |import: &str| import.strip_prefix("clarity.").is_some_and(|service| engine.uses.iter().any(|u| u.name == service));
+                    if let Some(import) = module.imports.iter().find(|i| !used(i)) {
+                        found.push(at(format!("imports {import}; an engine imports only the services it uses")));
                     }
                     if let Some(missing) = INTERFACE.iter().find(|f| !module.functions.iter().any(|e| e == *f)) {
                         found.push(at(format!("lacks {missing} of the engine interface")));

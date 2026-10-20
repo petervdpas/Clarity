@@ -1,0 +1,30 @@
+// Functions named like other declarations once they are Go or C# names:
+// a type, an enum value, a constructor, a window (tests/go*.rs, csharp*.rs).
+module shop
+
+enum Size
+    Small
+    Large
+
+entity Order
+    total: money
+
+function size(n: integer) -> Size
+    if n < 10
+        return Small
+    return Large
+
+function size_small() -> Size
+    return size(1)
+
+function new_order() -> Order
+    return new Order
+
+function main_window() -> integer
+    return 1
+
+function sources() -> integer
+    return main_window()
+
+page Main: window
+    title "Shop"

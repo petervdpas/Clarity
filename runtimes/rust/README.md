@@ -9,6 +9,7 @@ A generated application depends on this crate for:
 - **Migrations:** the steps Clarity writes, applied once each when the application starts.
 - **Pictures and files:** pictures kept in the database or in a file store, and the files of a store.
 - **The binding to the screen:** the state a window sends and the reply its handlers give.
+- **Engines:** processing modules compiled to WebAssembly, called with plain values (feature `engines`).
 
 ## Databases
 
@@ -22,8 +23,12 @@ SQLite is on by default. Each server database is a feature, which a generated ap
 | `mssql` | SQL Server |
 
 ```toml
-clarity-runtime = { version = "0.1.0", default-features = false, features = ["sqlite", "postgres"] }
+clarity-runtime = { version = "0.3.0", default-features = false, features = ["sqlite", "postgres"] }
 ```
+
+## Engines
+
+The feature `engines` hosts engines with [wasmi](https://crates.io/crates/wasmi): plain WebAssembly modules that import nothing, called with JSON values through Clarity's engine interface. A generated application turns it on only when the project declares an engine.
 
 ## Working on the runtime
 

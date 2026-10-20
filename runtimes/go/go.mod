@@ -2,7 +2,8 @@
 // (records, storage, queries, migrations, the binding to the screen),
 // package shell (the Wails desktop shell), and a package per server
 // database (postgresql, mysql, sqlserver), which an application imports
-// only for the databases it uses. Published by tagging runtimes/go/vX.Y.Z;
+// only for the databases it uses, and package engine (WebAssembly engines
+// through wazero), imported only by an application with an engine. Published by tagging runtimes/go/vX.Y.Z;
 // the version is clarity.Version.
 module github.com/petervdpas/Clarity/runtimes/go
 

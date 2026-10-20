@@ -11,6 +11,12 @@ Every window is plain Clarity text in its module, and you can edit that text wit
 
 **Code** in the ribbon opens the same panel at the Code tab. Click the button again, the cross in the panel's header, or press Escape in the text, to close it. Drag the panel's left edge to make it wider.
 
+## Code per part
+
+The Code tab shows the code of what is picked on the canvas: the handlers of that part's events, each with the handlers it calls, such as a canvas's `drawBoard` with its `draw_mark`. With nothing picked it shows the handlers of the window's own events (`on open`, `on close`). The line above the code says whose it is, as `board: on draw, on click`; tick **Whole window** to see all of the window's code. Saving puts what you typed back in place of those handlers, and the rest of the code stays as it was.
+
+Double-click a part on the canvas to go to the code of its main event: a button's click, a canvas's drawing, an input's change. When that event has no handler yet, Clarity writes one named after the part and the event (`save_click`), wires it, and opens it, ready for you to fill in. A part needs a name for that; give it one in its properties. The other events are under Events in the part's properties, each with **Wire** or **Code**.
+
 ## The designer follows the text
 
 In the Design tab, type as you like: move a part by changing its `at`, add a line for a new part, change `: window` to `: dialog`. Shortly after you stop typing, Clarity checks the text. When it is one valid declaration, the canvas shows the window as the text would make it, before you save. A note under the text says so: "The designer shows this text. Save it to keep it, or Revert."
@@ -20,9 +26,9 @@ page CustomerForm: dialog
     title "Customer"
     data customer: Customer
 
-    label "Name" at 1,1 span 3 for name
+    label "Name" name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
-    button "Save" name save at 11,3 span 2 default on click: save_clicked
+    button "Save" name save at 11,3 span 2 default on click: saveClicked
 ```
 
 While the canvas shows unsaved text, it does not take changes of its own: dragging or editing a property there says to save or revert the text first.

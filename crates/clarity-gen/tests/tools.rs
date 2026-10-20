@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use clarity_gen::tools::{Probe, check, find_on_path};
+use clarity_gen::tools::{Probe, check, engine_tools, find_on_path};
 use clarity_project::{Backend, Ui};
 
 /// A machine with these programs, each answering one command line.
@@ -149,4 +149,20 @@ fn every_stack_of_the_catalog_is_checked_and_reported() {
     assert!(report.contains("C# with Avalonia: ready (.NET SDK 10.0.402)\n"), "{report}");
     assert!(report.contains("Rust with the web renderer: missing Rust with cargo, from https://rustup.rs"), "{report}");
     assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
+}
+
+/// Building an engine from its Rust source needs cargo and Rust's
+/// WebAssembly target, which rustup adds.
+#[test]
+fn engines_need_cargo_and_the_webassembly_target() {
+    let missing = engine_tools(&Machine::default());
+    assert!(missing[0].contains("https://rustup.rs"), "{missing:?}");
+    let without = Machine::default()
+        .with("cargo", "--version", "cargo 1.91.0\n")
+        .with("rustup", "target list --installed", "x86_64-unknown-linux-gnu\n");
+    assert_eq!(engine_tools(&without), ["Rust's WebAssembly target: run rustup target add wasm32-unknown-unknown"]);
+    let with = Machine::default()
+        .with("cargo", "--version", "cargo 1.91.0\n")
+        .with("rustup", "target list --installed", "x86_64-unknown-linux-gnu\nwasm32-unknown-unknown\n");
+    assert!(engine_tools(&with).is_empty());
 }

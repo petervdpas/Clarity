@@ -39,10 +39,10 @@ action export_titles(photos_found: list<file>)
 
 page Catalog: window
     data photos: list<Photo>
-    button \"Index\" at 1,1 span 2 on click: index_clicked
+    button \"Index\" name button1 at 1,1 span 2 on click: indexClicked
 
 code Catalog
-    handler index_clicked
+    handler indexClicked
         index_photos()
         let found = files f in photos
         let n = count(found)

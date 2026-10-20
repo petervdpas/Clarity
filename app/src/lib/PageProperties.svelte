@@ -3,6 +3,7 @@
   import type { App } from "./generated/App";
   import type { Edit } from "./generated/Edit";
   import type { Event as PartEvent } from "./generated/Event";
+  import { freePartName, wireEvent } from "./codeParts";
   import type { Orientation } from "./generated/Orientation";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
@@ -139,16 +140,15 @@
   }
 
   /** Wires a handler to an event, or unwires it with `null`. Handlers stay in catalog order. */
+  /** The part's name, or the one it gets when it is changed: every part has one. */
+  const partName = $derived(
+    p?.name ?? (info ? freePartName(allParts(page).flatMap((w) => (w.props.name ? [w.props.name] : [])), info.keyword) : ""),
+  );
+
   function setHandler(event: PartEvent, handler: string | null) {
-    if (!p || !info) return;
-    const others = p.handlers.filter((h) => h.event !== event);
-    const handlers = handler ? [...others, { event, handler }] : others;
-    handlers.sort((a, b) => info.events.indexOf(a.event) - info.events.indexOf(b.event));
-    // A click runs a handler or opens a window, not both.
-    const onClick = event === "click" && handler ? null : p.onClick;
-    if (!location) return;
-    const props = withProps(p, { handlers, onClick });
-    wire({ op: "updateWidget", item: location.widget.span.start, container: null, props }, handler);
+    if (!p || !info || !location) return;
+    onedit(wireEvent({ item: location.widget.span.start, props: { ...p, name: partName }, events: info.events, owner, event, handler }));
+    if (handler) pageDesigner.showCode(handler);
   }
 
   function textOf(e: Event): string | null {
@@ -188,7 +188,7 @@
 
     <label class="prop">
       <span>Name</span>
-      <input value={p.name ?? ""} placeholder="the name the code behind uses" onchange={(e) => update({ name: textOf(e) })} />
+      <input value={p.name ?? partName} title="The name the code behind uses" onchange={(e) => update({ name: textOf(e) ?? partName })} />
     </label>
 
     {#if info.caption !== null || p.caption !== null || info.container === "plain" || info.properties.includes("for")}
@@ -413,12 +413,7 @@
                 <button class="small" title="Unwire" onclick={() => setHandler(ev, null)}>&times;</button>
               </span>
             {:else}
-              <button
-                class="small"
-                disabled={!p.name}
-                title={p.name ? "Wire a handler named after the part and the event" : "Give the part a name first"}
-                onclick={() => setHandler(ev, p.name + "_" + ev)}>Wire</button
-              >
+              <button class="small" title="Wire a handler named after the part and the event" onclick={() => setHandler(ev, partName + "_" + ev)}>Wire</button>
             {/if}
           </div>
         {/each}

@@ -36,10 +36,10 @@ action approve(order: Order)
 
 page OrderForm: window
     data order: Order
-    button \"Approve\" name approve_button at 1,1 span 2 on click: approve_clicked
+    button \"Approve\" name approveButton at 1,1 span 2 on click: approveClicked
 
 code OrderForm
-    handler approve_clicked
+    handler approveClicked
         approve(order)
         let total = order_total(order)
         message \"Total {total}\"
@@ -216,10 +216,10 @@ use sales
 
 page Desk: window
     data order: Order
-    button \"Approve\" name go at 1,1 span 2 on click: go_clicked
+    button \"Approve\" name go at 1,1 span 2 on click: goClicked
 
 code Desk
-    handler go_clicked
+    handler goClicked
         approve(order)
 ";
     assert_eq!(problems_of(&[("sales.clarity", SALES), ("desk.clarity", desk)]), vec![]);

@@ -15,6 +15,7 @@ pub mod layout;
 pub mod lexer;
 pub mod migrate;
 pub mod model;
+pub mod names;
 pub mod parser;
 pub mod rename;
 pub mod sample;

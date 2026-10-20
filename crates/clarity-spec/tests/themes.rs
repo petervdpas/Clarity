@@ -18,7 +18,7 @@ const THEME: &str = "theme Shop
 
 const WINDOW: &str = "page Card: window
     button \"Save\" name save at 1,1 span 2 style primary
-    label \"Hello\" at 1,2 span 3
+    label \"Hello\" name label1 at 1,2 span 3
 ";
 
 fn project(text: &str, offered: &[&str]) -> Project {

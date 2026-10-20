@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { commandAction, commandHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
   import FrameView from "./FrameView.svelte";
   import GridBox from "./GridBox.svelte";
   import ShownWindow from "./ShownWindow.svelte";
@@ -34,6 +35,7 @@
     findPage,
     locateInnerPage,
     locateWidget,
+    allParts,
     pageData,
     widgetForField,
     widgetInfo,
@@ -126,6 +128,49 @@
     } finally {
       pageDesigner.saving = false;
     }
+  }
+
+  // A part double-clicked on the window opens the code of its main event (its
+  // first in the catalog: click for a button, draw for a canvas), writing and
+  // wiring the handler first when there is none, as an IDE does.
+  let handledPartCode: object | null = null;
+  $effect(() => {
+    const request = pageDesigner.partCode;
+    if (!request || request === handledPartCode) return;
+    handledPartCode = request;
+    untrack(() => openPartCode(request.item));
+  });
+
+  function openPartCode(item: number) {
+    const owner = app ? app.name.name : page.name.name;
+    const element = findFrameElement(page.frame, item);
+    if (element?.kind === "command") {
+      const props = element.command.props;
+      const does = commandAction(props);
+      if (props.handler) pageDesigner.showCode(props.handler);
+      else if (does) pageDesigner.error = `${props.caption ?? "It"} ${does}: it runs no code. To give it code, wire a handler under Events in its properties.`;
+      else {
+        const handler = commandHandler(props);
+        edit(wireCommand({ item, props, owner, handler }));
+        pageDesigner.showCode(handler);
+      }
+      return;
+    }
+    const location = locateWidget(preview, page, item);
+    if (!location) return;
+    const p = location.widget.props;
+    const info = widgetInfo(preview, p.kind);
+    const event = info.events[0];
+    const wired = event ? p.handlers.find((h) => h.event === event) : undefined;
+    if (!event || wired) {
+      pageDesigner.showCode(wired ? handlerName(wired.handler) : null);
+      return;
+    }
+    // Every part has a name; one written without gets it now, with its handler.
+    const name = p.name ?? freePartName(allParts(page).flatMap((w) => (w.props.name ? [w.props.name] : [])), info.keyword);
+    const handler = `${name}_${event}`;
+    edit(wireEvent({ item, props: { ...p, name }, events: info.events, owner, event, handler }));
+    pageDesigner.showCode(handler);
   }
 
   function edit(e: Edit) {
@@ -412,6 +457,8 @@
   {#if pageDesigner.code.open}
     <div use:portal={"code-drawer"}>
       <CodePanel
+        {preview}
+        {page}
         {file}
         owner={app ? app.name.name : savedPage.name.name}
         item={app ? app.span.start : savedPage.span.start}

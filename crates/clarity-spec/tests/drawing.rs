@@ -12,11 +12,11 @@ const DIAL: &str = "module dial
 page Main: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Main
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.circle(50, 50, 40, \"accent\")
         dial.ring(50, 50, 40, \"border\", 2)
@@ -25,7 +25,7 @@ code Main
         dial.text(50, 90, \"{speed} km/h\")
         dial.text(150, 50, \"fast\", \"accent\", 12)
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
         angle = angle - 10
 ";
@@ -49,7 +49,7 @@ fn a_canvas_has_units_and_a_draw_handler() {
     let dial = &file.pages[0].widgets[0];
     assert_eq!(dial.props.units, Some(CanvasUnits { width: 200, height: 100 }));
     assert_eq!(dial.props.handlers[0].event, Event::Draw);
-    assert_eq!(widget_line(&dial.props), "canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial");
+    assert_eq!(widget_line(&dial.props), "canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial");
     assert!(problems(DIAL).is_empty(), "{:#?}", problems(DIAL));
 
     let handler = &file.code[0].handlers[0];
@@ -68,12 +68,12 @@ fn a_draw_handler_draws_the_shapes_a_canvas_has() {
     assert_has(&with("let x = sin(\"a\")"), "'sin' takes degrees, a number, not text");
     // Only the canvas's own draw handler draws on it.
     let elsewhere = DIAL.replace("        speed = speed + 10\n", "        speed = speed + 10\n        dial.clear(\"#000\")\n");
-    assert_has(&errors(&elsewhere), "'dial' is drawn only by its draw handler, draw_dial");
+    assert_has(&errors(&elsewhere), "'dial' is drawn only by its draw handler, drawDial");
 }
 
 #[test]
 fn a_canvas_that_draws_nothing_is_a_warning() {
-    let quiet = DIAL.replace(" on draw: draw_dial", "");
+    let quiet = DIAL.replace(" on draw: drawDial", "");
     let warnings: Vec<String> = problems(&quiet).into_iter().filter(|(s, _)| *s == Severity::Warning).map(|(_, m)| m).collect();
     assert_has(&warnings, "canvas at 1,1 draws nothing yet; wire 'on draw: handler'");
     assert_has(&errors(&DIAL.replace("units 200 x 100", "units 0 x 100")), "a canvas is 1 to 10000 units wide and high");
@@ -87,13 +87,13 @@ fn a_click_on_a_canvas_says_where() {
 
 page Main: window
     data square: integer
-    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: draw_board on click: board_clicked
+    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: drawBoard on click: boardClicked
 
 code Main
-    handler draw_board
+    handler drawBoard
         board.clear(\"panel\")
 
-    handler board_clicked
+    handler boardClicked
         square = 1
         if board.x >= 100
             square = 2
@@ -111,29 +111,29 @@ fn a_draw_handler_can_call_handlers_that_draw() {
     let board = "module game
 
 page Main: window
-    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: draw_board
-    button \"Again\" name again at 7,1 on click: again_clicked
+    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: drawBoard
+    button \"Again\" name again at 7,1 on click: againClicked
 
 code Main
-    handler draw_board
+    handler drawBoard
         board.clear(\"panel\")
-        draw_square(0, 0)
-        draw_square(100, 0)
+        drawSquare(0, 0)
+        drawSquare(100, 0)
 
-    handler draw_square(left: integer, top: integer)
+    handler drawSquare(left: integer, top: integer)
         board.rect(left + 5, top + 5, 90, 90, \"accent\")
-        draw_cross(left, top)
+        drawCross(left, top)
 
-    handler draw_cross(left: integer, top: integer)
+    handler drawCross(left: integer, top: integer)
         board.line(left, top, left + 100, top + 100, \"text\", 4)
 
-    handler again_clicked
+    handler againClicked
         message \"again\"
 ";
     assert!(errors(board).is_empty(), "{:#?}", errors(board));
     // Run from elsewhere, or by an event, its shapes would land outside a drawing.
-    let elsewhere = board.replace("        message \"again\"\n", "        draw_square(0, 0)\n");
-    assert_has(&errors(&elsewhere), "'board' is drawn only by its draw handler, draw_board, and the handlers only it runs");
-    let wired = board.replace("on click: again_clicked", "on click: draw_cross(0, 0)");
-    assert_has(&errors(&wired), "'board' is drawn only by its draw handler, draw_board, and the handlers only it runs");
+    let elsewhere = board.replace("        message \"again\"\n", "        drawSquare(0, 0)\n");
+    assert_has(&errors(&elsewhere), "'board' is drawn only by its draw handler, drawBoard, and the handlers only it runs");
+    let wired = board.replace("on click: againClicked", "on click: drawCross(0, 0)");
+    assert_has(&errors(&wired), "'board' is drawn only by its draw handler, drawBoard, and the handlers only it runs");
 }

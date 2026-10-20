@@ -243,7 +243,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             .filter_map(|h| {
                 let decl = written.iter().find(|d| d.name.name == h.handler)?;
                 let values = h.args.iter().zip(&decl.params).map(|(v, p)| literal(project, &p.ty, v)).collect();
-                Some((clarity_spec::widgets::handler_call(h), ident(&h.handler), values))
+                Some((clarity_spec::widgets::handler_call(h), method(&h.handler), values))
             })
             .collect();
 
@@ -280,7 +280,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
         let mut methods = String::new();
         let mut handlers = Vec::new();
         for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
-            let method = ident(&handler.name.name);
+            let method = method(&handler.name.name);
             let mut emitter = Emitter::new(project, types, None, Some(&ctx));
             let mut code = String::new();
             emitter.block(&handler.body, &mut code);
@@ -310,7 +310,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             source,
             "{struct_name} {struct_name}::load([[maybe_unused]] clarity::Db& db) {{\n    {struct_name} w;\n{load}    return w;\n}}\n\nvoid to_json(nlohmann::json& out, [[maybe_unused]] const {struct_name}& w) {{\n    out = nlohmann::json::object();\n{to}}}\n\nvoid from_json([[maybe_unused]] const nlohmann::json& in, [[maybe_unused]] {struct_name}& w) {{\n{from}}}\n\n"
         );
-        let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, ident(&handler))).collect();
+        let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, method(&handler))).collect();
         owners.push(Owner { name: name.clone(), struct_name, handlers, calls, is_app: app.is_some(), events, draws });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
@@ -480,7 +480,7 @@ impl<'a> Emitter<'a> {
                         let value = if is_decimal(&ty) && !is_decimal(&self.types.type_of(arg)) { format!("clarity::Decimal({})", self.value(arg)) } else { self.value(arg) };
                         let _ = write!(values, ", {value}");
                     }
-                    let _ = writeln!(out, "{}(db, ui{values});", ident(&function.name));
+                    let _ = writeln!(out, "{}(db, ui{values});", method(&function.name));
                     return;
                 }
                 let code = self.value(call);
@@ -1036,4 +1036,10 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
     hops.iter().rev().fold(cond, |inner, h| {
         format!("clarity::Cond::through({}, {}, {}, {inner})", string(&h.column), string(&h.table), string(&h.key))
     })
+}
+
+/// A handler (camelCase in Clarity) as the member function of its window,
+/// in C++'s snake_case: `approveClicked` is `approve_clicked`.
+fn method(handler: &str) -> String {
+    ident(&super::names::snake(handler))
 }

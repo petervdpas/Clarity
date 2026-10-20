@@ -297,6 +297,11 @@
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
   onpointerdown={pressMove}
+  ondblclick={(e) => {
+    if (!design) return;
+    e.stopPropagation();
+    pageDesigner.openPartCode(offset);
+  }}
   role="presentation"
 >
   <div class="content {p.kind === 'button' ? '' : (partClass ?? '')}" class:inert={design && !info.container}>

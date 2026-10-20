@@ -46,20 +46,20 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
-    button \"Approve\" name approve_button at 1,1 span 2 on click: approve_clicked
-    table name grid at 1,2 span 6 rows 4 bind orders columns number on open: open_clicked
-    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked
+    button \"Approve\" name approveButton at 1,1 span 2 on click: approveClicked
+    table name grid at 1,2 span 6 rows 4 bind orders columns number on open: openClicked
+    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked
 
 code OrderForm
-    handler approve_clicked
+    handler approveClicked
         approve(order)
         message \"Approved {order.number} of {order.total}\"
-        approve_button.enabled = false
+        approveButton.enabled = false
 
-    handler open_clicked
+    handler openClicked
         open OrderForm with order = grid.selected
 
-    handler refresh_clicked
+    handler refreshClicked
         reload orders
 ";
 
@@ -156,10 +156,10 @@ fn handlers_are_functions_of_their_window() {
     has(app, "typedef struct {\n    Order order;\n    OrderList orders;\n} OrderFormWindow;");
     has(app, "bool order_form_window_approve_clicked(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w);");
     let sales = file(&files, "src/modules/sales.c");
-    has(sales, "bool order_form_window_approve_clicked(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w) {\n    if (!approve(db, &w->order)) return false;\n    clarity_ui_message(ui, CLARITY_INFO, clarity_text_with(clarity_text_with(clarity_text(\"Approved {order.number} of {order.total}\"), \"order.number\", clarity_slot_text(w->order.number)), \"order.total\", clarity_slot_money(w->order.total, NULL)));\n    clarity_ui_set_enabled(ui, \"approve_button\", false);\n    return true;\n}");
+    has(sales, "bool order_form_window_approve_clicked(ClarityDb* db, ClarityUi* ui, OrderFormWindow* w) {\n    if (!approve(db, &w->order)) return false;\n    clarity_ui_message(ui, CLARITY_INFO, clarity_text_with(clarity_text_with(clarity_text(\"Approved {order.number} of {order.total}\"), \"order.number\", clarity_slot_text(w->order.number)), \"order.total\", clarity_slot_money(w->order.total, NULL)));\n    clarity_ui_set_enabled(ui, \"approveButton\", false);\n    return true;\n}");
     has(sales, "    size_t i1 = 0;\n    if (!clarity_ui_selected(ui, \"grid\", w->orders.count, &i1)) return false;\n    Order v1 = w->orders.items[i1];\n    clarity_ui_open(ui, \"OrderForm\", clarity_json_object(1, \"order\", order_json(&v1)));");
     let main = file(&files, "src/main.c");
-    has(main, "    if (strcmp(state->window, \"OrderForm\") == 0) {\n        OrderFormWindow w = {0};\n        if (!order_form_window_from_json(state->data, &w)) return false;\n        bool ok = false;\n        if (strcmp(handler, \"approve_clicked\") == 0) ok = order_form_window_approve_clicked(db, ui, &w);");
+    has(main, "    if (strcmp(state->window, \"OrderForm\") == 0) {\n        OrderFormWindow w = {0};\n        if (!order_form_window_from_json(state->data, &w)) return false;\n        bool ok = false;\n        if (strcmp(handler, \"approveClicked\") == 0) ok = order_form_window_approve_clicked(db, ui, &w);");
     has(main, "        for (size_t i = 0; i < all.count; i++) clarity_add_option(*out, all.items[i].id, all.items[i].name);");
 }
 
@@ -211,12 +211,12 @@ fn the_desktop_window_opens_at_the_main_windows_size() {
 fn a_click_passes_values_to_its_handler() {
     let source = SALES
         .replace(
-            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n",
-            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
+            "    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked\n",
+            "    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
         )
         .replace(
-            "    handler refresh_clicked\n",
-            "    handler digit(d: integer)\n        approve_button.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refresh_clicked\n",
+            "    handler refreshClicked\n",
+            "    handler digit(d: integer)\n        approveButton.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refreshClicked\n",
         );
     assert_ne!(source, SALES);
     let project = load_sources([("sales.clarity", source.as_str())]);
@@ -295,16 +295,16 @@ const DIAL: &str = "
 page Dial: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Dial
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
         dial.text(50, 90, \"{speed} km/h\")
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
 ";
 
@@ -352,7 +352,7 @@ fn an_engine_brings_its_host_and_wasm3() {
 /// A canvas with `on click` runs its handler, which reads where it was clicked.
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
-    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));

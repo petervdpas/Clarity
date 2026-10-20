@@ -44,37 +44,37 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
-    on return: window_returned
-    form name order_form at 1,1 span 12 rows 1 bind order on submit: order_submitted
-        textbox name number_input at 1,1 span 4 bind order.number readonly
-    table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: grid_opened
-    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked
-    textbox name number_filter at 1,7 span 4 on change: filter_changed
+    on return: windowReturned
+    form name orderForm at 1,1 span 12 rows 1 bind order on submit: orderSubmitted
+        textbox name numberInput at 1,1 span 4 bind order.number readonly
+    table name grid at 1,2 span 12 rows 4 bind orders columns number, total on open: gridOpened
+    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked
+    textbox name numberFilter at 1,7 span 4 on change: filterChanged
 
 code OrderForm
-    handler approve_clicked
+    handler approveClicked
         if not within_credit(order)
             message warning \"Too much\"
-            approve_button.enabled = false
+            approveButton.enabled = false
             return
         approve(order)
         message \"Approved {order.number}\"
 
-    handler window_returned
+    handler windowReturned
         reload orders
         reload order
-        filter_changed()
+        filterChanged()
 
-    handler filter_changed
-        orders = find o in Order where o.number contains number_filter.text and not (o.customer == order.customer) order by o.number
+    handler filterChanged
+        orders = find o in Order where o.number contains numberFilter.text and not (o.customer == order.customer) order by o.number
         if order.number contains \"ORD\"
-            number_filter.text = \"\"
+            numberFilter.text = \"\"
 
-    handler order_submitted
-        number_input.error = \"Check the number\"
-        number_input.readonly = not number_input.readonly
+    handler orderSubmitted
+        numberInput.error = \"Check the number\"
+        numberInput.readonly = not numberInput.readonly
 
-    handler grid_opened
+    handler gridOpened
         open OrderForm with order = grid.selected
         close
 ";
@@ -209,14 +209,14 @@ fn handlers_work_on_the_window_and_the_screen() {
         sales.contains("ui.message(Level::Info, Text::new(\"Approved {order.number}\").with(\"order.number\", Slot::text(w.order.number.clone())));"),
         "{sales}"
     );
-    assert!(sales.contains("ui.set_error(\"number_input\", Text::plain(\"Check the number\"));"), "{sales}");
-    assert!(sales.contains("ui.set_enabled(\"approve_button\", false);"), "{sales}");
+    assert!(sales.contains("ui.set_error(\"numberInput\", Text::plain(\"Check the number\"));"), "{sales}");
+    assert!(sales.contains("ui.set_enabled(\"approveButton\", false);"), "{sales}");
     assert!(sales.contains("approve(db, &mut w.order)?;"), "{sales}");
     assert!(sales.contains("ui.open(\"OrderForm\", vec![(\"order\", to_value(&ui.selected(\"grid\", &w.orders)?)?)]);"), "{sales}");
     assert!(sales.contains("ui.close = true;"), "{sales}");
 
     let main = file(&files, "src/main.rs");
-    assert!(main.contains("(\"OrderForm\", \"approve_clicked\") => {"), "{main}");
+    assert!(main.contains("(\"OrderForm\", \"approveClicked\") => {"), "{main}");
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
     assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\")];"), "{main}");
     assert!(file(&files, "src/model.json").contains("\"OrderForm\""));
@@ -239,22 +239,22 @@ fn handlers_set_errors_and_readonly_on_inputs() {
     let files = files();
     let sales = file(&files, "src/modules/sales.rs");
     assert!(
-        sales.contains("ui.set_error(\"number_input\", Text::plain(\"Check the number\"));"),
+        sales.contains("ui.set_error(\"numberInput\", Text::plain(\"Check the number\"));"),
         "{sales}"
     );
     assert!(
-        sales.contains("ui.set_readonly(\"number_input\", !ui.readonly(\"number_input\", true));"),
+        sales.contains("ui.set_readonly(\"numberInput\", !ui.readonly(\"numberInput\", true));"),
         "{sales}"
     );
     let main = file(&files, "src/main.rs");
-    assert!(main.contains("(\"OrderForm\", \"order_submitted\") => {"), "{main}");
+    assert!(main.contains("(\"OrderForm\", \"orderSubmitted\") => {"), "{main}");
 }
 
 #[test]
 fn window_events_and_reload_reach_the_backend() {
     let files = files();
     let main = file(&files, "src/main.rs");
-    assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"window_returned\"),"), "{main}");
+    assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"windowReturned\"),"), "{main}");
     assert!(main.contains("fn close_window("), "{main}");
     assert!(main.contains("on_event(db, state, \"open\")"), "{main}");
     let sales = file(&files, "src/modules/sales.rs");
@@ -274,12 +274,12 @@ fn queries_become_database_queries() {
     );
     assert!(
         sales.contains(
-            "w.orders = db.find::<Order>(&Query::new().filter(Cond::contains(\"number\", &ui.text(\"number_filter\")).and(Cond::compare(\"customer\", Op::Eq, sql::reference(w.order.customer)).negated())).order(\"number\", false))?;"
+            "w.orders = db.find::<Order>(&Query::new().filter(Cond::contains(\"number\", &ui.text(\"numberFilter\")).and(Cond::compare(\"customer\", Op::Eq, sql::reference(w.order.customer)).negated())).order(\"number\", false))?;"
         ),
         "{sales}"
     );
     assert!(sales.contains("if contains(&w.order.number, &String::from(\"ORD\")) {"), "{sales}");
-    assert!(sales.contains("ui.set_text(\"number_filter\", String::from(\"\"));"), "{sales}");
+    assert!(sales.contains("ui.set_text(\"numberFilter\", String::from(\"\"));"), "{sales}");
     // A handler runs another handler of its window.
     assert!(sales.contains("    order_form__filter_changed(db, w, ui)?;\n"), "{sales}");
 }
@@ -555,8 +555,8 @@ fn the_application_has_one_desktop_window() {
 #[test]
 fn only_a_target_in_new_window_makes_a_second_desktop_window() {
     let apart = SALES.replace(
-        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
-        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"Again\" at 3,6 span 2 on click -> OrderForm in new window",
+        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
+        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"Again\" name again at 3,6 span 2 on click -> OrderForm in new window",
     );
     assert_ne!(apart, SALES);
     let project = load_sources([("sales.clarity", apart.as_str())]);
@@ -579,8 +579,8 @@ fn a_window_opens_at_its_size() {
     assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(1100), Some(760)));
 
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n").replace(
-        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
-        "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"Again\" at 3,6 span 2 on click -> OrderForm in new window",
+        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
+        "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"Again\" name again at 3,6 span 2 on click -> OrderForm in new window",
     );
     let project = load_sources([("sales.clarity", sized.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
@@ -648,8 +648,8 @@ fn today_reads_the_clock() {
 #[test]
 fn an_unbound_checkbox_is_checked_in_the_window_state() {
     let source = SALES
-        .replace("    textbox name number_filter at 1,7 span 4 on change: filter_changed\n", "    textbox name number_filter at 1,7 span 4 on change: filter_changed\n    checkbox \"Only mine\" name mine at 5,7 span 3\n")
-        .replace("            number_filter.text = \"\"\n", "            number_filter.text = \"\"\n        if mine.checked\n            mine.checked = false\n");
+        .replace("    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n", "    textbox name numberFilter at 1,7 span 4 on change: filterChanged\n    checkbox \"Only mine\" name mine at 5,7 span 3\n")
+        .replace("            numberFilter.text = \"\"\n", "            numberFilter.text = \"\"\n        if mine.checked\n            mine.checked = false\n");
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -658,7 +658,7 @@ fn an_unbound_checkbox_is_checked_in_the_window_state() {
     assert!(sales.contains("ui.set_checked(\"mine\", false);"), "{sales}");
 }
 
-const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number at 1,1 span 3 bind track.length\n    text at 4,1 span 3 bind track.length\n";
+const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    length: duration, min 0, default 180\n\nfunction album_length(tracks: list<Track>) -> duration\n    let total: duration = 0\n    for track in tracks\n        total = total + track.length\n    return total\n\ncode Track\n    before save\n        if track.length > 7200\n            refuse \"{track.title} lasts {track.length}\"\n\npage Tracks: window\n    data track: Track\n    number name number1 at 1,1 span 3 bind track.length\n    text name text1 at 4,1 span 3 bind track.length\n";
 
 /// A duration is whole seconds; its slot shows it as 3:45 (X2).
 #[test]
@@ -718,8 +718,8 @@ fn rows_read_again_lose_their_selected_row() {
 #[test]
 fn the_selected_row_is_saved_and_deleted_as_it_is() {
     let source = SALES.replace(
-        "    handler grid_opened\n",
-        "    handler grid_changed\n        save grid.selected\n        delete grid.selected\n\n    handler grid_opened\n",
+        "    handler gridOpened\n",
+        "    handler gridChanged\n        save grid.selected\n        delete grid.selected\n\n    handler gridOpened\n",
     );
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
@@ -735,12 +735,12 @@ fn the_selected_row_is_saved_and_deleted_as_it_is() {
 fn a_click_passes_values_to_its_handler() {
     let source = SALES
         .replace(
-            "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked",
-            "    button \"Approve\" name approve_button at 1,6 span 2 on click: approve_clicked\n    button \"7\" name d7 at 3,6 span 1 on click: digit(7)\n    button \"Half\" name half at 4,6 span 1 on click: scale(0.5, \"half\", true)\n    button \"Ok\" name ok at 5,6 span 1 on click: mark(Approved)",
+            "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked",
+            "    button \"Approve\" name approveButton at 1,6 span 2 on click: approveClicked\n    button \"7\" name d7 at 3,6 span 1 on click: digit(7)\n    button \"Half\" name half at 4,6 span 1 on click: scale(0.5, \"half\", true)\n    button \"Ok\" name ok at 5,6 span 1 on click: mark(Approved)",
         )
         .replace(
-            "    handler order_submitted\n",
-            "    handler digit(d: integer)\n        number_filter.text = \"\"\n\n    handler scale(by: decimal, word: text, loud: bool)\n        digit(3)\n\n    handler mark(status: OrderStatus)\n        digit(1)\n\n    handler order_submitted\n",
+            "    handler orderSubmitted\n",
+            "    handler digit(d: integer)\n        numberFilter.text = \"\"\n\n    handler scale(by: decimal, word: text, loud: bool)\n        digit(3)\n\n    handler mark(status: OrderStatus)\n        digit(1)\n\n    handler orderSubmitted\n",
         );
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
@@ -819,16 +819,16 @@ const DIAL: &str = "
 page Dial: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Dial
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
         dial.text(50, 90, \"{speed} km/h\")
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
 ";
 
@@ -855,7 +855,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 /// A canvas with `on click` runs its handler, which reads where it was clicked.
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
-    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));

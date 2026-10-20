@@ -91,14 +91,14 @@ page P: dialog
     title \"Edit\"
     grid 6 columns
     data c: Customer
-    button \"Save\" at 5,4 on click -> Done
-    panel \"Box\" at 1,1 span 6 rows 3
-        textbox at 1,1 span 4 bind c.name
-    splitter at 1,5 span 6 rows 4 vertical
+    button \"Save\" name button1 at 5,4 on click -> Done
+    panel \"Box\" name panel1 at 1,1 span 6 rows 3
+        textbox name textbox1 at 1,1 span 4 bind c.name
+    splitter name splitter1 at 1,5 span 6 rows 4 vertical
         pane
-            label \"Left\" at 1,1
+            label \"Left\" name label1 at 1,1
         pane
-            canvas at 1,1 surface gpu renderer Game
+            canvas name canvas1 at 1,1 surface gpu renderer Game
 ",
         "p.clarity",
     );
@@ -147,10 +147,10 @@ fn reports_parse_errors_per_widget() {
 page P: window
     slider at 1,1
     textbox span 3
-    button \"x\" at 1,2 columns a
-    textbox at 1,3 bind c.name bind c.kind
-    label at 1,4 on hover -> X
-    checkbox at 1,5 on click -> X
+    button \"x\" name button1 at 1,2 columns a
+    textbox name textbox5 at 1,3 bind c.name bind c.kind
+    label name label1 at 1,4 on hover -> X
+    checkbox name checkbox1 at 1,5 on click -> X
 ",
         "p.clarity",
     );
@@ -169,11 +169,11 @@ fn reports_grid_problems() {
     let errs = errors(
         "page P: window
     data c: Customer
-    textbox at 10,1 span 4 bind c.name
-    label \"A\" at 1,2 span 4
-    label \"B\" at 3,2 span 2
-    panel at 1,4 span 4 rows 2
-        label \"Inside\" at 3,1 span 3
+    textbox name textbox1 at 10,1 span 4 bind c.name
+    label \"A\" name label1 at 1,2 span 4
+    label \"B\" name label2 at 3,2 span 2
+    panel name panel1 at 1,4 span 4 rows 2
+        label \"Inside\" name label3 at 3,1 span 3
 ",
     );
     assert_has(&errs, "runs past column 12");
@@ -187,16 +187,16 @@ fn checks_bindings_against_the_dictionary() {
     let page = "page P: window
     data c: Customer
     data many: list<Customer>
-    textbox at 1,1 bind c.limit
-    checkbox at 1,2 bind c.name
-    textbox at 1,3 bind many.name
-    textbox at 1,4 bind c.nope
-    textbox at 1,5 bind ghost.name
-    table at 1,6 bind c
-    list at 1,12 bind many show name, notes
-    number at 6,1 bind c.limit
-    dropdown at 6,2 bind c.kind
-    checkbox at 6,3 bind c.active
+    textbox name textbox1 at 1,1 bind c.limit
+    checkbox name checkbox1 at 1,2 bind c.name
+    textbox name textbox2 at 1,3 bind many.name
+    textbox name textbox3 at 1,4 bind c.nope
+    textbox name textbox4 at 1,5 bind ghost.name
+    table name table1 at 1,6 bind c
+    list name list1 at 1,12 bind many show name, notes
+    number name number1 at 6,1 bind c.limit
+    dropdown name dropdown1 at 6,2 bind c.kind
+    checkbox name checkbox2 at 6,3 bind c.active
 ";
     let errs = errors(page);
     let expected = [
@@ -217,11 +217,11 @@ fn checks_bindings_against_the_dictionary() {
 #[test]
 fn unbound_inputs_are_fine_and_unknown_click_targets_warn() {
     let page = "page P: window
-    textbox at 1,1
-    button \"Open\" at 1,2 on click -> CustomerBrowse
-    button \"Save\" at 3,2 on click -> save_customer
-    button \"Bad\" at 5,2 on click -> Customer
-    canvas at 1,3
+    textbox name textbox1 at 1,1
+    button \"Open\" name button1 at 1,2 on click -> CustomerBrowse
+    button \"Save\" name button2 at 3,2 on click -> save_customer
+    button \"Bad\" name button3 at 5,2 on click -> Customer
+    canvas name canvas1 at 1,3
 ";
     let warns = warnings(page);
     assert_has(&warns, "'save_customer' is not a window");
@@ -245,8 +245,8 @@ fn checks_containers_and_grid_size() {
 
     let errs = errors(
         "page Q: window
-    tabs at 1,1
-    splitter at 1,8
+    tabs name tabs1 at 1,1
+    splitter name splitter1 at 1,8
         pane
 ",
     );
@@ -333,7 +333,7 @@ fn a_part_binds_a_plain_value() {
     data pending: Kind
     data fresh: bool
 ";
-    let ok = format!("{page}    text at 1,1 span 4 bind shown\n    dropdown at 1,2 span 4 bind pending\n    checkbox \"Fresh\" at 1,3 span 4 bind fresh\n    number at 1,4 span 4 bind shown\n");
+    let ok = format!("{page}    text name text9 at 1,1 span 4 bind shown\n    dropdown name dropdown2 at 1,2 span 4 bind pending\n    checkbox \"Fresh\" name checkbox3 at 1,3 span 4 bind fresh\n    number name number2 at 1,4 span 4 bind shown\n");
     assert!(errors(&ok).is_empty(), "{:#?}", errors(&ok));
     assert_has(&errors(&format!("{page}    textbox at 1,1 span 4 bind fresh\n")), "'fresh' is bool; a textbox shows");
     assert_has(&errors(&format!("{page}    text at 1,1 span 4 bind shown.digits\n")), "'shown' is a plain value; bind it as 'shown'");

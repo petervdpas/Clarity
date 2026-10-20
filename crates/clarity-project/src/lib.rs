@@ -3,6 +3,7 @@
 //! is built. The modules sit in the folder of the same name next to it. See
 //! docs/DESIGN.md sections 1.2 and 1.3.
 
+pub mod engines;
 mod file;
 
 use std::path::{Path, PathBuf};

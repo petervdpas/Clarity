@@ -26,7 +26,8 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 - **Indentation** uses spaces; a tab is an error. Four spaces per level is the convention, and the designer writes four.
 - **Comments** start with `//` and run to the end of the line. They can stand on their own line or follow code. The designer keeps them when it rewrites a file.
 - **Blank lines** are free and are kept too.
-- **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. By convention, entities, enums, windows and the app are `PascalCase`, and everything else is `snake_case`.
+- **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. Entities, enums, windows and the app are written in `PascalCase` by convention. The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `square1`, `saveClicked`); the checker reports any other. Fields, data and functions are `snake_case` by convention.
+- **Every part has a name** (`button "Save" name save at 1,3`), which its events and code go by. The designer names a part when it is placed (`button1`); a part written without one is an error, and **Name them** under Problems names every such part in the file.
 - **Strings** are written in double quotes: `"Customer card"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
   In code, a string is also read for slots: `{customer.name}` is a value, and `{{` and `}}` are braces (see [Text with slots](#text-with-slots)). Strings in settings, such as titles and patterns, have no slots.
 - **Numbers** are written without quotes: `12`, `9.95`.
@@ -110,7 +111,7 @@ The `images` folder of the module folder holds the fixed pictures of the applica
 ```clarity
 // records/images/logo.png
 page AlbumBrowse: window
-    image at 12,1 span 1 rows 1 source "logo.png"
+    image name image1 at 12,1 span 1 rows 1 source "logo.png"
 ```
 
 - The picture must be in the `images` folder; a name that is not there is an error that lists what is.
@@ -398,12 +399,12 @@ page CustomerForm: window
     data customer: Customer
     data orders: list<Order>
     grid 12 columns
-    on return: window_returned
+    on return: windowReturned
 
-    label "Name" at 1,1 span 3 for name
+    label "Name" name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
-    table name order_table at 1,3 span 12 rows 6 bind orders columns number, total
-    button "Save" name save at 11,10 span 2 default on click: save_clicked
+    table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
+    button "Save" name save at 11,10 span 2 default on click: saveClicked
 ```
 
 ### Kinds
@@ -642,10 +643,10 @@ app Shop
                 button "New" icon "add" large on click -> CustomerForm
                 button "Browse" icon "list" on click -> CustomerBrowse
     sidebar left span 3
-        list at 1,1 span 3 rows 10 bind recent show name
+        list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
         status "Ready"
-        text at 10,1 span 3 bind session.user
+        text name text1 at 10,1 span 3 bind session.user
 ```
 
 ### App settings
@@ -756,11 +757,11 @@ A window's handlers are in a `code` block named after the window, in the same fi
 
 ```clarity
 code CustomerForm
-    handler kind_changed
+    handler kindChanged
         // Only business customers have a VAT number.
-        vat_number.enabled = customer.kind == Business
+        vatNumber.enabled = customer.kind == Business
 
-    handler save_clicked
+    handler saveClicked
         name.error = ""
         if customer.name == ""
             name.error = "Name is required"
@@ -778,7 +779,7 @@ code CustomerForm
 ### What a handler sees
 
 - **The window's data**, by its `data` names: `customer`, `orders`.
-- **The window's parts**, by their names: `save`, `vat_number`.
+- **The window's parts**, by their names: `save`, `vatNumber`.
 - **Its own locals**, made with `let`.
 - **Enum values**, written bare (`Business`) where the expected type says which enum is meant, and qualified (`CustomerKind.Business`) where it does not.
 - **Functions and actions** of its own module and of the modules it uses.
@@ -807,11 +808,11 @@ A canvas is drawn by its draw handler, wired with `on draw`. The handler draws s
 ```clarity
 page Main: window
     data speed: integer, default 80
-    canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial
-    button "Faster" at 7,8 span 6 key "+" on click: change(10)
+    canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
+    button "Faster" name button1 at 7,8 span 6 key "+" on click: change(10)
 
 code Main
-    handler draw_dial
+    handler drawDial
         let angle = 210 - speed * 240 / 200
         dial.clear("panel")
         dial.ring(50, 50, 42, "border", 3)
@@ -838,13 +839,13 @@ code Main
 ```clarity
 page Game: window
     data status: text
-    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: draw_board on click: board_clicked
+    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
 
 code Game
-    handler draw_board
+    handler drawBoard
         board.clear("panel")
 
-    handler board_clicked
+    handler boardClicked
         let square = 1
         if board.x >= 200
             square = 3
@@ -1015,7 +1016,7 @@ Text that people read names its values in slots, instead of adding them together
 
 ```clarity
 code OrderForm
-    handler approve_clicked
+    handler approveClicked
         approve(order)
         message "Order {order.number} of {order.total} is approved"
         approve_button.caption = "Approved on {order.ordered_on}"
@@ -1034,10 +1035,10 @@ code OrderForm
 
 ```clarity
 code Customers
-    handler filter_changed
-        customers = find c in Customer where c.name contains name_filter.text and c.active order by c.name
+    handler filterChanged
+        customers = find c in Customer where c.name contains nameFilter.text and c.active order by c.name
 
-    handler card_opened
+    handler cardOpened
         orders = find o in Order where o.customer == customer and o.total > 100 order by o.total desc
 ```
 
@@ -1136,31 +1137,31 @@ app Shop
 page CustomerBrowse: window
     title "Customers"
     data customers: list<Customer>
-    on return: window_returned
+    on return: windowReturned
 
-    label "Name" at 1,1 span 2 for name_filter
-    textbox name name_filter at 3,1 span 4 placeholder "Part of the name" on change: filter_changed
-    table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: open_clicked
-    button "New" at 9,10 span 2 on click -> CustomerForm
-    button "Open" name open_button at 11,10 span 2 on click: open_clicked
+    label "Name" name label1 at 1,1 span 2 for nameFilter
+    textbox name nameFilter at 3,1 span 4 placeholder "Part of the name" on change: filterChanged
+    table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: openClicked
+    button "New" name button1 at 9,10 span 2 on click -> CustomerForm
+    button "Open" name openButton at 11,10 span 2 on click: openClicked
 
 page CustomerForm: window
     title "Customer"
     data customer: Customer
 
-    form name customer_form at 1,1 span 12 rows 4 bind customer
-        label "Name" at 1,1 span 3 for name
+    form name customerForm at 1,1 span 12 rows 4 bind customer
+        label "Name" name label1 at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind customer.name
-        help at 10,1 span 3 for name
-        label "Kind" at 1,2 span 3 for kind
-        radio name kind at 4,2 span 6 bind customer.kind on change: kind_changed
-        label "Vat number" at 1,3 span 3 for vat_number
-        textbox name vat_number at 4,3 span 4 bind customer.vat_number
-        help at 8,3 span 5 for vat_number
-        label "Notes" at 1,4 span 3 for notes
+        help name help1 at 10,1 span 3 for name
+        label "Kind" name label2 at 1,2 span 3 for kind
+        radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
+        label "Vat number" name label3 at 1,3 span 3 for vatNumber
+        textbox name vatNumber at 4,3 span 4 bind customer.vat_number
+        help name help2 at 8,3 span 5 for vatNumber
+        label "Notes" name label4 at 1,4 span 3 for notes
         textbox name notes at 4,4 span 9 bind customer.notes
-    button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: save_clicked
-    button "Close" name close_form at 11,6 span 2 cancel on click: close_clicked
+    button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
+    button "Close" name closeForm at 11,6 span 2 cancel on click: closeClicked
 
 code Customer
     before save
@@ -1169,34 +1170,34 @@ code Customer
             customer.vat_number = ""
 
 code CustomerBrowse
-    handler window_returned
+    handler windowReturned
         // The form may have saved a customer.
-        filter_changed()
+        filterChanged()
 
-    handler filter_changed
-        customers = find c in Customer where c.name contains name_filter.text order by c.name
+    handler filterChanged
+        customers = find c in Customer where c.name contains nameFilter.text order by c.name
 
-    handler open_clicked
+    handler openClicked
         open CustomerForm with customer = grid.selected
 
 code CustomerForm
-    handler kind_changed
-        vat_number.enabled = customer.kind == Business
+    handler kindChanged
+        vatNumber.enabled = customer.kind == Business
 
-    handler save_clicked
+    handler saveClicked
         name.error = ""
-        vat_number.error = ""
+        vatNumber.error = ""
         if customer.name == ""
             name.error = "Name is required"
             return
         if customer.kind == Business and customer.vat_number == ""
-            vat_number.error = "Needed for business customers"
+            vatNumber.error = "Needed for business customers"
             return
         save customer
         message "Saved {customer.name}"
         close
 
-    handler close_clicked
+    handler closeClicked
         close
 ```
 

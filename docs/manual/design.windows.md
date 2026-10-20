@@ -13,12 +13,12 @@ page CustomerForm: window
     data orders: list<Order>
     grid 12 columns
     on open: window_opened
-    on return: window_returned
+    on return: windowReturned
 
-    label "Name" at 1,1 span 3 for name
+    label "Name" name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
-    table name order_table at 1,3 span 12 rows 6 bind orders columns number, total
-    button "Save" name save at 11,10 span 2 default on click: save_clicked
+    table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
+    button "Save" name save at 11,10 span 2 default on click: saveClicked
 ```
 
 The kind after the colon is `window` (a window of its own, which can have a menu, toolbar and other frame regions), `dialog` (a modal window) or `view`. Only a `window` has frame regions; see [The app and its frame](design.frame.md).
@@ -51,7 +51,7 @@ A window has three events of its own, listed under Events in The window:
 - `on return`: a window this one opened has closed, and this one is on top again. This is where a list reloads after a form saved a record.
 - `on close`: the window is about to close.
 
-**Wire** fills in a handler name (`window_opened`, `window_returned`, `window_closed`), writes an empty handler and opens it in the Code panel. See [Handlers](code.handlers.md).
+**Wire** fills in a handler name (`window_opened`, `windowReturned`, `window_closed`), writes an empty handler and opens it in the Code panel. See [Handlers](code.handlers.md).
 
 ## Size
 

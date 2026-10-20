@@ -17,11 +17,11 @@ entity Album
 
 page AlbumForm: window
     data album: Album
-    button \"Loans\" at 1,1 span 2 on click: loans_clicked
-    button \"On loan\" at 3,1 span 2 on click -> LoanBrowse
+    button \"Loans\" name button1 at 1,1 span 2 on click: loansClicked
+    button \"On loan\" name button2 at 3,1 span 2 on click -> LoanBrowse
 
 code AlbumForm
-    handler loans_clicked
+    handler loansClicked
         let lent = find l in Loan where l.album == album
         let n = count(lent)
         message \"{n} loans\"
@@ -37,7 +37,7 @@ entity Loan
 
 page LoanBrowse: window
     data loans: list<Loan>
-    button \"Album\" at 1,1 span 2 on click -> AlbumForm
+    button \"Album\" name button1 at 1,1 span 2 on click -> AlbumForm
 ";
 
 const STACKS: [(Backend, Ui); 5] =

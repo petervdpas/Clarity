@@ -320,52 +320,52 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
-    on open: window_opened
-    on return: window_returned
-    label \"Number\" at 1,1 span 2 for number_input
-    textbox name number_input at 3,1 span 4 bind order.number placeholder \"ORD-1\"
-    help at 3,2 span 4 for number_input
-    number at 1,3 span 3 bind order.total
-    checkbox \"Paid\" at 4,3 span 3 bind order.paid
-    switch \"Rush\" at 7,3 span 3 bind order.paid
-    dropdown at 1,4 span 4 bind order.status
-    dropdown name customer_pick at 5,4 span 4 bind order.customer
-    date at 9,4 span 3 bind order.ordered_on
-    text at 1,5 span 4 bind order.status
-    table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: grid_selected on open: grid_opened
-    textbox name number_filter at 1,10 span 4 on change: filter_changed
-    button \"Approve\" name approve_button at 9,10 span 2 default on click: approve_clicked
-    button \"New\" at 11,10 span 2 on click -> OrderForm
-    tabs at 1,11 span 12 rows 2
+    on open: windowOpened
+    on return: windowReturned
+    label \"Number\" name label1 at 1,1 span 2 for numberInput
+    textbox name numberInput at 3,1 span 4 bind order.number placeholder \"ORD-1\"
+    help name help1 at 3,2 span 4 for numberInput
+    number name number1 at 1,3 span 3 bind order.total
+    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid
+    switch \"Rush\" name switch1 at 7,3 span 3 bind order.paid
+    dropdown name dropdown1 at 1,4 span 4 bind order.status
+    dropdown name customerPick at 5,4 span 4 bind order.customer
+    date name date1 at 9,4 span 3 bind order.ordered_on
+    text name text1 at 1,5 span 4 bind order.status
+    table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: gridSelected on open: gridOpened
+    textbox name numberFilter at 1,10 span 4 on change: filterChanged
+    button \"Approve\" name approveButton at 9,10 span 2 default on click: approveClicked
+    button \"New\" name newOrder at 11,10 span 2 on click -> OrderForm
+    tabs name tabs1 at 1,11 span 12 rows 2
         tab \"Notes\"
-            memo at 1,1 span 12 bind order.number
+            memo name memo1 at 1,1 span 12 bind order.number
 
 code OrderForm
-    handler window_opened
-        number_input.readonly = order.paid
+    handler windowOpened
+        numberInput.readonly = order.paid
 
-    handler window_returned
+    handler windowReturned
         reload orders
         reload order
 
-    handler approve_clicked
+    handler approveClicked
         if not within_credit(order)
             message warning \"Order {order.number} is too large\"
-            approve_button.enabled = false
+            approveButton.enabled = false
             return
         order.status = Approved
         save order
-        number_input.error = \"\"
+        numberInput.error = \"\"
         message \"Approved\"
-        filter_changed()
+        filterChanged()
 
-    handler filter_changed
-        orders = find o in Order where o.number contains number_filter.text order by o.number
+    handler filterChanged
+        orders = find o in Order where o.number contains numberFilter.text order by o.number
 
-    handler grid_selected
+    handler gridSelected
         order = grid.selected
 
-    handler grid_opened
+    handler gridOpened
         open OrderForm with order = grid.selected
         close
 ";
@@ -421,13 +421,13 @@ fn handlers_are_methods_of_their_window() {
     let files = windows();
     let shop = file(&files, "shop_module.go");
     has(shop, "func (w *OrderFormWindow) approveClicked(db *clarity.Db, ui *clarity.Ui) error {");
-    has(shop, "\t\tui.Message(clarity.Warning, clarity.NewText(\"Order {order.number} is too large\").With(\"order.number\", clarity.SlotText(w.Order.Number)))\n\t\tui.SetEnabled(\"approve_button\", false)\n\t\treturn nil\n");
-    has(shop, "\tui.SetError(\"number_input\", clarity.PlainText(\"\"))\n\tui.Message(clarity.Info, clarity.PlainText(\"Approved\"))\n\tif err := w.filterChanged(db, ui); err != nil {\n\t\treturn err\n\t}\n");
-    has(shop, "\tv1, err := clarity.Find[Order](db, clarity.Query{}.Filter(clarity.Contains(\"number\", ui.Text(\"number_filter\"))).Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n");
+    has(shop, "\t\tui.Message(clarity.Warning, clarity.NewText(\"Order {order.number} is too large\").With(\"order.number\", clarity.SlotText(w.Order.Number)))\n\t\tui.SetEnabled(\"approveButton\", false)\n\t\treturn nil\n");
+    has(shop, "\tui.SetError(\"numberInput\", clarity.PlainText(\"\"))\n\tui.Message(clarity.Info, clarity.PlainText(\"Approved\"))\n\tif err := w.filterChanged(db, ui); err != nil {\n\t\treturn err\n\t}\n");
+    has(shop, "\tv1, err := clarity.Find[Order](db, clarity.Query{}.Filter(clarity.Contains(\"number\", ui.Text(\"numberFilter\"))).Order(\"number\", false))\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Orders = v1\n");
     has(shop, "\tv1, err := clarity.Selected(ui, \"grid\", w.Orders)\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Order = v1\n");
     has(shop, "\tui.Open(\"OrderForm\", map[string]any{\"order\": v1})\n\tui.Close()\n");
     has(shop, "\tw.Orders = v1\n\tui.Deselect(\"grid\")\n\tif w.Order.ID != 0 {\n\t\tv2, err := clarity.Get[Order](db, w.Order.ID)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tw.Order = &v2\n\t}\n");
-    has(shop, "\tui.SetReadonly(\"number_input\", w.Order.Paid)\n");
+    has(shop, "\tui.SetReadonly(\"numberInput\", w.Order.Paid)\n");
 }
 
 #[test]
@@ -436,8 +436,8 @@ fn the_program_dispatches_to_the_handlers() {
     let main = file(&files, "main.go");
     has(main, "func (windows) Open(db *clarity.Db, window string, with map[string]any) (clarity.WindowState, error) {");
     has(main, "\tcase \"OrderForm\":\n\t\tw, err := loadOrderFormWindow(db)\n\t\tif err != nil {\n\t\t\treturn clarity.WindowState{}, err\n\t\t}\n\t\treturn clarity.Opened(window, w, with)\n");
-    has(main, "\tcase \"OrderForm\":\n\t\tswitch event {\n\t\tcase \"open\":\n\t\t\treturn \"window_opened\", true\n");
-    has(main, "\t\tcase \"approve_clicked\":\n\t\t\tw := &OrderFormWindow{}\n\t\t\tif err := state.Decode(w); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\tif err := w.approveClicked(db, ui); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\treturn ui.Reply(state.Window, w)\n");
+    has(main, "\tcase \"OrderForm\":\n\t\tswitch event {\n\t\tcase \"open\":\n\t\t\treturn \"windowOpened\", true\n");
+    has(main, "\t\tcase \"approveClicked\":\n\t\t\tw := &OrderFormWindow{}\n\t\t\tif err := state.Decode(w); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\tif err := w.approveClicked(db, ui); err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n\t\t\treturn ui.Reply(state.Window, w)\n");
     has(main, "\tcase \"Customer\":\n\t\trows, err := clarity.All[Customer](db)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\tfor _, r := range rows {\n\t\t\toptions = append(options, clarity.RefOption{ID: r.ID, Text: r.Name})\n\t\t}\n");
 }
 
@@ -515,12 +515,12 @@ fn the_desktop_window_opens_at_the_main_windows_size() {
 fn a_click_passes_values_to_its_handler() {
     let source = WINDOWS
         .replace(
-            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
-            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n",
+            "    button \"New\" name newOrder at 11,10 span 2 on click -> OrderForm\n",
+            "    button \"New\" name newOrder at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n",
         )
         .replace(
-            "    handler grid_selected\n",
-            "    handler digit(d: integer)\n        number_input.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler grid_selected\n",
+            "    handler gridSelected\n",
+            "    handler digit(d: integer)\n        numberInput.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler gridSelected\n",
         );
     assert_ne!(source, WINDOWS);
     let project = load_sources([("shop.clarity", source.as_str())]);
@@ -601,16 +601,16 @@ const DIAL: &str = "
 page Dial: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Dial
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
         dial.text(50, 90, \"{speed} km/h\")
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
 ";
 
@@ -656,7 +656,7 @@ fn a_function_never_takes_the_name_of_a_type() {
 /// A canvas with `on click` runs its handler, which reads where it was clicked.
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
-    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -668,7 +668,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
 /// though Go would make a bare number an int.
 #[test]
 fn a_local_from_a_number_is_an_int64() {
-    let source = format!("{SALES}{DIAL}") + "\n    handler count_up\n        let step = 1\n        speed = speed + step\n";
+    let source = format!("{SALES}{DIAL}") + "\n    handler countUp\n        let step = 1\n        speed = speed + step\n";
     let project = load_sources([("sales.clarity", source.as_str())]);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code = file(&files, "sales_module.go");

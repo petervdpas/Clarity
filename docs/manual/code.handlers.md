@@ -8,10 +8,10 @@ A window's handlers live in a `code` block with the window's name, in the same f
 
 ```clarity
 code CustomerForm
-    handler kind_changed
-        vat_number.enabled = customer.kind == Business
+    handler kindChanged
+        vatNumber.enabled = customer.kind == Business
 
-    handler save_clicked
+    handler saveClicked
         name.error = ""
         if customer.name == ""
             name.error = "Name is required"
@@ -21,7 +21,7 @@ code CustomerForm
         close
 ```
 
-A part wires an event with `on click: save_clicked`; a window wires its own with `on open:`, `on close:` and `on return:`. The app's handlers, such as `on start`, are in a `code` block named after the app. A handler that is wired but not written is an error; one that is written but wired nowhere is a warning.
+A part wires an event with `on click: saveClicked`; a window wires its own with `on open:`, `on close:` and `on return:`. The app's handlers, such as `on start`, are in a `code` block named after the app. A handler that is wired but not written is an error; one that is written but wired nowhere is a warning.
 
 ## Values from a click
 
@@ -48,7 +48,7 @@ Handlers run in the backend. The window sends its data with the event, the handl
 
 - The window's data, by its `data` names: `customer`, `orders`, and its plain values: `shown`.
 - Its parameters, by name.
-- The window's parts, by their names: `save`, `vat_number`.
+- The window's parts, by their names: `save`, `vatNumber`.
 - Its own locals, made with `let`.
 - Functions and actions of its module and of the modules it uses; see [Functions and actions](code.functions.md).
 
@@ -70,11 +70,11 @@ A bound input changes through its data: `customer.name = "Ada"` changes the text
 
 ## Drawing on a canvas
 
-A canvas is drawn by its draw handler: `canvas name dial at 1,1 span 12 rows 7 on draw: draw_dial`. The handler draws shapes in the canvas's own units, x to the right and y down, 100 x 100 unless the canvas says `units 200 x 100`:
+A canvas is drawn by its draw handler: `canvas name dial at 1,1 span 12 rows 7 on draw: drawDial`. The handler draws shapes in the canvas's own units, x to the right and y down, 100 x 100 unless the canvas says `units 200 x 100`:
 
 ```clarity
 code Main
-    handler draw_dial
+    handler drawDial
         let angle = 210 - speed * 240 / 200
         dial.clear("panel")
         dial.ring(50, 50, 42, "border", 3)
@@ -91,10 +91,10 @@ Only a canvas's own draw handler draws on it, and the handlers it calls that not
 
 ### Clicking a canvas
 
-`on click: board_clicked` on a canvas runs the handler when the canvas is clicked. `board.x` and `board.y` say where, in the canvas's own units, rounded down; they are 0 before the first click. A click beside the drawing, where the part shows none of it, runs nothing. After the handler the canvas is drawn anew, so it shows what the click changed:
+`on click: boardClicked` on a canvas runs the handler when the canvas is clicked. `board.x` and `board.y` say where, in the canvas's own units, rounded down; they are 0 before the first click. A click beside the drawing, where the part shows none of it, runs nothing. After the handler the canvas is drawn anew, so it shows what the click changed:
 
 ```clarity
-    handler board_clicked
+    handler boardClicked
         let square = 1
         if board.x >= 200
             square = 3
@@ -114,15 +114,15 @@ Only a canvas's own draw handler draws on it, and the handlers it calls that not
 - `close` closes this window. The window below then runs its `on return` handler, the place to read a list again.
 - `return` leaves the handler at once.
 - `reload customers` reads the window's data `customers` again: a list loads all its records, a record loads again by its id.
-- `filter_changed()` runs another handler of the same window or app.
+- `filterChanged()` runs another handler of the same window or app.
 - `save` and `delete` store and remove records; see [Data events](code.data-events.md).
 
 ```clarity
 code CustomerBrowse
-    handler window_returned
-        filter_changed()
+    handler windowReturned
+        filterChanged()
 
-    handler open_clicked
+    handler openClicked
         open CustomerForm with customer = grid.selected
 ```
 

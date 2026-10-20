@@ -19,6 +19,7 @@
     onnewapp = null,
     onnewdata = null,
     onnewtheme = null,
+    onnewengine = null,
   }: {
     preview: Preview;
     /** What is open: a window, the app, an entity, an enum or a module. */
@@ -33,6 +34,8 @@
     /** Starts a new entity or enum. */
     onnewdata?: ((kind: "entity" | "enum") => void) | null;
     onnewtheme?: (() => void) | null;
+    /** Starts a new engine; null where the tree only shows. */
+    onnewengine?: (() => void) | null;
   } = $props();
 
   function is(kind: Selected["kind"], name: string): boolean {
@@ -144,8 +147,9 @@
       {#each engines as { engine, module, problems } (engine.name.name)}
         <button
           class="row"
+          class:current={is("engine", engine.name.name)}
           title={problems.length > 0 ? problems.join("\n") : `${engine.file} in module ${module}`}
-          onclick={() => onselect({ kind: "module", name: module })}
+          onclick={() => onselect({ kind: "engine", name: engine.name.name })}
         >
           {engine.name.name}
           {#if problems.length > 0}
@@ -155,8 +159,11 @@
           {/if}
         </button>
       {:else}
-        <p class="empty">No engines. An engine is a .wasm file in the engines folder, declared in a module.</p>
+        <p class="empty">No engines yet: processing compiled to WebAssembly, which code calls.</p>
       {/each}
+      {#if onnewengine}
+        <button class="row add" onclick={onnewengine}>+ New engine</button>
+      {/if}
     </details>
 
     <details>

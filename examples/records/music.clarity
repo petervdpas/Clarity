@@ -89,60 +89,60 @@ action export_collection()
 page AlbumBrowse: window
     title "Albums"
     data albums: list<Album>
-    on return: window_returned
+    on return: windowReturned
 
-    heading "The collection" at 1,1 span 6
-    image at 12,1 span 1 rows 1 source "logo.png" tooltip "My Record Collection"
-    label "Find" at 1,2 span 2 for title_filter
-    textbox name title_filter at 3,2 span 10 placeholder "Part of the title or the artist" on change: filter_changed
-    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: open_clicked
-    button "Export list" at 1,11 span 2 on click: export_clicked
-    button "New album" at 9,11 span 2 on click -> AlbumForm
-    button "Open" at 11,11 span 2 on click: open_clicked
+    heading "The collection" name heading1 at 1,1 span 6
+    image name image1 at 12,1 span 1 rows 1 source "logo.png" tooltip "My Record Collection"
+    label "Find" name label1 at 1,2 span 2 for titleFilter
+    textbox name titleFilter at 3,2 span 10 placeholder "Part of the title or the artist" on change: filterChanged
+    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: openClicked
+    button "Export list" name button1 at 1,11 span 2 on click: exportClicked
+    button "New album" name button2 at 9,11 span 2 on click -> AlbumForm
+    button "Open" name button3 at 11,11 span 2 on click: openClicked
 
 page AlbumForm: window
     title "Album"
     data album: Album
     data tracks: list<Track>
-    on open: album_opened
-    on return: album_opened
+    on open: albumOpened
+    on return: albumOpened
 
-    splitter at 1,1 span 12 rows 10 horizontal
+    splitter name splitter1 at 1,1 span 12 rows 10 horizontal
         pane
-            panel "Album" at 1,1 span 12 rows 9
-                label "Title" at 1,1 span 3 for title
+            panel "Album" name panel1 at 1,1 span 12 rows 9
+                label "Title" name label1 at 1,1 span 3 for title
                 textbox name title at 4,1 span 9 bind album.title
-                label "Artist" at 1,2 span 3 for artist
+                label "Artist" name label2 at 1,2 span 3 for artist
                 dropdown name artist at 4,2 span 9 bind album.artist
-                label "Genre" at 1,3 span 3 for genre
+                label "Genre" name label3 at 1,3 span 3 for genre
                 dropdown name genre at 4,3 span 9 bind album.genre
-                label "Year" at 1,4 span 3 for year
+                label "Year" name label4 at 1,4 span 3 for year
                 number name year at 4,4 span 3 bind album.year
-                label "Format" at 1,5 span 3 for format
+                label "Format" name label5 at 1,5 span 3 for format
                 radio name format at 4,5 span 9 bind album.format vertical rows 3
-                label "Label" at 1,8 span 3 for record_label
-                textbox name record_label at 4,8 span 9 bind album.record_label
+                label "Label" name label6 at 1,8 span 3 for recordLabel
+                textbox name recordLabel at 4,8 span 9 bind album.record_label
         pane
-            tabs at 1,1 span 12 rows 9
+            tabs name tabs1 at 1,1 span 12 rows 9
                 tab "Tracks"
-                    table name track_grid at 1,1 span 12 rows 6 bind tracks columns number, title, length on open: track_opened
+                    table name trackGrid at 1,1 span 12 rows 6 bind tracks columns number, title, length on open: trackOpened
                     label name length at 1,7 span 9
-                    button "Add track" at 10,7 span 3 on click: add_track_clicked
+                    button "Add track" name button1 at 10,7 span 3 on click: addTrackClicked
                 tab "Purchase"
-                    label "Bought on" at 1,1 span 3 for bought_on
-                    date name bought_on at 4,1 span 4 bind album.bought_on
-                    label "Price" at 1,2 span 3 for price
+                    label "Bought on" name label7 at 1,1 span 3 for boughtOn
+                    date name boughtOn at 4,1 span 4 bind album.bought_on
+                    label "Price" name label8 at 1,2 span 3 for price
                     number name price at 4,2 span 4 bind album.price
-                    label "Rating" at 1,3 span 3 for rating
+                    label "Rating" name label9 at 1,3 span 3 for rating
                     number name rating at 4,3 span 2 bind album.rating
-                    help at 6,3 span 7 for rating
+                    help name help1 at 6,3 span 7 for rating
                 tab "Cover"
                     image name cover at 1,1 span 12 rows 6 bind album.cover
-                    help at 1,7 span 12 for cover
+                    help name help2 at 1,7 span 12 for cover
                 tab "Notes"
-                    memo at 1,1 span 12 rows 7 bind album.notes
-    button "Save" name save at 9,11 span 2 style primary key "Ctrl+S" default on click: save_clicked
-    button "Close" at 11,11 span 2 cancel on click -> close
+                    memo name memo1 at 1,1 span 12 rows 7 bind album.notes
+    button "Save" name save at 9,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
+    button "Close" name button2 at 11,11 span 2 cancel on click -> close
 
 // One track, in a dialog over the album.
 page TrackDialog: dialog
@@ -150,99 +150,99 @@ page TrackDialog: dialog
     data album: Album
     data track: Track
 
-    label "No." at 1,1 span 3 for number
+    label "No." name label1 at 1,1 span 3 for number
     number name number at 4,1 span 2 bind track.number
-    label "Title" at 1,2 span 3 for title
+    label "Title" name label2 at 1,2 span 3 for title
     textbox name title at 4,2 span 9 bind track.title
-    label "Length" at 1,3 span 3 for length
+    label "Length" name label3 at 1,3 span 3 for length
     number name length at 4,3 span 3 bind track.length placeholder "3:45"
-    button "Delete" name delete_button at 1,5 span 2 on click: delete_clicked
-    button "Save" at 9,5 span 2 style primary default on click: save_clicked
-    button "Cancel" at 11,5 span 2 cancel on click -> close
+    button "Delete" name deleteButton at 1,5 span 2 on click: deleteClicked
+    button "Save" name button1 at 9,5 span 2 style primary default on click: saveClicked
+    button "Cancel" name button2 at 11,5 span 2 cancel on click -> close
 
 page ArtistBrowse: window
     title "Artists"
     data artists: list<Artist>
-    on return: window_returned
+    on return: windowReturned
 
-    label "Name" at 1,1 span 2 for name_filter
-    textbox name name_filter at 3,1 span 10 on change: filter_changed
-    list name artist_list at 1,2 span 12 rows 8 bind artists show name, country, formed on open: open_clicked
-    button "Find photos" at 1,10 span 2 on click: photos_clicked
-    button "Back up photos" at 3,10 span 2 on click: backup_clicked
-    button "New artist" at 9,10 span 2 on click -> ArtistForm
-    button "Open" at 11,10 span 2 on click: open_clicked
+    label "Name" name label1 at 1,1 span 2 for nameFilter
+    textbox name nameFilter at 3,1 span 10 on change: filterChanged
+    list name artistList at 1,2 span 12 rows 8 bind artists show name, country, formed on open: openClicked
+    button "Find photos" name button1 at 1,10 span 2 on click: photosClicked
+    button "Back up photos" name button2 at 3,10 span 2 on click: backupClicked
+    button "New artist" name button3 at 9,10 span 2 on click -> ArtistForm
+    button "Open" name button4 at 11,10 span 2 on click: openClicked
 
 page ArtistForm: window
     title "Artist"
     data artist: Artist
 
     image name photo at 10,1 span 3 rows 4 bind artist.photo
-    form at 1,1 span 9 rows 4 bind artist
-        label "Name" at 1,1 span 3 for name
+    form name form1 at 1,1 span 9 rows 4 bind artist
+        label "Name" name label1 at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind artist.name
-        label "Country" at 1,2 span 3 for country
+        label "Country" name label2 at 1,2 span 3 for country
         textbox name country at 4,2 span 6 bind artist.country
-        label "Formed in" at 1,3 span 3 for formed
+        label "Formed in" name label3 at 1,3 span 3 for formed
         number name formed at 4,3 span 2 bind artist.formed
-        label "Website" at 1,4 span 3 for website
+        label "Website" name label4 at 1,4 span 3 for website
         textbox name website at 4,4 span 6 bind artist.website placeholder "https://"
-    button "Save" at 9,6 span 2 style primary default on click: save_clicked
-    button "Close" at 11,6 span 2 cancel on click -> close
+    button "Save" name button1 at 9,6 span 2 style primary default on click: saveClicked
+    button "Close" name button2 at 11,6 span 2 cancel on click -> close
 
 page GenreBrowse: window
     title "Genres"
     data genres: list<Genre>
-    on return: window_returned
+    on return: windowReturned
 
-    table name genre_grid at 1,1 span 10 rows 8 bind genres columns name, parent on open: open_clicked
-    button "New genre" at 11,1 span 2 on click -> GenreDialog
-    button "Open" at 11,2 span 2 on click: open_clicked
+    table name genreGrid at 1,1 span 10 rows 8 bind genres columns name, parent on open: openClicked
+    button "New genre" name button1 at 11,1 span 2 on click -> GenreDialog
+    button "Open" name button2 at 11,2 span 2 on click: openClicked
 
 page GenreDialog: dialog
     title "Genre"
     data genre: Genre
 
-    label "Name" at 1,1 span 3 for name
+    label "Name" name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 9 bind genre.name
-    label "Belongs to" at 1,2 span 3 for parent
+    label "Belongs to" name label2 at 1,2 span 3 for parent
     dropdown name parent at 4,2 span 9 bind genre.parent
-    help at 4,3 span 9 for parent
-    button "Save" at 9,5 span 2 style primary default on click: save_clicked
-    button "Cancel" at 11,5 span 2 cancel on click -> close
+    help name help1 at 4,3 span 9 for parent
+    button "Save" name button1 at 9,5 span 2 style primary default on click: saveClicked
+    button "Cancel" name button2 at 11,5 span 2 cancel on click -> close
 
 code AlbumBrowse
-    handler window_returned
-        filter_changed()
+    handler windowReturned
+        filterChanged()
 
-    handler filter_changed
-        albums = find a in Album where a.title contains title_filter.text or a.artist.name contains title_filter.text order by a.artist.name, a.title
+    handler filterChanged
+        albums = find a in Album where a.title contains titleFilter.text or a.artist.name contains titleFilter.text order by a.artist.name, a.title
 
-    handler open_clicked
+    handler openClicked
         open AlbumForm with album = grid.selected
 
-    handler export_clicked
+    handler exportClicked
         export_collection()
         message "Saved the list in collection.txt"
 
 code AlbumForm
-    handler album_opened
+    handler albumOpened
         tracks = find t in Track where t.album == album order by t.number
         let total = total_length(tracks)
         let count = count(tracks)
         length.caption = "{count} tracks, {total}"
 
-    handler track_opened
-        open TrackDialog with album = album, track = track_grid.selected
+    handler trackOpened
+        open TrackDialog with album = album, track = trackGrid.selected
 
-    handler add_track_clicked
+    handler addTrackClicked
         if album.title == ""
             message warning "Save the album before adding tracks"
             return
         save album
         open TrackDialog with album = album
 
-    handler save_clicked
+    handler saveClicked
         title.error = ""
         if album.title == ""
             title.error = "An album needs a title"
@@ -252,7 +252,7 @@ code AlbumForm
         close
 
 code TrackDialog
-    handler save_clicked
+    handler saveClicked
         title.error = ""
         if track.title == ""
             title.error = "A track needs a title"
@@ -261,30 +261,30 @@ code TrackDialog
         save track
         close
 
-    handler delete_clicked
+    handler deleteClicked
         delete track
         close
 
 code ArtistBrowse
-    handler window_returned
-        filter_changed()
+    handler windowReturned
+        filterChanged()
 
-    handler filter_changed
-        artists = find a in Artist where a.name contains name_filter.text order by a.name
+    handler filterChanged
+        artists = find a in Artist where a.name contains nameFilter.text order by a.name
 
-    handler open_clicked
-        open ArtistForm with artist = artist_list.selected
+    handler openClicked
+        open ArtistForm with artist = artistList.selected
 
-    handler photos_clicked
+    handler photosClicked
         find_artist_photos()
-        filter_changed()
+        filterChanged()
 
-    handler backup_clicked
+    handler backupClicked
         back_up_photos()
         message "Copied the photos to the exports folder"
 
 code ArtistForm
-    handler save_clicked
+    handler saveClicked
         name.error = ""
         if artist.name == ""
             name.error = "An artist needs a name"
@@ -294,14 +294,14 @@ code ArtistForm
         close
 
 code GenreBrowse
-    handler window_returned
+    handler windowReturned
         reload genres
 
-    handler open_clicked
-        open GenreDialog with genre = genre_grid.selected
+    handler openClicked
+        open GenreDialog with genre = genreGrid.selected
 
 code GenreDialog
-    handler save_clicked
+    handler saveClicked
         name.error = ""
         if genre.name == ""
             name.error = "A genre needs a name"

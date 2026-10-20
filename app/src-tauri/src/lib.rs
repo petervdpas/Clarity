@@ -2,6 +2,7 @@
 //! and their history; the frontend only renders the `Preview` it receives.
 
 mod build;
+mod engines;
 mod external;
 mod themes;
 mod translations;
@@ -747,6 +748,12 @@ pub fn run() {
             try_decl,
             build_app,
             stop_app,
+            engines::engine_info,
+            engines::engine_source_text,
+            engines::save_engine_source,
+            engines::new_engine_source,
+            engines::add_engine_stubs,
+            engines::build_engine,
             rename,
             migrations::pending_migration,
             migrations::create_migration,

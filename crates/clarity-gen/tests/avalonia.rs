@@ -48,52 +48,52 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
-    on open: window_opened
-    on return: window_returned
-    label \"Number\" at 1,1 span 2 for number_input
-    textbox name number_input at 3,1 span 4 bind order.number placeholder \"ORD-1\"
-    help at 3,2 span 4 for number_input
-    number at 1,3 span 3 bind order.total
-    checkbox \"Paid\" at 4,3 span 3 bind order.paid
-    switch \"Rush\" at 7,3 span 3 bind order.paid
-    dropdown at 1,4 span 4 bind order.status
-    dropdown name customer_pick at 5,4 span 4 bind order.customer
-    date at 9,4 span 3 bind order.ordered_on
-    text at 1,5 span 4 bind order.status
-    table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: grid_selected on open: grid_opened
-    textbox name number_filter at 1,10 span 4 on change: filter_changed
-    button \"Approve\" name approve_button at 9,10 span 2 default on click: approve_clicked
-    button \"New\" at 11,10 span 2 on click -> OrderForm
-    tabs at 1,11 span 12 rows 2
+    on open: windowOpened
+    on return: windowReturned
+    label \"Number\" name label1 at 1,1 span 2 for numberInput
+    textbox name numberInput at 3,1 span 4 bind order.number placeholder \"ORD-1\"
+    help name help1 at 3,2 span 4 for numberInput
+    number name number1 at 1,3 span 3 bind order.total
+    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid
+    switch \"Rush\" name switch1 at 7,3 span 3 bind order.paid
+    dropdown name dropdown1 at 1,4 span 4 bind order.status
+    dropdown name customerPick at 5,4 span 4 bind order.customer
+    date name date1 at 9,4 span 3 bind order.ordered_on
+    text name text1 at 1,5 span 4 bind order.status
+    table name grid at 1,6 span 12 rows 4 bind orders columns number, status, total on select: gridSelected on open: gridOpened
+    textbox name numberFilter at 1,10 span 4 on change: filterChanged
+    button \"Approve\" name approveButton at 9,10 span 2 default on click: approveClicked
+    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm
+    tabs name tabs1 at 1,11 span 12 rows 2
         tab \"Notes\"
-            memo at 1,1 span 12 bind order.number
+            memo name memo1 at 1,1 span 12 bind order.number
 
 code OrderForm
-    handler window_opened
-        number_input.readonly = order.paid
+    handler windowOpened
+        numberInput.readonly = order.paid
 
-    handler window_returned
+    handler windowReturned
         reload orders
         reload order
 
-    handler approve_clicked
+    handler approveClicked
         if not within_credit(order)
             message warning \"Order {order.number} is too large\"
-            approve_button.enabled = false
+            approveButton.enabled = false
             return
         order.status = Approved
         save order
-        number_input.error = \"\"
+        numberInput.error = \"\"
         message \"Approved\"
-        filter_changed()
+        filterChanged()
 
-    handler filter_changed
-        orders = find o in Order where o.number contains number_filter.text order by o.number
+    handler filterChanged
+        orders = find o in Order where o.number contains numberFilter.text order by o.number
 
-    handler grid_selected
+    handler gridSelected
         order = grid.selected
 
-    handler grid_opened
+    handler gridOpened
         open OrderForm with order = grid.selected
         close
 ";
@@ -164,20 +164,21 @@ fn parts_bind_to_the_data_and_to_their_state() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
     // Every text through the application's Texts, so it shows in the language chosen.
-    has(window, "<TextBlock Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{x:Static local:Texts.Number}\" /><Run Text=\" *\" /></TextBlock>");
+    // A named label shows its caption as a handler sets it, still marked when its input is required.
+    has(window, "<TextBlock x:Name=\"label1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{Binding Label1.Caption}\" /><Run Text=\" *\" /></TextBlock>");
     has(
         window,
         "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.ORD1}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
     );
-    has(window, "<TextBlock Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
+    has(window, "<TextBlock x:Name=\"help1\" Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
     // Clarity's own inputs: each tells when the person changed its value, and only then.
-    has(window, "<c:NumberInput Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Format=\"{x:Static local:Edit.OrderTotal}\" Value=\"{Binding Order.Total}\" />");
-    has(window, "<c:CheckInput Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\" />");
+    has(window, "<c:NumberInput x:Name=\"number1\" Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Format=\"{x:Static local:Edit.OrderTotal}\" Value=\"{Binding Order.Total}\"");
+    has(window, "<c:CheckInput x:Name=\"checkbox1\" Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\"");
     // The caption beside the switch, as on the web, so it fits its row.
-    has(window, "<c:SwitchInput Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\" />");
-    has(window, "<c:ChoiceInput Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\" />");
+    has(window, "<c:SwitchInput x:Name=\"switch1\" Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\"");
+    has(window, "<c:ChoiceInput x:Name=\"dropdown1\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\"");
     has(window, "<c:ChoiceInput x:Name=\"customerPick\" Grid.Column=\"4\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{Binding CustomerChoices}\" Value=\"{Binding Order.Customer}\"");
-    has(window, "<c:DateInput Grid.Column=\"8\" Grid.Row=\"3\" Grid.ColumnSpan=\"3\" Value=\"{Binding Order.OrderedOn}\" />");
+    has(window, "<c:DateInput x:Name=\"date1\" Grid.Column=\"8\" Grid.Row=\"3\" Grid.ColumnSpan=\"3\" Value=\"{Binding Order.OrderedOn}\"");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
     has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
     has(window, "<c:TableColumn Field=\"Status\" Header=\"{x:Static local:Texts.Status}\" Kind=\"Choice\" Shown=\"{x:Static local:Shown.Converter}\" />");
@@ -185,9 +186,9 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.Total}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
     has(window, "<c:TextInput x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Value=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
-    has(window, "<Button Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{x:Static local:Texts.New}\" Command=\"{Binding OpenOrderFormCommand}\" />");
+    has(window, "<Button x:Name=\"button1\" Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{Binding Button1.Caption}\" Command=\"{Binding OpenOrderFormCommand}\"");
     has(window, "<TabItem Header=\"{x:Static local:Texts.Notes}\">");
-    has(window, "<c:TextInput Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Value=\"{Binding Order.Number}\" />");
+    has(window, "<c:TextInput x:Name=\"memo1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Value=\"{Binding Order.Number}\"");
     // No stock input is placed directly: the library's own decide when `change` runs.
     for stock in ["<TextBox ", "<CheckBox ", "<ToggleSwitch ", "<ComboBox ", "<CalendarDatePicker ", "<RadioButton "] {
         assert!(!window.contains(stock), "{stock} in\n{window}");
@@ -197,7 +198,7 @@ fn parts_bind_to_the_data_and_to_their_state() {
 /// A radio group is the library's, with the enum's choices.
 #[test]
 fn a_radio_group_picks_an_enum_value() {
-    let source = SHOP.replace("    dropdown at 1,4 span 4 bind order.status\n", "    radio name status_pick at 1,4 span 4 bind order.status vertical on change: filter_changed\n");
+    let source = SHOP.replace("    dropdown name dropdown1 at 1,4 span 4 bind order.status\n", "    radio name statusPick at 1,4 span 4 bind order.status vertical on change: filterChanged\n");
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -229,8 +230,8 @@ fn handlers_are_viewmodel_methods() {
     has(vm, "    public override string Title => Texts.Order;");
     has(vm, "    public Order Order { get => _order; set => SetProperty(ref _order, value); }\n    Order _order = new();");
     has(vm, "    public List<Order> Orders { get => _orders; set => SetProperty(ref _orders, value); }");
-    has(vm, "    public PartState NumberInput { get; } = new(\"number_input\");");
-    has(vm, "    public PartState ApproveButton { get; } = new(\"approve_button\", caption: \"Approve\");");
+    has(vm, "    public PartState NumberInput { get; } = new(\"numberInput\");");
+    has(vm, "    public PartState ApproveButton { get; } = new(\"approveButton\", caption: \"Approve\");");
     has(vm, "        _orders = Db.All<Order>();");
     has(vm, "        CustomerChoices = Choice.Of(Db.All<Customer>(), r => r.Name);");
     has(vm, "    [RelayCommand]\n    void ApproveClicked() => Handle(OnApproveClicked);");
@@ -376,8 +377,8 @@ fn the_language_and_theme_targets_pick_in_place() {
 #[test]
 fn the_selected_row_is_a_record_in_any_expression() {
     let source = SHOP.replace(
-        "    handler grid_opened\n",
-        "    handler grid_opened\n        if within_credit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
+        "    handler gridOpened\n",
+        "    handler gridOpened\n        if within_credit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
     );
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
@@ -392,8 +393,8 @@ fn the_selected_row_is_a_record_in_any_expression() {
 #[test]
 fn an_unbound_checkbox_is_checked_in_its_state() {
     let source = SHOP
-        .replace("    checkbox \"Paid\" at 4,3 span 3 bind order.paid\n", "    checkbox \"Paid\" at 4,3 span 3 bind order.paid\n    checkbox \"Only mine\" name mine at 10,3 span 3\n")
-        .replace("    handler grid_selected\n", "    handler grid_selected\n        if mine.checked\n            mine.checked = false\n");
+        .replace("    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid\n", "    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid\n    checkbox \"Only mine\" name mine at 10,3 span 3\n")
+        .replace("    handler gridSelected\n", "    handler gridSelected\n        if mine.checked\n            mine.checked = false\n");
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -425,11 +426,11 @@ entity Task
 page Main: window
     data tasks: list<Task>
     data task: Task
-    date name added_pick at 1,7 span 4 bind task.added on change: task_changed
-    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority, due, hours, owner, added, urgent edit title, done, priority, due, hours, owner, added, urgent as switch on change: task_changed
+    date name addedPick at 1,7 span 4 bind task.added on change: taskChanged
+    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority, due, hours, owner, added, urgent edit title, done, priority, due, hours, owner, added, urgent as switch on change: taskChanged
 
 code Main
-    handler task_changed
+    handler taskChanged
         save grid.selected
 ";
 
@@ -484,12 +485,12 @@ fn a_window_opens_at_its_size() {
 fn a_click_passes_values_to_its_handler() {
     let source = SHOP
         .replace(
-            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
-            "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n    textbox name one at 7,10 span 1 on change: digit(1)\n",
+            "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n",
+            "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 5,10 span 1 on click: digit(7)\n    button \"Half\" name half at 6,10 span 1 on click: scale(0.5, \"half\", Approved)\n    textbox name one at 7,10 span 1 on change: digit(1)\n",
         )
         .replace(
-            "    handler grid_selected\n",
-            "    handler digit(d: integer)\n        number_input.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler grid_selected\n",
+            "    handler gridSelected\n",
+            "    handler digit(d: integer)\n        numberInput.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler gridSelected\n",
         );
     assert_ne!(source, SHOP);
     let project = load_sources([("shop.clarity", source.as_str())]);
@@ -557,8 +558,8 @@ fn a_window_holds_plain_values() {
 #[test]
 fn keys_are_written_as_avalonia_names_them() {
     let source = SHOP.replace(
-        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n",
-        "    button \"New\" at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 1,13 span 1 key \"7\" on click: approve_clicked\n    button \"+\" name plus at 2,13 span 1 key \"+\" on click: approve_clicked\n    button \"Back\" name back at 3,13 span 1 key \"Backspace\" on click: approve_clicked\n    button \"Save\" name keep at 4,13 span 1 key \"Ctrl+S\" on click: approve_clicked\n    button \"Zoom\" name zoom at 5,13 span 1 key \"Ctrl++\" on click: approve_clicked\n",
+        "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n",
+        "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 1,13 span 1 key \"7\" on click: approveClicked\n    button \"+\" name plus at 2,13 span 1 key \"+\" on click: approveClicked\n    button \"Back\" name back at 3,13 span 1 key \"Backspace\" on click: approveClicked\n    button \"Save\" name keep at 4,13 span 1 key \"Ctrl+S\" on click: approveClicked\n    button \"Zoom\" name zoom at 5,13 span 1 key \"Ctrl++\" on click: approveClicked\n",
     );
     assert_ne!(source, SHOP);
     let project = load_sources([("shop.clarity", source.as_str())]);
@@ -602,16 +603,16 @@ const DIAL: &str = "
 page Dial: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Dial
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
         dial.text(50, 90, \"{speed} km/h\")
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
 ";
 
@@ -636,7 +637,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 /// A canvas with `on click` runs its handler, which reads where it was clicked.
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
-    let source = format!("{SHOP}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let source = format!("{SHOP}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));

@@ -28,29 +28,29 @@ page Card: window
     data customer: Customer
     data other: Customer
     data note_list: list<Note>
-    heading \"Customer\" at 1,1 span 12
-    form \"Details\" name details at 1,2 span 12 rows 6 bind customer on submit: details_submitted
-        label \"Name\" at 1,1 span 3 for name
+    heading \"Customer\" name heading1 at 1,1 span 12
+    form \"Details\" name details at 1,2 span 12 rows 6 bind customer on submit: detailsSubmitted
+        label \"Name\" name label1 at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind customer.name placeholder \"Full name\" tooltip \"As on the invoice\" taborder 1
-        label \"Kind\" at 1,2 span 3 for kind
+        label \"Kind\" name label2 at 1,2 span 3 for kind
         radio name kind at 4,2 span 6 vertical bind customer.kind
         switch \"Active\" name active at 4,3 span 3 bind customer.active readonly
         password name secret at 4,4 span 4 bind customer.secret
         memo name notes at 4,5 span 6 rows 2 bind customer.notes
-        help at 10,5 span 3 for notes
-    text at 1,8 span 6 bind customer.name
-    button \"Save\" name save at 9,9 span 2 key \"Ctrl+S\" default on click: save_clicked
-    button \"Close\" name close_button at 11,9 span 2 cancel on click: close_clicked
+        help name help1 at 10,5 span 3 for notes
+    text name text1 at 1,8 span 6 bind customer.name
+    button \"Save\" name save at 9,9 span 2 key \"Ctrl+S\" default on click: saveClicked
+    button \"Close\" name closeButton at 11,9 span 2 cancel on click: closeClicked
 
 code Card
-    handler details_submitted
+    handler detailsSubmitted
         name.error = \"\"
         if customer.name == \"\"
             name.error = \"Name is required\"
         notes.readonly = true
-    handler save_clicked
+    handler saveClicked
         save customer
-    handler close_clicked
+    handler closeClicked
         close
 ";
 
@@ -139,7 +139,7 @@ fn parses_forms_text_parts_and_their_properties() {
     let save = part(&widgets, "save");
     assert_eq!(save.props.shortcut.as_deref(), Some("Ctrl+S"));
     assert!(save.props.default_button);
-    assert!(part(&widgets, "close_button").props.cancel);
+    assert!(part(&widgets, "closeButton").props.cancel);
 
     let kinds: Vec<WidgetKind> = widgets.iter().map(|w| w.props.kind).collect();
     assert!(kinds.contains(&WidgetKind::Heading));
@@ -163,10 +163,10 @@ fn every_part_line_writes_back_the_same() {
 
 #[test]
 fn a_one_row_container_keeps_its_height() {
-    let source = "module shop\npage P: window\n    panel at 1,1 span 6 rows 1\n";
+    let source = "module shop\npage P: window\n    panel name panel1 at 1,1 span 6 rows 1\n";
     let (file, _) = parse(source, "p.clarity");
     let line = widget_line(&file.pages[0].widgets[0].props);
-    assert_eq!(line, "panel at 1,1 span 6 rows 1");
+    assert_eq!(line, "panel name panel1 at 1,1 span 6 rows 1");
 }
 
 #[test]
@@ -191,8 +191,8 @@ fn the_catalog_has_a_text_group_and_picks_inputs_per_type() {
 #[test]
 fn a_label_is_only_a_label() {
     let source = with(
-        "    text at 1,8 span 6 bind customer.name",
-        "    label at 1,8 span 6 bind customer.name",
+        "    text name text1 at 1,8 span 6 bind customer.name",
+        "    label name label3 at 1,8 span 6 bind customer.name",
     );
     assert_has(&errors(&source), "a label cannot be bound to data");
 }
@@ -224,8 +224,8 @@ fn a_form_binds_one_record_and_holds_its_inputs() {
     );
 
     let nested = with(
-        "        help at 10,5 span 3 for notes",
-        "        form at 10,5 span 3 bind customer",
+        "        help name help1 at 10,5 span 3 for notes",
+        "        form name form1 at 10,5 span 3 bind customer",
     );
     assert_has(&errors(&nested), "form at 10,5: a form cannot hold another form");
 }
@@ -234,7 +234,7 @@ fn a_form_binds_one_record_and_holds_its_inputs() {
 fn submit_belongs_to_forms() {
     let source = with(
         "taborder 1",
-        "taborder 1 on submit: name_submitted",
+        "taborder 1 on submit: nameSubmitted",
     );
     assert_has(&errors(&source), "a textbox has no submit event");
 }

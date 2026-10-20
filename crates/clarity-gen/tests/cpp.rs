@@ -45,20 +45,20 @@ page OrderForm: window
     title \"Order\"
     data order: Order
     data orders: list<Order>
-    button \"Approve\" name approve_button at 1,1 span 2 on click: approve_clicked
-    table name grid at 1,2 span 6 rows 4 bind orders columns number on open: open_clicked
-    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked
+    button \"Approve\" name approveButton at 1,1 span 2 on click: approveClicked
+    table name grid at 1,2 span 6 rows 4 bind orders columns number on open: openClicked
+    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked
 
 code OrderForm
-    handler approve_clicked
+    handler approveClicked
         approve(order)
         message \"Approved {order.number} of {order.total}\"
-        approve_button.enabled = false
+        approveButton.enabled = false
 
-    handler open_clicked
+    handler openClicked
         open OrderForm with order = grid.selected
 
-    handler refresh_clicked
+    handler refreshClicked
         reload orders
 ";
 
@@ -144,10 +144,10 @@ fn handlers_are_member_functions_of_their_window() {
     let app = file(&files, "src/app.hpp");
     has(app, "struct OrderFormWindow {\n    Order order;\n    std::vector<Order> orders;\n");
     let sales = file(&files, "src/modules/sales.cpp");
-    has(sales, "void OrderFormWindow::approve_clicked(clarity::Db& db, clarity::Ui& ui) {\n    approve(db, order);\n    ui.message(clarity::Level::Info, clarity::Text(\"Approved {order.number} of {order.total}\").with(\"order.number\", clarity::slot_text(order.number)).with(\"order.total\", clarity::slot_money(order.total, \"\")));\n    ui.set_enabled(\"approve_button\", false);\n}");
+    has(sales, "void OrderFormWindow::approve_clicked(clarity::Db& db, clarity::Ui& ui) {\n    approve(db, order);\n    ui.message(clarity::Level::Info, clarity::Text(\"Approved {order.number} of {order.total}\").with(\"order.number\", clarity::slot_text(order.number)).with(\"order.total\", clarity::slot_money(order.total, \"\")));\n    ui.set_enabled(\"approveButton\", false);\n}");
     has(sales, "ui.open(\"OrderForm\", nlohmann::json::object({{\"order\", ui.selected(\"grid\", orders)}}));");
     let main = file(&files, "src/main.cpp");
-    has(main, "        if (state.window == \"OrderForm\") {\n            auto w = state.data.get<OrderFormWindow>();\n            if (handler == \"approve_clicked\") w.approve_clicked(db, ui);");
+    has(main, "        if (state.window == \"OrderForm\") {\n            auto w = state.data.get<OrderFormWindow>();\n            if (handler == \"approveClicked\") w.approve_clicked(db, ui);");
     has(main, "        if (entity == \"Customer\") for (const auto& r : db.all<Customer>()) out.push_back({r.id, r.name});");
 }
 
@@ -199,12 +199,12 @@ fn the_desktop_window_opens_at_the_main_windows_size() {
 fn a_click_passes_values_to_its_handler() {
     let source = SALES
         .replace(
-            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n",
-            "    button \"Refresh\" name refresh_button at 3,1 span 2 on click: refresh_clicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
+            "    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked\n",
+            "    button \"Refresh\" name refreshButton at 3,1 span 2 on click: refreshClicked\n    button \"7\" name d7 at 5,1 span 1 on click: digit(7)\n    button \"Half\" name half at 6,1 span 1 on click: scale(0.5, \"half\", Approved)\n",
         )
         .replace(
-            "    handler refresh_clicked\n",
-            "    handler digit(d: integer)\n        approve_button.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refresh_clicked\n",
+            "    handler refreshClicked\n",
+            "    handler digit(d: integer)\n        approveButton.enabled = false\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler refreshClicked\n",
         );
     assert_ne!(source, SALES);
     let project = load_sources([("sales.clarity", source.as_str())]);
@@ -277,16 +277,16 @@ const DIAL: &str = "
 page Dial: window
     data angle: decimal, default 30
     data speed: integer, default 80
-    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: draw_dial
-    button \"Faster\" name faster at 7,1 span 2 on click: faster_clicked
+    canvas name dial at 1,1 span 6 rows 6 units 200 x 100 on draw: drawDial
+    button \"Faster\" name faster at 7,1 span 2 on click: fasterClicked
 
 code Dial
-    handler draw_dial
+    handler drawDial
         dial.clear(\"#101810\")
         dial.line(50, 50, 50 + 35 * cos(angle), 50 - 35 * sin(angle), \"text\", 3)
         dial.text(50, 90, \"{speed} km/h\")
 
-    handler faster_clicked
+    handler fasterClicked
         speed = speed + 10
 ";
 
@@ -351,7 +351,7 @@ fn an_engine_call_gives_its_declared_type() {
 /// A canvas with `on click` runs its handler, which reads where it was clicked.
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
-    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let source = format!("{SALES}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));

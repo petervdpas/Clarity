@@ -21,12 +21,12 @@ page Orders: window
     data orders: list<Order>
     data order: Order
     data customer: Customer
-    button \"Check\" at 1,1 span 2 on click: check_clicked
-    checkbox \"Shipped only\" name shipped_only at 3,1 span 3
+    button \"Check\" name button1 at 1,1 span 2 on click: checkClicked
+    checkbox \"Shipped only\" name shippedOnly at 3,1 span 3
     switch \"Bound\" name bound at 6,1 span 3 bind order.paid
 
 code Orders
-    handler check_clicked
+    handler checkClicked
 ";
 
 fn errors(body: &str) -> Vec<String> {
@@ -70,7 +70,7 @@ fn today_and_now_are_a_date_and_a_date_and_time() {
 /// textbox holds its text.
 #[test]
 fn an_unbound_checkbox_is_checked_or_not() {
-    assert_eq!(errors("if shipped_only.checked\n    shipped_only.checked = false"), Vec::<String>::new());
+    assert_eq!(errors("if shippedOnly.checked\n    shippedOnly.checked = false"), Vec::<String>::new());
     assert_eq!(errors("let x = bound.checked"), ["switch 'bound' is bound to order.paid; use order.paid"]);
 }
 

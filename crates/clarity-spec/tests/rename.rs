@@ -25,7 +25,7 @@ page Card: window
     title \"Customer\"
     data customer: Customer
     data customers: list<Customer>
-    textbox at 1,1 bind customer.name
+    textbox name textbox1 at 1,1 bind customer.name
 ";
 
 const OTHER: &str = "module other

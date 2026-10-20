@@ -4,7 +4,7 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import SourceEditor from "./SourceEditor.svelte";
-  import { projectEngines, signature } from "./engines";
+  import { projectEngines } from "./engines";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
@@ -25,7 +25,7 @@
     /** Applies an edit and throws with the reason when it is refused. */
     onapply: (edit: Edit) => Promise<void>;
     /** Opens a declaration by kind and name. */
-    onopen: (kind: "window" | "app" | "entity" | "enum" | "theme", name: string) => void;
+    onopen: (kind: "window" | "app" | "entity" | "enum" | "engine" | "theme", name: string) => void;
   } = $props();
 
   /** The engines this module declares, with the errors in their declarations. */
@@ -168,33 +168,17 @@
         Processing compiled to WebAssembly, its file in the <code>engines</code> folder. Code calls a function as
         <code>Engine.function(...)</code>; the engine only computes, and code hands it the records it needs.
       </p>
-      {#each engines as { engine, problems } (engine.name.name)}
-        <div class="engine">
-          <div>
-            <span class="kind">engine</span><strong>{engine.name.name}</strong> <span class="muted">from <code>{engine.file}</code></span>
-            {#if engine.uses.length > 0}
-              <span class="muted">, uses {engine.uses.map((u) => u.name).join(", ")}</span>
-            {/if}
-            {#if engine.state !== "none"}
-              <span class="muted">, state per {engine.state}</span>
-            {/if}
-            {#if engine.opens}
-              <span class="muted">, on open</span>
-            {/if}
-            {#if engine.seconds !== null || engine.megabytes !== null}
-              <span class="muted">, limit {[engine.seconds !== null ? `${engine.seconds} ${engine.seconds === 1 ? "second" : "seconds"}` : null, engine.megabytes !== null ? `${engine.megabytes} MB` : null].filter(Boolean).join(", ")}</span>
-            {/if}
-          </div>
-          {#each problems as problem (problem)}
-            <p class="problem">{problem}</p>
-          {/each}
-          <ul>
-            {#each engine.functions as f (f.name.name)}
-              <li class="signature"><code>{signature(f)}</code></li>
-            {/each}
-          </ul>
-        </div>
-      {/each}
+      <ul>
+        {#each engines as { engine, problems } (engine.name.name)}
+          <li>
+            <button onclick={() => onopen("engine", engine.name.name)} title={problems.length > 0 ? problems.join("\n") : "Open the engine: its functions, settings and code"}>
+              <span class="kind">engine</span>{engine.name.name}<span class="muted"
+                >{problems.length > 0 ? "does not fit its file" : engine.functions.map((f) => f.name.name).join(", ")}</span
+              >
+            </button>
+          </li>
+        {/each}
+      </ul>
     </section>
   {/if}
 
@@ -332,20 +316,6 @@
   li button.active {
     background: var(--panel-alt);
     font-weight: 600;
-  }
-
-  .engine + .engine {
-    margin-top: 10px;
-  }
-
-  .signature {
-    padding: 2px 6px 2px 72px;
-  }
-
-  .problem {
-    color: var(--error);
-    font-size: 12px;
-    margin: 4px 0;
   }
 
   .buttons {

@@ -119,6 +119,12 @@ pub enum Edit {
     },
     /// Set the modules this file uses, replacing its `use` lines.
     SetUses { uses: Vec<String> },
+    /// Give every part of the file's windows and app that has no name the
+    /// first free one of its kind, as a new part gets: every part has a name.
+    NameParts,
+    /// Rename every part and handler of the file that is not camelCase to
+    /// camelCase, wherever the file uses it.
+    CamelNames,
     /// Add an app at the end of the file.
     AddApp { name: String },
     /// Set the main window of an app.
@@ -218,7 +224,7 @@ pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<Edit
 fn is_text_edit(edit: &Edit) -> bool {
     matches!(
         edit,
-        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. }
+        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames
     )
 }
 
@@ -247,6 +253,7 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
                 focus = Some(*item);
                 crate::source::replace_decl(&text, *item, decl)?
             }
+            Edit::CamelNames => crate::names::camel_names(&text),
             Edit::AppendDecl { text: decl } => {
                 focus = Some(crate::source::appended_at(&text));
                 crate::source::append_decl(&text, decl)?
@@ -385,6 +392,8 @@ enum Kind {
     Field,
     Enum,
     Variant,
+    /// An engine's declaration, which its editor writes as a whole.
+    Engine,
     Use,
     /// A menu item, button or separator.
     Command,
@@ -505,6 +514,8 @@ fn top_kind(node: &LNode) -> Kind {
         Kind::Entity
     } else if starts_with_keyword(&node.tokens, "enum", Some(TokenKind::Ident)) {
         Kind::Enum
+    } else if starts_with_keyword(&node.tokens, "engine", Some(TokenKind::Ident)) {
+        Kind::Engine
     } else if starts_with_keyword(&node.tokens, "use", Some(TokenKind::Ident)) {
         Kind::Use
     } else {
@@ -797,6 +808,7 @@ impl Doc {
             Edit::AddVariant { owner, name, label } => self.add_variant(*owner, name, label.as_deref()),
             Edit::UpdateVariant { item, name, label } => self.update_variant(*item, name, label.as_deref()),
             Edit::SetUses { uses } => self.set_uses(uses),
+            Edit::NameParts => self.name_parts(),
             Edit::AddApp { name } => self.add_app(name),
             Edit::SetMain { app, main } => self.set_main(*app, main),
             Edit::SetOwnerEvent { owner, event, handler } => self.set_owner_event(*owner, *event, handler.as_deref()),
@@ -813,7 +825,7 @@ impl Doc {
             } => self.add_frame_item(*parent, *item, caption.clone()),
             Edit::UpdateCommand { item, props } => self.update_command(*item, props),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
-            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } => {
+            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
             }
         }
@@ -826,7 +838,7 @@ impl Doc {
         let (path, _) = self
             .find(
                 item,
-                "a window, app, entity, field, enum, variant, widget, tab, region, command or data declaration",
+                "a window, app, entity, field, enum, variant, engine, widget, tab, region, command or data declaration",
                 |k| {
                     matches!(
                         k,
@@ -836,6 +848,7 @@ impl Doc {
                             | Kind::Field
                             | Kind::Enum
                             | Kind::Variant
+                            | Kind::Engine
                             | Kind::Widget(_)
                             | Kind::WidgetTab
                             | Kind::Region(_)
@@ -950,10 +963,12 @@ impl Doc {
             .entity(&entity)
             .and_then(|e| e.field(field_name))
             .ok_or_else(|| EditError(format!("'{entity}' has no field '{field_name}'")))?;
-        let input_name = if self.used_names(path[0]).iter().any(|n| n == field_name) {
-            self.free_name(path[0], field_name)
+        // The input is named after its field, in camelCase like every part name.
+        let base = crate::names::camel_case(field_name);
+        let input_name = if self.used_names(path[0]).iter().any(|n| *n == base) {
+            self.free_name(path[0], &base)
         } else {
-            field_name.to_string()
+            base
         };
         let parts = templates::field_parts(field, data, &input_name, col, row, room.max(1));
         let mut focus = None;
@@ -962,6 +977,38 @@ impl Doc {
             focus = focus.or(id);
         }
         Ok(focus)
+    }
+
+    fn name_parts(&mut self) -> EditResult<Option<u32>> {
+        fn name_in(node: &mut LNode, kind: Kind, used: &mut Vec<String>) {
+            for child in &mut node.children {
+                let child_kind = child_kind(kind, child);
+                let named = child.tokens.windows(2).any(|w| w[0].kind == TokenKind::Ident && w[0].text == "name" && w[1].kind == TokenKind::Ident);
+                if matches!(child_kind, Kind::Widget(_)) && !named {
+                    let at = child
+                        .tokens
+                        .windows(2)
+                        .find(|w| w[0].kind == TokenKind::Ident && w[0].text == "at" && w[1].kind == TokenKind::Number)
+                        .map(|w| w[0].span.start as usize);
+                    if let (Some(at), Some(keyword)) = (at, child.tokens.first().map(|t| t.text.clone())) {
+                        let name = (1..).map(|n| format!("{keyword}{n}")).find(|n| !used.contains(n)).expect("an unused name exists");
+                        let text = format!("{}name {name} {}", &child.text[..at], &child.text[at..]);
+                        used.push(name);
+                        child.set_text(text);
+                    }
+                }
+                name_in(child, child_kind, used);
+            }
+        }
+        for top in 0..self.nodes.len() {
+            let kind = top_kind(&self.nodes[top]);
+            if !matches!(kind, Kind::Page | Kind::App) {
+                continue;
+            }
+            let mut used = self.used_names(top);
+            name_in(&mut self.nodes[top], kind, &mut used);
+        }
+        Ok(None)
     }
 
     /// Part names used in the top-level block (window or app) at index `top`.
@@ -1049,6 +1096,16 @@ impl Doc {
     ) -> EditResult<Option<u32>> {
         validate_props(props).map_err(EditError)?;
         let (path, _) = self.find(item, "a widget", |k| matches!(k, Kind::Widget(_)))?;
+        // Every part has a name: one written without gets one now, like a new part.
+        let named;
+        let props = if props.name.is_none() {
+            let mut with = props.clone();
+            with.name = Some(self.free_name(path[0], widgets::keyword(props.kind)));
+            named = with;
+            &named
+        } else {
+            props
+        };
         let current = self.node(&path).tokens[0].text.clone();
         if current != widgets::keyword(props.kind) {
             return fail(format!(

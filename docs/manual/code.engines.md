@@ -1,12 +1,27 @@
 # Engines
 
-How to use a processing engine compiled to WebAssembly: declaring it with its file, calling it from code, and writing one in Rust, C or Zig.
+How to make, edit and build a processing engine compiled to WebAssembly in Clarity, call it from code, or bring one written in another language.
 
 ## What an engine is
 
 An engine is a WebAssembly file that does one kind of processing: pricing, scheduling, a solver, the rules of a game. Every stack runs that same file, so the engine gives the same answers on every stack.
 
 An engine only computes. It has no database, files, network or screen. Your code reads the records, hands them to the engine as values, and saves or shows what comes back. Work that needs the database while it runs belongs in an [action](code.functions.md), and the action can call an engine for the processing in between.
+
+## Making an engine in Clarity
+
+1. Click **+ New engine** under Engines in the project tree, and give it a name, such as `Pricing`. Clarity declares it with one function to start from, writes its code in Rust with a stub for that function, builds it, and opens it.
+2. The engine opens in its own editor. On the left, its inspector holds what the declaration says:
+   - **Functions**: name, values and what each gives. **+ Add function** adds one, and its stub appears in the code.
+   - **Services**: clock, random and log.
+   - **State**: none, per app or per window, and **On open**.
+   - **Limits**: the time a call may run and the memory it may use.
+3. On the right is the engine's code. Write what each function computes there, and save with Ctrl+S. Double-click a function in the inspector, or click its name above the code, to go to it.
+4. Click **Build**, or just **Run**: Run and Build first build every engine whose code changed. The compiler's output goes to the Output panel, and its errors to Problems and to the lines of the code; click one to go there.
+
+A line above the editor says how the engine stands, with the button that helps: **Ready**; the code changed since it was built (**Build**); the code lacks a function the inspector names (**Write the missing functions**); or what to install to build it here. **Text** shows the declaration as Clarity text instead of the inspector. Building needs Rust with its WebAssembly target (`rustup target add wasm32-unknown-unknown`); Clarity says so when it is missing.
+
+An engine built elsewhere, in another language, is a file only: put it in the `engines` folder and declare it. Its editor edits the declaration and says whether the file fits it.
 
 ## Declaring an engine
 
@@ -35,7 +50,7 @@ engine Pricing from "pricing.wasm"
 - Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), `bytes`, enums, records and `list<Entity>`. Files are not: read the file in code and hand in its text (`read text of f`) or its bytes (`read bytes of f`).
 - `uses` and `limit` are optional; see [Services](#services) and [Limits](#limits) below.
 - The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports a service the engine does not use (or anything else), or lacks a function you declared.
-- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with what it uses, its state, its limit and its functions.
+- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its editor; see [Making an engine in Clarity](#making-an-engine-in-clarity).
 
 ## Services
 
@@ -98,7 +113,7 @@ handler discount_clicked
 
 ## Writing an engine
 
-The easiest way is Rust with the library `clarity-engine` (in Clarity's repository, `crates/clarity-engine`). It writes the engine interface for you; a function takes its arguments as a tuple, in the declared order, and gives back anything serde writes:
+The easiest way is to let Clarity write it (see [Making an engine in Clarity](#making-an-engine-in-clarity)): the code is Rust with the library `clarity-engine`, in a folder next to the file, `engines/pricing/` for `pricing.wasm`. The library writes the engine interface for you; a function takes its arguments as a tuple, in the declared order, and gives back anything serde writes:
 
 ```rust
 clarity_engine::interface!();
@@ -107,7 +122,7 @@ clarity_engine::function!(total, |(lines,): (Vec<Line>,)| Ok(priced(&lines).to_s
 clarity_engine::on_open!(|| Ok(()));
 ```
 
-`Err` is the engine's refusal, in its words. `clarity_engine::clock()`, `random()` and `log(...)` are the services, and `clarity_engine::Bytes` is `bytes`. Build the engine as a `cdylib` for `wasm32-unknown-unknown` and copy the `.wasm` file into the `engines` folder.
+`Err` is the engine's refusal, in its words. `clarity_engine::clock()`, `random()` and `log(...)` are the services, and `clarity_engine::Bytes` is `bytes`. Clarity builds the engine as a `cdylib` for `wasm32-unknown-unknown` and copies the `.wasm` file into the `engines` folder; outside Clarity, `cargo build --release --target wasm32-unknown-unknown` in its folder does the same.
 
 The examples have one each, with their source next to the file:
 
@@ -118,7 +133,7 @@ The examples have one each, with their source next to the file:
 | dial | `Gauge` | the needle's angle and colour, called from a draw handler |
 | noughts | `Board` | a game kept with `state per window` and `on open`, using `random` |
 
-`examples/build-engines.sh` builds them all from their sources.
+Each opens in Clarity's engine editor with its code, and Run builds what changed. `examples/build-engines.sh` builds them all at once from a terminal.
 
 ### The engine interface
 

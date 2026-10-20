@@ -134,7 +134,7 @@ fn updates_a_widget_and_keeps_its_comment() {
         },
     );
     assert!(
-        text.contains("    textbox at 3,2 span 8 bind c.email // the name\n"),
+        text.contains("    textbox name textbox1 at 3,2 span 8 bind c.email // the name\n"),
         "{text}"
     );
     assert!(text[focus.unwrap() as usize..].starts_with("textbox"));
@@ -155,7 +155,7 @@ fn moves_a_widget_into_a_container() {
         },
     );
     assert!(
-        text.contains("        label \"Inside\" at 1,1\n        label \"Name\" at 1,2 span 2\n"),
+        text.contains("        label \"Inside\" at 1,1\n        label \"Name\" name label1 at 1,2 span 2\n"),
         "{text}"
     );
     assert!(!text.contains("    label \"Name\" at 1,1"));
@@ -176,7 +176,7 @@ fn moves_a_container_with_its_children() {
         },
     );
     assert!(text.contains(
-        "            label \"First\" at 1,1\n            panel \"Box\" at 7,3 span 6 rows 3\n                label \"Inside\" at 1,1\n"
+        "            label \"First\" at 1,1\n            panel \"Box\" name panel1 at 7,3 span 6 rows 3\n                label \"Inside\" at 1,1\n"
     ), "{text}");
 }
 
@@ -550,7 +550,7 @@ fn a_part_keeps_the_style_it_is_given() {
     props.caption = None;
     props.style = Some("loud".into());
     let (text, _) = edit(PAGE, Edit::UpdateWidget { item: at(PAGE, "textbox"), container: None, props });
-    assert!(text.contains("    textbox at 3,2 span 4 style loud"), "{text}");
+    assert!(text.contains("    textbox name textbox1 at 3,2 span 4 style loud"), "{text}");
     let (file, diagnostics) = parse(&text, "p.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let textbox = file.pages[0].widgets.iter().find(|w| w.props.kind == WidgetKind::Textbox).unwrap();
@@ -579,5 +579,33 @@ fn a_batch_resizes_a_container_and_moves_its_parts() {
             ],
         },
     );
-    assert!(text.contains("    panel \"Box\" at 1,3 span 12 rows 3\n        label \"Inside\" at 3,1 span 4\n"), "{text}");
+    assert!(text.contains("    panel \"Box\" name panel1 at 1,3 span 12 rows 3\n        label \"Inside\" name label1 at 3,1 span 4\n"), "{text}");
+}
+
+/// Every part has a name, as in an IDE: a part written without one (by hand
+/// or by the agent) gets one the first time the designer changes it, so its
+/// events can be wired and its properties set from code.
+#[test]
+fn a_part_without_a_name_gets_one_when_it_is_changed() {
+    let mut props = new_props(WidgetKind::Label, 1, 1);
+    props.caption = Some("Name:".into());
+    props.width = 2;
+    let (text, _) = edit(PAGE, Edit::UpdateWidget { item: at(PAGE, "label \"Name\""), container: None, props: props.clone() });
+    assert!(text.contains("    label \"Name:\" name label1 at 1,1 span 2\n"), "{text}");
+    // The next one gets the next free name.
+    let (text, _) = edit(&text, Edit::UpdateWidget { item: at(&text, "label \"Inside\""), container: None, props: { let mut p = props.clone(); p.caption = Some("In".into()); p } });
+    assert!(text.contains("label \"In\" name label2 at 1,1"), "{text}");
+}
+
+/// Name them: every part of every window and the app that has no name gets
+/// the first free one of its kind; the rest of each line stays as written.
+#[test]
+fn names_every_part_that_has_none() {
+    let (text, _) = edit(PAGE, Edit::NameParts);
+    assert!(text.contains("    label \"Name\" name label1 at 1,1 span 2\n"), "{text}");
+    assert!(text.contains("    textbox name textbox1 at 3,1 span 6 bind c.name // the name\n"), "{text}");
+    assert!(text.contains("    panel \"Box\" name panel1 at 1,3 span 6 rows 3\n        label \"Inside\" name label2 at 1,1\n"), "{text}");
+    assert!(text.contains("            label \"First\" name label3 at 1,1\n"), "{text}");
+    // Named already: nothing changes.
+    assert_eq!(edit(&text, Edit::NameParts).0, text);
 }

@@ -8,10 +8,10 @@ How to read records with `find`, and how code lists, reads and writes files in a
 
 ```clarity
 code Customers
-    handler filter_changed
-        customers = find c in Customer where c.name contains name_filter.text and c.active order by c.name
+    handler filterChanged
+        customers = find c in Customer where c.name contains nameFilter.text and c.active order by c.name
 
-    handler card_opened
+    handler cardOpened
         orders = find o in Order where o.customer == customer and o.total > 100 order by o.total desc
 ```
 

@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  /** Clarity lines after which the next line is indented one level more. */
+  export const OPENS_CLARITY_BLOCK = /^\s*(handler|if|else|for|function|action|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
+  /** Lines of Rust (or another braced language) that open a block: ending in an open brace or bracket. */
+  export const OPENS_BRACED_BLOCK = /[{([]\s*$/;
+</script>
+
 <script lang="ts">
   // Clarity text with line numbers, problems from the backend while it is
   // typed, and Save and Revert. What it edits (a window's design, its code
@@ -13,6 +20,8 @@
     reloadKey,
     navPattern = null,
     placeholder = "",
+    opensBlock = OPENS_CLARITY_BLOCK,
+    errorsBlockSave = true,
     ondirty = () => {},
     onclose = () => {},
   }: {
@@ -26,14 +35,16 @@
     /** Lines worth a jump button, with the name in the first group. */
     navPattern?: RegExp | null;
     placeholder?: string;
+    /** Lines after which Enter indents one level more; Clarity's block lines unless given. */
+    opensBlock?: RegExp;
+    /** Whether errors keep the text from being saved: true for Clarity, which must be valid; false for a compiler's errors, which saving and building fix. */
+    errorsBlockSave?: boolean;
     ondirty?: (dirty: boolean) => void;
     onclose?: () => void;
   } = $props();
 
   const INDENT = "    ";
   const CHECK_DELAY = 300;
-  /** Lines after which the next line is indented one level more. */
-  const OPENS_BLOCK = /^\s*(handler|if|else|for|function|action|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
 
   let saved = $state("");
   let text = $state("");
@@ -109,6 +120,12 @@
     }
   }
 
+  /** Saves unsaved changes, as before a build; true when the text is saved afterwards. */
+  export async function saveIfChanged(): Promise<boolean> {
+    await store();
+    return !dirty;
+  }
+
   function revert() {
     text = saved;
     error = null;
@@ -156,7 +173,7 @@
       const lineStart = text.lastIndexOf("\n", start - 1) + 1;
       const line = text.slice(lineStart, start);
       const indent = /^ */.exec(line)?.[0] ?? "";
-      insert(start, end, "\n" + indent + (OPENS_BLOCK.test(line) ? INDENT : ""));
+      insert(start, end, "\n" + indent + (opensBlock.test(line) ? INDENT : ""));
     }
   }
 
@@ -183,9 +200,9 @@
       <button disabled={!dirty} onclick={revert} title="Put back the saved text">Revert</button>
       <button
         class="primary"
-        disabled={!dirty || saving || errorCount > 0}
+        disabled={!dirty || saving || (errorsBlockSave && errorCount > 0)}
         onclick={store}
-        title={errorCount > 0 ? "Fix the errors first" : "Save (Ctrl+S)"}>{saving ? "Saving..." : "Save"}</button
+        title={errorsBlockSave && errorCount > 0 ? "Fix the errors first" : "Save (Ctrl+S)"}>{saving ? "Saving..." : "Save"}</button
       >
     </div>
   </div>

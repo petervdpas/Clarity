@@ -26,12 +26,12 @@ entity Task
 
 page Main: window
     data tasks: list<Task>
-    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: task_changed
+    table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: taskChanged
 ";
 
 const CODE: &str = "
 code Main
-    handler task_changed
+    handler taskChanged
         save grid.selected
 ";
 
@@ -54,7 +54,7 @@ fn edit_lists_the_columns_whose_cells_are_inputs() {
     // Written back after the columns.
     assert_eq!(
         widgets::widget_line(props),
-        "table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: task_changed"
+        "table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: taskChanged"
     );
     assert!(widgets::has_event(WidgetKind::Table, Event::Change));
 }
@@ -87,14 +87,14 @@ fn only_shown_columns_of_editable_types_can_be_edited() {
 
 #[test]
 fn edits_that_nothing_saves_are_a_warning() {
-    let unsaved = TODO.replace(" on change: task_changed", "");
+    let unsaved = TODO.replace(" on change: taskChanged", "");
     assert!(messages(&unsaved, Severity::Warning).contains(&"table at 1,1 edits its rows but has no 'on change' handler to save them".to_string()));
 }
 
 #[test]
 fn a_list_part_has_no_edit() {
     let list = TODO.replace(
-        "table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: task_changed",
+        "table name grid at 1,1 span 12 rows 6 bind tasks columns title, done, priority edit done, priority on change: taskChanged",
         "list at 1,1 span 4 rows 6 bind tasks show title edit title",
     );
     let (_, diagnostics) = parse(&list, "todo.clarity");

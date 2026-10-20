@@ -15,34 +15,34 @@ entity Customer
 
 app Shop
     main Customers
-    on start: app_started
+    on start: appStarted
 
 page Customers: window
     title \"Customers\"
     data customers: list<Customer>
-    on open: window_opened
-    on return: window_returned
+    on open: windowOpened
+    on return: windowReturned
     table name grid at 1,1 span 12 rows 6 bind customers columns name
 
 page Card: window
     data customer: Customer
-    on close: window_closed
-    button \"Close\" name close_button at 1,1 span 2 on click: close_clicked
+    on close: windowClosed
+    button \"Close\" name closeButton at 1,1 span 2 on click: closeClicked
 
 code Shop
-    handler app_started
+    handler appStarted
         message \"Welcome\"
 
 code Customers
-    handler window_opened
+    handler windowOpened
         message \"Opened\"
-    handler window_returned
+    handler windowReturned
         reload customers
 
 code Card
-    handler window_closed
+    handler windowClosed
         save customer
-    handler close_clicked
+    handler closeClicked
         reload customer
         close
 ";
@@ -72,12 +72,12 @@ fn parses_window_and_app_events() {
         handler: handler.into(),
         args: Vec::new(),
     };
-    assert_eq!(file.apps[0].handlers, [handler(Event::Start, "app_started")]);
+    assert_eq!(file.apps[0].handlers, [handler(Event::Start, "appStarted")]);
     assert_eq!(
         file.pages[0].handlers,
-        [handler(Event::Open, "window_opened"), handler(Event::Return, "window_returned")]
+        [handler(Event::Open, "windowOpened"), handler(Event::Return, "windowReturned")]
     );
-    assert_eq!(file.pages[1].handlers, [handler(Event::Close, "window_closed")]);
+    assert_eq!(file.pages[1].handlers, [handler(Event::Close, "windowClosed")]);
     let StmtKind::Reload { data } = &file.code[1].handlers[1].body[0].kind else {
         panic!("expected reload")
     };
@@ -92,35 +92,35 @@ fn the_example_checks_clean() {
 #[test]
 fn each_owner_has_its_own_events() {
     assert_eq!(
-        errors(&SHOP.replace("    on start: app_started", "    on open: app_started")),
+        errors(&SHOP.replace("    on start: appStarted", "    on open: appStarted")),
         ["the app has the event start, not open"]
     );
     assert_eq!(
-        errors(&SHOP.replace("    on close: window_closed", "    on start: window_closed")),
+        errors(&SHOP.replace("    on close: windowClosed", "    on start: windowClosed")),
         ["a window has the events open, close and return, not start"]
     );
     assert_eq!(
-        errors(&SHOP.replace("    on return: window_returned", "    on open: window_returned")),
+        errors(&SHOP.replace("    on return: windowReturned", "    on open: windowReturned")),
         ["Customers already has 'on open'"]
     );
 }
 
 #[test]
 fn window_events_count_as_wired() {
-    let unwired = SHOP.replace("    on return: window_returned\n", "");
+    let unwired = SHOP.replace("    on return: windowReturned\n", "");
     let warnings: Vec<String> = problems(&unwired)
         .into_iter()
         .filter(|(s, _)| *s == Severity::Warning)
         .map(|(_, m)| m)
         .collect();
-    assert_eq!(warnings, ["handler 'window_returned' is not wired to any event"]);
-    let missing = SHOP.replace("    handler app_started\n        message \"Welcome\"\n", "");
+    assert_eq!(warnings, ["handler 'windowReturned' is not wired to any event"]);
+    let missing = SHOP.replace("    handler appStarted\n        message \"Welcome\"\n", "");
     let warnings: Vec<String> = problems(&missing)
         .into_iter()
         .filter(|(s, _)| *s == Severity::Warning)
         .map(|(_, m)| m)
         .collect();
-    assert_eq!(warnings, ["handler 'app_started' is wired but not written yet"]);
+    assert_eq!(warnings, ["handler 'appStarted' is wired but not written yet"]);
 }
 
 #[test]
@@ -145,13 +145,13 @@ fn the_designer_wires_and_unwires_window_events() {
         &Edit::SetOwnerEvent {
             owner: page,
             event: Event::Return,
-            handler: Some("window_returned".into()),
+            handler: Some("windowReturned".into()),
         },
     )
     .unwrap()
     .text;
     assert!(
-        wired.contains("    on close: window_closed\n    on return: window_returned\n    button \"Close\""),
+        wired.contains("    on close: windowClosed\n    on return: windowReturned\n    button \"Close\""),
         "{wired}"
     );
 

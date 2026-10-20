@@ -9,7 +9,7 @@ page Card: window
     data customer: Customer
 
     // The name.
-    label \"Name\" at 1,1 span 2
+    label \"Name\" name label1 at 1,1 span 2
 ";
 
 const APP: &str = "module m

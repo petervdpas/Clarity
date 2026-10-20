@@ -15,10 +15,10 @@ page AlbumForm: window
     data album: Album
     data other: Album
     image name cover at 1,1 span 3 rows 3 bind album.cover
-    button \"Clear\" at 1,4 span 2 on click: clear_clicked
+    button \"Clear\" name button1 at 1,4 span 2 on click: clearClicked
 
 code AlbumForm
-    handler clear_clicked
+    handler clearClicked
         if album.cover != none
             album.cover = none
 ";
@@ -85,7 +85,7 @@ fn a_picture_shows_in_an_image_part_only() {
     let found = errors(&load(&textbox, Some(&["photos"])));
     assert!(found.iter().any(|e| e.contains("image")), "{found:#?}");
 
-    let table = with("    data other: Album\n", "    data other: Album\n    data albums: list<Album>\n    table at 1,6 span 6 rows 4 bind albums columns title, cover\n");
+    let table = with("    data other: Album\n", "    data other: Album\n    data albums: list<Album>\n    table name table1 at 1,6 span 6 rows 4 bind albums columns title, cover\n");
     assert_eq!(errors(&load(&table, Some(&["photos"]))), ["table at 1,6: 'cover' is a picture; show it in an image part"]);
 }
 
@@ -155,7 +155,7 @@ fn the_dictionary_writes_the_store() {
 /// be for it, and an image field is placed as one.
 #[test]
 fn a_picture_part_takes_a_label_and_help() {
-    let source = with("    button \"Clear\"", "    help at 4,1 span 3 for cover\n    button \"Clear\"");
+    let source = with("    button \"Clear\"", "    help name button2 at 4,1 span 3 for cover\n    button \"Clear\"");
     assert_eq!(errors(&load(&source, Some(&["photos"]))), Vec::<String>::new());
     let cover = load(MUSIC, Some(&["photos"])).entity("Album").unwrap().field("cover").unwrap().ty.clone();
     assert_eq!(clarity_spec::widgets::widget_for(&cover), clarity_spec::widgets::WidgetKind::Image);

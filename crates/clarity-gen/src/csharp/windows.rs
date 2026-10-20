@@ -611,7 +611,7 @@ impl<'a> Window<'a> {
                     Some(n) => format!("{{Binding {}.Caption}}", member(n)),
                     None => self.text(&caption_text),
                 };
-                if required && named.is_none() {
+                if required {
                     // The mark of a required input stays beside the translated label.
                     let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"label\"{extra}><Run Text=\"{text}\" /><Run Text=\" *\" /></TextBlock>");
                 } else {

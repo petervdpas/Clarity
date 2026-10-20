@@ -6,6 +6,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::lexer::quote;
+use crate::names::camel_case;
 use crate::model::{DEFAULT_PAGE_COLUMNS, Entity, Field, FieldType, Project, WidgetProps, default_label};
 use crate::model::Handler;
 use crate::widgets::{self, Event, WidgetKind, new_props, widget_line};
@@ -106,11 +107,11 @@ fn input_width(kind: WidgetKind, ty: &FieldType, room: u32) -> u32 {
     width.min(room).max(1)
 }
 
-/// A button named after its caption: `Save` is `save`.
+/// A button named after its caption: `Save` is `save`, `New order` is `newOrder`.
 fn button(caption: &str, col: u32, row: u32) -> WidgetProps {
     let mut props: WidgetProps = new_props(WidgetKind::Button, col, row);
     props.caption = Some(caption.to_string());
-    props.name = Some(caption.to_lowercase());
+    props.name = Some(camel_case(caption));
     props
 }
 
@@ -145,21 +146,24 @@ pub fn field_parts(
         input.height = MEMO_ROWS;
     }
     input.caption = None;
-    input.name = Some(input_name.to_string());
+    let input_name = camel_case(input_name);
+    input.name = Some(input_name.clone());
     input.bind = Some(format!("{data}.{}", field.name.name));
     let mut parts = vec![input.clone()];
     if labelled {
         let mut label = new_props(WidgetKind::Label, col, row);
         label.caption = Some(field.label.clone());
         label.width = LABEL;
-        label.for_part = Some(input_name.to_string());
+        label.name = Some(format!("{input_name}Label"));
+        label.for_part = Some(input_name.clone());
         parts.push(label);
     }
     let left = room - input.width;
     if field.modifiers.help.is_some() && left >= 2 {
         let mut help = new_props(WidgetKind::Help, at + input.width, row);
         help.width = left;
-        help.for_part = Some(input_name.to_string());
+        help.name = Some(format!("{input_name}Help"));
+        help.for_part = Some(input_name.clone());
         parts.push(help);
     }
     parts
@@ -178,7 +182,7 @@ fn form_page(name: &str, title: &str, entity: &Entity) -> String {
         fields.extend(parts.iter().map(widget_line));
     }
     let mut form = new_props(WidgetKind::Form, 1, 1);
-    form.name = Some(format!("{data}_form"));
+    form.name = Some(camel_case(&format!("{data}_form")));
     form.width = columns;
     form.height = (row - 1).max(1);
     form.bind = Some(data.clone());
@@ -206,7 +210,7 @@ fn browse_filter(entity: &Entity) -> Option<&Field> {
 }
 
 /// The handler that runs when the filter changes.
-const FILTER_HANDLER: &str = "filter_changed";
+const FILTER_HANDLER: &str = "filterChanged";
 
 fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> String {
     let data = plural(&data_name(&entity.name.name));
@@ -215,10 +219,11 @@ fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> St
     // The filter: a label and a text box whose handler finds the records.
     let filter = browse_filter(entity);
     if let Some(field) = filter {
-        let input_name = format!("{}_filter", field.name.name);
+        let input_name = camel_case(&format!("{}_filter", field.name.name));
         let mut caption = new_props(WidgetKind::Label, 1, 1);
         caption.caption = Some(field.label.clone());
         caption.width = 2;
+        caption.name = Some(format!("{input_name}Label"));
         caption.for_part = Some(input_name.clone());
         lines.push(widget_line(&caption));
         let mut input = new_props(WidgetKind::Textbox, 3, 1);
@@ -236,7 +241,7 @@ fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> St
     table.width = grid;
     table.height = TABLE_ROWS;
     table.bind = Some(data.clone());
-    table.name = Some(format!("{data}_table"));
+    table.name = Some(camel_case(&format!("{data}_table")));
     table.columns = columns.iter().map(|c| c.to_string()).collect();
     lines.push(widget_line(&table));
     let buttons = table_row + TABLE_ROWS;
@@ -251,7 +256,7 @@ fn browse_page(name: &str, title: &str, entity: &Entity, columns: &[&str]) -> St
 }
 
 /// The handler a browse window gets for its `on return` event.
-const RETURN_HANDLER: &str = "window_returned";
+const RETURN_HANDLER: &str = "windowReturned";
 
 /// The code behind a template starts with, if any. A browse window finds
 /// its records with the filter when it changes, and again when a window it
@@ -269,8 +274,9 @@ pub fn code_from_template(project: &Project, name: &str, template: &PageTemplate
             };
             let var: String = data.chars().take(1).collect();
             let field = &field.name.name;
+            let filter = camel_case(&format!("{field}_filter"));
             Ok(Some(format!(
-                "{returned}        {FILTER_HANDLER}()\n\n    handler {FILTER_HANDLER}\n        {data} = find {var} in {} where {var}.{field} contains {field}_filter.text order by {var}.{field}",
+                "{returned}        {FILTER_HANDLER}()\n\n    handler {FILTER_HANDLER}\n        {data} = find {var} in {} where {var}.{field} contains {filter}.text order by {var}.{field}",
                 entity.name.name
             )))
         }

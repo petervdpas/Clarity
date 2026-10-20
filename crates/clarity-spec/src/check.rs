@@ -712,6 +712,17 @@ impl<'a> Checker<'a> {
                     );
                 }
             }
+            // Every part has a name, which code and its events go by (as in an IDE).
+            if let Some(part) = p.name.as_deref().filter(|n| !crate::names::is_camel_case(n)) {
+                self.error(file, crate::names::camel_case_problem("part", part), widget.span);
+            }
+            if p.name.is_none() {
+                self.error(
+                    file,
+                    format!("{name} at {},{} has no name; every part has one (Name them, in Problems, names them all)", p.col, p.row),
+                    widget.span,
+                );
+            }
             self.check_binding(file, page, widget);
             if let Some(target) = &p.on_click {
                 if p.new_window && frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {

@@ -12,7 +12,7 @@ entity Customer
     name: text(80)
 
 page Home: window
-    image at 1,1 span 3 rows 3 source \"logo.png\"
+    image name image1 at 1,1 span 3 rows 3 source \"logo.png\"
 ";
 
 const LOGO: [u8; 4] = [0x89, b'P', b'N', b'G'];
@@ -63,7 +63,7 @@ fn avalonia_embeds_the_pictures() {
 /// A project without pictures carries no folder for them.
 #[test]
 fn no_pictures_no_folder() {
-    let project = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Home: window\n    label \"Hi\" at 1,1 span 2\n")]);
+    let project = load_sources([("shop.clarity", "module shop\n\nentity Customer\n    name: text(80)\n\npage Home: window\n    label \"Hi\" name label1 at 1,1 span 2\n")]);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;

@@ -23,13 +23,13 @@ page Game: window
     title "Noughts and crosses"
     size 405 x 510
     data status: text, default "Your move"
-    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: draw_board on click: board_clicked
-    text at 1,9 span 12 bind status
-    button "New game" at 1,10 span 12 key "Ctrl+N" on click: restart_clicked
+    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
+    text name statusText at 1,9 span 12 bind status
+    button "New game" name newGame at 1,10 span 12 key "Ctrl+N" on click: restartClicked
 
 code Game
     // A click on a square plays it: three columns and three rows of 100.
-    handler board_clicked
+    handler boardClicked
         let square = 1
         if board.x >= 200
             square = 3
@@ -41,28 +41,28 @@ code Game
             square = square + 3
         status = Board.play(square)
 
-    handler restart_clicked
+    handler restartClicked
         status = Board.restart()
 
     // The grid, and on each square its mark.
-    handler draw_board
+    handler drawBoard
         board.clear("panel")
         board.line(100, 15, 100, 285, "border", 4)
         board.line(200, 15, 200, 285, "border", 4)
         board.line(15, 100, 285, 100, "border", 4)
         board.line(15, 200, 285, 200, "border", 4)
-        draw_mark(1, 0, 0)
-        draw_mark(2, 100, 0)
-        draw_mark(3, 200, 0)
-        draw_mark(4, 0, 100)
-        draw_mark(5, 100, 100)
-        draw_mark(6, 200, 100)
-        draw_mark(7, 0, 200)
-        draw_mark(8, 100, 200)
-        draw_mark(9, 200, 200)
+        drawMark(1, 0, 0)
+        drawMark(2, 100, 0)
+        drawMark(3, 200, 0)
+        drawMark(4, 0, 100)
+        drawMark(5, 100, 100)
+        drawMark(6, 200, 100)
+        drawMark(7, 0, 200)
+        drawMark(8, 100, 200)
+        drawMark(9, 200, 200)
 
     // A cross is two lines, a nought a ring, in the square from left, top.
-    handler draw_mark(square: integer, left: integer, top: integer)
+    handler drawMark(square: integer, left: integer, top: integer)
         let mark = Board.mark(square)
         if mark == "X"
             board.line(left + 25, top + 25, left + 75, top + 75, "accent", 8)

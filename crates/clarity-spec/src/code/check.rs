@@ -609,6 +609,9 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
             out.push(Diagnostic::error(format!("handler '{name}' is written twice"), handler.name.span));
             continue;
         }
+        if !crate::names::is_camel_case(name) {
+            out.push(Diagnostic::error(crate::names::camel_case_problem("handler", name), handler.name.span));
+        }
         // A handler is in use when an event runs it, or another handler does.
         let mut called = false;
         for other in block.handlers.iter().filter(|h| h.name.name != name) {

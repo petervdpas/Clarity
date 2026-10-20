@@ -580,7 +580,7 @@ impl<'a> Emitter<'a> {
                     let from = self.types.type_of(arg);
                     code.push_str(&format!(", {}", coerce(self.value(arg), &from, &expected)));
                 }
-                format!("{prefix}__{}(db, w, ui{code})?", function.name)
+                format!("{prefix}__{}(db, w, ui{code})?", super::names::snake(&function.name))
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             // A function of an engine: values to JSON and back (DESIGN 5.11).
@@ -1050,7 +1050,7 @@ pub fn emit_windows(
             .filter_map(|h| {
                 let decl = written.iter().find(|d| d.name.name == h.handler)?;
                 let values = h.args.iter().zip(&decl.params).map(|(v, p)| literal_in_main(project, &p.ty, v)).collect();
-                Some((clarity_spec::widgets::handler_call(h), format!("{}__{}", super::names::snake(name), h.handler), values))
+                Some((clarity_spec::widgets::handler_call(h), format!("{}__{}", super::names::snake(name), super::names::snake(&h.handler)), values))
             })
             .collect();
 
@@ -1096,7 +1096,7 @@ impl {struct_name} {{
 
         let mut handlers = Vec::new();
         for handler in file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers) {
-            let function = format!("{}__{}", super::names::snake(name), handler.name.name);
+            let function = format!("{}__{}", super::names::snake(name), super::names::snake(&handler.name.name));
             // The values a click gives it, typed.
             let values: String = handler
                 .params
@@ -1130,7 +1130,7 @@ impl {struct_name} {{
             .map(crate::canvas_draws)
             .unwrap_or_default()
             .into_iter()
-            .map(|(canvas, handler)| (canvas, format!("{}__{handler}", super::names::snake(name))))
+            .map(|(canvas, handler)| (canvas, format!("{}__{}", super::names::snake(name), super::names::snake(&handler))))
             .collect();
         owners.push(Owner {
             name: name.clone(),

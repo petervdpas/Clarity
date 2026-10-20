@@ -229,6 +229,25 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
     }
 }
 
+const WASM_TARGET: &str = "Rust's WebAssembly target: run rustup target add wasm32-unknown-unknown";
+
+/// What to install to build engines from their Rust source: cargo, and
+/// Rust's WebAssembly target. Empty when nothing is missing.
+pub fn engine_tools(probe: &dyn Probe) -> Vec<String> {
+    if probe.run("cargo", &["--version"]).is_none() {
+        return vec![RUST.to_string()];
+    }
+    let target = clarity_project::engines::TARGET;
+    let installed = match probe.run("rustup", &["target", "list", "--installed"]) {
+        Some(listed) => listed.lines().any(|l| l.trim() == target),
+        // Rust without rustup, as a system package: the target is in its sysroot or not.
+        None => probe
+            .run("rustc", &["--print", "sysroot"])
+            .is_some_and(|root| std::path::Path::new(root.trim()).join("lib/rustlib").join(target).is_dir()),
+    };
+    if installed { Vec::new() } else { vec![WASM_TARGET.to_string()] }
+}
+
 /// Every stack the catalog offers, checked.
 pub fn check_all(probe: &dyn Probe) -> Vec<StackTools> {
     clarity_project::catalog()

@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-  import { onMount } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
   import { loadPicturesWith } from "./lib/pictures.svelte";
@@ -17,6 +17,10 @@
   import { layout } from "./lib/layout.svelte";
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";
+  import EngineEditor from "./lib/EngineEditor.svelte";
+  import { fixOf } from "./lib/codeParts";
+  import { engineProblems, recordBuilt } from "./lib/engineBuilds.svelte";
+  import type { EngineBuilt } from "./lib/generated/EngineBuilt";
   import ModuleView from "./lib/ModuleView.svelte";
   import ThemeView from "./lib/ThemeView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
@@ -147,6 +151,16 @@
     return declaring && theme ? { theme, file: declaring } : null;
   });
   const moduleFile = $derived(current?.kind === "module" ? files.find((f) => (f.module?.name ?? "") === current.name) : undefined);
+  /** The open engine and the module that declares it. */
+  const openEngine = $derived.by(() => {
+    if (current?.kind !== "engine") return null;
+    const declaring = files.find((f) => f.engines.some((e) => e.name.name === current.name));
+    const decl = declaring?.engines.find((e) => e.name.name === current.name);
+    return declaring && decl ? { decl, file: declaring } : null;
+  });
+  /** A line of an engine's code to show, from the Problems list. */
+  let engineGoTo = $state<{ line: number; n: number } | null>(null);
+  const builtProblems = $derived(engineProblems());
   const appPage = $derived(app ? appAsPage(app) : null);
   const file = $derived(
     preview?.project.files.find(
@@ -245,6 +259,8 @@
         return o.name === p.baseTheme.name.name || all.some((f) => f.themes.some((t) => t.name.name === o.name));
       case "module":
         return all.some((f) => (f.module?.name ?? "") === o.name);
+      case "engine":
+        return all.some((f) => f.engines.some((e) => e.name.name === o.name));
       case "settings":
         return true;
     }
@@ -300,6 +316,50 @@
       applyPreview(await invoke<Preview>("rename", { kind, name, newName }));
       select({ kind, name: newName });
     } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** Opens an engine's code at a line its build reported. */
+  function showEngineLine(engine: string, line: number) {
+    select({ kind: "engine", name: engine });
+    engineGoTo = { line, n: (engineGoTo?.n ?? 0) + 1 };
+  }
+
+  async function deleteEngine(target: SpecFile, name: string, item: number) {
+    if (!(await ask(`Delete engine ${name}? Its file and its code stay in the engines folder.`, { title: "Clarity", kind: "warning" }))) return;
+    actionError = null;
+    try {
+      applyPreview((await applyEdit(target, { op: "remove", item })).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** The module a new engine goes into, while its dialog is open. */
+  let newEngine = $state<SpecFile | null>(null);
+  let newEngineError = $state<string | null>(null);
+
+  function startNewEngine() {
+    const target = files.find((f) => f.engines.length > 0) ?? file ?? files[0];
+    if (target) {
+      newEngineError = null;
+      newEngine = target;
+    }
+  }
+
+  /** Declares the engine with one function to start from, writes its code with a stub, builds it and opens it. */
+  async function addEngine(target: SpecFile, name: string) {
+    const stem = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+    const text = `engine ${name} from ${JSON.stringify(stem + ".wasm")}\n    function compute(value: integer) -> integer\n`;
+    try {
+      applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
+      newEngine = null;
+      select({ kind: "engine", name });
+      await invoke("new_engine_source", { name });
+      await invoke("build_engine", { name });
+    } catch (err) {
+      newEngineError = String(err);
       actionError = String(err);
     }
   }
@@ -430,6 +490,19 @@
     tab = "design";
   }
 
+  // An app's menu item or button double-clicked in a window's designer opens
+  // the app's designer at it, with its code.
+  let handledAppCode: object | null = null;
+  $effect(() => {
+    const request = pageDesigner.appCode;
+    if (!request || request === handledAppCode) return;
+    handledAppCode = request;
+    untrack(() => {
+      selectApp();
+      tick().then(() => pageDesigner.openPartCode(request.item));
+    });
+  });
+
   function selectPage(p: Page) {
     stack = [{ kind: "window", name: p.name.name }];
     pageDesigner.selected = null;
@@ -540,6 +613,18 @@
     return path.split(/[\\/]/).at(-1) ?? path;
   }
 
+  /** Applies a fix the Problems list offers to the file of the problem. */
+  async function applyFix(path: string, edit: Edit) {
+    const target = files.find((f) => f.path === path);
+    if (!target) return;
+    actionError = null;
+    try {
+      applyPreview((await applyEdit(target, edit)).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
   function location(d: Diagnostic): string {
     return `${fileName(d.path)}:${d.span.line}:${d.span.col}`;
   }
@@ -560,6 +645,7 @@
     const unlistenLine = listen<string>("build-line", (e) => {
       buildLog = [...buildLog.slice(-(BUILD_LOG_LINES - 1)), e.payload];
     });
+    const unlistenBuilt = listen<EngineBuilt>("engine-built", (e) => recordBuilt(e.payload));
     const unlistenDone = listen<BuildDone>("build-done", (e) => {
       building = false;
       buildDone = e.payload;
@@ -574,6 +660,7 @@
       unlistenProject.then((stop) => stop());
       unlistenLine.then((stop) => stop());
       unlistenDone.then((stop) => stop());
+      unlistenBuilt.then((stop) => stop());
     };
   });
 </script>
@@ -593,6 +680,7 @@
       onselect={select}
       onnewdata={full ? startNewData : null}
       onnewtheme={full ? addTheme : null}
+      onnewengine={full ? startNewEngine : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -849,10 +937,20 @@
                 <span>{message}</span>
               </li>
             {/each}
+            {#each builtProblems as { engine, problem }, i (i)}
+              <li class={problem.severity}>
+                <button class="link" onclick={() => showEngineLine(engine, problem.line)}><code>{engine} {problem.file.split(/[\\/]/).pop()}:{problem.line}</code></button>
+                <span>{problem.message}</span>
+              </li>
+            {/each}
             {#each preview.project.diagnostics as d, i (i)}
+              {@const fix = fixOf(d.message)}
               <li class={d.severity}>
                 <code>{location(d)}</code>
                 <span>{d.message}</span>
+                {#if fix}
+                  <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
+                {/if}
               </li>
             {:else}
               {#if projectProblems.length === 0}<li class="ok">No problems</li>{/if}
@@ -900,6 +998,15 @@
               if (openTheme.file) applyPreview((await applyEdit(openTheme.file, edit)).preview);
             }}
             onopensettings={selectSettings}
+          />
+        {:else if openEngine}
+          <EngineEditor
+            {preview}
+            decl={openEngine.decl}
+            file={openEngine.file}
+            goTo={engineGoTo}
+            onapply={async (edit) => applyPreview((await applyEdit(openEngine.file, edit)).preview)}
+            ondelete={() => deleteEngine(openEngine.file, openEngine.decl.name.name, openEngine.decl.span.start)}
           />
         {:else if moduleFile}
           <ModuleView
@@ -983,6 +1090,19 @@
     error={newDataError}
     onsubmit={addData}
     oncancel={() => (newData = null)}
+  />
+{/if}
+
+{#if newEngine && preview}
+  <NameDialog
+    {preview}
+    title="New engine"
+    placeholder="Pricing"
+    action="Add engine"
+    file={newEngine}
+    error={newEngineError}
+    onsubmit={addEngine}
+    oncancel={() => (newEngine = null)}
   />
 {/if}
 
@@ -1446,6 +1566,13 @@
     display: flex;
     flex-direction: column;
     font-size: 12px;
+  }
+
+  .diagnostics li .fix {
+    align-self: flex-start;
+    margin-top: 3px;
+    padding: 1px 8px;
+    font-size: 11px;
   }
 
   .diagnostics li.error {

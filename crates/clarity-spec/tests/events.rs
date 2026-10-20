@@ -8,7 +8,7 @@ const PAGE: &str = "module m
 
 page Card: window
     title \"Card\"
-    textbox name customer_name at 1,1 span 6 on change: name_changed on leave: name_left
+    textbox name customerName at 1,1 span 6 on change: name_changed on leave: name_left
     button \"Save\" name save at 1,2 span 2 on click: save_clicked
     button \"Back\" name button1 at 3,2 span 2 on click -> Card
 ";
@@ -28,7 +28,7 @@ fn parses_names_and_handlers() {
     assert!(diags.is_empty(), "{diags:#?}");
     let widgets = &file.pages[0].widgets;
     let input = &widgets[0].props;
-    assert_eq!(input.name.as_deref(), Some("customer_name"));
+    assert_eq!(input.name.as_deref(), Some("customerName"));
     assert_eq!(
         input.handlers,
         vec![
@@ -67,7 +67,7 @@ fn writes_name_after_the_caption_and_handlers_last() {
 #[test]
 fn rejects_events_a_part_does_not_have() {
     let (_, diags) = parse(
-        "module m\npage P: window\n    label \"A\" at 1,1 on change: x\n",
+        "module m\npage P: window\n    label \"A\" name label1 at 1,1 on change: x\n",
         "m.clarity",
     );
     assert!(diags[0].message.contains("a label has no change event"), "{diags:#?}");
@@ -85,7 +85,7 @@ fn rejects_events_a_part_does_not_have() {
 #[test]
 fn an_event_is_wired_once() {
     let (_, diags) = parse(
-        "module m\npage P: window\n    button \"A\" at 1,1 on click: a on click -> P\n",
+        "module m\npage P: window\n    button \"A\" name button1 at 1,1 on click: a on click -> P\n",
         "m.clarity",
     );
     assert!(diags[0].message.contains("duplicate 'on click'"), "{diags:#?}");
@@ -93,7 +93,7 @@ fn an_event_is_wired_once() {
 
 #[test]
 fn names_are_unique_in_a_window() {
-    let source = "module m\npage P: window\n    button \"A\" name go at 1,1\n    panel at 1,2 span 6 rows 3\n        button \"B\" name go at 1,1\n";
+    let source = "module m\npage P: window\n    button \"A\" name go at 1,1\n    panel name panel1 at 1,2 span 6 rows 3\n        button \"B\" name go at 1,1\n";
     assert!(errors(source).iter().any(|e| e.contains("duplicate part name 'go'")));
     // Another window may use the same name.
     let two = "module m\npage P: window\n    button \"A\" name go at 1,1\npage Q: window\n    button \"A\" name go at 1,1\n";

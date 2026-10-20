@@ -1,7 +1,7 @@
 //! Run and Build: the open project is generated into its `out/` folder and
 //! compiled with the stack's own toolchain (cargo for Rust, dotnet for C#). Run starts the
-//! application; Build makes a release program. The toolchain's output is
-//! sent to the frontend line by line.
+//! application; Build makes a release program. Engines whose source changed
+//! are built first. The toolchain's output is sent to the frontend line by line.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -14,14 +14,14 @@ use tauri::{AppHandle, Emitter, Manager};
 use ts_rs::TS;
 
 /// One line of toolchain output.
-const BUILD_LINE: &str = "build-line";
+pub(crate) const BUILD_LINE: &str = "build-line";
 /// The end of a build.
-const BUILD_DONE: &str = "build-done";
+pub(crate) const BUILD_DONE: &str = "build-done";
 
 
 #[derive(Default)]
 pub struct BuildState {
-    busy: AtomicBool,
+    pub(crate) busy: AtomicBool,
     /// The application Run started, so Stop and the next Run can end it.
     running: Mutex<Option<Child>>,
 }
@@ -129,8 +129,13 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
             return Err(err);
         }
     };
+    let dir = clarity_project::module_dir(&file);
     std::thread::spawn(move || {
-        let done = build(&app, &out, &toolchain, run);
+        // The engines whose source changed first, so the application has them as written.
+        let done = match crate::engines::build_changed(&app, &dir) {
+            Ok(()) => build(&app, &out, &toolchain, run),
+            Err(message) => BuildDone { ok: false, message, binary: None },
+        };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
         let _ = app.emit(BUILD_DONE, done);
     });

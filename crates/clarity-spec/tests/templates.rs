@@ -55,24 +55,24 @@ fn a_form_has_a_label_and_input_per_field() {
     let page = &text[text.find("page FreshWindow").unwrap()..];
     assert!(page.contains("    data customer: Customer\n"), "{page}");
     assert!(
-        page.contains("\n    form name customer_form at 1,1 span 12 rows 10 bind customer\n"),
+        page.contains("\n    form name customerForm at 1,1 span 12 rows 10 bind customer\n"),
         "{page}"
     );
     assert!(
         page.contains(
-            "        label \"Name\" at 1,1 span 3 for name\n        textbox name name at 4,1 span 6 bind customer.name\n"
+            "        label \"Name\" name nameLabel at 1,1 span 3 for name\n        textbox name name at 4,1 span 6 bind customer.name\n"
         ),
         "{page}"
     );
     assert!(page.contains("        checkbox name active at 4,"), "{page}");
     // A field's help becomes a help text next to its input.
     assert!(
-        page.contains("        help at 8,4 span 5 for vat_number\n"),
+        page.contains("        help name vatNumberHelp at 8,4 span 5 for vatNumber\n"),
         "{page}"
     );
     // Text without a maximum length gets a memo.
     assert!(
-        page.contains("        memo name notes at 4,8 span 6 rows 3 bind customer.notes\n        help at 10,8 span 3 for notes\n"),
+        page.contains("        memo name notes at 4,8 span 6 rows 3 bind customer.notes\n        help name notesHelp at 10,8 span 3 for notes\n"),
         "{page}"
     );
     assert!(page.contains("    button \"Save\" name save at 9,12 span 2 default\n"), "{page}");
@@ -88,12 +88,12 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
     assert!(page.contains("    data customers: list<Customer>\n"), "{page}");
     assert!(
         page.contains(
-            "    label \"Name\" at 1,1 span 2 for name_filter\n    textbox name name_filter at 3,1 span 4 on change: filter_changed\n"
+            "    label \"Name\" name nameFilterLabel at 1,1 span 2 for nameFilter\n    textbox name nameFilter at 3,1 span 4 on change: filterChanged\n"
         ),
         "{page}"
     );
     assert!(
-        page.contains("table name customers_table at 1,2 span 12 rows 8 bind customers columns name, email, kind, vat_number, credit_limit"),
+        page.contains("table name customersTable at 1,2 span 12 rows 8 bind customers columns name, email, kind, vat_number, credit_limit"),
         "{page}"
     );
     assert!(page.contains("button \"Open\""), "{page}");
@@ -133,10 +133,10 @@ fn a_browse_window_filters_and_refreshes_when_a_form_closes() {
     let (text, after) = add_window(PageTemplate::Browse {
         entity: "Order".into(),
     });
-    assert!(text.contains("    data orders: list<Order>\n    on return: window_returned\n"), "{text}");
+    assert!(text.contains("    data orders: list<Order>\n    on return: windowReturned\n"), "{text}");
     assert!(
         text.ends_with(
-            "\ncode FreshWindow\n    handler window_returned\n        // A window opened from here may have changed the records.\n        filter_changed()\n\n    handler filter_changed\n        orders = find o in Order where o.number contains number_filter.text order by o.number\n"
+            "\ncode FreshWindow\n    handler windowReturned\n        // A window opened from here may have changed the records.\n        filterChanged()\n\n    handler filterChanged\n        orders = find o in Order where o.number contains numberFilter.text order by o.number\n"
         ),
         "{text}"
     );
@@ -164,7 +164,7 @@ fn a_dropped_field_brings_its_label_and_help() {
     let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         outcome.text.contains(
-            "    label \"Vat number\" name label1 at 1,20 span 3 for vat_number\n    textbox name vat_number at 4,20 span 4 bind customer.vat_number\n    help name help1 at 8,20 span 5 for vat_number\n"
+            "    label \"Vat number\" name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vat_number\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
         ),
         "{}",
         outcome.text
@@ -174,7 +174,7 @@ fn a_dropped_field_brings_its_label_and_help() {
 
     // Dropped again, the input gets a free name and the label follows it.
     let again = apply_in(&after, &outcome.text, &edit_at(&after, 21)).unwrap_or_else(|e| panic!("{e}"));
-    assert!(again.text.contains("for vat_number1\n    textbox name vat_number1 at 4,21"), "{}", again.text);
+    assert!(again.text.contains("for vatNumber1\n    textbox name vatNumber1 at 4,21"), "{}", again.text);
 
     // Without room for a label, only the input is placed.
     let narrow = Edit::PlaceField {

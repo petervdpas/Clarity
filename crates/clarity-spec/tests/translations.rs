@@ -26,16 +26,16 @@ app Shop
 page Card: window
     title \"Customer card\"
     data customer: Customer
-    tabs at 1,1 span 12 rows 3
+    tabs name tabs1 at 1,1 span 12 rows 3
         tab \"General\"
-            textbox name name_input at 1,1 span 4 bind customer.name placeholder \"Full name\" tooltip \"Who buys\"
+            textbox name nameInput at 1,1 span 4 bind customer.name placeholder \"Full name\" tooltip \"Who buys\"
     button \"Save\" name save at 1,4 span 2 on click: saved
 
 code Card
     handler saved
         message \"Saved {customer.name}\"
         save.caption = \"Saved\"
-        name_input.error = \"Taken\"
+        nameInput.error = \"Taken\"
 
 action check(customer: Customer)
     refuse \"Not allowed\"

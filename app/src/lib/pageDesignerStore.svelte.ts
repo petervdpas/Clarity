@@ -86,6 +86,23 @@ class PageDesigner {
     this.#pending = { source, x: e.clientX, y: e.clientY, onclick };
   }
 
+  /** A part double-clicked on the window, whose main event's code is to open; `n` changes for each. */
+  partCode = $state<{ item: number; n: number } | null>(null);
+
+  /** Asks for the code of the part at `item`, as a double click on it does. */
+  openPartCode(item: number) {
+    this.selected = item;
+    this.partCode = { item, n: (this.partCode?.n ?? 0) + 1 };
+  }
+
+  /** An app's menu item or button double-clicked in a window, which is edited in the app; `n` changes for each. */
+  appCode = $state<{ item: number; n: number } | null>(null);
+
+  /** Asks to open the app's designer at its command `item`, with that command's code. */
+  openInApp(item: number) {
+    this.appCode = { item, n: (this.appCode?.n ?? 0) + 1 };
+  }
+
   /** Opens the code behind panel at a handler, or at the top. */
   showCode(handler: string | null) {
     this.code = { open: true, view: "code", focus: handler };

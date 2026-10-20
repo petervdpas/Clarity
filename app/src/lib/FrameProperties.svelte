@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commandHandler, wireCommand } from "./codeParts";
   // Properties of a picked frame element: a region, a ribbon tab or group,
   // a menu item, a button, a separator or the footer status.
 
@@ -63,17 +64,8 @@
   /** Wires a click handler, together with an empty handler in the code behind, or unwires it. */
   function setHandler(props: CommandProps, handler: string | null) {
     if (element.kind !== "command") return;
-    const edit: Edit = {
-      op: "updateCommand",
-      item: element.command.span.start,
-      props: { ...props, handler, onClick: handler ? null : props.onClick },
-    };
-    if (handler === null) {
-      onedit(edit);
-      return;
-    }
-    onedit({ op: "batch", edits: [edit, { op: "addHandler", owner, name: handler }] });
-    pageDesigner.showCode(handler);
+    onedit(wireCommand({ item: element.command.span.start, props, owner, handler }));
+    if (handler) pageDesigner.showCode(handler);
   }
 
   function remove(item: number) {
@@ -130,9 +122,8 @@
             <button title="Unwire" onclick={() => setHandler(p, null)}>&times;</button>
           {:else}
             <button
-              disabled={!p.name}
-              title={p.name ? "Wire a handler named after the part" : "Give the part a name first"}
-              onclick={() => setHandler(p, p.name + "_click")}>Wire</button
+              title="Wire a handler named after the item"
+              onclick={() => setHandler(p, commandHandler(p))}>Wire</button
             >
           {/if}
         </div>

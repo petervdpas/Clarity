@@ -80,6 +80,13 @@ enum SpecCommand {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
+    /// Name every part that has none, and make part and handler names
+    /// camelCase, in every module of a project: what the checker asks of
+    /// projects written before names were required.
+    Names {
+        /// The project file, or the folder with its modules.
+        dir: PathBuf,
+    },
     /// Print the checked model as JSON.
     Model {
         /// The project file, or the folder with its modules.
@@ -96,6 +103,7 @@ fn main() -> ExitCode {
         Command::Spec { command } => match command {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
+            SpecCommand::Names { dir } => names(&dir),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
         Command::Migrate {
@@ -171,6 +179,51 @@ fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
         eprintln!("clarity: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })
+}
+
+fn names(path: &std::path::Path) -> ExitCode {
+    let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        eprintln!("clarity: cannot read {}", dir.display());
+        return ExitCode::from(2);
+    };
+    let mut files: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "clarity")).collect();
+    files.sort();
+    let mut changed = 0;
+    let mut renames = Vec::new();
+    for file in &files {
+        let Ok(text) = std::fs::read_to_string(file) else { continue };
+        let named = match clarity_spec::edit::apply(&text, &clarity_spec::edit::Edit::NameParts) {
+            Ok(outcome) => outcome.text,
+            Err(err) => {
+                eprintln!("clarity: {}: {err}", file.display());
+                continue;
+            }
+        };
+        let (camel, renamed) = clarity_spec::names::camel_names_with(&named);
+        renames.extend(renamed);
+        if camel != text {
+            if let Err(err) = std::fs::write(file, &camel) {
+                eprintln!("clarity: cannot write {}: {err}", file.display());
+                return ExitCode::FAILURE;
+            }
+            eprintln!("named {}", file.display());
+            changed += 1;
+        }
+    }
+    // The translations' texts follow the renamed slots of the module's texts.
+    let translations = dir.join(clarity_spec::translations::TRANSLATIONS_DIR);
+    if let Ok(entries) = std::fs::read_dir(&translations) {
+        for path in entries.filter_map(Result::ok).map(|e| e.path()) {
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            let renamed = clarity_spec::names::rename_slots(&text, &renames);
+            if renamed != text && std::fs::write(&path, &renamed).is_ok() {
+                eprintln!("renamed slots in {}", path.display());
+            }
+        }
+    }
+    eprintln!("{changed} of {} file(s) changed", files.len());
+    ExitCode::SUCCESS
 }
 
 fn check(dir: &std::path::Path) -> ExitCode {

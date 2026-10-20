@@ -118,3 +118,19 @@ fn sets_the_uses_of_a_module() {
     let text = edit(&text, Edit::SetUses { uses: vec!["customers".into()] });
     assert!(text.starts_with("module shop\n\nuse customers\n\nenum Status"), "{text:?}");
 }
+
+/// The engine editor writes an engine's declaration anew from its inspector,
+/// and removes it, at the offset the engine's span starts at.
+#[test]
+fn replaces_and_removes_an_engine_declaration() {
+    let file = "module game\n\nengine Board from \"board.wasm\"\n    function play(square: integer) -> text\n\nenum Level\n    Easy\n";
+    let item = parse(file, "game.clarity").0.engines[0].span.start;
+    let replaced = edit(
+        file,
+        Edit::ReplaceDecl { item, text: "engine Board from \"board.wasm\"\n    uses random\n    state per window\n    function play(square: integer) -> text\n".into() },
+    );
+    assert!(replaced.contains("engine Board from \"board.wasm\"\n    uses random\n    state per window\n    function play"), "{replaced}");
+    assert!(replaced.contains("enum Level"), "{replaced}");
+    let removed = edit(&replaced, Edit::Remove { item });
+    assert!(!removed.contains("engine") && removed.contains("enum Level"), "{removed}");
+}

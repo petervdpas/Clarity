@@ -33,10 +33,10 @@ app Shop
             group \"Customers\"
                 button \"New\" icon \"add\" large on click -> CustomerCard
     sidebar left span 3
-        list at 1,1 span 3 rows 10 bind recent show name
+        list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
         status \"Ready\"
-        label \"v1\" at 11,1 span 2
+        label \"v1\" name label1 at 11,1 span 2
 ";
 
 fn diagnostics(app: &str) -> Vec<(Severity, String)> {
@@ -160,7 +160,7 @@ fn a_project_has_one_app() {
 
 #[test]
 fn footer_widgets_stay_on_one_row() {
-    let app = APP.replace("label \"v1\" at 11,1 span 2", "label \"v1\" at 11,2 span 2");
+    let app = APP.replace("label \"v1\" name label1 at 11,1 span 2", "label \"v1\" name label1 at 11,2 span 2");
     assert!(
         errors(&app)
             .iter()
@@ -170,7 +170,7 @@ fn footer_widgets_stay_on_one_row() {
 
 #[test]
 fn sidebar_widgets_fit_the_sidebar() {
-    let app = APP.replace("list at 1,1 span 3", "list at 1,1 span 4");
+    let app = APP.replace("list name list1 at 1,1 span 3", "list name list1 at 1,1 span 4");
     assert!(
         errors(&app)
             .iter()
@@ -267,7 +267,7 @@ app Shop
     let pages = "module p
 page CustomerCard: window
     title \"Card\"
-    button \"Other\" at 1,1 span 2 on click -> CustomerCard in new window
+    button \"Other\" name button1 at 1,1 span 2 on click -> CustomerCard in new window
 ";
     let project = load_sources([("p.clarity", pages), ("shop.clarity", app)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);

@@ -33,11 +33,11 @@ A new entity needs a migration step before the application can be built. Click *
 
 Open `Main` from the tree and go to the **Design** tab. On the right, under The window, add two pieces of data: `task` of entity `Task`, and `tasks` of entity `Task` with list ticked.
 
-In the sidebar's Parts tab, drag a **Form** from Containers onto the window and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `add_click` and opens the Code panel at it. Fill it in and click **Save**:
+In the sidebar's Parts tab, drag a **Form** from Containers onto the window and bind it to `task`. The Parts tab now lists the fields of `task`: drag Title and Done into the form, and each arrives as a label and a bound input. Drag **Table of tasks** below the form, and tick its columns. Drag a **Button**, caption it `Add`, name it `add` and tick "Enter clicks it". Under Events, click **Wire** next to click. Clarity writes an empty handler `addClick` and opens the Code panel at it. Fill it in and click **Save**:
 
 ```clarity
 code Main
-    handler add_click
+    handler addClick
         save task
         reload tasks
         task = new Task
@@ -52,11 +52,11 @@ page Main: window
     data tasks: list<Task>
 
     form name form1 at 1,1 span 12 rows 2 bind task
-        label "Title" at 1,1 span 3 for title
+        label "Title" name label1 at 1,1 span 3 for title
         textbox name title at 4,1 span 6 bind task.title
-        label "Done" at 1,2 span 3 for done
+        label "Done" name label2 at 1,2 span 3 for done
         checkbox name done at 4,2 span 3 bind task.done
-    button "Add" name add at 11,3 span 2 default on click: add_click
+    button "Add" name add at 11,3 span 2 default on click: addClick
     table name table1 at 1,4 span 12 rows 6 bind tasks columns title, done
 ```
 

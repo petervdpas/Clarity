@@ -7,7 +7,7 @@ use clarity_spec::{Project, Severity, load_sources};
 const HOME: &str = "module shop
 
 page Home: window
-    image at 1,1 span 3 rows 3 source \"logo.png\"
+    image name image1 at 1,1 span 3 rows 3 source \"logo.png\"
 ";
 
 fn picture(name: &str) -> ProjectImage {
@@ -49,7 +49,7 @@ fn a_picture_must_be_one_every_stack_can_show() {
 /// Pictures inside containers count too.
 #[test]
 fn pictures_in_containers_are_checked() {
-    let source = "module shop\n\npage Home: window\n    tabs at 1,1 span 6 rows 6\n        tab \"Cover\"\n            image at 1,1 span 3 rows 3 source \"cover.jpg\"\n";
+    let source = "module shop\n\npage Home: window\n    tabs name tabs1 at 1,1 span 6 rows 6\n        tab \"Cover\"\n            image name image1 at 1,1 span 3 rows 3 source \"cover.jpg\"\n";
     assert_eq!(errors(&with_images(source, &["logo.png"])), ["image 'cover.jpg' is not in the images folder; it has logo.png"]);
 }
 

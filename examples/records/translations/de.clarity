@@ -33,7 +33,7 @@ translation de
     "Close" "Schließen"
     "Delete" "Löschen"
     "New friend" "Neuer Freund"
-    "{loan_grid.selected.album.title} is back" "{loan_grid.selected.album.title} ist zurück"
+    "{loanGrid.selected.album.title} is back" "{loanGrid.selected.album.title} ist zurück"
     "Choose the album" "Wähle das Album"
     "Choose who borrows it" "Wähle, wer es ausleiht"
     "Lent {loan.album.title} to {loan.friend.name}" "{loan.album.title} an {loan.friend.name} verliehen"

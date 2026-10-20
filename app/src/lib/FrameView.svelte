@@ -52,6 +52,14 @@
     pageDesigner.selected = id;
   }
 
+  /** A double click on a command while designing: its code, here or (for the app's, in a window) in the app. */
+  function codeOf(e: Event, command: Command, editable: boolean) {
+    if (!design || command.props.kind === "separator") return;
+    e.stopPropagation();
+    if (editable) pageDesigner.openPartCode(command.span.start);
+    else pageDesigner.openInApp(command.span.start);
+  }
+
   /** A click on a command: picks it while designing, runs it otherwise. */
   function run(e: Event, command: Command, editable: boolean) {
     if (design) {
@@ -112,8 +120,10 @@
       <div class="entry" class:sub={item.items.length > 0} class:show={design && containsPicked(item)}>
         <button
           class:picked={design && pageDesigner.selected === item.span.start}
+          title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
           onpointerdown={(e) => design && run(e, item, editable)}
           onclick={(e) => !design && run(e, item, editable)}
+          ondblclick={(e) => codeOf(e, item, editable)}
         >
           <span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>
           {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
@@ -140,9 +150,10 @@
       class="tool"
       class:large={large && item.props.large}
       class:picked={design && pageDesigner.selected === item.span.start}
-      title={item.props.onClick ? `Opens ${item.props.onClick}` : undefined}
+      title={design && !editable ? "From the app: double-click to edit it in the app" : item.props.onClick ? `Opens ${item.props.onClick}` : undefined}
       onpointerdown={(e) => design && run(e, item, editable)}
       onclick={(e) => !design && run(e, item, editable)}
+      ondblclick={(e) => codeOf(e, item, editable)}
     >
       {#if item.props.icon}<span class="icon">{iconLetter(item.props.icon)}</span>{/if}
       {#if item.props.caption}<span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>{/if}
@@ -200,10 +211,12 @@
               onpointerdown={(e) => {
                 if (design && editable) pick(e, item.span.start);
               }}
+              title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
               onclick={(e) => {
                 if (item.items.length > 0) openMenu = openMenu === item.span.start ? null : item.span.start;
                 else run(e, item, editable);
-              }}>{item.props.caption ? tr(preview, item.props.caption) : ""}</button
+              }}
+              ondblclick={(e) => codeOf(e, item, editable)}>{item.props.caption ? tr(preview, item.props.caption) : ""}</button
             >
             {#if open && item.items.length > 0}
               <div class="dropdown">{@render entries(item.items, editable)}</div>
@@ -353,6 +366,16 @@
   .inherited {
     opacity: 0.55;
     position: relative;
+  }
+
+  /* An inherited menu bar fades its own buttons, not the menu that opens from it. */
+  .menubar.inherited {
+    opacity: 1;
+  }
+
+  .menubar.inherited > .top > button,
+  .menubar.inherited > .vsep {
+    opacity: 0.55;
   }
 
   .from {

@@ -15,7 +15,7 @@ entity Customer
 page Card: window
     data customer: Customer
     button \"Save\" name save at 1,1 span 2 on click: saved
-    textbox name name_input at 1,2 span 4 bind customer.name
+    textbox name nameInput at 1,2 span 4 bind customer.name
 
 code Card
     handler saved
@@ -31,7 +31,7 @@ fn messages(project: &Project, severity: Severity) -> Vec<String> {
 
 #[test]
 fn shown_text_has_slots() {
-    let project = window("message \"Saved {customer.name}, a customer since {customer.since}\"\nsave.caption = \"Save {customer.name}\"\nname_input.error = \"{customer.name} is taken\"");
+    let project = window("message \"Saved {customer.name}, a customer since {customer.since}\"\nsave.caption = \"Save {customer.name}\"\nnameInput.error = \"{customer.name} is taken\"");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let StmtKind::Message { text, .. } = &project.files[0].code[0].handlers[0].body[0].kind else { panic!() };
     let ExprKind::Text { parts } = &text.kind else { panic!("{text:?}") };

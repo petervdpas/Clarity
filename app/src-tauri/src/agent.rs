@@ -101,6 +101,9 @@ use the parts tool.
 project's folder, written as paths like `todo.clarity`.
 - Write whole files with write_file. Every write is checked at once: fix every error it reports before you go on, \
 and finish only when check reports no errors.
+- Give every part a name, and name parts and handlers in camelCase: letters and digits only, starting with a small \
+letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, not its kind. Fields, \
+data and functions stay snake_case.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - After adding or changing entities, write a migration step with migrate, so the database follows.

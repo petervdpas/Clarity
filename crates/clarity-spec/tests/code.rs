@@ -26,21 +26,21 @@ entity Order
 
 page CustomerForm: window
     data customer: Customer
-    dropdown name kind at 1,1 span 4 bind customer.kind on change: kind_changed
-    textbox name vat_number at 1,2 span 4 bind customer.vat_number
-    button \"Save\" name save at 1,3 span 2 on click: save_clicked
+    dropdown name kind at 1,1 span 4 bind customer.kind on change: kindChanged
+    textbox name vatNumber at 1,2 span 4 bind customer.vat_number
+    button \"Save\" name save at 1,3 span 2 on click: saveClicked
 
 page Orders: window
     data orders: list<Order>
-    table name grid at 1,1 span 12 rows 6 bind orders columns number, total on open: grid_opened
+    table name grid at 1,1 span 12 rows 6 bind orders columns number, total on open: gridOpened
 ";
 
 const CODE: &str = "
 code CustomerForm
-    handler kind_changed
-        vat_number.visible = customer.kind == Business
+    handler kindChanged
+        vatNumber.visible = customer.kind == Business
 
-    handler save_clicked
+    handler saveClicked
         if customer.name == \"\"
             message error \"Name is required\"
             return
@@ -55,7 +55,7 @@ code CustomerForm
         close
 
 code Orders
-    handler grid_opened
+    handler gridOpened
         let order = grid.selected
         open CustomerForm with customer = order.customer
 ";
@@ -93,13 +93,13 @@ fn form(body: &str) -> String {
     format!(
         "
 code CustomerForm
-    handler kind_changed
+    handler kindChanged
 {body}
-    handler save_clicked
+    handler saveClicked
         close
 
 code Orders
-    handler grid_opened
+    handler gridOpened
         close
 "
     )
@@ -119,7 +119,7 @@ fn parses_handlers_and_statements() {
     let form = &file.code[0];
     assert_eq!(form.name.name, "CustomerForm");
     let names: Vec<_> = form.handlers.iter().map(|h| h.name.name.as_str()).collect();
-    assert_eq!(names, ["kind_changed", "save_clicked"]);
+    assert_eq!(names, ["kindChanged", "saveClicked"]);
 
     let body = &form.handlers[1].body;
     let StmtKind::If { branches, otherwise } = &body[0].kind else {
@@ -247,16 +247,16 @@ fn enum_values_take_their_type_from_the_other_side() {
 #[test]
 fn checks_part_properties() {
     assert!(errors(&form("save.caption = \"Store\"\nsave.enabled = customer.active")).is_empty());
-    assert_eq!(errors(&form("vat_number.caption = \"x\"")), ["textbox 'vat_number' has no property 'caption'"]);
+    assert_eq!(errors(&form("vatNumber.caption = \"x\"")), ["textbox 'vatNumber' has no property 'caption'"]);
     let orders = "
 code CustomerForm
-    handler kind_changed
+    handler kindChanged
         close
-    handler save_clicked
+    handler saveClicked
         close
 
 code Orders
-    handler grid_opened
+    handler gridOpened
         grid.selected = grid.selected
         let n = count(orders) + grid.selected.lines
 ";
@@ -279,12 +279,12 @@ fn checks_open_and_records() {
 fn wiring_and_code_must_match() {
     let missing = "
 code CustomerForm
-    handler kind_changed
+    handler kindChanged
         close
 ";
     assert_eq!(
         warnings(missing),
-        ["handler 'save_clicked' is wired but not written yet", "handler 'grid_opened' is wired but not written yet"]
+        ["handler 'saveClicked' is wired but not written yet", "handler 'gridOpened' is wired but not written yet"]
     );
     let extra = format!("{CODE}\ncode Orders\n    handler nobody\n        close\n");
     assert_eq!(errors(&extra), ["there is already a code block for Orders"]);
@@ -293,8 +293,8 @@ code CustomerForm
     // A handler another handler runs is in use.
     let called = CODE.replace("code Orders\n", "code Orders\n    handler helper\n        close\n    handler caller\n        helper()\n");
     assert_eq!(warnings(&called), ["handler 'caller' is not wired to any event"]);
-    let twice = CODE.replace("    handler grid_opened\n", "    handler grid_opened\n        close\n    handler grid_opened\n");
-    assert_eq!(errors(&twice), ["handler 'grid_opened' is written twice"]);
+    let twice = CODE.replace("    handler gridOpened\n", "    handler gridOpened\n        close\n    handler gridOpened\n");
+    assert_eq!(errors(&twice), ["handler 'gridOpened' is written twice"]);
     assert_eq!(errors("\ncode Missing\n    handler x\n        close\n"), ["there is no window, app or entity 'Missing' in this file"]);
 }
 
@@ -302,8 +302,8 @@ code CustomerForm
 fn a_part_and_data_may_not_share_a_name() {
     let source = format!(
         "{}{CODE}",
-        BASE.replace("textbox name vat_number", "textbox name customer")
-            .replace("vat_number.visible", "customer.visible")
+        BASE.replace("textbox name vatNumber", "textbox name customer")
+            .replace("vatNumber.visible", "customer.visible")
     );
     let errors: Vec<String> = load_sources([("shop.clarity", source.as_str())])
         .diagnostics
@@ -320,10 +320,10 @@ fn app_code_handles_its_frame_commands() {
 app Shop
     main CustomerForm
     menu
-        item \"Quit\" name quit on click: quit_clicked
+        item \"Quit\" name quit on click: quitClicked
 
 code Shop
-    handler quit_clicked
+    handler quitClicked
         quit.enabled = false
         close
 ";
@@ -343,14 +343,14 @@ fn a_record_s_id_can_be_read_not_set() {
 #[test]
 fn a_button_can_close_its_window() {
     let base = BASE.replace(
-        "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n",
-        "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n    button \"Close\" at 3,3 span 2 on click -> close\n    button \"Quit\" at 5,3 span 2 on click -> quit\n",
+        "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n",
+        "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Close\" name button1 at 3,3 span 2 on click -> close\n    button \"Quit\" name button2 at 5,3 span 2 on click -> quit\n",
     );
     let source = format!("{base}{CODE}");
     let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert!(problems.is_empty(), "{problems:#?}");
     // Language and theme pick in a menu or a toolbar.
-    let base = BASE.replace("    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n", "    button \"Save\" name save at 1,3 span 2 on click: save_clicked\n    button \"Theme\" at 3,3 span 2 on click -> theme\n");
+    let base = BASE.replace("    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n", "    button \"Save\" name save at 1,3 span 2 on click: saveClicked\n    button \"Theme\" name button3 at 3,3 span 2 on click -> theme\n");
     let source = format!("{base}{CODE}");
     let problems: Vec<String> = load_sources([("shop.clarity", source.as_str())]).diagnostics.into_iter().map(|d| d.message).collect();
     assert_eq!(problems, ["'theme' picks in a menu or a toolbar; a button can close its window or quit"]);

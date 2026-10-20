@@ -22,7 +22,7 @@ caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<E
 /**
  * `data.field`
  */
-bind: string, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name: string, } | { "op": "addField", entity: number, spec: FieldSpec, } | { "op": "updateField", item: number, spec: FieldSpec, } | { "op": "addVariant", owner: number, name: string, label: string | null, } | { "op": "updateVariant", item: number, name: string, label: string | null, } | { "op": "setUses", uses: Array<string>, } | { "op": "addApp", name: string, } | { "op": "setMain", app: number, main: string, } | { "op": "setOwnerEvent", owner: number, event: Event, handler: string | null, } | { "op": "addRegion", owner: number, region: RegionKind, 
+bind: string, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name: string, } | { "op": "addField", entity: number, spec: FieldSpec, } | { "op": "updateField", item: number, spec: FieldSpec, } | { "op": "addVariant", owner: number, name: string, label: string | null, } | { "op": "updateVariant", item: number, name: string, label: string | null, } | { "op": "setUses", uses: Array<string>, } | { "op": "nameParts" } | { "op": "camelNames" } | { "op": "addApp", name: string, } | { "op": "setMain", app: number, main: string, } | { "op": "setOwnerEvent", owner: number, event: Event, handler: string | null, } | { "op": "addRegion", owner: number, region: RegionKind, 
 /**
  * Sidebars only.
  */

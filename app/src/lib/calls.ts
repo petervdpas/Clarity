@@ -22,3 +22,12 @@ export function handlerCall(h: Pick<Handler, "handler" | "args">): string {
   const args = h.args ?? [];
   return args.length === 0 ? h.handler : `${h.handler}(${args.map(written).join(", ")})`;
 }
+
+/**
+ * The call a part's event sends, or null when nothing is wired to it. A part
+ * needs no name for this: `button "7" on click: digit(7)` runs its handler.
+ */
+export function wiredCall(handlers: Handler[], event: Handler["event"]): string | null {
+  const wired = handlers.find((h) => h.event === event);
+  return wired ? handlerCall(wired) : null;
+}

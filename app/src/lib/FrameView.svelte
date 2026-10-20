@@ -58,9 +58,10 @@
       if (editable) pick(e, command.span.start);
       return;
     }
-    if (command.props.handler && command.props.name && live) {
+    // A command needs no name to run its handler, as a part does not.
+    if (command.props.handler && live) {
       openMenu = null;
-      live.event(command.props.name, "click", command.props.handler);
+      live.event(command.props.name ?? "", "click", command.props.handler);
     } else if (command.props.onClick) {
       openMenu = null;
       onnavigate(command.props.onClick, command.props.newWindow);

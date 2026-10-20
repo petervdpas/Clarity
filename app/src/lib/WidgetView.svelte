@@ -26,7 +26,7 @@
   import { useLive } from "./live";
   import { provideForm, useForm } from "./form";
   import { matchesShortcut } from "./shortcut";
-  import { handlerCall } from "./calls";
+  import { wiredCall } from "./calls";
   import { pictureUrl } from "./pictures.svelte";
   import { isStored, linkedFile, pictureFromFile, pictureUrl as recordPictureUrl } from "./recordPictures";
 
@@ -175,8 +175,8 @@
   /** Runs the handler wired to `event`, in a running application. */
   function fire(event: PartEvent) {
     // The handler as written, with the values it runs with: `digit(7)`.
-    const wired = p.handlers.find((h) => h.event === event);
-    if (live && wired && p.name && !design) live.event(p.name, event, handlerCall(wired));
+    const call = wiredCall(p.handlers, event);
+    if (live && call !== null && !design) live.event(p.name ?? "", event, call);
   }
 
   function click() {

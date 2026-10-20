@@ -4,7 +4,7 @@
      not packed. -->
 <Project>
   <PropertyGroup>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <Authors>Peter van de Pas</Authors>
     <PackageLicenseFile>assets/LICENSE.txt</PackageLicenseFile>
     <PackageIcon>assets/icon.png</PackageIcon>

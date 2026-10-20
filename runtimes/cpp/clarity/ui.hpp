@@ -34,6 +34,9 @@ struct PartState {
     std::optional<bool> checked;
     /// A canvas's drawing: its shapes, in order (conformance/drawing.json).
     std::optional<nlohmann::json> drawing;
+    /// Where a canvas was last clicked, in its units: x and y, and whatever
+    /// else the screen tells about the pointer, kept as it came.
+    std::optional<nlohmann::json> pointer;
 };
 
 /// One open window: its data by name, its parts' properties and the
@@ -107,6 +110,9 @@ public:
         if (!drawing) drawing = nlohmann::json::array();
         drawing->push_back(std::move(shape));
     }
+    /// Where a canvas was last clicked, across (`canvas.x`) and down (`canvas.y`); 0 before any click.
+    int64_t x(const std::string& part) const { return pointer(part, "x"); }
+    int64_t y(const std::string& part) const { return pointer(part, "y"); }
     /// The message a handler set on an input, or empty text.
     std::string error(const std::string& part) const;
     void set_error(const std::string& part, Text value) { parts_[part].error = std::move(value); }
@@ -143,6 +149,7 @@ public:
     Reply reply(const std::string& window, nlohmann::json data) const;
 
 private:
+    int64_t pointer(const std::string& part, const char* key) const;
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;

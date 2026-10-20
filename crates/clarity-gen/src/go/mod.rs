@@ -327,6 +327,8 @@ fn schema_go(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec
         body.push_str("\t}},\n");
     }
     body.push_str("}\n");
+    // Empty lists close on the line they open, as gofmt writes them.
+    let body = body.replace("[][]string{\n\t}}", "[][]string{}}").replace("[]SourceSteps{\n}", "[]SourceSteps{}");
     if errors.is_empty() { Ok(go_file(&body)) } else { Err(errors) }
 }
 

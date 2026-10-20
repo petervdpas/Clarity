@@ -47,3 +47,19 @@ fn a_draw_starts_an_empty_drawing_that_travels_with_the_part() {
     let reply = ui.reply("Main", serde_json::Map::new());
     assert_eq!(serde_json::to_value(&reply.state.parts["dial"]).unwrap()["drawing"], serde_json::json!([]));
 }
+
+#[test]
+fn a_canvas_says_where_it_was_clicked_as_every_runtime_does() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(DRAWING).unwrap();
+    for case in file["points"].as_array().unwrap() {
+        let part: PartState = serde_json::from_value(case["part"].clone()).unwrap();
+        let mut state = WindowState::default();
+        state.parts.insert("board".into(), part);
+        let ui = Ui::from_state(&state);
+        assert_eq!((ui.x("board"), ui.y("board")), (case["x"].as_i64().unwrap(), case["y"].as_i64().unwrap()), "{case}");
+        // What the pointer holds besides x and y travels back unchanged.
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["board"]).unwrap(), case["part"], "{case}");
+    }
+}

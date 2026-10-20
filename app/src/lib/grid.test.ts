@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { GAP, ROW_HEIGHT, rowIn, windowSize } from "./grid.ts";
+import { GAP, ROW_HEIGHT, resized, rowIn, windowSize } from "./grid.ts";
 
 test("a point is in the row whose height it falls in, gaps counting to the row above", () => {
   const tracks = [ROW_HEIGHT, 200, ROW_HEIGHT];
@@ -63,4 +63,17 @@ test("resizing a panel scales what is inside it, all in one batch of edits", () 
 test("a window opens at its own size, or at the standard one", () => {
   assert.deepEqual(windowSize({ size: { width: 320, height: 460 } }), { width: 320, height: 460 });
   assert.deepEqual(windowSize({ size: null }), { width: 1100, height: 760 });
+});
+
+test("dragging a window's edge sizes it in whole pixels, within the sizes a window may have", () => {
+  const start = { width: 420, height: 540 };
+  // The right edge moves the width, the bottom edge the height, the corner both.
+  assert.deepEqual(resized(start, "right", 30.6, 99, 1), { width: 451, height: 540 });
+  assert.deepEqual(resized(start, "bottom", 99, -40, 1), { width: 420, height: 500 });
+  assert.deepEqual(resized(start, "corner", 10, 20, 1), { width: 430, height: 560 });
+  // Shown at half size, a pixel on the screen is two of the window's.
+  assert.deepEqual(resized(start, "corner", 10, 20, 0.5), { width: 440, height: 580 });
+  // No smaller or larger than a window may be.
+  assert.deepEqual(resized(start, "corner", -1000, -1000, 1), { width: 200, height: 150 });
+  assert.deepEqual(resized(start, "corner", 9000, 9000, 1), { width: 3840, height: 2160 });
 });

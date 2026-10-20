@@ -9,7 +9,7 @@
   import { frameForPage } from "../lib/frame";
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
-  import { provideLive, type PartState } from "../lib/live";
+  import { provideLive, type PartState, type Pointer } from "../lib/live";
   import { errorText, offeredThemes, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import { themeChoice } from "../lib/scheme.svelte";
@@ -170,6 +170,9 @@
     },
     setChecked(part: string, checked: boolean) {
       if (current) current.parts[part] = { ...current.parts[part], checked };
+    },
+    setPointer(part: string, pointer: Pointer) {
+      if (current) current.parts[part] = { ...current.parts[part], pointer };
     },
     refOptions(entity: string) {
       const known = options[entity];

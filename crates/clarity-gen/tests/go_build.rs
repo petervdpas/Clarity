@@ -92,7 +92,10 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     run(&out, "go", &["build", "-o", name, "."]);
     let said = run(&out, &out.join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
-    assert!(out.join("data/app.db").exists());
+    // A project with records has its database; one without needs none.
+    if project.entities().next().is_some() {
+        assert!(out.join("data/app.db").exists());
+    }
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -348,4 +351,18 @@ fn functions_named_like_types_build_in_go() {
     std::fs::write(out.join("names_test.go"), NAME_CLASH_TEST).unwrap();
     run(&out, "go", &["test", "./..."]);
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The fourth example: a dial drawn by code, its needle placed by an engine.
+#[test]
+#[ignore]
+fn the_dial_example_builds_and_runs_in_go() {
+    builds_and_runs_in_go("dial", "Dial", Runtime::Local);
+}
+
+/// The fifth example: noughts and crosses, each window's game kept by an engine.
+#[test]
+#[ignore]
+fn the_noughts_example_builds_and_runs_in_go() {
+    builds_and_runs_in_go("noughts", "Noughts", Runtime::Local);
 }

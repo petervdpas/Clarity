@@ -48,8 +48,15 @@ function total_length(tracks: list<Track>) -> duration
         total = total + track.length
     return total
 
+// Reads the size of a picture from the first bytes of its file; its
+// source is in engines/images.
+engine Images from "images.wasm"
+    function width(picture: bytes) -> integer
+    function height(picture: bytes) -> integer
+
 // Photos dropped in the photos folder, named after the artist
-// (Miles Davis.jpg), become the photos of artists that have none.
+// (Miles Davis.jpg), become the photos of artists that have none, when
+// they are at least 200 pixels on each side.
 action find_artist_photos()
     effects db.write, files.read
     let found = files f in photos where f.extension == "jpg" or f.extension == "png"
@@ -57,8 +64,10 @@ action find_artist_photos()
     for artist in artists
         for f in found
             if f.name == artist.name + "." + f.extension
-                artist.photo = f
-                save artist
+                let picture = read bytes of f
+                if Images.width(picture) >= 200 and Images.height(picture) >= 200
+                    artist.photo = f
+                    save artist
 
 // A copy of every photo in the exports folder, byte for byte.
 action back_up_photos()

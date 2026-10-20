@@ -632,3 +632,17 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     has(vm, "    protected override void Redraw()\n    {\n        Dial.BeginDrawing();\n        OnDrawDial();\n        Dial.EndDrawing();\n    }");
     has(file(&files, "Windows/DialView.axaml"), "<c:CanvasView x:Name=\"dial\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"6\" Drawing=\"{Binding Dial.Drawing}\" UnitsWidth=\"200\" UnitsHeight=\"100\"");
 }
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SHOP}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let project = load_sources([("shop.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let vm = file(&files, "Windows/DialViewModel.cs");
+    has(vm, "Dial.X + Dial.Y");
+    // The canvas gives the window where it was clicked, then runs the handler.
+    has(vm, "    [RelayCommand]\n    void ClickDialAt(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    });");
+    has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickDialAtCommand}\"");
+}

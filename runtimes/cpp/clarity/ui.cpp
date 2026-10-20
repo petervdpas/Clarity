@@ -1,6 +1,7 @@
 #include "clarity/ui.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <mutex>
 
 namespace clarity {
@@ -30,6 +31,13 @@ bool Ui::enabled(const std::string& part) const { return part_or(parts_, part, &
 bool Ui::readonly(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::readonly, design); }
 bool Ui::checked(const std::string& part) const { return part_or(parts_, part, &PartState::checked, false); }
 std::string Ui::text(const std::string& part) const { return part_or(parts_, part, &PartState::text, std::string()); }
+
+int64_t Ui::pointer(const std::string& part, const char* key) const {
+    auto found = parts_.find(part);
+    if (found == parts_.end() || !found->second.pointer) return 0;
+    auto at = found->second.pointer->find(key);
+    return at != found->second.pointer->end() && at->is_number() ? static_cast<int64_t>(std::floor(at->get<double>())) : 0;
+}
 
 std::string Ui::caption(const std::string& part, const std::string& design) const {
     auto found = parts_.find(part);
@@ -90,6 +98,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.text) out["text"] = *p.text;
     if (p.checked) out["checked"] = *p.checked;
     if (p.drawing) out["drawing"] = *p.drawing;
+    if (p.pointer) out["pointer"] = *p.pointer;
 }
 
 void from_json(const nlohmann::json& in, PartState& p) {
@@ -104,6 +113,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("text", p.text);
     take("checked", p.checked);
     if (in.contains("drawing") && in["drawing"].is_array()) p.drawing = in["drawing"];
+    if (in.contains("pointer") && in["pointer"].is_object()) p.pointer = in["pointer"];
 }
 
 void to_json(nlohmann::json& out, const WindowState& s) {

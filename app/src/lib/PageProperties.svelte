@@ -9,7 +9,7 @@
   import type { Surface } from "./generated/Surface";
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
-  import { WINDOW_HEIGHT, WINDOW_WIDTH } from "./grid";
+  import { WINDOW_HEIGHT, WINDOW_MAX_HEIGHT, WINDOW_MAX_WIDTH, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH } from "./grid";
   import { layout } from "./layout.svelte";
   import { cellEdits, describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesignerStore.svelte";
@@ -513,9 +513,9 @@
     <!-- The size its desktop window opens at; both empty for the standard size. -->
     <div class="prop size">
       <span>Size</span>
-      <input type="number" min="200" max="3840" aria-label="Width in pixels" placeholder={String(WINDOW_WIDTH)} value={page.size?.width ?? ""} onchange={(e) => setSize(e.currentTarget.value, page.size?.height ?? WINDOW_HEIGHT)} />
+      <input type="number" min={WINDOW_MIN_WIDTH} max={WINDOW_MAX_WIDTH} aria-label="Width in pixels" placeholder={String(WINDOW_WIDTH)} value={page.size?.width ?? ""} onchange={(e) => setSize(e.currentTarget.value, page.size?.height ?? WINDOW_HEIGHT)} />
       <span class="times">x</span>
-      <input type="number" min="150" max="2160" aria-label="Height in pixels" placeholder={String(WINDOW_HEIGHT)} value={page.size?.height ?? ""} onchange={(e) => setSize(page.size?.width ?? WINDOW_WIDTH, e.currentTarget.value)} />
+      <input type="number" min={WINDOW_MIN_HEIGHT} max={WINDOW_MAX_HEIGHT} aria-label="Height in pixels" placeholder={String(WINDOW_HEIGHT)} value={page.size?.height ?? ""} onchange={(e) => setSize(page.size?.width ?? WINDOW_WIDTH, e.currentTarget.value)} />
     </div>
     {/if}
 

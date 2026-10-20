@@ -36,6 +36,8 @@ fn the_web_renderer_uses_the_shared_values() {
     assert_eq!(constant(GRID_TS, "WINDOW_WIDTH"), WINDOW_WIDTH);
     assert_eq!(constant(GRID_TS, "WINDOW_HEIGHT"), WINDOW_HEIGHT);
     assert_eq!(constant(GRID_TS, "CONTENT_PADDING"), CONTENT_PADDING);
+    assert_eq!((constant(GRID_TS, "WINDOW_MIN_WIDTH"), constant(GRID_TS, "WINDOW_MIN_HEIGHT")), clarity_spec::layout::WINDOW_MIN);
+    assert_eq!((constant(GRID_TS, "WINDOW_MAX_WIDTH"), constant(GRID_TS, "WINDOW_MAX_HEIGHT")), clarity_spec::layout::WINDOW_MAX);
     assert_eq!(constant(RUNTIME_SVELTE, "MESSAGE_MS"), MESSAGE_MS);
     assert_eq!(constant(FRAME_VIEW, "SIDEBAR_COLUMN_PX"), SIDEBAR_COLUMN);
     // The space around a running window's grid, written in its CSS.
@@ -60,7 +62,8 @@ fn every_window_opens_at_the_size_the_designer_shows() {
     assert!(SHOWN_WINDOW.contains("WINDOW_WIDTH"));
     // The designer and the preview both show the window so, at its own size
     // (or the standard one) and with the running window's padding around its grid.
-    for (name, view) in [("designer", PAGE_DESIGNER), ("preview", APP)] {
-        assert!(view.contains("<ShownWindow") && view.contains("clientWidth={windowSize(page).width}") && view.contains("windowSize(page).height") && view.contains("CONTENT_PADDING"), "{name}");
-    }
+    assert!(APP.contains("<ShownWindow") && APP.contains("clientWidth={windowSize(page).width}") && APP.contains("windowSize(page).height") && APP.contains("CONTENT_PADDING"), "preview");
+    // The designer shows the size a window's edge is dragged to while it is dragged.
+    assert!(PAGE_DESIGNER.contains("const shownSize = $derived(sizing ?? windowSize(page));"), "designer");
+    assert!(PAGE_DESIGNER.contains("<ShownWindow {area} clientWidth={shownSize.width}") && PAGE_DESIGNER.contains("style:height=\"{shownSize.height}px\"") && PAGE_DESIGNER.contains("CONTENT_PADDING"), "designer");
 }

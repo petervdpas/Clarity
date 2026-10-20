@@ -1066,7 +1066,7 @@ impl<'a> Emitter<'a> {
         let info = self.window.and_then(|w| w.parts.get(&part)).cloned().unwrap_or_default();
         let quoted = string(&part);
         match property.as_str() {
-            "visible" | "enabled" | "error" | "text" | "checked" => format!("clarity_ui_{property}(ui, {quoted})"),
+            "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("clarity_ui_{property}(ui, {quoted})"),
             "caption" => format!("clarity_ui_caption(ui, {quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("clarity_ui_readonly(ui, {quoted}, {})", info.readonly),
             "selected" => {

@@ -112,7 +112,8 @@ fn the_shop_example_builds_for_every_database() {
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = clarity_gen::generate(&project, &settings).unwrap();
         let cargo = files.iter().find(|f| f.path == "Cargo.toml").unwrap();
-        assert!(cargo.text.contains(&format!("features = [{feature}]")), "{}", cargo.text);
+        // The database's driver, beside the engines the shop has.
+        assert!(cargo.text.contains(&format!("features = [\"engines\", {feature}]")), "{}", cargo.text);
 
         let out = std::env::temp_dir().join(format!("clarity-gen-build-{feature}-{}", std::process::id()).replace('"', ""));
         let _ = std::fs::remove_dir_all(&out);
@@ -437,4 +438,18 @@ fn an_engine_answers_in_the_generated_application() {
     let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     assert!(output.status.success(), "{report}\nthe project is in {}", out.display());
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The fourth example: a dial drawn by code, its needle placed by an engine.
+#[test]
+#[ignore]
+fn the_dial_example_builds() {
+    builds_with_cargo("dial", Runtime::Local);
+}
+
+/// The fifth example: noughts and crosses, each window's game kept by an engine.
+#[test]
+#[ignore]
+fn the_noughts_example_builds() {
+    builds_with_cargo("noughts", Runtime::Local);
 }

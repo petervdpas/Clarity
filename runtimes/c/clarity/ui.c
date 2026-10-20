@@ -108,6 +108,18 @@ void clarity_ui_draw(ClarityUi* ui, const char* part, cJSON* shape) {
     cJSON_AddItemToArray(p->drawing, shape);
 }
 
+static int64_t pointer_at(const ClarityUi* ui, const char* part, const char* key) {
+    const ClarityPart* p = found(ui, part);
+    const cJSON* at = p && p->pointer ? cJSON_GetObjectItemCaseSensitive(p->pointer, key) : NULL;
+    if (!cJSON_IsNumber(at)) return 0;
+    int64_t whole = (int64_t)at->valuedouble;
+    return at->valuedouble < (double)whole ? whole - 1 : whole;
+}
+
+int64_t clarity_ui_x(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "x"); }
+
+int64_t clarity_ui_y(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "y"); }
+
 const char* clarity_ui_error(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return p && p->error ? clarity_text_show(p->error) : "";
@@ -214,6 +226,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->text) cJSON_AddStringToObject(out, "text", p->text);
     if (p->has_checked) cJSON_AddBoolToObject(out, "checked", p->checked);
     if (p->drawing) cJSON_AddItemToObject(out, "drawing", cJSON_Duplicate(p->drawing, true));
+    if (p->pointer) cJSON_AddItemToObject(out, "pointer", cJSON_Duplicate(p->pointer, true));
     return out;
 }
 
@@ -226,6 +239,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "checked"))) p->has_checked = true, p->checked = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "text"))) p->text = clarity_copy(v->valuestring);
     if (cJSON_IsArray(v = cJSON_GetObjectItemCaseSensitive(in, "drawing"))) p->drawing = cJSON_Duplicate(v, true);
+    if (cJSON_IsObject(v = cJSON_GetObjectItemCaseSensitive(in, "pointer"))) p->pointer = cJSON_Duplicate(v, true);
     ClarityText* text;
     v = cJSON_GetObjectItemCaseSensitive(in, "caption");
     if (v && !cJSON_IsNull(v)) {

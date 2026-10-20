@@ -98,6 +98,30 @@ handler discount_clicked
 
 ## Writing an engine
 
+The easiest way is Rust with the library `clarity-engine` (in Clarity's repository, `crates/clarity-engine`). It writes the engine interface for you; a function takes its arguments as a tuple, in the declared order, and gives back anything serde writes:
+
+```rust
+clarity_engine::interface!();
+
+clarity_engine::function!(total, |(lines,): (Vec<Line>,)| Ok(priced(&lines).to_string()));
+clarity_engine::on_open!(|| Ok(()));
+```
+
+`Err` is the engine's refusal, in its words. `clarity_engine::clock()`, `random()` and `log(...)` are the services, and `clarity_engine::Bytes` is `bytes`. Build the engine as a `cdylib` for `wasm32-unknown-unknown` and copy the `.wasm` file into the `engines` folder.
+
+The examples have one each, with their source next to the file:
+
+| Example | Engine | What it shows |
+|---|---|---|
+| shop | `Pricing` | an order's total from its lines, with volume discounts; called from a data event |
+| records | `Images` | the size of a picture, read from its file's `bytes` |
+| dial | `Gauge` | the needle's angle and colour, called from a draw handler |
+| noughts | `Board` | a game kept with `state per window` and `on open`, using `random` |
+
+`examples/build-engines.sh` builds them all from their sources.
+
+### The engine interface
+
 Any language that compiles to plain WebAssembly can make an engine, as long as the module imports nothing but the services it uses. Build for a target without an operating system: Rust's `wasm32-unknown-unknown`, clang's `--target=wasm32` without a C library, Zig's `wasm32-freestanding`. A target such as WASI adds imports of its own, and Clarity refuses the module.
 
 The module exports:
@@ -131,7 +155,7 @@ Values travel as Clarity's JSON:
 | `list<Entity>` | an array of those objects |
 | `bytes` | a string with the bytes as base64, as `"AQID"` |
 
-A function in Rust, with `serde_json`:
+A function in Rust without the library, with `serde_json`:
 
 ```rust
 #[unsafe(no_mangle)]

@@ -424,6 +424,8 @@ impl<'a> Emitter<'a> {
             "error" => "error",
             "readonly" => "readonly",
             "selected" => "selected",
+            "x" => "x",
+            "y" => "y",
             _ => return None,
         };
         Some((name.clone(), property))

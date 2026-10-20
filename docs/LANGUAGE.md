@@ -519,7 +519,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the images folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `draw`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `draw`, `click`, `pointer`, `key` |
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
@@ -832,7 +832,30 @@ code Main
 | `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
 
 - A color is a color of the theme by name (`"accent"`, `"text"`, a color the theme declares) or written out (`"#101810"`); a name the theme does not have is its text color.
-- The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it.
+- The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it, and the handlers it calls that nothing else runs: `draw_mark(5, 100, 100)` can draw one square of a board. A handler that an event or another handler also runs cannot draw, since its shapes would land outside a drawing.
+- `on click: handler` on a canvas runs the handler when the canvas is clicked, with `canvas.x` and `canvas.y` saying where, in the canvas's units, rounded down. They are read, not set, and 0 before the first click. A click beside the drawing, where the part shows none of it, runs nothing. The window draws the canvas anew after the handler, as after any other.
+
+```clarity
+page Game: window
+    data status: text
+    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: draw_board on click: board_clicked
+
+code Game
+    handler draw_board
+        board.clear("panel")
+
+    handler board_clicked
+        let square = 1
+        if board.x >= 200
+            square = 3
+        else if board.x >= 100
+            square = 2
+        if board.y >= 200
+            square = square + 6
+        else if board.y >= 100
+            square = square + 3
+        status = "Square {square}"
+```
 - `sin(degrees)` and `cos(degrees)` give a decimal, rounded to 10 decimals.
 
 ### Data events

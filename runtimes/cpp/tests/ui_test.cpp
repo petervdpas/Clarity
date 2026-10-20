@@ -3,6 +3,7 @@
 // other runtimes.
 
 #include "check.hpp"
+#include "conformance.hpp"
 #include "clarity/ui.hpp"
 
 using namespace clarity;
@@ -80,6 +81,19 @@ TEST(a_draw_starts_an_empty_drawing_that_travels_with_the_part) {
     Ui again(reply.state);
     again.begin_drawing("dial");
     CHECK_EQ(json(again.reply("Main", json::object()).state)["parts"]["dial"]["drawing"], json::array());
+}
+
+TEST(a_canvas_says_where_it_was_clicked_as_every_runtime_does) {
+    auto points = conformance("drawing.json")["points"];
+    CHECK(!points.empty());
+    for (const auto& c : points) {
+        WindowState state = json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"board", c["part"]}}}}.get<WindowState>();
+        Ui ui(state);
+        CHECK_EQ(ui.x("board"), c["x"].get<int64_t>());
+        CHECK_EQ(ui.y("board"), c["y"].get<int64_t>());
+        // What the pointer holds besides x and y travels back unchanged.
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["board"], c["part"]);
+    }
 }
 
 // Every window that opens has a number of its own, which its handlers'

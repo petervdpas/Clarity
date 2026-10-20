@@ -56,6 +56,15 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
         drawn = null;
     }
 
+    /// <summary>Where a canvas was last clicked; null before any click.</summary>
+    public Pointer? Pointer { get; set; }
+
+    /// <summary>Where a canvas was last clicked, across: <c>canvas.x</c>; 0 before any click.</summary>
+    public long X => Pointer?.X ?? 0;
+
+    /// <summary>Where a canvas was last clicked, down: <c>canvas.y</c>.</summary>
+    public long Y => Pointer?.Y ?? 0;
+
     /// <summary>The text an unbound input holds.</summary>
     public string Text { get => text; set => SetProperty(ref text, value); }
     string text = "";

@@ -490,6 +490,10 @@ impl<'a> Emitter<'a> {
                     Some(t) if !is_decimal(&t) && matches!(t, TypeInfo::Integer | TypeInfo::Duration) => {
                         out.push_str(&format!("var {target} {} = {code}\n", value_type(&t)))
                     }
+                    // Go would make a bare number an int.
+                    None if matches!(self.types.type_of(value), TypeInfo::Integer | TypeInfo::Duration) => {
+                        out.push_str(&format!("var {target} {} = {code}\n", value_type(&self.types.type_of(value))))
+                    }
                     _ => out.push_str(&format!("{target} := {code}\n")),
                 }
             }
@@ -904,6 +908,8 @@ impl<'a> Emitter<'a> {
             "readonly" => format!("ui.Readonly({quoted}, {})", info.readonly),
             "text" => format!("ui.Text({quoted})"),
             "checked" => format!("ui.Checked({quoted})"),
+            "x" => format!("ui.X({quoted})"),
+            "y" => format!("ui.Y({quoted})"),
             "selected" => match info.bind {
                 Some(bind) => self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&bind)), pre),
                 None => {

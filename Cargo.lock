@@ -649,6 +649,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-engine"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "clarity-gen"
 version = "0.1.0"
 dependencies = [

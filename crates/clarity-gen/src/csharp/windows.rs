@@ -843,10 +843,14 @@ impl<'a> Window<'a> {
             // A canvas drawn by its draw handler, through the runtime.
             WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
+                let name = member(named.unwrap_or_default());
+                let click = match Self::handler(widget, Event::Click) {
+                    Some(_) => format!(" Command=\"{{Binding Click{name}AtCommand}}\""),
+                    None => String::new(),
+                };
                 let _ = writeln!(
                     out,
-                    "{pad}<c:CanvasView {at} Drawing=\"{{Binding {}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
-                    member(named.unwrap_or_default())
+                    "{pad}<c:CanvasView {at} Drawing=\"{{Binding {name}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{click}{plain_state}{extra} />",
                 );
             }
             WidgetKind::Image | WidgetKind::Canvas => {
@@ -1102,6 +1106,17 @@ public partial class {name}View : UserControl
                 .map(|(canvas, handler)| format!("        {c}.BeginDrawing();\n        On{}();\n        {c}.EndDrawing();\n", pascal(handler), c = member(canvas)))
                 .collect();
             let _ = write!(events, "    protected override void Redraw()\n    {{\n{body}    }}\n\n");
+        }
+
+        // A click on a canvas: where it was, then its handler.
+        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas) {
+            let (Some(canvas), Some(click)) = (&widget.props.name, Self::handler(widget, Event::Click)) else { continue };
+            let _ = write!(
+                events,
+                "    [RelayCommand]\n    void Click{c}At(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }});\n\n",
+                pascal(&click.handler),
+                c = member(canvas)
+            );
         }
 
         // Windows opened by a click, and the built-in targets.

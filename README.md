@@ -14,6 +14,7 @@ crates/clarity-project/  the project file: stack, output and data sources
 crates/clarity-vault/    Clarity's vault of secrets and its connections
 crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ application
 crates/clarity-cli/      the `clarity` command
+crates/clarity-engine/   what an engine written in Rust stands on: the engine interface, typed functions, services
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
 runtimes/csharp/         the runtime of generated C# applications, with Avalonia
 runtimes/go/             the runtime of generated Go applications, with Wails
@@ -24,11 +25,13 @@ app/                     Clarity: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build
   src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
 examples/                example projects, each a project file with a folder of its modules:
-  shop                   customers and orders
-  records                a record collection, with albums, tracks and loans
+  shop                   customers and orders, priced by an engine
+  records                a record collection, with albums, tracks and loans; an engine reads photo sizes
   todo                   tasks with a done flag, edited in their table
   calculator             a calculator: values in clicks, plain window data, a seven-segment display
-  dial                   a speed dial drawn on a canvas by code
+  dial                   a speed dial drawn on a canvas by code, its needle placed by an engine
+  noughts                noughts and crosses against an engine that keeps each window's game
+  build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
 Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Runtime`, `Clarity.Avalonia`). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`).

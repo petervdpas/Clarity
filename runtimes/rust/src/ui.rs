@@ -255,6 +255,10 @@ pub struct PartState {
     /// A canvas's drawing: its shapes, in order (conformance/drawing.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drawing: Option<Vec<Value>>,
+    /// Where a canvas was last clicked, in its units: `x` and `y`, and
+    /// whatever else the screen tells about the pointer, kept as it came.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pointer: Option<Map<String, Value>>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -368,6 +372,21 @@ impl Ui {
     /// Adds a shape to a canvas's drawing: `{"op": "line", ...}`.
     pub fn draw(&mut self, part: &str, shape: Value) {
         self.parts.entry(part.to_string()).or_default().drawing.get_or_insert_with(Vec::new).push(shape);
+    }
+
+    /// Where a canvas was last clicked, across: `canvas.x`; 0 before any click.
+    pub fn x(&self, part: &str) -> i64 {
+        self.pointer(part, "x")
+    }
+
+    /// Where a canvas was last clicked, down: `canvas.y`.
+    pub fn y(&self, part: &str) -> i64 {
+        self.pointer(part, "y")
+    }
+
+    fn pointer(&self, part: &str, key: &str) -> i64 {
+        let value = self.parts.get(part).and_then(|p| p.pointer.as_ref()).and_then(|p| p.get(key));
+        value.and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f.floor() as i64))).unwrap_or(0)
     }
 
     /// The caption a handler set, or the one from the design.

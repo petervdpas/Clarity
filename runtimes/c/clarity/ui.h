@@ -24,6 +24,10 @@ typedef struct {
     /// A canvas's drawing: an array of its shapes, in order (NULL: none;
     /// conformance/drawing.json).
     cJSON* drawing;
+    /// Where a canvas was last clicked, in its units: an object with x and y,
+    /// and whatever else the screen tells about the pointer, kept as it came
+    /// (NULL: no click yet).
+    cJSON* pointer;
 } ClarityPart;
 
 /// The selected row of a table or list.
@@ -99,6 +103,9 @@ void clarity_ui_set_caption(ClarityUi* ui, const char* part, const ClarityText* 
 void clarity_ui_begin_drawing(ClarityUi* ui, const char* part);
 /// Adds a shape to a canvas's drawing: {"op": "line", ...}; it takes `shape`.
 void clarity_ui_draw(ClarityUi* ui, const char* part, cJSON* shape);
+/// Where a canvas was last clicked, across (`canvas.x`) and down (`canvas.y`); 0 before any click.
+int64_t clarity_ui_x(const ClarityUi* ui, const char* part);
+int64_t clarity_ui_y(const ClarityUi* ui, const char* part);
 /// The message a handler set on an input, or "".
 const char* clarity_ui_error(const ClarityUi* ui, const char* part);
 void clarity_ui_set_error(ClarityUi* ui, const char* part, const ClarityText* value);

@@ -851,3 +851,14 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     assert!(main.contains("ui.begin_drawing(\"dial\");\n            modules::sales::dial__draw_dial(db, &mut w, &mut ui)?;"), "{main}");
     assert!(main.contains("redraw(db, "), "{main}");
 }
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let sales = file(&files, "src/modules/sales.rs");
+    assert!(sales.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{sales}");
+}

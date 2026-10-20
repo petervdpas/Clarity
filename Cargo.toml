@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "crates/clarity-gen", "crates/clarity-cli", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-engine", "app/src-tauri"]
 
 [workspace.package]
 edition = "2024"

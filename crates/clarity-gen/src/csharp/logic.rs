@@ -151,6 +151,8 @@ fn part_property(property: &str) -> Option<&'static str> {
         "checked" => "IsChecked",
         "error" => "Error",
         "selected" => "SelectedItem",
+        "x" => "X",
+        "y" => "Y",
         _ => return None,
     })
 }

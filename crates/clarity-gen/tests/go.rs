@@ -652,3 +652,25 @@ fn a_function_never_takes_the_name_of_a_type() {
     has(code, "type Size string");
     has(code, "func NewOrder() Order");
 }
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "sales_module.go");
+    assert!(code.contains("ui.X(\"dial\") + ui.Y(\"dial\")"), "{code}");
+}
+
+/// A local an integer starts in is an int64, as Clarity's integers are,
+/// though Go would make a bare number an int.
+#[test]
+fn a_local_from_a_number_is_an_int64() {
+    let source = format!("{SALES}{DIAL}") + "\n    handler count_up\n        let step = 1\n        speed = speed + step\n";
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "sales_module.go");
+    assert!(code.contains("var step int64 = 1\n"), "{code}");
+}

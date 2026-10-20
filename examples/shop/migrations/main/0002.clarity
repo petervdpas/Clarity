@@ -1,0 +1,8 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Order lines"
+    add entity OrderLine
+        order: ref Order
+        product: text(80)
+        quantity: integer, default 1
+        price: money

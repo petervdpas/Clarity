@@ -28,6 +28,15 @@ sealed class GaugeViewModel(Db db) : WindowViewModel(db)
     }
 
     public void Faster() => Handle(() => Speed++);
+
+    /// What a generated window gives a canvas with `on click`.
+    public string Clicked { get; private set; } = "";
+
+    public void DialClicked(Pointer at) => Handle(() =>
+    {
+        Dial.Pointer = at;
+        Clicked = $"{Dial.X},{Dial.Y}";
+    });
 }
 
 public class DrawingTests
@@ -85,5 +94,30 @@ public class DrawingTests
         window.Show();
         // Kept in proportion and centered: 2 pixels a unit, 50 pixels above and below.
         Assert.Equal((2.0, 0.0, 50.0), view.Placement());
+    }
+
+    [Fact]
+    public void ACanvasFindsWhereItWasClickedAsEveryRendererDoes()
+    {
+        var file = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "drawing.json")));
+        var cases = file.RootElement.GetProperty("clicks").EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var c in cases)
+        {
+            double At(string key, int i) => c.GetProperty(key)[i].GetDouble();
+            var found = CanvasView.PointOf(new(At("units", 0), At("units", 1)), new(At("part", 0), At("part", 1)), new(At("at", 0), At("at", 1)));
+            var point = c.GetProperty("point");
+            Assert.Equal(point.ValueKind == System.Text.Json.JsonValueKind.Null ? null : new Pointer(point[0].GetInt64(), point[1].GetInt64()), found);
+        }
+    }
+
+    [AvaloniaFact]
+    public void AClickOnACanvasRunsItsHandlerWithWhereAndItIsDrawnAnew()
+    {
+        var vm = new GaugeViewModel(null!);
+        vm.Opened();
+        Assert.Equal((0L, 0L), (vm.Dial.X, vm.Dial.Y));
+        vm.DialClicked(new Pointer(120, 150));
+        Assert.Equal(("120,150", 2), (vm.Clicked, vm.Draws));
     }
 }

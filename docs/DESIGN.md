@@ -752,7 +752,72 @@ Built (N3, 2026-10-20): `uses clock, random, log` and `limit 2 seconds, 64 MB` (
 
 Built (N4, 2026-10-20): `state per app`, `state per window` and `on open` on all five stacks. Hosts load an engine from a declaration (functions, `uses`, limits, state, `on open`) and keep instances by window number, one at 0 for state per app, behind a lock, so the calls of an engine with state take turns. `on open` calls the export `clarity_open` with the engine interface and no arguments on every new instance; when it refuses or answers badly, the call it came before fails with `its on open refused: <why>` or `its on open gave no answer`. A failed call or one past its limit drops the instance; a refusal keeps it (`conformance/engines.json`, `kept` and `windows`). Every open window now has a number: `instance` in the window state that travels to the screen and back on the web stacks (given out where the state is made, kept by every reply), and `Instance` on the ViewModel in C#. Each core runtime keeps a registry of what listens for closed windows; the shell reports a window after its own `on close` has run (a failing `on close` keeps the window open, so its engine instance stays too), and an engine with state per window listens from the moment it loads. Rust's generated `main.rs` calls its engines' `close_window` itself. The checker allows a call to an engine with state per window only in a window's handlers. Not covered: a desktop window that opened `in new window` and is closed by its window manager reports none of its windows, so their instances stay until the application ends. Also built: `bytes`, the contents of a file as a value (`read bytes of f`, `write b to store "path"`, `b.size`), which crosses to an engine as base64 text: natively in Go and C#, through the runtime's base64 in Rust, C and C++ (`conformance/files.json`, `bytes`; the records example backs up its photos with it). Bytes are no window data.
 
+Engines in the examples (2026-10-20): `crates/clarity-engine` is what an engine written in Rust stands on (the interface as `interface!()`, functions with typed tuple arguments as `function!`, `on_open!`, the services, `Bytes`), so an engine holds only its own logic; N2 can generate against it. Each example has an engine with its source in `<example>/engines/<name>/`, built by `examples/build-engines.sh`: Pricing (shop, order lines priced in a data event), Images (records, picture sizes from `bytes`), Gauge (dial, called from a draw handler) and Board (the new noughts example, `state per window`, `on open`, `random`). The dial and noughts examples now have build tests on every stack too; they found that a project without entities wrote a Go `schema.go` gofmt would change.
+
 Not an engine: code that needs the database or files while it works. That is an action, which Clarity already compiles to every stack and checks for its effects; an action can call an engine for the processing in between.
+
+### 5.12 Engines beside the screen, engines in Clarity, and progress (2026-10-20, a design)
+
+Three pieces that belong together, since each needs the screen to change while code runs: progress of a long call on the backend (P), engines written in Clarity (N2), and engines that run beside the screen, in the renderer, at the pace of the screen (N5). Nothing here is built yet. The decisions still open are marked **Open**.
+
+#### Progress of a long call
+
+An engine that works long (a document of a thousand pages, a schedule for a year) says how far it is: `uses progress`, and the engine calls `clarity.progress(done, total)`. While the call runs, the window shows a progress bar with a **Stop** button, in the place its messages show.
+
+- **The way to the screen.** Today a handler runs and then replies; nothing reaches the screen in between. Progress needs a message while the handler runs: each shell already has a way to send one, used for nothing else yet: Tauri's `emit`, Wails' events, the webview's `eval` from the shell's own thread (C and C++), and Avalonia's `Dispatcher.UIThread.Post`. The runtime gives the host a progress sink per call; the shell sends `progress {window, done, total}` to the renderer, at most ten times a second.
+- **Stop.** The renderer sends `stop {window}`; the host stops the engine's call at its next check, the same place the time limit stops it (a fuel slice in wasmi, the context in wazero, the epoch in Wasmtime, the yield hook in wasm3). The call fails with `engine X failed in f: it was stopped`, which the handler shows as any error; an engine with state drops its instance, as after any failure.
+- **The window stays busy but painted.** While a handler runs, the window takes no other click (as today), shows the bar and keeps painting. For that the handler leaves the screen's thread: Wails already calls a bound method on a goroutine; Tauri's commands become `async`; the C and C++ webview shells answer a bound call later from a thread of their own (`webview_return`); Avalonia runs the handler as a task and posts its reply back.
+- **Also for code.** A handler's own long loop can show progress too: `progress n of total` as a statement in handlers and actions, so a long import shows the same bar. **Open:** whether this statement comes with the engine service or later.
+
+#### Engines written in Clarity (N2)
+
+An engine without `from` is written in Clarity, in the module that declares it:
+
+```
+engine Scoring
+    record Throw
+        pins: integer
+    function score(throws: list<Throw>) -> integer
+        let total = 0
+        for t in throws
+            total = total + t.pins
+        return total
+```
+
+- **What its code may do.** Values, records, lists, `if`, `for`, `while`, `let`, `return`, `refuse`, the arithmetic and text of the rest of the language, `round`, `sin` and `cos`, and the services it `uses` as built-ins (`now()`, `random(n)`, `log "..."`). No database, files, windows or messages: the checker reports those as it reports a `save` in a function. An engine also gets what plain functions lack: `record` declarations (values with fields, no table) and lists it builds (`add t to throws`, `remove`, `count`).
+- **Compiled once, by Clarity.** The Rust generator writes the engine as a crate on `clarity-engine` and builds it for `wasm32-unknown-unknown`; the file goes into the module's `engines` folder as `<Name>.wasm`, beside the engines brought along, with the hash of its source in the file's custom section. Every stack then uses that file as it uses any engine, so a Go or C# project needs Rust only when the engine's code changes. The designer says when an engine's file is older than its code, and Build makes it again.
+- **Tools.** Building an engine needs Rust with the `wasm32-unknown-unknown` target, which `clarity tools` checks and explains for any project that has a Clarity engine (P3).
+- **Alike everywhere.** The engine's code runs in one WebAssembly file on every stack, so it gives the same answers by construction; its own tests are its functions called with values, as `conformance/engines.json` does for the test engine.
+
+#### Engines beside the screen (N5)
+
+An engine declared `beside the screen` runs where the canvas is drawn, so a game or an animation runs at the pace of the screen without a trip to the backend per frame:
+
+```
+engine Asteroids from "asteroids.wasm"
+    beside the screen
+    uses random
+    tells finished(score: integer)
+    hears start(level: integer)
+
+page Play: window
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Asteroids on finished: game_over
+```
+
+- **One instance per canvas.** The engine starts when its window opens (`on open`) and goes when it closes; it keeps its state while it runs, like state per window.
+- **The loop.** At every frame the renderer calls the engine's `clarity_tick(ms)` with the time since the last frame, then `clarity_draw()`, which answers the canvas's shapes in its units, the same shapes as a draw handler's (`conformance/drawing.json`), so both renderers already know how to show them. Pointer and keys on the canvas go to `clarity_pointer(kind, x, y)` in canvas units and `clarity_key(kind, key)`.
+- **Back to the window: tells.** What the engine has to say to the application (the game is over, with its score) it tells: its answer to a tick or an input carries `{"tell": "finished", "values": [1200]}`, and the window's handler wired to that tell runs on the backend as any handler does, with the values as its parameters (`handler game_over(score: integer)`).
+- **From the window: hears.** A handler sends the engine an order with `sky.start(2)`; the reply carries it to the renderer, which calls the engine's export of that name.
+- **Where it runs.** On the web stacks in a Web Worker of its own, with the browser engine's WebAssembly: the worker draws nothing itself, it answers shapes, and the page shows them. A worker can be stopped from outside, so the limits hold here too: a frame that takes longer than its limit ends the engine, and the canvas shows the failure. On Avalonia in Wasmtime in the same process, on a timer at the screen's rate, stopped by its epoch. (Decided 2026-10-20: a worker, not the page's own thread, where an engine that loops would freeze the window.)
+- **Written in Clarity too.** An engine beside the screen can be a Clarity engine (N2): `on tick(ms)`, `on draw` (with the same drawing statements as a draw handler: `sky.circle(...)`), `on pointer(kind, x, y)`, `on key(kind, key)`, its `tell` statements, and functions for what it hears. That is where N2 earns its place: work that must run beside the screen, written in the same language as the rest.
+- **Services beside the screen** are the renderer's: the clock and random from the page or the process, the log into the application's log through the shell. Progress has no meaning there.
+
+#### In order
+
+1. **P**: progress and Stop for engine calls on the backend, on all five stacks and both renderers, with `progress n of total` if that is chosen.
+2. **N2a**: `record` declarations and engines written in Clarity, on the backend, built by Clarity into the engines folder.
+3. **N5a**: engines beside the screen, brought along: the frame loop, input, tells and hears, in a Web Worker and in Avalonia.
+4. **N5b**: Clarity engines beside the screen: `on tick`, `on draw`, `on pointer`, `on key`, `tell`.
 
 ## 6. Generation
 
@@ -1351,10 +1416,11 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | G4 | C and C++: emitters, runtimes, webview shell; Qt as a native toolkit for C++ if wanted. The project is a CMake project (`CMakeLists.txt`, built with make or Ninja, the tools P3 checks for), with the README.md every stack gets | G4a (C++) done: the runtime `runtimes/cpp` (C++20; system SQLite 3 and nlohmann-json, webview 0.12.0 copied into `third_party`; errors as exceptions, its own `Decimal`, SHA-256 and base64; drivers in `unique_ptr`, conditions in `shared_ptr<const Node>`, SQLite handles closed by RAII; records as plain structs that meet a `Record` concept) with its own tests on the conformance files; the generator `clarity-gen/src/cpp` writes `CMakeLists.txt`, `CMakePresets.json` (`cmake --workflow --preset debug` or `release`), `src/records.hpp` and `.cpp` with every module's enums and records, `src/modules/<module>.cpp` with each module's functions, actions, data events and windows, `src/app.hpp`, `src/schema.cpp`, `src/page.cpp` with the web renderer inlined, and `src/main.cpp` with `--check`; the program is a native window (webview on WebKitGTK) that talks to the renderer through `clarityInvoke`. Both examples build and run (`cargo test -p clarity-gen --test cpp_build -- --ignored`). SQLite only; the server databases come later. Every stack now writes module files where they cannot overwrite its own files (`src/modules/` in Rust and C++, `Modules/` in C#, `<module>_module.go` in Go, which also keeps a module named `windows` from building on Windows only). G4b (C) done: the runtime `runtimes/c` (C17; system SQLite 3, cJSON 1.7.18 and webview 0.12.0 copied into `third_party`, the webview built from one C++ file). Every call that can fail returns whether it worked and leaves its error, as errno does; values live in a scratch arena the shell empties after each command, so generated code never frees anything (cJSON allocates there too). Records are plain structs described to the runtime by a `ClarityEntity` (table, columns, values, data events); `customer_save`, `customer_find` and the others are typed calls around it. 20 tests of its own on the conformance files, clean under AddressSanitizer and UBSan. The generator `clarity-gen/src/c` lifts each call that can fail into `if (!call(..., &v1)) return false;` (as the Go generator lifts into `if err != nil`), passes records by pointer, gives a function's result through its last parameter, and writes the same files as C++ in C (`records.h`/`.c`, `app.h`, `src/modules/<module>.c`, `schema.c`, `page.c`, `main.c`); the program builds without a warning under `-Wall -Wextra`, debug and release. Both examples build and run (`cargo test -p clarity-gen --test c_build -- --ignored`). `clarity tools` checks the C and C++ libraries too (SQLite, WebKitGTK, nlohmann-json for C++) and, for C, a C++ compiler for the webview. SQLite only; the server databases come later |
 | H1 | Hardware, ideas raised by the user (2026-10-18), not decided. (a) A desktop application that talks to a device such as an Arduino over a serial port: the settings name the device as they name a file store (`serialport arduino "env:ARDUINO_PORT"`), code sends and receives with an effect like `device.write`; every stack can (Rust `serialport`, Go `go.bug.st/serial`, C# `System.IO.Ports`, C `libserialport`). (b) Code that runs on the device itself: Arduino sketches are C++, so a firmware target generated from a small part of the language, without a database or windows | idea |
 | N1 | Engines, first slice (section 5.11): `engine Name from "file.wasm"` with stateless functions on plain values, enums, records and lists; the `engines` folder; the engine interface (JSON over plain memory); the host checks the file at start; hosted on the backend of all five stacks (wasmi, wazero, wasm3, Wasmtime for .NET); a shared test engine and `conformance/engines.json` | done (2026-10-20): see "Built" in section 5.11. The designer reloads when the `engines` folder changes, lists the engines in the project tree (marking one that does not fit its file) and shows their functions in the module view |
-| N2 | Engines written in Clarity: `engine Name` with its functions and records, compiled through the Rust generator to `wasm32-unknown-unknown` with the engine interface | |
+| N2 | Engines written in Clarity (section 5.12): N2a `engine Name` with its functions and `record` declarations, built by Clarity through the Rust generator into the engines folder; N2b with N5 beside the screen | |
 | N3 | Imports and limits: `uses clock, random, log, progress`, time and memory limits per call, failures shown as refusals | done (2026-10-20) but `progress`: see "Built (N3)" in section 5.11 |
 | N4 | State and hooks: `state per window` and `state per app`, hooks such as `on open` and `on close`; `bytes` for document processing | done (2026-10-20): state, `on open` and `bytes`, see "Built (N4)" in section 5.11; no `on close` (the engine has nothing it could do then) |
-| N5 | Engines beside the screen: run in the web renderer and in Avalonia, drawing on a canvas with its shapes and input (`on tick`, pointer, key), values back to the window's handlers | |
+| N5 | Engines beside the screen (section 5.12): N5a brought along, in a Web Worker and in Avalonia, the frame loop, input, tells and hears; N5b written in Clarity (`on tick`, `on draw`, `on pointer`, `on key`, `tell`) | |
+| P | Progress of a long engine call on the backend (section 5.12): `uses progress`, a bar and Stop on the window while the handler runs, through each shell's way to the screen | |
 | W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |
 | A1 | AI through the MCP server: the whole project and its output readable, changes only as designer edits, proposals inside a project and for Clarity itself (section 1.2) | |
 | S4 | Graphics canvas (section 5.7): `bitmap` and `vector` field types, the standard canvas widget with view and edit modes, the `canvas` screen pattern, backend and frontend renderers | |

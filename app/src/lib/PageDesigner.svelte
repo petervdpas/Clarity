@@ -81,6 +81,21 @@
     return findPage(draft, savedPage.name.name) ?? savedPage;
   });
 
+  // The size a window's edge is being dragged to, kept until the window has
+  // it; null while none is.
+  let sizing = $state<{ width: number; height: number } | null>(null);
+  const shownSize = $derived(sizing ?? windowSize(page));
+
+  async function resize(size: { width: number; height: number }, done: boolean) {
+    sizing = size;
+    if (!done) return;
+    const now = windowSize(page);
+    if ((size.width !== now.width || size.height !== now.height) && !pageDesigner.saving) {
+      await apply({ op: "setSize", page: page.span.start, width: size.width, height: size.height });
+    }
+    sizing = null;
+  }
+
   const projectApp = $derived(findApp(preview));
   // The app's data is visible to the widgets in its sidebars and footer.
   const data = $derived({ ...(projectApp ? pageData(preview, appAsPage(projectApp)) : {}), ...pageData(preview, page) });
@@ -327,7 +342,7 @@
 
 <div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.folded.properties ? 'auto' : layout.sizes.properties + 'px'}">
   <div class="stage">
-    <ShownWindow {area} clientWidth={windowSize(page).width}>
+    <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app ? undefined : resize}>
       <div
         class="titlebar"
         class:selected={pageDesigner.selected === null}
@@ -340,7 +355,7 @@
       </div>
       <div
         class="client"
-        style:height="{windowSize(page).height}px"
+        style:height="{shownSize.height}px"
         bind:this={canvas}
         onpointerdown={() => (pageDesigner.selected = null)}
         role="presentation"

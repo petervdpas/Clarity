@@ -78,3 +78,21 @@ export function svgOf(
       return { tag: "g", attrs: {} };
   }
 }
+
+/**
+ * Where in a canvas's units a click is, from where in the part it is (in
+ * pixels), the drawing fitted whole and centred as the canvas draws it;
+ * null for a click beside the drawing (conformance/drawing.json, clicks).
+ */
+export function pointOf(
+  units: { width: number; height: number },
+  part: { width: number; height: number },
+  at: { x: number; y: number },
+): { x: number; y: number } | null {
+  const scale = Math.min(part.width / units.width, part.height / units.height);
+  if (!(scale > 0)) return null;
+  const x = (at.x - (part.width - units.width * scale) / 2) / scale;
+  const y = (at.y - (part.height - units.height * scale) / 2) / scale;
+  if (x < 0 || y < 0 || x >= units.width || y >= units.height) return null;
+  return { x: Math.floor(x), y: Math.floor(y) };
+}

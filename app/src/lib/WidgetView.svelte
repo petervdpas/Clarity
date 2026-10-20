@@ -531,6 +531,13 @@
         drawing={partState.drawing}
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
+        onpoint={live && p.name && !design && p.handlers.some((h) => h.event === "click")
+          ? (point) => {
+              // Where it was clicked goes with the part's state, for the handler to read.
+              if (live && p.name) live.setPointer(p.name, point);
+              fire("click");
+            }
+          : null}
       />
     {:else if p.kind === "canvas"}
       <div class="placeholder canvas">

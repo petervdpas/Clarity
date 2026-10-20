@@ -1,11 +1,14 @@
 // A canvas drawn by code: the shapes its draw handler drew, in the canvas's
 // own units, scaled to fit the control in proportion and centered, as the
 // web renderer draws them (conformance/drawing.json). A color is the
-// theme's by name, through its Clarity<Name> brush, or written out.
+// theme's by name, through its Clarity<Name> brush, or written out. A canvas
+// with `on click` runs its Command with where it was clicked, in its units.
 
 using System.Globalization;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Clarity.Runtime;
 
@@ -21,6 +24,16 @@ public class CanvasView : Control
 
     public static readonly StyledProperty<double> UnitsHeightProperty =
         AvaloniaProperty.Register<CanvasView, double>(nameof(UnitsHeight), 100);
+
+    public static readonly StyledProperty<ICommand?> CommandProperty =
+        AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(Command));
+
+    /// What a click runs, given the Pointer of where it was; none: clicks do nothing.
+    public ICommand? Command
+    {
+        get => GetValue(CommandProperty);
+        set => SetValue(CommandProperty, value);
+    }
 
     public IReadOnlyList<Shape> Drawing
     {
@@ -51,6 +64,56 @@ public class CanvasView : Control
         // The theme's colors may change after a drawing: light or dark, or another theme.
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
         ResourcesChanged += (_, _) => InvalidateVisual();
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == CommandProperty)
+            Cursor = Command is null ? null : new Cursor(StandardCursorType.Hand);
+    }
+
+    /// Where in a drawing of `units` a click `at` a part of size `part` is,
+    /// the drawing fitted as it is drawn, whole and centered; rounded down.
+    /// Null beside the drawing, where the part shows none of it.
+    public static Pointer? PointOf(Size units, Size part, Point at)
+    {
+        var scale = Math.Min(part.Width / units.Width, part.Height / units.Height);
+        if (!(scale > 0) || !double.IsFinite(scale))
+            return null;
+        var x = (at.X - (part.Width - units.Width * scale) / 2) / scale;
+        var y = (at.Y - (part.Height - units.Height * scale) / 2) / scale;
+        if (x < 0 || y < 0 || x >= units.Width || y >= units.Height)
+            return null;
+        return new Pointer((long)Math.Floor(x), (long)Math.Floor(y));
+    }
+
+    // A click is the primary button pressed and let go on the canvas.
+    bool pressed;
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        pressed = Command is not null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
+        if (pressed)
+            e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        if (!pressed)
+            return;
+        pressed = false;
+        var at = e.GetPosition(this);
+        if (at.X < 0 || at.Y < 0 || at.X > Bounds.Width || at.Y > Bounds.Height)
+            return;
+        var point = PointOf(new Size(UnitsWidth, UnitsHeight), Bounds.Size, at);
+        if (point is not null && Command?.CanExecute(point) == true)
+        {
+            Command.Execute(point);
+            e.Handled = true;
+        }
     }
 
     /// The brush of a color: the theme's by name, written out (#rrggbb), or

@@ -4,9 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { colorOf, svgOf, type Shape } from "./drawing.ts";
+import { colorOf, pointOf, svgOf, type Shape } from "./drawing.ts";
 
-const cases: { shapes: { code: string; sends: Shape }[] } = JSON.parse(
+type Click = { units: [number, number]; part: [number, number]; at: [number, number]; point: [number, number] | null };
+
+const cases: { shapes: { code: string; sends: Shape }[]; clicks: Click[] } = JSON.parse(
   readFileSync(new URL("../../../conformance/drawing.json", import.meta.url), "utf8"),
 );
 
@@ -30,4 +32,13 @@ test("each shape the backend sends is an SVG element", () => {
   const text = svgOf(cases.shapes[7].sends, { width: 200, height: 100 }, (t) => `shown ${t}`);
   assert.equal(text.text, "shown km/h");
   assert.deepEqual(text.attrs, { x: 50, y: 90, fill: "var(--text-muted)", "font-size": 8, "text-anchor": "middle", "dominant-baseline": "central" });
+});
+
+test("a click on a canvas is where in its units, as every renderer finds it", () => {
+  assert.ok(cases.clicks.length > 3);
+  for (const c of cases.clicks) {
+    const units = { width: c.units[0], height: c.units[1] };
+    const got = pointOf(units, { width: c.part[0], height: c.part[1] }, { x: c.at[0], y: c.at[1] });
+    assert.deepEqual(got && [got.x, got.y], c.point, JSON.stringify(c));
+  }
 });

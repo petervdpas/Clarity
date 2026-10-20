@@ -1,0 +1,24 @@
+# The Gauge engine of the dial example: where the needle points and what
+# colour it has. Built with
+#   cargo build --release --target wasm32-unknown-unknown
+# into ../gauge.wasm (see examples/build-engines.sh).
+[package]
+name = "gauge"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clarity-engine = { path = "../../../../crates/clarity-engine" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+# Not part of Clarity's workspace: it builds for WebAssembly on its own.
+[workspace]

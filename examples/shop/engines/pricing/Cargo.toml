@@ -1,0 +1,26 @@
+# The Pricing engine of the shop example: an order's total from its lines,
+# with volume discounts. Built with
+#   cargo build --release --target wasm32-unknown-unknown
+# into ../pricing.wasm (see examples/build-engines.sh).
+[package]
+name = "pricing"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clarity-engine = { path = "../../../../crates/clarity-engine" }
+rust_decimal = { version = "1", default-features = false, features = ["serde-with-str"] }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+# Not part of Clarity's workspace: it builds for WebAssembly on its own.
+[workspace]

@@ -12,6 +12,27 @@ export const GAP = 8;
 export const WINDOW_WIDTH = 1100;
 export const WINDOW_HEIGHT = 760;
 
+/** The smallest and largest size a window may say, in pixels. */
+export const WINDOW_MIN_WIDTH = 200;
+export const WINDOW_MIN_HEIGHT = 150;
+export const WINDOW_MAX_WIDTH = 3840;
+export const WINDOW_MAX_HEIGHT = 2160;
+
+/** An edge of a window the designer drags to size it. */
+export type WindowEdge = "right" | "bottom" | "corner";
+
+/**
+ * The size of a window whose `edge` was dragged `dx` by `dy` pixels on the
+ * screen, from `start`, while the window is shown at `scale`: whole pixels,
+ * within the sizes a window may have.
+ */
+export function resized(start: { width: number; height: number }, edge: WindowEdge, dx: number, dy: number, scale: number): { width: number; height: number } {
+  const within = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Math.round(value)));
+  const width = edge === "bottom" ? start.width : start.width + dx / scale;
+  const height = edge === "right" ? start.height : start.height + dy / scale;
+  return { width: within(width, WINDOW_MIN_WIDTH, WINDOW_MAX_WIDTH), height: within(height, WINDOW_MIN_HEIGHT, WINDOW_MAX_HEIGHT) };
+}
+
 /** The size a window opens at: its own (`size 320 x 460`), or the standard one. */
 export function windowSize(page: { size: { width: number; height: number } | null }): { width: number; height: number } {
   return page.size ?? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };

@@ -348,3 +348,14 @@ fn an_engine_brings_its_host_and_wasm3() {
     }
     assert!(!files().iter().any(|f| f.path.contains("engine") || f.path.contains("wasm3")));
 }
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "src/modules/sales.c");
+    assert!(code.contains("clarity_ui_x(ui, \"dial\") + clarity_ui_y(ui, \"dial\")"), "{code}");
+}

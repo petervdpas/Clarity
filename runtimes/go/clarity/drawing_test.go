@@ -57,3 +57,44 @@ func TestADrawStartsAnEmptyDrawingThatTravelsWithThePart(t *testing.T) {
 		t.Errorf("drawn anew: %s", got)
 	}
 }
+
+func TestACanvasSaysWhereItWasClickedAsEveryRuntimeDoes(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/drawing.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Points []struct {
+			Part json.RawMessage `json:"part"`
+			X    int64           `json:"x"`
+			Y    int64           `json:"y"`
+		} `json:"points"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Points) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Points {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"board": part}})
+		if x, y := ui.X("board"), ui.Y("board"); x != c.X || y != c.Y {
+			t.Errorf("%s: %d,%d, want %d,%d", c.Part, x, y, c.X, c.Y)
+		}
+		// What the pointer holds besides x and y travels back unchanged.
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["board"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("travels back as %s, want %s", got, c.Part)
+		}
+	}
+}
+
+// normal is JSON with its keys in order, to compare two texts by what they hold.
+func normal(text []byte) string {
+	var value any
+	_ = json.Unmarshal(text, &value)
+	out, _ := json.Marshal(value)
+	return string(out)
+}

@@ -9,6 +9,7 @@ package clarity
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 )
@@ -26,6 +27,9 @@ type PartState struct {
 	Checked *bool `json:"checked,omitempty"`
 	// Drawing is a canvas's drawing: its shapes, in order (conformance/drawing.json).
 	Drawing *[]map[string]any `json:"drawing,omitempty"`
+	// Pointer is where a canvas was last clicked, in its units: x and y, and
+	// whatever else the screen tells about the pointer, kept as it came.
+	Pointer map[string]any `json:"pointer,omitempty"`
 }
 
 // WindowState is one open window: its data by name, its parts' properties
@@ -221,6 +225,19 @@ func (u *Ui) Readonly(part string, design bool) bool {
 
 func (u *Ui) SetReadonly(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Readonly = &value })
+}
+
+// X is where a canvas was last clicked, across: canvas.x; 0 before any click.
+func (u *Ui) X(part string) int64 { return u.pointer(part, "x") }
+
+// Y is where a canvas was last clicked, down: canvas.y.
+func (u *Ui) Y(part string) int64 { return u.pointer(part, "y") }
+
+func (u *Ui) pointer(part, key string) int64 {
+	if at, ok := u.parts[part].Pointer[key].(float64); ok {
+		return int64(math.Floor(at))
+	}
+	return 0
 }
 
 // Text is the text of an unbound text input.

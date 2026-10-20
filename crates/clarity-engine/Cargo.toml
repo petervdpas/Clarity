@@ -1,0 +1,18 @@
+# What an engine written in Rust stands on (DESIGN 5.11): the engine
+# interface, its functions with typed arguments, the services and bytes.
+# An engine is a cdylib built for wasm32-unknown-unknown.
+[package]
+name = "clarity-engine"
+description = "Write engines for Clarity in Rust: the engine interface, typed functions, the services and bytes"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/petervdpas/Clarity"
+homepage = "https://github.com/petervdpas/Clarity"
+readme = "README.md"
+keywords = ["clarity", "webassembly", "wasm", "engine"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"

@@ -469,8 +469,9 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        // Drawn by its draw handler (`on draw`), or by a hand-written renderer.
-        events: &[Event::Draw, Event::Pointer, Event::Key],
+        // Drawn by its draw handler (`on draw`), or by a hand-written renderer;
+        // a click runs a handler, which reads where as `canvas.x` and `canvas.y`.
+        events: &[Event::Draw, Event::Click, Event::Pointer, Event::Key],
         properties: &[WidgetProperty::Units, WidgetProperty::Surface, WidgetProperty::Renderer],
     },
 ];

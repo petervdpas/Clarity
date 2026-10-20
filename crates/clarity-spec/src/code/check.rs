@@ -609,7 +609,12 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
             out.push(Diagnostic::error(format!("handler '{name}' is written twice"), handler.name.span));
             continue;
         }
-        if !owner.wired.iter().any(|w| w.handler == name) {
+        // A handler is in use when an event runs it, or another handler does.
+        let mut called = false;
+        for other in block.handlers.iter().filter(|h| h.name.name != name) {
+            each_stmt_expr(&other.body, &mut |e| called |= matches!(&e.kind, ExprKind::Call { function, .. } if function.name == name));
+        }
+        if !called && !owner.wired.iter().any(|w| w.handler == name) {
             out.push(Diagnostic::warning(
                 format!("handler '{name}' is not wired to any event"),
                 handler.name.span,
@@ -944,16 +949,46 @@ impl<'a> BodyChecker<'_, 'a> {
         self.owner.and_then(|o| o.data.iter().find(|d| d.name.name == name))
     }
 
-    /// A shape on a canvas, in the canvas's own draw handler.
+    /// Whether `handler` draws for the draw handler `draws`: it is that
+    /// handler, or one only it runs, itself or through such handlers, and no
+    /// event runs. Shapes drawn from anywhere else would land outside a drawing.
+    fn draws_for(&self, draws: &str, handler: &str) -> bool {
+        let calls = |from: &str, to: &str| {
+            let mut found = false;
+            if let Some(from) = self.handlers.iter().find(|h| h.name.name == from) {
+                each_stmt_expr(&from.body, &mut |e| found |= matches!(&e.kind, ExprKind::Call { function, .. } if function.name == to));
+            }
+            found
+        };
+        let names: Vec<&str> = self.handlers.iter().map(|h| h.name.name.as_str()).collect();
+        // What the draw handler runs, itself or through what it runs.
+        let mut reach = vec![draws];
+        while let Some(next) = names.iter().find(|n| !reach.contains(n) && reach.iter().any(|r| calls(r, n))) {
+            reach.push(next);
+        }
+        // Less what something else runs too.
+        let wired = |name: &str| self.owner.is_some_and(|o| o.wired.iter().any(|w| w.handler == name));
+        while let Some(at) = reach
+            .iter()
+            .skip(1)
+            .position(|h| wired(h) || names.iter().any(|n| !reach.contains(n) && calls(n, h)))
+        {
+            reach.remove(at + 1);
+        }
+        reach.contains(&handler)
+    }
+
+    /// A shape on a canvas, in the canvas's own draw handler or one it runs.
     fn draw(&mut self, canvas: &Ident, shape: &Ident, args: &[Expr]) {
         match self.part(&canvas.name) {
             Some((_, Part::Widget(p))) if p.kind == crate::widgets::WidgetKind::Canvas => {
                 let draws = p.handlers.iter().find(|h| h.event == crate::widgets::Event::Draw).map(|h| h.handler.as_str());
                 match draws {
                     None => self.error(format!("'{}' has no draw handler; wire 'on draw: handler'", canvas.name), canvas.span),
-                    Some(draws) if Some(draws) != self.handler => {
-                        self.error(format!("'{}' is drawn only by its draw handler, {draws}", canvas.name), canvas.span)
-                    }
+                    Some(draws) if !self.handler.is_some_and(|h| self.draws_for(draws, h)) => self.error(
+                        format!("'{}' is drawn only by its draw handler, {draws}, and the handlers only it runs", canvas.name),
+                        canvas.span,
+                    ),
                     Some(_) => {}
                 }
             }
@@ -1436,6 +1471,10 @@ impl<'a> BodyChecker<'_, 'a> {
             "readonly" if part.is_input() => value(Ty::Bool),
             "text" if matches!(part, Part::Widget(props) if has_text(props)) => value(Ty::Text),
             "checked" if matches!(part, Part::Widget(props) if has_checked(props)) => value(Ty::Bool),
+            // Where a canvas was clicked last, in its own units.
+            "x" | "y" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
+                Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where the canvas was clicked")) })
+            }
             "selected" => {
                 let Part::Widget(props) = part else { return None };
                 if !matches!(props.kind, WidgetKind::Table | WidgetKind::List) {

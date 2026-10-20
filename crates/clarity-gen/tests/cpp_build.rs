@@ -41,7 +41,10 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
     let said = run(&out, &out.join("build/debug").join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
-    assert!(out.join("data/app.db").exists());
+    // A project with records has its database; one without needs none.
+    if project.entities().next().is_some() {
+        assert!(out.join("data/app.db").exists());
+    }
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -163,4 +166,18 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     let said = run(&out, &out.join("build/debug/shop").display().to_string(), &["--check"]);
     assert!(said.contains("the databases are ready"), "{said}");
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The fourth example: a dial drawn by code, its needle placed by an engine.
+#[test]
+#[ignore]
+fn the_dial_example_builds_and_runs_in_cpp() {
+    builds_and_runs_in_cpp("dial", "Dial");
+}
+
+/// The fifth example: noughts and crosses, each window's game kept by an engine.
+#[test]
+#[ignore]
+fn the_noughts_example_builds_and_runs_in_cpp() {
+    builds_and_runs_in_cpp("noughts", "Noughts");
 }

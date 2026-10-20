@@ -11,6 +11,9 @@ import type { ShownText } from "./format";
 
 const LIVE = Symbol("clarity-live");
 
+/** A pointer's event on a canvas, in the canvas's units. */
+export type Pointer = { x: number; y: number };
+
 /** What a handler set on a part; anything unset keeps the design. */
 export type PartState = {
   visible?: boolean;
@@ -23,6 +26,12 @@ export type PartState = {
   text?: string | null;
   /** Whether an unbound checkbox or switch is on. */
   checked?: boolean | null;
+  /**
+   * The pointer's last event on a canvas: where, in its own units
+   * (conformance/drawing.json). A record that grows: more about the
+   * pointer can join x and y.
+   */
+  pointer?: Pointer | null;
   /** A canvas's drawing: the shapes its draw handler sent (conformance/drawing.json). */
   drawing?: Shape[] | null;
 };
@@ -39,6 +48,8 @@ export interface Live {
   setText(part: string, text: string): void;
   /** Keeps whether an unbound checkbox or switch is on, for the next event. */
   setChecked(part: string, checked: boolean): void;
+  /** Keeps the pointer's event on a canvas, for its handler. */
+  setPointer(part: string, pointer: Pointer): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
   /**

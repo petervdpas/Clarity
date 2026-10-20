@@ -135,6 +135,30 @@ void sin_and_cos_take_degrees_as_every_runtime_does(void) {
     cJSON_Delete(file);
 }
 
+void a_canvas_says_where_it_was_clicked_as_every_runtime_does(void) {
+    cJSON* file = conformance("drawing.json");
+    const cJSON* points = cJSON_GetObjectItemCaseSensitive(file, "points");
+    REQUIRE(cJSON_GetArraySize(points) > 0);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, points) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "board",
+                              cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        ClarityUi* ui = clarity_ui(&state);
+        CHECK(clarity_ui_x(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "x")->valuedouble);
+        CHECK(clarity_ui_y(ui, "board") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "y")->valuedouble);
+        // What the pointer holds besides x and y travels back unchanged.
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "board"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
 void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
     ClarityWindowState state;
     REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));

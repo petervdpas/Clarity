@@ -78,3 +78,62 @@ fn a_canvas_that_draws_nothing_is_a_warning() {
     assert_has(&warnings, "canvas at 1,1 draws nothing yet; wire 'on draw: handler'");
     assert_has(&errors(&DIAL.replace("units 200 x 100", "units 0 x 100")), "a canvas is 1 to 10000 units wide and high");
 }
+
+/// A canvas can be clicked: `on click: handler`, which reads where in its
+/// own units as `canvas.x` and `canvas.y`.
+#[test]
+fn a_click_on_a_canvas_says_where() {
+    let board = "module game
+
+page Main: window
+    data square: integer
+    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: draw_board on click: board_clicked
+
+code Main
+    handler draw_board
+        board.clear(\"panel\")
+
+    handler board_clicked
+        square = 1
+        if board.x >= 100
+            square = 2
+        if board.y >= 100
+            square = square + 3
+";
+    assert!(errors(board).is_empty(), "{:#?}", errors(board));
+    assert_has(&errors(&board.replace("        square = 1\n", "        board.x = 5\n")), "board.x is read, not set");
+}
+
+/// A draw handler can hand part of the drawing to a handler it calls, such
+/// as one mark of a board; that handler draws only when nothing else runs it.
+#[test]
+fn a_draw_handler_can_call_handlers_that_draw() {
+    let board = "module game
+
+page Main: window
+    canvas name board at 1,1 span 6 rows 6 units 300 x 300 on draw: draw_board
+    button \"Again\" name again at 7,1 on click: again_clicked
+
+code Main
+    handler draw_board
+        board.clear(\"panel\")
+        draw_square(0, 0)
+        draw_square(100, 0)
+
+    handler draw_square(left: integer, top: integer)
+        board.rect(left + 5, top + 5, 90, 90, \"accent\")
+        draw_cross(left, top)
+
+    handler draw_cross(left: integer, top: integer)
+        board.line(left, top, left + 100, top + 100, \"text\", 4)
+
+    handler again_clicked
+        message \"again\"
+";
+    assert!(errors(board).is_empty(), "{:#?}", errors(board));
+    // Run from elsewhere, or by an event, its shapes would land outside a drawing.
+    let elsewhere = board.replace("        message \"again\"\n", "        draw_square(0, 0)\n");
+    assert_has(&errors(&elsewhere), "'board' is drawn only by its draw handler, draw_board, and the handlers only it runs");
+    let wired = board.replace("on click: again_clicked", "on click: draw_cross(0, 0)");
+    assert_has(&errors(&wired), "'board' is drawn only by its draw handler, draw_board, and the handlers only it runs");
+}

@@ -347,3 +347,14 @@ fn an_engine_call_gives_its_declared_type() {
     has(file(&files, "src/modules/shop.cpp"), "engines::pricing().call_as<clarity::Decimal>(\"total\", nlohmann::json::array({lines}))");
     has(file(&files, "src/main.cpp"), "shop::engines::check();");
 }
+
+/// A canvas with `on click` runs its handler, which reads where it was clicked.
+#[test]
+fn a_click_on_a_canvas_runs_its_handler_with_where() {
+    let source = format!("{SALES}{DIAL}").replace("on draw: draw_dial\n", "on draw: draw_dial on click: dial_clicked\n") + "\n    handler dial_clicked\n        speed = dial.x + dial.y\n";
+    let project = load_sources([("sales.clarity", source.as_str())]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let code = file(&files, "src/modules/sales.cpp");
+    assert!(code.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{code}");
+}

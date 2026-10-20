@@ -85,7 +85,27 @@ code Main
 
 The shapes are `clear(color)`, `line(x1, y1, x2, y2, color, width)`, `rect(x, y, width, height, color)`, `circle(x, y, r, color)`, `ring(x, y, r, color, width)` and `text(x, y, text, color, size)`; a width can be left out (1), and so can a text's color and size (`"text"`, 10). A color is a color of the theme by name or written out, `"#101810"`. `sin` and `cos` take degrees.
 
-The draw handler runs when the window opens and after every other handler of the window, each time on an empty canvas, so it only says what the canvas shows for the data as it is. Only a canvas's own draw handler draws on it. The canvas scales its units to fit the part, keeping their proportion, on every stack alike.
+The draw handler runs when the window opens and after every other handler of the window, each time on an empty canvas, so it only says what the canvas shows for the data as it is. The canvas scales its units to fit the part, keeping their proportion, on every stack alike.
+
+Only a canvas's own draw handler draws on it, and the handlers it calls that nothing else runs. That lets a drawing of many alike things say each once: the noughts example draws its board with `draw_mark(square, left, top)` nine times, and `draw_mark` draws a cross as two lines or a nought as a ring.
+
+### Clicking a canvas
+
+`on click: board_clicked` on a canvas runs the handler when the canvas is clicked. `board.x` and `board.y` say where, in the canvas's own units, rounded down; they are 0 before the first click. A click beside the drawing, where the part shows none of it, runs nothing. After the handler the canvas is drawn anew, so it shows what the click changed:
+
+```clarity
+    handler board_clicked
+        let square = 1
+        if board.x >= 200
+            square = 3
+        else if board.x >= 100
+            square = 2
+        if board.y >= 200
+            square = square + 6
+        else if board.y >= 100
+            square = square + 3
+        status = Board.play(square)
+```
 
 ## Messages, windows and data
 

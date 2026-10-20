@@ -40,18 +40,22 @@ fn dotnet(out: &Path, args: &[&str], runtime: Runtime) -> Command {
 
 /// Generates the example `name` (examples/<name>.clarity) as C# with
 /// Avalonia, builds it with warnings as errors and runs `--check`.
-fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str, runtime: Runtime) {
+/// Builds the example `name` and runs it; with `translated`, it has a
+/// translation into that language, whose satellite assembly the build makes.
+fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     // As Run loads it: with the project file's language, currency and themes.
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     // Its translations, whose satellite assembly the build must make.
-    assert!(!project.translations.is_empty(), "the example has translations");
+    assert_eq!(!project.translations.is_empty(), translated.is_some(), "the example's translations");
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
     let files = clarity_gen::generate(&project, &settings).unwrap();
-    assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
+    if let Some(translated) = translated {
+        assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
+    }
 
     let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
@@ -71,16 +75,21 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: &str, runtim
     assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // The database the project file names, with every step applied.
-    assert!(out.join(format!("data/{name}.db")).exists());
+    // A project with records has its database; one without needs none.
+    if project.entities().next().is_some() {
+        assert!(out.join(format!("data/{name}.db")).exists());
+    }
     // The translated texts as a satellite assembly, as .NET looks for them.
-    assert!(out.join(format!("bin/Debug/net10.0/{translated}/{program}.resources.dll")).exists());
+    if let Some(translated) = translated {
+        assert!(out.join(format!("bin/Debug/net10.0/{translated}/{program}.resources.dll")).exists());
+    }
     std::fs::remove_dir_all(&out).unwrap();
 }
 
 #[test]
 #[ignore]
 fn the_shop_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("shop", "Shop", "nl", Runtime::Local);
+    builds_and_runs_in_csharp("shop", "Shop", Some("nl"), Runtime::Local);
 }
 
 /// The shop on the runtime's packages from nuget.org, at the version the
@@ -88,21 +97,21 @@ fn the_shop_example_builds_and_runs_in_csharp() {
 #[test]
 #[ignore]
 fn the_shop_example_builds_and_runs_on_the_published_packages() {
-    builds_and_runs_in_csharp("shop", "Shop", "nl", Runtime::Packages);
+    builds_and_runs_in_csharp("shop", "Shop", Some("nl"), Runtime::Packages);
 }
 
 /// The second example: master and detail, dialogs, a tree of genres, loans.
 #[test]
 #[ignore]
 fn the_records_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("records", "Records", "de", Runtime::Local);
+    builds_and_runs_in_csharp("records", "Records", Some("de"), Runtime::Local);
 }
 
 /// The third example: tasks edited in their table, and the people who finish them.
 #[test]
 #[ignore]
 fn the_todo_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("todo", "Todo", "nl", Runtime::Local);
+    builds_and_runs_in_csharp("todo", "Todo", Some("nl"), Runtime::Local);
 }
 
 /// The shop on each server database: the project builds with only that
@@ -257,4 +266,18 @@ fn functions_named_like_types_build_in_csharp() {
     let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The fourth example: a dial drawn by code, its needle placed by an engine.
+#[test]
+#[ignore]
+fn the_dial_example_builds_and_runs_in_csharp() {
+    builds_and_runs_in_csharp("dial", "Dial", None, Runtime::Local);
+}
+
+/// The fifth example: noughts and crosses, each window's game kept by an engine.
+#[test]
+#[ignore]
+fn the_noughts_example_builds_and_runs_in_csharp() {
+    builds_and_runs_in_csharp("noughts", "Noughts", None, Runtime::Local);
 }

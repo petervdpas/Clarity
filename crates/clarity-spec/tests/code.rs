@@ -290,6 +290,9 @@ code CustomerForm
     assert_eq!(errors(&extra), ["there is already a code block for Orders"]);
     let unwired = CODE.replace("code Orders\n", "code Orders\n    handler nobody\n        close\n");
     assert_eq!(warnings(&unwired), ["handler 'nobody' is not wired to any event"]);
+    // A handler another handler runs is in use.
+    let called = CODE.replace("code Orders\n", "code Orders\n    handler helper\n        close\n    handler caller\n        helper()\n");
+    assert_eq!(warnings(&called), ["handler 'caller' is not wired to any event"]);
     let twice = CODE.replace("    handler grid_opened\n", "    handler grid_opened\n        close\n    handler grid_opened\n");
     assert_eq!(errors(&twice), ["handler 'grid_opened' is written twice"]);
     assert_eq!(errors("\ncode Missing\n    handler x\n        close\n"), ["there is no window, app or entity 'Missing' in this file"]);

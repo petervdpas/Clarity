@@ -55,7 +55,7 @@ A window has three events of its own, listed under Events in The window:
 
 ## Size
 
-`size 320 x 460` is the size the window's desktop window opens at, in pixels: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. The desktop window takes the size of the window it shows first; a window opened in place keeps the size it has. Set it as Size under The window in the properties; the designer shows the window at its size.
+`size 320 x 460` is the size the window's desktop window opens at, in pixels: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. The desktop window takes the size of the window it shows first; a window opened in place keeps the size it has. Set it as Size under The window in the properties, or drag the window's right edge, bottom edge or bottom-right corner in the designer; the size shows while you drag. The designer shows the window at its size.
 
 ## The grid
 

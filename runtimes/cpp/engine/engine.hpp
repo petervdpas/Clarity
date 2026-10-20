@@ -3,7 +3,10 @@
 // computes; it imports only the services of Clarity it declares (`uses
 // clock, random, log`), so it reaches no database, file or network.
 // Each call runs on a fresh instance of the module, so an engine keeps no
-// state from one call to the next, and runs within the limits of its engine:
+// state from one call to the next, unless it is declared with `state per
+// app` (one instance serves every call) or `state per window` (each open
+// window has an instance of its own, dropped when the window closes). Every
+// call runs within the limits of its engine:
 // a call that runs too long is stopped, and an engine never gets more memory
 // than its limit. Hosted by wasm3; a generated application
 // has this code only when it declares an engine.
@@ -36,6 +39,27 @@ struct EngineLimits {
     uint32_t megabytes;
 };
 
+/// Whether an engine keeps an instance from call to call.
+enum class EngineState {
+    /// Every call runs on a fresh instance.
+    none,
+    /// One instance serves every call of the application (`state per app`).
+    per_app,
+    /// Each open window has an instance of its own (`state per window`).
+    per_window,
+};
+
+/// An engine as its declaration gives it: its functions, the services it
+/// uses, the limits of a call, whether it keeps state and whether it has
+/// `on open` (the engine's `clarity_open`, run on every new instance).
+struct EngineDeclaration {
+    std::vector<std::string> functions;
+    std::vector<std::string> uses;
+    EngineLimits limits;
+    EngineState state = EngineState::none;
+    bool opens = false;
+};
+
 /// What the services give: the system's clock, a fresh seed for every call
 /// and the standard error, unless a test fixes the clock (milliseconds since
 /// 1970) or the seed, or keeps the lines of the log.
@@ -48,11 +72,10 @@ struct EngineServices {
 
 class Engine {
 public:
-    /// Loads `bytes` as engine `name` with the functions it is declared
-    /// with; throws EngineError for a module that is no engine, imports
-    /// anything but the services it uses, or lacks one of them.
-    static Engine load(const std::string& name, std::vector<uint8_t> bytes, const std::vector<std::string>& functions, const std::vector<std::string>& uses,
-                       EngineLimits limits);
+    /// Loads `bytes` as engine `name` as it is declared; throws
+    /// EngineError for a module that is no engine, imports anything but the
+    /// services it uses, or lacks one of its functions.
+    static Engine load(const std::string& name, std::vector<uint8_t> bytes, const EngineDeclaration& declaration);
 
     /// The engine with `services` in place of the system's.
     Engine with_services(EngineServices services) const {
@@ -63,12 +86,25 @@ public:
 
     /// Calls `function` with `args`, a JSON array: its value, the engine's
     /// refusal (a RefusedError in its own words), or an EngineError.
-    nlohmann::json call(const std::string& function, const nlohmann::json& args) const;
+    nlohmann::json call(const std::string& function, const nlohmann::json& args) const { return call_in(0, function, args); }
+
+    /// Calls `function` in open window `window`: for an engine with state
+    /// per window, on that window's own instance.
+    nlohmann::json call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const;
+
+    /// Drops the instance window `window` had, when it closes.
+    void close_window(uint64_t window) const;
 
     /// Calls `function` and gives its value as the type code declares.
     template <class T>
     T call_as(const std::string& function, const nlohmann::json& args) const {
-        auto value = call(function, args);
+        return call_in_as<T>(0, function, args);
+    }
+
+    /// Calls `function` in open window `window` and gives its value as the type code declares.
+    template <class T>
+    T call_in_as(uint64_t window, const std::string& function, const nlohmann::json& args) const {
+        auto value = call_in(window, function, args);
         try {
             return value.get<T>();
         } catch (const nlohmann::json::exception& e) {

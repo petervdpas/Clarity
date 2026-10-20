@@ -45,9 +45,9 @@ TEST(a_handler_replies_as_the_other_runtimes_do) {
     ui.close();
     order.number = "ORD-8";
     Reply reply = ui.reply("Card", {{"order", order}, {"orders", orders}});
-    CHECK_EQ(json(reply), json::parse(R"({"state":{"window":"Card","data":{"order":{"id":7,"number":"ORD-8"},"orders":[{"id":1,"number":"A"},{"id":2,"number":"B"}]},"parts":{"mine":{"checked":true},"name":{"error":"Name is required","readonly":false},"name_filter":{"text":""},"save":{"enabled":false}},"selected":{"grid":1}},"messages":[{"level":"info","text":{"text":"Saved {n}","values":{"n":{"kind":"text","value":"ORD-7"}}}}],"open":[{"window":"Order","with":{"order":{"id":7,"number":"ORD-7"}}}],"close":true})"));
+    CHECK_EQ(json(reply), json::parse(R"({"state":{"window":"Card","instance":0,"data":{"order":{"id":7,"number":"ORD-8"},"orders":[{"id":1,"number":"A"},{"id":2,"number":"B"}]},"parts":{"mine":{"checked":true},"name":{"error":"Name is required","readonly":false},"name_filter":{"text":""},"save":{"enabled":false}},"selected":{"grid":1}},"messages":[{"level":"info","text":{"text":"Saved {n}","values":{"n":{"kind":"text","value":"ORD-7"}}}}],"open":[{"window":"Order","with":{"order":{"id":7,"number":"ORD-7"}}}],"close":true})"));
     // A new window's state has no parts and no selected rows yet.
-    CHECK_EQ(json(WindowState{"Card"}).dump(), R"({"data":{},"parts":{},"selected":{},"window":"Card"})");
+    CHECK_EQ(json(WindowState{"Card"}).dump(), R"({"data":{},"instance":0,"parts":{},"selected":{},"window":"Card"})");
 }
 
 TEST(rows_read_again_have_no_selected_row) {
@@ -80,4 +80,28 @@ TEST(a_draw_starts_an_empty_drawing_that_travels_with_the_part) {
     Ui again(reply.state);
     again.begin_drawing("dial");
     CHECK_EQ(json(again.reply("Main", json::object()).state)["parts"]["dial"]["drawing"], json::array());
+}
+
+// Every window that opens has a number of its own, which its handlers'
+// replies keep, so what belongs to one open window (an engine's state) is
+// found again and dropped when it closes.
+TEST(every_open_window_has_its_own_number) {
+    auto first = opened("Orders", json::object(), json::object());
+    auto second = opened("Orders", json::object(), json::object());
+    CHECK(first.instance > 0 && second.instance > 0 && first.instance != second.instance);
+    Ui ui(first);
+    CHECK_EQ(ui.instance(), first.instance);
+    CHECK_EQ(ui.reply("Orders", json::object()).state.instance, first.instance);
+    // The number travels with the state to the screen and back.
+    CHECK_EQ(json(first).get<WindowState>().instance, first.instance);
+}
+
+TEST(a_closed_window_is_reported_to_what_listens) {
+    uint64_t heard = 0;
+    auto listening = on_window_closed([&](uint64_t instance) { heard = instance; });
+    window_closed(7);
+    CHECK_EQ(heard, uint64_t(7));
+    listening.reset();
+    window_closed(8);
+    CHECK_EQ(heard, uint64_t(7));
 }

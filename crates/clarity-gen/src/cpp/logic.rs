@@ -747,12 +747,16 @@ impl<'a> Emitter<'a> {
                     .and_then(|f| f.returns.as_ref())
                     .map(|r| value_type(&type_ref_info(self.project, r)));
                 let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
-                let call = match returns {
-                    Some(ty) => format!("call_as<{ty}>"),
-                    None => "call".to_string(),
+                // An engine with state per window is called in the handler's own window.
+                let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
+                let (call, window) = match (returns, per_window) {
+                    (Some(ty), true) => (format!("call_in_as<{ty}>"), "ui.instance(), "),
+                    (Some(ty), false) => (format!("call_as<{ty}>"), ""),
+                    (None, true) => ("call_in".to_string(), "ui.instance(), "),
+                    (None, false) => ("call".to_string(), ""),
                 };
                 let args = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
-                format!("engines::{}().{call}({}, {args})", snake(&engine.name), string(&function.name))
+                format!("engines::{}().{call}({window}{}, {args})", snake(&engine.name), string(&function.name))
             }
             ExprKind::New { entity } => format!("{}{{}}", entity.name),
         }

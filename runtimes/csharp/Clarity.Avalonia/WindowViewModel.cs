@@ -13,6 +13,9 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>The databases of the application.</summary>
     public Db Db { get; } = db;
 
+    /// <summary>The number of this open window, its own: what belongs to it, such as an engine's state per window, goes by it.</summary>
+    public long Instance { get; } = OpenWindows.Next();
+
     /// <summary>The window's title.</summary>
     public virtual string Title => "";
 
@@ -111,8 +114,12 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>The window has opened with its data.</summary>
     public void Opened() => Handle(OnOpen);
 
-    /// <summary>The window is about to close.</summary>
-    public void Closing() => Handle(OnClose);
+    /// <summary>The window is about to close: its on close runs, then it is reported closed.</summary>
+    public void Closing()
+    {
+        Handle(OnClose);
+        OpenWindows.Close(Instance);
+    }
 
     /// <summary>A window this one opened has closed: the place to reload a list.</summary>
     public void Returned() => Handle(OnReturn);

@@ -95,6 +95,22 @@ int main() {
         Order order{7, "ORD-7", clarity::Decimal::parse("100.05")};
         auto less = cheaper(db, order);
         EXPECT(less.id == 7 && less.total == clarity::Decimal::parse("90.05"), "cheaper");
+        // An engine with state counts on from what its on open set.
+        EXPECT(counted(db) == 11 && counted(db) == 12, "counted");
+        // Each open window has an instance of its own of an engine with state
+        // per window, which goes when the window closes (as the shell reports it).
+        auto one = clarity::opened("Main", nlohmann::json::object(), nlohmann::json::object());
+        auto other = clarity::opened("Main", nlohmann::json::object(), nlohmann::json::object());
+        MainWindow a{}, b{};
+        clarity::Ui in_a(one), in_b(other);
+        a.moved(db, in_a);
+        b.moved(db, in_b);
+        a.moved(db, in_a);
+        EXPECT(a.moves == 12 && b.moves == 11, "moves");
+        clarity::window_closed(one.instance);
+        a.moved(db, in_a);
+        b.moved(db, in_b);
+        EXPECT(a.moves == 11 && b.moves == 12, "moves after closing");
     } catch (const std::exception& e) {
         std::cerr << "failed: " << e.what() << "\n";
         return 1;

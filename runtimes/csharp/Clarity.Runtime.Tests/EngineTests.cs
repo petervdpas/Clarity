@@ -20,7 +20,7 @@ public class EngineTests
     [Fact]
     public void EveryCallGivesWhatEveryHostGives()
     {
-        var engine = Engine.Load("Test", TestEngine, Names(Cases.GetProperty("functions")), Uses, Limits);
+        var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits));
         foreach (var call in Cases.GetProperty("calls").EnumerateArray())
         {
             var args = call.GetProperty("args").EnumerateArray().Select(a => (object?)JsonNode.Parse(a.GetRawText())).ToArray();
@@ -44,7 +44,7 @@ public class EngineTests
         {
             var bytes = refused.TryGetProperty("bytes", out var hex) ? Convert.FromHexString(hex.GetString()!) : TestEngine;
             var functions = refused.TryGetProperty("functions", out var f) ? Names(f) : [];
-            var error = Assert.Throws<EngineException>(() => Engine.Load("Test", bytes, functions, refused.TryGetProperty("uses", out var u) ? Names(u) : Uses, Limits));
+            var error = Assert.Throws<EngineException>(() => Engine.Load("Test", bytes, new EngineDeclaration(functions, refused.TryGetProperty("uses", out var u) ? Names(u) : Uses, Limits, Opens: refused.TryGetProperty("open", out var o) && o.GetBoolean())));
             Assert.Contains(refused.GetProperty("message").GetString()!, error.Message);
             Assert.StartsWith("engine Test ", error.Message);
         }
@@ -53,7 +53,7 @@ public class EngineTests
     [Fact]
     public void AValueComesBackAsTheTypeCodeDeclares()
     {
-        var engine = Engine.Load("Test", TestEngine, ["add", "total"], Uses, Limits);
+        var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(["add", "total"], Uses, Limits));
         Assert.Equal(42L, engine.Call<long>("add", 2L, 40L));
         Assert.Equal(29.95m, engine.Call<decimal>("total", new object[] { new[] { new { price = 9.95m, count = 3L }, new { price = 0.10m, count = 1L } } }));
     }
@@ -61,7 +61,7 @@ public class EngineTests
     [Fact]
     public void ACallKeepsToTheLimitsOfItsEngine()
     {
-        var engine = Engine.Load("Test", TestEngine, Names(Cases.GetProperty("functions")), Uses, Limits);
+        var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits));
         foreach (var call in Cases.GetProperty("limited").EnumerateArray())
         {
             var function = call.GetProperty("function").GetString()!;
@@ -84,7 +84,7 @@ public class EngineTests
     {
         var lines = new List<string>();
         var services = Cases.GetProperty("services");
-        var engine = Engine.Load("Test", TestEngine, Names(Cases.GetProperty("functions")), Uses, Limits)
+        var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits))
             .WithServices(new EngineServices(services.GetProperty("clock").GetInt64(), services.GetProperty("seed").GetUInt64(), lines.Add));
         foreach (var call in Cases.GetProperty("served").EnumerateArray())
         {
@@ -94,5 +94,64 @@ public class EngineTests
             Assert.True(JsonNode.DeepEquals(JsonNode.Parse(call.GetProperty("gives").GetRawText()), got), $"{call}: {got}");
             Assert.Equal(call.TryGetProperty("log", out var log) ? Names(log) : [], lines);
         }
+    }
+
+    [Fact]
+    public void AnEngineWithStateKeepsItsInstanceFromCallToCall()
+    {
+        var kept = Cases.GetProperty("kept");
+        Assert.Equal("app", kept.GetProperty("state").GetString());
+        var engine = Engine.Load("Test", TestEngine,
+            new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits, EngineState.PerApp, kept.GetProperty("open").GetBoolean()));
+        foreach (var call in kept.GetProperty("calls").EnumerateArray())
+        {
+            var function = call.GetProperty("function").GetString()!;
+            var args = call.GetProperty("args").EnumerateArray().Select(a => (object?)JsonNode.Parse(a.GetRawText())).ToArray();
+            if (call.TryGetProperty("fails", out var fails))
+            {
+                Assert.StartsWith(fails.GetString()!, Assert.Throws<EngineException>(() => engine.Call(function, args)).Message);
+                continue;
+            }
+            JsonNode got;
+            try
+            {
+                got = new JsonObject { ["value"] = engine.Call(function, args)?.DeepClone() };
+            }
+            catch (RefusedException e)
+            {
+                got = new JsonObject { ["error"] = e.Message };
+            }
+            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(call.GetProperty("gives").GetRawText()), got), $"{call}: {got}");
+        }
+    }
+
+    [Fact]
+    public void AnEngineWithStatePerWindowKeepsAnInstanceForEachWindow()
+    {
+        var windows = Cases.GetProperty("windows");
+        Assert.Equal("window", windows.GetProperty("state").GetString());
+        var engine = Engine.Load("Test", TestEngine,
+            new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits, EngineState.PerWindow, windows.GetProperty("open").GetBoolean()));
+        foreach (var step in windows.GetProperty("steps").EnumerateArray())
+        {
+            if (step.TryGetProperty("close", out var closed))
+            {
+                engine.CloseWindow(closed.GetInt64());
+                continue;
+            }
+            var got = new JsonObject { ["value"] = engine.CallIn(step.GetProperty("window").GetInt64(), step.GetProperty("function").GetString()!)?.DeepClone() };
+            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(step.GetProperty("gives").GetRawText()), got), $"{step}: {got}");
+        }
+    }
+
+    [Fact]
+    public void AnEngineWithStatePerWindowDropsAWindowsInstanceWhenItCloses()
+    {
+        var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits, EngineState.PerWindow, true));
+        var window = OpenWindows.Next();
+        Assert.Equal(11, engine.CallIn(window, "count")!.GetValue<int>());
+        Assert.Equal(12, engine.CallIn(window, "count")!.GetValue<int>());
+        OpenWindows.Close(window);
+        Assert.Equal(11, engine.CallIn(window, "count")!.GetValue<int>());
     }
 }

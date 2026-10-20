@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{
+use super::{EngineState, 
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -69,8 +69,50 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let mut functions = Vec::new();
     let (mut seconds, mut megabytes, mut limited) = (None, None, false);
     let mut uses = Vec::new();
+    let (mut state, mut stated, mut opens) = (EngineState::None, false, false);
     for child in &node.children {
         let mut line = Cursor::new(child.line);
+        if line.eat_keyword("state") {
+            let parsed = (|| {
+                if stated {
+                    return Err(line.error_here("an engine has one state line, as in 'state per app'"));
+                }
+                stated = true;
+                if !line.eat_keyword("per") {
+                    return Err(line.error_here("expected 'per app' or 'per window', as in 'state per window'"));
+                }
+                state = if line.eat_keyword("app") {
+                    EngineState::App
+                } else if line.eat_keyword("window") {
+                    EngineState::Window
+                } else {
+                    return Err(line.error_here("expected 'per app' or 'per window', as in 'state per window'"));
+                };
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
+        if line.eat_keyword("on") {
+            let parsed = (|| {
+                if !line.eat_keyword("open") {
+                    return Err(line.error_here("an engine has on open only: it cannot save or show anything at close, so a window's own 'on close' asks it what to keep"));
+                }
+                if opens {
+                    return Err(line.error_here("an engine has one on open line"));
+                }
+                opens = true;
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
         if line.eat_keyword("uses") {
             let parsed = (|| {
                 uses.extend(line.ident_list("the services it uses, as in 'uses clock, random, log'")?);
@@ -126,7 +168,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             Err(diag) => diagnostics.push(diag),
         }
     }
-    Ok(EngineDecl { name, file, uses, seconds, megabytes, functions, span: node.span() })
+    Ok(EngineDecl { name, file, uses, state, opens, seconds, megabytes, functions, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {

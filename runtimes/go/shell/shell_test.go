@@ -160,8 +160,10 @@ func TestReferenceOptionsAndCommandsWithoutAWindow(t *testing.T) {
 	if got := wire(t, call(t, c, "apart_start", `{}`)); got != `{"value":null}` {
 		t.Fatal(got)
 	}
-	if got := wire(t, call(t, c, "start_app", `{}`)); got != `{"value":{"state":{"window":"","data":{},"parts":{},"selected":{}},"messages":[],"open":[],"close":false}}` {
-		t.Fatal(got)
+	// The app's own events run in a window of no name, with a number like any.
+	started := call(t, c, "start_app", `{}`)
+	if reply, ok := started.Value.(clarity.Reply); started.Error != nil || !ok || reply.State.Window != "" || reply.State.Instance == 0 || len(reply.Open) != 0 || reply.Close {
+		t.Fatal(wire(t, started))
 	}
 	if got := wire(t, call(t, c, "nonsense", `{}`)); got != `{"error":"there is no command nonsense"}` {
 		t.Fatal(got)
@@ -204,5 +206,20 @@ func TestADesktopWindowOpensAtItsWindowsSizeOrTheStandardOne(t *testing.T) {
 	}
 	if w, h := size(0, 0); w != 1100 || h != 760 {
 		t.Fatalf("got %dx%d for no size", w, h)
+	}
+}
+
+// A window that closes is reported once its own `on close` has run, so an
+// engine with state per window drops what it had of it.
+func TestAClosedWindowIsReported(t *testing.T) {
+	c, _ := service(t)
+	var closed []uint64
+	clarity.OnWindowClosed(func(instance uint64) { closed = append(closed, instance) })
+	opened := call(t, c, "open_window", `{"window":"Card","with":{"name":"Ada"}}`).Value.(clarity.Reply)
+	if answer := call(t, c, "close_window", wire(t, map[string]any{"state": opened.State})); answer.Error != nil {
+		t.Fatal(answer.Error)
+	}
+	if len(closed) != 1 || closed[0] != opened.State.Instance {
+		t.Fatalf("closed %v, window %d", closed, opened.State.Instance)
 	}
 }

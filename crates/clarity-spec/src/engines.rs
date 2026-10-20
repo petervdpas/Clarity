@@ -167,6 +167,9 @@ pub fn attach(project: &mut Project, files: Vec<EngineFile>) {
                     } else if !module.memory {
                         found.push(at("lacks the memory of the engine interface".into()));
                     }
+                    if engine.opens && !module.functions.iter().any(|f| f == "clarity_open") {
+                        found.push(at("lacks clarity_open, which its on open needs".into()));
+                    }
                     for function in &engine.functions {
                         if !module.functions.contains(&function.name.name) {
                             found.push(at(format!("has no function {}", function.name.name)));

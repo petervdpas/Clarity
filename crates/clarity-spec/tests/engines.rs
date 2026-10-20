@@ -132,3 +132,61 @@ fn an_engine_declares_the_services_it_uses() {
     assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random or log");
     assert_has(&errors(&source("    uses clock, clock, random, log\n"), test_engine()), "uses clock twice");
 }
+
+/// `state per app` keeps one instance for every call; `on open` runs the
+/// engine's `clarity_open` on every new instance, which its file must export.
+#[test]
+fn an_engine_may_keep_state_and_open() {
+    use clarity_spec::code::EngineState;
+    let source = |lines: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log\n{lines}    function add(a: integer, b: integer) -> integer\n");
+    let declared = |lines: &str| {
+        let (file, diags) = parse(&source(lines), "shop.clarity");
+        assert!(diags.is_empty(), "{diags:#?}");
+        let e = &file.engines[0];
+        (e.state, e.opens)
+    };
+    assert_eq!(declared(""), (EngineState::None, false));
+    assert_eq!(declared("    state per app\n    on open\n"), (EngineState::App, true));
+    assert!(errors(&source("    state per app\n    on open\n"), test_engine()).is_empty());
+
+    let wrong = |lines: &str| errors(&source(lines), test_engine());
+    assert_has(&wrong("    state per day\n"), "expected 'per app' or 'per window'");
+    assert_has(&wrong("    state per app\n    state per app\n"), "one state line");
+    assert_has(&wrong("    on open\n    on open\n"), "one on open line");
+    assert_has(&wrong("    on close\n"), "an engine has on open only");
+    // A file without clarity_open cannot open.
+    let plain = vec![EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE_WITHOUT_OPEN.to_vec() }];
+    assert_has(&errors(&source("    on open\n").replace("    uses clock, random, log\n", ""), plain), "lacks clarity_open, which its on open needs");
+}
+
+/// The smallest engine: memory, clarity_alloc and clarity_free, no clarity_open
+/// (the module of the refused case in conformance/engines.json).
+const TEST_ENGINE_WITHOUT_OPEN: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x02, 0x7f, 0x7f, 0x00, 0x03, 0x03,
+    0x02, 0x00, 0x01, 0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x29, 0x03, 0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x0d, 0x63, 0x6c,
+    0x61, 0x72, 0x69, 0x74, 0x79, 0x5f, 0x61, 0x6c, 0x6c, 0x6f, 0x63, 0x00, 0x00, 0x0c, 0x63, 0x6c, 0x61, 0x72, 0x69, 0x74, 0x79, 0x5f, 0x66,
+    0x72, 0x65, 0x65, 0x00, 0x01, 0x0a, 0x09, 0x02, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x02, 0x00, 0x0b,
+];
+
+/// `state per window`: each open window has an instance of its own, so only
+/// a window's handlers call the engine; a function, an action or the app has
+/// no window to call it in.
+#[test]
+fn an_engine_with_state_per_window_is_called_by_a_window() {
+    use clarity_spec::code::EngineState;
+    let source = |callers: &str| {
+        format!(
+            "module shop\n\nengine Board from \"test.wasm\"\n    uses clock, random, log\n    state per window\n    on open\n    function count() -> integer\n\n{callers}"
+        )
+    };
+    let (file, diags) = parse(&source(""), "shop.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.engines[0].state, EngineState::Window);
+
+    let window = "page Game: window\n    data moves: integer\n\ncode Game\n    handler moved\n        moves = Board.count()\n";
+    assert!(errors(&source(window), test_engine()).is_empty(), "{:#?}", errors(&source(window), test_engine()));
+    let function = "function moves() -> integer\n    return Board.count()\n";
+    assert_has(&errors(&source(function), test_engine()), "engine Board keeps state per window, so only a window's handlers call it, not a function");
+    let app = "app Shop\n    data moves: integer\n\ncode Shop\n    handler moved\n        moves = Board.count()\n";
+    assert_has(&errors(&source(app), test_engine()), "engine Board keeps state per window, so only a window's handlers call it, not the app");
+}

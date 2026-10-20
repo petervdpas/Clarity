@@ -131,7 +131,13 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!windows->open(db, text_of(args, "window"), with, &opened)) return failed();
         return replied(s, opened, "open");
     }
-    if (strcmp(command, "close_window") == 0) return replied(s, &state, "close");
+    if (strcmp(command, "close_window") == 0) {
+        ClarityReply* reply;
+        if (!on_event(s, &state, "close", &reply)) return failed();
+        // The window has closed: what it had of an engine goes.
+        clarity_window_closed(state.instance);
+        return value(clarity_reply_json(reply));
+    }
     if (strcmp(command, "return_to") == 0) return replied(s, &state, "return");
     if (strcmp(command, "start_app") == 0) return replied(s, &state, "start");
     if (strcmp(command, "dispatch_event") == 0) {

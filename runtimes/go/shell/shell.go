@@ -179,7 +179,12 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		}
 		return answer(c.onEvent(state, "open"))
 	case "close_window":
-		return answer(c.onEvent(a.State, "close"))
+		reply, err := c.onEvent(a.State, "close")
+		if err == nil {
+			// The window has closed: what it had of an engine goes.
+			clarity.WindowClosed(a.State.Instance)
+		}
+		return answer(reply, err)
 	case "return_to":
 		return answer(c.onEvent(a.State, "return"))
 	case "start_app":

@@ -188,6 +188,20 @@ catch (RefusedException e)
 {
     Expect(e.Message == "no stock", "refused in its words");
 }
+// An engine with state counts on from what its on open set.
+Expect(Logic.Counted(null!) == 11 && Logic.Counted(null!) == 12, "counted");
+// Each open window has an instance of its own of an engine with state per
+// window, which goes when the window closes.
+var first = new MainViewModel(null!);
+var second = new MainViewModel(null!);
+first.MovedCommand.Execute(null);
+second.MovedCommand.Execute(null);
+first.MovedCommand.Execute(null);
+Expect(first.Moves == 12 && second.Moves == 11, $"moves {first.Moves} and {second.Moves}");
+first.Closing();
+first.MovedCommand.Execute(null);
+second.MovedCommand.Execute(null);
+Expect(first.Moves == 11 && second.Moves == 12, $"after closing, moves {first.Moves} and {second.Moves}");
 Console.WriteLine("every engine function answered");
 "#;
 

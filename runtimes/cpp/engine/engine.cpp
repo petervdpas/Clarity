@@ -4,10 +4,13 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <random>
 
 #include "clarity/text.hpp"
+#include "clarity/ui.hpp"
 
 extern "C" {
 #include "m3_env.h"
@@ -22,6 +25,14 @@ struct Engine::Loaded {
     IM3Environment environment = nullptr;
     std::vector<std::string> uses;
     EngineLimits limits{};
+    EngineState state = EngineState::none;
+    bool opens = false;
+    /// The instances an engine with state keeps between calls, by window (one,
+    /// at 0, for state per app), and the turn its calls take.
+    std::mutex turn;
+    std::map<uint64_t, std::unique_ptr<M3Runtime, void (*)(IM3Runtime)>> kept;
+    /// Hears of the windows that close, for state per window; it goes first when the engine does.
+    std::shared_ptr<void> listening;
     ~Loaded() {
         if (environment) m3_FreeEnvironment(environment);
     }
@@ -222,8 +233,8 @@ bool read_sections(const std::vector<uint8_t>& bytes, Sections& out) {
 
 }  // namespace
 
-Engine Engine::load(const std::string& name, std::vector<uint8_t> bytes, const std::vector<std::string>& functions, const std::vector<std::string>& uses,
-                    EngineLimits limits) {
+Engine Engine::load(const std::string& name, std::vector<uint8_t> bytes, const EngineDeclaration& declaration) {
+    const auto& [functions, uses, limits, state, opens] = declaration;
     auto refused = [&](const std::string& why) { return EngineError("engine " + name + " " + why); };
     if (bytes.size() < 8 || std::memcmp(bytes.data(), "\0asm", 4) != 0) throw refused("is no WebAssembly module");
     Sections sections;
@@ -240,11 +251,21 @@ Engine Engine::load(const std::string& name, std::vector<uint8_t> bytes, const s
     if (!sections.memory) throw refused("lacks the memory of the engine interface");
     for (const auto& f : functions)
         if (!exported(f)) throw refused("has no function " + f);
+    if (opens && !exported("clarity_open")) throw refused("lacks clarity_open, which its on open needs");
     auto loaded = std::make_shared<Loaded>();
     loaded->bytes = std::move(bytes);
     loaded->environment = m3_NewEnvironment();
     loaded->limits = limits;
     loaded->uses = uses;
+    loaded->state = state;
+    loaded->opens = opens;
+    // A window that closes takes its instance along.
+    if (state == EngineState::per_window) {
+        loaded->listening = on_window_closed([kept = loaded.get()](uint64_t window) {
+            std::lock_guard<std::mutex> turn(kept->turn);
+            kept->kept.erase(window);
+        });
+    }
     m3_YieldHook = watch;
     // wasm3 must be able to read it too.
     IM3Module module = nullptr;
@@ -254,30 +275,88 @@ Engine Engine::load(const std::string& name, std::vector<uint8_t> bytes, const s
     return Engine(name, std::move(loaded));
 }
 
-nlohmann::json Engine::call(const std::string& function, const nlohmann::json& args) const {
+namespace {
+
+using Runtime = std::unique_ptr<M3Runtime, void (*)(IM3Runtime)>;
+
+/// Why a call failed, in the words its error gives after the engine and the function.
+struct Failed {
+    std::string why;
+};
+
+/// Writes `input` into the instance, runs `function` and reads its answer as JSON.
+nlohmann::json invoke(IM3Runtime runtime, const char* function, const std::string& input) {
+    IM3Function alloc = nullptr, free_room = nullptr, run = nullptr;
+    for (auto [found, name] : {std::pair{&alloc, "clarity_alloc"}, std::pair{&free_room, "clarity_free"}, std::pair{&run, function}})
+        if (M3Result result = m3_FindFunction(found, runtime, name)) throw Failed{result};
+    auto len = static_cast<int32_t>(input.size());
+    int32_t at = 0;
+    if (M3Result result = m3_CallV(alloc, len)) throw Failed{result};
+    m3_GetResultsV(alloc, &at);
+    uint32_t memory_size = 0;
+    uint8_t* memory = m3_GetMemory(runtime, &memory_size, 0);
+    if (!memory || static_cast<uint64_t>(static_cast<uint32_t>(at)) + input.size() > memory_size) throw Failed{"the arguments do not fit its memory"};
+    std::memcpy(memory + static_cast<uint32_t>(at), input.data(), input.size());
+    int64_t packed = 0;
+    if (M3Result result = m3_CallV(run, at, len)) throw Failed{result};
+    m3_GetResultsV(run, &packed);
+    // The memory may have grown during the call.
+    memory = m3_GetMemory(runtime, &memory_size, 0);
+    auto place = static_cast<uint32_t>(static_cast<uint64_t>(packed) >> 32), size = static_cast<uint32_t>(packed);
+    if (!memory || static_cast<uint64_t>(place) + size > memory_size) throw Failed{"its answer is outside its memory"};
+    std::string output(reinterpret_cast<const char*>(memory) + place, size);
+    m3_CallV(free_room, static_cast<int32_t>(place), static_cast<int32_t>(size));
+    nlohmann::json answer = nlohmann::json::parse(output, nullptr, false);
+    if (answer.is_discarded()) throw Failed{"its answer is no JSON"};
+    return answer;
+}
+
+}  // namespace
+
+/// A new instance of the module with its services, opened when the engine has `on open`.
+static Runtime instance(IM3Environment environment, const std::vector<uint8_t>& bytes, const std::vector<std::string>& uses, EngineLimits limits, bool opens) {
+    Runtime runtime(m3_NewRuntime(environment, engine_stack, nullptr), m3_FreeRuntime);
+    if (!runtime) throw Failed{"no room for it"};
+    IM3Module module = nullptr;
+    if (M3Result result = m3_ParseModule(environment, &module, bytes.data(), static_cast<uint32_t>(bytes.size()))) throw Failed{result};
+    if (M3Result result = m3_LoadModule(runtime.get(), module)) {
+        m3_FreeModule(module);
+        throw Failed{result};
+    }
+    // The memory never grows past the limit: memory.grow answers -1 beyond it.
+    runtime->memory.maxPages = std::min(runtime->memory.maxPages, limits.megabytes * 16);
+    // The services it uses; one it does not import stays unlinked.
+    for (const auto& service : services) {
+        if (std::find(uses.begin(), uses.end(), service.name) == uses.end()) continue;
+        M3Result linked = m3_LinkRawFunction(module, "clarity", service.name, service.type, service.function);
+        if (linked && linked != m3Err_functionLookupFailed) throw Failed{linked};
+    }
+    if (opens) {
+        nlohmann::json opened;
+        try {
+            opened = invoke(runtime.get(), "clarity_open", "[]");
+        } catch (const Failed& f) {
+            if (f.why == late) throw;
+            throw Failed{"its on open gave no answer"};
+        }
+        if (opened.contains("error") && opened["error"].is_string()) throw Failed{"its on open refused: " + opened["error"].get<std::string>()};
+        if (!opened.contains("value")) throw Failed{"its on open gave no answer"};
+    }
+    return runtime;
+}
+
+void Engine::close_window(uint64_t window) const {
+    if (loaded_->state != EngineState::per_window) return;
+    std::lock_guard<std::mutex> turn(loaded_->turn);
+    loaded_->kept.erase(window);
+}
+
+nlohmann::json Engine::call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const {
     auto seconds = loaded_->limits.seconds;
     auto failed = [&](const std::string& why) {
         if (why == late) return EngineError("engine " + name_ + " failed in " + function + ": it ran longer than " + std::to_string(seconds) + " second" + (seconds == 1 ? "" : "s"));
         return EngineError("engine " + name_ + " failed in " + function + ": " + why);
     };
-    std::string input = args.dump();
-    std::unique_ptr<M3Runtime, void (*)(IM3Runtime)> runtime(m3_NewRuntime(loaded_->environment, engine_stack, nullptr), m3_FreeRuntime);
-    if (!runtime) throw failed("no room for it");
-    IM3Module module = nullptr;
-    if (M3Result result = m3_ParseModule(loaded_->environment, &module, loaded_->bytes.data(), static_cast<uint32_t>(loaded_->bytes.size())))
-        throw failed(result);
-    if (M3Result result = m3_LoadModule(runtime.get(), module)) {
-        m3_FreeModule(module);
-        throw failed(result);
-    }
-    // The memory never grows past the limit: memory.grow answers -1 beyond it.
-    runtime->memory.maxPages = std::min(runtime->memory.maxPages, loaded_->limits.megabytes * 16);
-    // The services it uses; one it does not import stays unlinked.
-    for (const auto& service : services) {
-        if (std::find(loaded_->uses.begin(), loaded_->uses.end(), service.name) == loaded_->uses.end()) continue;
-        M3Result linked = m3_LinkRawFunction(module, "clarity", service.name, service.type, service.function);
-        if (linked && linked != m3Err_functionLookupFailed) throw failed(linked);
-    }
     std::random_device fresh;
     uint64_t seed = services_.seed ? *services_.seed : (static_cast<uint64_t>(fresh()) << 32) ^ fresh();
     Serving state{&name_, &services_, seed};
@@ -286,28 +365,27 @@ nlohmann::json Engine::call(const std::string& function, const nlohmann::json& a
         ~Unserve() { serving = nullptr; }
     } unserve;
     Timed timed(seconds);
-    IM3Function alloc = nullptr, free_room = nullptr, run = nullptr;
-    for (auto [found, name] : {std::pair{&alloc, "clarity_alloc"}, std::pair{&free_room, "clarity_free"}, std::pair{&run, function.c_str()}})
-        if (M3Result result = m3_FindFunction(found, runtime.get(), name)) throw failed(result);
-    auto len = static_cast<int32_t>(input.size());
-    int32_t at = 0;
-    if (M3Result result = m3_CallV(alloc, len)) throw failed(result);
-    m3_GetResultsV(alloc, &at);
-    uint32_t memory_size = 0;
-    uint8_t* memory = m3_GetMemory(runtime.get(), &memory_size, 0);
-    if (!memory || static_cast<uint64_t>(static_cast<uint32_t>(at)) + input.size() > memory_size) throw failed("the arguments do not fit its memory");
-    std::memcpy(memory + static_cast<uint32_t>(at), input.data(), input.size());
-    int64_t packed = 0;
-    if (M3Result result = m3_CallV(run, at, len)) throw failed(result);
-    m3_GetResultsV(run, &packed);
-    // The memory may have grown during the call.
-    memory = m3_GetMemory(runtime.get(), &memory_size, 0);
-    auto place = static_cast<uint32_t>(static_cast<uint64_t>(packed) >> 32), size = static_cast<uint32_t>(packed);
-    if (!memory || static_cast<uint64_t>(place) + size > memory_size) throw failed("its answer is outside its memory");
-    std::string output(reinterpret_cast<const char*>(memory) + place, size);
-    m3_CallV(free_room, static_cast<int32_t>(place), static_cast<int32_t>(size));
-    nlohmann::json answer = nlohmann::json::parse(output, nullptr, false);
-    if (answer.is_discarded()) throw failed("its answer is no JSON");
+    // An engine with state keeps its instance, unless a call fails or runs
+    // past its limit: then its memory may be half changed, so the next call
+    // starts a new one. Its calls take turns.
+    bool keeps = loaded_->state != EngineState::none;
+    uint64_t key = loaded_->state == EngineState::per_window ? window : 0;
+    std::unique_lock<std::mutex> turn(loaded_->turn, std::defer_lock);
+    if (keeps) turn.lock();
+    Runtime runtime(nullptr, m3_FreeRuntime);
+    if (auto found = loaded_->kept.find(key); keeps && found != loaded_->kept.end()) {
+        runtime = std::move(found->second);
+        loaded_->kept.erase(found);
+    }
+    nlohmann::json answer;
+    try {
+        if (!runtime) runtime = instance(loaded_->environment, loaded_->bytes, loaded_->uses, loaded_->limits, loaded_->opens);
+        answer = invoke(runtime.get(), function.c_str(), args.dump());
+    } catch (const Failed& f) {
+        throw failed(f.why);
+    }
+    // The engine answered, even with a refusal, so its memory is whole.
+    if (keeps) loaded_->kept.emplace(key, std::move(runtime));
     if (answer.contains("error") && answer["error"].is_string()) refuse(Text::plain(answer["error"].get<std::string>()));
     if (!answer.contains("value")) throw failed("its answer has no value");
     return answer["value"];

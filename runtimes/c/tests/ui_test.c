@@ -36,7 +36,7 @@ void a_handler_replies_as_the_other_runtimes_do(void) {
     cJSON* data = cJSON_Duplicate(state.data, true);
     cJSON_ReplaceItemInObject(cJSON_GetObjectItem(data, "order"), "number", cJSON_CreateString("ORD-8"));
     CHECK_JSON(clarity_reply_json(clarity_ui_reply(ui, "Card", data)),
-               "{\"state\":{\"window\":\"Card\",\"data\":{\"order\":{\"id\":7,\"number\":\"ORD-8\"},\"orders\":[{\"id\":1,\"number\":\"A\"},{\"id\":2,\"number\":\"B\"}]},"
+               "{\"state\":{\"window\":\"Card\",\"instance\":0,\"data\":{\"order\":{\"id\":7,\"number\":\"ORD-8\"},\"orders\":[{\"id\":1,\"number\":\"A\"},{\"id\":2,\"number\":\"B\"}]},"
                "\"parts\":{\"mine\":{\"checked\":true},\"name\":{\"error\":\"Name is required\",\"readonly\":false},\"name_filter\":{\"text\":\"\"},"
                "\"save\":{\"enabled\":false}},\"selected\":{\"grid\":1}},\"messages\":[{\"level\":\"info\",\"text\":{\"text\":\"Saved {n}\","
                "\"values\":{\"n\":{\"kind\":\"text\",\"value\":\"ORD-7\"}}}}],\"open\":[{\"window\":\"Order\",\"with\":{\"order\":{\"id\":7,\"number\":\"ORD-7\"}}}],"
@@ -45,7 +45,7 @@ void a_handler_replies_as_the_other_runtimes_do(void) {
     CHECK_TEXT(state.parts[0].text, "Ada");
     // A new window's state has no parts and no selected rows yet.
     ClarityWindowState fresh = {.window = "Card", .data = cJSON_CreateObject()};
-    CHECK_JSON(clarity_window_state_json(&fresh), "{\"data\":{},\"parts\":{},\"selected\":{},\"window\":\"Card\"}");
+    CHECK_JSON(clarity_window_state_json(&fresh), "{\"data\":{},\"parts\":{},\"selected\":{},\"window\":\"Card\",\"instance\":0}");
 }
 
 void rows_read_again_have_no_selected_row(void) {
@@ -58,7 +58,7 @@ void rows_read_again_have_no_selected_row(void) {
     CHECK_OK(clarity_ui_selected(ui, "other", 2, &row));
     CHECK_INT(row, 0);
     CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(ui, "Orders", cJSON_CreateObject())->state),
-               "{\"window\":\"Orders\",\"data\":{},\"parts\":{},\"selected\":{\"other\":0}}");
+               "{\"window\":\"Orders\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{\"other\":0}}");
     // The handler worked on a copy: the state it came from keeps its rows.
     CHECK_INT(state.selected_count, 2);
     CHECK_TEXT(state.selected[0].name, "grid");
@@ -87,4 +87,37 @@ void a_window_opens_with_its_data_and_with(void) {
     CHECK_FAILS(CLARITY_INVALID, clarity_json_get_date(record, "bad", &since));
     CHECK_JSON(clarity_json_date((ClarityDate){0}), "null");
     CHECK_JSON(clarity_json_reference(0), "null");
+}
+
+/// Every window that opens has a number of its own, which its handlers'
+/// replies keep, so what belongs to one open window (an engine's state) is
+/// found again and dropped when it closes.
+void every_open_window_has_its_own_number(void) {
+    ClarityWindowState* first = clarity_opened("Orders", NULL, NULL);
+    ClarityWindowState* second = clarity_opened("Orders", NULL, NULL);
+    CHECK(first->instance > 0 && second->instance > 0 && first->instance != second->instance);
+    ClarityUi* ui = clarity_ui(first);
+    CHECK(clarity_ui_instance(ui) == first->instance);
+    CHECK(clarity_ui_reply(ui, "Orders", NULL)->state.instance == first->instance);
+    // The number travels with the state to the screen and back.
+    ClarityWindowState back;
+    CHECK_OK(clarity_window_state_from_json(clarity_window_state_json(first), &back));
+    CHECK(back.instance == first->instance);
+}
+
+static uint64_t heard;
+
+static void hear(uint64_t instance, void* context) {
+    (void)context;
+    heard = instance;
+}
+
+void a_closed_window_is_reported_to_what_listens(void) {
+    heard = 0;
+    clarity_on_window_closed(hear, NULL);
+    clarity_window_closed(7);
+    CHECK(heard == 7);
+    clarity_off_window_closed(hear, NULL);
+    clarity_window_closed(8);
+    CHECK(heard == 7);
 }

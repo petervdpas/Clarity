@@ -154,24 +154,40 @@ fn engines_go(project: &Project) -> String {
         let var = names::local(&engine.name.name);
         let names: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
         body.push_str(&format!(
-            "//go:embed engines/{file}\nvar {var}Wasm []byte\n\n// {var} is engine {name}, from {file}.\nvar {var} = sync.OnceValues(func() (*engine.Engine, error) {{\n\treturn engine.Load({}, {var}Wasm, []string{{{}}}, []string{{{uses}}}, engine.Limits{{Seconds: {seconds}, Megabytes: {megabytes}}})\n}})\n\n",
+            "//go:embed engines/{file}\nvar {var}Wasm []byte\n\n// {var} is engine {name}, from {file}.\nvar {var} = sync.OnceValues(func() (*engine.Engine, error) {{\n\treturn engine.Load({}, {var}Wasm, engine.Declaration{{Functions: []string{{{}}}, Uses: []string{{{uses}}}, Limits: engine.Limits{{Seconds: {seconds}, Megabytes: {megabytes}}}, State: {state}, Opens: {opens}}})\n}})\n\n",
             string(&engine.name.name),
             names.join(", "),
             uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
             seconds = engine.seconds(),
             megabytes = engine.megabytes(),
+            state = match engine.state {
+                clarity_spec::code::EngineState::None => "engine.NoState",
+                clarity_spec::code::EngineState::App => "engine.PerApp",
+                clarity_spec::code::EngineState::Window => "engine.PerWindow",
+            },
+            opens = engine.opens,
             file = engine.file,
             name = engine.name.name
         ));
         checks.push_str(&format!("\tif _, err := {var}(); err != nil {{\n\t\treturn err\n\t}}\n"));
+        // An engine with state per window is called in a window: its wrappers take the window's number.
+        let per_window = engine.state == clarity_spec::code::EngineState::Window;
         for function in &engine.functions {
-            let params: Vec<String> = function.params.iter().map(|p| format!("{} {}", names::local(&p.name.name), names::value_type(&logic::type_ref_info(project, &p.ty)))).collect();
-            let args: Vec<String> = function.params.iter().map(|p| names::local(&p.name.name)).collect();
+            let window = per_window.then(|| "window uint64".to_string());
+            let params: Vec<String> =
+                window.into_iter().chain(function.params.iter().map(|p| format!("{} {}", names::local(&p.name.name), names::value_type(&logic::type_ref_info(project, &p.ty))))).collect();
+            let args: Vec<String> = per_window
+                .then(|| "window".to_string())
+                .into_iter()
+                .chain(std::iter::once(string(&function.name.name)))
+                .chain(function.params.iter().map(|p| names::local(&p.name.name)))
+                .collect();
+            let call = if per_window { "CallIn" } else { "Call" };
             let returns = function.returns.as_ref().map_or("any".to_string(), |r| names::value_type(&logic::type_ref_info(project, r)));
             body.push_str(&format!(
-                "// {wrapper} calls {name}.{f}.\nfunc {wrapper}({}) ({returns}, error) {{\n\te, err := {var}()\n\tif err != nil {{\n\t\tvar none {returns}\n\t\treturn none, err\n\t}}\n\treturn engine.As[{returns}](e.Call({}))\n}}\n\n",
+                "// {wrapper} calls {name}.{f}.\nfunc {wrapper}({}) ({returns}, error) {{\n\te, err := {var}()\n\tif err != nil {{\n\t\tvar none {returns}\n\t\treturn none, err\n\t}}\n\treturn engine.As[{returns}](e.{call}({}))\n}}\n\n",
                 params.join(", "),
-                std::iter::once(string(&function.name.name)).chain(args).collect::<Vec<_>>().join(", "),
+                args.join(", "),
                 wrapper = engine_function(&engine.name.name, &function.name.name),
                 name = engine.name.name,
                 f = function.name.name,

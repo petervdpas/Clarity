@@ -587,8 +587,11 @@ impl<'a> Emitter<'a> {
                     .map(|r| value_type(&type_ref_info(self.project, r)))
                     .unwrap_or_else(|| "serde_json::Value".into());
                 let values: Vec<String> = args.iter().map(|a| format!("clarity_runtime::engine::to_value(&{})?", self.value(a))).collect();
+                // An engine with state per window is called in the handler's own window.
+                let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
+                let call = if per_window { "call_in(ui.instance(), " } else { "call(" };
                 format!(
-                    "clarity_runtime::engine::from_value::<{returns}>({e:?}, {f:?}, crate::engines::{}()?.call({f:?}, vec![{}])?)?",
+                    "clarity_runtime::engine::from_value::<{returns}>({e:?}, {f:?}, crate::engines::{}()?.{call}{f:?}, vec![{}])?)?",
                     super::names::snake(&engine.name),
                     values.join(", "),
                     e = engine.name,

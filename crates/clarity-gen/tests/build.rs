@@ -378,6 +378,7 @@ mod shop;
 #[path = "../src/engines.rs"]
 mod engines;
 
+use clarity_runtime::ui::{Ui, WindowState};
 use clarity_runtime::{Db, Decimal, Error};
 use shop::*;
 
@@ -396,6 +397,21 @@ fn every_engine_function_answers_from_clarity_code() {
     // The engine's own error reads as a refusal, in its words.
     let Err(Error::Refused(why)) = refused(&db, "no stock".into()) else { panic!("not refused") };
     assert_eq!(why.show(), "no stock");
+    // An engine with state counts on from what its on open set.
+    assert_eq!((counted(&db).unwrap(), counted(&db).unwrap()), (11, 12));
+    // Each open window has an instance of its own of an engine with state
+    // per window, which goes when the window closes.
+    let (first, second) = (WindowState::new("Main", Default::default()), WindowState::new("Main", Default::default()));
+    let (mut a, mut b) = (MainWindow::default(), MainWindow::default());
+    let (mut in_a, mut in_b) = (Ui::from_state(&first), Ui::from_state(&second));
+    main__moved(&db, &mut a, &mut in_a).unwrap();
+    main__moved(&db, &mut b, &mut in_b).unwrap();
+    main__moved(&db, &mut a, &mut in_a).unwrap();
+    assert_eq!((a.moves, b.moves), (12, 11));
+    engines::close_window(first.instance);
+    main__moved(&db, &mut a, &mut in_a).unwrap();
+    main__moved(&db, &mut b, &mut in_b).unwrap();
+    assert_eq!((a.moves, b.moves), (11, 12));
 }
 "#;
 

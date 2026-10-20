@@ -955,7 +955,9 @@ impl<'a> Emitter<'a> {
                     .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
                     .map(|f| f.params.iter().map(|p| p.ty.clone()).collect())
                     .unwrap_or_default();
-                let mut values = Vec::new();
+                // An engine with state per window is called in the handler's own window.
+                let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
+                let mut values = if per_window { vec!["ui.Instance()".to_string()] } else { Vec::new() };
                 for (arg, param) in args.iter().zip(&params) {
                     let ty = type_ref_info(self.project, param);
                     values.push(bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) }));

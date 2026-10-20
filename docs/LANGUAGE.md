@@ -905,6 +905,8 @@ An engine is a processing module compiled to WebAssembly, which every stack runs
 engine Pricing from "pricing.wasm"
     uses clock, random
     limit 2 seconds, 64 MB
+    state per app
+    on open
     function total(lines: list<Line>) -> money
     function size_of(count: integer) -> Size
     function discounted(order: Order) -> Order
@@ -921,7 +923,8 @@ function order_total(order: Order) -> money
 - **The engine computes; the application does all input and output.** An engine reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
 - **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number) and `log` (a line in the application's log). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
 - **`limit`** says what one call may take: `limit 2 seconds`, `limit 64 MB` or both, `limit 2 seconds, 64 MB`. A call that runs longer is stopped, and fails with an error that says so; the engine never gets more memory than its limit. Without a limit line, a call may take 5 seconds and the engine 256 MB. A time limit is between 1 and 3600 seconds, a memory limit between 1 and 4096 MB.
-- **No state.** Each call starts the engine afresh, so nothing carries over from one call to the next.
+- **State.** Without a state line, each call starts the engine afresh, so nothing carries over from one call to the next. `state per app` keeps one instance for the whole application: what the engine holds in its memory carries from call to call, such as a loaded dictionary. `state per window` keeps an instance for each open window, made at its first call there and dropped when the window closes: a game's board, a document being edited. Only a window's handlers call an engine with state per window, each in its own window. A call that fails or runs past its limit drops the instance, since its memory may be half changed; the next call starts a new one. A refusal keeps it.
+- **`on open`** runs the engine's own `clarity_open` whenever an instance is made: once per instance with state, before every call without. There is no `on close`: an engine cannot save or show anything, so a window that must keep what an engine holds asks it in its own `on close` handler and saves the answer.
 - **Checked twice.** The designer reads the file and reports a file that is not in the folder, is no WebAssembly, imports what the engine does not use, or lacks a declared function. The application checks it again when it starts, and stops there rather than at the first call.
 - **An error** that the engine gives back (its own refusal) reaches code as a refusal, in the engine's words. An engine that fails while it runs is an error that names the engine.
 - The declaration is visible to the modules that `use` the module, like its functions. Two engines of one module have different names, and an engine has each function once.
@@ -1232,6 +1235,8 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 engine        = "engine" Name "from" String
                     ["uses" service ("," service)*]
                     ["limit" n ("seconds" | "MB") ["," n ("seconds" | "MB")]]
+                    ["state" "per" ("app" | "window")]
+                    ["on" "open"]
                     ("function" name "(" [param ("," param)*] ")" "->" type-ref)*
 service       = "clock" | "random" | "log"
 engine-call   = Engine "." name "(" [expr ("," expr)*] ")"

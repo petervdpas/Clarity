@@ -464,6 +464,11 @@ pub struct EngineDecl {
     pub file: String,
     /// `uses clock, random, log`: the services of Clarity it may import.
     pub uses: Vec<Ident>,
+    /// `state per app` or `state per window`: what an instance serves; none
+    /// keeps no state.
+    pub state: EngineState,
+    /// `on open`: the engine's `clarity_open` runs on every new instance.
+    pub opens: bool,
     /// `limit 2 seconds, 64 MB`: how long one call may run; none written
     /// keeps the default (`engines::DEFAULT_SECONDS`).
     pub seconds: Option<u32>,
@@ -472,6 +477,20 @@ pub struct EngineDecl {
     pub megabytes: Option<u32>,
     pub functions: Vec<EngineFunction>,
     pub span: Span,
+}
+
+/// Whether an engine keeps an instance from call to call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum EngineState {
+    /// Every call runs on a fresh instance.
+    #[default]
+    None,
+    /// `state per app`: one instance serves every call of the application.
+    App,
+    /// `state per window`: each open window has an instance of its own.
+    Window,
 }
 
 impl EngineDecl {

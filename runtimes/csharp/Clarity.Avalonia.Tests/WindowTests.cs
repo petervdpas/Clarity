@@ -63,6 +63,28 @@ sealed class CardViewModel(Db db, string title = "Card", bool dialog = false, gl
 
 public class WindowTests
 {
+    /// Every window that opens has a number of its own, and its close is
+    /// reported once its own on close has run, so an engine with state per
+    /// window drops what it had of it.
+    [AvaloniaFact]
+    public void AClosingWindowIsReportedByItsNumberAfterItsOnClose()
+    {
+        var (first, second) = (new CardViewModel(Db.Memory()), new CardViewModel(Db.Memory()));
+        Assert.True(first.Instance > 0 && first.Instance != second.Instance);
+        var reported = new List<(long, bool)>();
+        void Listen(long instance) => reported.Add((instance, first.Said.Contains("close")));
+        OpenWindows.Closed += Listen;
+        try
+        {
+            first.Closing();
+        }
+        finally
+        {
+            OpenWindows.Closed -= Listen;
+        }
+        Assert.Equal([(first.Instance, true)], reported);
+    }
+
     [AvaloniaFact]
     public void ADesktopWindowOpensAtTheSizeOfTheWindowItShowsFirst()
     {

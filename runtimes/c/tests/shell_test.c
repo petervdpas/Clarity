@@ -107,7 +107,7 @@ void the_shell_answers_the_renderers_commands(void) {
     CHECK_JSON(invoked(s, "picture", "{\"entity\":\"Card\",\"id\":2,\"field\":\"photo\"}", NULL), "{\"value\":null}");
     CHECK_JSON(invoked(s, "nonsense", "{}", NULL), "{\"error\":\"there is no command nonsense\"}");
     CHECK_JSON(invoked(s, "start_app", "{}", NULL),
-               "{\"value\":{\"state\":{\"window\":\"\",\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],\"open\":[],\"close\":false}}");
+               "{\"value\":{\"state\":{\"window\":\"\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],\"open\":[],\"close\":false}}");
 
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL, 0, 0};
@@ -129,6 +129,33 @@ void the_shell_answers_the_renderers_commands(void) {
     invoked(s, "open_apart", "{\"window\":\"Card\",\"with\":{},\"width\":320,\"height\":460}", &main.desktop);
     CHECK_INT(main.width, 320);
     CHECK_INT(main.height, 460);
+    clarity_service_free(s);
+    clarity_db_close(db);
+}
+
+static uint64_t closed_window;
+
+static void closed(uint64_t instance, void* context) {
+    (void)context;
+    closed_window = instance;
+}
+
+/// A window that closes is reported once its own `on close` has run, so an
+/// engine with state per window drops what it had of it.
+void a_closed_window_is_reported(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    closed_window = 0;
+    clarity_on_window_closed(closed, NULL);
+    const cJSON* state = cJSON_GetObjectItem(cJSON_GetObjectItem(invoked(s, "open_window", "{\"window\":\"Card\",\"with\":{}}", NULL), "value"), "state");
+    uint64_t instance = (uint64_t)cJSON_GetObjectItem(state, "instance")->valuedouble;
+    cJSON* args = cJSON_CreateObject();
+    cJSON_AddItemToObject(args, "state", cJSON_Duplicate(state, true));
+    invoked(s, "close_window", cJSON_PrintUnformatted(args), NULL);
+    clarity_off_window_closed(closed, NULL);
+    CHECK(instance > 0 && closed_window == instance);
     clarity_service_free(s);
     clarity_db_close(db);
 }

@@ -3,12 +3,15 @@
 //! computes; it imports only the services of Clarity it declares (`uses
 //! clock, random, log`), so it reaches no database, file or network.
 //! Each call runs on a fresh instance of the module, so an engine keeps no
-//! state from one call to the next, and runs within the limits of its
-//! engine: a call that runs too long is stopped, and an engine never gets
-//! more memory than its limit.
+//! state from one call to the next, unless it is declared with `state per
+//! app` (one instance serves every call) or `state per window` (each open
+//! window has an instance of its own, dropped when the window closes). Every
+//! call runs within the limits of its engine: a call that runs too long is
+//! stopped, and an engine never gets more memory than its limit.
 
+use std::collections::HashMap;
 use std::hash::{BuildHasher, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
@@ -25,6 +28,30 @@ use crate::{Error, Result, ui::Text};
 pub struct Limits {
     pub seconds: u32,
     pub megabytes: u32,
+}
+
+/// Whether an engine keeps an instance from call to call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
+    /// Every call runs on a fresh instance.
+    None,
+    /// One instance serves every call of the application (`state per app`).
+    App,
+    /// Each open window has an instance of its own (`state per window`).
+    Window,
+}
+
+/// An engine as its declaration gives it: its functions, the services it
+/// uses, the limits of a call, whether it keeps state and whether it has
+/// `on open`.
+#[derive(Debug, Clone, Copy)]
+pub struct Declaration<'a> {
+    pub functions: &'a [&'a str],
+    pub uses: &'a [&'a str],
+    pub limits: Limits,
+    pub state: State,
+    /// Whether the engine's `clarity_open` runs on every new instance (`on open`).
+    pub opens: bool,
 }
 
 /// The services an engine may use, each a function of module `clarity`
@@ -81,7 +108,21 @@ pub struct Engine {
     module: Module,
     uses: Vec<String>,
     limits: Limits,
+    state: State,
+    opens: bool,
     services: Services,
+    /// The instances an engine with state keeps between calls, by window
+    /// (one, at 0, for state per app).
+    kept: Mutex<HashMap<u64, Live>>,
+}
+
+/// An instance with what a call needs of it.
+struct Live {
+    store: Store<Data>,
+    memory: Memory,
+    alloc: TypedFunc<i32, i32>,
+    free: TypedFunc<(i32, i32), ()>,
+    instance: wasmi::Instance,
 }
 
 /// Why a call ended without an answer.
@@ -108,7 +149,8 @@ impl Engine {
     /// with, the services it uses and the limits of its calls; refuses a
     /// module that is no engine, imports anything but those services, or
     /// lacks one of the functions.
-    pub fn load(name: &str, bytes: &[u8], functions: &[&str], uses: &[&str], limits: Limits) -> Result<Engine> {
+    pub fn load(name: &str, bytes: &[u8], declaration: &Declaration) -> Result<Engine> {
+        let Declaration { functions, uses, limits, state, opens } = *declaration;
         let refused = |why: String| Error::Engine(format!("engine {name} {why}"));
         if !bytes.starts_with(b"\0asm") {
             return Err(refused("is no WebAssembly module".into()));
@@ -143,8 +185,11 @@ impl Engine {
         if let Some(missing) = functions.iter().find(|f| !exported(f)) {
             return Err(refused(format!("has no function {missing}")));
         }
+        if opens && !exported("clarity_open") {
+            return Err(refused("lacks clarity_open, which its on open needs".into()));
+        }
         let uses = uses.iter().map(|u| u.to_string()).collect();
-        Ok(Engine { name: name.to_string(), engine, module, uses, limits, services: Services::default() })
+        Ok(Engine { name: name.to_string(), engine, module, uses, limits, state, opens, services: Services::default(), kept: Mutex::new(HashMap::new()) })
     }
 
     /// The engine with `services` in place of the system's.
@@ -156,27 +201,64 @@ impl Engine {
     /// Calls `function` with `args`: its value, its refusal in its own
     /// words, or what went wrong running it.
     pub fn call(&self, function: &str, args: Vec<Value>) -> Result<Value> {
+        self.call_in(0, function, args)
+    }
+
+    /// Calls `function` in open window `window`: for an engine with state
+    /// per window, on that window's own instance.
+    pub fn call_in(&self, window: u64, function: &str, args: Vec<Value>) -> Result<Value> {
         // The interpreter runs on a thread of its own with room to spare, so a
         // deep engine never overflows the caller's stack (a debug build needs it).
         std::thread::scope(|scope| {
             std::thread::Builder::new()
                 .stack_size(16 << 20)
-                .spawn_scoped(scope, || self.run(function, args))
+                .spawn_scoped(scope, || self.run(window, function, args))
                 .map_err(|e| Error::Engine(format!("engine {} could not start {function}: {e}", self.name)))?
                 .join()
                 .unwrap_or_else(|_| Err(Error::Engine(format!("engine {} failed in {function}", self.name))))
         })
     }
 
-    fn run(&self, function: &str, args: Vec<Value>) -> Result<Value> {
+    /// Drops the instance window `window` had, when it closes.
+    pub fn close_window(&self, window: u64) {
+        if self.state == State::Window {
+            self.kept.lock().unwrap_or_else(|e| e.into_inner()).remove(&window);
+        }
+    }
+
+    fn run(&self, window: u64, function: &str, args: Vec<Value>) -> Result<Value> {
         let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
         let seconds = self.limits.seconds;
         let until = Instant::now() + Duration::from_secs(u64::from(seconds));
-        let output = self.exchange(function, args, until).map_err(|stop| match stop {
+        let stopped = |stop| match stop {
             Stop::Late => failed(format!("it ran longer than {seconds} second{}", if seconds == 1 { "" } else { "s" })),
             Stop::Failed(why) => failed(why),
-        })?;
-        let answer: Value = serde_json::from_slice(&output).map_err(|e| failed(format!("its answer is no JSON: {e}")))?;
+        };
+        // An engine with state keeps its instance, unless a call fails or runs
+        // past its limit: then its memory may be half changed, so the next
+        // call starts a new one.
+        let key = match self.state {
+            State::None => None,
+            State::App => Some(0),
+            State::Window => Some(window),
+        };
+        let mut kept = key.map(|_| self.kept.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut live = match key.and_then(|k| kept.as_mut().and_then(|kept| kept.remove(&k))) {
+            Some(live) => live,
+            None => self.instance(until).map_err(stopped)?,
+        };
+        let output = invoke(&mut live, function, args, until, self.services.seed).map_err(stopped)?;
+        // The engine answered, even with a refusal, so its memory is whole.
+        if let (Some(key), Some(kept)) = (key, kept.as_mut()) {
+            kept.insert(key, live);
+        }
+        self.answer(function, &output)
+    }
+
+    /// The value in an engine's answer, or its refusal in its own words.
+    fn answer(&self, function: &str, output: &[u8]) -> Result<Value> {
+        let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
+        let answer: Value = serde_json::from_slice(output).map_err(|e| failed(format!("its answer is no JSON: {e}")))?;
         match (answer.get("value"), answer.get("error")) {
             (_, Some(error)) => Err(Error::Refused(Text::plain(error.as_str().unwrap_or_default()))),
             (Some(value), None) => Ok(value.clone()),
@@ -184,15 +266,14 @@ impl Engine {
         }
     }
 
-    /// Writes the arguments into a fresh instance, runs `function` and reads its answer.
-    fn exchange(&self, function: &str, args: Vec<Value>, until: Instant) -> std::result::Result<Vec<u8>, Stop> {
+    /// A new instance of the module with its services, opened when the engine has `on open`.
+    fn instance(&self, until: Instant) -> std::result::Result<Live, Stop> {
         let memory_limit = self.limits.megabytes as usize * 1024 * 1024;
-        let seed = self.services.seed.unwrap_or_else(|| std::collections::hash_map::RandomState::new().build_hasher().finish());
         let data = Data {
             limits: StoreLimitsBuilder::new().memory_size(memory_limit).build(),
             name: self.name.clone(),
             clock: self.services.clock,
-            random: seed,
+            random: 0,
             log: self.services.log.clone(),
         };
         let mut store = Store::new(&self.engine, data);
@@ -202,19 +283,35 @@ impl Engine {
         let memory: Memory = instance.get_memory(&store, "memory").ok_or_else(|| Stop::Failed("no memory".into()))?;
         let alloc: TypedFunc<i32, i32> = instance.get_typed_func(&store, "clarity_alloc")?;
         let free: TypedFunc<(i32, i32), ()> = instance.get_typed_func(&store, "clarity_free")?;
-        let run: TypedFunc<(i32, i32), i64> = instance.get_typed_func(&store, function)?;
-
-        let input = serde_json::to_vec(&Value::Array(args)).map_err(|e| Stop::Failed(e.to_string()))?;
-        let len = i32::try_from(input.len()).map_err(|_| Stop::Failed("the arguments are too large".into()))?;
-        let at = timed(&mut store, &alloc, len, until)?;
-        memory.write(&mut store, at as u32 as usize, &input).map_err(|e| Stop::Failed(e.to_string()))?;
-        let packed = timed(&mut store, &run, (at, len), until)?;
-        let (place, size) = ((packed >> 32) as u32, packed as u32);
-        let mut output = vec![0; size as usize];
-        memory.read(&store, place as usize, &mut output).map_err(|e| Stop::Failed(e.to_string()))?;
-        timed(&mut store, &free, (place as i32, size as i32), until)?;
-        Ok(output)
+        let mut live = Live { store, memory, alloc, free, instance };
+        if self.opens {
+            let output = invoke(&mut live, "clarity_open", Vec::new(), until, self.services.seed)?;
+            match self.answer("on open", &output) {
+                Ok(_) => {}
+                Err(Error::Refused(why)) => return Err(Stop::Failed(format!("its on open refused: {}", why.show()))),
+                Err(_) => return Err(Stop::Failed("its on open gave no answer".into())),
+            }
+        }
+        Ok(live)
     }
+}
+
+/// Writes the arguments into the instance, runs `function` and reads its
+/// answer. The random sequence starts afresh for every call.
+fn invoke(live: &mut Live, function: &str, args: Vec<Value>, until: Instant, seed: Option<u64>) -> std::result::Result<Vec<u8>, Stop> {
+    live.store.data_mut().random = seed.unwrap_or_else(|| std::collections::hash_map::RandomState::new().build_hasher().finish());
+    let run: TypedFunc<(i32, i32), i64> = live.instance.get_typed_func(&live.store, function)?;
+    let input = serde_json::to_vec(&Value::Array(args)).map_err(|e| Stop::Failed(e.to_string()))?;
+    let len = i32::try_from(input.len()).map_err(|_| Stop::Failed("the arguments are too large".into()))?;
+    let (alloc, free, memory) = (live.alloc, live.free, live.memory);
+    let at = timed(&mut live.store, &alloc, len, until)?;
+    memory.write(&mut live.store, at as u32 as usize, &input).map_err(|e| Stop::Failed(e.to_string()))?;
+    let packed = timed(&mut live.store, &run, (at, len), until)?;
+    let (place, size) = ((packed >> 32) as u32, packed as u32);
+    let mut output = vec![0; size as usize];
+    memory.read(&live.store, place as usize, &mut output).map_err(|e| Stop::Failed(e.to_string()))?;
+    timed(&mut live.store, &free, (place as i32, size as i32), until)?;
+    Ok(output)
 }
 
 impl Engine {

@@ -9,6 +9,8 @@ mod logic;
 mod model;
 mod names;
 
+use std::fmt::Write as _;
+
 use clarity_project::Settings;
 use clarity_spec::code::check;
 use clarity_spec::model::{FieldType, Project};
@@ -111,24 +113,38 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 /// file, and every one checked when the application starts.
 fn engines_rs(project: &Project) -> String {
     let mut out = format!(
-        "{HEADER}\n//! The engines of the application: each loaded once from its file, every one checked when the application starts.\n\nuse std::sync::OnceLock;\n\nuse clarity_runtime::{{Error, Result}};\nuse clarity_runtime::engine::{{Engine, Limits}};\n\ntype Loaded = OnceLock<std::result::Result<Engine, String>>;\n\nfn loaded(cell: &'static Loaded, name: &str, bytes: &[u8], functions: &[&str], uses: &[&str], limits: Limits) -> Result<&'static Engine> {{\n    cell.get_or_init(|| Engine::load(name, bytes, functions, uses, limits).map_err(|e| e.to_string())).as_ref().map_err(|e| Error::Engine(e.clone()))\n}}\n"
+        "{HEADER}\n//! The engines of the application: each loaded once from its file, every one checked when the application starts.\n\nuse std::sync::OnceLock;\n\nuse clarity_runtime::{{Error, Result}};\nuse clarity_runtime::engine::{{Declaration, Engine, Limits, State}};\n\ntype Loaded = OnceLock<std::result::Result<Engine, String>>;\n\nfn loaded(cell: &'static Loaded, name: &str, bytes: &[u8], declaration: Declaration) -> Result<&'static Engine> {{\n    cell.get_or_init(|| Engine::load(name, bytes, &declaration).map_err(|e| e.to_string())).as_ref().map_err(|e| Error::Engine(e.clone()))\n}}\n"
     );
     let mut checks = String::new();
+    let mut closes = String::new();
     for engine in crate::engines(project) {
         let function = snake(&engine.name.name);
         let names: Vec<String> = engine.functions.iter().map(|f| format!("{:?}", f.name.name)).collect();
         out.push_str(&format!(
-            "\n/// Engine {name}, from {file}.\npub fn {function}() -> Result<&'static Engine> {{\n    static ENGINE: Loaded = OnceLock::new();\n    loaded(&ENGINE, {name:?}, include_bytes!(\"../engines/{file}\"), &[{}], &[{uses}], Limits {{ seconds: {seconds}, megabytes: {megabytes} }})\n}}\n",
+            "\nstatic {cell}: Loaded = OnceLock::new();\n\n/// Engine {name}, from {file}.\npub fn {function}() -> Result<&'static Engine> {{\n    loaded(&{cell}, {name:?}, include_bytes!(\"../engines/{file}\"), Declaration {{ functions: &[{}], uses: &[{uses}], limits: Limits {{ seconds: {seconds}, megabytes: {megabytes} }}, state: {state}, opens: {opens} }})\n}}\n",
             names.join(", "),
             uses = engine.uses.iter().map(|u| format!("{:?}", u.name)).collect::<Vec<_>>().join(", "),
             seconds = engine.seconds(),
             megabytes = engine.megabytes(),
+            state = match engine.state {
+                clarity_spec::code::EngineState::None => "State::None",
+                clarity_spec::code::EngineState::App => "State::App",
+                clarity_spec::code::EngineState::Window => "State::Window",
+            },
+            opens = engine.opens,
             name = engine.name.name,
             file = engine.file,
+            cell = function.to_uppercase(),
         ));
         checks.push_str(&format!("    {function}()?;\n"));
+        if engine.state == clarity_spec::code::EngineState::Window {
+            let _ = write!(closes, "    if let Some(Ok(engine)) = {}.get() {{\n        engine.close_window(instance);\n    }}\n", function.to_uppercase());
+        }
     }
     out.push_str(&format!("\n/// Loads every engine, so one whose file does not fit stops the application at start.\npub fn check() -> Result<()> {{\n{checks}    Ok(())\n}}\n"));
+    out.push_str(&format!(
+        "\n/// Drops what open window `instance` had of the engines with state per window, when it closes.\n#[allow(unused_variables)]\npub fn close_window(instance: u64) {{\n{closes}}}\n"
+    ));
     out
 }
 
@@ -205,10 +221,14 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
     // An engine whose file does not fit its declaration stops the application at start, not at its first call.
-    let (engines_mod, check_engines) = if crate::engines(project).is_empty() {
-        ("", "")
+    let (engines_mod, check_engines, close_engines) = if crate::engines(project).is_empty() {
+        ("", "", "    let _ = instance;\n")
     } else {
-        ("mod engines;\n", "    if let Err(problem) = engines::check() {\n        eprintln!(\"{problem}\");\n        std::process::exit(1);\n    }\n")
+        (
+            "mod engines;\n",
+            "    if let Err(problem) = engines::check() {\n        eprintln!(\"{problem}\");\n        std::process::exit(1);\n    }\n",
+            "    engines::close_window(instance);\n",
+        )
     };
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
@@ -477,7 +497,10 @@ fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>)
 /// Runs a window's `on close` before the screen closes it.
 #[tauri::command]
 fn close_window(app: tauri::State<App>, state: WindowState) -> Answer<Reply> {{
-    locked(&app, |db| on_event(db, state, "close"))
+    let instance = state.instance;
+    let reply = locked(&app, |db| on_event(db, state, "close"))?;
+    // The window has closed: what it had of an engine goes.
+{close_engines}    Ok(reply)
 }}
 
 /// Runs a window's `on return` when it is on top again.

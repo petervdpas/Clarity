@@ -36,6 +36,9 @@ typedef struct {
 /// selected row of each table or list.
 typedef struct {
     const char* window;
+    /// The number of this open window, its own while it is open: what belongs
+    /// to it, such as an engine's state per window, goes by it.
+    uint64_t instance;
     cJSON* data;
     ClarityPart* parts;
     size_t part_count;
@@ -71,6 +74,19 @@ typedef struct {
 typedef struct ClarityUi ClarityUi;
 
 ClarityUi* clarity_ui(const ClarityWindowState* state);
+
+/// The number of the open window the handler runs in.
+uint64_t clarity_ui_instance(const ClarityUi* ui);
+
+/// Has `listen` hear of every window that closes, by its number: an engine
+/// with state per window drops what it had of it.
+void clarity_on_window_closed(void (*listen)(uint64_t instance, void* context), void* context);
+
+/// Stops `listen` hearing of windows that close.
+void clarity_off_window_closed(void (*listen)(uint64_t instance, void* context), void* context);
+
+/// Tells what listens that window `instance` has closed, once its own `on close` has run.
+void clarity_window_closed(uint64_t instance);
 
 bool clarity_ui_visible(const ClarityUi* ui, const char* part);
 void clarity_ui_set_visible(ClarityUi* ui, const char* part, bool value);

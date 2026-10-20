@@ -22,6 +22,18 @@ engine Pricing from "test.wasm"
     function discounted(order: Order) -> Order
     function fail(why: text) -> text
 
+engine Counter from "test.wasm"
+    uses clock, random, log
+    state per app
+    on open
+    function count() -> integer
+
+engine Board from "test.wasm"
+    uses clock, random, log
+    state per window
+    on open
+    function count() -> integer
+
 function answer(a: integer) -> integer
     return Pricing.add(a, 40)
 
@@ -40,5 +52,14 @@ function cheaper(order: Order) -> Order
 function refused(why: text) -> text
     return Pricing.fail(why)
 
+function counted() -> integer
+    return Counter.count()
+
 page Main: window
     title "Engines"
+    data moves: integer
+    button "Move" name move_button at 1,1 on click: moved
+
+code Main
+    handler moved
+        moves = Board.count()

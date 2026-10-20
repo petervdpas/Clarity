@@ -101,6 +101,21 @@ int main(void) {
     // The engine's own error reads as a refusal, in its words.
     const char* r = NULL;
     EXPECT(!refused(NULL, "no stock", &r) && clarity_error()->kind == CLARITY_REFUSED && strcmp(clarity_error()->message, "no stock") == 0, "refused");
+    // An engine with state counts on from what its on open set.
+    int64_t first = 0, second = 0;
+    EXPECT(counted(NULL, &first) && counted(NULL, &second) && first == 11 && second == 12, "counted");
+    // Each open window has an instance of its own of an engine with state
+    // per window, which goes when the window closes (as the shell reports it).
+    ClarityWindowState* one = clarity_opened("Main", NULL, NULL);
+    ClarityWindowState* other = clarity_opened("Main", NULL, NULL);
+    MainWindow first_window = {0}, second_window = {0};
+    ClarityUi* in_first = clarity_ui(one);
+    ClarityUi* in_second = clarity_ui(other);
+    EXPECT(main_window_moved(NULL, in_first, &first_window) && main_window_moved(NULL, in_second, &second_window) && main_window_moved(NULL, in_first, &first_window), "moved");
+    EXPECT(first_window.moves == 12 && second_window.moves == 11, "moves");
+    clarity_window_closed(one->instance);
+    EXPECT(main_window_moved(NULL, in_first, &first_window) && main_window_moved(NULL, in_second, &second_window), "moved again");
+    EXPECT(first_window.moves == 11 && second_window.moves == 12, "moves after closing");
     puts("every engine function answered");
     return 0;
 }

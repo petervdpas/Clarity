@@ -75,7 +75,7 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 1}, {"field", "photo"}}), json::parse(R"({"value":"data:image/png;base64,iVBORw0KGgo="})"));
     CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 2}, {"field", "photo"}}), json::parse(R"({"value":null})"));
     CHECK_EQ(service.invoke("nonsense", json::object()), json::parse(R"({"error":"there is no command nonsense"})"));
-    CHECK_EQ(service.invoke("start_app", json::object()), json::parse(R"({"value":{"state":{"window":"","data":{},"parts":{},"selected":{}},"messages":[],"open":[],"close":false}})"));
+    CHECK_EQ(service.invoke("start_app", json::object()), json::parse(R"({"value":{"state":{"window":"","instance":0,"data":{},"parts":{},"selected":{}},"messages":[],"open":[],"close":false}})"));
 
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main;
@@ -98,4 +98,18 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK(service.closed("apart-1") == std::optional<std::string>("main"));
     service.invoke("close_apart", json::object(), &main);
     CHECK(main.closed);
+}
+
+// A window that closes is reported once its own `on close` has run, so an
+// engine with state per window drops what it had of it.
+TEST(a_closed_window_is_reported) {
+    Db db = Db::memory();
+    Cards cards;
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    uint64_t closed = 0;
+    auto listening = on_window_closed([&](uint64_t instance) { closed = instance; });
+    auto state = service.invoke("open_window", {{"window", "Card"}, {"with", json::object()}})["value"]["state"];
+    service.invoke("close_window", {{"state", state}});
+    CHECK(state["instance"].get<uint64_t>() > 0);
+    CHECK_EQ(closed, state["instance"].get<uint64_t>());
 }

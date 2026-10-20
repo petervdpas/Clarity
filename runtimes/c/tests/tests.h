@@ -25,12 +25,17 @@
     X(rows_read_again_have_no_selected_row)                       \
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
+    X(every_open_window_has_its_own_number)                       \
+    X(a_closed_window_is_reported_to_what_listens)                \
+    X(a_closed_window_is_reported)                                \
     X(show_and_text)                                              \
     X(files_are_filtered_and_sorted_by_their_details)            \
     X(every_engine_call_gives_what_every_host_gives)              \
     X(a_module_that_is_no_engine_is_refused_when_it_loads)        \
     X(a_call_keeps_to_the_limits_of_its_engine)                   \
-    X(an_engine_uses_the_services_it_declares)
+    X(an_engine_uses_the_services_it_declares)                    \
+    X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
+    X(an_engine_with_state_per_window_keeps_an_instance_for_each_window)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

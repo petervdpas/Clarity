@@ -589,8 +589,12 @@ impl<'a> Emitter<'a> {
                     .and_then(|f| f.returns.as_ref())
                     .map(|r| value_type(&type_ref_info(self.project, r)))
                     .unwrap_or_else(|| "object".into());
-                let values: Vec<String> = std::iter::once(string(&function.name)).chain(args.iter().map(|a| self.value(a))).collect();
-                format!("Engines.{}.Call<{returns}>({})", pascal(&engine.name), values.join(", "))
+                // An engine with state per window is called in the handler's own window.
+                let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
+                let window = per_window.then(|| "Instance".to_string());
+                let values: Vec<String> = window.into_iter().chain(std::iter::once(string(&function.name))).chain(args.iter().map(|a| self.value(a))).collect();
+                let call = if per_window { "CallIn" } else { "Call" };
+                format!("Engines.{}.{call}<{returns}>({})", pascal(&engine.name), values.join(", "))
             }
             ExprKind::New { entity } => format!("new {}()", entity.name),
         }

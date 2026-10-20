@@ -211,10 +211,49 @@ const TEST_ENGINE: &[u8] = include_bytes!("../../../conformance/engines/test.was
 const ENGINE_TEST: &str = r#"package main
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
+	"github.com/petervdpas/Clarity/runtimes/go/shell"
 	"github.com/shopspring/decimal"
 )
+
+// Each open window has an instance of its own of an engine with state per
+// window, through the shell as the screen calls it, and the window's
+// instance goes when it closes.
+func TestEachOpenWindowHasItsOwnEngine(t *testing.T) {
+	db, err := clarity.Memory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := shell.New(shell.Options{Name: "shop", Main: "Main", Model: model, Db: db, Windows: windows{}})
+	invoke := func(command string, args any) clarity.Reply {
+		t.Helper()
+		text, _ := json.Marshal(args)
+		answer := s.Invoke(context.Background(), command, text)
+		if answer.Error != nil {
+			t.Fatalf("%s: %v", command, answer.Error)
+		}
+		return answer.Value.(clarity.Reply)
+	}
+	moves := func(r clarity.Reply) float64 { return r.State.Data["moves"].(float64) }
+	a := invoke("open_window", map[string]any{"window": "Main", "with": map[string]any{}})
+	b := invoke("open_window", map[string]any{"window": "Main", "with": map[string]any{}})
+	a = invoke("dispatch_event", map[string]any{"state": a.State, "handler": "moved"})
+	b = invoke("dispatch_event", map[string]any{"state": b.State, "handler": "moved"})
+	a = invoke("dispatch_event", map[string]any{"state": a.State, "handler": "moved"})
+	if moves(a) != 12 || moves(b) != 11 {
+		t.Fatalf("moves %v and %v", moves(a), moves(b))
+	}
+	invoke("close_window", map[string]any{"state": a.State})
+	a = invoke("dispatch_event", map[string]any{"state": a.State, "handler": "moved"})
+	b = invoke("dispatch_event", map[string]any{"state": b.State, "handler": "moved"})
+	if moves(a) != 11 || moves(b) != 12 {
+		t.Fatalf("after closing, moves %v and %v", moves(a), moves(b))
+	}
+}
 
 func TestEveryEngineFunctionAnswersFromClarityCode(t *testing.T) {
 	if err := checkEngines(); err != nil {
@@ -240,6 +279,12 @@ func TestEveryEngineFunctionAnswersFromClarityCode(t *testing.T) {
 	// The engine's own error reads as a refusal, in its words.
 	if _, err := Refused(nil, "no stock"); err == nil || err.Error() != "no stock" {
 		t.Fatal(err)
+	}
+	// An engine with state counts on from what its on open set.
+	first, err1 := Counted(nil)
+	second, err2 := Counted(nil)
+	if err1 != nil || err2 != nil || first != 11 || second != 12 {
+		t.Fatalf("counted %d, %d: %v %v", first, second, err1, err2)
 	}
 }
 "#;

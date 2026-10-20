@@ -6,6 +6,7 @@ package clarity
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 )
 
@@ -59,12 +60,13 @@ func TestAHandlerRepliesAsTheRustRuntimeDoes(t *testing.T) {
 	must(t, err)
 	wire, err := json.Marshal(reply)
 	must(t, err)
-	equal(t, string(wire), `{"state":{"window":"Card","data":{"order":{"Code":"","Customer":null,"ID":7,"Number":"ORD-8","Paid":false,"Placed":null,"Total":0},"orders":[{"Code":"","Customer":null,"ID":1,"Number":"A","Paid":false,"Placed":null,"Total":0},{"Code":"","Customer":null,"ID":2,"Number":"B","Paid":false,"Placed":null,"Total":0}]},"parts":{"mine":{"checked":true},"name":{"error":"Name is required","readonly":false},"name_filter":{"text":""},"save":{"enabled":false}},"selected":{"grid":1}},"messages":[{"level":"info","text":{"text":"Saved {n}","values":{"n":{"kind":"text","value":"ORD-7"}}}}],"open":[{"window":"Order","with":{"order":{"ID":7,"Number":"ORD-7","Customer":null,"Total":0,"Placed":null,"Paid":false,"Code":""}}}],"close":true}`)
+	equal(t, string(wire), `{"state":{"window":"Card","instance":0,"data":{"order":{"Code":"","Customer":null,"ID":7,"Number":"ORD-8","Paid":false,"Placed":null,"Total":0},"orders":[{"Code":"","Customer":null,"ID":1,"Number":"A","Paid":false,"Placed":null,"Total":0},{"Code":"","Customer":null,"ID":2,"Number":"B","Paid":false,"Placed":null,"Total":0}]},"parts":{"mine":{"checked":true},"name":{"error":"Name is required","readonly":false},"name_filter":{"text":""},"save":{"enabled":false}},"selected":{"grid":1}},"messages":[{"level":"info","text":{"text":"Saved {n}","values":{"n":{"kind":"text","value":"ORD-7"}}}}],"open":[{"window":"Order","with":{"order":{"ID":7,"Number":"ORD-7","Customer":null,"Total":0,"Placed":null,"Paid":false,"Code":""}}}],"close":true}`)
 
 	// The data goes through a map, so its keys are sorted, as from the Rust runtime.
-	// A new window's state has no parts and no selected rows yet.
-	fresh, _ := json.Marshal(NewWindowState("Card", map[string]any{}))
-	equal(t, string(fresh), `{"window":"Card","data":{},"parts":{},"selected":{}}`)
+	// A new window's state has its number, and no parts and no selected rows yet.
+	opened := NewWindowState("Card", map[string]any{})
+	fresh, _ := json.Marshal(opened)
+	equal(t, string(fresh), fmt.Sprintf(`{"window":"Card","instance":%d,"data":{},"parts":{},"selected":{}}`, opened.Instance))
 }
 
 // A window opens with its loaded data and with filled in by name; data
@@ -94,4 +96,37 @@ func TestRowsReadAgainHaveNoSelectedRow(t *testing.T) {
 		t.Fatal("the reply kept the selected row")
 	}
 	equal(t, reply.State.Selected["other"], 0)
+}
+
+// Every window that opens has a number of its own, which its handlers'
+// replies keep, so what belongs to one open window (an engine's state) is
+// found again and dropped when it closes.
+func TestEveryOpenWindowHasItsOwnNumber(t *testing.T) {
+	first, second := NewWindowState("Orders", nil), NewWindowState("Orders", nil)
+	if first.Instance == 0 || second.Instance == 0 || first.Instance == second.Instance {
+		t.Fatalf("%d %d", first.Instance, second.Instance)
+	}
+	ui := NewUi(first)
+	if ui.Instance() != first.Instance {
+		t.Fatalf("ui %d", ui.Instance())
+	}
+	reply, err := ui.Reply("Orders", map[string]any{})
+	if err != nil || reply.State.Instance != first.Instance {
+		t.Fatalf("reply %d %v", reply.State.Instance, err)
+	}
+	// The number travels with the state to the screen and back.
+	text, _ := json.Marshal(first)
+	var back WindowState
+	if err := json.Unmarshal(text, &back); err != nil || back.Instance != first.Instance {
+		t.Fatalf("%s %v", text, err)
+	}
+}
+
+func TestAClosedWindowIsReportedToWhatListens(t *testing.T) {
+	var closed []uint64
+	OnWindowClosed(func(instance uint64) { closed = append(closed, instance) })
+	WindowClosed(7)
+	if len(closed) != 1 || closed[0] != 7 {
+		t.Fatal(closed)
+	}
 }

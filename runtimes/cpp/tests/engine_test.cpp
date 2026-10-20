@@ -38,7 +38,7 @@ std::vector<std::string> uses(const json& file) {
 
 TEST(every_engine_call_gives_what_every_host_gives) {
     auto file = conformance("engines.json");
-    auto engine = Engine::load("Test", read_bytes(file["engine"]), file["functions"].get<std::vector<std::string>>(), uses(file), limits(file));
+    auto engine = Engine::load("Test", read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file)});
     for (const auto& call : file["calls"]) {
         json got;
         try {
@@ -56,7 +56,7 @@ TEST(a_module_that_is_no_engine_is_refused_when_it_loads) {
         auto bytes = refused.contains("bytes") ? hex(refused["bytes"]) : read_bytes(file["engine"]);
         auto functions = refused.value("functions", std::vector<std::string>());
         try {
-            Engine::load("Test", bytes, functions, refused.value("uses", uses(file)), limits(file));
+            Engine::load("Test", bytes, {functions, refused.value("uses", uses(file)), limits(file), EngineState::none, refused.value("open", false)});
             CHECK(false);
         } catch (const EngineError& e) {
             std::string message = e.what();
@@ -68,14 +68,14 @@ TEST(a_module_that_is_no_engine_is_refused_when_it_loads) {
 
 TEST(a_value_comes_back_as_the_type_code_declares) {
     auto file = conformance("engines.json");
-    auto engine = Engine::load("Test", read_bytes(file["engine"]), {"add", "total"}, uses(file), limits(file));
+    auto engine = Engine::load("Test", read_bytes(file["engine"]), {{"add", "total"}, uses(file), limits(file)});
     CHECK_EQ(engine.call_as<int64_t>("add", json::array({2, 40})), int64_t(42));
     CHECK(engine.call_as<Decimal>("total", json::array({json::array({{{"price", "9.95"}, {"count", 3}}})})) == Decimal::parse("29.85"));
 }
 
 TEST(a_call_keeps_to_the_limits_of_its_engine) {
     auto file = conformance("engines.json");
-    auto engine = Engine::load("Test", read_bytes(file["engine"]), file["functions"].get<std::vector<std::string>>(), uses(file), limits(file));
+    auto engine = Engine::load("Test", read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file)});
     for (const auto& call : file["limited"]) {
         if (call.contains("fails")) {
             try {
@@ -97,10 +97,51 @@ TEST(an_engine_uses_the_services_it_declares) {
     services.clock = file["services"]["clock"].get<int64_t>();
     services.seed = file["services"]["seed"].get<uint64_t>();
     services.log = [&](const std::string& line) { lines.push_back(line); };
-    auto engine = Engine::load("Test", read_bytes(file["engine"]), file["functions"].get<std::vector<std::string>>(), uses(file), limits(file)).with_services(services);
+    auto engine = Engine::load("Test", read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file)}).with_services(services);
     for (const auto& call : file["served"]) {
         lines.clear();
         CHECK_EQ(json({{"value", engine.call(call["function"], call["args"])}}), call["gives"]);
         CHECK_EQ(json(lines), call.value("log", json::array()));
+    }
+}
+
+TEST(an_engine_with_state_keeps_its_instance_from_call_to_call) {
+    auto file = conformance("engines.json");
+    const auto& kept = file["kept"];
+    CHECK_EQ(kept["state"].get<std::string>(), std::string("app"));
+    auto engine = Engine::load("Test", read_bytes(file["engine"]),
+                               {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file), EngineState::per_app, kept["open"].get<bool>()});
+    for (const auto& call : kept["calls"]) {
+        if (call.contains("fails")) {
+            try {
+                engine.call(call["function"], call["args"]);
+                CHECK(false);
+            } catch (const EngineError& e) {
+                CHECK(std::string(e.what()).rfind(call["fails"].get<std::string>(), 0) == 0);
+            }
+            continue;
+        }
+        json got;
+        try {
+            got = {{"value", engine.call(call["function"], call["args"])}};
+        } catch (const RefusedError& e) {
+            got = {{"error", e.what()}};
+        }
+        CHECK_EQ(got, call["gives"]);
+    }
+}
+
+TEST(an_engine_with_state_per_window_keeps_an_instance_for_each_window) {
+    auto file = conformance("engines.json");
+    const auto& windows = file["windows"];
+    CHECK_EQ(windows["state"].get<std::string>(), std::string("window"));
+    auto engine = Engine::load("Test", read_bytes(file["engine"]),
+                               {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file), EngineState::per_window, windows["open"].get<bool>()});
+    for (const auto& step : windows["steps"]) {
+        if (step.contains("close")) {
+            engine.close_window(step["close"].get<uint64_t>());
+            continue;
+        }
+        CHECK_EQ(json({{"value", engine.call_in(step["window"].get<uint64_t>(), step["function"], json::array())}}), step["gives"]);
     }
 }

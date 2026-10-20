@@ -175,6 +175,12 @@
             {#if engine.uses.length > 0}
               <span class="muted">, uses {engine.uses.map((u) => u.name).join(", ")}</span>
             {/if}
+            {#if engine.state !== "none"}
+              <span class="muted">, state per {engine.state}</span>
+            {/if}
+            {#if engine.opens}
+              <span class="muted">, on open</span>
+            {/if}
             {#if engine.seconds !== null || engine.megabytes !== null}
               <span class="muted">, limit {[engine.seconds !== null ? `${engine.seconds} ${engine.seconds === 1 ? "second" : "seconds"}` : null, engine.megabytes !== null ? `${engine.megabytes} MB` : null].filter(Boolean).join(", ")}</span>
             {/if}

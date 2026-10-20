@@ -146,10 +146,10 @@ void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
     cJSON_AddNumberToObject(circle, "r", clarity_units(d("40.5")));
     clarity_ui_draw(ui, "dial", circle);
     CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state),
-               "{\"window\":\"Main\",\"data\":{},\"parts\":{\"dial\":{\"drawing\":[{\"op\":\"clear\",\"color\":\"#101810\"},{\"op\":\"circle\",\"r\":40.5}]}},\"selected\":{}}");
+               "{\"window\":\"Main\",\"instance\":0,\"data\":{},\"parts\":{\"dial\":{\"drawing\":[{\"op\":\"clear\",\"color\":\"#101810\"},{\"op\":\"circle\",\"r\":40.5}]}},\"selected\":{}}");
     // The next draw starts anew.
     ClarityUi* again = clarity_ui(&state);
     clarity_ui_begin_drawing(again, "dial");
     CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(again, "Main", cJSON_CreateObject())->state),
-               "{\"window\":\"Main\",\"data\":{},\"parts\":{\"dial\":{\"drawing\":[]}},\"selected\":{}}");
+               "{\"window\":\"Main\",\"instance\":0,\"data\":{},\"parts\":{\"dial\":{\"drawing\":[]}},\"selected\":{}}");
 }

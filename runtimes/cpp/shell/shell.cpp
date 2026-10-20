@@ -39,7 +39,12 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         json with = args.value("with", json::object());
         if (command == "start") return value({{"model", json::parse(options_.model)}, {"main", options_.main}});
         if (command == "open_window") return value(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));
-        if (command == "close_window") return value(on_event(state, "close"));
+        if (command == "close_window") {
+            auto reply = on_event(state, "close");
+            // The window has closed: what it had of an engine goes.
+            window_closed(state.instance);
+            return value(reply);
+        }
         if (command == "return_to") return value(on_event(state, "return"));
         if (command == "start_app") return value(on_event(WindowState{}, "start"));
         if (command == "dispatch_event") return value(dispatch(state, text_of(args, "handler")));

@@ -9,6 +9,8 @@ package clarity
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 )
 
 // PartState is what a handler changed of a part; unset fields keep the design.
@@ -29,17 +31,48 @@ type PartState struct {
 // WindowState is one open window: its data by name, its parts' properties
 // and the selected row of each table or list.
 type WindowState struct {
-	Window   string               `json:"window"`
+	Window string `json:"window"`
+	// Instance is the number of this open window, its own while it is open:
+	// what belongs to it, such as an engine's state per window, goes by it.
+	Instance uint64               `json:"instance"`
 	Data     map[string]any       `json:"data"`
 	Parts    map[string]PartState `json:"parts"`
 	Selected map[string]int       `json:"selected"`
 }
 
+// nextInstance is the number the next window that opens gets.
+var nextInstance atomic.Uint64
+
+// NewWindowState is a window that opens, with a number of its own.
 func NewWindowState(window string, data map[string]any) WindowState {
 	if data == nil {
 		data = map[string]any{}
 	}
-	return WindowState{Window: window, Data: data, Parts: map[string]PartState{}, Selected: map[string]int{}}
+	return WindowState{Window: window, Instance: nextInstance.Add(1), Data: data, Parts: map[string]PartState{}, Selected: map[string]int{}}
+}
+
+var (
+	closedMu sync.Mutex
+	closed   []func(instance uint64)
+)
+
+// OnWindowClosed has listen hear of every window that closes, by its
+// number: an engine with state per window drops what it had of it.
+func OnWindowClosed(listen func(instance uint64)) {
+	closedMu.Lock()
+	defer closedMu.Unlock()
+	closed = append(closed, listen)
+}
+
+// WindowClosed tells what listens that window instance has closed, once its
+// own `on close` has run.
+func WindowClosed(instance uint64) {
+	closedMu.Lock()
+	listeners := append([]func(uint64){}, closed...)
+	closedMu.Unlock()
+	for _, listen := range listeners {
+		listen(instance)
+	}
 }
 
 // Decode reads the window's data into the struct of its window.
@@ -90,6 +123,7 @@ type RefOption struct {
 
 // Ui is what a handler can do to the screen.
 type Ui struct {
+	instance uint64
 	parts    map[string]PartState
 	selected map[string]int
 	messages []Message
@@ -99,7 +133,7 @@ type Ui struct {
 }
 
 func NewUi(state WindowState) *Ui {
-	ui := &Ui{parts: map[string]PartState{}, selected: map[string]int{}, messages: []Message{}, open: []OpenRequest{}}
+	ui := &Ui{instance: state.Instance, parts: map[string]PartState{}, selected: map[string]int{}, messages: []Message{}, open: []OpenRequest{}}
 	for k, v := range state.Parts {
 		ui.parts[k] = v
 	}
@@ -108,6 +142,9 @@ func NewUi(state WindowState) *Ui {
 	}
 	return ui
 }
+
+// Instance is the number of the open window the handler runs in.
+func (u *Ui) Instance() uint64 { return u.instance }
 
 func (u *Ui) part(name string, change func(*PartState)) {
 	p := u.parts[name]
@@ -257,7 +294,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		}
 	}
 	return Reply{
-		State:    WindowState{Window: window, Data: values, Parts: u.parts, Selected: u.selected},
+		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected},
 		Messages: u.messages,
 		Open:     u.open,
 		Close:    u.close,

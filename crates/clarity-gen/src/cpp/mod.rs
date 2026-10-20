@@ -187,7 +187,7 @@ fn engines_cpp(project: &Project) -> (String, String) {
         let _ = write!(header, "/// Engine {}, from {}.\nconst clarity::Engine& {var}();\n\n", engine.name.name, engine.file);
         let _ = write!(
             source,
-            "/// Engine {name}, from {file}.\nconst unsigned char {var}_wasm[] = {{\n    {rows}\n}};\n\nconst clarity::Engine& {var}() {{\n    static const clarity::Engine engine = clarity::Engine::load({quoted}, std::vector<uint8_t>(std::begin({var}_wasm), std::end({var}_wasm)), {{{functions}}}, {{{uses}}}, clarity::EngineLimits{{{seconds}, {megabytes}}});\n    return engine;\n}}\n\n",
+            "/// Engine {name}, from {file}.\nconst unsigned char {var}_wasm[] = {{\n    {rows}\n}};\n\nconst clarity::Engine& {var}() {{\n    static const clarity::Engine engine = clarity::Engine::load({quoted}, std::vector<uint8_t>(std::begin({var}_wasm), std::end({var}_wasm)), {{{{{functions}}}, {{{uses}}}, clarity::EngineLimits{{{seconds}, {megabytes}}}, {state}, {opens}}});\n    return engine;\n}}\n\n",
             name = engine.name.name,
             file = engine.file,
             rows = rows.join(",\n    "),
@@ -196,6 +196,12 @@ fn engines_cpp(project: &Project) -> (String, String) {
             uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
             seconds = engine.seconds(),
             megabytes = engine.megabytes(),
+            state = match engine.state {
+                clarity_spec::code::EngineState::None => "clarity::EngineState::none",
+                clarity_spec::code::EngineState::App => "clarity::EngineState::per_app",
+                clarity_spec::code::EngineState::Window => "clarity::EngineState::per_window",
+            },
+            opens = engine.opens,
         );
         let _ = writeln!(checks, "    {var}();");
     }

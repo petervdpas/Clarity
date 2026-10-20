@@ -3,8 +3,11 @@
 // (conformance/engines.json). An engine computes; it imports only the
 // services of Clarity it declares (`uses clock, random, log`), so it reaches
 // no database, file or network. Each call runs on a fresh instance
-// of the module, so an engine keeps no state from one call to the next, and
-// runs within the limits of its engine: a call that runs too long is
+// of the module, so an engine keeps no state from one call to the next,
+// unless it is declared with `state per app` (one instance serves every
+// call) or `state per window` (each open window has an instance of its own,
+// dropped when the window closes). Every call runs within the limits of its
+// engine: a call that runs too long is
 // stopped, and an engine never gets more memory than its limit. An
 // application imports this package only when it has an engine.
 package engine
@@ -17,6 +20,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
@@ -58,13 +62,50 @@ var services = map[string]struct{ params, results []api.ValueType }{
 	"log":    {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, nil},
 }
 
+// State is whether an engine keeps an instance from call to call.
+type State int
+
+const (
+	// NoState runs every call on a fresh instance.
+	NoState State = iota
+	// PerApp keeps one instance for every call of the application (`state per app`).
+	PerApp
+	// PerWindow keeps an instance for each open window (`state per window`).
+	PerWindow
+)
+
+// Declaration is an engine as its declaration gives it: its functions, the
+// services it uses, the limits of a call, whether it keeps state and
+// whether it has `on open`.
+type Declaration struct {
+	Functions []string
+	Uses      []string
+	Limits    Limits
+	State     State
+	// Opens runs the engine's clarity_open on every new instance (`on open`).
+	Opens bool
+}
+
 // Engine is an engine, its module checked and compiled once.
 type Engine struct {
 	name     string
 	runtime  wazero.Runtime
 	module   wazero.CompiledModule
 	limits   Limits
+	state    State
+	opens    bool
 	services Services
+	// kept holds the instances an engine with state keeps between calls, by
+	// window (one, at 0, for PerApp).
+	mu   sync.Mutex
+	kept map[uint64]*live
+}
+
+// live is an instance with what a call needs of it.
+type live struct {
+	module      api.Module
+	memory      api.Memory
+	alloc, free api.Function
 }
 
 // call is the state of the services during one call.
@@ -113,7 +154,8 @@ func serve(ctx context.Context, runtime wazero.Runtime) error {
 // the services it uses and the limits of its calls; it refuses a module
 // that is no engine, imports anything but those services, or lacks one of
 // the functions.
-func Load(name string, bytes []byte, functions []string, uses []string, limits Limits) (*Engine, error) {
+func Load(name string, bytes []byte, declaration Declaration) (*Engine, error) {
+	functions, uses, limits := declaration.Functions, declaration.Uses, declaration.Limits
 	refused := func(why string) error { return &Error{What: "engine " + name + " " + why} }
 	if len(bytes) < 4 || string(bytes[:4]) != "\x00asm" {
 		return nil, refused("is no WebAssembly module")
@@ -156,7 +198,15 @@ func Load(name string, bytes []byte, functions []string, uses []string, limits L
 			return nil, refused("has no function " + f)
 		}
 	}
-	return &Engine{name: name, runtime: runtime, module: module, limits: limits}, nil
+	if _, ok := exported["clarity_open"]; declaration.Opens && !ok {
+		return nil, refused("lacks clarity_open, which its on open needs")
+	}
+	e := &Engine{name: name, runtime: runtime, module: module, limits: limits, state: declaration.State, opens: declaration.Opens, kept: map[uint64]*live{}}
+	if e.state == PerWindow {
+		// A window that closes takes its instance along.
+		clarity.OnWindowClosed(e.CloseWindow)
+	}
+	return e, nil
 }
 
 // Serve gives the engine services in place of the system's.
@@ -167,6 +217,25 @@ func (e *Engine) Serve(s Services) {
 // Call calls function with args: its value as JSON gives it, the engine's
 // refusal in its own words, or what went wrong running it.
 func (e *Engine) Call(function string, args ...any) (any, error) {
+	return e.CallIn(0, function, args...)
+}
+
+// CloseWindow drops the instance window had, when it closes.
+func (e *Engine) CloseWindow(window uint64) {
+	if e.state != PerWindow {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if l, ok := e.kept[window]; ok {
+		l.module.Close(context.Background())
+		delete(e.kept, window)
+	}
+}
+
+// CallIn calls function in open window window: for an engine with state
+// per window, on that window's own instance.
+func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error) {
 	state := &call{name: e.name, clock: e.services.Clock, random: rand.Uint64(), log: e.services.Log}
 	if e.services.Seed != nil {
 		state.random = *e.services.Seed
@@ -186,59 +255,126 @@ func (e *Engine) Call(function string, args ...any) (any, error) {
 		}
 		return &Error{What: fmt.Sprintf("engine %s failed in %s: %s", e.name, function, why)}
 	}
-	instance, err := e.runtime.InstantiateModule(ctx, e.module, wazero.NewModuleConfig().WithName(""))
+	// An engine with state keeps its instance, unless a call fails or runs
+	// past its limit: then its memory may be half changed, so the next call
+	// starts a new one.
+	keeps := e.state != NoState
+	key := window
+	if e.state == PerApp {
+		key = 0
+	}
+	if keeps {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+	}
+	l := e.kept[key]
+	delete(e.kept, key)
+	if l == nil {
+		var err error
+		if l, err = e.instance(ctx); err != nil {
+			return nil, failed(err.Error())
+		}
+	}
+	output, err := invoke(ctx, l, function, args)
 	if err != nil {
+		l.module.Close(context.Background())
 		return nil, failed(err.Error())
 	}
-	defer instance.Close(context.Background())
-	memory := instance.Memory()
-	alloc, free, run := instance.ExportedFunction("clarity_alloc"), instance.ExportedFunction("clarity_free"), instance.ExportedFunction(function)
-	if memory == nil || alloc == nil || free == nil || run == nil {
-		return nil, failed("the engine interface is incomplete")
+	// The engine answered, even with a refusal, so its memory is whole.
+	if keeps {
+		e.kept[key] = l
+	} else {
+		l.module.Close(context.Background())
+	}
+	return answer(output, failed)
+}
+
+// instance is a new instance of the module, opened when the engine has `on open`.
+func (e *Engine) instance(ctx context.Context) (*live, error) {
+	module, err := e.runtime.InstantiateModule(ctx, e.module, wazero.NewModuleConfig().WithName(""))
+	if err != nil {
+		return nil, err
+	}
+	l := &live{module: module, memory: module.Memory(), alloc: module.ExportedFunction("clarity_alloc"), free: module.ExportedFunction("clarity_free")}
+	if l.memory == nil || l.alloc == nil || l.free == nil {
+		module.Close(context.Background())
+		return nil, errors.New("the engine interface is incomplete")
+	}
+	if e.opens {
+		output, err := invoke(ctx, l, "clarity_open", nil)
+		if err != nil {
+			module.Close(context.Background())
+			return nil, err
+		}
+		if _, err := answer(output, func(why string) error { return errors.New(why) }); err != nil {
+			module.Close(context.Background())
+			var refused *clarity.RefusedError
+			if errors.As(err, &refused) {
+				return nil, errors.New("its on open refused: " + refused.Error())
+			}
+			return nil, errors.New("its on open gave no answer")
+		}
+	}
+	return l, nil
+}
+
+// invoke writes the arguments into the instance, runs function and reads its answer.
+func invoke(ctx context.Context, l *live, function string, args []any) ([]byte, error) {
+	run := l.module.ExportedFunction(function)
+	if run == nil {
+		return nil, errors.New("there is no function " + function)
 	}
 	if args == nil {
 		args = []any{}
 	}
 	input, err := json.Marshal(args)
 	if err != nil {
-		return nil, failed(err.Error())
+		return nil, err
 	}
-	room, err := alloc.Call(ctx, uint64(len(input)))
+	room, err := l.alloc.Call(ctx, uint64(len(input)))
 	if err != nil {
-		return nil, failed(err.Error())
+		return nil, err
 	}
 	at := uint32(room[0])
-	if !memory.Write(at, input) {
-		return nil, failed("the arguments do not fit its memory")
+	if !l.memory.Write(at, input) {
+		return nil, errors.New("the arguments do not fit its memory")
 	}
 	result, err := run.Call(ctx, uint64(at), uint64(len(input)))
 	if err != nil {
-		return nil, failed(err.Error())
+		return nil, err
 	}
 	place, size := uint32(result[0]>>32), uint32(result[0])
-	output, ok := memory.Read(place, size)
+	output, ok := l.memory.Read(place, size)
 	if !ok {
-		return nil, failed("its answer is outside its memory")
+		return nil, errors.New("its answer is outside its memory")
 	}
 	output = append([]byte(nil), output...)
-	if _, err := free.Call(ctx, uint64(place), uint64(size)); err != nil {
-		return nil, failed(err.Error())
+	if _, err := l.free.Call(ctx, uint64(place), uint64(size)); err != nil {
+		return nil, err
 	}
-	var answer struct {
-		Value *json.RawMessage `json:"value"`
-		Error *string          `json:"error"`
-	}
+	return output, nil
+}
+
+// answer is the value in an engine's answer, or its refusal in its own words.
+func answer(output []byte, failed func(string) error) (any, error) {
+	// By key, so a value that is null is a value too.
+	var answer map[string]json.RawMessage
 	if err := json.Unmarshal(output, &answer); err != nil {
 		return nil, failed("its answer is no JSON: " + err.Error())
 	}
-	if answer.Error != nil {
-		return nil, clarity.Refuse(clarity.PlainText(*answer.Error))
+	if raw, ok := answer["error"]; ok {
+		var why string
+		if err := json.Unmarshal(raw, &why); err != nil {
+			return nil, failed("its error is no text")
+		}
+		return nil, clarity.Refuse(clarity.PlainText(why))
 	}
-	if answer.Value == nil {
+	raw, ok := answer["value"]
+	if !ok {
 		return nil, failed("its answer has no value")
 	}
 	var value any
-	if err := json.Unmarshal(*answer.Value, &value); err != nil {
+	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, failed(err.Error())
 	}
 	return value, nil

@@ -257,7 +257,7 @@ fn engines_c(project: &Project) -> (String, String) {
         let rows: Vec<String> = bytes.chunks(16).map(|row| row.iter().map(|b| format!("0x{b:02x}")).collect::<Vec<_>>().join(", ")).collect();
         let names: Vec<String> = engine.functions.iter().map(|f| string(&f.name.name)).collect();
         source.push_str(&format!(
-            "\n/// Engine {name}, from {file}.\nstatic const uint8_t {var}_wasm[] = {{\n    {}\n}};\nstatic const char* const {var}_functions[] = {{{}}};\nstatic const char* const {var}_uses[] = {{{uses}}};\nstatic ClarityEngine* {var}_engine = NULL;\n\nstatic bool {var}_loaded(void) {{\n    return {var}_engine || clarity_engine_load({}, {var}_wasm, sizeof {var}_wasm, {}, {var}_functions, {use_count}, {var}_uses, (ClarityEngineLimits){{{seconds}, {megabytes}}}, &{var}_engine);\n}}\n",
+            "\n/// Engine {name}, from {file}.\nstatic const uint8_t {var}_wasm[] = {{\n    {}\n}};\nstatic const char* const {var}_functions[] = {{{}}};\nstatic const char* const {var}_uses[] = {{{uses}}};\nstatic ClarityEngine* {var}_engine = NULL;\n\nstatic bool {var}_loaded(void) {{\n    return {var}_engine || clarity_engine_load({}, {var}_wasm, sizeof {var}_wasm, (ClarityEngineDeclaration){{{}, {var}_functions, {use_count}, {var}_uses, (ClarityEngineLimits){{{seconds}, {megabytes}}}, {state}, {opens}}}, &{var}_engine);\n}}\n",
             rows.join(",\n    "),
             names.join(", "),
             string(&engine.name.name),
@@ -266,14 +266,25 @@ fn engines_c(project: &Project) -> (String, String) {
             use_count = engine.uses.len(),
             seconds = engine.seconds(),
             megabytes = engine.megabytes(),
+            state = match engine.state {
+                clarity_spec::code::EngineState::None => "CLARITY_ENGINE_NO_STATE",
+                clarity_spec::code::EngineState::App => "CLARITY_ENGINE_PER_APP",
+                clarity_spec::code::EngineState::Window => "CLARITY_ENGINE_PER_WINDOW",
+            },
+            opens = engine.opens,
             name = engine.name.name,
             file = engine.file,
         ));
         checks.push_str(&format!("    if (!{var}_loaded()) return false;\n"));
+        // An engine with state per window is called in a window: its functions take the window's number.
+        let per_window = engine.state == clarity_spec::code::EngineState::Window;
         for function in &engine.functions {
             let wrapper = engine_function(&engine.name.name, &function.name.name);
             let returns = function.returns.as_ref().map_or(TypeInfo::Unknown, |r| logic::type_ref_info(project, r));
-            let mut params: Vec<String> = function.params.iter().map(|p| format!("{} {}", names::param_type(&logic::type_ref_info(project, &p.ty)), ident(&p.name.name))).collect();
+            let window = per_window.then(|| "uint64_t window".to_string());
+            let mut params: Vec<String> =
+                window.into_iter().chain(function.params.iter().map(|p| format!("{} {}", names::param_type(&logic::type_ref_info(project, &p.ty)), ident(&p.name.name)))).collect();
+            let call = if per_window { "clarity_engine_call_in({var}_engine, window, " } else { "clarity_engine_call({var}_engine, " }.replace("{var}", &var);
             params.push(format!("{}* result", value_type(&returns)));
             let signature = format!("bool {wrapper}({})", params.join(", "));
             header.push_str(&format!("/// {}.{} of engine {}.\n{signature};\n", engine.name.name, function.name.name, engine.name.name));
@@ -284,7 +295,7 @@ fn engines_c(project: &Project) -> (String, String) {
                 .collect();
             let name_local = if matches!(returns, TypeInfo::Enum(_)) { "    const char* name;\n" } else { "" };
             source.push_str(&format!(
-                "\n{signature} {{\n    if (!{var}_loaded()) return false;\n    cJSON* args = cJSON_CreateArray();\n{args}    cJSON* value = NULL;\n    if (!clarity_engine_call({var}_engine, {}, args, &value)) return false;\n    cJSON* box = cJSON_CreateObject();\n    cJSON_AddItemToObject(box, \"value\", value);\n{name_local}    return {};\n}}\n",
+                "\n{signature} {{\n    if (!{var}_loaded()) return false;\n    cJSON* args = cJSON_CreateArray();\n{args}    cJSON* value = NULL;\n    if (!{call}{}, args, &value)) return false;\n    cJSON* box = cJSON_CreateObject();\n    cJSON_AddItemToObject(box, \"value\", value);\n{name_local}    return {};\n}}\n",
                 string(&function.name.name),
                 from_json(&returns),
             ));

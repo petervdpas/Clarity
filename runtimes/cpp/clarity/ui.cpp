@@ -1,5 +1,8 @@
 #include "clarity/ui.hpp"
 
+#include <atomic>
+#include <mutex>
+
 namespace clarity {
 
 namespace {
@@ -40,11 +43,39 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_}, messages_, open_, close_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, open_, close_};
+}
+
+namespace {
+
+/// What hears of windows that close, for as long as it is kept.
+std::mutex listening;
+std::vector<std::weak_ptr<std::function<void(uint64_t)>>> listeners;
+
+}  // namespace
+
+std::shared_ptr<void> on_window_closed(std::function<void(uint64_t instance)> listen) {
+    auto kept = std::make_shared<std::function<void(uint64_t)>>(std::move(listen));
+    std::lock_guard<std::mutex> lock(listening);
+    listeners.push_back(kept);
+    return kept;
+}
+
+void window_closed(uint64_t instance) {
+    std::vector<std::shared_ptr<std::function<void(uint64_t)>>> live;
+    {
+        std::lock_guard<std::mutex> lock(listening);
+        std::erase_if(listeners, [](const auto& l) { return l.expired(); });
+        for (const auto& l : listeners)
+            if (auto kept = l.lock()) live.push_back(kept);
+    }
+    for (const auto& listen : live) (*listen)(instance);
 }
 
 WindowState opened(const std::string& window, nlohmann::json data, const nlohmann::json& with) {
-    WindowState state{window, data.is_object() ? std::move(data) : nlohmann::json::object(), {}, {}};
+    // The number the next window that opens gets.
+    static std::atomic<uint64_t> next_instance{1};
+    WindowState state{window, data.is_object() ? std::move(data) : nlohmann::json::object(), {}, {}, next_instance++};
     for (auto& [name, value] : with.items()) state.data[name] = value;
     return state;
 }
@@ -76,11 +107,12 @@ void from_json(const nlohmann::json& in, PartState& p) {
 }
 
 void to_json(nlohmann::json& out, const WindowState& s) {
-    out = {{"window", s.window}, {"data", s.data}, {"parts", s.parts}, {"selected", s.selected}};
+    out = {{"window", s.window}, {"instance", s.instance}, {"data", s.data}, {"parts", s.parts}, {"selected", s.selected}};
 }
 
 void from_json(const nlohmann::json& in, WindowState& s) {
     s.window = in.value("window", "");
+    s.instance = in.contains("instance") && in["instance"].is_number_unsigned() ? in["instance"].get<uint64_t>() : 0;
     s.data = in.value("data", nlohmann::json::object());
     if (in.contains("parts")) s.parts = in["parts"].get<std::map<std::string, PartState>>();
     if (in.contains("selected")) s.selected = in["selected"].get<std::map<std::string, int>>();

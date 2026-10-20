@@ -35,7 +35,7 @@ engine Pricing from "pricing.wasm"
 - Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`. Files are not: read the file in code and hand its text in.
 - `uses` and `limit` are optional; see [Services](#services) and [Limits](#limits) below.
 - The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports a service the engine does not use (or anything else), or lacks a function you declared.
-- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with what it uses, its limit and its functions.
+- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with what it uses, its state, its limit and its functions.
 
 ## Services
 
@@ -58,6 +58,24 @@ Every call runs within limits, so an engine that loops without end, or grows wit
 
 Write `limit 2 seconds`, `limit 64 MB`, or both: `limit 2 seconds, 64 MB`. Without a limit line, a call may run 5 seconds and the engine may use 256 MB. A time limit is between 1 and 3600 seconds; a memory limit between 1 and 4096 MB.
 
+## State
+
+Without a state line, every call starts the engine afresh: nothing it did in one call is there in the next. An engine that should remember says so:
+
+```clarity
+engine Board from "board.wasm"
+    state per window
+    on open
+    function move(from: integer, to: integer) -> bool
+    function score() -> integer
+```
+
+- `state per app` keeps one instance for the whole application, for something the engine loads once and keeps, such as a dictionary or a model.
+- `state per window` keeps an instance for each open window: a game's board, a document being edited. It is made at the window's first call and goes when the window closes. Only a window's handlers call such an engine, each in its own window; a function or an action has no window to call it in.
+- `on open` runs the engine's `clarity_open` whenever an instance is made: once for an engine with state, before every call for one without. It sets the engine up, for example the start of a game.
+- A call that fails, or runs past its time limit, drops the instance: its memory may be half changed. The next call starts a new one and opens it again. A refusal keeps the instance, since the engine answered.
+- There is no `on close`. An engine can't save or show anything, so when a window must keep what the engine holds, the window's own `on close` handler asks the engine and saves the answer.
+
 ## Calling an engine
 
 Code calls an engine's function by the engine's name:
@@ -74,7 +92,7 @@ handler discount_clicked
 - The checker types the call against the declaration, as it does a call to one of your functions.
 - Handlers, functions and actions can all call an engine. A call has no effects, because an engine reaches nothing.
 - A record that comes back is a copy. It is saved only when your code saves it.
-- Each call starts the engine afresh. Nothing carries over from one call to the next.
+- Without a state line, each call starts the engine afresh; see [State](#state).
 - When the engine refuses (it gives back an error), code gets a refusal in the engine's words, as from `refuse`. A handler shows it like any other refusal.
 - The application checks every engine when it starts, and stops there if a file does not fit its declaration, not at the first call.
 
@@ -89,6 +107,7 @@ The module exports:
 | `memory` | The engine's memory, which the host writes into and reads from. |
 | `clarity_alloc(len: i32) -> i32` | Room for `len` bytes; gives its place. |
 | `clarity_free(place: i32, len: i32)` | Gives back room the engine handed out. |
+| `clarity_open(place: i32, len: i32) -> i64` | Only with `on open`: sets up a new instance, called like a function with no arguments. |
 | each function, by its name | `(place: i32, len: i32) -> i64` |
 
 A call goes like this:
@@ -166,5 +185,6 @@ These are designed but not built:
 
 - Engines written in Clarity itself.
 - The service `progress`, which would let a long call show on the screen how far it is.
-- Engines that keep state per window or per application, and hooks such as `on tick`.
+- Hooks such as `on tick`, for engines beside the screen.
+- `bytes`, the contents of a file as a value, for document processing.
 - Engines that run beside the screen, drawing on a canvas.

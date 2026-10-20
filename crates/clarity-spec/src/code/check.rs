@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{
+use super::{EngineState, 
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -361,6 +361,8 @@ impl Part<'_> {
 /// What a handler can see of its window or app.
 struct Owner<'a> {
     name: &'a str,
+    /// Whether it is the app, whose code runs in no window of its own.
+    is_app: bool,
     data: &'a [DataDecl],
     parts: HashMap<&'a str, Part<'a>>,
     /// Handlers wired to events, with the span of the part that wires them.
@@ -430,6 +432,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
     for page in &file.pages {
         let mut owner = Owner {
             name: &page.name.name,
+            is_app: false,
             data: &page.data,
             parts: HashMap::new(),
             wired: Vec::new(),
@@ -442,6 +445,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
     for app in &file.apps {
         let mut owner = Owner {
             name: &app.name.name,
+            is_app: true,
             data: &app.data,
             parts: HashMap::new(),
             wired: Vec::new(),
@@ -1591,6 +1595,18 @@ impl<'a> BodyChecker<'_, 'a> {
             self.error(format!("engine {} has no function {}", engine.name, function.name), function.span);
             return Ty::Unknown;
         };
+        // An engine with state per window has an instance in each open window,
+        // so it is called in a window: by the window's own handlers.
+        if decl.state == EngineState::Window {
+            let caller = match self.owner {
+                Some(owner) if !owner.is_app => None,
+                Some(_) => Some("the app"),
+                None => Some(self.context()),
+            };
+            if let Some(caller) = caller {
+                self.error(format!("engine {} keeps state per window, so only a window's handlers call it, not {caller}", engine.name), expr.span);
+            }
+        }
         let called = format!("{}.{}", engine.name, function.name);
         if args.len() != callee.params.len() {
             let n = callee.params.len();

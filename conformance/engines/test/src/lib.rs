@@ -136,3 +136,18 @@ function!(note, |args| {
     unsafe { log(line.as_ptr(), line.len() as i32) };
     Ok(json!(true))
 });
+
+/// How often `count` was called in this instance, from where `clarity_open` set it.
+static COUNTED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// The hook `on open`: runs once when the host makes an instance, before its first call.
+#[unsafe(no_mangle)]
+pub extern "C" fn clarity_open(at: i32, len: i32) -> i64 {
+    answer(at, len, |_args| {
+        COUNTED.store(10, std::sync::atomic::Ordering::Relaxed);
+        Ok(Value::Null)
+    })
+}
+
+// count() -> integer: how often it was called, which an engine with state remembers.
+function!(count, |_args| Ok(json!(COUNTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1)));

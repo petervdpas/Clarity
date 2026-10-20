@@ -46,7 +46,7 @@ void every_engine_call_gives_what_every_host_gives(void) {
     size_t used;
     const char** uses = names(cJSON_GetObjectItem(file, "uses"), &used);
     ClarityEngine* engine;
-    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, count, functions, used, uses, limits(file), &engine));
+    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, (ClarityEngineDeclaration){count, functions, used, uses, limits(file)}, &engine));
     const cJSON* call;
     cJSON_ArrayForEach(call, cJSON_GetObjectItem(file, "calls")) {
         cJSON* value = NULL;
@@ -78,7 +78,7 @@ void a_module_that_is_no_engine_is_refused_when_it_loads(void) {
         size_t used;
         const char** uses = names(own ? own : cJSON_GetObjectItem(file, "uses"), &used);
         ClarityEngine* engine;
-        CHECK_FAILS(CLARITY_ENGINE, clarity_engine_load("Test", data, size, count, functions, used, uses, limits(file), &engine));
+        CHECK_FAILS(CLARITY_ENGINE, clarity_engine_load("Test", data, size, (ClarityEngineDeclaration){count, functions, used, uses, limits(file), .opens = cJSON_IsTrue(cJSON_GetObjectItem(refused, "open"))}, &engine));
         CHECK(strstr(clarity_error()->message, cJSON_GetObjectItem(refused, "message")->valuestring) != NULL);
         CHECK(strncmp(clarity_error()->message, "engine Test ", 12) == 0);
     }
@@ -92,7 +92,7 @@ void a_call_keeps_to_the_limits_of_its_engine(void) {
     size_t used;
     const char** uses = names(cJSON_GetObjectItem(file, "uses"), &used);
     ClarityEngine* engine;
-    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, count, functions, used, uses, limits(file), &engine));
+    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, (ClarityEngineDeclaration){count, functions, used, uses, limits(file)}, &engine));
     const cJSON* call;
     cJSON_ArrayForEach(call, cJSON_GetObjectItem(file, "limited")) {
         cJSON* value = NULL;
@@ -126,7 +126,7 @@ void an_engine_uses_the_services_it_declares(void) {
     const char** functions = names(cJSON_GetObjectItem(file, "functions"), &count);
     const char** uses = names(cJSON_GetObjectItem(file, "uses"), &used);
     ClarityEngine* engine;
-    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, count, functions, used, uses, limits(file), &engine));
+    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, (ClarityEngineDeclaration){count, functions, used, uses, limits(file)}, &engine));
     const cJSON* services = cJSON_GetObjectItem(file, "services");
     clarity_engine_serve(engine, (ClarityEngineServices){.fixed_clock = true,
                                                          .clock = (int64_t)cJSON_GetObjectItem(services, "clock")->valuedouble,
@@ -147,6 +147,66 @@ void an_engine_uses_the_services_it_declares(void) {
         CHECK(cJSON_Compare(logged, log ? log : none, true));
         cJSON_Delete(none);
         cJSON_Delete(logged);
+    }
+    clarity_engine_free(engine);
+}
+
+void an_engine_with_state_keeps_its_instance_from_call_to_call(void) {
+    cJSON* file = conformance("engines.json");
+    ClarityBytes bytes = test_engine(file);
+    size_t count, used;
+    const char** functions = names(cJSON_GetObjectItem(file, "functions"), &count);
+    const char** uses = names(cJSON_GetObjectItem(file, "uses"), &used);
+    const cJSON* kept = cJSON_GetObjectItem(file, "kept");
+    CHECK(strcmp(cJSON_GetObjectItem(kept, "state")->valuestring, "app") == 0);
+    ClarityEngineDeclaration declaration = {count, functions, used, uses, limits(file), CLARITY_ENGINE_PER_APP, cJSON_IsTrue(cJSON_GetObjectItem(kept, "open"))};
+    ClarityEngine* engine;
+    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, declaration, &engine));
+    const cJSON* call;
+    cJSON_ArrayForEach(call, cJSON_GetObjectItem(kept, "calls")) {
+        cJSON* value = NULL;
+        bool answered = clarity_engine_call(engine, cJSON_GetObjectItem(call, "function")->valuestring, cJSON_Duplicate(cJSON_GetObjectItem(call, "args"), true), &value);
+        const cJSON* fails = cJSON_GetObjectItem(call, "fails");
+        if (fails) {
+            CHECK(!answered && strncmp(clarity_error()->message, fails->valuestring, strlen(fails->valuestring)) == 0);
+            continue;
+        }
+        cJSON* got = cJSON_CreateObject();
+        if (answered) {
+            cJSON_AddItemToObject(got, "value", value);
+        } else {
+            cJSON_AddStringToObject(got, "error", clarity_error()->message);
+        }
+        if (!cJSON_Compare(got, cJSON_GetObjectItem(call, "gives"), true)) fprintf(stderr, "got %s\n", cJSON_PrintUnformatted(got));
+        CHECK(cJSON_Compare(got, cJSON_GetObjectItem(call, "gives"), true));
+    }
+    clarity_engine_free(engine);
+}
+
+void an_engine_with_state_per_window_keeps_an_instance_for_each_window(void) {
+    cJSON* file = conformance("engines.json");
+    ClarityBytes bytes = test_engine(file);
+    size_t count, used;
+    const char** functions = names(cJSON_GetObjectItem(file, "functions"), &count);
+    const char** uses = names(cJSON_GetObjectItem(file, "uses"), &used);
+    const cJSON* windows = cJSON_GetObjectItem(file, "windows");
+    CHECK(strcmp(cJSON_GetObjectItem(windows, "state")->valuestring, "window") == 0);
+    ClarityEngineDeclaration declaration = {count, functions, used, uses, limits(file), CLARITY_ENGINE_PER_WINDOW, cJSON_IsTrue(cJSON_GetObjectItem(windows, "open"))};
+    ClarityEngine* engine;
+    REQUIRE_OK(clarity_engine_load("Test", bytes.data, bytes.size, declaration, &engine));
+    const cJSON* step;
+    cJSON_ArrayForEach(step, cJSON_GetObjectItem(windows, "steps")) {
+        const cJSON* closed = cJSON_GetObjectItem(step, "close");
+        if (closed) {
+            clarity_engine_close_window(engine, (uint64_t)closed->valuedouble);
+            continue;
+        }
+        cJSON* value = NULL;
+        uint64_t window = (uint64_t)cJSON_GetObjectItem(step, "window")->valuedouble;
+        CHECK(clarity_engine_call_in(engine, window, cJSON_GetObjectItem(step, "function")->valuestring, cJSON_CreateArray(), &value));
+        cJSON* got = cJSON_CreateObject();
+        cJSON_AddItemToObject(got, "value", value);
+        CHECK(cJSON_Compare(got, cJSON_GetObjectItem(step, "gives"), true));
     }
     clarity_engine_free(engine);
 }

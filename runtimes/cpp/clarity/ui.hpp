@@ -7,6 +7,9 @@
 #pragma once
 
 #include <map>
+#include <cstdint>
+#include <memory>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -40,7 +43,18 @@ struct WindowState {
     nlohmann::json data = nlohmann::json::object();
     std::map<std::string, PartState> parts;
     std::map<std::string, int> selected;
+    /// The number of this open window, its own while it is open: what belongs
+    /// to it, such as an engine's state per window, goes by it.
+    uint64_t instance = 0;
 };
+
+/// Has `listen` hear of every window that closes, by its number, for as long
+/// as what it gives back is kept: an engine with state per window drops what
+/// it had of it.
+std::shared_ptr<void> on_window_closed(std::function<void(uint64_t instance)> listen);
+
+/// Tells what listens that window `instance` has closed, once its own `on close` has run.
+void window_closed(uint64_t instance);
 
 /// How a message shows: info goes away by itself.
 enum class Level { Info, Warning, Error };
@@ -73,7 +87,10 @@ struct RefOption {
 /// What a handler can do to the screen.
 class Ui {
 public:
-    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected) {}
+    explicit Ui(const WindowState& state) : parts_(state.parts), selected_(state.selected), instance_(state.instance) {}
+
+    /// The number of the open window the handler runs in.
+    uint64_t instance() const { return instance_; }
 
     bool visible(const std::string& part) const;
     void set_visible(const std::string& part, bool value) { parts_[part].visible = value; }
@@ -128,6 +145,7 @@ public:
 private:
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
+    uint64_t instance_ = 0;
     std::vector<Message> messages_;
     std::vector<OpenRequest> open_;
     bool close_ = false;

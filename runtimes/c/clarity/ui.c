@@ -1,6 +1,7 @@
 #include "clarity/ui.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct ClarityUi {
@@ -12,6 +13,35 @@ struct ClarityUi {
     size_t open_count, open_room;
     bool close;
 };
+
+uint64_t clarity_ui_instance(const ClarityUi* ui) {
+    return ui->state.instance;
+}
+
+/// What hears of windows that close; it outlives every command, so it lives
+/// outside the scratch arena.
+static struct Listener {
+    void (*listen)(uint64_t, void*);
+    void* context;
+}* listeners;
+static size_t listener_count;
+
+void clarity_on_window_closed(void (*listen)(uint64_t instance, void* context), void* context) {
+    listeners = realloc(listeners, sizeof *listeners * (listener_count + 1));
+    listeners[listener_count++] = (struct Listener){listen, context};
+}
+
+void clarity_off_window_closed(void (*listen)(uint64_t instance, void* context), void* context) {
+    for (size_t i = 0; i < listener_count; ++i) {
+        if (listeners[i].listen != listen || listeners[i].context != context) continue;
+        listeners[i] = listeners[--listener_count];
+        return;
+    }
+}
+
+void clarity_window_closed(uint64_t instance) {
+    for (size_t i = 0; i < listener_count; ++i) listeners[i].listen(instance, listeners[i].context);
+}
 
 ClarityUi* clarity_ui(const ClarityWindowState* state) {
     ClarityUi* ui = CLARITY_NEW(ClarityUi, 1);
@@ -159,8 +189,11 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
 }
 
 ClarityWindowState* clarity_opened(const char* window, cJSON* data, const cJSON* with) {
+    // The number the next window that opens gets.
+    static uint64_t next_instance = 1;
     ClarityWindowState* s = CLARITY_NEW(ClarityWindowState, 1);
     s->window = clarity_copy(window);
+    s->instance = next_instance++;
     s->data = cJSON_IsObject(data) ? data : cJSON_CreateObject();
     const cJSON* item;
     cJSON_ArrayForEach(item, with) {
@@ -210,6 +243,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
 cJSON* clarity_window_state_json(const ClarityWindowState* s) {
     cJSON* out = cJSON_CreateObject();
     cJSON_AddStringToObject(out, "window", s->window ? s->window : "");
+    cJSON_AddNumberToObject(out, "instance", (double)s->instance);
     cJSON_AddItemToObject(out, "data", s->data ? cJSON_Duplicate(s->data, true) : cJSON_CreateObject());
     cJSON* parts = cJSON_AddObjectToObject(out, "parts");
     for (size_t i = 0; i < s->part_count; ++i) cJSON_AddItemToObject(parts, s->parts[i].name, part_json(&s->parts[i]));
@@ -222,6 +256,8 @@ bool clarity_window_state_from_json(const cJSON* in, ClarityWindowState* out) {
     ClarityWindowState s = {0};
     const cJSON* window = cJSON_GetObjectItemCaseSensitive(in, "window");
     s.window = clarity_copy(cJSON_IsString(window) ? window->valuestring : "");
+    const cJSON* instance = cJSON_GetObjectItemCaseSensitive(in, "instance");
+    s.instance = cJSON_IsNumber(instance) && instance->valuedouble > 0 ? (uint64_t)instance->valuedouble : 0;
     const cJSON* data = cJSON_GetObjectItemCaseSensitive(in, "data");
     s.data = cJSON_IsObject(data) ? cJSON_Duplicate(data, true) : cJSON_CreateObject();
     const cJSON* parts = cJSON_GetObjectItemCaseSensitive(in, "parts");

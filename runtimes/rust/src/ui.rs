@@ -262,6 +262,10 @@ pub struct PartState {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct WindowState {
     pub window: String,
+    /// The number of this open window, its own while it is open: what
+    /// belongs to it, such as an engine's state per window, goes by it.
+    #[serde(default)]
+    pub instance: u64,
     pub data: Map<String, Value>,
     #[serde(default)]
     pub parts: BTreeMap<String, PartState>,
@@ -269,10 +273,15 @@ pub struct WindowState {
     pub selected: BTreeMap<String, usize>,
 }
 
+/// The number the next window that opens gets.
+static NEXT_INSTANCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 impl WindowState {
+    /// A window that opens, with a number of its own.
     pub fn new(window: &str, data: Map<String, Value>) -> Self {
         WindowState {
             window: window.to_string(),
+            instance: NEXT_INSTANCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             data,
             ..WindowState::default()
         }
@@ -312,6 +321,7 @@ pub struct Reply {
 /// What a handler can do to the screen.
 #[derive(Debug, Default)]
 pub struct Ui {
+    instance: u64,
     parts: BTreeMap<String, PartState>,
     selected: BTreeMap<String, usize>,
     messages: Vec<Message>,
@@ -320,8 +330,14 @@ pub struct Ui {
 }
 
 impl Ui {
+    /// The number of the open window the handler runs in.
+    pub fn instance(&self) -> u64 {
+        self.instance
+    }
+
     pub fn from_state(state: &WindowState) -> Ui {
         Ui {
+            instance: state.instance,
             parts: state.parts.clone(),
             selected: state.selected.clone(),
             ..Ui::default()
@@ -433,6 +449,7 @@ impl Ui {
         Reply {
             state: WindowState {
                 window: window.to_string(),
+                instance: self.instance,
                 data,
                 parts: self.parts,
                 selected: self.selected,
@@ -501,6 +518,22 @@ mod tests {
         assert_eq!(Slot::money(Decimal::new(125050, 2), None).value, Value::String("1250.50".into()));
         assert_eq!(Slot::name(&"Business", "CustomerKind").enum_name.as_deref(), Some("CustomerKind"));
     }
+    /// Every window that opens has a number of its own, which its handlers'
+    /// replies keep, so what belongs to one open window (an engine's state)
+    /// is found again and dropped when it closes.
+    #[test]
+    fn every_open_window_has_its_own_number() {
+        let (first, second) = (WindowState::new("Orders", Map::new()), WindowState::new("Orders", Map::new()));
+        assert!(first.instance > 0 && second.instance > 0 && first.instance != second.instance);
+        let ui = Ui::from_state(&first);
+        assert_eq!(ui.instance(), first.instance);
+        assert_eq!(ui.reply("Orders", Map::new()).state.instance, first.instance);
+        // The number travels with the state to the screen and back.
+        let wire = serde_json::to_value(&first).unwrap();
+        assert_eq!(wire["instance"], first.instance);
+        assert_eq!(serde_json::from_value::<WindowState>(wire).unwrap().instance, first.instance);
+    }
+
     #[test]
     fn unbound_inputs_carry_their_text() {
         let mut state = WindowState::new("Customers", Map::new());

@@ -33,6 +33,7 @@ pub fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
         TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
         TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
@@ -495,8 +496,10 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "clarity::refuse({text});");
             }
             StmtKind::Write { text, store, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "write_bytes" } else { "write_text" };
                 let (path, text) = (self.value(path), self.value(text));
-                let _ = writeln!(out, "db.write_text({}, {path}, {text});", string(&store.name));
+                let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
@@ -657,6 +660,9 @@ impl<'a> Emitter<'a> {
                 if self.types.type_of(object) == TypeInfo::File {
                     return format!("{}.{}", self.place(object), member.name);
                 }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    return format!("static_cast<int64_t>({}.size())", self.place(object));
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for C++", print::expr(expr)));
                     return String::new();
@@ -736,6 +742,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
+            ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self
                     .project
@@ -746,7 +753,13 @@ impl<'a> Emitter<'a> {
                     .and_then(|e| e.functions.iter().find(|f| f.name.name == function.name))
                     .and_then(|f| f.returns.as_ref())
                     .map(|r| value_type(&type_ref_info(self.project, r)));
-                let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+                // Bytes cross as base64 text; other values as their JSON.
+                let values: Vec<String> = args
+                    .iter()
+                    .map(|a| if self.types.type_of(a) == TypeInfo::Bytes { format!("clarity::base64({})", self.value(a)) } else { self.value(a) })
+                    .collect();
+                let bytes_back = returns.as_deref() == Some("clarity::Bytes");
+                let returns = if bytes_back { Some("std::string".to_string()) } else { returns };
                 // An engine with state per window is called in the handler's own window.
                 let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
                 let (call, window) = match (returns, per_window) {
@@ -756,7 +769,8 @@ impl<'a> Emitter<'a> {
                     (None, false) => ("call".to_string(), ""),
                 };
                 let args = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
-                format!("engines::{}().{call}({window}{}, {args})", snake(&engine.name), string(&function.name))
+                let call = format!("engines::{}().{call}({window}{}, {args})", snake(&engine.name), string(&function.name));
+                if bytes_back { format!("clarity::from_base64({call})") } else { call }
             }
             ExprKind::New { entity } => format!("{}{{}}", entity.name),
         }

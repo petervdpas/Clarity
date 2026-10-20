@@ -32,7 +32,7 @@ engine Pricing from "pricing.wasm"
 ```
 
 - Every function gives a value, so each has `-> type`.
-- Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`. Files are not: read the file in code and hand its text in.
+- Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), `bytes`, enums, records and `list<Entity>`. Files are not: read the file in code and hand in its text (`read text of f`) or its bytes (`read bytes of f`).
 - `uses` and `limit` are optional; see [Services](#services) and [Limits](#limits) below.
 - The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports a service the engine does not use (or anything else), or lacks a function you declared.
 - The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its module, which shows each engine with what it uses, its state, its limit and its functions.
@@ -129,6 +129,7 @@ Values travel as Clarity's JSON:
 | an enum | the value's name, as `"Large"` |
 | a record | an object with its `id` and its fields, by their names |
 | `list<Entity>` | an array of those objects |
+| `bytes` | a string with the bytes as base64, as `"AQID"` |
 
 A function in Rust, with `serde_json`:
 
@@ -186,5 +187,4 @@ These are designed but not built:
 - Engines written in Clarity itself.
 - The service `progress`, which would let a long call show on the screen how far it is.
 - Hooks such as `on tick`, for engines beside the screen.
-- `bytes`, the contents of a file as a value, for document processing.
 - Engines that run beside the screen, drawing on a canvas.

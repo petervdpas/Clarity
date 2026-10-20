@@ -314,6 +314,8 @@ pub enum ExprKind {
     },
     /// `read text of f`: the text a file holds.
     ReadText { file: Box<Expr> },
+    /// `read bytes of f`: the contents of a file of a file store, as they are.
+    ReadBytes { file: Box<Expr> },
     /// `new Photo`: a new record of the entity, with its defaults.
     New { entity: Ident },
 }
@@ -401,6 +403,8 @@ pub enum TypeRefKind {
     Duration,
     /// A file of a file store.
     File,
+    /// The contents of a file as they are (`read bytes of f`).
+    Bytes,
     /// An entity (a record) or an enum.
     Named { name: String },
     List { item: String },

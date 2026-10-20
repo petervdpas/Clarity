@@ -197,6 +197,10 @@ public:
     std::string read_text(const FileEntry& file);
     /// Writes `text` as the file `path` of a store, making its folders.
     void write_text(const std::string& store, const std::string& path, const std::string& text);
+    /// The contents of a file as they are.
+    Bytes read_bytes(const FileEntry& file);
+    /// Writes `bytes` as they are as the file `path` of a store, making its folders.
+    void write_bytes(const std::string& store, const std::string& path, const Bytes& bytes);
     /// A file as the picture of a field kept in `field_store` (none: in the
     /// database): the file itself when it is in that store, else a copy.
     Picture picture_from(const FileEntry& file, const std::optional<std::string>& field_store);

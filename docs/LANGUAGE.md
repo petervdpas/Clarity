@@ -918,7 +918,7 @@ function order_total(order: Order) -> money
 ```
 
 - **The file** is in the `engines` folder of the module folder (`shop/engines/pricing.wasm`). Every generated application carries it inside the program.
-- **Each function** has a signature like a function's, and always a result: `-> type`. Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), enums, records and `list<Entity>`; not `file` or `list<file>`.
+- **Each function** has a signature like a function's, and always a result: `-> type`. Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), `bytes`, enums, records and `list<Entity>`; not `file` or `list<file>`. An engine that works on a document gets its bytes: `Reader.pages(read bytes of f)`.
 - **A call** is `Engine.function(args)`. The checker types it against the declaration, as it does a call to a function. Handlers, functions and actions can all call an engine: it has no effects.
 - **The engine computes; the application does all input and output.** An engine reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
 - **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number) and `log` (a line in the application's log). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
@@ -980,6 +980,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `new Entity` | a new record of the entity, with its defaults; `save` stores it |
 | `files f in store where ... order by ...` | the files of a file store that meet a condition; see [Files](#files) |
 | `read text of f` | the text a file holds |
+| `read bytes of f` | the contents of a file as they are; see [Files](#files) |
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
@@ -1054,6 +1055,7 @@ action export_collection()
 - `files f in photos` lists every file of the store and its folders, leaving out files and folders whose name starts with a dot, sorted by path. `where` and `order by` work as in `find`, on the details of a file, and run in memory: the condition may be any bool.
 - A file has `name` (`Blue Train.jpg`), `path` inside the store (`2024/Blue Train.jpg`, with `/` between folders), `extension` in lower case without the dot (`jpg`), `size` in bytes and `modified` (a date and time, in UTC). A list of files is `list<file>`, one file `file`.
 - `read text of f` gives the text a file holds, as UTF-8. `write t to exports "lists/albums.txt"` writes one, making its folders. A path that would leave the store is refused.
+- `read bytes of f` gives the contents of a file as they are, of type `bytes`: a picture, a PDF, anything that is no text. `write b to exports "copies/cover.png"` writes bytes as they are. `b.size` is how many bytes there are. Bytes are no window data: the screen has nothing to show of them, so code keeps them while it works and hands them to engines and functions.
 - A file becomes a record's picture with `photo.picture = f`. In the field's own store (`store photos`) it is the file itself: the column holds its path, nothing is copied, as a catalog of photos wants. Kept anywhere else, the picture is a copy of the file. A file that is no picture is refused.
 - Listing, reading and writing are effects, `files.read` and `files.write`, which an action declares; a function cannot reach files.
 
@@ -1074,6 +1076,7 @@ The types of values follow the data dictionary:
 | a list of records | `list<Entity>`, a list in the window's data |
 | `image` | an `image` field; compared with and set to `none`, or set to a file |
 | `file`, `list<file>` | a file of a file store, and a list of them; see [Files](#files) |
+| `bytes` | the contents of a file as they are (`read bytes of f`); `size` is their number |
 
 An integer is accepted where a decimal is expected. Nothing else converts by itself. The checker reports unknown names, wrong types, setting something that cannot be set, and calls with the wrong arguments.
 

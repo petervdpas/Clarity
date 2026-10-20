@@ -65,6 +65,7 @@ function shownType(ty: TypeRefKind, span: DataDecl["span"]): FieldType | null {
     case "named":
       return { kind: "enum", name: { name: ty.name, span } };
     case "file":
+    case "bytes":
     case "list":
       return null;
     default:

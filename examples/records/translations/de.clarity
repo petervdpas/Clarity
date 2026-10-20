@@ -62,6 +62,8 @@ translation de
     "Photo" "Foto"
     "No picture" "Kein Bild"
     "Find photos" "Fotos suchen"
+    "Back up photos" "Fotos sichern"
+    "Copied the photos to the exports folder" "Die Fotos sind in den Exportordner kopiert"
     "Export list" "Liste exportieren"
     "Saved the list in collection.txt" "Die Liste steht in collection.txt"
     "Load a picture" "Bild laden"

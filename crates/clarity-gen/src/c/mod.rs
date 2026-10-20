@@ -223,6 +223,7 @@ fn engines_c(project: &Project) -> (String, String) {
     let to_json = |ty: &TypeInfo, value: &str| -> String {
         match ty {
             TypeInfo::Text => format!("clarity_json_text({value})"),
+            TypeInfo::Bytes => format!("clarity_json_bytes({value})"),
             TypeInfo::Integer | TypeInfo::Duration => format!("clarity_json_integer({value})"),
             TypeInfo::Decimal | TypeInfo::Money => format!("clarity_json_decimal({value})"),
             TypeInfo::Bool => format!("clarity_json_bool({value})"),
@@ -237,6 +238,7 @@ fn engines_c(project: &Project) -> (String, String) {
     let from_json = |ty: &TypeInfo| -> String {
         match ty {
             TypeInfo::Text => "clarity_json_get_text(box, \"value\", result)".into(),
+            TypeInfo::Bytes => "clarity_json_get_bytes(box, \"value\", result)".into(),
             TypeInfo::Integer | TypeInfo::Duration => "clarity_json_get_integer(box, \"value\", result)".into(),
             TypeInfo::Decimal | TypeInfo::Money => "clarity_json_get_decimal(box, \"value\", result)".into(),
             TypeInfo::Bool => "clarity_json_get_bool(box, \"value\", result)".into(),

@@ -38,6 +38,7 @@ pub fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
         TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
         TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
@@ -646,10 +647,12 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
             StmtKind::Write { text, store, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "clarity_write_bytes" } else { "clarity_write_text" };
                 let path = bare(self.value(path, &mut pre));
                 let text = bare(self.value(text, &mut pre));
                 out.push_str(&pre);
-                let _ = writeln!(out, "if (!clarity_write_text(db, {}, {path}, {text})) return false;", string(&store.name));
+                let _ = writeln!(out, "if (!{write}(db, {}, {path}, {text})) return false;", string(&store.name));
             }
             StmtKind::For { var, list, body } => {
                 let (item_type, list_c) = match self.types.type_of(list) {
@@ -1022,6 +1025,10 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object, pre);
                     return arrow(&object, &ident(&member.name));
                 }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    let object = self.place(object, pre);
+                    return format!("((int64_t)({object}).size)");
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for C", print::expr(expr)));
                     return String::new();
@@ -1142,6 +1149,10 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadText { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift("const char*", &format!("clarity_read_text(db, {file}, {{out}})"), pre)
+            }
+            ExprKind::ReadBytes { file } => {
+                let file = bare(self.value(file, pre));
+                self.lift("ClarityBytes", &format!("clarity_read_bytes(db, {file}, {{out}})"), pre)
             }
             // A function of an engine, through its typed function in engines.c (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {

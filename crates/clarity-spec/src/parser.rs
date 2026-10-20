@@ -824,6 +824,9 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
                 ty.span,
             ));
         }
+        TypeRefKind::Bytes => {
+            return Err(Diagnostic::error("bytes are no window data: the screen has nothing to show of them, so code keeps them while it works", ty.span));
+        }
         TypeRefKind::Named { name: entity } if default.is_none() => DataKind::Record { entity: Ident { name: entity, span: ty.span } },
         _ => DataKind::Value { ty, default },
     };

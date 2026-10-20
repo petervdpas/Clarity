@@ -366,6 +366,20 @@ pub fn to_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value> {
     serde_json::to_value(value).map_err(|e| Error::Engine(format!("a value for an engine: {e}")))
 }
 
+/// Bytes as they go to an engine: base64 text.
+pub fn bytes_value(bytes: &[u8]) -> Value {
+    use base64::Engine as _;
+    Value::String(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+/// The bytes an engine gave, from base64 text.
+pub fn bytes_from(engine: &str, function: &str, value: Value) -> Result<Vec<u8>> {
+    use base64::Engine as _;
+    let wrong = || Error::Engine(format!("engine {engine} gave {function} a value of another type: no bytes"));
+    let text = value.as_str().ok_or_else(wrong)?;
+    base64::engine::general_purpose::STANDARD.decode(text).map_err(|_| wrong())
+}
+
 /// What an engine gave, as a value of code of its declared type.
 pub fn from_value<T: serde::de::DeserializeOwned>(engine: &str, function: &str, value: Value) -> Result<T> {
     serde_json::from_value(value).map_err(|e| Error::Engine(format!("engine {engine} gave {function} a value of another type: {e}")))

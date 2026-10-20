@@ -125,3 +125,35 @@ fn a_file_becomes_a_picture_and_text_comes_from_text_files() {
     let read_number = with("lines = lines + read text of n", "lines = lines + read text of 5");
     assert_eq!(errors(&load(&read_number, &["photos"])), ["'read text of' needs a file, not integer"]);
 }
+
+/// `bytes`: the contents of a file as they are, read with `read bytes of f`,
+/// written with `write`, measured with `.size`, and handed to engines and
+/// functions; not window data, which the screen shows.
+const DOCUMENTS: &str = "module catalog
+
+function reversed(content: bytes) -> bytes
+    return content
+
+action copy_pictures()
+    effects files.read, files.write
+    for f in files f in photos where f.extension == \"png\"
+        let content: bytes = read bytes of f
+        if content.size > 0
+            write reversed(content) to photos \"copies/\" + f.name
+";
+
+#[test]
+fn bytes_are_read_written_and_measured() {
+    let project = load(DOCUMENTS, &["photos"]);
+    assert!(errors(&project).is_empty(), "{:#?}", errors(&project));
+    let (file, _) = parse(DOCUMENTS, "catalog.clarity");
+    let copy = &file.functions[1];
+    let StmtKind::For { body, .. } = &copy.body[0].kind else { panic!("{:?}", copy.body[0]) };
+    let StmtKind::Let { value, .. } = &body[0].kind else { panic!("{:?}", body[0]) };
+    assert!(matches!(value.kind, ExprKind::ReadBytes { .. }), "{value:?}");
+
+    // Bytes are no text, and a function reaches no files.
+    let wrong = |source: &str| errors(&load(source, &["photos"]));
+    assert!(wrong("module catalog\n\nfunction joined(b: bytes) -> text\n    return \"x\" + b\n").iter().any(|e| e.contains("bytes")));
+    assert!(wrong("module catalog\n\npage Doc: window\n    data content: bytes\n").iter().any(|e| e.contains("bytes are no window data")));
+}

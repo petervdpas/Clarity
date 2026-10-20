@@ -113,6 +113,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Image => "ClarityPicture*".into(),
         TypeInfo::File => "ClarityFile".into(),
         TypeInfo::Files => "ClarityFileList".into(),
+        TypeInfo::Bytes => "ClarityBytes".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => list_type(item),
         TypeInfo::Unknown => "int64_t".into(),

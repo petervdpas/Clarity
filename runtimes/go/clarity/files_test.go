@@ -5,6 +5,7 @@
 package clarity
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -22,6 +23,11 @@ type fileCases struct {
 		Size                            int64
 	}
 	Refused []string
+	Bytes   []struct {
+		Path   string
+		Base64 string
+		Size   int64
+	}
 }
 
 func loadFileCases(t *testing.T) fileCases {
@@ -149,4 +155,32 @@ func TestFilesAreFilteredAndSortedByTheirDetails(t *testing.T) {
 	// The list sorted is a copy.
 	equal(t, files[0].Name, "b.jpg")
 	equal(t, *New(3), 3)
+}
+
+func TestBytesAreReadAndWrittenAsTheyAre(t *testing.T) {
+	db, _, cases := planted(t)
+	for _, c := range cases.Bytes {
+		bytes, err := base64.StdEncoding.DecodeString(c.Base64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.WriteBytes("photos", c.Path, bytes); err != nil {
+			t.Fatal(err)
+		}
+		files, err := db.Files("photos")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			if f.Path != c.Path {
+				continue
+			}
+			read, err := db.ReadBytes(f)
+			if err != nil || f.Size != c.Size || string(read) != string(bytes) {
+				t.Fatalf("%v size %d: %v", read, f.Size, err)
+			}
+			return
+		}
+		t.Fatalf("%s is not listed", c.Path)
+	}
 }

@@ -95,6 +95,9 @@ int main() {
         Order order{7, "ORD-7", clarity::Decimal::parse("100.05")};
         auto less = cheaper(db, order);
         EXPECT(less.id == 7 && less.total == clarity::Decimal::parse("90.05"), "cheaper");
+        // Bytes cross to an engine and back as they are.
+        EXPECT(backwards(db, clarity::Bytes{1, 2, 3}) == clarity::Bytes({3, 2, 1}), "backwards");
+        EXPECT(measured(db, clarity::Bytes{1, 2, 3}) == 6, "measured");
         // An engine with state counts on from what its on open set.
         EXPECT(counted(db) == 11 && counted(db) == 12, "counted");
         // Each open window has an instance of its own of an engine with state

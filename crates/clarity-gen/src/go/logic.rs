@@ -58,6 +58,7 @@ pub(crate) fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
         TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
         TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
@@ -444,6 +445,18 @@ impl<'a> Emitter<'a> {
     }
 
     /// The lines that lift a call that can fail; gives the name of its value.
+    /// `code` as a plain operand: an expression with an operator is held in a
+    /// variable of its own first.
+    fn held_operand(&mut self, code: String, pre: &mut String) -> String {
+        if !code.contains(' ') || code.starts_with('"') && code.ends_with('"') && !code[1..code.len() - 1].contains('"') {
+            return code;
+        }
+        self.temps += 1;
+        let name = format!("v{}", self.temps);
+        pre.push_str(&format!("{name} := {code}\n"));
+        name
+    }
+
     fn lift(&mut self, call: String, pre: &mut String) -> String {
         self.temps += 1;
         let name = format!("v{}", self.temps);
@@ -537,11 +550,17 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
             StmtKind::Write { text, store, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "WriteBytes" } else { "WriteText" };
                 let path = bare(self.value(path, &mut pre));
                 let text = bare(self.value(text, &mut pre));
+                // A sum among the arguments is held first, as gofmt writes a
+                // call with several arguments more tightly than one on its own.
+                let path = self.held_operand(path, &mut pre);
+                let text = self.held_operand(text, &mut pre);
                 out.push_str(&pre);
                 out.push_str(&format!(
-                    "if err := db.WriteText({}, {path}, {text}); err != nil {{\n\t{}\n}}\n",
+                    "if err := db.{write}({}, {path}, {text}); err != nil {{\n\t{}\n}}\n",
                     string(&store.name),
                     self.fail("err")
                 ));
@@ -838,6 +857,10 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object, pre);
                     return format!("{object}.{}", pascal(&member.name));
                 }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    let object = self.place(object, pre);
+                    return format!("int64(len({object}))");
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for Go", print::expr(expr)));
                     return String::new();
@@ -943,6 +966,10 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadText { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadText({file})"), pre)
+            }
+            ExprKind::ReadBytes { file } => {
+                let file = bare(self.value(file, pre));
+                self.lift(format!("db.ReadBytes({file})"), pre)
             }
             // A function of an engine, through its typed function in engines.go (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {

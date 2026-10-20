@@ -110,6 +110,16 @@ func (db *Db) ReadText(file FileEntry) (string, error) {
 
 // WriteText writes text as the file path of a store, making its folders.
 func (db *Db) WriteText(store, path, text string) error {
+	return db.WriteBytes(store, path, []byte(text))
+}
+
+// ReadBytes is the contents of a file as they are.
+func (db *Db) ReadBytes(file FileEntry) ([]byte, error) {
+	return db.readFile(file)
+}
+
+// WriteBytes writes bytes as they are as the file path of a store, making its folders.
+func (db *Db) WriteBytes(store, path string, bytes []byte) error {
 	root, err := db.storeFolder(store)
 	if err != nil {
 		return err
@@ -121,7 +131,7 @@ func (db *Db) WriteText(store, path, text string) error {
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		return &StorageError{What: "cannot make " + filepath.Dir(file) + ": " + err.Error(), Err: err}
 	}
-	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(file, bytes, 0o644); err != nil {
 		return &StorageError{What: "cannot write " + file + ": " + err.Error(), Err: err}
 	}
 	return nil

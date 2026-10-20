@@ -101,6 +101,12 @@ int main(void) {
     // The engine's own error reads as a refusal, in its words.
     const char* r = NULL;
     EXPECT(!refused(NULL, "no stock", &r) && clarity_error()->kind == CLARITY_REFUSED && strcmp(clarity_error()->message, "no stock") == 0, "refused");
+    // Bytes cross to an engine and back as they are.
+    static const uint8_t forwards[] = {1, 2, 3};
+    ClarityBytes back = {0};
+    int64_t length = 0;
+    EXPECT(backwards(NULL, (ClarityBytes){forwards, 3}, &back) && back.size == 3 && back.data[0] == 3 && back.data[2] == 1, "backwards");
+    EXPECT(measured(NULL, (ClarityBytes){forwards, 3}, &length) && length == 6, "measured");
     // An engine with state counts on from what its on open set.
     int64_t first = 0, second = 0;
     EXPECT(counted(NULL, &first) && counted(NULL, &second) && first == 11 && second == 12, "counted");

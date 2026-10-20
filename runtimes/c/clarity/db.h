@@ -112,6 +112,10 @@ bool clarity_files(ClarityDb* db, const char* store, ClarityFileList* out);
 bool clarity_read_text(ClarityDb* db, const ClarityFile* file, const char** out);
 /// Writes `text` as the file `path` of a store, making its folders.
 bool clarity_write_text(ClarityDb* db, const char* store, const char* path, const char* text);
+/// The contents of a file as they are.
+bool clarity_read_bytes(ClarityDb* db, const ClarityFile* file, ClarityBytes* out);
+/// Writes `bytes` as they are as the file `path` of a store, making its folders.
+bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, ClarityBytes bytes);
 /// A file as the picture of a field kept in `field_store` (NULL: in the
 /// database): the file itself when it is in that store, else a copy.
 bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityPicture** out);

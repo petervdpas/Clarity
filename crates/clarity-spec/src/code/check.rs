@@ -59,6 +59,8 @@ pub enum TypeInfo {
     /// A file of a file store, and a list of them.
     File,
     Files,
+    /// The contents of a file as they are.
+    Bytes,
     Enum(String),
     Record(String),
     List(String),
@@ -183,6 +185,7 @@ impl<'a> Env<'a> {
             TypeRefKind::DateTime => Ty::DateTime,
             TypeRefKind::Duration => Ty::Duration,
             TypeRefKind::File => Ty::File,
+            TypeRefKind::Bytes => Ty::Bytes,
             TypeRefKind::List { item } if item == "file" => Ty::Files,
             TypeRefKind::Named { name } => match (self.entity(name), self.enum_decl(name)) {
                 (Some(entity), _) => Ty::Record(entity),
@@ -235,6 +238,7 @@ enum Ty<'a> {
     Image,
     File,
     Files,
+    Bytes,
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
@@ -255,6 +259,7 @@ impl Ty<'_> {
             Ty::Duration => TypeInfo::Duration,
             Ty::Image => TypeInfo::Image,
             Ty::File => TypeInfo::File,
+            Ty::Bytes => TypeInfo::Bytes,
             Ty::Files => TypeInfo::Files,
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
@@ -275,6 +280,7 @@ impl Ty<'_> {
             Ty::Duration => "duration".into(),
             Ty::Image => "image".into(),
             Ty::File => "file".into(),
+            Ty::Bytes => "bytes".into(),
             Ty::Files => "list<file>".into(),
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
@@ -293,7 +299,7 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image | Ty::File | Ty::Files)
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image | Ty::File | Ty::Files | Ty::Bytes)
     }
 
     fn same(&self, other: &Ty) -> bool {
@@ -1081,11 +1087,14 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             StmtKind::Write { text, path, .. } => {
                 self.check_files("writes a file", "files.write", stmt.span);
-                for (value, what) in [(text, "the text to write"), (path, "the path to write it to")] {
-                    let ty = self.expr(value, Some(Ty::Text));
-                    if !Ty::Text.accepts(&ty) {
-                        self.error(format!("{what} must be text, not {}", ty.name()), value.span);
-                    }
+                // What is written is text, or bytes as they are.
+                let ty = self.expr(text, None);
+                if !matches!(ty, Ty::Bytes | Ty::Unknown) && !Ty::Text.accepts(&ty) {
+                    self.error(format!("what to write must be text or bytes, not {}", ty.name()), text.span);
+                }
+                let ty = self.expr(path, Some(Ty::Text));
+                if !Ty::Text.accepts(&ty) {
+                    self.error(format!("the path to write it to must be text, not {}", ty.name()), path.span);
                 }
             }
             StmtKind::For { var, list, body } => {
@@ -1452,6 +1461,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 ty: Ty::Unknown,
                 writable: Ok(()),
             }),
+            Ty::Bytes => match member {
+                "size" => Some(Place::Value { ty: Ty::Integer, writable: Err("the size of bytes is read, not set".into()) }),
+                _ => {
+                    self.error(format!("bytes have size, not '{member}'"), span);
+                    None
+                }
+            },
             Ty::File => {
                 let ty = match member {
                     "name" | "path" | "extension" => Ty::Text,
@@ -1567,6 +1583,14 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("'read text of' needs a file, not {}", ty.name()), file.span);
                 }
                 Ty::Text
+            }
+            ExprKind::ReadBytes { file } => {
+                self.check_files("reads a file", "files.read", expr.span);
+                let ty = self.expr(file, None);
+                if !matches!(ty, Ty::File | Ty::Unknown) {
+                    self.error(format!("'read bytes of' needs a file, not {}", ty.name()), file.span);
+                }
+                Ty::Bytes
             }
             ExprKind::New { entity } => match self.env.entity(&entity.name) {
                 Some(decl) => Ty::Record(decl),
@@ -2160,7 +2184,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::Find { var: inner, filter, .. } | ExprKind::Files { var: inner, filter, .. } => {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
-        ExprKind::ReadText { file } => mentions(file, var),
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
@@ -2414,7 +2438,7 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(filter, found);
             }
         }
-        ExprKind::ReadText { file } => each_expr(file, found),
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {

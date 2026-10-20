@@ -280,6 +280,13 @@ func TestEveryEngineFunctionAnswersFromClarityCode(t *testing.T) {
 	if _, err := Refused(nil, "no stock"); err == nil || err.Error() != "no stock" {
 		t.Fatal(err)
 	}
+	// Bytes cross to an engine and back as they are.
+	if back, err := Backwards(nil, []byte{1, 2, 3}); err != nil || string(back) != string([]byte{3, 2, 1}) {
+		t.Fatal(back, err)
+	}
+	if n, err := Measured(nil, []byte{1, 2, 3}); err != nil || n != 6 {
+		t.Fatal(n, err)
+	}
 	// An engine with state counts on from what its on open set.
 	first, err1 := Counted(nil)
 	second, err2 := Counted(nil)

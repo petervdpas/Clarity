@@ -123,6 +123,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Image => "*clarity.Picture".into(),
         TypeInfo::File => "clarity.FileEntry".into(),
         TypeInfo::Files => "[]clarity.FileEntry".into(),
+        TypeInfo::Bytes => "[]byte".into(),
         TypeInfo::Enum(name) => name.clone(),
         TypeInfo::Record(name) => format!("*{name}"),
         TypeInfo::List(name) => format!("[]{name}"),

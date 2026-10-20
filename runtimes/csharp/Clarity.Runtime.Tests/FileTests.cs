@@ -42,14 +42,28 @@ public sealed class FileTests : IDisposable
         var listed = db.Files("photos").Select(f => new { f.Path, f.Name, f.Extension, f.Size, Modified = f.Modified?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) });
         var expected = Cases().GetProperty("listing").EnumerateArray().Select(f => new
         {
-            Path = f.GetProperty("path").GetString(),
-            Name = f.GetProperty("name").GetString(),
-            Extension = f.GetProperty("extension").GetString(),
+            Path = f.GetProperty("path").GetString()!,
+            Name = f.GetProperty("name").GetString()!,
+            Extension = f.GetProperty("extension").GetString()!,
             Size = f.GetProperty("size").GetInt64(),
             Modified = f.GetProperty("modified").GetString(),
         });
         Assert.Equal(expected, listed);
         Assert.Throws<StorageException>(() => db.Files("films"));
+    }
+
+    [Fact]
+    public void BytesAreReadAndWrittenAsTheyAre()
+    {
+        foreach (var c in Cases().GetProperty("bytes").EnumerateArray())
+        {
+            var path = c.GetProperty("path").GetString()!;
+            var bytes = Convert.FromBase64String(c.GetProperty("base64").GetString()!);
+            db.WriteBytes("photos", path, bytes);
+            var file = db.Files("photos").Single(f => f.Path == path);
+            Assert.Equal(c.GetProperty("size").GetInt64(), file.Size);
+            Assert.Equal(bytes, db.ReadBytes(file));
+        }
     }
 
     [Fact]

@@ -57,6 +57,7 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
         TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
         TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
@@ -66,7 +67,7 @@ fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
 
 /// Values of these types are copied; the others are cloned when read.
 fn is_copy(ty: &TypeInfo) -> bool {
-    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files)
+    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
 }
 
 fn is_decimal(ty: &TypeInfo) -> bool {
@@ -233,9 +234,11 @@ impl<'a> Emitter<'a> {
                 out.push('\n');
             }
             StmtKind::Write { text, store, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "write_bytes" } else { "write_text" };
                 let path = self.text_ref(path);
                 let text = self.text_ref(text);
-                out.push_str(&format!("{pad}db.write_text({:?}, &{path}, &{text})?;\n", store.name));
+                out.push_str(&format!("{pad}db.{write}({:?}, &{path}, &{text})?;\n", store.name));
             }
             StmtKind::For { var, list, body } => {
                 let source = match self.held(list) {
@@ -490,6 +493,10 @@ impl<'a> Emitter<'a> {
                     let object = self.object(object);
                     return format!("{object}.{}", member.name);
                 }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    let object = self.object(object);
+                    return format!("({object}.len() as i64)");
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -586,12 +593,20 @@ impl<'a> Emitter<'a> {
                     .and_then(|f| f.returns.as_ref())
                     .map(|r| value_type(&type_ref_info(self.project, r)))
                     .unwrap_or_else(|| "serde_json::Value".into());
-                let values: Vec<String> = args.iter().map(|a| format!("clarity_runtime::engine::to_value(&{})?", self.value(a))).collect();
+                // Bytes cross as base64 text; other values as serde writes them.
+                let values: Vec<String> = args
+                    .iter()
+                    .map(|a| match self.types.type_of(a) {
+                        TypeInfo::Bytes => format!("clarity_runtime::engine::bytes_value(&{})", self.value(a)),
+                        _ => format!("clarity_runtime::engine::to_value(&{})?", self.value(a)),
+                    })
+                    .collect();
+                let from = if returns == "Vec<u8>" { "bytes_from".to_string() } else { format!("from_value::<{returns}>") };
                 // An engine with state per window is called in the handler's own window.
                 let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
                 let call = if per_window { "call_in(ui.instance(), " } else { "call(" };
                 format!(
-                    "clarity_runtime::engine::from_value::<{returns}>({e:?}, {f:?}, crate::engines::{}()?.{call}{f:?}, vec![{}])?)?",
+                    "clarity_runtime::engine::{from}({e:?}, {f:?}, crate::engines::{}()?.{call}{f:?}, vec![{}])?)?",
                     super::names::snake(&engine.name),
                     values.join(", "),
                     e = engine.name,
@@ -601,6 +616,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
+            ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
             ExprKind::New { entity } => format!("{}::default()", entity.name),
         }
     }

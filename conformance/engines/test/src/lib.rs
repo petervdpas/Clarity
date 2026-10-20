@@ -151,3 +151,21 @@ pub extern "C" fn clarity_open(at: i32, len: i32) -> i64 {
 
 // count() -> integer: how often it was called, which an engine with state remembers.
 function!(count, |_args| Ok(json!(COUNTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1)));
+
+/// Bytes as they cross: base64 text.
+fn bytes(v: &Value) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    let text = v.as_str().ok_or_else(|| format!("{v} is no bytes"))?;
+    base64::engine::general_purpose::STANDARD.decode(text).map_err(|e| format!("{v} is no bytes: {e}"))
+}
+
+// reverse(b: bytes) -> bytes: the bytes backwards.
+function!(reverse, |args| {
+    use base64::Engine;
+    let mut b = bytes(&args[0])?;
+    b.reverse();
+    Ok(json!(base64::engine::general_purpose::STANDARD.encode(b)))
+});
+
+// length(b: bytes) -> integer: how many bytes there are.
+function!(length, |args| Ok(json!(bytes(&args[0])?.len())));

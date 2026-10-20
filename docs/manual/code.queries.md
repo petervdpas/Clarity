@@ -73,7 +73,8 @@ action export_collection()
 - `files f in photos where f.extension == "jpg" order by f.path` lists the files of the store and its folders, leaving out names that start with a dot. The condition may be any bool, since it runs in memory.
 - A file has `name`, `path` inside the store, `extension` in lower case without the dot, `size` in bytes and `modified` (a date and time, in UTC).
 - `read text of f` gives the text a file holds, as UTF-8.
-- `write t to exports "lists/albums.txt"` writes text as a file, making its folders. A path that would leave the store is refused.
+- `read bytes of f` gives a file's contents as they are, as `bytes`: a picture, a PDF, anything that is no text. `b.size` is how many there are.
+- `write t to exports "lists/albums.txt"` writes text as a file, making its folders; `write b to ...` writes bytes as they are. A path that would leave the store is refused.
 - `artist.photo = f` makes a file a record's picture.
 
 Listing and reading need `effects files.read` in an action, writing `files.write`; handlers may do both, and functions cannot reach files. See [Functions and actions](code.functions.md).

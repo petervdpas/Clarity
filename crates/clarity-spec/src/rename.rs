@@ -231,7 +231,7 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(filter, name, found);
             }
         }
-        ExprKind::ReadText { file } => expr(file, name, found),
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => expr(file, name, found),
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {

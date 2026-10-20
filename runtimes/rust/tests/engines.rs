@@ -159,3 +159,15 @@ fn an_engine_with_state_per_window_keeps_an_instance_for_each_window() {
         assert_eq!(serde_json::json!({ "value": got }), step["gives"], "{step}");
     }
 }
+
+/// Bytes cross to an engine and back as base64 text.
+#[test]
+fn bytes_cross_as_base64() {
+    let cases = cases();
+    let functions = names(&cases["functions"]);
+    let functions: Vec<&str> = functions.iter().map(String::as_str).collect();
+    let used = uses(&cases["uses"]);
+    let engine = Engine::load("Test", TEST_ENGINE, &declared(&cases, &functions, &used)).unwrap();
+    let reversed = engine.call("reverse", vec![clarity_runtime::engine::bytes_value(&[1, 2, 3])]).unwrap();
+    assert_eq!(clarity_runtime::engine::bytes_from("Test", "reverse", reversed).unwrap(), vec![3, 2, 1]);
+}

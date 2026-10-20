@@ -57,6 +57,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Image => "Option<Picture>".into(),
         TypeInfo::File => "FileEntry".into(),
         TypeInfo::Files => "Vec<FileEntry>".into(),
+        TypeInfo::Bytes => "Vec<u8>".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("Vec<{item}>"),
         TypeInfo::Unknown => "()".into(),

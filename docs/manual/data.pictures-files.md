@@ -60,8 +60,8 @@ action export_collection()
     write lines to exports "collection.txt"
 ```
 
-- `read text of f` gives the text a file holds.
-- `write t to exports "lists/albums.txt"` writes a file, making its folders. A path that would leave the store is refused.
+- `read text of f` gives the text a file holds; `read bytes of f` its contents as they are.
+- `write t to exports "lists/albums.txt"` writes a file, making its folders, from text or from bytes. A path that would leave the store is refused.
 - `artist.photo = f` makes a file a record's picture. In the field's own store the column holds its path and nothing is copied; anywhere else the picture is a copy.
 
 ## Effects

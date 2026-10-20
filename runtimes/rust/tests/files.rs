@@ -99,3 +99,18 @@ fn a_file_becomes_a_picture_linked_in_its_own_store() {
     assert_eq!(serde_json::to_value(Picture::InStore("2024/cover.png".into())).unwrap(), serde_json::json!({ "file": "2024/cover.png" }));
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn bytes_are_read_and_written_as_they_are() {
+    use base64::Engine;
+    let (db, root) = store("bytes");
+    for case in cases()["bytes"].as_array().unwrap() {
+        let path = case["path"].as_str().unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(case["base64"].as_str().unwrap()).unwrap();
+        db.write_bytes("photos", path, &bytes).unwrap();
+        let file = db.files("photos").unwrap().into_iter().find(|f| f.path == path).unwrap();
+        assert_eq!(file.size, case["size"].as_i64().unwrap());
+        assert_eq!(db.read_bytes(&file).unwrap(), bytes);
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

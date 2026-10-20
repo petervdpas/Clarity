@@ -45,7 +45,7 @@ fn shown_as(ty: &crate::code::TypeRefKind) -> Option<FieldType> {
         T::DateTime => FieldType::DateTime,
         T::Duration => FieldType::Duration,
         T::Named { name } => FieldType::Enum { name: Ident { name: name.clone(), span: crate::span::Span::default() } },
-        T::File | T::List { .. } => return None,
+        T::File | T::Bytes | T::List { .. } => return None,
     })
 }
 

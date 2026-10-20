@@ -267,6 +267,7 @@ pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
         "datetime" => TypeRefKind::DateTime,
         "duration" => TypeRefKind::Duration,
         "file" => TypeRefKind::File,
+        "bytes" => TypeRefKind::Bytes,
         "list" => {
             cursor.expect(TokenKind::Lt, "'<' after 'list'")?;
             let item = cursor.expect_ident("an entity name")?;
@@ -789,6 +790,15 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             cursor.next();
             let file = parse_postfix(cursor)?;
             return Ok(Expr { span: join(token.span, file.span), kind: ExprKind::ReadText { file: Box::new(file) } });
+        }
+        TokenKind::Ident
+            if token.text == "read" && cursor.peek_at(1).is_some_and(|t| t.text == "bytes") && cursor.peek_at(2).is_some_and(|t| t.text == "of") =>
+        {
+            cursor.next();
+            cursor.next();
+            cursor.next();
+            let file = parse_postfix(cursor)?;
+            return Ok(Expr { span: join(token.span, file.span), kind: ExprKind::ReadBytes { file: Box::new(file) } });
         }
         TokenKind::Ident if token.text == "new" && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident) => {
             cursor.next();

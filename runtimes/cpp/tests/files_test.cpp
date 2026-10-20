@@ -68,3 +68,22 @@ TEST(a_store_lists_its_files_as_every_runtime_does) {
     CHECK_THROWS(InvalidError, db.store_file("photos", "../x.png"));
     fs::remove_all(root);
 }
+
+TEST(bytes_are_read_and_written_as_they_are) {
+    fs::path root = planted();
+    Db db = Db::memory();
+    db.add_store("photos", root.string());
+    for (const auto& c : conformance("files.json")["bytes"]) {
+        auto path = c["path"].get<std::string>();
+        Bytes bytes = from_base64(c["base64"].get<std::string>());
+        db.write_bytes("photos", path, bytes);
+        auto files = db.files("photos");
+        auto file = std::find_if(files.begin(), files.end(), [&](const FileEntry& f) { return f.path == path; });
+        CHECK(file != files.end());
+        if (file == files.end()) continue;
+        CHECK_EQ(file->size, c["size"].get<int64_t>());
+        CHECK(db.read_bytes(*file) == bytes);
+        // Bytes cross to an engine as base64 text, and back.
+        CHECK(from_base64(base64(bytes)) == bytes);
+    }
+}

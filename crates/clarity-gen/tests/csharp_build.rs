@@ -188,6 +188,9 @@ catch (RefusedException e)
 {
     Expect(e.Message == "no stock", "refused in its words");
 }
+// Bytes cross to an engine and back as they are.
+Expect(Logic.Backwards(null!, [1, 2, 3]).SequenceEqual(new byte[] { 3, 2, 1 }), "backwards");
+Expect(Logic.Measured(null!, [1, 2, 3]) == 6, "measured");
 // An engine with state counts on from what its on open set.
 Expect(Logic.Counted(null!) == 11 && Logic.Counted(null!) == 12, "counted");
 // Each open window has an instance of its own of an engine with state per

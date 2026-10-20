@@ -60,6 +60,14 @@ action find_artist_photos()
                 artist.photo = f
                 save artist
 
+// A copy of every photo in the exports folder, byte for byte.
+action back_up_photos()
+    effects files.read, files.write
+    let found = files f in photos
+    for f in found
+        let content: bytes = read bytes of f
+        write content to exports "photos/" + f.path
+
 // The collection as a text file in the exports folder.
 action export_collection()
     effects files.write
@@ -152,6 +160,7 @@ page ArtistBrowse: window
     textbox name name_filter at 3,1 span 10 on change: filter_changed
     list name artist_list at 1,2 span 12 rows 8 bind artists show name, country, formed on open: open_clicked
     button "Find photos" at 1,10 span 2 on click: photos_clicked
+    button "Back up photos" at 3,10 span 2 on click: backup_clicked
     button "New artist" at 9,10 span 2 on click -> ArtistForm
     button "Open" at 11,10 span 2 on click: open_clicked
 
@@ -260,6 +269,10 @@ code ArtistBrowse
     handler photos_clicked
         find_artist_photos()
         filter_changed()
+
+    handler backup_clicked
+        back_up_photos()
+        message "Copied the photos to the exports folder"
 
 code ArtistForm
     handler save_clicked

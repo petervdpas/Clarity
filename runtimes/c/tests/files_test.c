@@ -119,3 +119,33 @@ void files_are_filtered_and_sorted_by_their_details(void) {
     clarity_sort_files(&files, 1, (ClarityFileOrder[]){clarity_desc("name")});
     CHECK_TEXT(names(&files), "c.jpg b.jpg a.png");
 }
+
+void bytes_are_read_and_written_as_they_are(void) {
+    const char* root = planted();
+    cJSON* cases = conformance("files.json");
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    REQUIRE_OK(clarity_add_store(db, "photos", root));
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "bytes")) {
+        const char* path = cJSON_GetObjectItem(c, "path")->valuestring;
+        ClarityBytes bytes = clarity_from_base64(cJSON_GetObjectItem(c, "base64")->valuestring);
+        CHECK_OK(clarity_write_bytes(db, "photos", path, bytes));
+        ClarityFileList files;
+        REQUIRE_OK(clarity_files(db, "photos", &files));
+        const ClarityFile* file = NULL;
+        for (size_t i = 0; i < files.count; ++i)
+            if (strcmp(files.items[i].path, path) == 0) file = &files.items[i];
+        REQUIRE(file);
+        CHECK(file->size == (int64_t)cJSON_GetObjectItem(c, "size")->valuedouble);
+        ClarityBytes read;
+        CHECK_OK(clarity_read_bytes(db, file, &read));
+        CHECK(read.size == bytes.size && memcmp(read.data, bytes.data, bytes.size) == 0);
+        // Bytes cross to an engine as base64 text, and back.
+        ClarityBytes back;
+        cJSON* box = clarity_json_object(1, "value", clarity_json_bytes(bytes));
+        CHECK_OK(clarity_json_get_bytes(box, "value", &back));
+        CHECK(back.size == bytes.size && memcmp(back.data, bytes.data, bytes.size) == 0);
+    }
+    clarity_db_close(db);
+}

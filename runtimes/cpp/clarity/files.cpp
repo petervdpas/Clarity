@@ -89,11 +89,17 @@ std::string Db::read_text(const FileEntry& file) {
 }
 
 void Db::write_text(const std::string& store, const std::string& path, const std::string& text) {
+    write_bytes(store, path, Bytes(text.begin(), text.end()));
+}
+
+Bytes Db::read_bytes(const FileEntry& file) { return read_file(file.store, file.path); }
+
+void Db::write_bytes(const std::string& store, const std::string& path, const Bytes& bytes) {
     fs::path file = in_store(store_folder(store), path);
     std::error_code error;
     fs::create_directories(file.parent_path(), error);
     std::ofstream out(file, std::ios::binary);
-    out << text;
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     if (!out) throw StorageError("cannot write " + file.string());
 }
 

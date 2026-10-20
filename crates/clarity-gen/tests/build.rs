@@ -397,6 +397,9 @@ fn every_engine_function_answers_from_clarity_code() {
     // The engine's own error reads as a refusal, in its words.
     let Err(Error::Refused(why)) = refused(&db, "no stock".into()) else { panic!("not refused") };
     assert_eq!(why.show(), "no stock");
+    // Bytes cross to an engine and back as they are.
+    assert_eq!(backwards(&db, vec![1, 2, 3]).unwrap(), vec![3, 2, 1]);
+    assert_eq!(measured(&db, vec![1, 2, 3]).unwrap(), 6);
     // An engine with state counts on from what its on open set.
     assert_eq!((counted(&db).unwrap(), counted(&db).unwrap()), (11, 12));
     // Each open window has an instance of its own of an engine with state

@@ -80,11 +80,22 @@ impl Db {
 
     /// Writes `text` as the file `path` of a store, making its folders.
     pub fn write_text(&self, store: &str, path: &str, text: &str) -> Result<()> {
+        self.write_bytes(store, path, text.as_bytes())
+    }
+
+    /// The contents of a file as they are.
+    pub fn read_bytes(&self, file: &FileEntry) -> Result<Vec<u8>> {
+        let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+        std::fs::read(&path).map_err(|e| failed("read", &path, e))
+    }
+
+    /// Writes `bytes` as they are as the file `path` of a store, making its folders.
+    pub fn write_bytes(&self, store: &str, path: &str, bytes: &[u8]) -> Result<()> {
         let file = picture::in_store(self.store_folder(store)?, path)?;
         if let Some(folder) = file.parent() {
             std::fs::create_dir_all(folder).map_err(|e| failed("make", folder, e))?;
         }
-        std::fs::write(&file, text).map_err(|e| failed("write", &file, e))
+        std::fs::write(&file, bytes).map_err(|e| failed("write", &file, e))
     }
 
     /// A file as the picture of a field kept in `field_store` (none: in the

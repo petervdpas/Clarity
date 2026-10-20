@@ -21,6 +21,8 @@ engine Pricing from "test.wasm"
     function size_of(n: integer) -> Size
     function discounted(order: Order) -> Order
     function fail(why: text) -> text
+    function reverse(content: bytes) -> bytes
+    function length(content: bytes) -> integer
 
 engine Counter from "test.wasm"
     uses clock, random, log
@@ -51,6 +53,12 @@ function cheaper(order: Order) -> Order
 
 function refused(why: text) -> text
     return Pricing.fail(why)
+
+function backwards(content: bytes) -> bytes
+    return Pricing.reverse(content)
+
+function measured(content: bytes) -> integer
+    return Pricing.length(content) + content.size
 
 function counted() -> integer
     return Counter.count()

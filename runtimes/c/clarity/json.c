@@ -82,3 +82,12 @@ bool clarity_json_get_picture(const cJSON* in, const char* name, ClarityPicture*
     if (v) *out = clarity_picture_from_json(v);
     return true;
 }
+
+cJSON* clarity_json_bytes(ClarityBytes value) { return cJSON_CreateString(clarity_base64(value)); }
+
+bool clarity_json_get_bytes(const cJSON* in, const char* name, ClarityBytes* out) {
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(in, name);
+    if (!cJSON_IsString(item)) return clarity_fail(CLARITY_INVALID, "%s is no bytes", name);
+    *out = clarity_from_base64(item->valuestring);
+    return true;
+}

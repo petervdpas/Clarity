@@ -69,13 +69,19 @@ public sealed partial class Db
     }
 
     /// <summary>Writes the text as the file <paramref name="path"/> of a store, making its folders.</summary>
-    public void WriteText(string store, string path, string text)
+    public void WriteText(string store, string path, string text) => WriteBytes(store, path, new UTF8Encoding(false).GetBytes(text));
+
+    /// <summary>The contents of a file as they are.</summary>
+    public byte[] ReadBytes(FileEntry file) => ReadFile(file);
+
+    /// <summary>Writes the bytes as they are as the file <paramref name="path"/> of a store, making its folders.</summary>
+    public void WriteBytes(string store, string path, byte[] bytes)
     {
         var file = Pictures.InStore(StoreFolder(store), path);
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, text, new UTF8Encoding(false));
+            File.WriteAllBytes(file, bytes);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

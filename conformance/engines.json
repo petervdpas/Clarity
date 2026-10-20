@@ -1,5 +1,5 @@
 {
-  "about": "Engines (DESIGN 5.11): processing modules compiled once to WebAssembly that every stack hosts alike. An engine is a plain WebAssembly module that exports its `memory`, `clarity_alloc(len) -> place` and `clarity_free(place, len)`, and each of its functions under its own name as `(place, len) -> i64`. To call one, the host writes the arguments as a JSON array (UTF-8) into room from clarity_alloc and calls the function with its place and length; the engine takes that room over. The function gives the place and length of its answer packed in an i64 (place in the high 32 bits), `{\"value\": ...}` or `{\"error\": \"why\"}`, which the host reads and gives back with clarity_free. Values are JSON as everywhere in Clarity: integers as numbers, decimals and money as exact text, enums by name, records as objects of their fields. An engine imports only the services of Clarity it declares with `uses` (`uses`), from module `clarity`: `clock() -> i64` (milliseconds since 1970-01-01 UTC), `random() -> i64` (the next number of splitmix64, seeded afresh for every call), and `log(place, len)` (a line of UTF-8 text, which the host writes to the application's log as `engine <Name>: <text>`). A host refuses a module that imports anything else, that is no WebAssembly, or that lacks the interface or a declared function, when it loads it. `engine` is test.wasm, built from engines/test. Each engine has limits per call (`limits`: seconds and megabytes). A call that runs longer than its time limit is stopped by the host and fails with exactly `engine <Name> failed in <function>: it ran longer than <n> second(s)`. An engine never gets more memory than its memory limit; growing past it fails as the engine's own allocator reports, most often as a failure of the call, `engine <Name> failed in <function>: ...` in the host's words. `limited` lists calls under the file's limits: `gives` an answer, or `fails` with a message that starts as given. `services` fixes the clock and the seed for `served`, the calls of the services; `log` lists the lines a call writes. A refused case loads with the file's `uses` unless it gives its own. An engine keeps no state unless its declaration says `state per app`: then one instance serves every call, and its memory carries from call to call. `on open` (`open`) calls the engine's export `clarity_open`, with the engine interface and no arguments, whenever the host makes an instance: before every call without state, once with it. A call that fails (or runs past its limit) drops the kept instance, though a refusal (`error`) keeps it, so the next call starts a new one and opens it again. `kept` runs its calls in order on one engine loaded with its `state` and `open`; a refused case with `open` declares `on open`. With `state per window`, each open window of the application has an instance of its own, kept from call to call in that window and dropped when the window closes. `windows` runs its steps in order on one engine: a call in a window (each window a number the host is given), or the close of a window, which a window that never called the engine may have too.",
+  "about": "Engines (DESIGN 5.11): processing modules compiled once to WebAssembly that every stack hosts alike. An engine is a plain WebAssembly module that exports its `memory`, `clarity_alloc(len) -> place` and `clarity_free(place, len)`, and each of its functions under its own name as `(place, len) -> i64`. To call one, the host writes the arguments as a JSON array (UTF-8) into room from clarity_alloc and calls the function with its place and length; the engine takes that room over. The function gives the place and length of its answer packed in an i64 (place in the high 32 bits), `{\"value\": ...}` or `{\"error\": \"why\"}`, which the host reads and gives back with clarity_free. Values are JSON as everywhere in Clarity: integers as numbers, decimals and money as exact text, enums by name, records as objects of their fields, bytes as base64 text. An engine imports only the services of Clarity it declares with `uses` (`uses`), from module `clarity`: `clock() -> i64` (milliseconds since 1970-01-01 UTC), `random() -> i64` (the next number of splitmix64, seeded afresh for every call), and `log(place, len)` (a line of UTF-8 text, which the host writes to the application's log as `engine <Name>: <text>`). A host refuses a module that imports anything else, that is no WebAssembly, or that lacks the interface or a declared function, when it loads it. `engine` is test.wasm, built from engines/test. Each engine has limits per call (`limits`: seconds and megabytes). A call that runs longer than its time limit is stopped by the host and fails with exactly `engine <Name> failed in <function>: it ran longer than <n> second(s)`. An engine never gets more memory than its memory limit; growing past it fails as the engine's own allocator reports, most often as a failure of the call, `engine <Name> failed in <function>: ...` in the host's words. `limited` lists calls under the file's limits: `gives` an answer, or `fails` with a message that starts as given. `services` fixes the clock and the seed for `served`, the calls of the services; `log` lists the lines a call writes. A refused case loads with the file's `uses` unless it gives its own. An engine keeps no state unless its declaration says `state per app`: then one instance serves every call, and its memory carries from call to call. `on open` (`open`) calls the engine's export `clarity_open`, with the engine interface and no arguments, whenever the host makes an instance: before every call without state, once with it. A call that fails (or runs past its limit) drops the kept instance, though a refusal (`error`) keeps it, so the next call starts a new one and opens it again. `kept` runs its calls in order on one engine loaded with its `state` and `open`; a refused case with `open` declares `on open`. With `state per window`, each open window of the application has an instance of its own, kept from call to call in that window and dropped when the window closes. `windows` runs its steps in order on one engine: a call in a window (each window a number the host is given), or the close of a window, which a window that never called the engine may have too.",
   "engine": "engines/test.wasm",
   "functions": [
     "add",
@@ -13,7 +13,9 @@
     "now",
     "dice",
     "note",
-    "count"
+    "count",
+    "reverse",
+    "length"
   ],
   "calls": [
     {
@@ -128,6 +130,33 @@
       "args": [],
       "gives": {
         "value": 1
+      }
+    },
+    {
+      "function": "reverse",
+      "args": [
+        "AQID"
+      ],
+      "gives": {
+        "value": "AwIB"
+      }
+    },
+    {
+      "function": "reverse",
+      "args": [
+        ""
+      ],
+      "gives": {
+        "value": ""
+      }
+    },
+    {
+      "function": "length",
+      "args": [
+        "AQID"
+      ],
+      "gives": {
+        "value": 3
       }
     }
   ],

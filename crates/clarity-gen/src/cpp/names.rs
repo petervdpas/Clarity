@@ -87,6 +87,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Image => "std::optional<clarity::Picture>".into(),
         TypeInfo::File => "clarity::FileEntry".into(),
         TypeInfo::Files => "std::vector<clarity::FileEntry>".into(),
+        TypeInfo::Bytes => "clarity::Bytes".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("std::vector<{item}>"),
         TypeInfo::Unknown => "auto".into(),

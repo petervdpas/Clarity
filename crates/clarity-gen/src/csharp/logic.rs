@@ -100,6 +100,7 @@ pub(crate) fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
         TypeRefKind::Date => TypeInfo::Date,
         TypeRefKind::DateTime => TypeInfo::DateTime,
         TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
         TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
         TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
         TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
@@ -275,8 +276,10 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}{place} = {value};\n"));
             }
             StmtKind::Write { text, store, path } => {
+                // Bytes are written as they are, text as UTF-8.
+                let write = if self.types.type_of(text) == TypeInfo::Bytes { "WriteBytes" } else { "WriteText" };
                 let (path, text) = (self.value(path), self.value(text));
-                out.push_str(&format!("{pad}{db}.WriteText({}, {path}, {text});\n", string(&store.name)));
+                out.push_str(&format!("{pad}{db}.{write}({}, {path}, {text});\n", string(&store.name)));
             }
             StmtKind::If { branches, otherwise } => {
                 for (i, branch) in branches.iter().enumerate() {
@@ -515,6 +518,10 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object);
                     return format!("{object}.{}", pascal(&field.name));
                 }
+                if self.types.type_of(object) == TypeInfo::Bytes {
+                    let object = self.place(object);
+                    return format!("{object}.LongLength");
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -576,6 +583,10 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadText { file } => {
                 let db = self.db;
                 format!("{db}.ReadText({})", self.value(file))
+            }
+            ExprKind::ReadBytes { file } => {
+                let db = self.db;
+                format!("{db}.ReadBytes({})", self.value(file))
             }
             // A function of an engine, through the runtime's host (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {

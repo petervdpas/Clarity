@@ -111,9 +111,15 @@ bool clarity_read_text(ClarityDb* db, const ClarityFile* file, const char** out)
 }
 
 bool clarity_write_text(ClarityDb* db, const char* store, const char* path, const char* text) {
+    return clarity_write_bytes(db, store, path, (ClarityBytes){(const uint8_t*)text, strlen(text)});
+}
+
+bool clarity_read_bytes(ClarityDb* db, const ClarityFile* file, ClarityBytes* out) { return read_in_store(db, file->store, file->path, out); }
+
+bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, ClarityBytes bytes) {
     const char *folder = NULL, *file = NULL;
     if (!clarity_store_folder(db, store, &folder) || !clarity_in_store(folder, path, &file)) return false;
-    return clarity_make_folders(clarity_parent(file)) && clarity_write_file(file, (ClarityBytes){(const uint8_t*)text, strlen(text)});
+    return clarity_make_folders(clarity_parent(file)) && clarity_write_file(file, bytes);
 }
 
 bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityPicture** out) {

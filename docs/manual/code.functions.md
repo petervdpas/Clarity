@@ -57,7 +57,7 @@ Both must be bool, and both come before the statements, together with `effects`.
 | Effect | Needed for |
 |---|---|
 | `db.write` | `save` and `delete` |
-| `files.read` | listing files and `read text of` |
+| `files.read` | listing files, `read text of` and `read bytes of` |
 | `files.write` | `write ... to` |
 | `db.read` | accepted; reading records needs no effect |
 

@@ -12,6 +12,8 @@
 #include "clarity/picture.h"
 
 cJSON* clarity_json_text(const char* value);
+/// Bytes as they travel: base64 text.
+cJSON* clarity_json_bytes(ClarityBytes value);
 cJSON* clarity_json_integer(int64_t value);
 cJSON* clarity_json_decimal(ClarityDecimal value);
 cJSON* clarity_json_bool(bool value);
@@ -24,6 +26,8 @@ cJSON* clarity_json_reference(int64_t id);
 const cJSON* clarity_json_given(const cJSON* in, const char* name);
 
 bool clarity_json_get_text(const cJSON* in, const char* name, const char** out);
+/// Bytes from the base64 text `name` of `in`.
+bool clarity_json_get_bytes(const cJSON* in, const char* name, ClarityBytes* out);
 bool clarity_json_get_integer(const cJSON* in, const char* name, int64_t* out);
 bool clarity_json_get_decimal(const cJSON* in, const char* name, ClarityDecimal* out);
 bool clarity_json_get_bool(const cJSON* in, const char* name, bool* out);

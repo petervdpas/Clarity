@@ -30,6 +30,7 @@
     X(a_closed_window_is_reported)                                \
     X(show_and_text)                                              \
     X(files_are_filtered_and_sorted_by_their_details)            \
+    X(bytes_are_read_and_written_as_they_are)                     \
     X(every_engine_call_gives_what_every_host_gives)              \
     X(a_module_that_is_no_engine_is_refused_when_it_loads)        \
     X(a_call_keeps_to_the_limits_of_its_engine)                   \

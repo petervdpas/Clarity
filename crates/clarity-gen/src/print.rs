@@ -28,6 +28,7 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Find { var, entity, filter, order } => query(&format!("find {} in {}", var.name, entity.name), filter.as_deref(), order),
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
+        ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
         ExprKind::New { entity } => format!("new {}", entity.name),
         ExprKind::EngineCall { engine, function, args } => {
             format!("{}.{}({})", engine.name, function.name, args.iter().map(expr).collect::<Vec<_>>().join(", "))

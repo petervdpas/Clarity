@@ -14,8 +14,8 @@ crates/clarity-project/  the project file: stack, output and data sources
 crates/clarity-vault/    Clarity's vault of secrets and its connections
 crates/clarity-gen/      the transpiler: a project as a Rust, C#, Go, C or C++ application
 crates/clarity-cli/      the `clarity` command
-crates/clarity-engine/   what an engine written in Rust stands on: the engine interface, typed functions, services
 runtimes/rust/           the runtime of generated Rust applications (the clarity-runtime crate)
+runtimes/rust-engine/    what an engine written in Rust stands on (the clarity-engine crate): the engine interface, typed functions, services
 runtimes/csharp/         the runtime of generated C# applications, with Avalonia
 runtimes/go/             the runtime of generated Go applications, with Wails
 runtimes/c/              the runtime of generated C applications, with webview and cJSON

@@ -131,8 +131,8 @@ fn an_engine_builds_with_cargo_for_webassembly() {
     assert_eq!(build.args, ["build", "--release", "--target", "wasm32-unknown-unknown", "--message-format", "short"]);
     assert_eq!(build.dir, source.folder);
     assert_eq!(build.artifact, source.folder.join("target/wasm32-unknown-unknown/release/board.wasm"));
-    let local = engines::build_command(&source, Some(Path::new("/repo/crates/clarity-engine")));
-    assert_eq!(&local.args[6..], ["--config", "patch.crates-io.clarity-engine.path=\"/repo/crates/clarity-engine\""]);
+    let local = engines::build_command(&source, Some(Path::new("/repo/runtimes/rust-engine")));
+    assert_eq!(&local.args[6..], ["--config", "patch.crates-io.clarity-engine.path=\"/repo/runtimes/rust-engine\""]);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -185,7 +185,7 @@ fn missing_functions_get_their_stubs_added() {
 fn a_new_engine_builds_as_it_is_made() {
     let dir = folder("builds");
     let source = engines::scaffold(&dir, &engine(), &is_enum).unwrap();
-    let library = Path::new(env!("CARGO_MANIFEST_DIR")).join("../clarity-engine").canonicalize().unwrap();
+    let library = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust-engine").canonicalize().unwrap();
     let build = engines::build_command(&source, Some(&library));
     let out = std::process::Command::new(build.tool).args(&build.args).current_dir(&build.dir).output().unwrap();
     let text = String::from_utf8_lossy(&out.stderr);

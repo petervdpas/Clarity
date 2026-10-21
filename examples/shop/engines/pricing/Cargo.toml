@@ -13,7 +13,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-clarity-engine = { path = "../../../../crates/clarity-engine" }
+clarity-engine = { path = "../../../../runtimes/rust-engine" }
 rust_decimal = { version = "1", default-features = false, features = ["serde-with-str"] }
 serde = { version = "1", features = ["derive"] }
 

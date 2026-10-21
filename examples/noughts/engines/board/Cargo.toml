@@ -13,7 +13,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-clarity-engine = { path = "../../../../crates/clarity-engine" }
+clarity-engine = { path = "../../../../runtimes/rust-engine" }
 
 [profile.release]
 opt-level = "s"

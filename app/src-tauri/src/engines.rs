@@ -122,7 +122,7 @@ fn library() -> Option<PathBuf> {
     if !cfg!(debug_assertions) {
         return None;
     }
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/clarity-engine").canonicalize().ok()
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust-engine").canonicalize().ok()
 }
 
 /// Builds every engine of the project in `dir` whose file is older than its

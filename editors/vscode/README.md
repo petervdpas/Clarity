@@ -24,13 +24,13 @@ The language is described in the [language reference](https://github.com/petervd
 
 ## Install
 
-From the Marketplace: search for **Clarity** in the Extensions view, or
+From the Marketplace: search for **Clarity Designer** in the Extensions view, or
 
     code --install-extension petervdpas.clarity-designer
 
 From a package, such as one attached to a release:
 
-    code --install-extension clarity-designer-0.1.1.vsix
+    code --install-extension clarity-designer-0.1.2.vsix
 
 ## For the repository
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- The README says to search for **Clarity Designer**, the extension's own name, in the Extensions view.
+
 ## 0.1.1
 
 - The first version published by the release pipeline (`editors/vscode/v*` tags). The extension itself is as in 0.1.0.

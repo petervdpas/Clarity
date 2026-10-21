@@ -423,6 +423,8 @@ enum Kind {
     Variant,
     /// An engine's declaration, which its editor writes as a whole.
     Engine,
+    /// A theme's declaration, which its view writes as a whole.
+    Theme,
     Use,
     /// A menu item, button or separator.
     Command,
@@ -545,6 +547,8 @@ fn top_kind(node: &LNode) -> Kind {
         Kind::Enum
     } else if starts_with_keyword(&node.tokens, "engine", Some(TokenKind::Ident)) {
         Kind::Engine
+    } else if starts_with_keyword(&node.tokens, "theme", Some(TokenKind::Ident)) {
+        Kind::Theme
     } else if starts_with_keyword(&node.tokens, "use", Some(TokenKind::Ident)) {
         Kind::Use
     } else {
@@ -870,7 +874,7 @@ impl Doc {
         let (path, _) = self
             .find(
                 item,
-                "a window, app, entity, field, enum, variant, engine, widget, tab, region, command or data declaration",
+                "a window, app, entity, field, enum, variant, engine, theme, widget, tab, region, command or data declaration",
                 |k| {
                     matches!(
                         k,
@@ -881,6 +885,7 @@ impl Doc {
                             | Kind::Enum
                             | Kind::Variant
                             | Kind::Engine
+                            | Kind::Theme
                             | Kind::Widget(_)
                             | Kind::WidgetTab
                             | Kind::Region(_)

@@ -134,3 +134,13 @@ fn replaces_and_removes_an_engine_declaration() {
     let removed = edit(&replaced, Edit::Remove { item });
     assert!(!removed.contains("engine") && removed.contains("enum Level"), "{removed}");
 }
+
+/// Delete theme in the designer removes the theme's declaration, at the
+/// offset its span starts at, and leaves the rest of the module.
+#[test]
+fn removes_a_theme_declaration() {
+    let file = "module game\n\ntheme Night\n    title \"Night\"\n    mode dark\n    color panel \"#1d2129\"\n\nenum Level\n    Easy\n";
+    let item = parse(file, "game.clarity").0.themes[0].span.start;
+    let removed = edit(file, Edit::Remove { item });
+    assert!(!removed.contains("Night") && removed.contains("enum Level"), "{removed}");
+}

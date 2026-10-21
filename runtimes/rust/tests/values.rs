@@ -63,3 +63,72 @@ fn a_canvas_says_where_it_was_clicked_as_every_runtime_does() {
         assert_eq!(serde_json::to_value(&reply.state.parts["board"]).unwrap(), case["part"], "{case}");
     }
 }
+
+const FOLDING: &str = include_str!("../../../conformance/folding.json");
+
+#[test]
+fn a_foldable_part_is_folded_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(FOLDING).unwrap();
+    for case in file["cases"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("details".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        let ui = Ui::from_state(&state);
+        assert_eq!(ui.folded("details", case["design"].as_bool().unwrap()), case["folded"].as_bool().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        ui.set_folded("details", case["folded"].as_bool().unwrap());
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["details"]).unwrap(), case["part"], "{case}");
+    }
+}
+
+const SIDEBARS: &str = include_str!("../../../conformance/sidebars.json");
+
+#[test]
+fn a_sidebar_is_collapsed_and_maximized_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(SIDEBARS).unwrap();
+    let ui_with = |part: &serde_json::Value| {
+        let mut state = WindowState::default();
+        state.parts.insert("nav".into(), serde_json::from_value::<PartState>(part.clone()).unwrap());
+        Ui::from_state(&state)
+    };
+    for case in file["collapsed"].as_array().unwrap() {
+        assert_eq!(ui_with(&case["part"]).collapsed("nav", case["design"].as_bool().unwrap()), case["collapsed"].as_bool().unwrap(), "{case}");
+    }
+    for case in file["maximized"].as_array().unwrap() {
+        assert_eq!(ui_with(&case["part"]).maximized("nav"), case["maximized"].as_bool().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        if let Some(collapsed) = case["collapsed"].as_bool() {
+            ui.set_collapsed("nav", collapsed);
+        }
+        if let Some(maximized) = case["maximized"].as_bool() {
+            ui.set_maximized("nav", maximized);
+        }
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["nav"]).unwrap(), case["part"], "{case}");
+    }
+}
+
+const RIBBONS: &str = include_str!("../../../conformance/ribbons.json");
+
+#[test]
+fn a_ribbons_open_tab_is_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(RIBBONS).unwrap();
+    for case in file["tab"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("mainRibbon".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        assert_eq!(Ui::from_state(&state).tab("mainRibbon"), case["tab"].as_i64().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        ui.set_tab("mainRibbon", case["tab"].as_i64().unwrap());
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["mainRibbon"]).unwrap(), case["part"], "{case}");
+    }
+}

@@ -2,10 +2,12 @@
 //! renderer writes them in TypeScript, the generators read them here, and
 //! this test keeps the two equal.
 
-use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, SIDEBAR_COLUMN, WINDOW_HEIGHT, WINDOW_WIDTH};
+use clarity_spec::layout::{BUTTON_SIDES, CONTENT_PADDING, GAP, INPUT_SIDES, MESSAGE_MS, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 const GRID_TS: &str = include_str!("../../../app/src/lib/grid.ts");
 const RUNTIME_SVELTE: &str = include_str!("../../../app/src/runtime/Runtime.svelte");
+const SIDEBARS_TS: &str = include_str!("../../../app/src/lib/sidebars.ts");
+const SIDEBAR_VIEW: &str = include_str!("../../../runtimes/csharp/Clarity.Avalonia/SidebarView.cs");
 const FRAME_VIEW: &str = include_str!("../../../app/src/lib/FrameView.svelte");
 const RENDER_CSS: &str = include_str!("../../../app/src/render.css");
 const SHOWN_WINDOW: &str = include_str!("../../../app/src/lib/ShownWindow.svelte");
@@ -39,7 +41,11 @@ fn the_web_renderer_uses_the_shared_values() {
     assert_eq!((constant(GRID_TS, "WINDOW_MIN_WIDTH"), constant(GRID_TS, "WINDOW_MIN_HEIGHT")), clarity_spec::layout::WINDOW_MIN);
     assert_eq!((constant(GRID_TS, "WINDOW_MAX_WIDTH"), constant(GRID_TS, "WINDOW_MAX_HEIGHT")), clarity_spec::layout::WINDOW_MAX);
     assert_eq!(constant(RUNTIME_SVELTE, "MESSAGE_MS"), MESSAGE_MS);
-    assert_eq!(constant(FRAME_VIEW, "SIDEBAR_COLUMN_PX"), SIDEBAR_COLUMN);
+    // A sidebar's widths, the same on the web and in Avalonia.
+    let (narrowest, widest) = clarity_spec::model::SIDEBAR_WIDTHS;
+    assert_eq!((constant(SIDEBARS_TS, "NARROWEST"), constant(SIDEBARS_TS, "WIDEST")), (narrowest, widest));
+    assert!(SIDEBAR_VIEW.contains(&format!("Narrowest = {narrowest}, Widest = {widest};")), "SidebarView.cs");
+    assert!(FRAME_VIEW.contains("sidebarWidth("), "FrameView sizes sidebars by sidebars.ts");
     // The space around a running window's grid, written in its CSS.
     let client = RUNTIME_SVELTE.split("  .client {").nth(1).expect("the .client rule");
     assert!(client.split('}').next().unwrap().contains(&format!("padding: {CONTENT_PADDING}px;")), "{client}");

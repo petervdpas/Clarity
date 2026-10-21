@@ -11,7 +11,7 @@ use crate::diagnostic::Diagnostic;
 use crate::frame::{self, RegionKind};
 use crate::lexer::{Line, Token, TokenKind, lex};
 use crate::model::{
-    App, Command, CommandKind, Handler, DEFAULT_PAGE_COLUMNS, DEFAULT_SIDEBAR_WIDTH, DataDecl, Entity,
+    App, Command, CommandKind, Handler, DEFAULT_PAGE_COLUMNS, DataDecl, Entity,
     EnumDecl, EnumVariant, FOOTER_COLUMNS, Field, FieldType, Footer, Frame, Ident,
     Literal, Menu, Modifiers, Orientation, Page, PageKind, Ribbon, RibbonGroup,
     RibbonTab, Side, Sidebar, SpecFile, Surface,
@@ -959,7 +959,21 @@ fn parse_region(
             });
         }
         RegionKind::Ribbon => {
-            cursor.expect_end()?;
+            let (mut name, mut collapsible, mut collapsed) = (None, false, false);
+            while let Some(word) = cursor.peek().map(|t| t.text.clone()) {
+                let clause = cursor.expect_ident("a ribbon property")?;
+                match word.as_str() {
+                    "name" => name = Some(cursor.expect_ident("a part name")?.name),
+                    "collapsible" => collapsible = true,
+                    "collapsed" => collapsed = true,
+                    other => {
+                        return Err(Diagnostic::error(
+                            format!("unknown ribbon property '{other}'; a ribbon has name, collapsible and collapsed"),
+                            clause.span,
+                        ));
+                    }
+                }
+            }
             if frame.ribbon.is_some() {
                 return Err(duplicate());
             }
@@ -971,12 +985,15 @@ fn parse_region(
                 }
             }
             frame.ribbon = Some(Ribbon {
+                name,
+                collapsible,
+                collapsed,
                 tabs,
                 span: node.span(),
             });
         }
         RegionKind::Sidebar => {
-            let side = cursor.expect_ident("'left' or 'right', as in 'sidebar left span 3'")?;
+            let side = cursor.expect_ident("'left' or 'right', as in 'sidebar left name nav'")?;
             let side = match side.name.as_str() {
                 "left" => Side::Left,
                 "right" => Side::Right,
@@ -987,21 +1004,51 @@ fn parse_region(
                     ));
                 }
             };
-            let width = if cursor.eat_keyword("span") {
-                cursor.expect_number("a number of columns")?
-            } else {
-                DEFAULT_SIDEBAR_WIDTH
-            };
-            cursor.expect_end()?;
-            if frame.sidebars.iter().any(|s| s.side == side) {
+            let mut props = frame::new_sidebar(side, None);
+            let mut old_columns = None;
+            while let Some(word) = cursor.peek().map(|t| t.text.clone()) {
+                let clause = cursor.expect_ident("a sidebar property")?;
+                match word.as_str() {
+                    "name" => props.name = Some(cursor.expect_ident("a part name")?.name),
+                    "width" => props.width = cursor.expect_number("a width in pixels")?,
+                    "min" => props.min = Some(cursor.expect_number("a width in pixels")?),
+                    "max" => props.max = Some(cursor.expect_number("a width in pixels")?),
+                    "resizable" => props.resizable = true,
+                    "collapsible" => props.collapsible = true,
+                    "collapsed" => props.collapsed = true,
+                    "maximizable" => props.maximizable = true,
+                    "grid" => {
+                        props.columns = cursor.expect_number("a number of columns")?;
+                        if !cursor.eat_keyword("columns") {
+                            return Err(Diagnostic::error("expected 'columns', as in 'grid 4 columns'", clause.span));
+                        }
+                    }
+                    // The old sidebar, `span 3` columns wide: read, for its fix.
+                    "span" => old_columns = Some(cursor.expect_number("a number of columns")?),
+                    other => {
+                        return Err(Diagnostic::error(
+                            format!("unknown sidebar property '{other}'; a sidebar has name, width, min, max, resizable, collapsible, collapsed, maximizable and grid"),
+                            clause.span,
+                        ));
+                    }
+                }
+            }
+            if let Some(columns) = old_columns {
+                diagnostics.push(Diagnostic::error(
+                    format!("a sidebar's width is in pixels now; Update the sidebars, in Problems, writes it so ('width {} grid {columns} columns')", columns * crate::layout::SIDEBAR_COLUMN),
+                    keyword.span,
+                ));
+                props.columns = columns;
+                props.width = columns * crate::layout::SIDEBAR_COLUMN;
+            }
+            if frame.sidebars.iter().any(|s| s.props.side == side) {
                 return Err(Diagnostic::error(
                     format!("duplicate '{} {}'", keyword.name, frame::side_keyword(side)),
                     keyword.span,
                 ));
             }
             frame.sidebars.push(Sidebar {
-                side,
-                width,
+                props,
                 widgets: parse_widgets(&node.children, diagnostics),
                 span: node.span(),
             });
@@ -1054,7 +1101,7 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
     }
     cursor.next();
     let title = cursor.expect_string("a tab title")?;
-    cursor.expect_end()?;
+    let name = part_name(&mut cursor)?;
     let mut groups = Vec::new();
     for child in &node.children {
         let mut c = Cursor::new(child.line);
@@ -1064,9 +1111,10 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
         }
         c.next();
         let result = c.expect_string("a group title").and_then(|title| {
-            c.expect_end()?;
+            let name = part_name(&mut c)?;
             Ok(RibbonGroup {
                 title,
+                name,
                 items: parse_commands(
                     &child.children,
                     &[CommandKind::Button, CommandKind::Separator],
@@ -1082,9 +1130,17 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
     }
     Ok(RibbonTab {
         title,
+        name,
         groups,
         span: node.span(),
     })
+}
+
+/// An optional `name x` at the end of a line, as tabs and groups of a ribbon have.
+fn part_name(cursor: &mut Cursor) -> ParseResult<Option<String>> {
+    let name = if cursor.eat_keyword("name") { Some(cursor.expect_ident("a part name")?.name) } else { None };
+    cursor.expect_end()?;
+    Ok(name)
 }
 
 fn parse_commands(
@@ -1307,6 +1363,8 @@ fn parse_widget_props(
         tooltip: None,
         style: None,
         readonly: false,
+        foldable: false,
+        folded: false,
         tab_order: None,
         shortcut: None,
         default_button: false,
@@ -1525,6 +1583,16 @@ fn parse_widget_props(
             "readonly" => {
                 applies(WidgetProperty::Readonly)?;
                 props.readonly = true;
+            }
+            "foldable" => {
+                applies(WidgetProperty::Foldable)?;
+                props.foldable = true;
+            }
+            "folded" => {
+                if !props.foldable {
+                    return Err(Diagnostic::error("'folded' needs 'foldable': write 'foldable folded'", clause.span));
+                }
+                props.folded = true;
             }
             "taborder" => {
                 applies(WidgetProperty::TabOrder)?;

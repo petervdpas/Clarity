@@ -1,0 +1,17 @@
+{
+  "about": "A ribbon (DESIGN 2, `ribbon name mainRibbon collapsible collapsed`, with named tabs and groups). The person opens a tab, and folds a collapsible ribbon to its tabs; opening a tab of a folded ribbon unfolds it. The renderer sends the open tab, counted from 1, as the ribbon part's `tab`, and whether it is folded as `collapsed` (as a sidebar's, conformance/sidebars.json); a handler reads and sets them as `part.tab` and `part.collapsed`, and hides a tab or group by its name with `part.visible`. `tab` gives the part's state and what `part.tab` reads: the first tab without one. `set` gives what setting it sends back. `shown` gives the tabs (visible or not), the open tab asked for, and the tab the renderer shows: the asked one when it is there and visible, else the first visible tab; none when no tab is visible.",
+  "tab": [
+    { "part": {}, "tab": 1 },
+    { "part": { "tab": 2 }, "tab": 2 }
+  ],
+  "set": [
+    { "tab": 3, "part": { "tab": 3 } }
+  ],
+  "shown": [
+    { "visible": [true, true, true], "tab": 2, "shown": 2 },
+    { "visible": [true, false, true], "tab": 2, "shown": 1 },
+    { "visible": [false, true, true], "tab": 1, "shown": 2 },
+    { "visible": [true, true], "tab": 7, "shown": 1 },
+    { "visible": [false, false], "tab": 1, "shown": null }
+  ]
+}

@@ -179,6 +179,10 @@ pub struct PartInfo {
     pub caption: Option<String>,
     /// Whether the design makes the part read-only.
     pub readonly: bool,
+    /// Whether the design starts a foldable part folded.
+    pub folded: bool,
+    /// Whether the design starts a collapsible sidebar folded to its button.
+    pub collapsed: bool,
 }
 
 /// The window or app a handler belongs to.
@@ -199,7 +203,7 @@ impl WindowCtx {
     fn widgets(&mut self, widgets: &[Widget]) {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -226,11 +230,22 @@ impl WindowCtx {
             self.commands(&toolbar.items);
         }
         if let Some(ribbon) = &frame.ribbon {
+            if let Some(name) = &ribbon.name {
+                self.parts.insert(name.clone(), PartInfo { collapsed: ribbon.collapsed, ..PartInfo::default() });
+            }
+            for tab in &ribbon.tabs {
+                for name in tab.name.iter().chain(tab.groups.iter().filter_map(|g| g.name.as_ref())) {
+                    self.parts.insert(name.clone(), PartInfo::default());
+                }
+            }
             for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
                 self.commands(&group.items);
             }
         }
         for sidebar in &frame.sidebars {
+            if let Some(name) = &sidebar.props.name {
+                self.parts.insert(name.clone(), PartInfo { collapsed: sidebar.props.collapsed, ..PartInfo::default() });
+            }
             self.widgets(&sidebar.widgets);
         }
         if let Some(footer) = &frame.footer {
@@ -591,7 +606,7 @@ impl<'a> Emitter<'a> {
             StmtKind::Assign { target, value } => {
                 if let Some((part, property)) = self.part_property(target) {
                     let function = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" => format!("clarity_ui_set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" => format!("clarity_ui_set_{property}"),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
                             return;
@@ -1069,6 +1084,10 @@ impl<'a> Emitter<'a> {
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("clarity_ui_{property}(ui, {quoted})"),
             "caption" => format!("clarity_ui_caption(ui, {quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("clarity_ui_readonly(ui, {quoted}, {})", info.readonly),
+            "folded" => format!("clarity_ui_folded(ui, {quoted}, {})", info.folded),
+            "collapsed" => format!("clarity_ui_collapsed(ui, {quoted}, {})", info.collapsed),
+            "maximized" => format!("clarity_ui_maximized(ui, {quoted})"),
+            "tab" => format!("clarity_ui_tab(ui, {quoted})"),
             "selected" => {
                 let found = info.bind.and_then(|bind| self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == bind)).cloned());
                 match found {

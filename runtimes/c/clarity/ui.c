@@ -132,6 +132,50 @@ bool clarity_ui_readonly(const ClarityUi* ui, const char* part, bool design) {
     return p && p->has_readonly ? p->readonly : design;
 }
 
+bool clarity_ui_folded(const ClarityUi* ui, const char* part, bool design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_folded ? p->folded : design;
+}
+
+void clarity_ui_set_folded(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_folded = true;
+    p->folded = value;
+}
+
+bool clarity_ui_collapsed(const ClarityUi* ui, const char* part, bool design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_collapsed ? p->collapsed : design;
+}
+
+void clarity_ui_set_collapsed(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_collapsed = true;
+    p->collapsed = value;
+}
+
+bool clarity_ui_maximized(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_maximized && p->maximized;
+}
+
+void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_maximized = true;
+    p->maximized = value;
+}
+
+int64_t clarity_ui_tab(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_tab ? p->tab : 1;
+}
+
+void clarity_ui_set_tab(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_tab = true;
+    p->tab = value;
+}
+
 void clarity_ui_set_readonly(ClarityUi* ui, const char* part, bool value) {
     ClarityPart* p = part_of(ui, part);
     p->has_readonly = true;
@@ -223,6 +267,10 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->caption) cJSON_AddItemToObject(out, "caption", clarity_text_json(p->caption));
     if (p->error) cJSON_AddItemToObject(out, "error", clarity_text_json(p->error));
     if (p->has_readonly) cJSON_AddBoolToObject(out, "readonly", p->readonly);
+    if (p->has_folded) cJSON_AddBoolToObject(out, "folded", p->folded);
+    if (p->has_collapsed) cJSON_AddBoolToObject(out, "collapsed", p->collapsed);
+    if (p->has_maximized) cJSON_AddBoolToObject(out, "maximized", p->maximized);
+    if (p->has_tab) cJSON_AddNumberToObject(out, "tab", (double)p->tab);
     if (p->text) cJSON_AddStringToObject(out, "text", p->text);
     if (p->has_checked) cJSON_AddBoolToObject(out, "checked", p->checked);
     if (p->drawing) cJSON_AddItemToObject(out, "drawing", cJSON_Duplicate(p->drawing, true));
@@ -236,6 +284,10 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "visible"))) p->has_visible = true, p->visible = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "enabled"))) p->has_enabled = true, p->enabled = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "readonly"))) p->has_readonly = true, p->readonly = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "folded"))) p->has_folded = true, p->folded = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "collapsed"))) p->has_collapsed = true, p->collapsed = cJSON_IsTrue(v);
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "maximized"))) p->has_maximized = true, p->maximized = cJSON_IsTrue(v);
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "tab"))) p->has_tab = true, p->tab = (int64_t)v->valuedouble;
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "checked"))) p->has_checked = true, p->checked = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "text"))) p->text = clarity_copy(v->valuestring);
     if (cJSON_IsArray(v = cJSON_GetObjectItemCaseSensitive(in, "drawing"))) p->drawing = cJSON_Duplicate(v, true);

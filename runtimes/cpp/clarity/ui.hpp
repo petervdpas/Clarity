@@ -28,6 +28,15 @@ struct PartState {
     std::optional<Text> caption;
     std::optional<Text> error;
     std::optional<bool> readonly;
+    /// Whether a foldable panel or form is folded, as the person or a handler
+    /// left it; none keeps the design (conformance/folding.json).
+    std::optional<bool> folded;
+    /// Whether a collapsible sidebar is folded to its button, and whether a
+    /// maximizable one fills the window (conformance/sidebars.json).
+    std::optional<bool> collapsed;
+    std::optional<bool> maximized;
+    /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
+    std::optional<int64_t> tab;
     /// What an unbound text input holds; the screen sends it with each event.
     std::optional<std::string> text;
     /// Whether an unbound checkbox or switch is on.
@@ -119,6 +128,18 @@ public:
     /// Whether an input is read-only: as a handler set it, or `design`.
     bool readonly(const std::string& part, bool design) const;
     void set_readonly(const std::string& part, bool value) { parts_[part].readonly = value; }
+    /// Whether a foldable part is folded: as the person or a handler left it, or `design`.
+    bool folded(const std::string& part, bool design) const;
+    void set_folded(const std::string& part, bool value) { parts_[part].folded = value; }
+    /// Whether a collapsible sidebar is folded to its button: as left, or `design`.
+    bool collapsed(const std::string& part, bool design) const;
+    void set_collapsed(const std::string& part, bool value) { parts_[part].collapsed = value; }
+    /// Whether a maximizable sidebar fills the window.
+    bool maximized(const std::string& part) const;
+    void set_maximized(const std::string& part, bool value) { parts_[part].maximized = value; }
+    /// The open tab of a ribbon, counted from 1.
+    int64_t tab(const std::string& part) const;
+    void set_tab(const std::string& part, int64_t value) { parts_[part].tab = value; }
     /// The text of an unbound text input.
     std::string text(const std::string& part) const;
     void set_text(const std::string& part, std::string value) { parts_[part].text = std::move(value); }

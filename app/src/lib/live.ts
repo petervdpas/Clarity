@@ -34,6 +34,14 @@ export type PartState = {
   pointer?: Pointer | null;
   /** A canvas's drawing: the shapes its draw handler sent (conformance/drawing.json). */
   drawing?: Shape[] | null;
+  /** Whether a foldable panel or form is folded, as the person or a handler left it (conformance/folding.json). */
+  folded?: boolean | null;
+  /** Whether a collapsible sidebar is folded to its button (conformance/sidebars.json). */
+  collapsed?: boolean | null;
+  /** Whether a maximizable sidebar fills the window. */
+  maximized?: boolean | null;
+  /** The open tab of a ribbon, counted from 1 (conformance/ribbons.json). */
+  tab?: number | null;
 };
 
 export interface Live {
@@ -50,6 +58,12 @@ export interface Live {
   setChecked(part: string, checked: boolean): void;
   /** Keeps the pointer's event on a canvas, for its handler. */
   setPointer(part: string, pointer: Pointer): void;
+  /** Keeps whether the person folded a foldable part, sent with the next event. */
+  setFolded(part: string, folded: boolean): void;
+  /** Keeps whether the person folded a sidebar or let it fill the window, sent with the next event. */
+  setSidebar(part: string, change: { collapsed?: boolean; maximized?: boolean }): void;
+  /** Keeps the tab the person opened on a ribbon, and whether it is folded, sent with the next event. */
+  setRibbon(part: string, change: { tab?: number; collapsed?: boolean }): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
   /**

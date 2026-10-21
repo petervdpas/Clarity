@@ -1,0 +1,26 @@
+{
+  "about": "A sidebar (DESIGN 2, `sidebar left name nav width 280 min 200 max 480 resizable collapsible collapsed maximizable grid 4 columns`). The person drags a resizable sidebar's inner edge between min and max, folds a collapsible one to a button and back, and lets a maximizable one fill the window and give it back. The renderer sends whether it is folded as the part's `collapsed` and whether it fills the window as `maximized`; a handler reads and sets them as `part.collapsed` and `part.maximized`. Without them in the part's state, a sidebar is folded as designed (`collapsed`) and does not fill the window. `collapsed` gives the design, the part's state and what `part.collapsed` reads; `maximized` the part's state and what `part.maximized` reads; `set` what setting them sends back. `widths` give the width the person drags to, the limits, and the width it gets.",
+  "collapsed": [
+    { "design": false, "part": {}, "collapsed": false },
+    { "design": true, "part": {}, "collapsed": true },
+    { "design": true, "part": { "collapsed": false }, "collapsed": false },
+    { "design": false, "part": { "collapsed": true }, "collapsed": true }
+  ],
+  "maximized": [
+    { "part": {}, "maximized": false },
+    { "part": { "maximized": true }, "maximized": true }
+  ],
+  "set": [
+    { "collapsed": true, "part": { "collapsed": true } },
+    { "maximized": true, "part": { "maximized": true } },
+    { "collapsed": false, "maximized": false, "part": { "collapsed": false, "maximized": false } }
+  ],
+  "widths": [
+    { "dragged": 300, "min": 200, "max": 480, "width": 300 },
+    { "dragged": 120, "min": 200, "max": 480, "width": 200 },
+    { "dragged": 900, "min": 200, "max": 480, "width": 480 },
+    { "dragged": 50, "min": null, "max": null, "width": 100 },
+    { "dragged": 2000, "min": null, "max": null, "width": 1600 },
+    { "dragged": 333.6, "min": null, "max": null, "width": 334 }
+  ]
+}

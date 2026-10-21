@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
-use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT, SIDEBAR_COLUMN};
+use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT};
 use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
@@ -410,13 +410,35 @@ impl<'a> Window<'a> {
             }
             out.push_str("      </Menu>\n");
         }
+        // The ribbon is the runtime's RibbonView: its open tab and folding follow
+        // its part state, and each tab and group shows while its own is visible.
         if let Some(ribbon) = self.frame.ribbon {
-            out.push_str("      <TabControl DockPanel.Dock=\"Top\" Classes=\"ribbon\">\n");
+            let mut attrs = String::new();
+            if let Some(name) = &ribbon.name {
+                let _ = write!(attrs, " x:Name=\"{}\"", attr(name));
+            }
+            attrs.push_str(" DockPanel.Dock=\"Top\" Classes=\"ribbon\"");
+            if let Some(name) = &ribbon.name {
+                let part = member(name);
+                if ribbon.collapsible {
+                    let _ = write!(attrs, " Collapsible=\"True\" IsCollapsed=\"{{Binding {part}.IsCollapsed}}\"");
+                }
+                let _ = write!(attrs, " Tab=\"{{Binding {part}.Tab}}\"");
+            }
+            let shown = |name: &Option<String>| match name {
+                Some(n) => format!(" x:Name=\"{}\"", attr(n)),
+                None => String::new(),
+            };
+            let visible = |name: &Option<String>| match name {
+                Some(n) => format!(" IsVisible=\"{{Binding {}.IsVisible}}\"", member(n)),
+                None => String::new(),
+            };
+            let _ = writeln!(out, "      <c:RibbonView{attrs}>");
             for tab in &ribbon.tabs {
-                let _ = writeln!(out, "        <TabItem Header=\"{}\">", self.text(&tab.title));
+                let _ = writeln!(out, "        <TabItem{} Header=\"{}\"{}>", shown(&tab.name), self.text(&tab.title), visible(&tab.name));
                 out.push_str("          <StackPanel Orientation=\"Horizontal\" Spacing=\"16\">\n");
                 for group in &tab.groups {
-                    out.push_str("            <StackPanel Spacing=\"4\">\n              <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">\n");
+                    let _ = writeln!(out, "            <StackPanel{} Spacing=\"4\"{}>\n              <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">", shown(&group.name), visible(&group.name));
                     for item in &group.items {
                         self.button(item, 8, &mut out);
                     }
@@ -424,7 +446,7 @@ impl<'a> Window<'a> {
                 }
                 out.push_str("          </StackPanel>\n        </TabItem>\n");
             }
-            out.push_str("      </TabControl>\n");
+            out.push_str("      </c:RibbonView>\n");
         }
         if let Some(toolbar) = self.frame.toolbar {
             out.push_str("      <Border DockPanel.Dock=\"Top\" Classes=\"toolbar\">\n        <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">\n");
@@ -441,15 +463,35 @@ impl<'a> Window<'a> {
             self.grid(&footer.widgets, footer.columns, Some(1), false, 5, &mut out);
             out.push_str("        </DockPanel>\n      </Border>\n");
         }
+        // A sidebar is the runtime's SidebarView: dragged, folded and filling the window as it allows.
         for (side, dock) in [(self.frame.left, "Left"), (self.frame.right, "Right")] {
             let Some(sidebar) = side else { continue };
-            let _ = writeln!(
-                out,
-                "      <Border DockPanel.Dock=\"{dock}\" Classes=\"sidebar\" Width=\"{}\">",
-                sidebar.width * SIDEBAR_COLUMN
-            );
-            self.grid(&sidebar.widgets, sidebar.width, None, false, 4, &mut out);
-            out.push_str("      </Border>\n");
+            let p = &sidebar.props;
+            let mut attrs = format!(" DockPanel.Dock=\"{dock}\" Side=\"{dock}\" Classes=\"sidebar\" SidebarWidth=\"{}\"", p.width);
+            if let Some(min) = p.min {
+                let _ = write!(attrs, " MinSidebarWidth=\"{min}\"");
+            }
+            if let Some(max) = p.max {
+                let _ = write!(attrs, " MaxSidebarWidth=\"{max}\"");
+            }
+            for (on, what) in [(p.resizable, "Resizable"), (p.collapsible, "Collapsible"), (p.maximizable, "Maximizable")] {
+                if on {
+                    let _ = write!(attrs, " {what}=\"True\"");
+                }
+            }
+            if let Some(name) = &p.name {
+                let part = member(name);
+                if p.collapsible {
+                    let _ = write!(attrs, " IsCollapsed=\"{{Binding {part}.IsCollapsed}}\"");
+                }
+                if p.maximizable {
+                    let _ = write!(attrs, " IsMaximized=\"{{Binding {part}.IsMaximized}}\"");
+                }
+                attrs = format!(" x:Name=\"{}\"{attrs}", attr(name));
+            }
+            let _ = writeln!(out, "      <c:SidebarView{attrs}>\n        <c:SidebarView.Content>");
+            self.grid(&sidebar.widgets, p.columns, None, false, 5, &mut out);
+            out.push_str("        </c:SidebarView.Content>\n      </c:SidebarView>\n");
         }
         // A window smaller than its design scrolls, unless rows grow to fit.
         let fluid = self.page.widgets.iter().any(grows);
@@ -746,6 +788,15 @@ impl<'a> Window<'a> {
                     }
                 }
                 let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra} />");
+            }
+            // A foldable panel or form is an Expander: open while the part is not folded.
+            WidgetKind::Form | WidgetKind::Panel if p.foldable && named.is_some() => {
+                let class = if p.kind == WidgetKind::Form { "form" } else { "panel" };
+                let header = p.caption.as_ref().map(|t| format!(" Header=\"{}\"", self.text(t))).unwrap_or_default();
+                let part = member(named.unwrap_or_default());
+                let _ = writeln!(out, "{pad}<Expander {at}{header} IsExpanded=\"{{Binding {part}.IsOpen}}\" Classes=\"{class}\"{plain_state}{extra}>");
+                self.grid(&widget.children, p.width, None, false, depth + 1, out);
+                let _ = writeln!(out, "{pad}</Expander>");
             }
             WidgetKind::Form | WidgetKind::Panel => {
                 let _ = writeln!(out, "{pad}<Border {at} Classes=\"{}\"{plain_state}{extra}>", if p.kind == WidgetKind::Form { "form" } else { "panel" });
@@ -1056,7 +1107,31 @@ public partial class {name}View : UserControl
             if !help.is_empty() {
                 args.push(format!("help: {}", string(&help)));
             }
-            let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({});", member(n), args.join(", "));
+            // A foldable part starts as designed.
+            let starts = if widget.props.foldable && widget.props.folded { " { IsFolded = true }" } else { "" };
+            let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}){starts};", member(n), args.join(", "));
+        }
+        // The ribbon starts folded as designed; its tabs and groups have a state each.
+        if let Some(ribbon) = self.frame.ribbon {
+            if let Some(n) = &ribbon.name
+                && seen.insert(n.clone())
+            {
+                let starts = if ribbon.collapsible && ribbon.collapsed { " { IsCollapsed = true }" } else { "" };
+                let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}){starts};", member(n), string(n));
+            }
+            for name in ribbon.tabs.iter().flat_map(|t| t.name.iter().chain(t.groups.iter().filter_map(|g| g.name.as_ref()))) {
+                if seen.insert(name.clone()) {
+                    let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({});", member(name), string(name));
+                }
+            }
+        }
+        // A sidebar starts folded as designed.
+        for sidebar in [self.frame.left, self.frame.right].into_iter().flatten() {
+            let Some(n) = &sidebar.props.name else { continue };
+            if seen.insert(n.clone()) {
+                let starts = if sidebar.props.collapsible && sidebar.props.collapsed { " { IsCollapsed = true }" } else { "" };
+                let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}){starts};", member(n), string(n));
+            }
         }
         for command in &self.commands {
             let Some(n) = &command.props.name else { continue };

@@ -41,12 +41,52 @@ In the Parts tab, the Frame group holds the regions. Drag one onto an edge of th
 - Every menu item and button has a camelCase name, as every part does: `item "New customer" name newCustomerItem`. A new one is named after its caption and kind, as `ordersButton`; a separator has none. Double-click an item or button to go to its click handler, which Clarity writes when there is none yet.
 - `toolbar`: `button` and `separator`.
 - `ribbon`: `tab "Title"` blocks with `group "Title"` blocks of buttons and separators; a button can be `large`.
-- `sidebar left` or `sidebar right`, `span n` columns wide (3 by default): parts on a grid of its own.
+- `sidebar left` or `sidebar right`: parts on a grid of its own, docked to that edge; see [Sidebars](#sidebars).
 - `footer`: an optional `status "text"` and parts on a one-row grid of 12 columns.
 
 Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. A sidebar has its Side and Width in columns; a footer its Status text.
 
 A `window` can declare regions of its own in the same way. A window's region replaces the app's region of that kind, and its sidebar replaces the app's sidebar on the same side; the other regions still come from the app. A `dialog` and a `view` have no frame.
+
+## The ribbon
+
+A ribbon is a named part of the frame, docked at the top, and its tabs and groups have names too:
+
+```clarity
+app Shop
+    main CustomerCard
+    ribbon name mainRibbon collapsible
+        tab "Home" name homeTab
+            group "Clipboard" name clipboardGroup
+                button "Paste" name pasteButton icon "paste" large on click: pasteClicked
+        tab "View" name viewTab
+            group "Zoom" name zoomGroup
+                button "Zoom in" name zoomInButton on click: zoomInClicked
+```
+
+- `collapsible`: the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it again. `collapsible collapsed` starts it folded.
+- Code reads and sets the open tab as `mainRibbon.tab`, counted from 1, and the folding as `mainRibbon.collapsed`. A tab or group hides with `homeTab.visible = false`; when the open tab is hidden, the first visible one opens.
+- A new ribbon, tab or group is named for you: `mainRibbon`, and a tab or group after its title, as `homeTab` and `clipboardGroup`. Pick it on the canvas to change its name and, for the ribbon, its folding under Properties.
+
+## Sidebars
+
+A sidebar is a part docked to the left or right edge of a window, beside the window's own grid; in the app it shows beside every window that has none of its own on that side. It holds parts on a grid of its own: a list, a form, a canvas, whatever the window needs at hand.
+
+```clarity
+page Albums: window
+    data albums: list<Album>
+    sidebar left name nav width 280 min 200 max 480 resizable collapsible maximizable grid 3 columns
+        list name albumList at 1,1 span 3 rows 10 bind albums show title
+```
+
+- `name`: every sidebar has one, like every part; a new one is named after its side, as `leftSidebar`.
+- `width 280`: its width in pixels, 240 without it; a sidebar is 100 to 1600 pixels wide.
+- `resizable`: the person drags its inner edge to size it, from `min` to `max` (100 and 1600 without them).
+- `collapsible`: a button folds it to a narrow strip at its edge, and the strip's button opens it again. `collapsible collapsed` starts it folded.
+- `maximizable`: a button lets it fill the window, and gives the window back.
+- `grid 3 columns`: the columns of its own grid, 3 without it.
+
+Code reads and sets `nav.collapsed` and `nav.maximized`, on a sidebar that allows them, so a handler can open it or let it fill the window. In the designer, pick a sidebar on the canvas to set all of this under Properties. A sidebar written the old way, `sidebar left span 3` (in columns), is an error; **Update the sidebars** in Problems writes it in pixels and names it.
 
 ## Commands
 

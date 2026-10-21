@@ -741,22 +741,6 @@
           <div class="buttons">
             <RibbonButton icon="window" label="New window" disabled={!preview} onclick={startNewWindow} />
             <RibbonButton icon="grid" label="Grid" active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
-            <RibbonButton
-              icon="text"
-              label="Text"
-              title="Show this window as Clarity text; the designer follows what you type"
-              disabled={!designing}
-              active={pageDesigner.code.open && pageDesigner.code.view === "design"}
-              onclick={() => pageDesigner.togglePanel("design")}
-            />
-            <RibbonButton
-              icon="code"
-              label="Code"
-              title="Show the code behind of this window"
-              disabled={!designing}
-              active={pageDesigner.code.open && pageDesigner.code.view === "code"}
-              onclick={() => pageDesigner.togglePanel("code")}
-            />
           </div>
           <div class="group-name">Window</div>
         </div>
@@ -1069,7 +1053,6 @@
         </section>
       {/if}
       <!-- The code behind panel slides out over the main area. -->
-      <div id="code-drawer" class="code-drawer"></div>
     </div>
     {#if agent.open}
       <Splitter axis="x" label="Width of the agent" onmove={(d) => layout.resize("agent", -d)} />
@@ -1183,13 +1166,6 @@
     font-family: var(--mono);
     font-size: 12px;
     white-space: pre-wrap;
-  }
-
-  .code-drawer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 20;
   }
 
   /* Ribbon */

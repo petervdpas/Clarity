@@ -36,7 +36,7 @@ class PageDesigner {
   saving = $state(false);
   /** Show the snap grid cells while designing. */
   showGrid = $state(true);
-  /** The text panel: open or not, which view, and the handler to show in the code. */
+  /** The inspector's code tabs: open (Code or Text, by `view`) or not (Properties), and the handler to show in the code. */
   code = $state<{ open: boolean; view: PanelView; focus: string | null }>({ open: false, view: "code", focus: null });
   /** The project as the Design text being typed would make it; the canvas shows it until it is saved or reverted. */
   draft = $state<Preview | null>(null);
@@ -108,11 +108,6 @@ class PageDesigner {
     this.code = { open: true, view: "code", focus: handler };
   }
 
-  /** Opens the text panel at `view`, or closes it when it already shows that view. */
-  togglePanel(view: PanelView) {
-    const showing = this.code.open && this.code.view === view;
-    this.code = { open: !showing, view, focus: null };
-  }
 
   cancel() {
     this.#pending = null;

@@ -174,6 +174,15 @@
     setPointer(part: string, pointer: Pointer) {
       if (current) current.parts[part] = { ...current.parts[part], pointer };
     },
+    setFolded(part: string, folded: boolean) {
+      if (current) current.parts[part] = { ...current.parts[part], folded };
+    },
+    setSidebar(part: string, change: { collapsed?: boolean; maximized?: boolean }) {
+      if (current) current.parts[part] = { ...current.parts[part], ...change };
+    },
+    setRibbon(part: string, change: { tab?: number; collapsed?: boolean }) {
+      if (current) current.parts[part] = { ...current.parts[part], ...change };
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {

@@ -18,7 +18,7 @@ use crate::frame::{self, RegionKind, command_line, new_command, validate_command
 use crate::lexer::{Token, TokenKind, lex, quote};
 use crate::model::{
     Project,
-    CommandKind, CommandProps, DEFAULT_SIDEBAR_WIDTH, MAX_PAGE_COLUMNS, PageKind, Side, WidgetProps,
+    CommandKind, CommandProps, MAX_PAGE_COLUMNS, PageKind, Side, WidgetProps,
 };
 use crate::parser::{
     is_app_setting, is_page_setting, is_region_line, parse, starts_with_keyword,
@@ -144,7 +144,15 @@ pub enum Edit {
         side: Option<Side>,
     },
     /// Set the side and width of a sidebar.
-    SetSidebar { item: u32, side: Side, width: u32 },
+    /// Rewrite a sidebar's line: its side, name, width and what the person may do with it.
+    UpdateSidebar { item: u32, props: crate::model::SidebarProps },
+    /// Rewrite a ribbon's line: its name and whether the person folds it to its tabs.
+    UpdateRibbon { item: u32, name: Option<String>, collapsible: bool, collapsed: bool },
+    /// Give the ribbon tab or group at `item` the name `name`.
+    SetName { item: u32, name: String },
+    /// Write every sidebar of the file in the current way: old ones, given in
+    /// columns (`span 3`), get their width in pixels, and each gets a name.
+    UpdateSidebars,
     /// Add an item at the end of a menu, submenu, toolbar, ribbon, ribbon
     /// tab or ribbon group.
     AddFrameItem {
@@ -817,7 +825,10 @@ impl Doc {
                 region,
                 side,
             } => self.add_region(*owner, *region, *side),
-            Edit::SetSidebar { item, side, width } => self.set_sidebar(*item, *side, *width),
+            Edit::UpdateSidebar { item, props } => self.update_sidebar(*item, props),
+            Edit::UpdateSidebars => self.update_sidebars(),
+            Edit::UpdateRibbon { item, name, collapsible, collapsed } => self.update_ribbon(*item, name.as_deref(), *collapsible, *collapsed),
+            Edit::SetName { item, name } => self.set_name(*item, name),
             Edit::AddFrameItem {
                 parent,
                 item,
@@ -996,6 +1007,31 @@ impl Doc {
                         used.push(name);
                         child.set_text(text);
                     }
+                }
+                // A ribbon is `mainRibbon`, a tab and a group are named after their titles: `homeTab`, `clipboardGroup`.
+                let ribbon_base = match child_kind {
+                    Kind::Region(RegionKind::Ribbon) => Some("mainRibbon".to_string()),
+                    Kind::RibbonTab | Kind::RibbonGroup => {
+                        let title = child.tokens.get(1).filter(|t| t.kind == TokenKind::Str).map(|t| t.text.clone()).unwrap_or_default();
+                        Some(ribbon_part_base(&title, if child_kind == Kind::RibbonTab { "Tab" } else { "Group" }))
+                    }
+                    _ => None,
+                };
+                if let Some(base) = ribbon_base.filter(|_| !named) {
+                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
+                    let at = child.tokens.last().map(|t| t.span.end as usize).unwrap_or(child.text.len());
+                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
+                    used.push(name);
+                    child.set_text(text);
+                }
+                // A sidebar is named after its side: `leftSidebar`.
+                if child_kind == Kind::Region(RegionKind::Sidebar) && !named && child.tokens.len() > 1 {
+                    let base = format!("{}Sidebar", child.tokens[1].text);
+                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
+                    let at = child.tokens[1].span.end as usize;
+                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
+                    used.push(name);
+                    child.set_text(text);
                 }
                 // A menu item or button is named after its caption and kind: "New game" is `newGameItem`.
                 if child_kind == Kind::Command && !named && child.tokens.first().is_some_and(|t| t.text != "separator") {
@@ -1440,14 +1476,28 @@ impl Doc {
             .unwrap_or(0)
     }
 
-    fn region_line(region: RegionKind, side: Option<Side>) -> String {
+    fn region_line(&self, top: usize, region: RegionKind, side: Option<Side>) -> String {
         match region {
-            RegionKind::Sidebar => format!(
-                "sidebar {} span {DEFAULT_SIDEBAR_WIDTH}",
-                frame::side_keyword(side.unwrap_or(Side::Left))
-            ),
+            RegionKind::Sidebar => {
+                let side = side.unwrap_or(Side::Left);
+                frame::sidebar_line(&frame::new_sidebar(side, Some(self.sidebar_name(top, side))))
+            }
+            RegionKind::Ribbon => format!("ribbon name {}", self.free(top, "mainRibbon")),
             other => frame::keyword(other).to_string(),
         }
+    }
+
+    /// `base`, or `base2`, `base3`... whichever no part of the block `top` has.
+    fn free(&self, top: usize, base: &str) -> String {
+        let used = self.used_names(top);
+        if used.iter().any(|u| u == base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base.to_string() }
+    }
+
+    /// The first free name for a sidebar on `side`: `leftSidebar`.
+    fn sidebar_name(&self, top: usize, side: Side) -> String {
+        let base = format!("{}Sidebar", frame::side_keyword(side));
+        let used = self.used_names(top);
+        if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base }
     }
 
     fn add_region(
@@ -1476,7 +1526,8 @@ impl Doc {
         }
 
         let indent = self.node(&path).child_indent();
-        let mut node = self.fresh_node(indent, Self::region_line(region, side));
+        let line = self.region_line(path[0], region, side);
+        let mut node = self.fresh_node(indent, line);
         let inner = indent + INDENT_STEP;
         // Starter content, so the new region shows up and is ready to edit.
         match region {
@@ -1499,13 +1550,13 @@ impl Doc {
                 node.children.push(button);
             }
             RegionKind::Ribbon => {
-                let mut tab = self.fresh_node(inner, format!("tab {}", quote("Home")));
-                let mut group =
-                    self.fresh_node(inner + INDENT_STEP, format!("group {}", quote("Group")));
-                let button = self.fresh_node(
-                    inner + 2 * INDENT_STEP,
-                    command_line(&new_command(CommandKind::Button, Some("Button".into()))),
-                );
+                let tab_name = self.free(path[0], "homeTab");
+                let group_name = self.free(path[0], "actionsGroup");
+                let mut tab = self.fresh_node(inner, format!("tab {} name {tab_name}", quote("Home")));
+                let mut group = self.fresh_node(inner + INDENT_STEP, format!("group {} name {group_name}", quote("Actions")));
+                let mut props = new_command(CommandKind::Button, Some("Button".into()));
+                props.name = Some(self.command_name(path[0], &props));
+                let button = self.fresh_node(inner + 2 * INDENT_STEP, command_line(&props));
                 group.children.push(button);
                 tab.children.push(group);
                 node.children.push(tab);
@@ -1534,31 +1585,89 @@ impl Doc {
         Ok(Some(id))
     }
 
-    fn set_sidebar(&mut self, item: u32, side: Side, width: u32) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "a sidebar", |k| {
-            k == Kind::Region(RegionKind::Sidebar)
-        })?;
-        if width == 0 || width > MAX_PAGE_COLUMNS {
-            return fail(format!("a sidebar is 1 to {MAX_PAGE_COLUMNS} columns wide"));
-        }
+    fn update_sidebar(&mut self, item: u32, props: &crate::model::SidebarProps) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(item, "a sidebar", |k| k == Kind::Region(RegionKind::Sidebar))?;
         let parent = &path[..path.len() - 1];
         let clash = self.node(parent).children.iter().any(|c| {
-            c.id != item
-                && starts_with_keyword(&c.tokens, "sidebar", Some(TokenKind::Ident))
-                && sidebar_side(c) == Some(side)
+            c.id != item && starts_with_keyword(&c.tokens, "sidebar", Some(TokenKind::Ident)) && sidebar_side(c) == Some(props.side)
         });
         if clash {
-            return fail(format!(
-                "there is already a {} sidebar",
-                frame::side_keyword(side)
-            ));
+            return fail(format!("there is already a {} sidebar", frame::side_keyword(props.side)));
+        }
+        let mut props = props.clone();
+        if props.name.is_none() {
+            props.name = Some(self.sidebar_name(path[0], props.side));
         }
         let node = self.node_mut(&path);
         let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
         let rest = node.text[rest_start..].to_string();
-        node.set_text(format!("sidebar {} span {width}", frame::side_keyword(side)) + &rest);
+        node.set_text(frame::sidebar_line(&props) + &rest);
         Ok(Some(item))
     }
+
+    fn update_ribbon(&mut self, item: u32, name: Option<&str>, collapsible: bool, collapsed: bool) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(item, "a ribbon", |k| k == Kind::Region(RegionKind::Ribbon))?;
+        let name = match name {
+            Some(n) => n.to_string(),
+            None => self.free(path[0], "mainRibbon"),
+        };
+        let mut line = format!("ribbon name {name}");
+        if collapsible {
+            line.push_str(if collapsed { " collapsible collapsed" } else { " collapsible" });
+        }
+        let node = self.node_mut(&path);
+        let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
+        let rest = node.text[rest_start..].to_string();
+        node.set_text(line + &rest);
+        Ok(Some(item))
+    }
+
+    fn set_name(&mut self, item: u32, name: &str) -> EditResult<Option<u32>> {
+        if !crate::names::is_camel_case(name) {
+            return fail(crate::names::camel_case_problem("part", name));
+        }
+        let (path, _) = self.find(item, "a ribbon tab or group", |k| matches!(k, Kind::RibbonTab | Kind::RibbonGroup))?;
+        let node = self.node_mut(&path);
+        let at = node.tokens.windows(2).position(|w| w[0].text == "name" && w[1].kind == TokenKind::Ident);
+        let text = match at {
+            Some(i) => {
+                let t = &node.tokens[i + 1];
+                format!("{}{name}{}", &node.text[..t.span.start as usize], &node.text[t.span.end as usize..])
+            }
+            None => {
+                let end = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(node.text.len());
+                format!("{} name {name}{}", &node.text[..end], &node.text[end..])
+            }
+        };
+        node.set_text(text);
+        Ok(Some(item))
+    }
+
+    fn update_sidebars(&mut self) -> EditResult<Option<u32>> {
+        for top in 0..self.nodes.len() {
+            if !matches!(top_kind(&self.nodes[top]), Kind::Page | Kind::App) {
+                continue;
+            }
+            let mut used = self.used_names(top);
+            for child in &mut self.nodes[top].children {
+                if !starts_with_keyword(&child.tokens, "sidebar", Some(TokenKind::Ident)) {
+                    continue;
+                }
+                let Some(mut props) = sidebar_props_of(&child.tokens) else { continue };
+                if props.name.is_none() {
+                    let base = format!("{}Sidebar", frame::side_keyword(props.side));
+                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
+                    used.push(name.clone());
+                    props.name = Some(name);
+                }
+                let rest_start = child.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
+                let rest = child.text[rest_start..].to_string();
+                child.set_text(frame::sidebar_line(&props) + &rest);
+            }
+        }
+        Ok(None)
+    }
+
 
     fn add_frame_item(
         &mut self,
@@ -1600,10 +1709,12 @@ impl Doc {
                 command_line(&props)
             }
             (Kind::Region(RegionKind::Ribbon), FrameItem::Tab) => {
-                format!("tab {}", quote(caption.as_deref().unwrap_or("Tab")))
+                let title = caption.as_deref().unwrap_or("Tab");
+                format!("tab {} name {}", quote(title), self.free(path[0], &ribbon_part_base(title, "Tab")))
             }
             (Kind::RibbonTab, FrameItem::Group) => {
-                format!("group {}", quote(caption.as_deref().unwrap_or("Group")))
+                let title = caption.as_deref().unwrap_or("Group");
+                format!("group {} name {}", quote(title), self.free(path[0], &ribbon_part_base(title, "Group")))
             }
             _ => return fail("that cannot go there"),
         };
@@ -1693,6 +1804,47 @@ impl Doc {
         siblings.swap(index, other);
         Ok(Some(item))
     }
+}
+
+/// A ribbon tab's or group's name after its title and kind: `homeTab`, `clipboardGroup`.
+fn ribbon_part_base(title: &str, kind: &str) -> String {
+    let title = crate::names::camel_case(title);
+    if title.is_empty() { kind.to_lowercase() } else { format!("{title}{kind}") }
+}
+
+/// What a sidebar's line says, read from its tokens, the old `span` form
+/// (columns, now pixels) included; none when it is no sidebar line.
+fn sidebar_props_of(tokens: &[crate::lexer::Token]) -> Option<crate::model::SidebarProps> {
+    let side = match tokens.get(1).map(|t| t.text.as_str()) {
+        Some("left") => Side::Left,
+        Some("right") => Side::Right,
+        _ => return None,
+    };
+    let mut props = frame::new_sidebar(side, None);
+    let number = |i: usize| tokens.get(i).and_then(|t| t.text.parse::<u32>().ok());
+    let mut i = 2;
+    while i < tokens.len() {
+        match tokens[i].text.as_str() {
+            "name" => props.name = tokens.get(i + 1).map(|t| t.text.clone()),
+            "width" => props.width = number(i + 1).unwrap_or(props.width),
+            "min" => props.min = number(i + 1),
+            "max" => props.max = number(i + 1),
+            "grid" => props.columns = number(i + 1).unwrap_or(props.columns),
+            "span" => {
+                if let Some(columns) = number(i + 1) {
+                    props.columns = columns;
+                    props.width = columns * crate::layout::SIDEBAR_COLUMN;
+                }
+            }
+            "resizable" => props.resizable = true,
+            "collapsible" => props.collapsible = true,
+            "collapsed" => props.collapsed = true,
+            "maximizable" => props.maximizable = true,
+            _ => {}
+        }
+        i += 1;
+    }
+    Some(props)
 }
 
 fn sidebar_side(node: &LNode) -> Option<Side> {

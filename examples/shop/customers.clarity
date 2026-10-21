@@ -47,7 +47,7 @@ page CustomerForm: window
                     label "Active" name label5 at 1,5 span 3 for active
                     switch name active at 4,5 span 3 bind customer.active
             tab "Finance"
-                panel "Credit" name panel2 at 1,1 span 12 rows 3
+                panel "Credit" name panel2 at 1,1 span 12 rows 3 foldable
                     label "Credit limit" name label6 at 1,1 span 3 for creditLimit
                     number name creditLimit at 4,1 span 3 bind customer.credit_limit
                     label "Vat number" name label7 at 1,2 span 3 for vatNumber

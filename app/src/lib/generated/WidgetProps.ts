@@ -78,6 +78,15 @@ style: string | null,
  */
 readonly: boolean, 
 /**
+ * A panel or form the person using the application folds and unfolds
+ * by its header: `foldable`.
+ */
+foldable: boolean, 
+/**
+ * A foldable part that starts folded: `foldable folded`.
+ */
+folded: boolean, 
+/**
  * Position in the keyboard order; parts without one follow in reading
  * order.
  */

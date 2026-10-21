@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isFolded } from "./folding";
   import { untrack } from "svelte";
   import DateTimeInput from "./ui/DateTimeInput.svelte";
   import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
@@ -66,6 +67,16 @@
   const caption = $derived(partState?.caption !== undefined && partState.caption !== null ? shownText(preview, partState.caption) : p.caption !== null ? tr(preview, p.caption) : null);
   const selectedRow = $derived(live && p.name ? live.selected[p.name] : undefined);
   const readonly = $derived(partState?.readonly ?? p.readonly);
+  // A foldable panel or form: folded as the person or a handler left it, or as designed.
+  let foldedHere = $state<boolean | null>(null);
+  const folded = $derived(p.foldable && (live ? isFolded(p.folded, partState) : (foldedHere ?? p.folded)));
+
+  function toggleFold() {
+    const next = !folded;
+    // Live, the part's state carries it to the handlers; in the preview it is the window's own.
+    if (live && p.name) live.setFolded(p.name, next);
+    else foldedHere = next;
+  }
   const error = $derived(partState?.error ? shownText(preview, partState.error) || null : null);
   // The class of the part's style in the project's theme: on a button the button
   // itself, on other parts their content.
@@ -442,9 +453,18 @@
         >{caption ?? ""}</button
       >
     {:else if p.kind === "panel" || p.kind === "form"}
-      <fieldset class={p.kind} class:bare={p.kind === "form" && !p.caption}>
-        {#if p.caption}<legend>{p.caption}</legend>{/if}
-        <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} container={offset} {onnavigate} />
+      <fieldset class={p.kind} class:bare={p.kind === "form" && !p.caption && !p.foldable} class:folded={folded && !design}>
+        {#if p.foldable}
+          <!-- The person folds and unfolds it by its header; designing, it stays open to edit. -->
+          <legend>
+            <button type="button" class="fold" aria-expanded={!folded} onclick={toggleFold} disabled={design}>
+              <span class="chevron" class:closed={folded}>&#9662;</span>{p.caption ? tr(preview, p.caption) : ""}
+            </button>
+          </legend>
+        {:else if p.caption}<legend>{p.caption}</legend>{/if}
+        {#if !folded || design}
+          <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} container={offset} {onnavigate} />
+        {/if}
       </fieldset>
     {:else if p.kind === "tabs"}
       <div class="tabs">
@@ -787,6 +807,41 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-muted);
+  }
+
+  /* The header of a foldable panel or form, which folds and unfolds it. */
+  legend .fold {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  legend .fold:disabled {
+    cursor: inherit;
+    opacity: 1;
+  }
+
+  .chevron {
+    display: inline-block;
+    transition: transform 0.1s;
+  }
+
+  .chevron.closed {
+    transform: rotate(-90deg);
+  }
+
+  fieldset.folded {
+    flex: none;
+    align-self: flex-start;
+    padding-bottom: 0;
   }
 
   .tabs {

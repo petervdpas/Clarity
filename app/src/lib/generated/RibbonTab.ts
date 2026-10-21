@@ -2,4 +2,4 @@
 import type { RibbonGroup } from "./RibbonGroup";
 import type { Span } from "./Span";
 
-export type RibbonTab = { title: string, groups: Array<RibbonGroup>, span: Span, };
+export type RibbonTab = { title: string, name: string | null, groups: Array<RibbonGroup>, span: Span, };

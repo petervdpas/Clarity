@@ -468,6 +468,41 @@ impl<'a> Checker<'a> {
 
     /// Part names are unique in a window, its sidebars and its footer
     /// included: the code behind refers to parts by name.
+    /// A sidebar's name, its width and limits, and what the person may do with it.
+    fn check_sidebar(&mut self, file: usize, sidebar: &crate::model::Sidebar) {
+        let p = &sidebar.props;
+        let side = crate::frame::side_keyword(p.side);
+        let shown = p.name.clone().unwrap_or_else(|| side.to_string());
+        let mut problems = Vec::new();
+        match p.name.as_deref() {
+            None => problems.push(format!("sidebar {side} has no name; every part has one (Name them, in Problems, names them all)")),
+            Some(name) if !crate::names::is_camel_case(name) => problems.push(crate::names::camel_case_problem("part", name)),
+            Some(_) => {}
+        }
+        let (least, most) = crate::model::SIDEBAR_WIDTHS;
+        for width in [Some(p.width), p.min, p.max].into_iter().flatten() {
+            if !(least..=most).contains(&width) {
+                problems.push(format!("a sidebar is {least} to {most} pixels wide"));
+                break;
+            }
+        }
+        if (p.min.is_some() || p.max.is_some()) && !p.resizable {
+            problems.push(format!("sidebar {shown}: 'min' and 'max' are for a resizable sidebar; add 'resizable'"));
+        }
+        if let Some(min) = p.min.filter(|m| *m > p.width) {
+            problems.push(format!("sidebar {shown}: min {min} is more than its width {}", p.width));
+        }
+        if let Some(max) = p.max.filter(|m| *m < p.width) {
+            problems.push(format!("sidebar {shown}: max {max} is less than its width {}", p.width));
+        }
+        if p.collapsed && !p.collapsible {
+            problems.push(format!("sidebar {shown}: 'collapsed' needs 'collapsible': write 'collapsible collapsed'"));
+        }
+        for problem in problems {
+            self.error(file, problem, sidebar.span);
+        }
+    }
+
     /// The menu items and buttons a window shows (its own, and the app's) are
     /// members of it beside its data, so they cannot share a name with it.
     fn check_commands_and_data(&mut self, file: usize, page: &'a Page) {
@@ -655,6 +690,26 @@ impl<'a> Checker<'a> {
             if ribbon.tabs.is_empty() {
                 self.warning(file, "the ribbon has no tabs yet", ribbon.span);
             }
+            // The ribbon, its tabs and its groups are parts, with names.
+            let named = |name: &Option<String>, what: String| match name.as_deref() {
+                None => Some(format!("{what} has no name; every part has one (Name them, in Problems, names them all)")),
+                Some(n) if !crate::names::is_camel_case(n) => Some(crate::names::camel_case_problem("part", n)),
+                Some(_) => None,
+            };
+            let mut problems = Vec::new();
+            problems.extend(named(&ribbon.name, "the ribbon".to_string()).map(|p| (p, ribbon.span)));
+            if ribbon.collapsed && !ribbon.collapsible {
+                problems.push(("the ribbon: 'collapsed' needs 'collapsible': write 'collapsible collapsed'".to_string(), ribbon.span));
+            }
+            for tab in &ribbon.tabs {
+                problems.extend(named(&tab.name, format!("tab \"{}\"", tab.title)).map(|p| (p, tab.span)));
+                for group in &tab.groups {
+                    problems.extend(named(&group.name, format!("group \"{}\"", group.title)).map(|p| (p, group.span)));
+                }
+            }
+            for (problem, span) in problems {
+                self.error(file, problem, span);
+            }
             for tab in &ribbon.tabs {
                 for group in &tab.groups {
                     self.check_commands(file, &group.items);
@@ -662,14 +717,11 @@ impl<'a> Checker<'a> {
             }
         }
         for sidebar in &frame.sidebars {
-            if sidebar.width == 0 || sidebar.width > MAX_PAGE_COLUMNS {
-                self.error(
-                    file,
-                    format!("a sidebar is 1 to {MAX_PAGE_COLUMNS} columns wide"),
-                    sidebar.span,
-                );
+            self.check_sidebar(file, sidebar);
+            if sidebar.props.columns == 0 || sidebar.props.columns > MAX_PAGE_COLUMNS {
+                self.error(file, format!("a sidebar's grid has 1 to {MAX_PAGE_COLUMNS} columns"), sidebar.span);
             } else {
-                self.check_widgets(file, context, &sidebar.widgets, sidebar.width);
+                self.check_widgets(file, context, &sidebar.widgets, sidebar.props.columns);
             }
         }
         if let Some(footer) = &frame.footer {

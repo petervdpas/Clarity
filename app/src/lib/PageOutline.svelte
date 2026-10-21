@@ -79,7 +79,7 @@
       }
     }
     for (const shown of [f.left, f.right]) {
-      if (shown && region(shown.value.span.start, "Sidebar", shown.inherited, shown.value.side)) walk(shown.value.widgets, 2);
+      if (shown && region(shown.value.span.start, "Sidebar", shown.inherited, shown.value.props.side)) walk(shown.value.widgets, 2);
     }
     if (f.footer && region(f.footer.value.span.start, "Footer", f.footer.inherited)) {
       const status = f.footer.value.statusSpan;

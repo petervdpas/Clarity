@@ -28,11 +28,11 @@ app Shop
     toolbar
         button \"New\" name newButton icon \"add\" on click -> CustomerCard
         separator
-    ribbon
-        tab \"Home\"
-            group \"Customers\"
+    ribbon name mainRibbon
+        tab \"Home\" name homeTab
+            group \"Customers\" name customersGroup
                 button \"New\" name newRibbon icon \"add\" large on click -> CustomerCard
-    sidebar left span 3
+    sidebar left name leftSidebar width 192
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
         status \"Ready\"
@@ -70,8 +70,8 @@ fn parses_an_app_with_every_region() {
     assert_eq!(file_menu.items[1].props.kind, CommandKind::Separator);
     let ribbon = app.frame.ribbon.as_ref().unwrap();
     assert!(ribbon.tabs[0].groups[0].items[0].props.large);
-    assert_eq!(app.frame.sidebars[0].side, Side::Left);
-    assert_eq!(app.frame.sidebars[0].width, 3);
+    assert_eq!(app.frame.sidebars[0].props.side, Side::Left);
+    assert_eq!(app.frame.sidebars[0].props.columns, 3);
     let footer = app.frame.footer.as_ref().unwrap();
     assert_eq!(footer.status.as_deref(), Some("Ready"));
     assert_eq!(footer.widgets.len(), 1);
@@ -102,7 +102,7 @@ fn reports_misplaced_commands() {
 
 #[test]
 fn reports_duplicate_regions() {
-    let source = "module m\napp A\n    menu\n        item \"A\" name aItem\n    menu\n        item \"B\" name bItem\n    sidebar left\n    sidebar left\n";
+    let source = "module m\napp A\n    menu\n        item \"A\" name aItem\n    menu\n        item \"B\" name bItem\n    sidebar left name leftSidebar width 192\n    sidebar left name leftSidebar width 192\n";
     let (_, diags) = parse(source, "a.clarity");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert!(messages.contains(&"duplicate 'menu'"));
@@ -214,7 +214,7 @@ page Plain: window
 page Own: window
     toolbar
         button \"Mine\" name mineButton on click -> Plain
-    sidebar right span 2
+    sidebar right name rightSidebar width 128 grid 2 columns
 page Ask: dialog
     title \"Ask\"
 ";
@@ -227,7 +227,7 @@ app Shop
         item \"File\" name file2
     toolbar
         button \"Theirs\" name theirsButton on click -> Plain
-    sidebar left span 3
+    sidebar left name leftSidebar width 192
     footer
         status \"Ready\"
 ";
@@ -242,8 +242,8 @@ app Shop
 
     let own = clarity_spec::frame::shown(app, page("Own"));
     assert_eq!(own.toolbar.unwrap().items[0].props.caption.as_deref(), Some("Mine"));
-    assert_eq!(own.left.map(|s| s.width), Some(3));
-    assert_eq!(own.right.map(|s| s.width), Some(2));
+    assert_eq!(own.left.map(|s| s.props.columns), Some(3));
+    assert_eq!(own.right.map(|s| s.props.columns), Some(2));
     assert!(own.menu.is_some());
 
     let ask = clarity_spec::frame::shown(app, page("Ask"));

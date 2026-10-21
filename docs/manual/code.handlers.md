@@ -130,6 +130,6 @@ code CustomerBrowse
 
 On the **Design** tab, the **Code** button in the Window group slides the Code panel out over the window you design. It shows the window's handlers as text, with a button per handler to jump to it. Problems are marked by line while you type. **Save** (Ctrl+S) writes the code and stays off while there are errors; **Revert** puts back the saved text. A save is one designer edit, so Undo takes it back.
 
-In the part properties, each event has a field for its handler; typing a name there wires that handler and writes it empty if it is new. **Wire** names a handler after the part and the event (`saveClick` for the `click` of a button named `save`), writes it empty into the code behind and opens the panel there. **Code** next to a wired event jumps to its handler. With no part picked, the properties show the window's own events in the same way.
+In the part properties, each event has a field for its handler; typing a name there wires that handler and writes it empty if it is new. **Wire** names a handler after the part and the event (`saveClick` for the `click` of a button named `save`), writes it empty into the code behind and opens it in the inspector's Code tab. **Code** next to a wired event jumps to its handler. With no part picked, the properties show the window's own events in the same way.
 
 The full rules are in [the language reference](../LANGUAGE.md#8-code-behind).

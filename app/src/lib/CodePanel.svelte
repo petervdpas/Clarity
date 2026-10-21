@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A window (or the app) as Clarity text, in a panel that slides out over
-  // the designer. Design shows the window's own declaration: while it is
+  // A window (or the app) as Clarity text, in the Code and Text tabs of the
+  // designer's inspector. Text shows the window's own declaration: while it is
   // typed the designer follows the text, and Save writes it. Code shows the
   // code behind: of the part picked in the designer (its handlers and the
   // handlers they call), of the window's own events when nothing is picked,
@@ -10,15 +10,13 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy } from "svelte";
   import SourceEditor from "./SourceEditor.svelte";
-  import Splitter from "./Splitter.svelte";
-  import { layout } from "./layout.svelte";
   import { applyEdit } from "./applyEdit";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Diagnostic } from "./generated/Diagnostic";
   import type { Preview } from "./generated/Preview";
   import type { SpecFile } from "./generated/SpecFile";
-  import { pageDesigner, type PanelView } from "./pageDesignerStore.svelte";
+  import { pageDesigner } from "./pageDesignerStore.svelte";
   import { commandAction, focusOf, handlerName, mergeFocus } from "./codeParts";
   import { findFrameElement } from "./frame";
   import { locateWidget } from "./pages";
@@ -44,11 +42,6 @@
     onapplied: (preview: Preview) => void;
     onclose: () => void;
   } = $props();
-
-  const VIEWS: { key: PanelView; name: string }[] = [
-    { key: "design", name: "Design" },
-    { key: "code", name: "Code" },
-  ];
 
   let codeEditor: SourceEditor | undefined = $state();
 
@@ -154,33 +147,17 @@
   const reloadKey = $derived(file.path + "\n" + owner + "\n" + item + "\n" + file.version);
 </script>
 
-<div class="panel" role="dialog" aria-label="{owner} as Clarity text" style:width="min({layout.sizes.codePanel}px, 90%)">
-  <div class="edge">
-    <Splitter axis="x" label="Width of the text panel" onmove={(d) => layout.resize("codePanel", -d)} />
-  </div>
-  <header>
-    <div class="tabs" role="tablist">
-      {#each VIEWS as v (v.key)}
-        <button
-          role="tab"
-          aria-selected={pageDesigner.code.view === v.key}
-          class:active={pageDesigner.code.view === v.key}
-          onclick={() => (pageDesigner.code = { ...pageDesigner.code, view: v.key, focus: null })}>{v.name}</button
-        >
-      {/each}
+<div class="panel" aria-label="{owner} as Clarity text">
+  {#if pageDesigner.code.view === "code"}
+    <div class="scope">
+      {#if scope}
+        <span class="what">{whole ? `All of ${owner}` : scope.label}</span>
+        <label><input type="checkbox" bind:checked={whole} /> Whole window</label>
+      {:else}
+        <span class="what">All of {owner}</span>
+      {/if}
     </div>
-    {#if pageDesigner.code.view === "code"}
-      <span class="scope">
-        {#if scope}
-          <span class="what">{whole ? `All of ${owner}` : scope.label}</span>
-          <label><input type="checkbox" bind:checked={whole} /> Whole window</label>
-        {:else}
-          <span class="what">All of {owner}</span>
-        {/if}
-      </span>
-    {/if}
-    <button class="close" onclick={onclose} title="Close (Escape)">&times;</button>
-  </header>
+  {/if}
 
   <!-- Both stay mounted, so switching keeps unsaved text. -->
   <div class="view" class:hidden={pageDesigner.code.view !== "design"}>
@@ -204,7 +181,7 @@
       save={saveCode}
       reloadKey={reloadKey + "\n" + (focused && scope ? scope.roots.join(",") : "all")}
       navPattern={/^handler\s+([A-Za-z_]\w*)/}
-      placeholder={'handler save_clicked\n    message "Hello"'}
+      placeholder={'handler saveClick\n    message "Hello"'}
       {onclose}
     />
   </div>
@@ -212,70 +189,21 @@
 
 <style>
   .panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-
+    flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--panel);
-    border-left: 1px solid var(--border-strong);
-    box-shadow: -12px 0 32px rgb(0 0 0 / 0.35);
-    pointer-events: auto;
-    animation: slide-in 140ms ease-out;
-  }
-
-  .edge {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    display: flex;
-  }
-
-  @keyframes slide-in {
-    from {
-      transform: translateX(40px);
-      opacity: 0;
-    }
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .tabs {
-    display: flex;
-    gap: 2px;
-  }
-
-  .tabs button {
-    border: none;
-    border-radius: var(--radius) var(--radius) 0 0;
-    background: none;
-    padding: 6px 14px;
-    color: var(--text-muted);
-  }
-
-  .tabs button.active {
-    background: var(--panel-alt);
-    color: var(--text);
-    font-weight: 600;
+    min-height: 0;
   }
 
   .scope {
-    flex: 1;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    padding-left: 12px;
+    padding: 6px 12px;
     font-size: 12px;
     color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
   }
 
   .scope .what {
@@ -286,10 +214,6 @@
     display: flex;
     align-items: center;
     gap: 4px;
-  }
-
-  .close {
-    margin-bottom: 4px;
   }
 
   .view {

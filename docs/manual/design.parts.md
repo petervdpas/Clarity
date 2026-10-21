@@ -29,7 +29,7 @@ For every part, its own properties, events and binding rules are in [the languag
 ## Containers
 
 - `form`: binds to one record (`bind customer`) and holds the inputs of that record on its own grid. Event: `submit`, when Enter is pressed in one of its inputs.
-- `panel`: parts in a frame with the caption.
+- `panel`: parts in a frame with the caption. Tick **The person can fold it by its header** under Folding in its properties (`foldable`), and **Starts folded** to start it folded (`foldable folded`); a form folds the same way. Code reads and sets it as `details.folded`.
 - `tabs`: `tab "Title"` blocks, each with parts. Event: `change`. Add tab is in the properties.
 - `splitter`: exactly two `pane` blocks, side by side or stacked.
 
@@ -48,7 +48,7 @@ When the window is a `window` or the app, a Frame group comes first, with the me
 
 ## The properties panel
 
-The panel on the right has two sections, which fold: **The window** (title, grid columns, data and the window's events; see [Windows](design.windows.md)) and **What is picked**. Click a part on the canvas, or a line in the sidebar's Window tab, to pick it. Click the window's background or title bar to pick nothing.
+The inspector on the right has the tabs Properties, Code and Text ([Design as text](design.text.md)). Properties shows what is selected. Click a part on the canvas, or a line in the sidebar's Window tab, to select it and see its properties and events. Click the window's background or title bar to select the window itself: its title, grid columns, size, data and events (see [Windows](design.windows.md)).
 
 What is picked shows the fields that part has:
 

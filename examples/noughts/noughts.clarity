@@ -23,6 +23,11 @@ page Game: window
     title "Noughts and crosses"
     size 405 x 510
     data status: text, default "Your move"
+    data rules: text, default "Click a square to put your cross there; the computer answers with a nought. Three in a row wins."
+    // How to play: folded to a button until the person opens it.
+    sidebar right name help width 260 min 200 max 420 resizable collapsible collapsed maximizable
+        heading "How to play" name helpHeading at 1,1 span 3
+        text name rulesText at 1,2 span 3 rows 4 bind rules
     canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
     text name statusText at 1,9 span 12 bind status
     button "New game" name newGame at 1,10 span 12 key "Ctrl+N" on click: restartClicked

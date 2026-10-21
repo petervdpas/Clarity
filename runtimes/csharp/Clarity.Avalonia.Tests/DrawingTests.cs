@@ -120,4 +120,20 @@ public class DrawingTests
         vm.DialClicked(new Pointer(120, 150));
         Assert.Equal(("120,150", 2), (vm.Clicked, vm.Draws));
     }
+
+    /// A foldable panel or form is open while it is not folded: the Expander
+    /// binds to IsOpen, the code sets IsFolded (conformance/folding.json).
+    [Fact]
+    public void AFoldablePartIsOpenWhileItIsNotFolded()
+    {
+        var details = new PartState("details");
+        var changed = new List<string?>();
+        details.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        Assert.True(details.IsOpen);
+        details.IsFolded = true;
+        Assert.False(details.IsOpen);
+        Assert.Equal(["IsFolded", "IsOpen"], changed);
+        details.IsOpen = true;
+        Assert.False(details.IsFolded);
+    }
 }

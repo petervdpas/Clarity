@@ -3,7 +3,7 @@
   import type { App } from "./generated/App";
   import type { Edit } from "./generated/Edit";
   import type { Event as PartEvent } from "./generated/Event";
-  import { freePartName, wireEvent } from "./codeParts";
+  import { eventHandler, freePartName, wireEvent } from "./codeParts";
   import type { Orientation } from "./generated/Orientation";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
@@ -11,7 +11,6 @@
   import type { WidgetProps } from "./generated/WidgetProps";
   import { findFrameElement } from "./frame";
   import { WINDOW_HEIGHT, WINDOW_MAX_HEIGHT, WINDOW_MAX_WIDTH, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH } from "./grid";
-  import { layout } from "./layout.svelte";
   import { cellEdits, describeType, themeStyles } from "./model";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
@@ -22,14 +21,11 @@
     preview,
     page,
     onedit,
-    subject,
     app = null,
   }: {
     preview: Preview;
     page: Page;
     onedit: (edit: Edit) => void;
-    /** The window itself, or what is picked on it. */
-    subject: "window" | "picked";
     /** Set when the page stands for the app (see `appAsPage`). */
     app?: App | null;
   } = $props();
@@ -94,10 +90,10 @@
 
   /** The handler name Wire suggests for each own event. */
   const OWNER_HANDLERS: Partial<Record<PartEvent, string>> = {
-    open: "window_opened",
-    close: "window_closed",
-    return: "window_returned",
-    start: "app_started",
+    open: "windowOpened",
+    close: "windowClosed",
+    return: "windowReturned",
+    start: "appStarted",
   };
 
   /** Wires one of the window's or app's own events, or unwires it with `null`. */
@@ -174,16 +170,8 @@
 </script>
 
 <section>
-  <h3>
-    <button class="fold" aria-expanded={!layout.folded[subject]} onclick={() => layout.toggle(subject)}>
-      <span class="chevron" class:closed={layout.folded[subject]}>&#9662;</span>
-      {subject === "window" ? "The window" : "What is picked"}
-    </button>
-  </h3>
-
-  {#if layout.folded[subject]}
-    <!-- Folded: only the header shows. -->
-  {:else if subject === "picked" && location && p && info}
+  <!-- What is selected: a part, a tab or pane, a menu item, or else the window itself. -->
+  {#if location && p && info}
     <div class="kind">{info.name}</div>
 
     <label class="prop">
@@ -384,6 +372,18 @@
         <input value={p.shortcut ?? ""} placeholder="Ctrl+S" onchange={(e) => update({ shortcut: textOf(e) })} />
       </label>
     {/if}
+    {#if info.properties.includes("foldable")}
+      <fieldset class="checks">
+        <legend>Folding</legend>
+        <label
+          ><input type="checkbox" checked={p.foldable} onchange={(e) => update({ foldable: e.currentTarget.checked, folded: e.currentTarget.checked && p.folded })} /> The person
+          can fold it by its header</label
+        >
+        <label><input type="checkbox" checked={p.folded} disabled={!p.foldable} onchange={(e) => update({ folded: e.currentTarget.checked })} /> Starts folded</label>
+        <p class="hint">Code reads and sets it as <code>{partName}.folded</code>.</p>
+      </fieldset>
+    {/if}
+
     {#if info.properties.includes("readonly") || info.properties.includes("default") || info.properties.includes("cancel")}
       <fieldset class="checks">
         <legend>Behavior</legend>
@@ -413,7 +413,7 @@
                 <button class="small" title="Unwire" onclick={() => setHandler(ev, null)}>&times;</button>
               </span>
             {:else}
-              <button class="small" title="Wire a handler named after the part and the event" onclick={() => setHandler(ev, partName + "_" + ev)}>Wire</button>
+              <button class="small" title="Wire a handler named after the part and the event" onclick={() => setHandler(ev, eventHandler(partName, ev))}>Wire</button>
             {/if}
           </div>
         {/each}
@@ -462,7 +462,7 @@
     <div class="actions">
       <button class="danger" onclick={() => onedit({ op: "remove", item: location.widget.span.start })}>Remove</button>
     </div>
-  {:else if subject === "picked" && inner}
+  {:else if inner}
     {@const tab = inner.widget.pages[inner.index]}
     {#if tab.title !== null}
       <div class="kind">Tab</div>
@@ -476,10 +476,8 @@
     {:else}
       <div class="kind">Pane</div>
     {/if}
-  {:else if subject === "picked" && frameElement}
+  {:else if frameElement}
     <FrameProperties {preview} element={frameElement} {onedit} {owner} />
-  {:else if subject === "picked"}
-    <p class="hint">Nothing yet. Click a part of the window, or a line in the Window tab.</p>
   {:else}
     {#if app}
       <div class="kind">App <code>{app.name.name}</code></div>
@@ -582,38 +580,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-  }
-
-  .fold {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    padding: 0;
-    border: none;
-    background: none;
-    font: inherit;
-    letter-spacing: inherit;
-    text-transform: inherit;
-    color: inherit;
-    text-align: left;
-  }
-
-  .chevron {
-    display: inline-block;
-    transition: transform 0.1s;
-  }
-
-  .chevron.closed {
-    transform: rotate(-90deg);
   }
 
   .kind {

@@ -1,0 +1,13 @@
+{
+  "about": "A foldable panel or form (DESIGN 2, `foldable`, `foldable folded`). The person using the application folds and unfolds it by its header; the renderer sends whether it is folded as the part's `folded` with each event, and a handler reads and sets it as `part.folded`. Without a `folded` in the part's state, it is as designed: folded with `foldable folded`, open with `foldable`. `cases` give the design, the part's state, and what `part.folded` reads. `set` gives what setting `part.folded` sends back in the part's state.",
+  "cases": [
+    { "design": false, "part": {}, "folded": false },
+    { "design": true, "part": {}, "folded": true },
+    { "design": true, "part": { "folded": false }, "folded": false },
+    { "design": false, "part": { "folded": true }, "folded": true }
+  ],
+  "set": [
+    { "folded": true, "part": { "folded": true } },
+    { "folded": false, "part": { "folded": false } }
+  ]
+}

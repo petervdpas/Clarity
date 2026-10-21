@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { NARROWEST, WIDEST } from "./sidebars";
+  import type { SidebarProps } from "./generated/SidebarProps";
   import { commandHandler, wireCommand } from "./codeParts";
   // Properties of a picked frame element: a region, a ribbon tab or group,
   // a menu item, a button, a separator or the footer status.
@@ -173,12 +175,35 @@
       <button class="danger" onclick={() => remove(element.toolbar.span.start)}>Remove toolbar</button>
     </div>
   {:else if element.kind === "ribbon"}
+    {@const r = element.ribbon}
+    <div class="kind">Ribbon</div>
+    <label class="prop">
+      <span>Name</span>
+      <input value={r.name ?? ""} title="The name the code behind uses" onchange={(e) => onedit({ op: "updateRibbon", item: r.span.start, name: e.currentTarget.value.trim() || null, collapsible: r.collapsible, collapsed: r.collapsed })} />
+    </label>
+    <fieldset class="checks">
+      <legend>The person can</legend>
+      <label
+        ><input type="checkbox" checked={r.collapsible} onchange={(e) => onedit({ op: "updateRibbon", item: r.span.start, name: r.name, collapsible: e.currentTarget.checked, collapsed: e.currentTarget.checked && r.collapsed })} /> fold
+        it to its tabs (double-click a tab)</label
+      >
+      <label
+        ><input type="checkbox" checked={r.collapsed} disabled={!r.collapsible} onchange={(e) => onedit({ op: "updateRibbon", item: r.span.start, name: r.name, collapsible: r.collapsible, collapsed: e.currentTarget.checked })} /> starts
+        folded</label
+      >
+    </fieldset>
+    <p class="hint">Code reads and sets <code>{r.name ?? "it"}.tab</code>, the open tab from 1, and <code>.collapsed</code>; a tab or group hides with <code>.visible</code>.</p>
     <div class="actions">
       <button onclick={() => add(element.ribbon.span.start, "tab")}>Add tab</button>
       <button class="danger" onclick={() => remove(element.ribbon.span.start)}>Remove ribbon</button>
     </div>
   {:else if element.kind === "ribbonTab" || element.kind === "ribbonGroup"}
     {@const item = element.kind === "ribbonTab" ? element.tab : element.group}
+    <div class="kind">{element.kind === "ribbonTab" ? "Ribbon tab" : "Ribbon group"}</div>
+    <label class="prop">
+      <span>Name</span>
+      <input value={item.name ?? ""} title="The name the code behind uses" onchange={(e) => e.currentTarget.value.trim() && onedit({ op: "setName", item: item.span.start, name: e.currentTarget.value.trim() })} />
+    </label>
     <label class="prop">
       <span>Title</span>
       <input value={item.title} onchange={(e) => onedit({ op: "setTitle", target: item.span.start, title: e.currentTarget.value })} />
@@ -196,24 +221,43 @@
     </div>
   {:else if element.kind === "sidebar"}
     {@const s = element.sidebar}
+    {@const p = s.props}
+    {@const set = (changes: Partial<SidebarProps>) => onedit({ op: "updateSidebar", item: s.span.start, props: { ...p, ...changes } })}
+    {@const pixels = (e: Event) => Math.round(Number((e.currentTarget as HTMLInputElement).value)) || null}
+    <div class="kind">Sidebar</div>
+    <label class="prop">
+      <span>Name</span>
+      <input value={p.name ?? ""} title="The name the code behind uses" onchange={(e) => set({ name: e.currentTarget.value.trim() || null })} />
+    </label>
     <label class="prop">
       <span>Side</span>
-      <select value={s.side} onchange={(e) => onedit({ op: "setSidebar", item: s.span.start, side: e.currentTarget.value as Side, width: s.width })}>
+      <select value={p.side} onchange={(e) => set({ side: e.currentTarget.value as Side })}>
         <option value="left">Left</option>
         <option value="right">Right</option>
       </select>
     </label>
     <label class="prop">
-      <span>Width in columns</span>
-      <input
-        type="number"
-        min="1"
-        max="24"
-        value={s.width}
-        onchange={(e) => onedit({ op: "setSidebar", item: s.span.start, side: s.side, width: Math.max(1, Number(e.currentTarget.value) || 1) })}
-      />
+      <span>Width in pixels</span>
+      <input type="number" min={NARROWEST} max={WIDEST} value={p.width} onchange={(e) => set({ width: pixels(e) ?? p.width })} />
     </label>
-    <p class="hint">Drag widgets onto the sidebar; it has its own snap grid.</p>
+    <label class="prop">
+      <span>Grid columns</span>
+      <input type="number" min="1" max="24" value={p.columns} onchange={(e) => set({ columns: Math.max(1, pixels(e) ?? 1) })} />
+    </label>
+    <fieldset class="checks">
+      <legend>The person can</legend>
+      <label><input type="checkbox" checked={p.resizable} onchange={(e) => set({ resizable: e.currentTarget.checked, min: e.currentTarget.checked ? p.min : null, max: e.currentTarget.checked ? p.max : null })} /> drag its edge to size it</label>
+      {#if p.resizable}
+        <div class="limits">
+          <label>Narrowest <input type="number" min={NARROWEST} max={p.width} placeholder={String(NARROWEST)} value={p.min ?? ""} onchange={(e) => set({ min: pixels(e) })} /></label>
+          <label>Widest <input type="number" min={p.width} max={WIDEST} placeholder={String(WIDEST)} value={p.max ?? ""} onchange={(e) => set({ max: pixels(e) })} /></label>
+        </div>
+      {/if}
+      <label><input type="checkbox" checked={p.collapsible} onchange={(e) => set({ collapsible: e.currentTarget.checked, collapsed: e.currentTarget.checked && p.collapsed })} /> fold it to a button</label>
+      <label><input type="checkbox" checked={p.collapsed} disabled={!p.collapsible} onchange={(e) => set({ collapsed: e.currentTarget.checked })} /> starts folded</label>
+      <label><input type="checkbox" checked={p.maximizable} onchange={(e) => set({ maximizable: e.currentTarget.checked })} /> let it fill the window</label>
+    </fieldset>
+    <p class="hint">Drag parts onto the sidebar; it has its own snap grid. Code reads and sets <code>{p.name ?? "it"}.collapsed</code> and <code>.maximized</code>.</p>
     <div class="actions">
       <button class="danger" onclick={() => remove(s.span.start)}>Remove sidebar</button>
     </div>
@@ -234,6 +278,18 @@
 {/if}
 
 <style>
+  .limits {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding-left: 22px;
+    font-size: 12px;
+  }
+
+  .limits input {
+    width: 100%;
+  }
+
   .kind {
     font-weight: 600;
   }

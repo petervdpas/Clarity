@@ -7,6 +7,7 @@ import type { PageKind } from "./PageKind";
 import type { PageTemplate } from "./PageTemplate";
 import type { RegionKind } from "./RegionKind";
 import type { Side } from "./Side";
+import type { SidebarProps } from "./SidebarProps";
 import type { WidgetKind } from "./WidgetKind";
 import type { WidgetProps } from "./WidgetProps";
 
@@ -26,4 +27,4 @@ bind: string, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name
 /**
  * Sidebars only.
  */
-side: Side | null, } | { "op": "setSidebar", item: number, side: Side, width: number, } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, } | { "op": "setCode", owner: string, text: string, } | { "op": "addHandler", owner: string, name: string, } | { "op": "replaceDecl", item: number, text: string, } | { "op": "appendDecl", text: string, };
+side: Side | null, } | { "op": "updateSidebar", item: number, props: SidebarProps, } | { "op": "updateRibbon", item: number, name: string | null, collapsible: boolean, collapsed: boolean, } | { "op": "setName", item: number, name: string, } | { "op": "updateSidebars" } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, } | { "op": "setCode", owner: string, text: string, } | { "op": "addHandler", owner: string, name: string, } | { "op": "replaceDecl", item: number, text: string, } | { "op": "appendDecl", text: string, };

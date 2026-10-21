@@ -175,6 +175,8 @@ pub enum WidgetProperty {
     Cancel,
     Digits,
     Units,
+    /// `foldable` and `folded`: a panel or form folds by its header.
+    Foldable,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -346,7 +348,7 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Plain),
         clickable: false,
         events: &[Event::Submit],
-        properties: &[],
+        properties: &[WidgetProperty::Foldable],
     },
     Entry {
         kind: WidgetKind::Panel,
@@ -361,7 +363,7 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Plain),
         clickable: false,
         events: &[],
-        properties: &[],
+        properties: &[WidgetProperty::Foldable],
     },
     Entry {
         kind: WidgetKind::Tabs,
@@ -629,6 +631,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         tooltip: None,
         style: None,
         readonly: false,
+        foldable: false,
+        folded: false,
         tab_order: None,
         shortcut: None,
         default_button: false,
@@ -720,6 +724,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if props.readonly {
         parts.push("readonly".to_string());
+    }
+    if props.foldable {
+        parts.push(if props.folded { "foldable folded" } else { "foldable" }.to_string());
     }
     if let Some(order) = props.tab_order {
         parts.push(format!("taborder {order}"));
@@ -833,6 +840,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             "placeholder",
         ),
         (WidgetProperty::Readonly, props.readonly, "readonly"),
+        (WidgetProperty::Foldable, props.foldable, "foldable"),
         (WidgetProperty::TabOrder, props.tab_order.is_some(), "taborder"),
         (WidgetProperty::Shortcut, props.shortcut.is_some(), "key"),
         (WidgetProperty::Default, props.default_button, "default"),
@@ -844,6 +852,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         if present && !has_property(props.kind, property) {
             return Err(format!("'{what}' does not apply to a {name}"));
         }
+    }
+    if props.folded && !props.foldable {
+        return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());
     }
     if props.digits.is_some_and(|d| !(1..=MAX_DIGITS).contains(&d)) {
         return Err(format!("a display has 1 to {MAX_DIGITS} digits"));

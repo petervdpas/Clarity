@@ -18,10 +18,13 @@ app Todo
             item "Language" name languageItem on click -> language
             separator
             item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-    toolbar
-        button "Users" name users2 icon "list" on click -> Users
-        separator
-        button "Language" name language2 icon "language" on click -> language
+    // A ribbon the person folds to its tabs with a double click.
+    ribbon name mainRibbon collapsible
+        tab "Home" name homeTab
+            group "People" name peopleGroup
+                button "Users" name usersButton icon "list" large on click -> Users
+            group "Settings" name settingsGroup
+                button "Language" name languageButton icon "language" large on click -> language
 
 page Main: window
     title "Todo"

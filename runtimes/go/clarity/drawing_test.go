@@ -98,3 +98,139 @@ func normal(text []byte) string {
 	out, _ := json.Marshal(value)
 	return string(out)
 }
+
+func TestAFoldablePartIsFoldedAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/folding.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Cases []struct {
+			Design bool            `json:"design"`
+			Part   json.RawMessage `json:"part"`
+			Folded bool            `json:"folded"`
+		} `json:"cases"`
+		Set []struct {
+			Folded bool            `json:"folded"`
+			Part   json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Cases) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Cases {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"details": part}})
+		if got := ui.Folded("details", c.Design); got != c.Folded {
+			t.Errorf("%s with design %v: %v, want %v", c.Part, c.Design, got, c.Folded)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		ui.SetFolded("details", c.Folded)
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["details"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("set %v sends %s, want %s", c.Folded, got, c.Part)
+		}
+	}
+}
+
+func TestASidebarIsCollapsedAndMaximizedAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/sidebars.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Collapsed []struct {
+			Design    bool            `json:"design"`
+			Part      json.RawMessage `json:"part"`
+			Collapsed bool            `json:"collapsed"`
+		} `json:"collapsed"`
+		Maximized []struct {
+			Part      json.RawMessage `json:"part"`
+			Maximized bool            `json:"maximized"`
+		} `json:"maximized"`
+		Set []struct {
+			Collapsed *bool           `json:"collapsed"`
+			Maximized *bool           `json:"maximized"`
+			Part      json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Collapsed) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	uiWith := func(raw json.RawMessage) *Ui {
+		var part PartState
+		if err := json.Unmarshal(raw, &part); err != nil {
+			t.Fatal(err)
+		}
+		return NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"nav": part}})
+	}
+	for _, c := range file.Collapsed {
+		if got := uiWith(c.Part).Collapsed("nav", c.Design); got != c.Collapsed {
+			t.Errorf("%s with design %v: %v, want %v", c.Part, c.Design, got, c.Collapsed)
+		}
+	}
+	for _, c := range file.Maximized {
+		if got := uiWith(c.Part).Maximized("nav"); got != c.Maximized {
+			t.Errorf("%s: %v, want %v", c.Part, got, c.Maximized)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		if c.Collapsed != nil {
+			ui.SetCollapsed("nav", *c.Collapsed)
+		}
+		if c.Maximized != nil {
+			ui.SetMaximized("nav", *c.Maximized)
+		}
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["nav"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("sends %s, want %s", got, c.Part)
+		}
+	}
+}
+
+func TestARibbonsOpenTabIsAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/ribbons.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Tab []struct {
+			Part json.RawMessage `json:"part"`
+			Tab  int64           `json:"tab"`
+		} `json:"tab"`
+		Set []struct {
+			Tab  int64           `json:"tab"`
+			Part json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Tab) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Tab {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"mainRibbon": part}})
+		if got := ui.Tab("mainRibbon"); got != c.Tab {
+			t.Errorf("%s: %d, want %d", c.Part, got, c.Tab)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		ui.SetTab("mainRibbon", c.Tab)
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["mainRibbon"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("sends %s, want %s", got, c.Part)
+		}
+	}
+}

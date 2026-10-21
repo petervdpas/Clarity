@@ -77,7 +77,9 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
         let tokens = &line.tokens;
         // A part, or a menu item or button of the frame.
         let is_part = line.indent > 0
-            && tokens.first().is_some_and(|t| crate::widgets::by_keyword(&t.text).is_some() || crate::frame::command_by_keyword(&t.text).is_some());
+            && tokens.first().is_some_and(|t| {
+                crate::widgets::by_keyword(&t.text).is_some() || crate::frame::command_by_keyword(&t.text).is_some() || matches!(t.text.as_str(), "sidebar" | "ribbon" | "tab" | "group")
+            });
         let declared = if line.indent > 0 && tokens.first().is_some_and(|t| t.text == "handler") {
             tokens.get(1)
         } else if is_part {

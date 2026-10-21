@@ -140,6 +140,49 @@ pub fn side_keyword(side: Side) -> &'static str {
     }
 }
 
+/// A sidebar's line as it is written, saying only what is not the default.
+pub fn sidebar_line(p: &crate::model::SidebarProps) -> String {
+    let mut out = format!("sidebar {}", side_keyword(p.side));
+    if let Some(name) = &p.name {
+        out.push_str(&format!(" name {name}"));
+    }
+    if p.width != crate::model::DEFAULT_SIDEBAR_WIDTH {
+        out.push_str(&format!(" width {}", p.width));
+    }
+    if let Some(min) = p.min {
+        out.push_str(&format!(" min {min}"));
+    }
+    if let Some(max) = p.max {
+        out.push_str(&format!(" max {max}"));
+    }
+    for (on, word) in [(p.resizable, "resizable"), (p.collapsible, "collapsible"), (p.collapsed, "collapsed"), (p.maximizable, "maximizable")] {
+        if on {
+            out.push(' ');
+            out.push_str(word);
+        }
+    }
+    if p.columns != crate::model::DEFAULT_SIDEBAR_COLUMNS {
+        out.push_str(&format!(" grid {} columns", p.columns));
+    }
+    out
+}
+
+/// A new sidebar on `side`, with the defaults.
+pub fn new_sidebar(side: Side, name: Option<String>) -> crate::model::SidebarProps {
+    crate::model::SidebarProps {
+        side,
+        name,
+        width: crate::model::DEFAULT_SIDEBAR_WIDTH,
+        min: None,
+        max: None,
+        resizable: false,
+        collapsible: false,
+        collapsed: false,
+        maximizable: false,
+        columns: crate::model::DEFAULT_SIDEBAR_COLUMNS,
+    }
+}
+
 /// Click targets that are not windows.
 pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme"];
 
@@ -325,7 +368,7 @@ pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Pag
     }
     let own = &page.frame;
     let theirs = app.map(|a| &a.frame);
-    let side = |frame: Option<&'a crate::model::Frame>, side: Side| frame.and_then(|f| f.sidebars.iter().find(|s| s.side == side));
+    let side = |frame: Option<&'a crate::model::Frame>, side: Side| frame.and_then(|f| f.sidebars.iter().find(|s| s.props.side == side));
     ShownFrame {
         menu: own.menu.as_ref().or(theirs.and_then(|f| f.menu.as_ref())),
         toolbar: own.toolbar.as_ref().or(theirs.and_then(|f| f.toolbar.as_ref())),

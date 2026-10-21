@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { commandAction, commandHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
+  import { commandAction, commandHandler, eventHandler, freePartName, handlerName, wireCommand, wireEvent } from "./codeParts";
   import FrameView from "./FrameView.svelte";
   import GridBox from "./GridBox.svelte";
   import ShownWindow from "./ShownWindow.svelte";
@@ -81,6 +81,45 @@
       return draftApp ? appAsPage(draftApp) : savedPage;
     }
     return findPage(draft, savedPage.name.name) ?? savedPage;
+  });
+
+  // The inspector on the right: the picked part's (or the window's)
+  // properties, its code, or the window as text, in tabs, as an IDE's object
+  // inspector, one width for all tabs. The code tabs are as tall as the room they have.
+  type InspectorTab = "properties" | "code" | "text";
+  const INSPECTOR_TABS: { key: InspectorTab; name: string; title: string }[] = [
+    { key: "properties", name: "Properties", title: "What the picked part or the window is" },
+    { key: "code", name: "Code", title: "The code of the picked part, or of the window" },
+    { key: "text", name: "Text", title: "The window as Clarity text" },
+  ];
+  const inspectorTab = $derived<InspectorTab>(!pageDesigner.code.open ? "properties" : pageDesigner.code.view === "code" ? "code" : "text");
+  const coding = $derived(inspectorTab !== "properties");
+  let codeOpened = $state(false);
+  $effect(() => {
+    if (coding) codeOpened = true;
+  });
+
+  function showTab(tab: InspectorTab) {
+    pageDesigner.code = tab === "properties" ? { ...pageDesigner.code, open: false, focus: null } : { open: true, view: tab === "code" ? "code" : "design", focus: null };
+  }
+
+  // The code tabs reach down to the bottom of the room the designer has.
+  let inspector: HTMLElement | undefined = $state();
+  let inspectorHeight = $state(600);
+  $effect(() => {
+    const room = inspector?.closest("main");
+    if (!inspector || !room) return;
+    const measure = () => {
+      if (inspector) inspectorHeight = Math.max(240, room.getBoundingClientRect().bottom - Math.max(inspector.getBoundingClientRect().top, room.getBoundingClientRect().top) - 12);
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(room);
+    room.addEventListener("scroll", measure);
+    return () => {
+      watch.disconnect();
+      room.removeEventListener("scroll", measure);
+    };
   });
 
   // The size a window's edge is being dragged to, kept until the window has
@@ -168,7 +207,7 @@
     }
     // Every part has a name; one written without gets it now, with its handler.
     const name = p.name ?? freePartName(allParts(page).flatMap((w) => (w.props.name ? [w.props.name] : [])), info.keyword);
-    const handler = `${name}_${event}`;
+    const handler = eventHandler(name, event);
     edit(wireEvent({ item, props: { ...p, name }, events: info.events, owner, event, handler }));
     pageDesigner.showCode(handler);
   }
@@ -433,15 +472,37 @@
   {#if layout.folded.properties}
     <span></span>
   {:else}
-    <Splitter axis="x" label="Width of the properties" onmove={(d) => layout.resize("properties", -d)} />
+    <Splitter axis="x" label="Width of the inspector" onmove={(d) => layout.resize("properties", -d)} />
   {/if}
-  <aside>
+  <aside bind:this={inspector} class:coding style:height={coding && !layout.folded.properties ? `${inspectorHeight}px` : null}>
     {#if layout.folded.properties}
-      <button class="dock" title="Show the properties" onclick={() => layout.toggle("properties")}>&lsaquo; Properties</button>
+      <button class="dock" title="Show the inspector" onclick={() => layout.toggle("properties")}>&lsaquo; Inspector</button>
     {:else}
-      <button class="undock" title="Fold the properties away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
-      <PageProperties {preview} {page} {app} onedit={edit} subject="window" />
-      <PageProperties {preview} {page} {app} onedit={edit} subject="picked" />
+      <div class="inspector-bar">
+        <div class="inspector-tabs" role="tablist">
+          {#each INSPECTOR_TABS as t (t.key)}
+            <button role="tab" aria-selected={inspectorTab === t.key} class:active={inspectorTab === t.key} title={t.title} onclick={() => showTab(t.key)}>{t.name}</button>
+          {/each}
+        </div>
+        <button class="undock" title="Fold the inspector away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
+      </div>
+      <div class="properties" class:hidden={coding}>
+        <PageProperties {preview} {page} {app} onedit={edit} />
+      </div>
+      <!-- Mounted once opened, so switching tabs keeps unsaved text. -->
+      {#if codeOpened}
+        <div class="code" class:hidden={!coding}>
+          <CodePanel
+            {preview}
+            {page}
+            {file}
+            owner={app ? app.name.name : savedPage.name.name}
+            item={app ? app.span.start : savedPage.span.start}
+            {onapplied}
+            onclose={() => showTab("properties")}
+          />
+        </div>
+      {/if}
     {/if}
 
     {#if pageDesigner.error}
@@ -451,22 +512,6 @@
       </div>
     {/if}
   </aside>
-</div>
-
-<div class="code-anchor">
-  {#if pageDesigner.code.open}
-    <div use:portal={"code-drawer"}>
-      <CodePanel
-        {preview}
-        {page}
-        {file}
-        owner={app ? app.name.name : savedPage.name.name}
-        item={app ? app.span.start : savedPage.span.start}
-        {onapplied}
-        onclose={() => (pageDesigner.code = { ...pageDesigner.code, open: false, focus: null })}
-      />
-    </div>
-  {/if}
 </div>
 
 {#if pageDesigner.drag}
@@ -578,6 +623,67 @@
     gap: 12px;
     position: sticky;
     top: 0;
+    min-width: 0;
+  }
+
+  aside.coding {
+    gap: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--panel);
+    overflow: hidden;
+  }
+
+  .inspector-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  aside.coding .inspector-bar {
+    padding: 4px 8px 0;
+  }
+
+  .inspector-tabs {
+    display: flex;
+    gap: 2px;
+  }
+
+  .inspector-tabs button {
+    border: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: none;
+    padding: 5px 12px;
+    color: var(--text-muted);
+  }
+
+  .inspector-tabs button.active {
+    background: var(--panel-alt);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .properties {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .code {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .inspector-bar .undock {
+    margin: 0 0 4px;
   }
 
   .undock {

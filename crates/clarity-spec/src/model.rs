@@ -369,6 +369,13 @@ pub struct WidgetProps {
     pub style: Option<String>,
     /// An input that shows its value but cannot be changed.
     pub readonly: bool,
+    /// A panel or form the person using the application folds and unfolds
+    /// by its header: `foldable`.
+    #[serde(default)]
+    pub foldable: bool,
+    /// A foldable part that starts folded: `foldable folded`.
+    #[serde(default)]
+    pub folded: bool,
     /// Position in the keyboard order; parts without one follow in reading
     /// order.
     pub tab_order: Option<u32>,
@@ -470,6 +477,12 @@ pub struct Toolbar {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Ribbon {
+    /// The name code goes by; every part has one.
+    pub name: Option<String>,
+    /// The person folds it to its tabs, and a tab opens it again.
+    pub collapsible: bool,
+    /// A collapsible ribbon that starts folded.
+    pub collapsed: bool,
     pub tabs: Vec<RibbonTab>,
     pub span: Span,
 }
@@ -478,6 +491,7 @@ pub struct Ribbon {
 #[ts(export)]
 pub struct RibbonTab {
     pub title: String,
+    pub name: Option<String>,
     pub groups: Vec<RibbonGroup>,
     pub span: Span,
 }
@@ -486,6 +500,7 @@ pub struct RibbonTab {
 #[ts(export)]
 pub struct RibbonGroup {
     pub title: String,
+    pub name: Option<String>,
     pub items: Vec<Command>,
     pub span: Span,
 }
@@ -498,17 +513,47 @@ pub enum Side {
     Right,
 }
 
+/// A sidebar docked to the left or right edge of a window, with its own
+/// grid of parts: `sidebar left name nav width 280 min 200 max 480
+/// resizable collapsible collapsed maximizable grid 4 columns`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Sidebar {
-    pub side: Side,
-    /// Columns of the sidebar's own grid.
-    pub width: u32,
+    pub props: SidebarProps,
     pub widgets: Vec<Widget>,
     pub span: Span,
 }
 
-pub const DEFAULT_SIDEBAR_WIDTH: u32 = 3;
+/// What a sidebar's line says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SidebarProps {
+    pub side: Side,
+    /// The name code and events go by; every part has one.
+    pub name: Option<String>,
+    /// Its width in pixels.
+    pub width: u32,
+    /// How narrow and how wide the person may drag a resizable sidebar.
+    pub min: Option<u32>,
+    pub max: Option<u32>,
+    /// The person drags its inner edge to size it.
+    pub resizable: bool,
+    /// It folds to a button at its edge, and back.
+    pub collapsible: bool,
+    /// A collapsible sidebar that starts folded.
+    pub collapsed: bool,
+    /// It has a button that lets it fill the window, and give it back.
+    pub maximizable: bool,
+    /// Columns of its own grid.
+    pub columns: u32,
+}
+
+/// A sidebar's width and grid when its line says none.
+pub const DEFAULT_SIDEBAR_WIDTH: u32 = 240;
+pub const DEFAULT_SIDEBAR_COLUMNS: u32 = 3;
+/// The widths a sidebar may have, in pixels.
+pub const SIDEBAR_WIDTHS: (u32, u32) = (100, 1600);
 
 /// A one-row grid at the bottom of the window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

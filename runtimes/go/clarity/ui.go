@@ -21,6 +21,17 @@ type PartState struct {
 	Caption  *Text `json:"caption,omitempty"`
 	Error    *Text `json:"error,omitempty"`
 	Readonly *bool `json:"readonly,omitempty"`
+	// Folded is whether a foldable panel or form is folded, as the person or a
+	// handler left it; nil keeps the design (conformance/folding.json).
+	Folded *bool `json:"folded,omitempty"`
+	// Collapsed is whether a collapsible sidebar is folded to its button, as the
+	// person or a handler left it; nil keeps the design (conformance/sidebars.json).
+	Collapsed *bool `json:"collapsed,omitempty"`
+	// Maximized is whether a maximizable sidebar fills the window; nil is not.
+	Maximized *bool `json:"maximized,omitempty"`
+	// Tab is the open tab of a ribbon, counted from 1; nil is the first
+	// (conformance/ribbons.json).
+	Tab *int64 `json:"tab,omitempty"`
 	// Text is what an unbound text input holds; the screen sends it with each event.
 	Text *string `json:"text,omitempty"`
 	// Checked is whether an unbound checkbox or switch is on.
@@ -225,6 +236,54 @@ func (u *Ui) Readonly(part string, design bool) bool {
 
 func (u *Ui) SetReadonly(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Readonly = &value })
+}
+
+// Folded is whether a foldable part is folded: as the person or a handler left it, or design.
+func (u *Ui) Folded(part string, design bool) bool {
+	if f := u.parts[part].Folded; f != nil {
+		return *f
+	}
+	return design
+}
+
+func (u *Ui) SetFolded(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Folded = &value })
+}
+
+// Collapsed is whether a collapsible sidebar is folded to its button: as left, or design.
+func (u *Ui) Collapsed(part string, design bool) bool {
+	if c := u.parts[part].Collapsed; c != nil {
+		return *c
+	}
+	return design
+}
+
+func (u *Ui) SetCollapsed(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Collapsed = &value })
+}
+
+// Maximized is whether a maximizable sidebar fills the window.
+func (u *Ui) Maximized(part string) bool {
+	if m := u.parts[part].Maximized; m != nil {
+		return *m
+	}
+	return false
+}
+
+func (u *Ui) SetMaximized(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Maximized = &value })
+}
+
+// Tab is the open tab of a ribbon, counted from 1.
+func (u *Ui) Tab(part string) int64 {
+	if t := u.parts[part].Tab; t != nil {
+		return *t
+	}
+	return 1
+}
+
+func (u *Ui) SetTab(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Tab = &value })
 }
 
 // X is where a canvas was last clicked, across: canvas.x; 0 before any click.

@@ -502,10 +502,12 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Holds | Own properties | Events |
 |---|---|---|---|
-| `form` | parts, on its own grid; binds to one record: `bind customer` | none | `submit` |
-| `panel` | parts, on its own grid, in a frame with the caption | none | none |
+| `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded` | `submit` |
+| `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
 | `tabs` | `tab "Title"` blocks, each with parts | none | `change` |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
+
+A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
 
 **Data**
 
@@ -637,12 +639,12 @@ app Shop
         button "Customers" name customersButton icon "list" on click -> CustomerBrowse
         separator
         button "Orders" name ordersButton on click: ordersClicked
-    ribbon
-        tab "Home"
-            group "Customers"
+    ribbon name mainRibbon collapsible
+        tab "Home" name homeTab
+            group "Customers" name customersGroup
                 button "New" name newButton icon "add" large on click -> CustomerForm
                 button "Browse" name browseButton icon "list" on click -> CustomerBrowse
-    sidebar left span 3
+    sidebar left name leftSidebar width 192
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
         status "Ready"
@@ -665,10 +667,14 @@ app Shop
 | `menu` | at the top | `item "Caption"` lines, which can hold more items below them (a submenu), and `separator` |
 | `toolbar` | at the top, below the menu | `button` and `separator` |
 | `ribbon` | at the top | `tab "Title"` blocks with `group "Title"` blocks of `button` and `separator` |
-| `sidebar left` or `sidebar right` | at that side, `span n` columns wide (default 3) | parts, on its own grid |
+| `sidebar left` or `sidebar right` | at that side, `width` pixels wide (240 without it) | parts, on its own grid of `grid n columns` (3 without it) |
 | `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
 
 Every menu item and button has a name, in camelCase like a part's (`item "New customer" name newCustomerItem`); a separator has none. Its name is unique among the window's parts, menus and toolbars. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
+
+A ribbon is a named part too, and so are its tabs and groups: `ribbon name mainRibbon collapsible collapsed`, `tab "Home" name homeTab`, `group "Clipboard" name clipboardGroup`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
+
+A sidebar is a named part: `sidebar left name nav width 280 min 200 max 480 resizable collapsible collapsed maximizable grid 4 columns`. Its width is in pixels (240 without `width`, 100 to 1600). With `resizable` the person drags its inner edge between `min` and `max`; with `collapsible` a button folds it to a narrow strip and back, and `collapsed` starts it folded; with `maximizable` a button lets it fill the window. `grid n columns` gives its own grid (3 without it). Code reads and sets `part.collapsed` and `part.maximized`. The old form `sidebar left span 3` is an error that **Update the sidebars** fixes.
 
 A window can declare its own regions. A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
 
@@ -800,6 +806,11 @@ A name that is both data and a part in the same window is an error.
 | `text` | text boxes, memos and password inputs that are not bound | text: what the user typed | yes |
 | `checked` | checkboxes and switches that are not bound | bool: whether it is on | yes |
 | `selected` | tables, lists | the record of the selected row | no |
+| `folded` | foldable panels and forms | bool: whether it is folded, by the person or by code | yes |
+| `collapsed` | collapsible sidebars | bool: whether it is folded to its button | yes |
+| `maximized` | maximizable sidebars | bool: whether it fills the window | yes |
+| `tab` | ribbons | integer: the open tab, counted from 1 | yes |
+| `collapsed` | collapsible ribbons | bool: whether it is folded to its tabs | yes |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
 

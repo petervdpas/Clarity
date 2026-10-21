@@ -17,6 +17,16 @@ typedef struct {
     const ClarityText* caption;
     const ClarityText* error;
     bool has_readonly, readonly;
+    /// Whether a foldable panel or form is folded, as the person or a handler
+    /// left it; without `has_folded` it is as designed (conformance/folding.json).
+    bool has_folded, folded;
+    /// Whether a collapsible sidebar is folded to its button, and whether a
+    /// maximizable one fills the window (conformance/sidebars.json).
+    bool has_collapsed, collapsed;
+    bool has_maximized, maximized;
+    /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
+    bool has_tab;
+    int64_t tab;
     /// What an unbound text input holds (NULL: not set); the screen sends it with each event.
     const char* text;
     /// Whether an unbound checkbox or switch is on.
@@ -112,6 +122,18 @@ void clarity_ui_set_error(ClarityUi* ui, const char* part, const ClarityText* va
 /// Whether an input is read-only: as a handler set it, or `design`.
 bool clarity_ui_readonly(const ClarityUi* ui, const char* part, bool design);
 void clarity_ui_set_readonly(ClarityUi* ui, const char* part, bool value);
+/// Whether a foldable part is folded: as the person or a handler left it, or `design`.
+bool clarity_ui_folded(const ClarityUi* ui, const char* part, bool design);
+void clarity_ui_set_folded(ClarityUi* ui, const char* part, bool value);
+/// Whether a collapsible sidebar is folded to its button: as left, or `design`.
+bool clarity_ui_collapsed(const ClarityUi* ui, const char* part, bool design);
+void clarity_ui_set_collapsed(ClarityUi* ui, const char* part, bool value);
+/// Whether a maximizable sidebar fills the window.
+bool clarity_ui_maximized(const ClarityUi* ui, const char* part);
+void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value);
+/// The open tab of a ribbon, counted from 1.
+int64_t clarity_ui_tab(const ClarityUi* ui, const char* part);
+void clarity_ui_set_tab(ClarityUi* ui, const char* part, int64_t value);
 /// The text of an unbound text input.
 const char* clarity_ui_text(const ClarityUi* ui, const char* part);
 void clarity_ui_set_text(ClarityUi* ui, const char* part, const char* value);

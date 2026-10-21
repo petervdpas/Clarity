@@ -335,6 +335,10 @@ impl Ty<'_> {
 enum Part<'a> {
     Widget(&'a WidgetProps),
     Command(&'a CommandProps),
+    Sidebar(&'a crate::model::SidebarProps),
+    Ribbon(&'a crate::model::Ribbon),
+    /// A tab or a group of a ribbon.
+    RibbonPart(&'static str),
 }
 
 impl Part<'_> {
@@ -345,6 +349,9 @@ impl Part<'_> {
                 CommandKind::Button => "button",
                 _ => "item",
             },
+            Part::Sidebar(_) => "sidebar",
+            Part::Ribbon(_) => "ribbon",
+            Part::RibbonPart(kind) => kind,
         }
     }
 
@@ -355,6 +362,7 @@ impl Part<'_> {
                 WidgetKind::Label | WidgetKind::Help | WidgetKind::Heading | WidgetKind::Button
             ),
             Part::Command(_) => true,
+            Part::Sidebar(_) | Part::Ribbon(_) | Part::RibbonPart(_) => false,
         }
     }
 
@@ -421,11 +429,25 @@ fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
         collect_commands(&toolbar.items, owner);
     }
     if let Some(ribbon) = &frame.ribbon {
-        for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
-            collect_commands(&group.items, owner);
+        if let Some(name) = &ribbon.name {
+            owner.parts.insert(name, Part::Ribbon(ribbon));
+        }
+        for tab in &ribbon.tabs {
+            if let Some(name) = &tab.name {
+                owner.parts.insert(name, Part::RibbonPart("tab"));
+            }
+            for group in &tab.groups {
+                if let Some(name) = &group.name {
+                    owner.parts.insert(name, Part::RibbonPart("group"));
+                }
+                collect_commands(&group.items, owner);
+            }
         }
     }
     for sidebar in &frame.sidebars {
+        if let Some(name) = &sidebar.props.name {
+            owner.parts.insert(name, Part::Sidebar(&sidebar.props));
+        }
         collect_widgets(&sidebar.widgets, owner);
     }
     if let Some(footer) = &frame.footer {
@@ -1472,6 +1494,13 @@ impl<'a> BodyChecker<'_, 'a> {
             "caption" if part.has_caption() => value(Ty::Text),
             "error" if part.is_input() => value(Ty::Text),
             "readonly" if part.is_input() => value(Ty::Bool),
+            // A sidebar folded to its button, or filling the window.
+            "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
+            "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
+            // A ribbon folded to its tabs, and its open tab, counted from 1.
+            "collapsed" if matches!(part, Part::Ribbon(r) if r.collapsible) => value(Ty::Bool),
+            "tab" if matches!(part, Part::Ribbon(_)) => value(Ty::Integer),
+            "folded" if matches!(part, Part::Widget(props) if props.foldable) => value(Ty::Bool),
             "text" if matches!(part, Part::Widget(props) if has_text(props)) => value(Ty::Text),
             "checked" if matches!(part, Part::Widget(props) if has_checked(props)) => value(Ty::Bool),
             // Where a canvas was clicked last, in its own units.

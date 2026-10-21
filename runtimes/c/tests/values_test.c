@@ -159,6 +159,93 @@ void a_canvas_says_where_it_was_clicked_as_every_runtime_does(void) {
     cJSON_Delete(file);
 }
 
+void a_foldable_part_is_folded_as_every_runtime_says(void) {
+    cJSON* file = conformance("folding.json");
+    const cJSON* c;
+    REQUIRE(cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(file, "cases")) > 0);
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "cases")) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "details", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        ClarityUi* ui = clarity_ui(&state);
+        CHECK(clarity_ui_folded(ui, "details", cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "design"))) == cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "folded")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        clarity_ui_set_folded(ui, "details", cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "folded")));
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "details"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
+static ClarityUi* sidebar_ui(const cJSON* part) {
+    cJSON* in = cJSON_CreateObject();
+    cJSON_AddStringToObject(in, "window", "Main");
+    cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+    cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "nav", cJSON_Duplicate(part, true));
+    ClarityWindowState* state = clarity_alloc(sizeof *state);
+    if (!clarity_window_state_from_json(in, state)) return NULL;
+    return clarity_ui(state);
+}
+
+void a_sidebar_is_collapsed_and_maximized_as_every_runtime_says(void) {
+    cJSON* file = conformance("sidebars.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "collapsed")) {
+        ClarityUi* ui = sidebar_ui(cJSON_GetObjectItemCaseSensitive(c, "part"));
+        REQUIRE(ui);
+        CHECK(clarity_ui_collapsed(ui, "nav", cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "design"))) == cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "collapsed")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "maximized")) {
+        ClarityUi* ui = sidebar_ui(cJSON_GetObjectItemCaseSensitive(c, "part"));
+        REQUIRE(ui);
+        CHECK(clarity_ui_maximized(ui, "nav") == cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(c, "maximized")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityUi* ui = sidebar_ui(cJSON_CreateObject());
+        REQUIRE(ui);
+        const cJSON* collapsed = cJSON_GetObjectItemCaseSensitive(c, "collapsed");
+        const cJSON* maximized = cJSON_GetObjectItemCaseSensitive(c, "maximized");
+        if (cJSON_IsBool(collapsed)) clarity_ui_set_collapsed(ui, "nav", cJSON_IsTrue(collapsed));
+        if (cJSON_IsBool(maximized)) clarity_ui_set_maximized(ui, "nav", cJSON_IsTrue(maximized));
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "nav"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
+void a_ribbons_open_tab_is_as_every_runtime_says(void) {
+    cJSON* file = conformance("ribbons.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "tab")) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "mainRibbon", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        CHECK(clarity_ui_tab(clarity_ui(&state), "mainRibbon") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "tab")->valuedouble);
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        clarity_ui_set_tab(ui, "mainRibbon", (int64_t)cJSON_GetObjectItemCaseSensitive(c, "tab")->valuedouble);
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "mainRibbon"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
 void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
     ClarityWindowState state;
     REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));

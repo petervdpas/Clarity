@@ -515,13 +515,13 @@ app Shop
             item "Quit" name quitItem key "Ctrl+Q" on click -> quit
         item "Help" name helpItem
             item "About" name aboutItem on click -> About
-    ribbon
-        tab "Home"
-            group "Customers"
+    ribbon name mainRibbon collapsible
+        tab "Home" name homeTab
+            group "Customers" name customersGroup
                 button "New" name newButton icon "add" large on click -> CustomerCard
                 button "Browse" name browseButton icon "list" on click -> CustomerBrowse
-    sidebar left span 3
-        list at 1,1 span 3 rows 10 bind recent show name
+    sidebar left name leftSidebar width 192
+        list name recentList at 1,1 span 3 rows 10 bind recent show name
     footer
         status "Ready"
         text at 10,1 span 3 bind session.user

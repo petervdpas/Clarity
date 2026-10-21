@@ -2,4 +2,16 @@
 import type { RibbonTab } from "./RibbonTab";
 import type { Span } from "./Span";
 
-export type Ribbon = { tabs: Array<RibbonTab>, span: Span, };
+export type Ribbon = { 
+/**
+ * The name code goes by; every part has one.
+ */
+name: string | null, 
+/**
+ * The person folds it to its tabs, and a tab opens it again.
+ */
+collapsible: boolean, 
+/**
+ * A collapsible ribbon that starts folded.
+ */
+collapsed: boolean, tabs: Array<RibbonTab>, span: Span, };

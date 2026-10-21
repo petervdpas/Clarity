@@ -245,6 +245,21 @@ pub struct PartState {
     pub error: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<bool>,
+    /// Whether a foldable panel or form is folded, as the person or a
+    /// handler left it; none keeps the design (conformance/folding.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folded: Option<bool>,
+    /// Whether a collapsible sidebar is folded to its button, as the person or
+    /// a handler left it; none keeps the design (conformance/sidebars.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collapsed: Option<bool>,
+    /// Whether a maximizable sidebar fills the window; none is not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximized: Option<bool>,
+    /// The open tab of a ribbon, counted from 1; none is the first
+    /// (conformance/ribbons.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab: Option<i64>,
     /// What an unbound text input holds; the screen sends it with each
     /// event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -417,6 +432,42 @@ impl Ui {
 
     pub fn set_readonly(&mut self, part: &str, value: bool) {
         self.parts.entry(part.to_string()).or_default().readonly = Some(value);
+    }
+
+    /// Whether a foldable part is folded: as the person or a handler left it, or `design`.
+    pub fn folded(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.folded).unwrap_or(design)
+    }
+
+    pub fn set_folded(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().folded = Some(value);
+    }
+
+    /// Whether a collapsible sidebar is folded to its button: as left, or `design`.
+    pub fn collapsed(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.collapsed).unwrap_or(design)
+    }
+
+    pub fn set_collapsed(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().collapsed = Some(value);
+    }
+
+    /// Whether a maximizable sidebar fills the window.
+    pub fn maximized(&self, part: &str) -> bool {
+        self.parts.get(part).and_then(|p| p.maximized).unwrap_or(false)
+    }
+
+    pub fn set_maximized(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().maximized = Some(value);
+    }
+
+    /// The open tab of a ribbon, counted from 1.
+    pub fn tab(&self, part: &str) -> i64 {
+        self.parts.get(part).and_then(|p| p.tab).unwrap_or(1)
+    }
+
+    pub fn set_tab(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().tab = Some(value);
     }
 
     /// The text of an unbound text input.

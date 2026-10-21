@@ -29,6 +29,10 @@ std::string level_name(Level level) {
 bool Ui::visible(const std::string& part) const { return part_or(parts_, part, &PartState::visible, true); }
 bool Ui::enabled(const std::string& part) const { return part_or(parts_, part, &PartState::enabled, true); }
 bool Ui::readonly(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::readonly, design); }
+bool Ui::folded(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::folded, design); }
+bool Ui::collapsed(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::collapsed, design); }
+bool Ui::maximized(const std::string& part) const { return part_or(parts_, part, &PartState::maximized, false); }
+int64_t Ui::tab(const std::string& part) const { return part_or(parts_, part, &PartState::tab, int64_t(1)); }
 bool Ui::checked(const std::string& part) const { return part_or(parts_, part, &PartState::checked, false); }
 std::string Ui::text(const std::string& part) const { return part_or(parts_, part, &PartState::text, std::string()); }
 
@@ -95,6 +99,10 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.caption) out["caption"] = *p.caption;
     if (p.error) out["error"] = *p.error;
     if (p.readonly) out["readonly"] = *p.readonly;
+    if (p.folded) out["folded"] = *p.folded;
+    if (p.collapsed) out["collapsed"] = *p.collapsed;
+    if (p.maximized) out["maximized"] = *p.maximized;
+    if (p.tab) out["tab"] = *p.tab;
     if (p.text) out["text"] = *p.text;
     if (p.checked) out["checked"] = *p.checked;
     if (p.drawing) out["drawing"] = *p.drawing;
@@ -110,6 +118,10 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("caption", p.caption);
     take("error", p.error);
     take("readonly", p.readonly);
+    take("folded", p.folded);
+    take("collapsed", p.collapsed);
+    take("maximized", p.maximized);
+    take("tab", p.tab);
     take("text", p.text);
     take("checked", p.checked);
     if (in.contains("drawing") && in["drawing"].is_array()) p.drawing = in["drawing"];

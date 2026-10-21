@@ -96,6 +96,46 @@ TEST(a_canvas_says_where_it_was_clicked_as_every_runtime_does) {
     }
 }
 
+TEST(a_foldable_part_is_folded_as_every_runtime_says) {
+    auto file = conformance("folding.json");
+    CHECK(!file["cases"].empty());
+    for (const auto& c : file["cases"]) {
+        Ui ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"details", c["part"]}}}}.get<WindowState>());
+        CHECK_EQ(ui.folded("details", c["design"].get<bool>()), c["folded"].get<bool>());
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        ui.set_folded("details", c["folded"].get<bool>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["details"], c["part"]);
+    }
+}
+
+TEST(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) {
+    auto file = conformance("sidebars.json");
+    auto with = [](const json& part) { return Ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"nav", part}}}}.get<WindowState>()); };
+    for (const auto& c : file["collapsed"]) CHECK_EQ(with(c["part"]).collapsed("nav", c["design"].get<bool>()), c["collapsed"].get<bool>());
+    for (const auto& c : file["maximized"]) CHECK_EQ(with(c["part"]).maximized("nav"), c["maximized"].get<bool>());
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        if (c.contains("collapsed")) ui.set_collapsed("nav", c["collapsed"].get<bool>());
+        if (c.contains("maximized")) ui.set_maximized("nav", c["maximized"].get<bool>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["nav"], c["part"]);
+    }
+}
+
+TEST(a_ribbons_open_tab_is_as_every_runtime_says) {
+    auto file = conformance("ribbons.json");
+    for (const auto& c : file["tab"]) {
+        Ui ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"mainRibbon", c["part"]}}}}.get<WindowState>());
+        CHECK_EQ(ui.tab("mainRibbon"), c["tab"].get<int64_t>());
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        ui.set_tab("mainRibbon", c["tab"].get<int64_t>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["mainRibbon"], c["part"]);
+    }
+}
+
 // Every window that opens has a number of its own, which its handlers'
 // replies keep, so what belongs to one open window (an engine's state) is
 // found again and dropped when it closes.

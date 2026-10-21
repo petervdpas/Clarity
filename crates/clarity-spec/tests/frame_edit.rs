@@ -84,7 +84,8 @@ fn adds_a_sidebar_per_side() {
             side: Some(Side::Right),
         },
     );
-    assert!(text.contains("    sidebar right span 3\n"));
+    // A new sidebar is named after its side, with the default width and grid.
+    assert!(text.contains("    sidebar right name rightSidebar\n"), "{text}");
     let again = Edit::AddRegion {
         owner: page,
         region: RegionKind::Sidebar,
@@ -99,21 +100,16 @@ fn adds_a_sidebar_per_side() {
             side: Some(Side::Left),
         },
     );
-    let moved = Edit::SetSidebar {
-        item: at(&left, "sidebar left"),
-        side: Side::Right,
-        width: 4,
-    };
+    let mut props = clarity_spec::frame::new_sidebar(Side::Right, Some("leftSidebar".into()));
+    let moved = Edit::UpdateSidebar { item: at(&left, "sidebar left"), props: props.clone() };
     assert!(error(&left, moved).contains("already a right sidebar"));
-    let wider = edit(
-        &left,
-        Edit::SetSidebar {
-            item: at(&left, "sidebar left"),
-            side: Side::Left,
-            width: 4,
-        },
-    );
-    assert!(wider.contains("    sidebar left span 4\n"));
+    props.side = Side::Left;
+    props.width = 320;
+    props.resizable = true;
+    props.min = Some(200);
+    props.columns = 4;
+    let wider = edit(&left, Edit::UpdateSidebar { item: at(&left, "sidebar left"), props });
+    assert!(wider.contains("    sidebar left name leftSidebar width 320 min 200 resizable grid 4 columns\n"), "{wider}");
 }
 
 #[test]
@@ -233,7 +229,7 @@ fn builds_a_ribbon() {
             side: None,
         },
     );
-    assert!(text.contains("    ribbon\n        tab \"Home\"\n            group \"Group\"\n                button \"Button\"\n    footer"), "{text}");
+    assert!(text.contains("    ribbon name mainRibbon\n        tab \"Home\" name homeTab\n            group \"Actions\" name actionsGroup\n                button \"Button\" name buttonButton\n    footer"), "{text}");
     let tab = at(&text, "tab \"Home\"");
     let text = edit(
         &text,
@@ -243,7 +239,7 @@ fn builds_a_ribbon() {
             caption: Some("Print".into()),
         },
     );
-    assert!(text.contains("            group \"Print\"\n    footer"));
+    assert!(text.contains("            group \"Print\" name printGroup\n    footer"), "{text}");
 }
 
 #[test]

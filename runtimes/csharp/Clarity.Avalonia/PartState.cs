@@ -65,6 +65,35 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>Where a canvas was last clicked, down: <c>canvas.y</c>.</summary>
     public long Y => Pointer?.Y ?? 0;
 
+    /// <summary>Whether a foldable panel or form is folded, as the person or a handler left it
+    /// (conformance/folding.json).</summary>
+    public bool IsFolded
+    {
+        get => folded;
+        set
+        {
+            if (SetProperty(ref folded, value))
+                OnPropertyChanged(nameof(IsOpen));
+        }
+    }
+    bool folded;
+
+    /// <summary>Whether a foldable part shows its content: not folded. An Expander binds to it.</summary>
+    public bool IsOpen { get => !IsFolded; set => IsFolded = !value; }
+
+    /// <summary>Whether a collapsible sidebar is folded to its button, as the person or a handler
+    /// left it (conformance/sidebars.json).</summary>
+    public bool IsCollapsed { get => collapsed; set => SetProperty(ref collapsed, value); }
+    bool collapsed;
+
+    /// <summary>Whether a maximizable sidebar fills the window.</summary>
+    public bool IsMaximized { get => maximized; set => SetProperty(ref maximized, value); }
+    bool maximized;
+
+    /// <summary>The open tab of a ribbon, counted from 1 (conformance/ribbons.json).</summary>
+    public long Tab { get => tab; set => SetProperty(ref tab, value); }
+    long tab = 1;
+
     /// <summary>The text an unbound input holds.</summary>
     public string Text { get => text; set => SetProperty(ref text, value); }
     string text = "";

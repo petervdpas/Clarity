@@ -2,4 +2,4 @@
 import type { Command } from "./Command";
 import type { Span } from "./Span";
 
-export type RibbonGroup = { title: string, items: Array<Command>, span: Span, };
+export type RibbonGroup = { title: string, name: string | null, items: Array<Command>, span: Span, };

@@ -42,7 +42,7 @@ function pick<T>(own: T | null | undefined, app: T | null | undefined): Shown<T>
 /** The frame a window shows: each of its own regions replaces the app's. */
 export function shownFrame(app: App | null, own: Frame | null): ShownFrame {
   const a = app?.frame ?? null;
-  const side = (frame: Frame | null, s: "left" | "right") => frame?.sidebars.find((x) => x.side === s) ?? null;
+  const side = (frame: Frame | null, s: "left" | "right") => frame?.sidebars.find((x) => x.props.side === s) ?? null;
   return {
     menu: pick(own?.menu, a?.menu),
     toolbar: pick(own?.toolbar, a?.toolbar),
@@ -117,7 +117,7 @@ export function findFrameElement(frame: Frame, offset: number): FrameElement | n
 
 /** Widget grids inside a frame (sidebars and the footer), for locating widgets. */
 export function frameGrids(frame: Frame): { offset: number; columns: number; widgets: Widget[] }[] {
-  const grids = frame.sidebars.map((s) => ({ offset: s.span.start, columns: s.width, widgets: s.widgets }));
+  const grids = frame.sidebars.map((s) => ({ offset: s.span.start, columns: s.props.columns, widgets: s.widgets }));
   if (frame.footer) grids.push({ offset: frame.footer.span.start, columns: frame.footer.columns, widgets: frame.footer.widgets });
   return grids;
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { shownTab } from "./ribbons";
+  import { STRIP_WIDTH, sidebarWidth } from "./sidebars";
   // The frame around a window: menu, toolbar and ribbon at the top, sidebars
   // at the sides, the footer at the bottom, and the window body in between.
   // In design mode the window's own regions can be picked; regions that come
@@ -11,6 +13,7 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import type { Sidebar } from "./generated/Sidebar";
+  import type { Ribbon } from "./generated/Ribbon";
   import type { ShownFrame } from "./frame";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import type { PageData } from "./pages";
@@ -38,12 +41,32 @@
     children: Snippet;
   } = $props();
 
-  const SIDEBAR_COLUMN_PX = 64;
   const DOCKS: Dock[] = ["top", "left", "right", "bottom"];
 
   /** The open top-level menu item. */
   let openMenu = $state<number | null>(null);
-  let ribbonTab = $state(0);
+  // A ribbon as the person left it, outside the designer: the open tab (from
+  // 1) and whether it is folded; live, the ribbon's part state carries them to
+  // the handlers, which also hide its tabs and groups (conformance/ribbons.json).
+  let ribbonHere = $state<{ tab?: number; collapsed?: boolean }>({});
+
+  /** Whether a named tab or group shows: designing, always; else while its state is not hidden. */
+  function shows(name: string | null): boolean {
+    return design || !live || !name || live.parts[name]?.visible !== false;
+  }
+
+  function ribbonNow(r: Ribbon): { tab: number | null; collapsed: boolean } {
+    const part = live && r.name ? live.parts[r.name] : undefined;
+    const asked = part?.tab ?? ribbonHere.tab ?? 1;
+    const collapsed = !design && r.collapsible && (part?.collapsed ?? ribbonHere.collapsed ?? r.collapsed);
+    return { tab: shownTab(r.tabs.map((t) => shows(t.name)), asked), collapsed };
+  }
+
+  function setRibbon(r: Ribbon, change: { tab?: number; collapsed?: boolean }) {
+    if (!r.collapsible) delete change.collapsed;
+    if (live && r.name && !design) live.setRibbon(r.name, change);
+    else ribbonHere = { ...ribbonHere, ...change };
+  }
 
   const regionDrag = $derived(design && pageDesigner.drag?.kind === "region" ? pageDesigner.drag : null);
 
@@ -79,16 +102,38 @@
   // In a running application, commands report their clicks to the backend.
   const live = useLive();
 
-  /** Sidebar widths the user dragged to, outside the designer; the design gives the start. */
-  let sidebarWidth = $state<Partial<Record<Side, number>>>({});
-  const SIDEBAR_MIN_PX = 120;
+  // A sidebar as the person left it, outside the designer: the width it was
+  // dragged to, and whether it is folded or fills the window. Live, the
+  // part's state carries folded and filling to the handlers (conformance/sidebars.json).
+  let draggedWidth = $state<Partial<Record<Side, number>>>({});
+  let here = $state<Partial<Record<Side, { collapsed?: boolean; maximized?: boolean }>>>({});
+
+  function stateOf(s: Sidebar): { collapsed: boolean; maximized: boolean } {
+    const part = live && s.props.name ? live.parts[s.props.name] : undefined;
+    const own = here[s.props.side];
+    return {
+      collapsed: !design && s.props.collapsible && (part?.collapsed ?? own?.collapsed ?? s.props.collapsed),
+      maximized: !design && s.props.maximizable && (part?.maximized ?? own?.maximized ?? false),
+    };
+  }
+
+  function setState(s: Sidebar, change: { collapsed?: boolean; maximized?: boolean }) {
+    if (live && s.props.name) live.setSidebar(s.props.name, change);
+    else here[s.props.side] = { ...here[s.props.side], ...change };
+  }
+
+  function widthOf(s: Sidebar): number {
+    return draggedWidth[s.props.side] ?? s.props.width;
+  }
 
   function resizeSidebar(shown: { value: Sidebar } | null, delta: number) {
     if (!shown) return;
     const s = shown.value;
-    const now = sidebarWidth[s.side] ?? s.width * SIDEBAR_COLUMN_PX;
-    sidebarWidth[s.side] = Math.min(window.innerWidth * 0.6, Math.max(SIDEBAR_MIN_PX, now + delta));
+    draggedWidth[s.props.side] = sidebarWidth(widthOf(s) + delta, s.props.min, s.props.max);
   }
+
+  /** The sidebar that fills the window, if one does. */
+  const filling = $derived([frame.left, frame.right].find((shown) => shown && stateOf(shown.value).maximized)?.value ?? null);
 
   function containsPicked(command: Command): boolean {
     const id = pageDesigner.selected;
@@ -163,23 +208,41 @@
 
 {#snippet sidebar(shown: { value: Sidebar; inherited: boolean })}
   {@const s = shown.value}
+  {@const now = stateOf(s)}
   <div
-    class="sidebar {s.side}"
+    class="sidebar {s.props.side}"
     class:inherited={design && shown.inherited}
     class:picked={design && pageDesigner.selected === s.span.start}
-    style:width="{sidebarWidth[s.side] ?? s.width * SIDEBAR_COLUMN_PX}px"
+    class:collapsed={now.collapsed}
+    class:filling={now.maximized}
+    style:width={now.maximized ? null : `${now.collapsed ? STRIP_WIDTH : widthOf(s)}px`}
     role="presentation"
     onpointerdown={(e) => design && !shown.inherited && pick(e, s.span.start)}
   >
     {#if design && shown.inherited}<span class="from">from app</span>{/if}
-    {#if page}
+    {#if s.props.collapsible || s.props.maximizable}
+      <!-- The person folds it to this button and back, and lets it fill the window. -->
+      <div class="sidebar-buttons">
+        {#if s.props.maximizable && !now.collapsed}
+          <button type="button" disabled={design} title={now.maximized ? "Give the window back" : "Fill the window"} onclick={() => setState(s, { maximized: !now.maximized })}
+            >{now.maximized ? "\u2921" : "\u2922"}</button
+          >
+        {/if}
+        {#if s.props.collapsible}
+          <button type="button" disabled={design} title={now.collapsed ? "Show the sidebar" : "Fold the sidebar away"} onclick={() => setState(s, { collapsed: !now.collapsed, maximized: false })}
+            >{(s.props.side === "left") !== now.collapsed ? "\u2039" : "\u203A"}</button
+          >
+        {/if}
+      </div>
+    {/if}
+    {#if page && !now.collapsed}
     <GridBox
       {preview}
       {page}
       {data}
       design={design && !shown.inherited}
       widgets={s.widgets}
-      columns={s.width}
+      columns={s.props.columns}
       container={s.span.start}
       {onnavigate}
     />
@@ -248,8 +311,10 @@
   {#if frame.ribbon}
     {@const shown = frame.ribbon}
     {@const editable = !shown.inherited}
-    {@const tabs = shown.value.tabs}
-    {@const active = tabs[Math.min(ribbonTab, tabs.length - 1)]}
+    {@const r = shown.value}
+    {@const tabs = r.tabs}
+    {@const now = ribbonNow(r)}
+    {@const active = now.tab === null ? undefined : tabs[now.tab - 1]}
     <div
       class="ribbon"
       class:inherited={design && shown.inherited}
@@ -257,22 +322,26 @@
       role="presentation"
       onpointerdown={(e) => design && editable && pick(e, shown.value.span.start)}
     >
-      <div class="ribbon-tabs">
+      <div class="ribbon-tabs" role="presentation" ondblclick={() => !design && r.collapsible && setRibbon(r, { collapsed: !now.collapsed })}>
         {#each tabs as tab, i (tab.span.start)}
-          <button
-            class:active={tab === active}
-            class:picked={design && pageDesigner.selected === tab.span.start}
-            onpointerdown={(e) => {
-              ribbonTab = i;
-              if (design && editable) pick(e, tab.span.start);
-            }}>{tr(preview, tab.title)}</button
-          >
+          {#if shows(tab.name)}
+            <button
+              class:active={tab === active}
+              class:picked={design && pageDesigner.selected === tab.span.start}
+              title={!design && r.collapsible ? "Double-click to fold or unfold the ribbon" : undefined}
+              onpointerdown={(e) => {
+                // Opening a tab of a folded ribbon unfolds it.
+                setRibbon(r, { tab: i + 1, collapsed: false });
+                if (design && editable) pick(e, tab.span.start);
+              }}>{tr(preview, tab.title)}</button
+            >
+          {/if}
         {/each}
         {#if design && shown.inherited}<span class="from">from app</span>{/if}
       </div>
-      {#if active}
+      {#if active && !now.collapsed}
         <div class="ribbon-body">
-          {#each active.groups as group (group.span.start)}
+          {#each active.groups.filter((g) => shows(g.name)) as group (group.span.start)}
             <div
               class="ribbon-group"
               class:picked={design && pageDesigner.selected === group.span.start}
@@ -293,13 +362,15 @@
   {/if}
 
   <div class="middle">
-    {#if frame.left}
+    {#if frame.left && (!filling || filling === frame.left.value)}
+      {@const now = stateOf(frame.left.value)}
       {@render sidebar(frame.left)}
-      {#if !design}<Splitter axis="x" label="Width of the left sidebar" onmove={(d) => resizeSidebar(frame.left, d)} />{/if}
+      {#if !design && frame.left.value.props.resizable && !now.collapsed && !now.maximized}<Splitter axis="x" label="Width of the left sidebar" onmove={(d) => resizeSidebar(frame.left, d)} />{/if}
     {/if}
-    <div class="body">{@render children()}</div>
-    {#if frame.right}
-      {#if !design}<Splitter axis="x" label="Width of the right sidebar" onmove={(d) => resizeSidebar(frame.right, -d)} />{/if}
+    <div class="body" class:hidden={filling !== null}>{@render children()}</div>
+    {#if frame.right && (!filling || filling === frame.right.value)}
+      {@const now = stateOf(frame.right.value)}
+      {#if !design && frame.right.value.props.resizable && !now.collapsed && !now.maximized}<Splitter axis="x" label="Width of the right sidebar" onmove={(d) => resizeSidebar(frame.right, -d)} />{/if}
       {@render sidebar(frame.right)}
     {/if}
   </div>
@@ -618,6 +689,35 @@
 
   .sidebar.right {
     border-left: var(--border-width) solid var(--border);
+  }
+
+  .sidebar.collapsed {
+    padding: 4px 2px;
+  }
+
+  /* Filling the window: the window's own parts make room. */
+  .sidebar.filling {
+    flex: 1;
+  }
+
+  .body.hidden {
+    display: none;
+  }
+
+  .sidebar-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+
+  .sidebar.right .sidebar-buttons {
+    justify-content: flex-start;
+  }
+
+  .sidebar-buttons button {
+    padding: 0 6px;
+    line-height: 1.4;
   }
 
   .footer {

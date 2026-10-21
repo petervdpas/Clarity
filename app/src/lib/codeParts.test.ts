@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commandAction, commandHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, wireCommand, wireEvent } from "./codeParts.ts";
+import { commandAction, commandHandler, eventHandler, fixOf, freePartName, focusOf, handlerName, handlersOf, mergeFocus, wireCommand, wireEvent } from "./codeParts.ts";
 import type { CommandProps } from "./generated/CommandProps";
 import type { WidgetProps } from "./generated/WidgetProps";
 
@@ -93,9 +93,9 @@ const item = (changes: Partial<CommandProps>): CommandProps =>
   ({ kind: "item", caption: "New game", name: null, icon: null, shortcut: null, large: false, onClick: null, newWindow: false, handler: null, ...changes }) as CommandProps;
 
 test("a menu item's handler is named after the item, or its caption when it has no name", () => {
-  assert.equal(commandHandler(item({})), "new_game_click");
-  assert.equal(commandHandler(item({ name: "restart" })), "restart_click");
-  assert.equal(commandHandler(item({ caption: "Save & close..." })), "save_close_click");
+  assert.equal(commandHandler(item({})), "newGameClick");
+  assert.equal(commandHandler(item({ name: "restartItem" })), "restartItemClick");
+  assert.equal(commandHandler(item({ caption: "Save & close..." })), "saveCloseClick");
 });
 
 test("a menu item that opens a window or quits has no code, and says what it does", () => {
@@ -109,12 +109,12 @@ test("a menu item that opens a window or quits has no code, and says what it doe
 });
 
 test("wiring a menu item writes its handler and stops it opening a window", () => {
-  const wired = wireCommand({ item: 7, props: item({ onClick: "Game" }), owner: "Noughts", handler: "new_game_click" });
+  const wired = wireCommand({ item: 7, props: item({ onClick: "Game" }), owner: "Noughts", handler: "newGameClick" });
   assert.deepEqual(wired, {
     op: "batch",
     edits: [
-      { op: "updateCommand", item: 7, props: item({ handler: "new_game_click", onClick: null }) },
-      { op: "addHandler", owner: "Noughts", name: "new_game_click" },
+      { op: "updateCommand", item: 7, props: item({ handler: "newGameClick", onClick: null }) },
+      { op: "addHandler", owner: "Noughts", name: "newGameClick" },
     ],
   });
   assert.equal(wireCommand({ item: 7, props: item({ handler: "x" }), owner: "Noughts", handler: null }).op, "updateCommand");
@@ -132,5 +132,12 @@ test("a naming problem offers the fix that solves it for the whole file", () => 
     edit: { op: "camelNames" },
   });
   assert.equal(fixOf('item "New game" has no name; every menu item and button has one (Name them, in Problems, names them all)')?.label, "Name them");
+  assert.equal(fixOf("a sidebar's width is in pixels now; Update the sidebars, in Problems, writes it so ('width 192 grid 3 columns')")?.label, "Update the sidebars");
   assert.equal(fixOf("unknown name 'x'"), null);
+});
+
+test("a wired event's handler is named after the part and the event, in camelCase", () => {
+  assert.equal(eventHandler("save", "click"), "saveClick");
+  assert.equal(eventHandler("board", "draw"), "boardDraw");
+  assert.equal(eventHandler("Game", "open"), "gameOpen");
 });

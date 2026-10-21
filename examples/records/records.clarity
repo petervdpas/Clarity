@@ -7,7 +7,7 @@ use loans
 app Records
     title "My Record Collection"
     main AlbumBrowse
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "Albums" name albumsItem key "Ctrl+1" on click -> AlbumBrowse
             item "New album" name newAlbumItem key "Ctrl+N" on click -> AlbumForm
@@ -21,7 +21,7 @@ app Records
         item "Loans" name loansItem
             item "On loan" name onLoanItem on click -> LoanBrowse
             item "Friends" name friendsItem on click -> FriendBrowse
-    toolbar
+    toolbar name mainToolbar
         button "Albums" name albums2 on click -> AlbumBrowse
         button "Artists" name artists2 on click -> ArtistBrowse
         separator

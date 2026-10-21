@@ -630,12 +630,12 @@ app Shop
     main CustomerCard
     data session: Session
     on start: appStarted
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
             item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-    toolbar
+    toolbar name mainToolbar
         button "Customers" name customersButton icon "list" on click -> CustomerBrowse
         separator
         button "Orders" name ordersButton on click: ordersClicked
@@ -670,7 +670,9 @@ app Shop
 | `sidebar left` or `sidebar right` | at that side, `width` pixels wide (240 without it) | parts, on its own grid of `grid n columns` (3 without it) |
 | `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
 
-Every menu item and button has a name, in camelCase like a part's (`item "New customer" name newCustomerItem`); a separator has none. Its name is unique among the window's parts, menus and toolbars. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
+Every menu item and button has a name, in camelCase like a part's (`item "New customer" name newCustomerItem`); a separator has none. Its name is unique among the window's parts, including the menu and the toolbar themselves. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
+
+The menu and the toolbar are named parts: `menu name mainMenu`, `toolbar name mainToolbar`. Code hides one with its `visible` and turns it off with its `enabled`.
 
 A ribbon is a named part too, and so are its tabs and groups: `ribbon name mainRibbon collapsible collapsed`, `tab "Home" name homeTab`, `group "Clipboard" name clipboardGroup`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
 

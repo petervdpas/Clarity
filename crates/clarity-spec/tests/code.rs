@@ -319,7 +319,7 @@ fn app_code_handles_its_frame_commands() {
     let app = "
 app Shop
     main CustomerForm
-    menu
+    menu name mainMenu
         item \"Quit\" name quitItem on click: quitClicked
 
 code Shop

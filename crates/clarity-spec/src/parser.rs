@@ -929,7 +929,7 @@ fn parse_region(
     let duplicate = || Diagnostic::error(format!("duplicate '{}'", keyword.name), keyword.span);
     match region {
         RegionKind::Menu => {
-            cursor.expect_end()?;
+            let name = region_name(&mut cursor, "menu")?;
             if frame.menu.is_some() {
                 return Err(duplicate());
             }
@@ -939,12 +939,13 @@ fn parse_region(
                 diagnostics,
             );
             frame.menu = Some(Menu {
+                name,
                 items,
                 span: node.span(),
             });
         }
         RegionKind::Toolbar => {
-            cursor.expect_end()?;
+            let name = region_name(&mut cursor, "toolbar")?;
             if frame.toolbar.is_some() {
                 return Err(duplicate());
             }
@@ -954,6 +955,7 @@ fn parse_region(
                 diagnostics,
             );
             frame.toolbar = Some(Toolbar {
+                name,
                 items,
                 span: node.span(),
             });
@@ -1137,6 +1139,21 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
 }
 
 /// An optional `name x` at the end of a line, as tabs and groups of a ribbon have.
+/// The name on a menu's or toolbar's line: `menu name mainMenu`.
+fn region_name(cursor: &mut Cursor, what: &str) -> ParseResult<Option<String>> {
+    let mut name = None;
+    while let Some(word) = cursor.peek().map(|t| t.text.clone()) {
+        let clause = cursor.expect_ident(&format!("a {what} property"))?;
+        match word.as_str() {
+            "name" => name = Some(cursor.expect_ident("a part name")?.name),
+            other => {
+                return Err(Diagnostic::error(format!("unknown {what} property '{other}'; a {what} has a name"), clause.span));
+            }
+        }
+    }
+    Ok(name)
+}
+
 fn part_name(cursor: &mut Cursor) -> ParseResult<Option<String>> {
     let name = if cursor.eat_keyword("name") { Some(cursor.expect_ident("a part name")?.name) } else { None };
     cursor.expect_end()?;

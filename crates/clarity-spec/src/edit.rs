@@ -148,7 +148,7 @@ pub enum Edit {
     UpdateSidebar { item: u32, props: crate::model::SidebarProps },
     /// Rewrite a ribbon's line: its name and whether the person folds it to its tabs.
     UpdateRibbon { item: u32, name: Option<String>, collapsible: bool, collapsed: bool },
-    /// Give the ribbon tab or group at `item` the name `name`.
+    /// Give the menu, toolbar, or ribbon tab or group at `item` the name `name`.
     SetName { item: u32, name: String },
     /// Write every sidebar of the file in the current way: old ones, given in
     /// columns (`span 3`), get their width in pixels, and each gets a name.
@@ -1011,6 +1011,8 @@ impl Doc {
                 // A ribbon is `mainRibbon`, a tab and a group are named after their titles: `homeTab`, `clipboardGroup`.
                 let ribbon_base = match child_kind {
                     Kind::Region(RegionKind::Ribbon) => Some("mainRibbon".to_string()),
+                    Kind::Region(RegionKind::Menu) => Some("mainMenu".to_string()),
+                    Kind::Region(RegionKind::Toolbar) => Some("mainToolbar".to_string()),
                     Kind::RibbonTab | Kind::RibbonGroup => {
                         let title = child.tokens.get(1).filter(|t| t.kind == TokenKind::Str).map(|t| t.text.clone()).unwrap_or_default();
                         Some(ribbon_part_base(&title, if child_kind == Kind::RibbonTab { "Tab" } else { "Group" }))
@@ -1483,6 +1485,8 @@ impl Doc {
                 frame::sidebar_line(&frame::new_sidebar(side, Some(self.sidebar_name(top, side))))
             }
             RegionKind::Ribbon => format!("ribbon name {}", self.free(top, "mainRibbon")),
+            RegionKind::Menu => format!("menu name {}", self.free(top, "mainMenu")),
+            RegionKind::Toolbar => format!("toolbar name {}", self.free(top, "mainToolbar")),
             other => frame::keyword(other).to_string(),
         }
     }
@@ -1626,7 +1630,9 @@ impl Doc {
         if !crate::names::is_camel_case(name) {
             return fail(crate::names::camel_case_problem("part", name));
         }
-        let (path, _) = self.find(item, "a ribbon tab or group", |k| matches!(k, Kind::RibbonTab | Kind::RibbonGroup))?;
+        let (path, _) = self.find(item, "a menu, a toolbar, or a ribbon tab or group", |k| {
+            matches!(k, Kind::RibbonTab | Kind::RibbonGroup | Kind::Region(RegionKind::Menu) | Kind::Region(RegionKind::Toolbar))
+        })?;
         let node = self.node_mut(&path);
         let at = node.tokens.windows(2).position(|w| w[0].text == "name" && w[1].kind == TokenKind::Ident);
         let text = match at {

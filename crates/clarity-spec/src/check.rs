@@ -583,9 +583,11 @@ impl<'a> Checker<'a> {
             .filter_map(|w| w.props.name.as_deref().map(|n| (n, w.span)))
             .collect();
         if let Some(menu) = &frame.menu {
+            named.extend(menu.name.as_deref().map(|n| (n, menu.span)));
             commands(&menu.items, &mut named);
         }
         if let Some(toolbar) = &frame.toolbar {
+            named.extend(toolbar.name.as_deref().map(|n| (n, toolbar.span)));
             commands(&toolbar.items, &mut named);
         }
         if let Some(ribbon) = &frame.ribbon {
@@ -673,17 +675,28 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// A menu and a toolbar are parts, with camelCase names.
+    fn check_region_name(&mut self, file: usize, name: &Option<String>, what: &str, span: Span) {
+        match name.as_deref() {
+            None => self.error(file, format!("{what} has no name; every part has one (Name them, in Problems, names them all)"), span),
+            Some(n) if !crate::names::is_camel_case(n) => self.error(file, crate::names::camel_case_problem("part", n), span),
+            Some(_) => {}
+        }
+    }
+
     fn check_frame(&mut self, file: usize, context: &PageContext<'a>, frame: &'a Frame) {
         if let Some(menu) = &frame.menu {
             if menu.items.is_empty() {
                 self.warning(file, "the menu has no items yet", menu.span);
             }
+            self.check_region_name(file, &menu.name, "the menu", menu.span);
             self.check_commands(file, &menu.items);
         }
         if let Some(toolbar) = &frame.toolbar {
             if toolbar.items.is_empty() {
                 self.warning(file, "the toolbar has no buttons yet", toolbar.span);
             }
+            self.check_region_name(file, &toolbar.name, "the toolbar", toolbar.span);
             self.check_commands(file, &toolbar.items);
         }
         if let Some(ribbon) = &frame.ribbon {

@@ -463,6 +463,8 @@ impl Frame {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Menu {
+    /// Its part name, as code hides or disables it: `mainMenu`.
+    pub name: Option<String>,
     pub items: Vec<Command>,
     pub span: Span,
 }
@@ -470,6 +472,8 @@ pub struct Menu {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Toolbar {
+    /// Its part name, as code hides or disables it: `mainToolbar`.
+    pub name: Option<String>,
     pub items: Vec<Command>,
     pub span: Span,
 }

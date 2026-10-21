@@ -2,4 +2,8 @@
 import type { Command } from "./Command";
 import type { Span } from "./Span";
 
-export type Menu = { items: Array<Command>, span: Span, };
+export type Menu = { 
+/**
+ * Its part name, as code hides or disables it: `mainMenu`.
+ */
+name: string | null, items: Array<Command>, span: Span, };

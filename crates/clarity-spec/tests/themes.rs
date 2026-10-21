@@ -144,7 +144,7 @@ fn theme_names_are_texts_to_translate() {
 
 #[test]
 fn a_menu_item_can_switch_the_theme() {
-    let app = "app Shop\n    main Card\n    menu\n        item \"Theme\" name themeItem on click -> theme\n";
+    let app = "app Shop\n    main Card\n    menu name mainMenu\n        item \"Theme\" name themeItem on click -> theme\n";
     let project = project(&format!("{THEME}\n{WINDOW}\n{app}"), &["Shop"]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(clarity_spec::Preview::new(project).commands.contains(&"theme".to_string()));

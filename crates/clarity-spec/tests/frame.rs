@@ -18,14 +18,14 @@ app Shop
     title \"Shop\"
     main CustomerCard
     data recent: list<Customer>
-    menu
+    menu name mainMenu
         item \"File\" name fileItem
             item \"New customer\" name newCustomerItem key \"Ctrl+N\" on click -> CustomerCard
             separator
             item \"Quit\" name quitItem on click -> quit
         item \"Help\" name helpItem
             item \"About\" name aboutItem on click -> Overview
-    toolbar
+    toolbar name mainToolbar
         button \"New\" name newButton icon \"add\" on click -> CustomerCard
         separator
     ribbon name mainRibbon
@@ -85,7 +85,7 @@ fn the_example_app_checks_clean() {
 #[test]
 fn reports_misplaced_commands() {
     let source =
-        "module m\napp A\n    menu\n        button \"X\" name xButton\n    toolbar\n        item \"Y\" name yItem\n";
+        "module m\napp A\n    menu name mainMenu\n        button \"X\" name xButton\n    toolbar name mainToolbar\n        item \"Y\" name yItem\n";
     let (_, diags) = parse(source, "a.clarity");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert!(
@@ -102,7 +102,7 @@ fn reports_misplaced_commands() {
 
 #[test]
 fn reports_duplicate_regions() {
-    let source = "module m\napp A\n    menu\n        item \"A\" name aItem\n    menu\n        item \"B\" name bItem\n    sidebar left name leftSidebar width 192\n    sidebar left name leftSidebar width 192\n";
+    let source = "module m\napp A\n    menu name mainMenu\n        item \"A\" name aItem\n    menu name mainMenu\n        item \"B\" name bItem\n    sidebar left name leftSidebar width 192\n    sidebar left name leftSidebar width 192\n";
     let (_, diags) = parse(source, "a.clarity");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert!(messages.contains(&"duplicate 'menu'"));
@@ -111,7 +111,7 @@ fn reports_duplicate_regions() {
 
 #[test]
 fn only_windows_have_regions() {
-    let pages = "module p\npage V: view\n    menu\n        item \"A\" name a2\n";
+    let pages = "module p\npage V: view\n    menu name mainMenu\n        item \"A\" name a2\n";
     let errors: Vec<_> = load_sources([("p.clarity", pages)])
         .diagnostics
         .into_iter()
@@ -212,7 +212,7 @@ fn a_window_shows_its_own_regions_before_the_apps() {
 page Plain: window
     title \"Plain\"
 page Own: window
-    toolbar
+    toolbar name mainToolbar
         button \"Mine\" name mineButton on click -> Plain
     sidebar right name rightSidebar width 128 grid 2 columns
 page Ask: dialog
@@ -223,9 +223,9 @@ use p
 
 app Shop
     main Plain
-    menu
+    menu name mainMenu
         item \"File\" name file2
-    toolbar
+    toolbar name mainToolbar
         button \"Theirs\" name theirsButton on click -> Plain
     sidebar left name leftSidebar width 192
     footer
@@ -259,7 +259,7 @@ use p
 
 app Shop
     main CustomerCard
-    menu
+    menu name mainMenu
         item \"File\" name file3
             item \"New customer\" name newCustomerItem on click -> CustomerCard in new window
             item \"Card\" name cardItem on click -> CustomerCard
@@ -281,6 +281,6 @@ page CustomerCard: window
     assert!(clarity_spec::widgets::widget_line(button).ends_with("on click -> CustomerCard in new window"), "{}", clarity_spec::widgets::widget_line(button));
 
     // Only a window opens in a new window.
-    let quit = "module shop\nuse p\n\napp Shop\n    menu\n        item \"Quit\" name quitItem on click -> quit in new window\n";
+    let quit = "module shop\nuse p\n\napp Shop\n    menu name mainMenu\n        item \"Quit\" name quitItem on click -> quit in new window\n";
     assert!(errors(quit).iter().any(|e| e == "only a window opens in a new window"), "{:?}", errors(quit));
 }

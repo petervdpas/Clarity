@@ -11,7 +11,7 @@ entity Task
 app Todo
     title "Todo"
     main Main
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "Users" name usersItem on click -> Users
             separator

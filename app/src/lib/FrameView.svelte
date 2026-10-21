@@ -50,9 +50,14 @@
   // the handlers, which also hide its tabs and groups (conformance/ribbons.json).
   let ribbonHere = $state<{ tab?: number; collapsed?: boolean }>({});
 
-  /** Whether a named tab or group shows: designing, always; else while its state is not hidden. */
+  /** Whether a named menu, toolbar, tab or group shows: designing, always; else while its state is not hidden. */
   function shows(name: string | null): boolean {
     return design || !live || !name || live.parts[name]?.visible !== false;
+  }
+
+  /** Whether a named menu or toolbar takes clicks: designing, always; else while its state is not disabled. */
+  function takesClicks(name: string | null): boolean {
+    return design || !live || !name || live.parts[name]?.enabled !== false;
   }
 
   function ribbonNow(r: Ribbon): { tab: number | null; collapsed: boolean } {
@@ -251,12 +256,14 @@
 {/snippet}
 
 <div class="frame">
-  {#if frame.menu}
+  {#if frame.menu && shows(frame.menu.value.name)}
     {@const shown = frame.menu}
     {@const editable = !shown.inherited}
     <div
       class="menubar"
       class:inherited={design && shown.inherited}
+      class:disabled={!takesClicks(shown.value.name)}
+      inert={!takesClicks(shown.value.name)}
       class:picked={design && pageDesigner.selected === shown.value.span.start}
       role="menubar"
       tabindex="-1"
@@ -291,11 +298,13 @@
     </div>
   {/if}
 
-  {#if frame.toolbar}
+  {#if frame.toolbar && shows(frame.toolbar.value.name)}
     {@const shown = frame.toolbar}
     <div
       class="toolbar"
       class:inherited={design && shown.inherited}
+      class:disabled={!takesClicks(shown.value.name)}
+      inert={!takesClicks(shown.value.name)}
       class:picked={design && pageDesigner.selected === shown.value.span.start}
       role="toolbar"
       tabindex="-1"
@@ -440,6 +449,10 @@
   }
 
   /* An inherited menu bar fades its own buttons, not the menu that opens from it. */
+  .menubar.disabled,
+  .toolbar.disabled {
+    opacity: 0.5;
+  }
   .menubar.inherited {
     opacity: 1;
   }

@@ -8,7 +8,7 @@ use desk
 app Shop
     title "Shop"
     main CustomerCard
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "Customer card" name customerCardItem key "Ctrl+K" on click -> CustomerCard
             separator
@@ -20,7 +20,7 @@ app Shop
             item "New customer" name newCustomerItem on click -> CustomerForm in new window
         item "Orders" name ordersItem
             item "All orders" name allOrdersItem on click -> OrderBrowse
-    toolbar
+    toolbar name mainToolbar
         button "Customers" name customers2 icon "people" on click -> CustomerBrowse
         button "Orders" name orders2 icon "cart" on click -> OrderBrowse
         separator

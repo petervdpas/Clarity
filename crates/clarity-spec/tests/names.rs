@@ -136,12 +136,12 @@ const MENU: &str = "module game
 app Game
     title \"Game\"
     main Main
-    menu
+    menu name mainMenu
         item \"Game\" name gameMenu
             item \"New game\" name newGameItem key \"Ctrl+N\" on click: newGameClicked
             separator
             item \"Quit\" name quitItem on click -> quit
-    toolbar
+    toolbar name mainToolbar
         button \"New\" name newButton on click: newGameClicked
 
 code Game

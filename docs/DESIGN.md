@@ -508,7 +508,7 @@ Application chrome is not placed on the grid. It docks to the edges of a window,
 ```clarity
 app Shop
     main CustomerCard
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerCard
             separator

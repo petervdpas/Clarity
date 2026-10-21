@@ -2,4 +2,8 @@
 import type { Command } from "./Command";
 import type { Span } from "./Span";
 
-export type Toolbar = { items: Array<Command>, span: Span, };
+export type Toolbar = { 
+/**
+ * Its part name, as code hides or disables it: `mainToolbar`.
+ */
+name: string | null, items: Array<Command>, span: Span, };

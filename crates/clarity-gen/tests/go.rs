@@ -303,7 +303,7 @@ function within_credit(order: Order) -> bool
 app Shop
     title \"Shop\"
     main OrderForm
-    menu
+    menu name mainMenu
         item \"File\" name fileItem
             item \"Orders\" name ordersItem key \"Ctrl+O\" on click -> OrderForm
             item \"Another order\" name anotherOrderItem on click -> OrderForm in new window
@@ -311,7 +311,7 @@ app Shop
             item \"Quit\" name quitItem on click -> quit
             item \"Language\" name languageItem on click -> language
             item \"Theme\" name themeItem on click -> theme
-    toolbar
+    toolbar name mainToolbar
         button \"Look\" name lookButton on click -> theme
     footer
         status \"Ready\"

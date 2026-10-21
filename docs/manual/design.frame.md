@@ -11,7 +11,7 @@ app Shop
     title "Shop"
     main CustomerBrowse
     on start: appStarted
-    menu
+    menu name mainMenu
         item "File" name fileItem
             item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
@@ -19,7 +19,7 @@ app Shop
         item "View" name viewItem
             item "Language" name languageItem on click -> language
             item "Theme" name themeItem on click -> theme
-    toolbar
+    toolbar name mainToolbar
         button "Customers" name customersButton icon "list" on click -> CustomerBrowse
         separator
         button "Orders" name ordersButton on click: ordersClicked
@@ -37,14 +37,15 @@ To design it, click **App** on the Project tab, or App at the top of the project
 
 In the Parts tab, the Frame group holds the regions. Drag one onto an edge of the window: a menu, toolbar or ribbon docks at the top, a sidebar on the left or right, a footer at the bottom. A new menu starts with File and Quit.
 
-- `menu`: `item "Caption"` lines, which can hold items below them (a submenu), and `separator`.
+- `menu name mainMenu`: `item "Caption"` lines, which can hold items below them (a submenu), and `separator`.
 - Every menu item and button has a camelCase name, as every part does: `item "New customer" name newCustomerItem`. A new one is named after its caption and kind, as `ordersButton`; a separator has none. Double-click an item or button to go to its click handler, which Clarity writes when there is none yet.
-- `toolbar`: `button` and `separator`.
+- `toolbar name mainToolbar`: `button` and `separator`.
+- The menu and the toolbar are parts with a camelCase name, as `mainMenu` and `mainToolbar`, which a new one gets. Code hides one with `mainToolbar.visible = false` and turns it off with `mainMenu.enabled = false`.
 - `ribbon`: `tab "Title"` blocks with `group "Title"` blocks of buttons and separators; a button can be `large`.
 - `sidebar left` or `sidebar right`: parts on a grid of its own, docked to that edge; see [Sidebars](#sidebars).
 - `footer`: an optional `status "text"` and parts on a one-row grid of 12 columns.
 
-Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. A sidebar has its Side and Width in columns; a footer its Status text.
+Pick a region or a command on the canvas to edit it. The properties panel then offers Add item, Add submenu item, Add separator, Add button, Add tab and Add group, Move up and Move down, and Remove. The menu, the toolbar and the ribbon have their Name; a sidebar its own options (see [Sidebars](#sidebars)); a footer its Status text.
 
 A `window` can declare regions of its own in the same way. A window's region replaces the app's region of that kind, and its sidebar replaces the app's sidebar on the same side; the other regions still come from the app. A `dialog` and a `view` have no frame.
 

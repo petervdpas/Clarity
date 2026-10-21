@@ -13,7 +13,7 @@ engine Board from "board.wasm"
 app Noughts
     title "Noughts and crosses"
     main Game
-    menu
+    menu name mainMenu
         item "Game" name gameItem
             item "Another window" name anotherWindowItem on click -> Game in new window
             separator

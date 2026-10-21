@@ -58,13 +58,18 @@ A name that is both data and a part in the same window is an error.
 
 | Property | On | Can be set |
 |---|---|---|
-| `visible`, `enabled` | every part | yes |
+| `visible`, `enabled` | every part, the menu and the toolbar too | yes |
 | `caption` | labels, help texts, headings, buttons, commands | yes |
 | `error` | inputs; `""` clears it | yes |
 | `readonly` | inputs | yes |
 | `text` | text boxes, memos and password inputs that are not bound | yes |
 | `checked` | checkboxes and switches that are not bound | yes |
 | `selected` | tables and lists: the record of the chosen row | no |
+| `folded` | foldable panels and forms | yes |
+| `collapsed` | collapsible sidebars and ribbons | yes |
+| `maximized` | maximizable sidebars | yes |
+| `tab` | the ribbon: its open tab, from 1 | yes |
+| `x`, `y` | canvases: where it was clicked last | no |
 
 A bound input changes through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`. When you set an input's `error`, its help text shows the message and the input is marked.
 

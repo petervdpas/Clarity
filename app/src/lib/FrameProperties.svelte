@@ -80,6 +80,13 @@
   }
 </script>
 
+{#snippet nameField(part: { name: string | null; span: { start: number } })}
+  <label class="prop">
+    <span>Name</span>
+    <input value={part.name ?? ""} title="The name the code behind uses" onchange={(e) => e.currentTarget.value.trim() && onedit({ op: "setName", item: part.span.start, name: e.currentTarget.value.trim() })} />
+  </label>
+{/snippet}
+
 {#if element.kind === "command"}
   {@const c = element.command}
   {@const p = c.props}
@@ -163,12 +170,16 @@
 {:else}
   <div class="kind">{REGION_NAMES[element.kind]}</div>
   {#if element.kind === "menu"}
+    {@render nameField(element.menu)}
+    <p class="hint">Code hides it with <code>{element.menu.name ?? "it"}.visible</code> and turns it off with <code>.enabled</code>.</p>
     <div class="actions">
       <button onclick={() => add(element.menu.span.start, "item")}>Add item</button>
       <button onclick={() => add(element.menu.span.start, "separator")}>Add separator</button>
       <button class="danger" onclick={() => remove(element.menu.span.start)}>Remove menu</button>
     </div>
   {:else if element.kind === "toolbar"}
+    {@render nameField(element.toolbar)}
+    <p class="hint">Code hides it with <code>{element.toolbar.name ?? "it"}.visible</code> and turns it off with <code>.enabled</code>.</p>
     <div class="actions">
       <button onclick={() => add(element.toolbar.span.start, "button")}>Add button</button>
       <button onclick={() => add(element.toolbar.span.start, "separator")}>Add separator</button>
@@ -176,7 +187,6 @@
     </div>
   {:else if element.kind === "ribbon"}
     {@const r = element.ribbon}
-    <div class="kind">Ribbon</div>
     <label class="prop">
       <span>Name</span>
       <input value={r.name ?? ""} title="The name the code behind uses" onchange={(e) => onedit({ op: "updateRibbon", item: r.span.start, name: e.currentTarget.value.trim() || null, collapsible: r.collapsible, collapsed: r.collapsed })} />
@@ -199,11 +209,7 @@
     </div>
   {:else if element.kind === "ribbonTab" || element.kind === "ribbonGroup"}
     {@const item = element.kind === "ribbonTab" ? element.tab : element.group}
-    <div class="kind">{element.kind === "ribbonTab" ? "Ribbon tab" : "Ribbon group"}</div>
-    <label class="prop">
-      <span>Name</span>
-      <input value={item.name ?? ""} title="The name the code behind uses" onchange={(e) => e.currentTarget.value.trim() && onedit({ op: "setName", item: item.span.start, name: e.currentTarget.value.trim() })} />
-    </label>
+    {@render nameField(item)}
     <label class="prop">
       <span>Title</span>
       <input value={item.title} onchange={(e) => onedit({ op: "setTitle", target: item.span.start, title: e.currentTarget.value })} />
@@ -224,7 +230,6 @@
     {@const p = s.props}
     {@const set = (changes: Partial<SidebarProps>) => onedit({ op: "updateSidebar", item: s.span.start, props: { ...p, ...changes } })}
     {@const pixels = (e: Event) => Math.round(Number((e.currentTarget as HTMLInputElement).value)) || null}
-    <div class="kind">Sidebar</div>
     <label class="prop">
       <span>Name</span>
       <input value={p.name ?? ""} title="The name the code behind uses" onchange={(e) => set({ name: e.currentTarget.value.trim() || null })} />

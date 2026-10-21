@@ -177,9 +177,15 @@ impl WindowCtx {
 
     fn frame(&mut self, frame: &Frame) {
         if let Some(menu) = &frame.menu {
+            if let Some(name) = &menu.name {
+                self.parts.insert(name.clone(), PartInfo::default());
+            }
             self.commands(&menu.items);
         }
         if let Some(toolbar) = &frame.toolbar {
+            if let Some(name) = &toolbar.name {
+                self.parts.insert(name.clone(), PartInfo::default());
+            }
             self.commands(&toolbar.items);
         }
         if let Some(ribbon) = &frame.ribbon {

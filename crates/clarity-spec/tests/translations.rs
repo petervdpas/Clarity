@@ -17,7 +17,7 @@ entity Customer
 app Shop
     title \"The shop\"
     main Card
-    menu
+    menu name mainMenu
         item \"File\" name fileItem
             item \"Quit\" name quitItem on click -> quit
     footer

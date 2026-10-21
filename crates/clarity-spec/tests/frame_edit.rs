@@ -16,7 +16,7 @@ const APP: &str = "module m
 
 app Shop
     title \"Shop\"
-    menu
+    menu name mainMenu
         item \"File\"
             item \"Open\" // opens a file
             item \"Quit\" on click -> quit
@@ -67,7 +67,7 @@ fn docks_regions_after_the_settings_in_catalog_order() {
     );
     assert!(
         text.contains(
-            "    data customer: Customer\n    menu\n        item \"File\"\n            item \"Quit\" on click -> quit\n    footer\n        status \"Ready\"\n\n    // The name.\n"
+            "    data customer: Customer\n    menu name mainMenu\n        item \"File\"\n            item \"Quit\" on click -> quit\n    footer\n        status \"Ready\"\n\n    // The name.\n"
         ),
         "{text}"
     );

@@ -31,7 +31,7 @@ function within_credit(order: Order) -> bool
 app Shop
     title \"Shop\"
     main OrderForm
-    menu
+    menu name mainMenu
         item \"File\" name fileItem
             item \"Orders\" name ordersItem key \"Ctrl+O\" on click -> OrderForm
             item \"Another order\" name anotherOrderItem on click -> OrderForm in new window
@@ -39,7 +39,7 @@ app Shop
             item \"Quit\" name quitItem on click -> quit
             item \"Language\" name languageItem on click -> language
             item \"Theme\" name themeItem on click -> theme
-    toolbar
+    toolbar name mainToolbar
         button \"Look\" name lookButton on click -> theme
     footer
         status \"Ready\"
@@ -213,13 +213,24 @@ fn a_radio_group_picks_an_enum_value() {
 fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<Menu DockPanel.Dock=\"Top\">\n");
     has(window, "<MenuItem Header=\"{x:Static local:Texts.Orders}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" />");
     has(window, "<Separator />");
     has(window, "<MenuItem Header=\"{x:Static local:Texts.Quit}\" Command=\"{Binding Quit_Command}\" />");
     // A window opens in a desktop window of its own only where the design says so.
     has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrder}\" Command=\"{Binding OpenNew_OrderFormCommand}\" />");
     has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.Ready}\" />");
+}
+
+/// The menu and the toolbar are parts: code hides and disables them by name.
+#[test]
+fn the_menu_and_the_toolbar_follow_their_part_state() {
+    let files = files();
+    let window = file(&files, "Windows/OrderFormView.axaml");
+    has(window, "<Menu x:Name=\"mainMenu\" DockPanel.Dock=\"Top\" IsEnabled=\"{Binding MainMenu.IsEnabled}\" IsVisible=\"{Binding MainMenu.IsVisible}\">\n");
+    has(window, "<Border x:Name=\"mainToolbar\" DockPanel.Dock=\"Top\" Classes=\"toolbar\" IsEnabled=\"{Binding MainToolbar.IsEnabled}\" IsVisible=\"{Binding MainToolbar.IsVisible}\">\n");
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "    public PartState MainMenu { get; } = new(\"mainMenu\");\n");
+    has(vm, "    public PartState MainToolbar { get; } = new(\"mainToolbar\");\n");
 }
 
 #[test]

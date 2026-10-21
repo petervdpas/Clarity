@@ -157,7 +157,7 @@ entity Customer
 
 app Shop
     main Card
-    menu
+    menu name mainMenu
         item \"Theme\" name themeItem on click -> theme
 
 page Card: window

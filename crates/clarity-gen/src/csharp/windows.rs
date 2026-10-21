@@ -403,8 +403,16 @@ impl<'a> Window<'a> {
         // A dialog sizes its desktop window to its view.
         let width = if self.page.kind == PageKind::Dialog { format!(" Width=\"{DIALOG_WIDTH}\"") } else { String::new() };
         let mut out = String::new();
+        // The menu and the toolbar show and take clicks while their part state says so.
+        let bar = |name: &Option<String>, rest: &str| match name {
+            Some(n) => {
+                let part = member(n);
+                format!(" x:Name=\"{}\"{rest} IsEnabled=\"{{Binding {part}.IsEnabled}}\" IsVisible=\"{{Binding {part}.IsVisible}}\"", attr(n))
+            }
+            None => rest.to_string(),
+        };
         if let Some(menu) = self.frame.menu {
-            out.push_str("      <Menu DockPanel.Dock=\"Top\">\n");
+            let _ = writeln!(out, "      <Menu{}>", bar(&menu.name, " DockPanel.Dock=\"Top\""));
             for item in &menu.items {
                 self.menu_item(item, 4, &mut out);
             }
@@ -449,7 +457,7 @@ impl<'a> Window<'a> {
             out.push_str("      </c:RibbonView>\n");
         }
         if let Some(toolbar) = self.frame.toolbar {
-            out.push_str("      <Border DockPanel.Dock=\"Top\" Classes=\"toolbar\">\n        <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">\n");
+            let _ = writeln!(out, "      <Border{}>\n        <StackPanel Orientation=\"Horizontal\" Spacing=\"4\">", bar(&toolbar.name, " DockPanel.Dock=\"Top\" Classes=\"toolbar\""));
             for item in &toolbar.items {
                 self.button(item, 5, &mut out);
             }
@@ -1110,6 +1118,12 @@ public partial class {name}View : UserControl
             // A foldable part starts as designed.
             let starts = if widget.props.foldable && widget.props.folded { " { IsFolded = true }" } else { "" };
             let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}){starts};", member(n), args.join(", "));
+        }
+        // The menu and the toolbar have a state each.
+        for name in self.frame.menu.and_then(|m| m.name.as_ref()).into_iter().chain(self.frame.toolbar.and_then(|t| t.name.as_ref())) {
+            if seen.insert(name.clone()) {
+                let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({});", member(name), string(name));
+            }
         }
         // The ribbon starts folded as designed; its tabs and groups have a state each.
         if let Some(ribbon) = self.frame.ribbon {

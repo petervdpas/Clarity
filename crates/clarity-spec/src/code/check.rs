@@ -337,8 +337,8 @@ enum Part<'a> {
     Command(&'a CommandProps),
     Sidebar(&'a crate::model::SidebarProps),
     Ribbon(&'a crate::model::Ribbon),
-    /// A tab or a group of a ribbon.
-    RibbonPart(&'static str),
+    /// A part code only hides and disables: a menu, a toolbar, or a ribbon's tab or group.
+    Plain(&'static str),
 }
 
 impl Part<'_> {
@@ -351,7 +351,7 @@ impl Part<'_> {
             },
             Part::Sidebar(_) => "sidebar",
             Part::Ribbon(_) => "ribbon",
-            Part::RibbonPart(kind) => kind,
+            Part::Plain(kind) => kind,
         }
     }
 
@@ -362,7 +362,7 @@ impl Part<'_> {
                 WidgetKind::Label | WidgetKind::Help | WidgetKind::Heading | WidgetKind::Button
             ),
             Part::Command(_) => true,
-            Part::Sidebar(_) | Part::Ribbon(_) | Part::RibbonPart(_) => false,
+            Part::Sidebar(_) | Part::Ribbon(_) | Part::Plain(_) => false,
         }
     }
 
@@ -423,9 +423,15 @@ fn collect_commands<'a>(commands: &'a [Command], owner: &mut Owner<'a>) {
 
 fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
     if let Some(menu) = &frame.menu {
+        if let Some(name) = &menu.name {
+            owner.parts.insert(name, Part::Plain("menu"));
+        }
         collect_commands(&menu.items, owner);
     }
     if let Some(toolbar) = &frame.toolbar {
+        if let Some(name) = &toolbar.name {
+            owner.parts.insert(name, Part::Plain("toolbar"));
+        }
         collect_commands(&toolbar.items, owner);
     }
     if let Some(ribbon) = &frame.ribbon {
@@ -434,11 +440,11 @@ fn collect_frame<'a>(frame: &'a Frame, owner: &mut Owner<'a>) {
         }
         for tab in &ribbon.tabs {
             if let Some(name) = &tab.name {
-                owner.parts.insert(name, Part::RibbonPart("tab"));
+                owner.parts.insert(name, Part::Plain("tab"));
             }
             for group in &tab.groups {
                 if let Some(name) = &group.name {
-                    owner.parts.insert(name, Part::RibbonPart("group"));
+                    owner.parts.insert(name, Part::Plain("group"));
                 }
                 collect_commands(&group.items, owner);
             }

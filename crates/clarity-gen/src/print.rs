@@ -36,6 +36,8 @@ pub fn expr(e: &Expr) -> String {
             key.name,
             args.iter().map(|a| format!("{} = {}", a.name.name, expr(&a.value))).collect::<Vec<_>>().join(", ")
         ),
+        ExprKind::ListOf { items } => format!("[{}]", items.iter().map(expr).collect::<Vec<_>>().join(", ")),
+        ExprKind::Index { list, index } => format!("{}[{}]", expr(list), expr(index)),
         ExprKind::EngineCall { engine, function, args } => {
             format!("{}.{}({})", engine.name, function.name, args.iter().map(expr).collect::<Vec<_>>().join(", "))
         }

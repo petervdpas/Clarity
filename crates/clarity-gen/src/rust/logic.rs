@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind,
+    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
@@ -32,6 +32,8 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             types,
             decl: Some(decl),
             window: None,
+            engine: None,
+            writing: false,
             refs: vec![HashSet::new()],
             errors: Vec::new(),
         };
@@ -42,32 +44,89 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
         }
     }
+    for engine in &file.engines {
+        if let Some(body) = &engine.body {
+            match emit_engine(project, types, engine, body) {
+                Ok(code) => out.push_str(&code),
+                Err(mut problems) => errors.append(&mut problems),
+            }
+        }
+    }
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// What a `TypeRef` names, as a checker type.
-fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
-    match &ty.kind {
-        TypeRefKind::Text => TypeInfo::Text,
-        TypeRefKind::Integer => TypeInfo::Integer,
-        TypeRefKind::Duration => TypeInfo::Duration,
-        TypeRefKind::Decimal => TypeInfo::Decimal,
-        TypeRefKind::Money => TypeInfo::Money,
-        TypeRefKind::Bool => TypeInfo::Bool,
-        TypeRefKind::Date => TypeInfo::Date,
-        TypeRefKind::DateTime => TypeInfo::DateTime,
-        TypeRefKind::File => TypeInfo::File,
-        TypeRefKind::Bytes => TypeInfo::Bytes,
-        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
-        TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
-        TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
-        TypeRefKind::List { item } => TypeInfo::List(item.clone()),
-    }
+/// The Rust name of what an engine written in Clarity keeps: `BoardKept`.
+fn kept_struct(engine: &str) -> String {
+    format!("{engine}Kept")
 }
+
+/// An engine written in Clarity: a struct of what it keeps, the kept values
+/// of each instance (a window, or 0 for the app), and per function a public
+/// entry that finds the instance's values and an inner one that works on
+/// them. A call works on a copy that is kept only when the call succeeds,
+/// so a call that fails or refuses changes nothing.
+fn emit_engine(project: &Project, types: &FileTypes, engine: &EngineDecl, body: &EngineBody) -> Result<String, Vec<String>> {
+    let name = &engine.name.name;
+    let snake = super::names::snake(name);
+    let kept = kept_struct(name);
+    let mut errors = Vec::new();
+    let mut fields = String::new();
+    let mut starts = String::new();
+    for keep in &body.keeps {
+        let info = type_ref_info(project, &keep.ty);
+        let field = ident(&keep.name.name);
+        fields.push_str(&format!("    pub {field}: {},\n", value_type(&info)));
+        let mut emitter = Emitter::new(project, types, None, Some(engine));
+        let from = types.type_of(&keep.value);
+        let value = coerce(emitter.value(&keep.value), &from, &info);
+        if emitter.errors.is_empty() {
+            starts.push_str(&format!("            {field}: {value},\n"));
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("engine {name} keeps {}: {e}", keep.name.name)));
+        }
+    }
+    let mut out = format!(
+        "/// What engine {name} keeps between calls.\n#[derive(Debug, Clone)]\npub struct {kept} {{\n{fields}}}\n\nimpl {kept} {{\n    /// What a new instance starts with.\n    pub fn new(db: &Db) -> Result<Self> {{\n        Ok({kept} {{\n{starts}        }})\n    }}\n}}\n\n"
+    );
+    let stored = engine.state != EngineState::None;
+    let cell = format!("{}_KEPT", snake.to_uppercase());
+    if stored {
+        out.push_str(&format!(
+            "static {cell}: std::sync::Mutex<std::collections::BTreeMap<u64, {kept}>> = std::sync::Mutex::new(std::collections::BTreeMap::new());\n\n/// Drops what instance `instance` (a window, or 0 for the app) kept of engine {name}.\npub fn {snake}_close(instance: u64) {{\n    {cell}.lock().unwrap_or_else(|e| e.into_inner()).remove(&instance);\n}}\n\n"
+        ));
+    }
+    for decl in &body.functions {
+        let mut emitter = Emitter::new(project, types, Some(decl), Some(engine));
+        let inner = emitter.function();
+        if !emitter.errors.is_empty() {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("function '{}' of engine {name}: {e}", decl.name.name)));
+            continue;
+        }
+        let function = super::names::snake(&decl.name.name);
+        let params: String = decl.params.iter().map(|p| format!(", {}: {}", ident(&p.name.name), value_type(&type_ref_info(project, &p.ty)))).collect();
+        let names: String = decl.params.iter().map(|p| format!(", {}", ident(&p.name.name))).collect();
+        let ret = decl.returns.as_ref().map(|r| value_type(&type_ref_info(project, r))).unwrap_or_else(|| "()".into());
+        let run = if stored {
+            format!(
+                "    let mut all = {cell}.lock().unwrap_or_else(|e| e.into_inner());\n    let mut kept = match all.get(&instance) {{\n        Some(kept) => kept.clone(),\n        None => {kept}::new(db)?,\n    }};\n    let answer = {snake}_{function}_with(db, &mut kept{names})?;\n    all.insert(instance, kept);\n    Ok(answer)\n"
+            )
+        } else {
+            format!("    let mut kept = {kept}::new(db)?;\n    {snake}_{function}_with(db, &mut kept{names})\n")
+        };
+        out.push_str(&format!(
+            "/// {name}.{} in code, for instance `instance` (a window, or 0 for the app).\n#[allow(unused_variables)]\npub fn {snake}_{function}(db: &Db, instance: u64{params}) -> Result<{ret}> {{\n{run}}}\n\n",
+            decl.name.name
+        ));
+        out.push_str(&inner);
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+pub(crate) use crate::type_ref_info;
 
 /// Values of these types are copied; the others are cloned when read.
 fn is_copy(ty: &TypeInfo) -> bool {
-    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
+    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
 }
 
 fn is_decimal(ty: &TypeInfo) -> bool {
@@ -90,6 +149,11 @@ struct Emitter<'a> {
     decl: Option<&'a FunctionDecl>,
     /// The window or app of a handler.
     window: Option<WindowCtx>,
+    /// The engine written in Clarity whose function or keep value this is.
+    engine: Option<&'a EngineDecl>,
+    /// Whether the place being written is assigned, so a list position in
+    /// it is taken to change.
+    writing: bool,
     /// Locals that hold a borrowed record or list (parameters and `for`
     /// variables), per block.
     refs: Vec<HashSet<String>>,
@@ -97,6 +161,10 @@ struct Emitter<'a> {
 }
 
 impl<'a> Emitter<'a> {
+    fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, engine: Option<&'a EngineDecl>) -> Self {
+        Emitter { project, types, decl, window: None, engine, writing: false, refs: vec![HashSet::new()], errors: Vec::new() }
+    }
+
     fn is_ref(&self, name: &str) -> bool {
         self.refs.iter().any(|scope| scope.contains(name))
     }
@@ -109,6 +177,13 @@ impl<'a> Emitter<'a> {
         let decl = self.decl.expect("a function or action");
         let action = decl.kind != FunctionKind::Function;
         let mut params = vec!["db: &Db".to_string()];
+        let name = match self.engine {
+            Some(engine) => {
+                params.push(format!("kept: &mut {}", kept_struct(&engine.name.name)));
+                format!("{}_{}_with", super::names::snake(&engine.name.name), super::names::snake(&decl.name.name))
+            }
+            None => ident(&decl.name.name),
+        };
         for param in &decl.params {
             let info = type_ref_info(self.project, &param.ty);
             let name = ident(&param.name.name);
@@ -124,7 +199,7 @@ impl<'a> Emitter<'a> {
             params.push(format!("{name}: {ty}"));
         }
         let ret = self.returns().map(|r| value_type(&r)).unwrap_or_else(|| "()".into());
-        let mut out = format!("pub fn {}({}) -> Result<{ret}> {{\n", ident(&decl.name.name), params.join(", "));
+        let mut out = format!("pub fn {name}({}) -> Result<{ret}> {{\n", params.join(", "));
         for condition in &decl.requires {
             out.push_str(&format!(
                 "    require({}, {:?})?;\n",
@@ -212,7 +287,17 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}{place} = Some(db.picture_from(&{file}, {store})?);\n"));
                     return;
                 }
+                // A list position: the position and value first, so they may read the list.
+                if let ExprKind::Index { list, index } = &target.kind {
+                    let at = self.value(index);
+                    let code = coerce(self.value(value), &from, &to);
+                    let list = self.list_place(list, true);
+                    out.push_str(&format!("{pad}{{\n{pad}    let at = {at};\n{pad}    let value = {code};\n{pad}    *clarity_runtime::at_mut(&mut {list}[..], at)? = value;\n{pad}}}\n"));
+                    return;
+                }
+                self.writing = true;
                 let place = self.place(target);
+                self.writing = false;
                 let code = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}{place} = {code};\n"));
                 if let ExprKind::Name { name } = &target.kind {
@@ -253,6 +338,17 @@ impl<'a> Emitter<'a> {
                     Some((place, _)) => place,
                     None => format!("({})", self.value(list)),
                 };
+                // Plain values are taken one by one, so the body may change the list.
+                if matches!(self.types.type_of(list), TypeInfo::Values(_)) {
+                    let source = match self.held(list) {
+                        Some((place, _)) => format!("{place}.clone()"),
+                        None => self.value(list),
+                    };
+                    out.push_str(&format!("{pad}for {} in {source} {{\n", ident(&var.name)));
+                    self.block(body, depth + 1, out);
+                    out.push_str(&format!("{pad}}}\n"));
+                    return;
+                }
                 // A body that changes, saves or deletes its record works on the
                 // record in the list, as on the other stacks.
                 let each = if changes(body, &var.name) { "iter_mut" } else { "iter" };
@@ -354,7 +450,21 @@ impl<'a> Emitter<'a> {
         match self.types.name_of(expr) {
             Some(NameKind::Local) => Some((ident(name), self.is_ref(name))),
             Some(NameKind::Data) => Some((format!("w.{}", ident(name)), false)),
+            Some(NameKind::Kept) => Some((format!("kept.{}", ident(name)), false)),
             _ => None,
+        }
+    }
+
+    /// The list of a position (`squares` in `squares[3]`) as a place.
+    fn list_place(&mut self, list: &Expr, writing: bool) -> String {
+        match self.held(list) {
+            Some((place, _)) => place,
+            None => {
+                let was = std::mem::replace(&mut self.writing, writing);
+                let place = self.place(list);
+                self.writing = was;
+                place
+            }
         }
     }
 
@@ -499,12 +609,24 @@ impl<'a> Emitter<'a> {
                 }
                 Some(NameKind::Local) => ident(name),
                 Some(NameKind::Data) => format!("w.{}", ident(name)),
+                Some(NameKind::Kept) => format!("kept.{}", ident(name)),
                 Some(NameKind::EnumValue(e)) => format!("{e}::{name}"),
                 _ => {
                     self.errors.push(format!("'{name}' is a part; use one of its properties"));
                     String::new()
                 }
             },
+            // `squares[3]`: counted from 1; a position outside the list fails.
+            ExprKind::Index { list, index } => {
+                let at = self.value(index);
+                if self.writing {
+                    let list = self.list_place(list, true);
+                    format!("(*clarity_runtime::at_mut(&mut {list}[..], {at})?)")
+                } else {
+                    let list = self.list_place(list, false);
+                    format!("(*clarity_runtime::at(&{list}[..], {at})?)")
+                }
+            }
             // A part property inside a path: `grid.selected` in `grid.selected.number`.
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
                 let (part, property) = self.part_property(expr).unwrap_or_default();
@@ -568,7 +690,22 @@ impl<'a> Emitter<'a> {
                 let (part, property) = self.part_property(expr).unwrap_or_default();
                 self.read_part(&part, property)
             }
-            ExprKind::Name { .. } | ExprKind::Member { .. } => {
+            ExprKind::ListOf { items } => {
+                let item = match &ty {
+                    TypeInfo::Values(item) => item.info(),
+                    TypeInfo::List(entity) => TypeInfo::Record(entity.clone()),
+                    _ => TypeInfo::Unknown,
+                };
+                let values: Vec<String> = items
+                    .iter()
+                    .map(|i| {
+                        let from = self.types.type_of(i);
+                        coerce(self.value(i), &from, &item)
+                    })
+                    .collect();
+                if values.is_empty() { "Vec::new()".to_string() } else { format!("vec![{}]", values.join(", ")) }
+            }
+            ExprKind::Name { .. } | ExprKind::Member { .. } | ExprKind::Index { .. } => {
                 let place = self.place(expr);
                 let loaded = place.ends_with(")?");
                 if is_copy(&ty) || loaded { place } else { format!("{place}.clone()") }
@@ -606,6 +743,9 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Call { function, args } => self.call(&function.name, args),
             // A function of an engine: values to JSON and back (DESIGN 5.11).
+            ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
+                self.written_call(&engine.name, &function.name, args)
+            }
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self
                     .project
@@ -881,6 +1021,44 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// A function of an engine written in Clarity, on the instance of the
+    /// handler's window (state per window) or the app's (0).
+    fn written_call(&mut self, engine: &str, function: &str, args: &[Expr]) -> String {
+        let Some(decl) = crate::engine(self.project, engine) else { return String::new() };
+        let Some(callee) = decl.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == function)) else {
+            self.errors.push(format!("engine {engine} has no function '{function}'"));
+            return String::new();
+        };
+        let module = self
+            .project
+            .files
+            .iter()
+            .find(|f| f.engines.iter().any(|e| e.name.name == engine))
+            .and_then(|f| f.module.as_ref())
+            .map(|m| super::names::snake(&m.name))
+            .unwrap_or_default();
+        let instance = match decl.state {
+            EngineState::Window if self.window.is_some() => "ui.instance()".to_string(),
+            EngineState::Window => {
+                self.errors.push(format!("engine {engine} keeps state per window; call it from a handler"));
+                String::new()
+            }
+            _ => "0".to_string(),
+        };
+        let mut code = vec!["db".to_string(), instance];
+        for (arg, param) in args.iter().zip(&callee.params) {
+            let expected = type_ref_info(self.project, &param.ty);
+            let from = self.types.type_of(arg);
+            code.push(coerce(self.value(arg), &from, &expected));
+        }
+        format!(
+            "crate::modules::{module}::{}_{}({})?",
+            super::names::snake(engine),
+            super::names::snake(function),
+            code.join(", ")
+        )
+    }
+
     fn call(&mut self, name: &str, args: &[Expr]) -> String {
         use clarity_spec::code::check::{NOW, TODAY};
         // Dates are optional values in records and locals.
@@ -912,7 +1090,33 @@ impl<'a> Emitter<'a> {
             };
             return format!("({list}.len() as i64)");
         }
-        let Some(callee) = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name) else {
+        let project_function = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name);
+        // `random(6)` in an engine that uses random.
+        if name == clarity_spec::code::check::RANDOM && project_function.is_none() {
+            let max = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity_runtime::random({max})?");
+        }
+        // An engine's own function, on the same kept values. Its values are
+        // worked out first, so they may read what the engine keeps.
+        if let Some(engine) = self.engine
+            && let Some(own) = engine.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == name))
+        {
+            let mut code = String::from("{ ");
+            let mut names = String::new();
+            for (i, (arg, param)) in args.iter().zip(&own.params).enumerate() {
+                let expected = type_ref_info(self.project, &param.ty);
+                let from = self.types.type_of(arg);
+                code.push_str(&format!("let a{i} = {}; ", coerce(self.value(arg), &from, &expected)));
+                names.push_str(&format!(", a{i}"));
+            }
+            code.push_str(&format!(
+                "{}_{}_with(db, kept{names})? }}",
+                super::names::snake(&engine.name.name),
+                super::names::snake(name)
+            ));
+            return code;
+        }
+        let Some(callee) = project_function else {
             self.errors.push(format!("unknown function '{name}'"));
             return String::new();
         };
@@ -1157,6 +1361,8 @@ impl {struct_name} {{
                 types,
                 decl: None,
                 window: Some(std::mem::take(&mut ctx)),
+                engine: None,
+                writing: false,
                 refs: vec![HashSet::new()],
                 errors: Vec::new(),
             };

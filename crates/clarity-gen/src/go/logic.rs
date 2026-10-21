@@ -14,7 +14,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp,
+    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp,
     path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
@@ -43,28 +43,98 @@ pub fn emit(project: &Project, file: &clarity_spec::model::SpecFile, types: &Fil
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
         }
     }
+    for engine in &file.engines {
+        if let Some(body) = &engine.body {
+            match emit_engine(project, types, engine, body) {
+                Ok(code) => out.push_str(&code),
+                Err(mut problems) => errors.append(&mut problems),
+            }
+        }
+    }
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
-/// What a `TypeRef` names, as a checker type.
-pub(crate) fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
-    match &ty.kind {
-        TypeRefKind::Text => TypeInfo::Text,
-        TypeRefKind::Integer => TypeInfo::Integer,
-        TypeRefKind::Duration => TypeInfo::Duration,
-        TypeRefKind::Decimal => TypeInfo::Decimal,
-        TypeRefKind::Money => TypeInfo::Money,
-        TypeRefKind::Bool => TypeInfo::Bool,
-        TypeRefKind::Date => TypeInfo::Date,
-        TypeRefKind::DateTime => TypeInfo::DateTime,
-        TypeRefKind::File => TypeInfo::File,
-        TypeRefKind::Bytes => TypeInfo::Bytes,
-        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
-        TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
-        TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
-        TypeRefKind::List { item } => TypeInfo::List(item.clone()),
-    }
+/// The Go type of what an engine written in Clarity keeps: `boardKept`.
+fn kept_type(engine: &str) -> String {
+    format!("{}Kept", local(engine))
 }
+
+/// An engine written in Clarity: a struct of what it keeps, the kept values
+/// of each instance (a window, or 0 for the app), and per function an entry
+/// that finds the instance's values and an inner one that works on them. A
+/// call works on a copy that is kept only when the call succeeds, so a call
+/// that fails or refuses changes nothing.
+fn emit_engine(project: &Project, types: &FileTypes, engine: &EngineDecl, body: &EngineBody) -> Result<String, Vec<String>> {
+    let name = &engine.name.name;
+    let var = local(name);
+    let kept = kept_type(name);
+    let mut errors = Vec::new();
+    let mut fields = String::new();
+    let mut start = String::new();
+    let mut copies = String::new();
+    // Field types line up, as gofmt writes them.
+    let width = body.keeps.iter().map(|k| local(&k.name.name).len()).max().unwrap_or(0);
+    for keep in &body.keeps {
+        let info = type_ref_info(project, &keep.ty);
+        let field = local(&keep.name.name);
+        fields.push_str(&format!("\t{field:width$} {}\n", value_type(&info)));
+        let mut emitter = Emitter::new(project, types, None, None);
+        emitter.engine = Some(engine);
+        let mut pre = String::new();
+        let value = if is_decimal(&info) { emitter.decimal(&keep.value, &mut pre) } else { emitter.value(&keep.value, &mut pre) };
+        if emitter.errors.is_empty() {
+            start.push_str(&pre);
+            start.push_str(&format!("k.{field} = {}\n", bare(value)));
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("engine {name} keeps {}: {e}", keep.name.name)));
+        }
+        if matches!(info, TypeInfo::Values(_)) {
+            copies.push_str(&format!("\tc.{field} = slices.Clone(k.{field})\n"));
+        }
+    }
+    let stored = engine.state != EngineState::None;
+    let mut out = format!(
+        "// {kept} is what engine {name} keeps between calls.\ntype {kept} struct {{\n{fields}}}\n\n// start gives a new instance what it starts with.\nfunc (k *{kept}) start(db *clarity.Db) error {{\n{}\treturn nil\n}}\n\n",
+        indent(&start, 1)
+    );
+    if stored {
+        out.push_str(&format!(
+            "// copy is a copy of its own to work on.\nfunc (k *{kept}) copy() *{kept} {{\n\tc := *k\n{copies}\treturn &c\n}}\n\nvar {var}All = map[uint64]*{kept}{{}}\nvar {var}Lock sync.Mutex\n\n// A closed window's values go.\nfunc init() {{\n\tclarity.OnWindowClosed({var}Close)\n}}\n\n// {var}Close drops what instance (a window, or 0 for the app) kept of engine {name}.\nfunc {var}Close(instance uint64) {{\n\t{var}Lock.Lock()\n\tdefer {var}Lock.Unlock()\n\tdelete({var}All, instance)\n}}\n\n"
+        ));
+    }
+    for decl in &body.functions {
+        let mut emitter = Emitter::new(project, types, Some(decl), None);
+        emitter.engine = Some(engine);
+        let inner = emitter.function();
+        if !emitter.errors.is_empty() {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("function '{}' of engine {name}: {e}", decl.name.name)));
+            continue;
+        }
+        let wrapper = super::engine_function(name, &decl.name.name);
+        let params: String = decl.params.iter().map(|p| format!(", {} {}", local(&p.name.name), value_type(&type_ref_info(project, &p.ty)))).collect();
+        let names: String = decl.params.iter().map(|p| format!(", {}", local(&p.name.name))).collect();
+        let returns = decl.returns.as_ref().map(|r| type_ref_info(project, r));
+        let (ret, fail, answer, give) = match &returns {
+            Some(ty) => (format!("({}, error)", value_type(ty)), format!("return {}, err", zero(ty)), "answer, err := ", "return answer, nil"),
+            None => ("error".to_string(), "return err".to_string(), "err := ", "return nil"),
+        };
+        let run = if stored {
+            format!(
+                "\t{var}Lock.Lock()\n\tdefer {var}Lock.Unlock()\n\tvar kept *{kept}\n\tif found, ok := {var}All[instance]; ok {{\n\t\tkept = found.copy()\n\t}} else {{\n\t\tkept = &{kept}{{}}\n\t\tif err := kept.start(db); err != nil {{\n\t\t\t{fail}\n\t\t}}\n\t}}\n\t{answer}{wrapper}With(db, kept{names})\n\tif err != nil {{\n\t\t{fail}\n\t}}\n\t{var}All[instance] = kept\n\t{give}\n"
+            )
+        } else {
+            format!("\tkept := &{kept}{{}}\n\tif err := kept.start(db); err != nil {{\n\t\t{fail}\n\t}}\n\treturn {wrapper}With(db, kept{names})\n")
+        };
+        out.push_str(&format!(
+            "// {wrapper} is {name}.{} in code, for instance (a window, or 0 for the app).\nfunc {wrapper}(db *clarity.Db, instance uint64{params}) {ret} {{\n{run}}}\n\n",
+            decl.name.name
+        ));
+        out.push_str(&inner);
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+pub(crate) use crate::type_ref_info;
 
 fn is_decimal(ty: &TypeInfo) -> bool {
     matches!(ty, TypeInfo::Decimal | TypeInfo::Money)
@@ -361,6 +431,8 @@ struct Emitter<'a> {
     decl: Option<&'a FunctionDecl>,
     /// The window of a handler.
     window: Option<&'a WindowCtx>,
+    /// The engine written in Clarity whose function or keep value this is.
+    engine: Option<&'a EngineDecl>,
     errors: Vec<String>,
     /// Lifted values so far: `v1`, `v2`.
     temps: usize,
@@ -372,7 +444,7 @@ struct Emitter<'a> {
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter { project, types, decl, window, errors: Vec::new(), temps: 0, loops: 0, ensuring: false }
+        Emitter { project, types, decl, window, engine: None, errors: Vec::new(), temps: 0, loops: 0, ensuring: false }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -390,10 +462,17 @@ impl<'a> Emitter<'a> {
     fn function(&mut self) -> String {
         let decl = self.decl.expect("a function, action or data event");
         let mut params = vec!["db *clarity.Db".to_string()];
+        if let Some(engine) = self.engine {
+            params.push(format!("kept *{}", kept_type(&engine.name.name)));
+        }
         for param in &decl.params {
             params.push(format!("{} {}", local(&param.name.name), value_type(&type_ref_info(self.project, &param.ty))));
         }
-        let name = if decl.kind == FunctionKind::Event { local(&decl.name.name) } else { function_name(self.project, &decl.name.name) };
+        let name = match self.engine {
+            Some(engine) => format!("{}With", super::engine_function(&engine.name.name, &decl.name.name)),
+            None if decl.kind == FunctionKind::Event => local(&decl.name.name),
+            None => function_name(self.project, &decl.name.name),
+        };
         let ret = self.returns().map(|r| format!("({}, error)", value_type(&r))).unwrap_or_else(|| "error".into());
         let mut body = String::new();
         for condition in &decl.requires {
@@ -571,6 +650,17 @@ impl<'a> Emitter<'a> {
                     return;
                 }
                 let to = self.types.type_of(target);
+                // A list position, counted from 1.
+                if let ExprKind::Index { list, index } = &target.kind {
+                    let list = self.list_ref(list, &mut pre);
+                    let at = bare(self.value(index, &mut pre));
+                    let at = self.held_operand(at, &mut pre);
+                    let code = bare(if is_decimal(&to) { self.decimal(value, &mut pre) } else { self.value(value, &mut pre) });
+                    let code = self.held_operand(code, &mut pre);
+                    out.push_str(&pre);
+                    out.push_str(&format!("if err := clarity.SetAt({list}, {at}, {code}); err != nil {{\n\t{}\n}}\n", self.fail("err")));
+                    return;
+                }
                 let code = if is_decimal(&to) { self.decimal(value, &mut pre) } else { self.value(value, &mut pre) };
                 let place = self.place(target, &mut pre);
                 out.push_str(&pre);
@@ -608,8 +698,17 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::For { var, list, body } => {
                 // Files are worked on as values, records through pointers.
+                let values = matches!(self.types.type_of(list), TypeInfo::Values(_));
                 let by_value = self.types.type_of(list) == TypeInfo::Files;
                 let list = bare(self.value(list, &mut pre));
+                // Plain values one by one, from a copy, so the body may change the list.
+                if values {
+                    out.push_str(&pre);
+                    let mut inner = String::new();
+                    self.block(body, &mut inner);
+                    out.push_str(&format!("for _, {} := range {list} {{\n{}}}\n", local(&var.name), indent(&unused_locals(&inner), 1)));
+                    return;
+                }
                 out.push_str(&pre);
                 self.loops += 1;
                 let index = if self.loops == 1 { "i".to_string() } else { format!("i{}", self.loops) };
@@ -647,7 +746,8 @@ impl<'a> Emitter<'a> {
                 }
                 let call_code = self.call_code(&function.name, args, &mut pre);
                 out.push_str(&pre);
-                let returns = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == function.name).and_then(|f| f.returns.as_ref());
+                let own = self.engine.and_then(|e| e.body.as_ref()).and_then(|b| b.functions.iter().find(|f| f.name.name == function.name));
+                let returns = own.or_else(|| self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == function.name)).and_then(|f| f.returns.as_ref());
                 let take = if returns.is_some() { "_, err" } else { "err" };
                 out.push_str(&format!("if {take} := {call_code}; err != nil {{\n\t{}\n}}\n", self.fail("err")));
             }
@@ -891,6 +991,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) if self.ensuring && name == "result" => "result".into(),
                 Some(NameKind::Local) => local(name),
+                Some(NameKind::Kept) => format!("kept.{}", local(name)),
                 Some(NameKind::Data) if self.window.is_some() => format!("w.{}", pascal(name)),
                 Some(NameKind::EnumValue(e)) => constant(e, name),
                 _ => {
@@ -988,6 +1089,21 @@ impl<'a> Emitter<'a> {
     fn value(&mut self, expr: &Expr, pre: &mut String) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
+            ExprKind::ListOf { items } => {
+                let decimals = matches!(ty, TypeInfo::Values(item) if is_decimal(&item.info()));
+                let items: Vec<String> = items.iter().map(|i| bare(if decimals { self.decimal(i, pre) } else { self.value(i, pre) })).collect();
+                format!("{}{{{}}}", value_type(&ty), items.join(", "))
+            }
+            ExprKind::Index { list, index } => {
+                let list = self.list_ref(list, pre);
+                let at = bare(self.value(index, pre));
+                let at = self.held_operand(at, pre);
+                self.lift(format!("clarity.At({list}, {at})"), pre)
+            }
+            // A list of values is a value: what reads it gets a copy of its own.
+            ExprKind::Name { .. } | ExprKind::Member { .. } if matches!(ty, TypeInfo::Values(_)) && self.part_property(expr).is_none() => {
+                format!("slices.Clone({})", self.place(expr, pre))
+            }
             ExprKind::Number { value } if is_decimal(&ty) => decimal_literal(value),
             ExprKind::Number { value } => value.clone(),
             ExprKind::Str { value } => string(value),
@@ -1025,6 +1141,9 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadBytes { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift(format!("db.ReadBytes({file})"), pre)
+            }
+            ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
+                self.written_call(&engine.name, &function.name, args, pre)
             }
             // A function of an engine, through its typed function in engines.go (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {
@@ -1147,7 +1266,53 @@ impl<'a> Emitter<'a> {
     }
 
     /// A call that can fail, without lifting it.
+    /// A list as it is, for a position or a count: a name or field read in
+    /// place, anything else computed.
+    fn list_ref(&mut self, list: &Expr, pre: &mut String) -> String {
+        match &list.kind {
+            ExprKind::Name { .. } | ExprKind::Member { .. } if self.part_property(list).is_none() => self.place(list, pre),
+            _ => bare(self.value(list, pre)),
+        }
+    }
+
+    /// A function of an engine written in Clarity, on the instance of the
+    /// handler's window (state per window) or the app's (0).
+    fn written_call(&mut self, engine: &str, function: &str, args: &[Expr], pre: &mut String) -> String {
+        let Some(decl) = crate::engine(self.project, engine) else { return String::new() };
+        let Some(callee) = decl.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == function)) else {
+            self.errors.push(format!("engine {engine} has no function '{function}'"));
+            return String::new();
+        };
+        let instance = match decl.state {
+            EngineState::Window if self.window.is_some() => "ui.Instance()",
+            EngineState::Window => {
+                self.errors.push(format!("engine {engine} keeps state per window; call it from a handler"));
+                ""
+            }
+            _ => "0",
+        };
+        let mut values = vec!["db".to_string(), instance.to_string()];
+        for (arg, param) in args.iter().zip(&callee.params) {
+            let ty = type_ref_info(self.project, &param.ty);
+            let value = bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) });
+            values.push(self.held_operand(value, pre));
+        }
+        self.lift(format!("{}({})", super::engine_function(engine, function), values.join(", ")), pre)
+    }
+
     fn call_code(&mut self, name: &str, args: &[Expr], pre: &mut String) -> String {
+        // An engine's own function, on the same kept values.
+        if let Some(engine) = self.engine
+            && let Some(own) = engine.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == name))
+        {
+            let mut code = vec!["db".to_string(), "kept".to_string()];
+            for (arg, param) in args.iter().zip(&own.params) {
+                let ty = type_ref_info(self.project, &param.ty);
+                let value = bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) });
+                code.push(self.held_operand(value, pre));
+            }
+            return format!("{}With({})", super::engine_function(&engine.name.name, name), code.join(", "));
+        }
         let Some(callee) = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name) else {
             self.errors.push(format!("unknown function '{name}'"));
             return String::new();
@@ -1186,8 +1351,13 @@ impl<'a> Emitter<'a> {
             return format!("clarity.Round({})", values.join(", "));
         }
         if name == "count" {
-            let list = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            let list = args.first().map(|a| self.list_ref(a, pre)).unwrap_or_default();
             return format!("int64(len({list}))");
+        }
+        // `random(6)` in an engine that uses random.
+        if name == clarity_spec::code::check::RANDOM && !self.project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == name) {
+            let max = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            return self.lift(format!("clarity.Random({max})"), pre);
         }
         let call = self.call_code(name, args, pre);
         self.lift(call, pre)

@@ -82,6 +82,9 @@ typedef enum {
     CLARITY_REFERENCE,
     /// An engine could not load, or failed while it ran (DESIGN 5.11).
     CLARITY_ENGINE,
+    /// A value in code that does not fit where it is used: a position
+    /// outside its list, a highest number below 1 (conformance/lists.json).
+    CLARITY_VALUE,
 } ClarityErrorKind;
 
 typedef struct ClarityText ClarityText;

@@ -52,3 +52,7 @@ public static class Contracts
     /// <summary>Checks an <c>ensure</c> line of a function or action.</summary>
     public static void Ensure(bool holds, string what) => Require(holds, what);
 }
+
+/// <summary>A value in code that does not fit where it is used: a position
+/// outside its list, a highest number below 1 (conformance/lists.json).</summary>
+public sealed class ValueException(string what) : ClarityException(what);

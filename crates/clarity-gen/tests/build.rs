@@ -461,3 +461,73 @@ fn the_dial_example_builds() {
 fn the_noughts_example_builds() {
     builds_with_cargo("noughts", Runtime::Local);
 }
+
+/// The noughts example's Board engine, written in Clarity, as the Rust it
+/// becomes: its module built on the runtime alone and played.
+const BOARD_TEST: &str = r#"
+use clarity_runtime::{Db, Error};
+use noughts_board::modules::noughts::*;
+
+#[test]
+fn each_window_plays_a_game_of_its_own() {
+    clarity_runtime::i18n::load(include_str!("../model.json"));
+    let db = Db::memory().unwrap();
+    assert_eq!(board_play(&db, 1, 1).unwrap(), "Your move");
+    assert_eq!(board_mark(&db, 1, 1).unwrap(), 1);
+    // The computer took the centre.
+    assert_eq!(board_mark(&db, 1, 5).unwrap(), 2);
+    let Err(Error::Refused(why)) = board_play(&db, 1, 5) else { panic!("the centre was free") };
+    assert_eq!(why.show(), "That square is taken");
+    let Err(Error::Refused(why)) = board_play(&db, 1, 10) else { panic!("square 10 was played") };
+    assert_eq!(why.show(), "There are nine squares");
+    // Another window has a board of its own, and a closed window's board goes.
+    assert_eq!(board_mark(&db, 2, 1).unwrap(), 0);
+    board_close(1);
+    assert_eq!(board_mark(&db, 1, 1).unwrap(), 0);
+    // The computer blocks your line and takes its own.
+    board_play(&db, 3, 1).unwrap();
+    board_play(&db, 3, 2).unwrap();
+    assert_eq!(board_mark(&db, 3, 3).unwrap(), 2);
+    let mut said = String::new();
+    for square in [4, 6, 7, 8, 9] {
+        if board_mark(&db, 3, square).unwrap() == 0 {
+            said = board_play(&db, 3, square).unwrap();
+            break;
+        }
+    }
+    assert_ne!(said, "");
+    assert_eq!(board_restart(&db, 3).unwrap(), "Your move");
+    assert_eq!(board_taken(&db, 3).unwrap(), 0);
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_written_in_clarity_runs() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let file = root.join("examples/noughts.clarity");
+    let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = clarity_project::Backend::Rust;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-board-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(out.join("src/modules")).unwrap();
+    std::fs::create_dir_all(out.join("tests")).unwrap();
+    let file_text = |path: &str| files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text.clone();
+    std::fs::write(out.join("src/modules/noughts.rs"), file_text("src/modules/noughts.rs")).unwrap();
+    std::fs::write(out.join("model.json"), file_text("src/model.json")).unwrap();
+    std::fs::write(out.join("src/lib.rs"), "pub mod modules {\n    pub mod noughts;\n}\n").unwrap();
+    let runtime = root.join("runtimes/rust").canonicalize().unwrap();
+    std::fs::write(
+        out.join("Cargo.toml"),
+        format!("[package]\nname = \"noughts-board\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\nclarity-runtime = {{ path = {:?} }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\n\n[workspace]\n", runtime.display().to_string()),
+    )
+    .unwrap();
+    std::fs::write(out.join("tests/board.rs"), BOARD_TEST).unwrap();
+    let output = Command::new("cargo").args(["test", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", root.join("target/generated")).output().unwrap();
+    let report = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "{report}\nthe project is in {}", out.display());
+    std::fs::remove_dir_all(&out).unwrap();
+}

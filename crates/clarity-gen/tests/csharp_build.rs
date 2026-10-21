@@ -289,3 +289,79 @@ fn the_dial_example_builds_and_runs_in_csharp() {
 fn the_noughts_example_builds_and_runs_in_csharp() {
     builds_and_runs_in_csharp("noughts", "Noughts", Some("nl"), Runtime::Local);
 }
+
+/// The noughts example's Board engine, written in Clarity, as the C# it
+/// becomes, played from a program of its own.
+const BOARD_CHECK: &str = r#"using Clarity.Avalonia;
+using Clarity.Runtime;
+using Noughts;
+
+// The texts in the project's default language, as the application starts
+// them; nothing is remembered on disk.
+Locale.Start(Noughts.Texts.BaseLanguage, Noughts.Texts.Languages, null, Noughts.Texts.In, Labels.Named);
+
+static void Expect(bool holds, string what)
+{
+    if (!holds)
+        throw new Exception(what);
+}
+
+static string Refusal(Action call)
+{
+    try
+    {
+        call();
+        return "";
+    }
+    catch (RefusedException e)
+    {
+        return e.Message;
+    }
+}
+
+var said = BoardEngine.Play(null!, 1, 1);
+Expect(said == "Your move", $"play said {said}");
+Expect(BoardEngine.Mark(null!, 1, 1) == 1, "your cross");
+// The computer took the centre.
+Expect(BoardEngine.Mark(null!, 1, 5) == 2, "the centre");
+Expect(Refusal(() => BoardEngine.Play(null!, 1, 5)) == "That square is taken", "taken");
+Expect(Refusal(() => BoardEngine.Play(null!, 1, 10)) == "There are nine squares", "nine squares");
+// Another window has a board of its own, and a closed window's board goes.
+Expect(BoardEngine.Mark(null!, 2, 1) == 0, "another window");
+OpenWindows.Close(1);
+Expect(BoardEngine.Mark(null!, 1, 1) == 0, "closed");
+// The computer blocks your line.
+BoardEngine.Play(null!, 3, 1);
+BoardEngine.Play(null!, 3, 2);
+Expect(BoardEngine.Mark(null!, 3, 3) == 2, "blocked");
+Expect(BoardEngine.Restart(null!, 3) == "Your move", "restart");
+Expect(BoardEngine.Taken(null!, 3) == 0, "an empty board");
+Console.WriteLine("the board played");
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_written_in_clarity_runs_in_csharp() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let root = scratch().join(format!("clarity-gen-csharp-board-{}", std::process::id()));
+    let (out, check) = (root.join("Noughts"), root.join("Check"));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    std::fs::create_dir_all(&check).unwrap();
+    std::fs::write(check.join("Program.cs"), BOARD_CHECK).unwrap();
+    std::fs::write(
+        check.join("Check.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>\n  </PropertyGroup>\n  <ItemGroup>\n    <ProjectReference Include=\"../Noughts/Noughts.csproj\" />\n  </ItemGroup>\n</Project>\n",
+    )
+    .unwrap();
+    let ran = dotnet(&check, &["run", "--nologo"], Runtime::Local).output().unwrap();
+    let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
+    assert!(ran.status.success() && said.contains("the board played"), "{said}\nin {}", root.display());
+    std::fs::remove_dir_all(&root).unwrap();
+}

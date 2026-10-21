@@ -41,6 +41,12 @@ type InvalidError struct{ What string }
 
 func (e *InvalidError) Error() string { return "invalid value: " + e.What }
 
+// ValueError is a value in code that does not fit where it is used: a
+// position outside its list, a highest number below 1 (conformance/lists.json).
+type ValueError struct{ What string }
+
+func (e *ValueError) Error() string { return e.What }
+
 // StorageError is the database failing.
 type StorageError struct {
 	What string

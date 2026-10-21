@@ -60,6 +60,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bytes => "Vec<u8>".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("Vec<{item}>"),
+        TypeInfo::Values(item) => format!("Vec<{}>", value_type(&item.info())),
         TypeInfo::Unknown => "()".into(),
     }
 }

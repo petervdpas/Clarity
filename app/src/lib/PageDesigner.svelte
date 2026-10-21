@@ -23,7 +23,7 @@
   import type { SpecFile } from "./generated/SpecFile";
   import type { WidgetInfo } from "./generated/WidgetInfo";
   import { NO_FRAME, findApp, findFrameElement, shownFrame } from "./frame";
-  import { describeType, themeArea, themeOf } from "./model";
+  import { describeType, themeArea, themeOf, tr } from "./model";
   import { dataEntity, dataType, isList, valueField } from "./windowData";
   import type { WidgetKind } from "./generated/WidgetKind";
   import { pageDesigner, type PageDragSource, type Placement } from "./pageDesignerStore.svelte";
@@ -94,6 +94,9 @@
   ];
   const inspectorTab = $derived<InspectorTab>(!pageDesigner.code.open ? "properties" : pageDesigner.code.view === "code" ? "code" : "text");
   const coding = $derived(inspectorTab !== "properties");
+  /** The code fills the designer, the canvas set aside, while Code or Text is open. */
+  let filling = $state(false);
+  const filled = $derived(filling && coding && !layout.folded.properties);
   let codeOpened = $state(false);
   $effect(() => {
     if (coding) codeOpened = true;
@@ -406,10 +409,10 @@
         {#each (entity?.fields ?? []).filter((f) => f.type.kind !== "list") as field (field.name.name)}
           <PartTile
             kind={widgetForField(preview, field)}
-            name={field.label}
+            name={tr(preview, field.label)}
             detail={describeType(field)}
             title="Drag onto the window: a label and a bound input"
-            onpointerdown={(e) => pressField(e, decl.name.name, field.name.name, field.label, false)}
+            onpointerdown={(e) => pressField(e, decl.name.name, field.name.name, tr(preview, field.label), false)}
           />
         {/each}
       {/if}
@@ -424,8 +427,12 @@
 </div>
 </div>
 
-<div class="designer" style:grid-template-columns="minmax(0, 1fr) auto {layout.folded.properties ? 'auto' : layout.sizes.properties + 'px'}">
-  <div class="stage">
+<div
+  class="designer"
+  class:filled
+  style:grid-template-columns={filled ? "minmax(0, 1fr)" : `minmax(0, 1fr) auto ${layout.folded.properties ? "auto" : layout.sizes.properties + "px"}`}
+>
+  <div class="stage" class:hidden={filled}>
     <ShownWindow {area} clientWidth={shownSize.width} clientHeight={shownSize.height} onresize={app ? undefined : resize}>
       <div
         class="titlebar"
@@ -434,7 +441,7 @@
         tabindex="-1"
         onpointerdown={() => (pageDesigner.selected = null)}
       >
-        <span>{page.title ?? page.name.name}</span>
+        <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
         <code>{app ? "app " + app.name.name : page.name.name + ": " + page.kind + " | " + page.columns + " columns"}</code>
       </div>
       <div
@@ -469,7 +476,9 @@
     </ShownWindow>
   </div>
 
-  {#if layout.folded.properties}
+  {#if filled}
+    <!-- The canvas and the splitter wait while the code fills the designer. -->
+  {:else if layout.folded.properties}
     <span></span>
   {:else}
     <Splitter axis="x" label="Width of the inspector" onmove={(d) => layout.resize("properties", -d)} />
@@ -484,7 +493,16 @@
             <button role="tab" aria-selected={inspectorTab === t.key} class:active={inspectorTab === t.key} title={t.title} onclick={() => showTab(t.key)}>{t.name}</button>
           {/each}
         </div>
-        <button class="undock" title="Fold the inspector away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
+        <span class="bar-buttons">
+        {#if coding}
+          <button class="undock" title={filled ? "Give the canvas back" : "Let the code fill the designer"} onclick={() => (filling = !filling)}
+            >{filled ? "\u2921 Canvas" : "\u2922 Fill"}</button
+          >
+        {/if}
+        {#if !filled}
+          <button class="undock" title="Fold the inspector away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
+        {/if}
+        </span>
       </div>
       <div class="properties" class:hidden={coding}>
         <PageProperties {preview} {page} {app} onedit={edit} {onapplied} />
@@ -530,6 +548,10 @@
 
   .designer > :global(.splitter) {
     align-self: stretch;
+  }
+
+  .stage.hidden {
+    display: none;
   }
 
   .stage {
@@ -640,6 +662,11 @@
     justify-content: space-between;
     gap: 8px;
     border-bottom: 1px solid var(--border);
+  }
+
+  .bar-buttons {
+    display: flex;
+    gap: 4px;
   }
 
   aside.coding .inspector-bar {

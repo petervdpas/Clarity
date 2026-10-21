@@ -374,3 +374,80 @@ fn the_dial_example_builds_and_runs_in_go() {
 fn the_noughts_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("noughts", "Noughts", Runtime::Local);
 }
+
+/// The noughts example's Board engine, written in Clarity, as the Go it
+/// becomes, played from a test of its own.
+const BOARD_TEST: &str = r#"package main
+
+import (
+	"os"
+	"testing"
+
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
+)
+
+func refusal(err error) string {
+	if refused, ok := err.(*clarity.RefusedError); ok {
+		return refused.Error()
+	}
+	return ""
+}
+
+func TestEachWindowPlaysAGameOfItsOwn(t *testing.T) {
+	model, err := os.ReadFile("model.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clarity.LoadTranslations(model)
+	if said, err := boardPlay(nil, 1, 1); err != nil || said != "Your move" {
+		t.Fatalf("play said %q: %v", said, err)
+	}
+	// The computer took the centre.
+	if mark, _ := boardMark(nil, 1, 5); mark != 2 {
+		t.Fatalf("the centre is %d", mark)
+	}
+	if _, err := boardPlay(nil, 1, 5); refusal(err) != "That square is taken" {
+		t.Fatalf("taken: %v", err)
+	}
+	if _, err := boardPlay(nil, 1, 10); refusal(err) != "There are nine squares" {
+		t.Fatalf("nine squares: %v", err)
+	}
+	// Another window has a board of its own, and a closed window's board goes.
+	if mark, _ := boardMark(nil, 2, 1); mark != 0 {
+		t.Fatalf("another window: %d", mark)
+	}
+	clarity.WindowClosed(1)
+	if mark, _ := boardMark(nil, 1, 1); mark != 0 {
+		t.Fatalf("closed: %d", mark)
+	}
+	// The computer blocks your line.
+	boardPlay(nil, 3, 1)
+	boardPlay(nil, 3, 2)
+	if mark, _ := boardMark(nil, 3, 3); mark != 2 {
+		t.Fatalf("not blocked: %d", mark)
+	}
+	if said, _ := boardRestart(nil, 3); said != "Your move" {
+		t.Fatalf("restart said %q", said)
+	}
+	if taken, _ := boardTaken(nil, 3); taken != 0 {
+		t.Fatalf("taken %d", taken)
+	}
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_written_in_clarity_runs_in_go() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = Backend::Go;
+    settings.stack.ui = Ui::Web;
+    settings.datasources[0].url = "data/app.db".into();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-go-board-{}", std::process::id()));
+    write(&out, &files, Runtime::Local);
+    std::fs::write(out.join("board_test.go"), BOARD_TEST).unwrap();
+    run(&out, "go", &["test", "./..."]);
+    std::fs::remove_dir_all(&out).unwrap();
+}

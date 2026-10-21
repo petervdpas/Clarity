@@ -38,6 +38,58 @@ pub use rust_decimal::Decimal;
 pub use sql::SqlValue;
 use store::{Driver, Failure};
 
+/// `xs[i]` in code: item `i` of a list, counted from 1 (conformance/lists.json).
+pub fn at<T>(list: &[T], position: i64) -> Result<&T> {
+    let len = list.len();
+    usize::try_from(position).ok().and_then(|p| p.checked_sub(1)).and_then(|i| list.get(i)).ok_or_else(|| outside(position, len))
+}
+
+/// `xs[i] = value` in code: item `i` of a list to set, counted from 1.
+pub fn at_mut<T>(list: &mut [T], position: i64) -> Result<&mut T> {
+    let len = list.len();
+    usize::try_from(position).ok().and_then(|p| p.checked_sub(1)).and_then(|i| list.get_mut(i)).ok_or_else(|| outside(position, len))
+}
+
+fn outside(position: i64, len: usize) -> Error {
+    Error::Value(format!("there is no item {position} in a list of {len}"))
+}
+
+/// The numbers `random(max)` gives: splitmix64, the sequence every runtime
+/// gives alike from the same seed (conformance/lists.json).
+#[derive(Debug, Clone)]
+pub struct Random {
+    state: u64,
+}
+
+impl Random {
+    pub fn seeded(seed: u64) -> Self {
+        Random { state: seed }
+    }
+
+    /// A whole number from 1 to `max`.
+    pub fn next(&mut self, max: i64) -> Result<i64> {
+        if max < 1 {
+            return Err(Error::Value(format!("random takes a highest number of 1 or more, not {max}")));
+        }
+        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        Ok(1 + (z % max as u64) as i64)
+    }
+}
+
+/// `random(max)` in an engine written in Clarity: a whole number from 1 to
+/// `max`, from a sequence seeded once per run of the application.
+pub fn random(max: i64) -> Result<i64> {
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::{Mutex, OnceLock};
+    static RANDOM: OnceLock<Mutex<Random>> = OnceLock::new();
+    let random = RANDOM.get_or_init(|| Mutex::new(Random::seeded(std::collections::hash_map::RandomState::new().build_hasher().finish())));
+    random.lock().unwrap_or_else(|e| e.into_inner()).next(max)
+}
+
 /// `round(value, places)` in code: at most `places` decimals, rounded half
 /// away from zero; a value with fewer stays as it is, and places below 0
 /// count as 0 (conformance/rounding.json).
@@ -92,6 +144,9 @@ pub enum Error {
     Refused(ui::Text),
     /// An engine could not load, or failed while it ran (DESIGN 5.11).
     Engine(String),
+    /// A value in code that does not fit where it is used: a position
+    /// outside its list, a highest number below 1 (conformance/lists.json).
+    Value(String),
 }
 
 impl fmt::Display for Error {
@@ -104,7 +159,7 @@ impl fmt::Display for Error {
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
             Error::Refused(what) => f.write_str(&what.show()),
-            Error::Engine(what) => f.write_str(what),
+            Error::Engine(what) | Error::Value(what) => f.write_str(what),
         }
     }
 }

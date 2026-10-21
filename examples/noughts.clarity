@@ -1,6 +1,6 @@
 // The noughts example: noughts and crosses against the computer, the game
-// kept by an engine with state per window, in the noughts folder next to
-// this file.
+// kept by an engine written in Clarity with state per window, in the
+// noughts folder next to this file.
 project Noughts
     stack csharp avalonia desktop
     output "out"

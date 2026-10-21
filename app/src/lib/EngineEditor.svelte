@@ -5,13 +5,14 @@
   // function added in the inspector gets its stub in the code; a double click
   // on a function goes to it. The state line says in plain words whether the
   // engine is ready, needs building, or what is wrong, with the button that
-  // fixes it.
+  // fixes it. An engine written in Clarity is its code: the tab holds the
+  // whole engine, and the inspector sets its state and services above it.
 
   import { untrack } from "svelte";
   import { invoke } from "./backend";
   import SourceEditor, { OPENS_BRACED_BLOCK } from "./SourceEditor.svelte";
   import { asDiagnostic, engineBuilds } from "./engineBuilds.svelte";
-  import { engineText, formOf, freeName, paramsOf, paramsText, projectEngines, SERVICES, type EngineForm } from "./engines";
+  import { engineText, formOf, freeName, paramsOf, paramsText, projectEngines, SERVICES, withEngineLine, type EngineForm, type EngineLine } from "./engines";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
   import type { Edit } from "./generated/Edit";
@@ -39,6 +40,8 @@
   } = $props();
 
   const name = $derived(decl.name.name);
+  /** Written in Clarity: no file to build, the declaration is its code. */
+  const written = $derived(decl.body !== null);
   const item = $derived(decl.span.start);
   const form = $derived(formOf(decl));
   const declProblems = $derived(projectEngines(preview.project).find((e) => e.engine.name.name === name)?.problems ?? []);
@@ -60,6 +63,8 @@
     ...preview.project.files.flatMap((f) => f.entities.flatMap((e) => [e.name.name, `list<${e.name.name}>`])),
   ]);
 
+  /** The code fills the editor, the declaration set aside. */
+  let filled = $state(false);
   let info = $state<EngineInfo | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
@@ -69,6 +74,7 @@
   let code: SourceEditor | undefined = $state();
 
   async function refresh() {
+    if (written) return;
     try {
       info = await invoke<EngineInfo>("engine_info", { name });
     } catch (err) {
@@ -146,8 +152,21 @@
     });
   }
 
+  /** Sets the `uses` or `state` line of an engine written in Clarity, after saving what is typed in its code. */
+  function setLine(kind: EngineLine, line: string | null) {
+    act(async () => {
+      if (code && !(await code.saveIfChanged())) return;
+      const now = await invoke<CodeView>("decl_text", { path: file.path, item });
+      await onapply({ op: "replaceDecl", item, text: withEngineLine(now.text, kind, line) });
+    });
+  }
+
   /** The state of the engine in one line, and how bad it is. */
   const status = $derived.by((): { text: string; tone: "ok" | "warn" | "error" | "plain" } => {
+    if (written) {
+      if (declProblems.length > 0) return { text: declProblems[0], tone: "error" };
+      return { text: "Ready: written in Clarity, generated with the application on every stack", tone: "ok" };
+    }
     if (!info) return { text: "Looking at the engine...", tone: "plain" };
     // A file that is not there yet is what making its code and building it fixes.
     if (declProblems.length > 0 && (info.built || info.source)) return { text: declProblems[0], tone: "error" };
@@ -161,6 +180,81 @@
 </script>
 
 <div class="engine-editor">
+  {#if written}
+  <header>
+    <div class="title">
+      <strong>{name}</strong>
+      <span class="muted">engine in module {file.module?.name ?? ""}, written in Clarity</span>
+    </div>
+    <div class="buttons">
+      <button class="danger" onclick={ondelete}>Delete engine</button>
+    </div>
+  </header>
+
+  <div class="status {status.tone}" role="status"><span>{status.text}</span></div>
+  {#if error}<p class="refused" role="alert">{error}</p>{/if}
+
+  <div class="panes" class:filled>
+    <aside class="inspector" class:hidden={filled}>
+      <section>
+        <h3>Functions</h3>
+        <p class="muted">What code calls as <code>{name}.function(...)</code>. Double-click one to go to its code.</p>
+        <ul class="names">
+          {#each decl.body?.functions ?? [] as f (f.span.start)}
+            <li ondblclick={() => code?.jumpTo(f.name.name)} title="Double-click to go to its code"><code>{f.name.name}</code></li>
+          {/each}
+        </ul>
+      </section>
+
+      <section>
+        <h3>What it keeps</h3>
+        <p class="muted">Values kept from call to call, each with what it starts as: <code>keep moves: integer = 0</code> in the code.</p>
+        <ul class="names">
+          {#each decl.body?.keeps ?? [] as k (k.span.start)}
+            <li><code>{k.name.name}</code></li>
+          {:else}
+            <li class="muted">Nothing: every call starts from its values alone.</li>
+          {/each}
+        </ul>
+      </section>
+
+      <section>
+        <h3>Services</h3>
+        <label class="check">
+          <input type="checkbox" checked={form.uses.includes("random")} disabled={busy} onchange={(e) => setLine("uses", e.currentTarget.checked ? "uses random" : null)} />
+          random: <code>random(n)</code> gives a whole number from 1 to n
+        </label>
+      </section>
+
+      <section>
+        <h3>State</h3>
+        {#each [["none", "None: every call starts fresh", null], ["app", "Per app: one set of values for the whole application", "state per app"], ["window", "Per window: a set of values for each open window", "state per window"]] as [value, label, line] (value)}
+          <label class="check">
+            <input type="radio" name="engine-state" checked={form.state === value} disabled={busy} onchange={() => setLine("state", line)} />
+            {label}
+          </label>
+        {/each}
+      </section>
+    </aside>
+
+    <section class="code">
+      <div class="tab">
+        <code>engine {name}</code>
+        <button class="fill" title={filled ? "Give the inspector back" : "Let the code fill the editor"} onclick={() => (filled = !filled)}
+          >{filled ? "\u2921 Inspector" : "\u2922 Fill"}</button
+        >
+      </div>
+      <SourceEditor
+        bind:this={code}
+        load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+        check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+        save={(text) => onapply({ op: "replaceDecl", item, text })}
+        reloadKey={file.path + "\n" + item + "\n" + file.version}
+        navPattern={/^\s*function\s+([A-Za-z0-9_]+)/}
+      />
+    </section>
+  </div>
+  {:else}
   <header>
     <div class="title">
       <strong>{name}</strong>
@@ -187,8 +281,8 @@
   </div>
   {#if error}<p class="refused" role="alert">{error}</p>{/if}
 
-  <div class="panes">
-    <aside class="inspector">
+  <div class="panes" class:filled>
+    <aside class="inspector" class:hidden={filled}>
       {#if asText}
         <SourceEditor
           load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
@@ -281,7 +375,12 @@
     <section class="code">
       {#if info?.source}
         {@const main = info.source.main}
-        <div class="tab"><code>{main.split(/[\\/]/).slice(-3).join("/")}</code></div>
+        <div class="tab">
+          <code>{main.split(/[\\/]/).slice(-3).join("/")}</code>
+          <button class="fill" title={filled ? "Give the declaration back" : "Let the code fill the editor"} onclick={() => (filled = !filled)}
+            >{filled ? "\u2921 Declaration" : "\u2922 Fill"}</button
+          >
+        </div>
         <SourceEditor
           bind:this={code}
           load={async () => ({
@@ -307,6 +406,7 @@
       {/if}
     </section>
   </div>
+  {/if}
 </div>
 
 <style>
@@ -386,6 +486,38 @@
     display: grid;
     grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
     gap: 10px;
+  }
+
+  /* The code fills the editor, the declaration set aside. */
+  .panes.filled {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inspector.hidden {
+    display: none;
+  }
+
+  .names {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .names li {
+    padding: 2px 4px;
+    border-radius: var(--radius);
+    cursor: default;
+  }
+
+  .names li:hover {
+    background: var(--panel-alt);
+  }
+
+  .tab .fill {
+    margin-left: auto;
   }
 
   .inspector {
@@ -482,6 +614,8 @@
   }
 
   .tab {
+    display: flex;
+    align-items: center;
     padding: 4px 12px;
     font-size: 12px;
     border-bottom: 1px solid var(--border);

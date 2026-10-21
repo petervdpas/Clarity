@@ -1,16 +1,47 @@
 # Engines
 
-How to make, edit and build a processing engine compiled to WebAssembly in Clarity, call it from code, or bring one written in another language.
+How to write a processing engine in Clarity, or make, edit and build one compiled to WebAssembly, call it from code, or bring one written in another language.
 
 ## What an engine is
 
-An engine is a WebAssembly file that does one kind of processing: pricing, scheduling, a solver, the rules of a game. Every stack runs that same file, so the engine gives the same answers on every stack.
+An engine does one kind of processing: pricing, scheduling, a solver, the rules of a game. There are two kinds, called alike from code:
+
+- **Written in Clarity.** The engine is Clarity code in a module, and every stack generates it with the application, as it does your functions. It needs no other language and nothing to install. See [An engine written in Clarity](#an-engine-written-in-clarity).
+- **Compiled to WebAssembly.** The engine is a file in the `engines` folder, written in Rust or any language that builds to WebAssembly. Every stack runs that same file, so it gives the same answers on every stack.
 
 An engine only computes. It has no database, files, network or screen. Your code reads the records, hands them to the engine as values, and saves or shows what comes back. Work that needs the database while it runs belongs in an [action](code.functions.md), and the action can call an engine for the processing in between.
 
-## Making an engine in Clarity
+## An engine written in Clarity
 
-1. Click **+ New engine** under Engines in the project tree, and give it a name, such as `Pricing`. Clarity declares it with one function to start from, writes its code in Rust with a stub for that function, builds it, and opens it.
+Click **+ New engine** under Engines in the project tree, give it a name, and leave **Written in** at Clarity. Clarity writes it with one function to start from and opens it:
+
+```clarity
+engine Dice
+    uses random
+    state per app
+    keep rolled: integer = 0
+
+    function roll(sides: integer) -> integer
+        rolled = rolled + 1
+        return random(sides)
+
+    function rolls() -> integer
+        return rolled
+```
+
+- On the right is the engine as Clarity code: what it keeps and its functions. Save with Ctrl+S; the checker marks a problem on its line as you type. **Fill** gives the code the whole editor.
+- On the left, the inspector lists its functions (double-click one to go to it) and what it keeps, and sets its **Services** and **State**: it writes the `uses` and `state` lines into the code.
+- **`keep name: type = value`** is a value the engine keeps from one call to the next, with what it starts as. A keep is a plain value or a list of them, such as `list<integer>`, with items counted from 1: `squares[3]`.
+- **State** decides whose values they are: without a state line every call starts from the values as written; `state per app` keeps one set for the whole application; `state per window` keeps a set for each open window, which goes when the window closes.
+- **A call that fails changes nothing.** A function works on a copy of what the engine keeps and keeps it only when it succeeds, so a refusal leaves the values as they were.
+- **It keeps to itself**: no windows, data, parts, messages or database. It gives back what the screen should show, and its texts are keys, translated like your own.
+- **`random(n)`**, with `uses random`, gives a whole number from 1 to `n`, from the same sequence every stack gives (`conformance/lists.json`).
+
+The noughts example keeps its game in such an engine: `Board`, with the board as `keep squares: list<integer>`, one board for each window.
+
+## Making an engine in WebAssembly
+
+1. Click **+ New engine** under Engines in the project tree, give it a name, such as `Pricing`, and pick **Rust, built to WebAssembly** under **Written in**. Clarity declares it with one function to start from, writes its code in Rust with a stub for that function, builds it, and opens it.
 2. The engine opens in its own editor. On the left, its inspector holds what the declaration says:
    - **Functions**: name, values and what each gives. **+ Add function** adds one, and its stub appears in the code.
    - **Services**: clock, random, log and language.
@@ -51,7 +82,7 @@ engine Pricing from "pricing.wasm"
 - Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), `bytes`, enums, records and `list<Entity>`. Files are not: read the file in code and hand in its text (`read text of f`) or its bytes (`read bytes of f`).
 - `uses` and `limit` are optional; see [Services](#services) and [Limits](#limits) below.
 - The designer checks the file against the declaration, again whenever the `engines` folder changes. It reports a file that is not in the folder, is no WebAssembly, imports a service the engine does not use (or anything else), or lacks a function you declared.
-- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its editor; see [Making an engine in Clarity](#making-an-engine-in-clarity).
+- The project tree lists the engines under Engines, marking one that does not fit its file. Clicking one opens its editor; see [Making an engine in WebAssembly](#making-an-engine-in-webassembly).
 
 ## Services
 
@@ -128,7 +159,7 @@ handler discountClicked
 
 ## Writing an engine
 
-The easiest way is to let Clarity write it (see [Making an engine in Clarity](#making-an-engine-in-clarity)): the code is Rust with the library `clarity-engine`, in a folder next to the file, `engines/pricing/` for `pricing.wasm`. The library writes the engine interface for you; a function takes its arguments as a tuple, in the declared order, and gives back anything serde writes:
+The easiest way to a WebAssembly engine is to let Clarity write it (see [Making an engine in WebAssembly](#making-an-engine-in-webassembly)): the code is Rust with the library `clarity-engine`, in a folder next to the file, `engines/pricing/` for `pricing.wasm`. The library writes the engine interface for you; a function takes its arguments as a tuple, in the declared order, and gives back anything serde writes:
 
 ```rust
 clarity_engine::interface!();
@@ -223,7 +254,9 @@ The test engine in Clarity's repository, `conformance/engines/test`, is a comple
 
 ## How each stack runs it
 
-Each stack hosts the file with a WebAssembly runtime written for it. You install nothing extra.
+An engine written in Clarity is code of the application on every stack, next to your functions: a struct of what it keeps, and the kept values of each window (or of the app) behind a lock. It needs no WebAssembly runtime.
+
+Each stack hosts a WebAssembly file with a WebAssembly runtime written for it. You install nothing extra.
 
 | Stack | Runs engines with | Comes from |
 |---|---|---|
@@ -238,7 +271,6 @@ The generated program carries the engine inside it: embedded on Rust, Go and C#,
 
 These are designed but not built:
 
-- Engines written in Clarity itself.
 - The service `progress`, which would let a long call show on the screen how far it is.
 - Hooks such as `on tick`, for engines beside the screen.
 - Engines that run beside the screen, drawing on a canvas.

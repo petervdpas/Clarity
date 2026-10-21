@@ -91,8 +91,47 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
 }
 
 /// Every engine the project declares (DESIGN 5.11).
+/// What a `TypeRef` names, as a checker type.
+pub(crate) fn type_ref_info(project: &Project, ty: &clarity_spec::code::TypeRef) -> clarity_spec::code::check::TypeInfo {
+    use clarity_spec::code::TypeRefKind;
+    use clarity_spec::code::check::{TypeInfo, ValueItem};
+    match &ty.kind {
+        TypeRefKind::Text => TypeInfo::Text,
+        TypeRefKind::Integer => TypeInfo::Integer,
+        TypeRefKind::Duration => TypeInfo::Duration,
+        TypeRefKind::Decimal => TypeInfo::Decimal,
+        TypeRefKind::Money => TypeInfo::Money,
+        TypeRefKind::Bool => TypeInfo::Bool,
+        TypeRefKind::Date => TypeInfo::Date,
+        TypeRefKind::DateTime => TypeInfo::DateTime,
+        TypeRefKind::File => TypeInfo::File,
+        TypeRefKind::Bytes => TypeInfo::Bytes,
+        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
+        TypeRefKind::List { item } if ValueItem::of_word(item).is_some() => TypeInfo::Values(ValueItem::of_word(item).expect("a value item")),
+        TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
+        TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
+        TypeRefKind::List { item } => TypeInfo::List(item.clone()),
+    }
+}
+
+/// The engines loaded from WebAssembly files (`engine X from x.wasm`).
 pub(crate) fn engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
-    project.files.iter().flat_map(|f| &f.engines).collect()
+    project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none()).collect()
+}
+
+/// The engines written in Clarity, each with the file that declares it:
+/// every stack generates their code like that of functions.
+pub(crate) fn written_engines(project: &Project) -> Vec<(&clarity_spec::model::SpecFile, &clarity_spec::code::EngineDecl, &clarity_spec::code::EngineBody)> {
+    project
+        .files
+        .iter()
+        .flat_map(|f| f.engines.iter().filter_map(move |e| e.body.as_ref().map(|b| (f, e, b))))
+        .collect()
+}
+
+/// The engine `name`, loaded or written.
+pub(crate) fn engine<'a>(project: &'a Project, name: &str) -> Option<&'a clarity_spec::code::EngineDecl> {
+    project.files.iter().flat_map(|f| &f.engines).find(|e| e.name.name == name)
 }
 
 /// The files of the project's engines, in `folder` of the output; the

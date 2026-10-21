@@ -461,7 +461,7 @@
               <span class="chevron" class:closed={folded}>&#9662;</span>{p.caption ? tr(preview, p.caption) : ""}
             </button>
           </legend>
-        {:else if p.caption}<legend>{p.caption}</legend>{/if}
+        {:else if p.caption}<legend>{tr(preview, p.caption)}</legend>{/if}
         {#if !folded || design}
           <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} container={offset} {onnavigate} />
         {/if}

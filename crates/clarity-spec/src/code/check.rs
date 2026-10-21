@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{EngineState, 
+use super::{EngineBody, EngineState, 
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -64,7 +64,51 @@ pub enum TypeInfo {
     Enum(String),
     Record(String),
     List(String),
+    /// A list of plain values: `list<integer>`.
+    Values(ValueItem),
     Unknown,
+}
+
+/// What a list of plain values holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValueItem {
+    Text,
+    Integer,
+    Decimal,
+    Bool,
+}
+
+impl ValueItem {
+    /// The item type as Clarity writes it: `integer`.
+    pub fn word(self) -> &'static str {
+        match self {
+            ValueItem::Text => "text",
+            ValueItem::Integer => "integer",
+            ValueItem::Decimal => "decimal",
+            ValueItem::Bool => "bool",
+        }
+    }
+
+    /// The item type of `list<word>`, when it is a plain value.
+    pub fn of_word(word: &str) -> Option<ValueItem> {
+        match word {
+            "text" => Some(ValueItem::Text),
+            "integer" => Some(ValueItem::Integer),
+            "decimal" => Some(ValueItem::Decimal),
+            "bool" => Some(ValueItem::Bool),
+            _ => None,
+        }
+    }
+
+    /// The type of one item.
+    pub fn info(self) -> TypeInfo {
+        match self {
+            ValueItem::Text => TypeInfo::Text,
+            ValueItem::Integer => TypeInfo::Integer,
+            ValueItem::Decimal => TypeInfo::Decimal,
+            ValueItem::Bool => TypeInfo::Bool,
+        }
+    }
 }
 
 /// What a name in code refers to.
@@ -82,6 +126,8 @@ pub enum NameKind {
     EnumType,
     /// A call that runs another handler of the same window or app.
     Handler,
+    /// What an engine written in Clarity keeps between calls.
+    Kept,
 }
 
 /// Types and names of one file, keyed by the span (start, end) of each
@@ -187,6 +233,7 @@ impl<'a> Env<'a> {
             TypeRefKind::File => Ty::File,
             TypeRefKind::Bytes => Ty::Bytes,
             TypeRefKind::List { item } if item == "file" => Ty::Files,
+            TypeRefKind::List { item } if ValueItem::of_word(item).is_some() => Ty::Values(ValueItem::of_word(item).expect("a value item")),
             TypeRefKind::Named { name } => match (self.entity(name), self.enum_decl(name)) {
                 (Some(entity), _) => Ty::Record(entity),
                 (None, Some(decl)) => Ty::Enum(decl),
@@ -242,6 +289,8 @@ enum Ty<'a> {
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
+    /// A list of plain values.
+    Values(ValueItem),
     /// The type could not be found; the reason is reported once already.
     Unknown,
 }
@@ -264,6 +313,7 @@ impl Ty<'_> {
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
+            Ty::Values(item) => TypeInfo::Values(*item),
             Ty::Unknown => TypeInfo::Unknown,
         }
     }
@@ -285,6 +335,7 @@ impl Ty<'_> {
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
             Ty::List(e) => format!("list<{}>", e.name.name),
+            Ty::Values(item) => format!("list<{}>", item.word()),
             Ty::Unknown => "unknown".into(),
         }
     }
@@ -299,13 +350,14 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Image | Ty::File | Ty::Files | Ty::Bytes)
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Image | Ty::File | Ty::Files | Ty::Bytes)
     }
 
     fn same(&self, other: &Ty) -> bool {
         match (self, other) {
             (Ty::Enum(a), Ty::Enum(b)) => std::ptr::eq(*a, *b),
             (Ty::Record(a), Ty::Record(b)) | (Ty::List(a), Ty::List(b)) => std::ptr::eq(*a, *b),
+            (Ty::Values(a), Ty::Values(b)) => a == b,
             _ => std::mem::discriminant(self) == std::mem::discriminant(other),
         }
     }
@@ -693,6 +745,7 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
         returns: None,
         scopes: vec![scope],
         saves_reported: false,
+        engine: None,
         out,
     };
     checker.block(&handler.body);
@@ -707,7 +760,9 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
             out.push(Diagnostic::error(format!("there is already an engine {}", engine.name.name), engine.name.span));
         }
         seen.push(&engine.name.name);
-        if !engine.file.ends_with(".wasm") {
+        if let Some(body) = &engine.body {
+            check_engine_body(env, engine, body, out);
+        } else if !engine.file.ends_with(".wasm") {
             out.push(Diagnostic::error("an engine is a .wasm file in the engines folder", engine.span));
         }
         let mut used: Vec<&str> = Vec::new();
@@ -780,9 +835,52 @@ fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
     }
 }
 
+/// An engine written in Clarity: what it keeps starts as a value of its
+/// type, and its functions are checked with those values in scope.
+fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mut Output) {
+    let mut kept = HashMap::new();
+    for keep in &body.keeps {
+        let ty = env.type_ref(&keep.ty).unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, keep.ty.span));
+            Ty::Unknown
+        });
+        if kept.contains_key(&keep.name.name) {
+            out.push(Diagnostic::error(format!("engine {} keeps {} twice", engine.name.name, keep.name.name), keep.name.span));
+        }
+        // What it starts as: a value written out, checked against its type.
+        let mut checker = BodyChecker {
+            env,
+            owner: None,
+            handlers: &[],
+            decl: None,
+            handler: None,
+            event: None,
+            returns: None,
+            scopes: vec![HashMap::new()],
+            saves_reported: false,
+            engine: Some(engine),
+            out,
+        };
+        let value = checker.expr(&keep.value, Some(ty));
+        if !ty.accepts(&value) {
+            checker.error(format!("{} starts as {}: expected {}", keep.name.name, value.name(), ty.name()), keep.value.span);
+        }
+        kept.insert(keep.name.name.clone(), ty);
+    }
+    for decl in &body.functions {
+        check_body_in(env, decl, None, Some(engine), kept.clone(), out);
+    }
+}
+
 /// Checks the parameters, conditions and statements of a function, action
 /// or data event.
 fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, out: &mut Output) {
+    check_body_in(env, decl, event, None, HashMap::new(), out);
+}
+
+/// `check_body` for a function of an engine written in Clarity: `kept` are
+/// the engine's keep values, in scope beneath its parameters.
+fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, engine: Option<&EngineDecl>, kept: HashMap<String, Ty<'a>>, out: &mut Output) {
     let name = decl.name.name.as_str();
     let mut scope = HashMap::new();
     for param in &decl.params {
@@ -806,8 +904,9 @@ fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, 
         handler: None,
         event,
         returns,
-        scopes: vec![scope],
+        scopes: vec![kept, scope],
         saves_reported: false,
+        engine,
         out,
     };
     for condition in &decl.requires {
@@ -859,12 +958,18 @@ struct BodyChecker<'e, 'a> {
     scopes: Vec<HashMap<String, Ty<'a>>>,
     /// A missing `effects db.write` is reported once per action.
     saves_reported: bool,
+    /// The engine written in Clarity whose function this is: its keep
+    /// values are in scope, its functions callable, and it shows nothing.
+    engine: Option<&'e EngineDecl>,
     out: &'e mut Output,
 }
 
 /// What a name or path refers to.
 /// The id every record has, which code can read.
 pub const RECORD_ID: &str = "id";
+
+/// A random number from 1 to its argument, in an engine that uses random.
+pub const RANDOM: &str = "random";
 
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
@@ -1112,7 +1217,9 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// Statements that show or close windows belong in handlers.
     fn ui_only(&mut self, word: &str, span: Span) {
-        if self.decl.is_some() {
+        if let Some(engine) = self.engine {
+            self.error(format!("an engine shows nothing: '{word}' belongs in a handler, which shows what engine {} gives", engine.name.name), span);
+        } else if self.decl.is_some() {
             let context = self.context();
             self.error(format!("'{word}' belongs in a handler, not in {context}"), span);
         }
@@ -1167,6 +1274,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 let ty = self.expr(list, None);
                 let item = match ty {
                     Ty::List(entity) => Ty::Record(entity),
+                    Ty::Values(item) => item_ty(item),
                     Ty::Files => Ty::File,
                     Ty::Unknown => Ty::Unknown,
                     other => {
@@ -1427,7 +1535,8 @@ impl<'a> BodyChecker<'_, 'a> {
         match &expr.kind {
             ExprKind::Name { name } => {
                 if let Some(ty) = self.local(name) {
-                    self.name_is(expr, NameKind::Local);
+                    let kept = self.engine.is_some() && self.decl.is_some() && self.scopes.iter().rposition(|s| s.contains_key(name)) == Some(0);
+                    self.name_is(expr, if kept { NameKind::Kept } else { NameKind::Local });
                     return Some(Place::Value { ty, writable: Ok(()) });
                 }
                 if let Some(decl) = self.data(name) {
@@ -1483,6 +1592,25 @@ impl<'a> BodyChecker<'_, 'a> {
                     Place::Value { ty, .. } => self.member(ty, member.name.as_str(), member.span),
                 }
             }
+            // `squares[3]`: a position of a list, set when the list can be.
+            ExprKind::Index { list, index } => {
+                let (ty, writable) = match self.place(list)? {
+                    Place::Value { ty, writable } => (ty, writable),
+                    _ => return None,
+                };
+                self.position(index);
+                let item = match ty {
+                    Ty::Values(item) => item_ty(item),
+                    Ty::List(entity) => Ty::Record(entity),
+                    Ty::Unknown => Ty::Unknown,
+                    other => {
+                        self.error(format!("only a list has positions, not {}", other.name()), list.span);
+                        Ty::Unknown
+                    }
+                };
+                self.out.types.types.insert((expr.span.start, expr.span.end), item.info());
+                Some(Place::Value { ty: item, writable })
+            }
             _ => {
                 let ty = self.expr(expr, None);
                 Some(Place::Value {
@@ -1490,6 +1618,14 @@ impl<'a> BodyChecker<'_, 'a> {
                     writable: Err("only a local, a data field or a part property can be set".into()),
                 })
             }
+        }
+    }
+
+    /// A position in a list: an integer, counted from 1.
+    fn position(&mut self, index: &Expr) {
+        let ty = self.expr(index, Some(Ty::Integer));
+        if !matches!(ty, Ty::Integer | Ty::Unknown) {
+            self.error(format!("a position in a list is an integer, counted from 1, not {}", ty.name()), index.span);
         }
     }
 
@@ -1601,6 +1737,50 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             ExprKind::Str { .. } => Ty::Text,
+            // `[0, 0, 0]`: values of one plain type; an empty one takes the type expected.
+            ExprKind::ListOf { items } => {
+                if items.is_empty() {
+                    return match expected {
+                        Some(ty @ Ty::Values(_)) => ty,
+                        _ => {
+                            self.error("an empty list needs its type, as in let squares: list<integer> = []", expr.span);
+                            Ty::Unknown
+                        }
+                    };
+                }
+                let wanted = match expected {
+                    Some(Ty::Values(item)) => Some(item_ty(item)),
+                    _ => None,
+                };
+                let first = self.expr(&items[0], wanted);
+                let item = match first {
+                    Ty::Text => ValueItem::Text,
+                    Ty::Integer => ValueItem::Integer,
+                    Ty::Decimal | Ty::Money => ValueItem::Decimal,
+                    Ty::Bool => ValueItem::Bool,
+                    Ty::Unknown => return Ty::Unknown,
+                    other => {
+                        self.error(format!("a list holds text, integers, decimals or bools, not {}", other.name()), items[0].span);
+                        return Ty::Unknown;
+                    }
+                };
+                // An expected list of decimals takes integers too.
+                let item = match (wanted, item) {
+                    (Some(Ty::Decimal), ValueItem::Integer) => ValueItem::Decimal,
+                    _ => item,
+                };
+                for other in &items[1..] {
+                    let ty = self.expr(other, Some(item_ty(item)));
+                    if !item_ty(item).accepts(&ty) {
+                        self.error(format!("a list holds values of one type: this is {}, the list {}", ty.name(), item.word()), other.span);
+                    }
+                }
+                Ty::Values(item)
+            }
+            ExprKind::Index { .. } => match self.place(expr) {
+                Some(Place::Value { ty, .. }) => ty,
+                _ => Ty::Unknown,
+            },
             // A text by its key; each slot gets a value, once. That the key has
             // these slots is checked against the language files.
             ExprKind::Key { args, .. } => {
@@ -1751,7 +1931,7 @@ impl<'a> BodyChecker<'_, 'a> {
         if function.name == "count" {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
             match tys.as_slice() {
-                [Ty::List(_) | Ty::Files | Ty::Unknown] => {}
+                [Ty::List(_) | Ty::Values(_) | Ty::Files | Ty::Unknown] => {}
                 [other] => self.error(format!("'count' needs a list, not {}", other.name()), args[0].span),
                 _ => self.error("'count' takes one list", expr.span),
             }
@@ -1818,7 +1998,24 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             return None;
         }
-        let Some(callee) = self.env.function(&function.name) else {
+        // `random(6)`: a number from 1 to 6, for an engine that uses random.
+        if function.name == RANDOM && self.env.function(RANDOM).is_none() {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, Some(Ty::Integer))).collect();
+            match self.engine {
+                Some(engine) if !engine.uses.iter().any(|u| u.name == RANDOM) => {
+                    self.error(format!("random needs 'uses random' in engine {}", engine.name.name), function.span)
+                }
+                Some(_) => {}
+                None => self.error("random is a service of an engine; a function gives the same answer for the same values", function.span),
+            }
+            if !matches!(tys.as_slice(), [Ty::Integer | Ty::Unknown]) {
+                self.error("random takes the highest number it may give, as in random(6)", expr.span);
+            }
+            return Some(Ty::Integer);
+        }
+        // An engine's own functions call each other by name.
+        let own = self.engine.and_then(|e| e.body.as_ref()).and_then(|b| b.functions.iter().find(|f| f.name.name == function.name));
+        let Some(callee) = own.or_else(|| self.env.function(&function.name)) else {
             for arg in args {
                 self.expr(arg, None);
             }
@@ -2277,6 +2474,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Key { args, .. } => args.iter().any(|a| mentions(&a.value, var)),
+        ExprKind::ListOf { items } => items.iter().any(|i| mentions(i, var)),
+        ExprKind::Index { list, index } => mentions(list, var) || mentions(index, var),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
     }
 }
@@ -2534,6 +2733,15 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(&arg.value, found);
             }
         }
+        ExprKind::ListOf { items } => {
+            for item in items {
+                each_expr(item, found);
+            }
+        }
+        ExprKind::Index { list, index } => {
+            each_expr(list, found);
+            each_expr(index, found);
+        }
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {
@@ -2572,4 +2780,14 @@ fn joins_text(expr: &Expr) -> bool {
     let ExprKind::Binary { op: BinaryOp::Add, left, right } = &expr.kind else { return false };
     let literal = |e: &Expr| matches!(e.kind, ExprKind::Str { .. });
     literal(left) || literal(right) || joins_text(left) || joins_text(right)
+}
+
+/// The type of one item of a list of plain values.
+fn item_ty<'a>(item: ValueItem) -> Ty<'a> {
+    match item {
+        ValueItem::Text => Ty::Text,
+        ValueItem::Integer => Ty::Integer,
+        ValueItem::Decimal => Ty::Decimal,
+        ValueItem::Bool => Ty::Bool,
+    }
 }

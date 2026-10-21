@@ -7,6 +7,7 @@
   // or all of it. Both are checked by the backend while they are typed, and
   // a save is one designer edit, so Undo takes it back.
 
+  import { tr } from "./model";
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy } from "svelte";
   import SourceEditor from "./SourceEditor.svelte";
@@ -54,7 +55,7 @@
     const element = selected === null ? null : findFrameElement(page.frame, selected);
     if (element?.kind === "command") {
       const c = element.command.props;
-      const caption = c.caption ?? c.name ?? "the command";
+      const caption = c.caption ? tr(preview, c.caption) : (c.name ?? "the command");
       const does = commandAction(c);
       if (c.handler) return { label: `"${caption}": on click`, roots: [c.handler] };
       return { label: `"${caption}" ${does ?? "runs no code yet; double-click it to write its handler"}`, roots: [] };

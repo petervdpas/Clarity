@@ -292,6 +292,11 @@ fn shown(project: &Project) -> Shown {
             for text in &engine.says {
                 shown.text(text, engine.span);
             }
+            // An engine written in Clarity names keys in its code as functions do.
+            for decl in engine.body.iter().flat_map(|b| &b.functions) {
+                shown.place = format!("engine {}, function {}", engine.name.name, decl.name.name);
+                shown.code(&decl.body);
+            }
         }
     }
     // Clarity's own words.

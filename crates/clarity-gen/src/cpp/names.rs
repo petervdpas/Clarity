@@ -90,6 +90,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bytes => "clarity::Bytes".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("std::vector<{item}>"),
+        TypeInfo::Values(item) => format!("std::vector<{}>", value_type(&item.info())),
         TypeInfo::Unknown => "auto".into(),
     }
 }

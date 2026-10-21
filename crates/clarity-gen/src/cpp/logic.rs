@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp,
+    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp,
     path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
@@ -21,25 +21,7 @@ use super::model::constant;
 use super::names::{decimal, ident, param_type, snake, string, value_type};
 use crate::print;
 
-/// What a `TypeRef` names, as a checker type.
-pub fn type_ref_info(project: &Project, ty: &TypeRef) -> TypeInfo {
-    match &ty.kind {
-        TypeRefKind::Text => TypeInfo::Text,
-        TypeRefKind::Integer => TypeInfo::Integer,
-        TypeRefKind::Duration => TypeInfo::Duration,
-        TypeRefKind::Decimal => TypeInfo::Decimal,
-        TypeRefKind::Money => TypeInfo::Money,
-        TypeRefKind::Bool => TypeInfo::Bool,
-        TypeRefKind::Date => TypeInfo::Date,
-        TypeRefKind::DateTime => TypeInfo::DateTime,
-        TypeRefKind::File => TypeInfo::File,
-        TypeRefKind::Bytes => TypeInfo::Bytes,
-        TypeRefKind::List { item } if item == "file" => TypeInfo::Files,
-        TypeRefKind::Named { name } if project.entity(name).is_some() => TypeInfo::Record(name.clone()),
-        TypeRefKind::Named { name } => TypeInfo::Enum(name.clone()),
-        TypeRefKind::List { item } => TypeInfo::List(item.clone()),
-    }
-}
+pub(crate) use crate::type_ref_info;
 
 fn is_decimal(ty: &TypeInfo) -> bool {
     matches!(ty, TypeInfo::Decimal | TypeInfo::Money)
@@ -87,6 +69,123 @@ pub fn signature(project: &Project, decl: &FunctionDecl) -> String {
     format!("{ret} {}({})", ident(&decl.name.name), params.join(", "))
 }
 
+/// The C++ struct of what an engine written in Clarity keeps: `BoardKept`.
+fn kept_struct(engine: &str) -> String {
+    format!("{engine}Kept")
+}
+
+/// The declaration of a function of an engine written in Clarity, for the
+/// header: `std::string board_play(clarity::Db& db, uint64_t instance, int64_t square)`.
+pub fn engine_signature(project: &Project, engine: &EngineDecl, decl: &FunctionDecl) -> String {
+    let mut params = vec!["clarity::Db& db".to_string(), "uint64_t instance".to_string()];
+    for param in &decl.params {
+        params.push(format!("{} {}", param_type(&type_ref_info(project, &param.ty)), ident(&param.name.name)));
+    }
+    let ret = decl.returns.as_ref().map(|r| value_type(&type_ref_info(project, r))).unwrap_or_else(|| "void".into());
+    format!("{ret} {}_{}({})", snake(&engine.name.name), snake(&decl.name.name), params.join(", "))
+}
+
+/// The inner function that works on the kept values.
+fn inner_signature(project: &Project, engine: &EngineDecl, decl: &FunctionDecl) -> String {
+    let mut params = vec!["[[maybe_unused]] clarity::Db& db".to_string(), format!("[[maybe_unused]] {}& kept", kept_struct(&engine.name.name))];
+    for param in &decl.params {
+        params.push(format!("{} {}", param_type(&type_ref_info(project, &param.ty)), ident(&param.name.name)));
+    }
+    let ret = decl.returns.as_ref().map(|r| value_type(&type_ref_info(project, r))).unwrap_or_else(|| "void".into());
+    format!("{ret} {}_{}_with({})", snake(&engine.name.name), snake(&decl.name.name), params.join(", "))
+}
+
+/// The header lines of the engines written in Clarity in `file`.
+pub fn engine_declarations(project: &Project, file: &SpecFile) -> String {
+    let mut out = String::new();
+    for engine in &file.engines {
+        let Some(body) = &engine.body else { continue };
+        for decl in &body.functions {
+            let _ = writeln!(out, "{};", engine_signature(project, engine, decl));
+        }
+        if engine.state != EngineState::None {
+            let _ = writeln!(out, "void {}_close(uint64_t instance);", snake(&engine.name.name));
+        }
+    }
+    out
+}
+
+/// An engine written in Clarity: a struct of what it keeps, the kept values
+/// of each instance (a window, or 0 for the app), and per function an entry
+/// that finds the instance's values and an inner one that works on them. A
+/// call works on a copy that is kept only when the call succeeds, so a call
+/// that fails or refuses changes nothing.
+fn emit_engine(project: &Project, types: &FileTypes, engine: &EngineDecl, body: &EngineBody) -> Result<String, Vec<String>> {
+    let name = &engine.name.name;
+    let snake_name = snake(name);
+    let kept = kept_struct(name);
+    let mut errors = Vec::new();
+    let mut fields = String::new();
+    let mut starts = String::new();
+    for keep in &body.keeps {
+        let info = type_ref_info(project, &keep.ty);
+        let field = ident(&keep.name.name);
+        let _ = writeln!(fields, "    {} {field};", value_type(&info));
+        let mut emitter = Emitter::new(project, types, None, None);
+        emitter.engine = Some(engine);
+        let value = emitter.value(&keep.value);
+        if emitter.errors.is_empty() {
+            let _ = writeln!(starts, "    kept.{field} = {value};");
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("engine {name} keeps {}: {e}", keep.name.name)));
+        }
+    }
+    let stored = engine.state != EngineState::None;
+    let mut inner = String::new();
+    let mut prototypes = String::new();
+    let mut entries = String::new();
+    for decl in &body.functions {
+        let mut emitter = Emitter::new(project, types, Some(decl), None);
+        emitter.engine = Some(engine);
+        let code = emitter.function();
+        if !emitter.errors.is_empty() {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("function '{}' of engine {name}: {e}", decl.name.name)));
+            continue;
+        }
+        let _ = writeln!(prototypes, "{};", inner_signature(project, engine, decl));
+        inner.push_str(&code);
+        let function = format!("{snake_name}_{}", snake(&decl.name.name));
+        let names: String = decl.params.iter().map(|p| format!(", {}", ident(&p.name.name))).collect();
+        let void = decl.returns.is_none();
+        let run = if stored {
+            let (answer, give) = if void { ("", "") } else { ("auto answer = ", "    return answer;\n") };
+            format!(
+                "    auto& store = {snake_name}_store();\n    std::lock_guard<std::mutex> held(store.lock);\n    auto found = store.all.find(instance);\n    {kept} kept = found != store.all.end() ? found->second : {snake_name}_new(db);\n    {answer}{function}_with(db, kept{names});\n    store.all.insert_or_assign(instance, kept);\n{give}"
+            )
+        } else {
+            let give = if void { "" } else { "return " };
+            format!("    {kept} kept = {snake_name}_new(db);\n    {give}{function}_with(db, kept{names});\n")
+        };
+        let _ = write!(
+            entries,
+            "/// {name}.{} in code, for instance `instance` (a window, or 0 for the app).\n{} {{\n{run}}}\n\n",
+            decl.name.name,
+            engine_signature(project, engine, decl).replacen("uint64_t instance", "[[maybe_unused]] uint64_t instance", 1)
+        );
+    }
+    let store = if stored {
+        format!(
+            "/// The values each instance (a window, or 0 for the app) keeps; a closed window's go.\nstruct {kept}Store {{\n    std::mutex lock;\n    std::map<uint64_t, {kept}> all;\n    std::shared_ptr<void> closing = clarity::on_window_closed([this](uint64_t instance) {{\n        std::lock_guard<std::mutex> held(lock);\n        all.erase(instance);\n    }});\n}};\n\n{kept}Store& {snake_name}_store() {{\n    static {kept}Store store;\n    return store;\n}}\n\n"
+        )
+    } else {
+        String::new()
+    };
+    let close = if stored {
+        format!("void {snake_name}_close(uint64_t instance) {{\n    auto& store = {snake_name}_store();\n    std::lock_guard<std::mutex> held(store.lock);\n    store.all.erase(instance);\n}}\n\n")
+    } else {
+        String::new()
+    };
+    let out = format!(
+        "namespace {{\n\n/// What engine {name} keeps between calls.\nstruct {kept} {{\n{fields}}};\n\n/// What a new instance starts with.\n{kept} {snake_name}_new([[maybe_unused]] clarity::Db& db) {{\n    {kept} kept;\n{starts}    return kept;\n}}\n\n{store}{prototypes}\n{inner}}}  // namespace\n\n{close}{entries}"
+    );
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
 /// The data events written in `file`, as actions on their record.
 pub fn events(file: &SpecFile) -> Vec<FunctionDecl> {
     file.code
@@ -108,6 +207,14 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             out.push_str(&code);
         } else {
             errors.extend(emitter.errors.into_iter().map(|e| format!("{} '{}': {e}", decl.kind.keyword(), decl.name.name)));
+        }
+    }
+    for engine in &file.engines {
+        if let Some(body) = &engine.body {
+            match emit_engine(project, types, engine, body) {
+                Ok(code) => out.push_str(&code),
+                Err(mut problems) => errors.append(&mut problems),
+            }
         }
     }
     // Each data event runs from its record's method.
@@ -359,12 +466,14 @@ struct Emitter<'a> {
     decl: Option<&'a FunctionDecl>,
     /// The window of a handler.
     window: Option<&'a WindowCtx>,
+    /// The engine written in Clarity whose function or keep value this is.
+    engine: Option<&'a EngineDecl>,
     errors: Vec<String>,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter { project, types, decl, window, errors: Vec::new() }
+        Emitter { project, types, decl, window, engine: None, errors: Vec::new() }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -401,7 +510,11 @@ impl<'a> Emitter<'a> {
                 body.push_str("return result;\n");
             }
         }
-        format!("{} {{\n{}}}\n\n", signature(self.project, decl), indent(&body, 1))
+        let signature = match self.engine {
+            Some(engine) => inner_signature(self.project, engine, decl),
+            None => signature(self.project, decl),
+        };
+        format!("{signature} {{\n{}}}\n\n", indent(&body, 1))
     }
 
     fn block(&mut self, body: &[Stmt], out: &mut String) {
@@ -485,6 +598,14 @@ impl<'a> Emitter<'a> {
                     let _ = write!(out, " else {{\n{}}}", indent(&body, 1));
                 }
                 out.push('\n');
+            }
+            StmtKind::For { var, list, body } if matches!(self.types.type_of(list), TypeInfo::Values(_)) => {
+                // Plain values one by one, from a copy, so the body may change the list.
+                let ty = value_type(&self.types.type_of(list));
+                let list = if matches!(list.kind, ExprKind::ListOf { .. }) { self.value(list) } else { format!("{ty}({})", self.value(list)) };
+                let mut inner = String::new();
+                self.block(body, &mut inner);
+                let _ = write!(out, "for (auto {} : {list}) {{\n{}}}\n", ident(&var.name), indent(&inner, 1));
             }
             StmtKind::For { var, list, body } => {
                 let list = self.value(list);
@@ -686,6 +807,7 @@ impl<'a> Emitter<'a> {
         match &expr.kind {
             ExprKind::Name { name } => match self.types.name_of(expr) {
                 Some(NameKind::Local) | Some(NameKind::Data) => ident(name),
+                Some(NameKind::Kept) => format!("kept.{}", ident(name)),
                 Some(NameKind::EnumValue(e)) => constant(e, name),
                 _ => {
                     self.errors.push(format!("'{name}' is not generated yet for C++"));
@@ -719,6 +841,8 @@ impl<'a> Emitter<'a> {
                     _ => format!("{object}.{}", ident(&member.name)),
                 }
             }
+            // `squares[3]`: counted from 1; a position outside the list fails.
+            ExprKind::Index { list, index } => format!("clarity::at({}, {})", self.place(list), self.value(index)),
             _ => self.value(expr),
         }
     }
@@ -762,6 +886,11 @@ impl<'a> Emitter<'a> {
     fn value(&mut self, expr: &Expr) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
+            ExprKind::ListOf { items } => {
+                let items: Vec<String> = items.iter().map(|i| self.value(i)).collect();
+                format!("{}{{{}}}", value_type(&ty), items.join(", "))
+            }
+            ExprKind::Index { .. } => self.place(expr),
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("int64_t{{{value}}}"),
             ExprKind::Str { value } => format!("std::string({})", string(value)),
@@ -786,6 +915,9 @@ impl<'a> Emitter<'a> {
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
+            ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
+                self.written_call(&engine.name, &function.name, args)
+            }
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self
                     .project
@@ -883,6 +1015,41 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// The arguments of a call, each as its parameter takes it.
+    fn args(&mut self, args: &[Expr], params: &[clarity_spec::code::Param]) -> Vec<String> {
+        let mut code = Vec::new();
+        for (arg, param) in args.iter().zip(params) {
+            let ty = type_ref_info(self.project, &param.ty);
+            code.push(match ty {
+                TypeInfo::Record(_) => self.record_arg(arg),
+                ref t if is_decimal(t) && !is_decimal(&self.types.type_of(arg)) => format!("clarity::Decimal({})", self.value(arg)),
+                _ => self.value(arg),
+            });
+        }
+        code
+    }
+
+    /// A function of an engine written in Clarity, on the instance of the
+    /// handler's window (state per window) or the app's (0).
+    fn written_call(&mut self, engine: &str, function: &str, args: &[Expr]) -> String {
+        let Some(decl) = crate::engine(self.project, engine) else { return String::new() };
+        let Some(callee) = decl.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == function)) else {
+            self.errors.push(format!("engine {engine} has no function '{function}'"));
+            return String::new();
+        };
+        let instance = match decl.state {
+            EngineState::Window if self.window.is_some() => "ui.instance()",
+            EngineState::Window => {
+                self.errors.push(format!("engine {engine} keeps state per window; call it from a handler"));
+                ""
+            }
+            _ => "0",
+        };
+        let mut code = vec!["db".to_string(), instance.to_string()];
+        code.extend(self.args(args, &callee.params));
+        format!("{}_{}({})", snake(engine), snake(function), code.join(", "))
+    }
+
     fn call(&mut self, name: &str, args: &[Expr]) -> String {
         use clarity_spec::code::check::{NOW, TODAY};
         if name == TODAY {
@@ -911,6 +1078,19 @@ impl<'a> Emitter<'a> {
         if name == "count" {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("int64_t({list}.size())");
+        }
+        // `random(6)` in an engine that uses random.
+        if name == clarity_spec::code::check::RANDOM && !self.project.files.iter().flat_map(|f| &f.functions).any(|f| f.name.name == name) {
+            let max = args.first().map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity::random({max})");
+        }
+        // An engine's own function, on the same kept values.
+        if let Some(engine) = self.engine
+            && let Some(own) = engine.body.as_ref().and_then(|b| b.functions.iter().find(|f| f.name.name == name))
+        {
+            let mut code = vec!["db".to_string(), "kept".to_string()];
+            code.extend(self.args(args, &own.params));
+            return format!("{}_{}_with({})", snake(&engine.name.name), snake(name), code.join(", "));
         }
         let Some(callee) = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name) else {
             self.errors.push(format!("unknown function '{name}'"));

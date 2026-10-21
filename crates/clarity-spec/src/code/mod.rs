@@ -321,6 +321,10 @@ pub enum ExprKind {
     /// A text by its key, in the person's language, its slots filled by
     /// name: `@orderApproved(number = order.number)`.
     Key { key: Ident, args: Vec<Arg> },
+    /// A list of values as written: `[0, 0, 0]`.
+    ListOf { items: Vec<Expr> },
+    /// The value at a position of a list, from 1: `squares[3]`.
+    Index { list: Box<Expr>, index: Box<Expr> },
 }
 
 /// `c.name` or `c.name desc` in `order by`.
@@ -485,6 +489,29 @@ pub struct EngineDecl {
     /// default (`engines::DEFAULT_MEGABYTES`).
     pub megabytes: Option<u32>,
     pub functions: Vec<EngineFunction>,
+    /// An engine written in Clarity (no `from` file): what it keeps and
+    /// its functions with their code. Every stack runs it as generated code.
+    pub body: Option<EngineBody>,
+    pub span: Span,
+}
+
+/// The Clarity of an engine written in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct EngineBody {
+    /// What an instance keeps between calls: `keep squares: list<integer> = [0, 0, 0]`.
+    pub keeps: Vec<Keep>,
+    /// Its functions, with their code; `functions` of the engine are their signatures.
+    pub functions: Vec<FunctionDecl>,
+}
+
+/// A value an engine written in Clarity keeps between calls, and what it starts as.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Keep {
+    pub name: Ident,
+    pub ty: TypeRef,
+    pub value: Expr,
     pub span: Span,
 }
 
@@ -624,6 +651,11 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
         ExprKind::Key { args, .. } => args.iter().for_each(|a| each_expr(&a.value, found)),
+        ExprKind::ListOf { items } => items.iter().for_each(|i| each_expr(i, found)),
+        ExprKind::Index { list, index } => {
+            each_expr(list, found);
+            each_expr(index, found);
+        }
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {

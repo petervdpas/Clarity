@@ -90,6 +90,31 @@ export function engineText(form: EngineForm): string {
   return lines.map((l, i) => (i === 0 ? l : "    " + l)).join("\n") + "\n";
 }
 
+/** The lines above the code of an engine written in Clarity that the inspector sets. */
+export type EngineLine = "uses" | "state";
+
+/**
+ * The text of an engine written in Clarity with its `uses` or `state` line
+ * set to `line`, or taken away for null. The line goes where the other
+ * settings are: after the `engine` line, before what it keeps and its
+ * functions.
+ */
+export function withEngineLine(text: string, kind: EngineLine, line: string | null): string {
+  const lines = text.split("\n");
+  const own = lines.findIndex((l, i) => i > 0 && l.trim().startsWith(kind + " "));
+  if (own >= 0) {
+    if (line === null) lines.splice(own, 1);
+    else lines[own] = "    " + line;
+    return lines.join("\n");
+  }
+  if (line === null) return text;
+  // After the settings already there: uses first, then state.
+  let at = 1;
+  while (at < lines.length && /^\s+(uses|says|state)\b/.test(lines[at]) && !(kind === "uses" && lines[at].trim().startsWith("state"))) at++;
+  lines.splice(at, 0, "    " + line);
+  return lines.join("\n");
+}
+
 /** The line (from 1) where an engine's Rust source writes the function `name`, as clarity_project::engines finds it. */
 export function functionLine(source: string, name: string): number | null {
   const lines = source.split("\n");

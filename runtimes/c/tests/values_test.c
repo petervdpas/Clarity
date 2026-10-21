@@ -271,3 +271,84 @@ void a_draw_starts_an_empty_drawing_that_travels_with_the_part(void) {
     CHECK_JSON(clarity_window_state_json(&clarity_ui_reply(again, "Main", cJSON_CreateObject())->state),
                "{\"window\":\"Main\",\"instance\":0,\"data\":{},\"parts\":{\"dial\":{\"drawing\":[]}},\"selected\":{}}");
 }
+
+void an_item_is_read_by_its_position_from_1(void) {
+    cJSON* file = conformance("lists.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "items")) {
+        const cJSON* values = cJSON_GetObjectItemCaseSensitive(c, "list");
+        int64_t items[16];
+        size_t count = 0;
+        const cJSON* v;
+        cJSON_ArrayForEach(v, values) items[count++] = (int64_t)v->valuedouble;
+        ClarityIntegers list = clarity_integers(count, items);
+        int64_t position = (int64_t)cJSON_GetObjectItemCaseSensitive(c, "at")->valuedouble;
+        int64_t got = 0;
+        const cJSON* gives = cJSON_GetObjectItemCaseSensitive(c, "gives");
+        if (gives) {
+            CHECK_OK(clarity_integers_at(list, position, &got));
+            CHECK_INT(got, (int64_t)gives->valuedouble);
+        } else {
+            CHECK_FAILS(CLARITY_VALUE, clarity_integers_at(list, position, &got));
+            CHECK_TEXT(clarity_error()->message, cJSON_GetObjectItemCaseSensitive(c, "fails")->valuestring);
+        }
+    }
+    cJSON_Delete(file);
+}
+
+void an_item_is_set_by_its_position_from_1(void) {
+    ClarityIntegers list = clarity_integers(3, (int64_t[]){10, 20, 30});
+    // A copy has items of its own.
+    ClarityIntegers copy = clarity_integers(list.count, list.items);
+    CHECK_OK(clarity_integers_set(list, 2, 99));
+    CHECK_INT(list.items[1], 99);
+    CHECK_INT(copy.items[1], 20);
+    CHECK_FAILS(CLARITY_VALUE, clarity_integers_set(list, 4, 1));
+    CHECK_TEXT(clarity_error()->message, "there is no item 4 in a list of 3");
+}
+
+void random_gives_what_every_runtime_gives_from_a_seed(void) {
+    cJSON* file = conformance("lists.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "random")) {
+        ClaritySplitmix random = {(uint64_t)cJSON_GetObjectItemCaseSensitive(c, "seed")->valuedouble};
+        int64_t max = (int64_t)cJSON_GetObjectItemCaseSensitive(c, "max")->valuedouble;
+        const cJSON* gives = cJSON_GetObjectItemCaseSensitive(c, "gives");
+        int64_t got = 0;
+        if (!gives) {
+            CHECK_FAILS(CLARITY_VALUE, clarity_splitmix_next(&random, max, &got));
+            CHECK_TEXT(clarity_error()->message, cJSON_GetObjectItemCaseSensitive(c, "fails")->valuestring);
+            continue;
+        }
+        const cJSON* want;
+        cJSON_ArrayForEach(want, gives) {
+            CHECK_OK(clarity_splitmix_next(&random, max, &got));
+            CHECK_INT(got, (int64_t)want->valuedouble);
+        }
+    }
+    cJSON_Delete(file);
+}
+
+void random_stays_within_its_highest_number(void) {
+    for (int i = 0; i < 200; ++i) {
+        int64_t n = 0;
+        CHECK_OK(clarity_random(6, &n));
+        CHECK(n >= 1 && n <= 6);
+    }
+}
+
+void what_an_engine_keeps_outlives_the_scratch_arena(void) {
+    ClarityIntegers kept = {0};
+    ClarityTexts words = {0};
+    clarity_integers_keep(&kept, clarity_integers(2, (int64_t[]){4, 5}));
+    clarity_texts_keep(&words, clarity_texts(1, (const char*[]){clarity_copy("noughts")}));
+    clarity_scratch_reset();
+    CHECK_INT(kept.count, 2);
+    CHECK_INT(kept.items[1], 5);
+    CHECK_TEXT(words.items[0], "noughts");
+    clarity_integers_keep(&kept, clarity_integers(0, NULL));
+    CHECK_INT(kept.count, 0);
+    clarity_texts_drop(&words);
+    CHECK_INT(words.count, 0);
+    clarity_integers_drop(&kept);
+}

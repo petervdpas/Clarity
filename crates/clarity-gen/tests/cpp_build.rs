@@ -189,3 +189,86 @@ fn the_dial_example_builds_and_runs_in_cpp() {
 fn the_noughts_example_builds_and_runs_in_cpp() {
     builds_and_runs_in_cpp("noughts", "Noughts");
 }
+
+/// The noughts example's Board engine, written in Clarity, as the C++ it
+/// becomes, played from a program of its own.
+const BOARD_CHECK: &str = r#"#include <iostream>
+
+#include "app.hpp"
+
+namespace noughts {
+const std::string& model();
+}
+
+#define EXPECT(holds, what)                                  \
+    do {                                                     \
+        if (!(holds)) {                                      \
+            std::cerr << "failed: " << (what) << "\n";       \
+            return 1;                                        \
+        }                                                    \
+    } while (0)
+
+static std::string refusal(auto call) {
+    try {
+        call();
+    } catch (const clarity::RefusedError& e) {
+        return e.what();
+    }
+    return "";
+}
+
+int main() {
+    using namespace noughts;
+    clarity::load_translations(model());
+    clarity::Db db({{"main", clarity::Dialect::Sqlite, ":memory:"}});
+    EXPECT(board_play(db, 1, 1) == "Your move", "play");
+    EXPECT(board_mark(db, 1, 1) == 1, "your cross");
+    // The computer took the centre.
+    EXPECT(board_mark(db, 1, 5) == 2, "the centre");
+    EXPECT(refusal([&] { board_play(db, 1, 5); }) == "That square is taken", "taken");
+    EXPECT(refusal([&] { board_play(db, 1, 10); }) == "There are nine squares", "nine squares");
+    // Another window has a board of its own, and a closed window's board goes.
+    EXPECT(board_mark(db, 2, 1) == 0, "another window");
+    clarity::window_closed(1);
+    EXPECT(board_mark(db, 1, 1) == 0, "closed");
+    // The computer blocks your line.
+    board_play(db, 3, 1);
+    board_play(db, 3, 2);
+    EXPECT(board_mark(db, 3, 3) == 2, "blocked");
+    EXPECT(board_restart(db, 3) == "Your move", "restart");
+    EXPECT(board_taken(db, 3) == 0, "an empty board");
+    std::cout << "the board played\n";
+    return 0;
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_written_in_clarity_runs_in_cpp() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = Backend::Cpp;
+    settings.stack.ui = Ui::Web;
+    settings.datasources[0].url = "data/app.db".into();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-cpp-board-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["build"]).unwrap();
+    // The check program: every source of the application but its main.
+    std::fs::create_dir_all(out.join("check")).unwrap();
+    std::fs::write(out.join("check/board_check.cpp"), BOARD_CHECK).unwrap();
+    let lists = std::fs::read_to_string(out.join("CMakeLists.txt")).unwrap();
+    std::fs::write(
+        out.join("CMakeLists.txt"),
+        format!("{lists}\nset(CHECK_SOURCES ${{PROGRAM_SOURCES}})\nlist(FILTER CHECK_SOURCES EXCLUDE REGEX \"src/main.cpp$\")\nadd_executable(board_check ${{CHECK_SOURCES}} check/board_check.cpp)\ntarget_include_directories(board_check PRIVATE src)\ntarget_link_libraries(board_check PRIVATE clarity clarity_shell)\n"),
+    )
+    .unwrap();
+    let built = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = built.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    let said = run(&out, &out.join("build/debug/board_check").display().to_string(), &[]);
+    assert!(said.contains("the board played"), "{said}");
+    std::fs::remove_dir_all(&out).unwrap();
+}

@@ -166,6 +166,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bytes => "byte[]".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("List<{item}>"),
+        TypeInfo::Values(item) => format!("List<{}>", value_type(&item.info())),
         TypeInfo::Unknown => "void".into(),
     }
 }

@@ -182,3 +182,84 @@ fn the_dial_example_builds_and_runs_in_c() {
 fn the_noughts_example_builds_and_runs_in_c() {
     builds_and_runs_in_c("noughts", "Noughts");
 }
+
+/// The noughts example's Board engine, written in Clarity, as the C it
+/// becomes, played from a program of its own; each call is a command of its
+/// own, as the shell runs them, so what the board keeps outlives the
+/// scratch arena.
+const BOARD_CHECK: &str = r#"#include <stdio.h>
+#include <string.h>
+
+#include "app.h"
+#include "page.h"
+
+#define EXPECT(holds, what)                                                          \
+    do {                                                                             \
+        if (!(holds)) {                                                              \
+            fprintf(stderr, "failed: %s (%s)\n", what, clarity_error()->message);    \
+            return 1;                                                                \
+        }                                                                            \
+        clarity_scratch_reset();                                                     \
+    } while (0)
+
+static int64_t mark(uint64_t window, int64_t square) {
+    int64_t got = -1;
+    if (!board_mark(NULL, window, square, &got)) return -1;
+    return got;
+}
+
+int main(void) {
+    clarity_start();
+    clarity_load_translations(page_model());
+    const char* said = NULL;
+    EXPECT(board_play(NULL, 1, 1, &said) && strcmp(said, "Your move") == 0, "play");
+    EXPECT(mark(1, 1) == 1, "your cross");
+    // The computer took the centre.
+    EXPECT(mark(1, 5) == 2, "the centre");
+    EXPECT(!board_play(NULL, 1, 5, &said) && strcmp(clarity_error()->message, "That square is taken") == 0, "taken");
+    EXPECT(!board_play(NULL, 1, 10, &said) && strcmp(clarity_error()->message, "There are nine squares") == 0, "nine squares");
+    // Another window has a board of its own, and a closed window's board goes.
+    EXPECT(mark(2, 1) == 0, "another window");
+    clarity_window_closed(1);
+    EXPECT(mark(1, 1) == 0, "closed");
+    // The computer blocks your line.
+    EXPECT(board_play(NULL, 3, 1, &said), "first cross");
+    EXPECT(board_play(NULL, 3, 2, &said), "second cross");
+    EXPECT(mark(3, 3) == 2, "blocked");
+    EXPECT(board_restart(NULL, 3, &said) && strcmp(said, "Your move") == 0, "restart");
+    int64_t taken = -1;
+    EXPECT(board_taken(NULL, 3, &taken) && taken == 0, "an empty board");
+    printf("the board played\n");
+    return 0;
+}
+"#;
+
+#[test]
+#[ignore]
+fn an_engine_written_in_clarity_runs_in_c() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.stack.backend = Backend::C;
+    settings.stack.ui = Ui::Web;
+    settings.datasources[0].url = "data/app.db".into();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-c-board-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["build"]).unwrap();
+    std::fs::create_dir_all(out.join("check")).unwrap();
+    std::fs::write(out.join("check/board_check.c"), BOARD_CHECK).unwrap();
+    let lists = std::fs::read_to_string(out.join("CMakeLists.txt")).unwrap();
+    std::fs::write(
+        out.join("CMakeLists.txt"),
+        format!("{lists}\nset(CHECK_SOURCES ${{PROGRAM_SOURCES}})\nlist(FILTER CHECK_SOURCES EXCLUDE REGEX \"src/main.c$\")\nadd_executable(board_check ${{CHECK_SOURCES}} check/board_check.c)\ntarget_include_directories(board_check PRIVATE src)\ntarget_link_libraries(board_check PRIVATE clarity clarity_shell)\n"),
+    )
+    .unwrap();
+    let built = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = built.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    let said = run(&out, &out.join("build/debug/board_check").display().to_string(), &[]);
+    assert!(said.contains("the board played"), "{said}");
+    std::fs::remove_dir_all(&out).unwrap();
+}

@@ -23,7 +23,7 @@ SQLite is on by default. Each server database is a feature, which a generated ap
 | `mssql` | SQL Server |
 
 ```toml
-clarity-runtime = { version = "0.9.0", default-features = false, features = ["sqlite", "postgres"] }
+clarity-runtime = { version = "0.10.0", default-features = false, features = ["sqlite", "postgres"] }
 ```
 
 ## Engines

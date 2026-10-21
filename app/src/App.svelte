@@ -55,7 +55,7 @@
   import AgentPanel from "./lib/AgentPanel.svelte";
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import { agent } from "./lib/agentStore.svelte";
-  import { themeArea, themeOf } from "./lib/model";
+  import { themeArea, themeOf, tr } from "./lib/model";
   import ThemeStyles from "./lib/ThemeStyles.svelte";
 
   const LAST_PROJECT_KEY = "clarity.lastProject";
@@ -192,7 +192,7 @@
     const targets = catalog.targets.filter((t) => settings.stack.targets.includes(t.id)).map((t) => t.label);
     return `${backend}, ${ui}, ${targets.join(" and ")}`;
   });
-  const projectName = $derived(app?.title ?? app?.name.name ?? (openFile ? fileName(openFile) : ""));
+  const projectName = $derived(app?.title && preview ? tr(preview, app.title) : (app?.name.name ?? (openFile ? fileName(openFile) : "")));
 
   // Entering design mode shows the parts.
   $effect.pre(() => {
@@ -354,14 +354,22 @@
     }
   }
 
-  /** Declares the engine with one function to start from, writes its code with a stub, builds it and opens it. */
-  async function addEngine(target: SpecFile, name: string) {
+  /**
+   * Declares the engine with one function to start from and opens it:
+   * written in Clarity, or in Rust built to WebAssembly, whose code with a
+   * stub it writes and builds.
+   */
+  async function addEngine(target: SpecFile, name: string, how: string) {
     const stem = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
-    const text = `engine ${name} from ${JSON.stringify(stem + ".wasm")}\n    function compute(value: integer) -> integer\n`;
+    const text =
+      how === "rust"
+        ? `engine ${name} from ${JSON.stringify(stem + ".wasm")}\n    function compute(value: integer) -> integer\n`
+        : `engine ${name}\n    function compute(value: integer) -> integer\n        return value\n`;
     try {
       applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
       newEngine = null;
       select({ kind: "engine", name });
+      if (how !== "rust") return;
       await invoke("new_engine_source", { name });
       await invoke("build_engine", { name });
     } catch (err) {
@@ -1086,7 +1094,7 @@
         {:else if page}
           <ShownWindow area={themeArea(themeOf(preview))} clientWidth={windowSize(page).width}>
             <div class="titlebar">
-              <span>{page.title ?? page.name.name}</span>
+              <span>{page.title ? tr(preview, page.title) : page.name.name}</span>
               <code>{page.name.name}: {page.kind}</code>
             </div>
             <!-- The window's client, at the height it opens at. -->
@@ -1163,6 +1171,13 @@
     action="Add engine"
     file={newEngine}
     error={newEngineError}
+    choice={{
+      label: "Written in",
+      options: [
+        { value: "clarity", label: "Clarity: generated with the application on every stack" },
+        { value: "rust", label: "Rust, built to WebAssembly" },
+      ],
+    }}
     onsubmit={addEngine}
     oncancel={() => (newEngine = null)}
   />

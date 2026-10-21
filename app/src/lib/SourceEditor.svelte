@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** Clarity lines after which the next line is indented one level more. */
-  export const OPENS_CLARITY_BLOCK = /^\s*(handler|if|else|for|function|action|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
+  export const OPENS_CLARITY_BLOCK = /^\s*(handler|if|else|for|function|action|engine|page|app|code|entity|enum|tabs|tab|panel|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\b/;
   /** Lines of Rust (or another braced language) that open a block: ending in an open brace or bracket. */
   export const OPENS_BRACED_BLOCK = /[{([]\s*$/;
 </script>

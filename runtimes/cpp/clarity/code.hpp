@@ -62,4 +62,41 @@ inline FileOrder desc(const std::string& detail) { return {detail, true}; }
 /// The files sorted by the keys, the first deciding first; text by its bytes, as on every stack.
 std::vector<FileEntry> sort_files(std::vector<FileEntry> files, std::initializer_list<FileOrder> keys);
 
+/// A value in code that does not fit where it is used: a position outside
+/// its list, a highest number below 1 (conformance/lists.json).
+class ValueError : public Error {
+public:
+    using Error::Error;
+};
+
+/// `xs[i]` in code: item i of a list, counted from 1.
+template <typename T>
+const T& at(const std::vector<T>& list, int64_t position) {
+    if (position < 1 || position > int64_t(list.size()))
+        throw ValueError("there is no item " + std::to_string(position) + " in a list of " + std::to_string(list.size()));
+    return list[size_t(position - 1)];
+}
+
+/// `xs[i] = value` in code: item i of a list to set, counted from 1.
+template <typename T>
+T& at(std::vector<T>& list, int64_t position) {
+    return const_cast<T&>(at(static_cast<const std::vector<T>&>(list), position));
+}
+
+/// The numbers `random(max)` gives: splitmix64, the sequence every runtime
+/// gives alike from the same seed.
+class Splitmix {
+public:
+    explicit Splitmix(uint64_t seed) : state_(seed) {}
+    /// A whole number from 1 to max.
+    int64_t next(int64_t max);
+
+private:
+    uint64_t state_;
+};
+
+/// `random(max)` in an engine written in Clarity, from a sequence seeded
+/// once per run of the application.
+int64_t random(int64_t max);
+
 }  // namespace clarity

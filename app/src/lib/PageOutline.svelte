@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tr } from "./model";
   import type { Command } from "./generated/Command";
   import type { Edit } from "./generated/Edit";
   import type { Page } from "./generated/Page";
@@ -34,7 +35,7 @@
       const sorted = widgets.toSorted((a, b) => a.props.row - b.props.row || a.props.col - b.props.col);
       for (const w of sorted) {
         const p = w.props;
-        const text = p.name ?? p.caption ?? p.bind ?? "";
+        const text = p.name ?? (p.caption ? tr(preview, p.caption) : null) ?? p.bind ?? "";
         out.push({ id: w.span.start, key: String(w.span.start), depth, kind: widgetInfo(preview, p.kind).name, text, removable: true });
         walk(w.children, depth + 1);
         for (const inner of w.pages) {
@@ -43,7 +44,7 @@
             key: String(inner.span.start),
             depth: depth + 1,
             kind: inner.title === null ? "Pane" : "Tab",
-            text: inner.title ?? "",
+            text: inner.title ? tr(preview, inner.title) : "",
             removable: inner.title !== null,
           });
           walk(inner.children, depth + 2);
@@ -54,7 +55,7 @@
     const commands = (items: Command[], depth: number) => {
       for (const c of items) {
         const kind = c.items.length > 0 ? "Submenu" : COMMAND_NAMES[c.props.kind];
-        out.push({ id: c.span.start, key: String(c.span.start), depth, kind, text: c.props.name ?? c.props.caption ?? "", removable: true });
+        out.push({ id: c.span.start, key: String(c.span.start), depth, kind, text: c.props.name ?? (c.props.caption ? tr(preview, c.props.caption) : ""), removable: true });
         commands(c.items, depth + 1);
       }
     };
@@ -104,7 +105,7 @@
       onclick={() => (pageDesigner.selected = null)}
     >
       <span class="kind">{rootName ?? (page.kind === "window" ? "Window" : page.kind === "dialog" ? "Dialog" : "View")}</span>
-      <span class="muted">"{page.title ?? page.name.name}"</span>
+      <span class="muted">"{page.title ? tr(preview, page.title) : page.name.name}"</span>
     </button>
     {#each lines as line (line.key)}
       <button

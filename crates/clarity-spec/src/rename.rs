@@ -237,6 +237,15 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
                 expr(&arg.value, name, found);
             }
         }
+        ExprKind::ListOf { items } => {
+            for item in items {
+                expr(item, name, found);
+            }
+        }
+        ExprKind::Index { list, index } => {
+            expr(list, name, found);
+            expr(index, name, found);
+        }
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {

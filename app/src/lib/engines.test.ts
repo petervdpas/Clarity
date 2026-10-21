@@ -91,3 +91,17 @@ test("a new function gets a name no other function of the engine has", () => {
   assert.equal(freeName([], "compute"), "compute");
   assert.equal(freeName(["compute", "compute2"], "compute"), "compute3");
 });
+
+test("a line of an engine written in Clarity is set, replaced or taken away above its code", async () => {
+  const { withEngineLine } = await import("./engines.ts");
+  const text = "engine Board\n    uses random\n    keep squares: list<integer> = [0, 0]\n\n    function mark(square: integer) -> integer\n        return squares[square]\n";
+  assert.equal(
+    withEngineLine(text, "state", "state per window"),
+    "engine Board\n    uses random\n    state per window\n    keep squares: list<integer> = [0, 0]\n\n    function mark(square: integer) -> integer\n        return squares[square]\n",
+  );
+  assert.equal(withEngineLine(text, "uses", null), "engine Board\n    keep squares: list<integer> = [0, 0]\n\n    function mark(square: integer) -> integer\n        return squares[square]\n");
+  const windowed = withEngineLine(text, "state", "state per window");
+  assert.equal(withEngineLine(windowed, "state", "state per app"), windowed.replace("state per window", "state per app"));
+  // A comment above a line stays where it is.
+  assert.equal(withEngineLine("engine Dice\n    // Rolls.\n    function roll() -> integer\n        return 1\n", "uses", "uses random"), "engine Dice\n    uses random\n    // Rolls.\n    function roll() -> integer\n        return 1\n");
+});

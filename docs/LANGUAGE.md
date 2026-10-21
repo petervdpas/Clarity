@@ -174,7 +174,7 @@ The declarations a module can hold:
 | `app Name` | [7](#7-the-app-and-its-frame), one per project |
 | `code Name` | [8](#8-code-behind) |
 | `function name(...)` and `action name(...)` | [9](#9-functions-and-actions) |
-| `engine Name from "file.wasm"` | [9](#engines) |
+| `engine Name`, `engine Name from "file.wasm"` | [9](#engines) |
 
 ## 4. Data: enums and entities
 
@@ -950,7 +950,7 @@ action approve(order: Order)
 
 ### Engines
 
-An engine is a processing module compiled to WebAssembly, which every stack runs the same way: pricing, scheduling, a solver, the logic of a game. A module declares it with its file and the functions it has; code calls those functions like its own.
+An engine is a processing module that every stack runs the same way: pricing, scheduling, a solver, the logic of a game. It is written in Clarity (see [An engine written in Clarity](#an-engine-written-in-clarity)) or compiled to WebAssembly from another language. A module declares a WebAssembly engine with its file and the functions it has; code calls those functions like its own.
 
 ```clarity
 engine Pricing from "pricing.wasm"
@@ -982,6 +982,35 @@ function order_total(order: Order) -> money
 - **An error** that the engine gives back (its own refusal) reaches code as a refusal, in the engine's words. An engine that fails while it runs is an error that names the engine.
 - The declaration is visible to the modules that `use` the module, like its functions. Two engines of one module have different names, and an engine has each function once.
 
+#### An engine written in Clarity
+
+An engine without `from` is written in Clarity: what it keeps between calls, and its functions with their code. Every stack generates it as code of its own, like a function, so it needs no file and no other language.
+
+```clarity
+engine Board
+    uses random
+    state per window
+    keep squares: list<integer> = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    keep moves: integer = 0
+
+    function play(square: integer) -> text
+        if squares[square] != 0
+            refuse @thatSquareIsTaken
+        squares[square] = 1
+        moves = moves + 1
+        return @yourMove
+
+    function mark(square: integer) -> integer
+        return squares[square]
+```
+
+- **`keep name: type = value`** is a value the engine keeps from call to call, with what it starts as. Its functions read and set it by name. A keep is a plain value or a list of them (`list<integer>`); the value it starts with is written out.
+- **`state`** works as for any engine: none gives every call fresh values, `state per app` one set for the whole application, `state per window` one set for each open window, dropped when the window closes.
+- **A call changes nothing when it fails.** A function works on a copy of what the engine keeps, which it keeps only when the call succeeds; a refusal or an error leaves the values as they were.
+- **Its functions** are written as functions are, with `require` and `ensure` if wanted, and call each other by name (`answer()`). Code outside calls them as `Board.play(5)`.
+- **It keeps to itself.** An engine has no window, data, parts or database: `message`, `open`, `save`, `find` and the like are errors in it. It returns what the screen should show, and its texts are keys, translated like the project's own.
+- **`uses random`** gives it `random(n)`: a whole number from 1 to `n`. No other service is needed in Clarity: the language the person picked is already how its texts show.
+
 How to build an engine in another language, and what it exports, is in the manual: [Engines](manual/code.engines.md).
 
 ## 10. Statements and expressions
@@ -994,7 +1023,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 |---|---|---|
 | `let name = expr` | A local, with the type of the expression. | everywhere |
 | `let name: type = expr` | A local with a declared type. | everywhere |
-| `target = expr` | Sets a local, a data field (`customer.credit_limit`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
+| `target = expr` | Sets a local, a data field (`customer.credit_limit`), an item of a list (`squares[3] = 1`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
 | `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
 | `for item in list` | Runs the block once per item of a list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
@@ -1020,6 +1049,8 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `@savedName(name = customer.name)` | a text by its key, its slots filled by name; see [Texts by key](#texts-by-key) |
 | `"{album.title}.txt"` | text with slots, filled plainly; see [Text with slots](#text-with-slots) |
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
+| `[1, 2, 3]`, `["a", "b"]` | a list of values of one type; an empty one needs its type, as in `let squares: list<integer> = []` |
+| `squares[3]` | an item of a list, counted from 1; a position outside the list is an error |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
 | `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
@@ -1038,7 +1069,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
-From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
+From tightest to loosest: member access (`.`) and items (`[i]`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
 
 ### Texts by key
 
@@ -1146,6 +1177,7 @@ The types of values follow the data dictionary:
 | an enum | that enum |
 | a record | an entity, a `ref` |
 | a list of records | `list<Entity>`, a list in the window's data |
+| a list of values | `list<text>`, `list<integer>`, `list<decimal>`, `list<bool>`: in code and in what an engine keeps; a list is a value, so a copy changes on its own |
 | `image` | an `image` field; compared with and set to `none`, or set to a file |
 | `file`, `list<file>` | a file of a file store, and a list of them; see [Files](#files) |
 | `bytes` | the contents of a file as they are (`read bytes of f`); `size` is their number |
@@ -1309,12 +1341,20 @@ function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" 
 
 engine        = "engine" Name "from" String
                     ["uses" service ("," service)*]
+                    ["says" Key ("," Key)*]
                     ["limit" n ("seconds" | "MB") ["," n ("seconds" | "MB")]]
                     ["state" "per" ("app" | "window")]
                     ["on" "open"]
                     ("function" name "(" [param ("," param)*] ")" "->" type-ref)*
-service       = "clock" | "random" | "log"
+              | "engine" Name                                // written in Clarity
+                    ["uses" "random"]
+                    ["state" "per" ("app" | "window")]
+                    ("keep" name ":" type-ref "=" expr)*
+                    function*
+service       = "clock" | "random" | "log" | "language"
 engine-call   = Engine "." name "(" [expr ("," expr)*] ")"
+list-of       = "[" [expr ("," expr)*] "]"
+item          = expr "[" expr "]"
 
 find          = "find" name "in" Entity ["where" condition]
                 ["order" "by" name "." field ["desc"] ("," name "." field ["desc"])*]

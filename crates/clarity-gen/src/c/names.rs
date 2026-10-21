@@ -100,6 +100,18 @@ pub fn list_type(entity: &str) -> String {
     format!("{entity}List")
 }
 
+/// The C type of a list of plain values: `ClarityIntegers`.
+pub fn values_type(item: clarity_spec::code::check::ValueItem) -> String {
+    use clarity_spec::code::check::ValueItem;
+    match item {
+        ValueItem::Text => "ClarityTexts",
+        ValueItem::Integer => "ClarityIntegers",
+        ValueItem::Decimal => "ClarityDecimals",
+        ValueItem::Bool => "ClarityBools",
+    }
+    .into()
+}
+
 /// The C type of a value in code. A record is its struct; code passes and
 /// keeps records through pointers to them.
 pub fn value_type(ty: &TypeInfo) -> String {
@@ -116,6 +128,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bytes => "ClarityBytes".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => list_type(item),
+        TypeInfo::Values(item) => values_type(*item),
         TypeInfo::Unknown => "int64_t".into(),
     }
 }

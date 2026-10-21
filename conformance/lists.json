@@ -1,0 +1,18 @@
+{
+  "about": "Lists of values in code (`list<integer>`, `list<text>`, `list<decimal>`, `list<bool>`) and random, as every runtime gives them. `xs[i]` reads or sets item i, counted from 1. A position outside the list fails with exactly `there is no item <i> in a list of <n>`. `random(max)` in an engine written in Clarity gives a whole number from 1 to max: 1 + (the next number of splitmix64 as an unsigned 64-bit number, modulo max). `random` cases start the sequence from `seed` and list what the calls give in order. A max below 1 fails with exactly `random takes a highest number of 1 or more, not <max>`.",
+  "items": [
+    { "list": [10, 20, 30], "at": 1, "gives": 10 },
+    { "list": [10, 20, 30], "at": 3, "gives": 30 },
+    { "list": [10, 20, 30], "at": 0, "fails": "there is no item 0 in a list of 3" },
+    { "list": [10, 20, 30], "at": 4, "fails": "there is no item 4 in a list of 3" },
+    { "list": [], "at": 1, "fails": "there is no item 1 in a list of 0" },
+    { "list": [10, 20, 30], "at": -1, "fails": "there is no item -1 in a list of 3" }
+  ],
+  "random": [
+    { "seed": 42, "max": 6, "gives": [2, 2, 1, 1, 5, 1] },
+    { "seed": 42, "max": 9, "gives": [2, 2, 1, 1, 8, 7] },
+    { "seed": 7, "max": 100, "gives": [88, 5, 47, 4, 75, 6] },
+    { "seed": 0, "max": 1, "gives": [1, 1, 1, 1, 1, 1] },
+    { "seed": 1, "max": 0, "fails": "random takes a highest number of 1 or more, not 0" }
+  ]
+}

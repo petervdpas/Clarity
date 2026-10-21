@@ -127,6 +127,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Enum(name) => name.clone(),
         TypeInfo::Record(name) => format!("*{name}"),
         TypeInfo::List(name) => format!("[]{name}"),
+        TypeInfo::Values(item) => format!("[]{}", value_type(&item.info())),
         TypeInfo::Unknown => "any".into(),
     }
 }

@@ -2,6 +2,7 @@
   // The data dictionary for one entity: a row per field with its name, type
   // and modifiers. Every change is one edit, checked by the Rust backend.
 
+  import { tr } from "./model";
   import TextField from "./TextField.svelte";
   import RenameField from "./RenameField.svelte";
   import type { Edit } from "./generated/Edit";
@@ -154,7 +155,7 @@
             <td class="center">
               <input type="checkbox" checked={m.unique} onchange={(e) => update(field, { modifiers: { unique: e.currentTarget.checked } })} />
             </td>
-            <td><TextField {preview} {onapplied} text={m.label} placeholder={field.label} onwrite={(text) => update(field, { modifiers: { label: text } })} /></td>
+            <td><TextField {preview} {onapplied} text={m.label} placeholder={tr(preview, field.label)} onwrite={(text) => update(field, { modifiers: { label: text } })} /></td>
             <td>
               <input
                 class="mono"

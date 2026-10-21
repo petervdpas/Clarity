@@ -7,6 +7,7 @@
   import { projectEngines } from "./engines";
   import { findApp } from "./frame";
   import { languageName } from "./translate";
+  import { tr } from "./model";
   import type { Selected } from "./selection";
 
   let {
@@ -60,7 +61,7 @@
   const engines = $derived(projectEngines(preview.project));
   /** The language the texts are written in, and those the project translates them to. */
   const written = $derived(preview.project.locale.language ?? "en");
-  const languages = $derived(Object.keys(preview.project.translations).toSorted());
+  const languages = $derived(Object.keys(preview.project.translations).filter((l) => l !== written).toSorted());
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -71,7 +72,7 @@
   {#if app}
     <button class="row top" class:current={selected?.kind === "app"} onclick={onapp} title="The app: its frame and main window">
       <span class="badge app">app</span>
-      {app.title ?? app.name.name}
+      {app.title ? tr(preview, app.title) : app.name.name}
     </button>
   {:else if onnewapp}
     <button class="row add" onclick={onnewapp}>+ New app</button>
@@ -153,7 +154,7 @@
       <summary>i18n <span class="count">{languages.length + 1}</span></summary>
       <button class="row" class:current={is("language", written)} title="The language the texts are written in" onclick={() => onselect({ kind: "language", name: written })}>
         {languageName(written)}
-        <span class="note">{written}, as written</span>
+        <span class="note">{written}, default</span>
       </button>
       {#each languages as language (language)}
         <button class="row" class:current={is("language", language)} title="translations/{language}.clarity" onclick={() => onselect({ kind: "language", name: language })}>

@@ -266,6 +266,9 @@ fn go_file(body: &str) -> String {
     if body.contains("slices.") {
         imports.push("\t\"slices\"\n".to_string());
     }
+    if body.contains("sync.") {
+        imports.push("\t\"sync\"\n".to_string());
+    }
     // In the order gofmt keeps: by path.
     let mut third = Vec::new();
     if body.contains("clarity.") {

@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{EngineState, 
+use super::{EngineBody, EngineState, Keep, 
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -61,11 +61,12 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let mut cursor = Cursor::new(node.line);
     cursor.next();
     let name = cursor.expect_ident("an engine name")?;
-    if !cursor.eat_keyword("from") {
-        return Err(cursor.error_here("expected 'from' and its file, as in 'engine Pricing from \"pricing.wasm\"'"));
-    }
-    let file = cursor.expect_string("the engine's file in the engines folder")?;
+    // `engine Pricing from "pricing.wasm"` runs that file; without `from`,
+    // the engine is written in Clarity below its line.
+    let file = if cursor.eat_keyword("from") { cursor.expect_string("the engine's file in the engines folder")? } else { String::new() };
     cursor.expect_end()?;
+    let written = file.is_empty();
+    let mut body = EngineBody { keeps: Vec::new(), functions: Vec::new() };
     let mut functions = Vec::new();
     let (mut seconds, mut megabytes, mut limited) = (None, None, false);
     let mut uses = Vec::new();
@@ -168,6 +169,37 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             }
             continue;
         }
+        if line.eat_keyword("keep") {
+            let parsed = (|| {
+                if !written {
+                    return Err(line.error_here("only an engine written in Clarity keeps values; one with a file keeps its own"));
+                }
+                let name = line.expect_ident("the name of what it keeps")?;
+                line.expect(TokenKind::Colon, "':' and its type, as in 'keep moves: integer = 0'")?;
+                let ty = parse_type_ref(&mut line)?;
+                line.expect(TokenKind::Assign, "'=' and what it starts as, as in 'keep moves: integer = 0'")?;
+                let value = parse_expr(&mut line)?;
+                line.expect_end()?;
+                no_children(child)?;
+                Ok(Keep { name, ty, value, span: child.span() })
+            })();
+            match parsed {
+                Ok(keep) => body.keeps.push(keep),
+                Err(diag) => diagnostics.push(diag),
+            }
+            continue;
+        }
+        // An engine written in Clarity has its functions' code below them.
+        if written && line.peek().is_some_and(|t| t.text == "function") {
+            match parse_function(child, FunctionKind::Function, diagnostics) {
+                Ok(decl) => {
+                    functions.push(EngineFunction { name: decl.name.clone(), params: decl.params.clone(), returns: decl.returns.clone(), span: decl.span });
+                    body.functions.push(decl);
+                }
+                Err(diag) => diagnostics.push(diag),
+            }
+            continue;
+        }
         let parsed = (|| {
             if !line.eat_keyword("function") {
                 return Err(line.error_here("expected 'function' and its signature, as in 'function total(lines: list<Line>) -> money'"));
@@ -185,7 +217,8 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             Err(diag) => diagnostics.push(diag),
         }
     }
-    Ok(EngineDecl { name, file, uses, says, state, opens, seconds, megabytes, functions, span: node.span() })
+    let body = written.then_some(body);
+    Ok(EngineDecl { name, file, uses, says, state, opens, seconds, megabytes, functions, body, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {
@@ -566,6 +599,8 @@ fn is_place(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Name { .. } => true,
         ExprKind::Member { object, .. } => is_place(object),
+        // `squares[3] = 1`: a position of a list.
+        ExprKind::Index { list, .. } => is_place(list),
         _ => false,
     }
 }
@@ -762,15 +797,25 @@ fn parse_postfix(cursor: &mut Cursor) -> ParseResult<Expr> {
         return Ok(Expr { span: join(engine.span, close.span), kind: ExprKind::EngineCall { engine, function, args } });
     }
     let mut expr = parse_primary(cursor)?;
-    while cursor.eat(TokenKind::Dot) {
-        let member = cursor.expect_ident("a name after '.'")?;
-        expr = Expr {
-            span: join(expr.span, member.span),
-            kind: ExprKind::Member {
-                object: Box::new(expr),
-                member,
-            },
-        };
+    loop {
+        if cursor.eat(TokenKind::Dot) {
+            let member = cursor.expect_ident("a name after '.'")?;
+            expr = Expr {
+                span: join(expr.span, member.span),
+                kind: ExprKind::Member {
+                    object: Box::new(expr),
+                    member,
+                },
+            };
+        } else if cursor.peek_kind() == Some(TokenKind::LBracket) {
+            // `squares[3]`: a position of a list.
+            cursor.next();
+            let index = parse_expr(cursor)?;
+            let close = cursor.expect(TokenKind::RBracket, "']'")?;
+            expr = Expr { span: join(expr.span, close.span), kind: ExprKind::Index { list: Box::new(expr), index: Box::new(index) } };
+        } else {
+            break;
+        }
     }
     Ok(expr)
 }
@@ -789,6 +834,19 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             value: token.text.clone(),
         },
         TokenKind::Str => text_kind(token)?,
+        // `[0, 0, 0]`: a list of values.
+        TokenKind::LBracket => {
+            cursor.next();
+            let mut items = Vec::new();
+            if cursor.peek_kind() != Some(TokenKind::RBracket) {
+                items.push(parse_expr(cursor)?);
+                while cursor.eat(TokenKind::Comma) {
+                    items.push(parse_expr(cursor)?);
+                }
+            }
+            let close = cursor.expect(TokenKind::RBracket, "']'")?;
+            return Ok(Expr { span: join(token.span, close.span), kind: ExprKind::ListOf { items } });
+        }
         TokenKind::Key => {
             cursor.next();
             let key = Ident { name: token.text.clone(), span: token.span };

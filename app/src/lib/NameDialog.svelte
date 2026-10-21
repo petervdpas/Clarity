@@ -11,6 +11,7 @@
     action,
     file,
     error,
+    choice = null,
     onsubmit,
     oncancel,
   }: {
@@ -22,12 +23,18 @@
     /** The module proposed first. */
     file: SpecFile;
     error: string | null;
-    onsubmit: (file: SpecFile, name: string) => void;
+    /** A choice to make with the name, its first option picked to start with. */
+    choice?: { label: string; options: { value: string; label: string }[] } | null;
+    onsubmit: (file: SpecFile, name: string, picked: string) => void;
     oncancel: () => void;
   } = $props();
 
   let name = $state("");
   let path = $state("");
+  let picked = $state("");
+  $effect.pre(() => {
+    picked = choice?.options[0]?.value ?? "";
+  });
   $effect.pre(() => {
     path = file.path;
   });
@@ -35,7 +42,7 @@
   function submit(e: SubmitEvent) {
     e.preventDefault();
     const target = preview.project.files.find((f) => f.path === path);
-    if (target && name.trim()) onsubmit(target, name.trim());
+    if (target && name.trim()) onsubmit(target, name.trim(), picked);
   }
 </script>
 
@@ -57,6 +64,16 @@
         {/each}
       </select>
     </label>
+    {#if choice}
+      <label>
+        <span>{choice.label}</span>
+        <select bind:value={picked}>
+          {#each choice.options as o (o.value)}
+            <option value={o.value}>{o.label}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
     {#if error}<p class="error">{error}</p>{/if}
     <div class="buttons">
       <button type="button" onclick={oncancel}>Cancel</button>

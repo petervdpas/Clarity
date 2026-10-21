@@ -149,7 +149,8 @@ pub fn read_module(bytes: &[u8]) -> Result<Module, String> {
 pub fn attach(project: &mut Project, files: Vec<EngineFile>) {
     let mut found = Vec::new();
     for file in &project.files {
-        for engine in &file.engines {
+        // An engine written in Clarity has no file.
+        for engine in file.engines.iter().filter(|e| e.body.is_none()) {
             let at = |message: String| Diagnostic::error(format!("engine {}: '{}' {message}", engine.name.name, engine.file), engine.span).in_file(&file.path);
             let Some(bytes) = files.iter().find(|f| f.name == engine.file) else {
                 found.push(at("is not in the engines folder".into()));

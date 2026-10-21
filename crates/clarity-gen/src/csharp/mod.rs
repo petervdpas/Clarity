@@ -82,7 +82,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let texts = texts::Texts::of(project);
     let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.images.as_ref().is_some_and(|i| !i.is_empty()), engines))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -131,7 +131,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text(&themes::theme_path(theme), themes::theme_axaml(theme, &styles)));
     }
     files.push(text("AppThemes.cs", themes::app_themes(&offered, &name)));
-    files.extend(crate::web::picture_files(project, "images"));
+    files.extend(crate::web::resource_files(project, "resources", true));
     files.push(text("App.axaml", APP_AXAML.replace("{namespace}", &name).replace("    <!-- {styles} -->\n", &themes::style_classes(&styles))));
     Ok(files)
 }
@@ -158,14 +158,14 @@ fn main_window(project: &Project) -> Option<String> {
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
 /// references the runtime's own projects there instead, for working on them.
-fn csproj(name: &str, servers: &[&Server], pictures: bool, engines: bool) -> String {
+fn csproj(name: &str, servers: &[&Server], carried: bool, engines: bool) -> String {
     let version = runtime_version();
     // Engines need Wasmtime, which only an application with an engine carries.
     let packages: Vec<&str> = std::iter::once(UI_PACKAGE).chain(servers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
-    // The pictures of the project's images folder, embedded.
-    let mut resources = if pictures { "  <ItemGroup>\n    <AvaloniaResource Include=\"images/**\" />\n  </ItemGroup>\n".to_string() } else { String::new() };
+    // The files of the project's resources folder, embedded.
+    let mut resources = if carried { "  <ItemGroup>\n    <AvaloniaResource Include=\"resources/**\" />\n  </ItemGroup>\n".to_string() } else { String::new() };
     // The engines' files, embedded under their names.
     if engines {
         resources.push_str("  <ItemGroup>\n    <EmbeddedResource Include=\"Engines/*.wasm\" LogicalName=\"Engines/%(Filename)%(Extension)\" />\n  </ItemGroup>\n");

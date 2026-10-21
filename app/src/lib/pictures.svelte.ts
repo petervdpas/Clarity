@@ -6,7 +6,7 @@ import { Pictures, type PictureLoader } from "./pictures";
 let version = $state(0);
 let pictures = new Pictures(null, () => version++);
 
-/** The URL of a picture of the images folder, as pictures.ts gives it. */
+/** The URL of a picture of the resources folder, as pictures.ts gives it. */
 export function pictureUrl(name: string): string | null | undefined {
   void version;
   return pictures.url(name);

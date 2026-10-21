@@ -919,6 +919,20 @@ impl<'a> Checker<'a> {
         let info = widgets::info(p.kind);
         let at = format!("{name} at {},{}", p.col, p.row);
 
+        // A markdown's text is a file of the resources folder or a text it binds, never a key.
+        if p.kind == WidgetKind::Markdown {
+            if p.caption.is_some() {
+                self.error(
+                    file,
+                    "a markdown shows a Markdown file of the resources folder (source \"rules.md\") or a text it binds, not a key".to_string(),
+                    widget.span,
+                );
+            }
+            if p.source.is_some() && p.bind.is_some() {
+                self.error(file, "a markdown shows a Markdown file (source) or a text it binds, not both".to_string(), widget.span);
+            }
+        }
+
         let Some(bind) = &p.bind else {
             if !p.columns.is_empty() || !p.edit.is_empty() || !p.show.is_empty() {
                 self.error(

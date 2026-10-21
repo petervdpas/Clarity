@@ -1,4 +1,4 @@
-// Where the renderer finds a picture of the project's images folder. A
+// Where the renderer finds a picture of the project's resources folder. A
 // generated application carries the pictures next to its renderer; the
 // designer asks Clarity for them, since the page cannot read the project
 // folder, and shows each one once it has come.
@@ -12,7 +12,7 @@ export type PictureLoader = (name: string) => Promise<string>;
  */
 export function bundled(name: string): string {
   const carried = (globalThis as { clarityPictures?: Record<string, string> }).clarityPictures?.[name];
-  return carried ?? `images/${encodeURIComponent(name)}`;
+  return carried ?? `resources/${encodeURIComponent(name)}`;
 }
 
 export class Pictures {

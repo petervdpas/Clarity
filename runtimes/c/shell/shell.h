@@ -63,6 +63,11 @@ void clarity_service_free(ClarityService* service);
 /// Runs a command: the same commands, with the same arguments, as the
 /// Tauri shell has. Answers `{"value": ...}` or `{"error": ...}`, in the scratch arena.
 cJSON* clarity_service_invoke(ClarityService* service, const char* command, const cJSON* args, ClarityDesktop* caller);
+/// Opens a link in the person's browser; whether it could.
+bool clarity_open_in_browser(const char* address);
+/// How the service opens a link of a markdown part: clarity_open_in_browser
+/// unless set otherwise, as tests do.
+void clarity_service_on_link(ClarityService* service, bool (*open_link)(const char* address));
 /// What the service asks of the desktop, set by clarity_shell_run: ending
 /// the program, and opening a desktop window of its own, named `name`, for
 /// the opener, at `width` x `height` (the window's size, or the standard one).

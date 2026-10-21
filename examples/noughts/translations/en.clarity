@@ -12,7 +12,6 @@ translation en
     quitItem "Quit"
     gameTitle "Noughts and crosses"
     gameStatus "Your move"
-    gameRules "Click a square to put your cross there; the computer answers with a nought. Three in a row wins."
     helpHeadingCaption "How to play"
     newGameCaption "New game"
     yes "Yes"

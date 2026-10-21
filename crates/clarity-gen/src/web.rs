@@ -306,22 +306,29 @@ pub fn renderer_files(project: &Project) -> Vec<OutFile> {
     if let Some(index) = files.iter_mut().find(|f| f.path == "ui/index.html") {
         index.text = index.text.replace("  </head>", &format!("{links}  </head>"));
     }
-    files.extend(picture_files(project, "ui/images"));
+    files.extend(resource_files(project, "ui/resources", false));
     files
 }
 
-/// The pictures of the project's images folder, in `folder` of the output.
-pub(crate) fn picture_files(project: &Project, folder: &str) -> Vec<OutFile> {
-    project
-        .images
-        .iter()
-        .flatten()
-        .map(|image| OutFile {
-            path: format!("{folder}/{}", image.name),
-            text: String::new(),
-            bytes: Some(std::borrow::Cow::Owned(image.bytes.clone())),
-        })
-        .collect()
+/// The files of the project's resources folder, in `folder` of the output.
+/// With `markdown`, its Markdown files too, a file per language as in the
+/// project (`rules.md`, `rules.nl.md`); the web renderer reads those from
+/// the model instead.
+pub(crate) fn resource_files(project: &Project, folder: &str, markdown: bool) -> Vec<OutFile> {
+    let Some(resources) = &project.resources else { return Vec::new() };
+    let binary = |name: &str, bytes: Vec<u8>| OutFile { path: format!("{folder}/{name}"), text: String::new(), bytes: Some(std::borrow::Cow::Owned(bytes)) };
+    let mut files: Vec<OutFile> = resources.files.iter().map(|f| binary(&f.name, f.bytes.clone())).collect();
+    if markdown {
+        let default = clarity_spec::translations::default_language(project);
+        for (name, languages) in &resources.markdown {
+            let stem = name.strip_suffix(".md").unwrap_or(name);
+            for (language, text) in languages {
+                let file = if *language == default { name.clone() } else { format!("{stem}.{language}.md") };
+                files.push(binary(&file, text.as_bytes().to_vec()));
+            }
+        }
+    }
+    files
 }
 
 /// The windows, the frame and the data dictionary, for the renderer. File
@@ -360,7 +367,7 @@ pub fn single_page(project: &Project) -> String {
     let pictures: serde_json::Map<String, serde_json::Value> = files
         .iter()
         .filter_map(|f| {
-            let name = f.path.strip_prefix("ui/images/")?;
+            let name = f.path.strip_prefix("ui/resources/").filter(|n| clarity_spec::resources::is_picture(n))?;
             let bytes = f.bytes.as_deref()?;
             let kind = match name.rsplit('.').next().unwrap_or_default().to_lowercase().as_str() {
                 "png" => "image/png",

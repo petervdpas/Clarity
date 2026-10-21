@@ -32,6 +32,12 @@
     {:else if kind === "text"}
       <text x="5" y="17.5" class="ink small">Ada Lovelace</text>
       <line x1="4" y1="21" x2="44" y2="21" class="dashed" />
+    {:else if kind === "markdown"}
+      <text x="4" y="10" class="ink bold small"># Rules</text>
+      <circle cx="6" cy="16" r="1" class="fill" />
+      <line x1="9" y1="16" x2="36" y2="16" />
+      <circle cx="6" cy="22" r="1" class="fill" />
+      <line x1="9" y1="22" x2="30" y2="22" />
     {:else if kind === "memo"}
       <rect x="4" y="3" width="40" height="22" rx="2" />
       <line x1="8" y1="9" x2="38" y2="9" />

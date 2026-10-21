@@ -57,7 +57,7 @@ An engine built elsewhere, in another language, is a file only: put it in the `e
 
 ## Declaring an engine
 
-Put the file in the `engines` folder of the module folder, next to `images`:
+Put the file in the `engines` folder of the module folder, next to `resources`:
 
 ```text
 shop.clarity

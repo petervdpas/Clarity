@@ -1,0 +1,159 @@
+{
+  "about": "The markdown part's Markdown, as every renderer reads it, into blocks and their spans. Blocks: a line `#` to `######` and a space is a `heading` of that `level`; a line `-`, `*` or `+` and a space, or a number with `.` or `)` and a space, is an `item` (`ordered` with its `number` for a number), whose `depth` is its leading spaces halved, at most 3; a fence of three backticks starts a `code` block, its lines as written up to the closing fence; other lines are a `paragraph`. Lines that follow a paragraph or an item without a blank line join it, with one space. A blank line ends a paragraph or an item. Spans: the text of a block split where its look changes, merged where it does not; a span lists only what holds for it (`bold`, `italic`, `code`, `link`). Inline: a backslash takes the next punctuation as written; `code` between backticks is as written; `**` or `__` around text is bold, `*` or `_` around text is italic (a `_` inside a word is a letter); a delimiter followed by a space, or never closed, is a letter. `[text](address)` is a link when the address starts with `http://`, `https://` or `mailto:`; with another address only its text shows. HTML is text.",
+  "cases": [
+    {
+      "name": "a paragraph",
+      "markdown": "Nine squares in three rows.",
+      "blocks": [{ "kind": "paragraph", "spans": [{ "text": "Nine squares in three rows." }] }]
+    },
+    {
+      "name": "lines join, a blank line parts",
+      "markdown": "You play the crosses\nand move first.\n\nThe computer plays the noughts.",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "You play the crosses and move first." }] },
+        { "kind": "paragraph", "spans": [{ "text": "The computer plays the noughts." }] }
+      ]
+    },
+    {
+      "name": "headings",
+      "markdown": "# How to play\n## Winning\n###### Small\n#NoSpace",
+      "blocks": [
+        { "kind": "heading", "level": 1, "spans": [{ "text": "How to play" }] },
+        { "kind": "heading", "level": 2, "spans": [{ "text": "Winning" }] },
+        { "kind": "heading", "level": 6, "spans": [{ "text": "Small" }] },
+        { "kind": "paragraph", "spans": [{ "text": "#NoSpace" }] }
+      ]
+    },
+    {
+      "name": "bold, italic and code",
+      "markdown": "Get **three in a row** to *win*; press `Ctrl+N` for __a new__ _game_.",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            { "text": "Get " },
+            { "text": "three in a row", "bold": true },
+            { "text": " to " },
+            { "text": "win", "italic": true },
+            { "text": "; press " },
+            { "text": "Ctrl+N", "code": true },
+            { "text": " for " },
+            { "text": "a new", "bold": true },
+            { "text": " " },
+            { "text": "game", "italic": true },
+            { "text": "." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bold inside italic, and italic inside bold",
+      "markdown": "*a **b** c* and **d *e* f**",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            { "text": "a ", "italic": true },
+            { "text": "b", "bold": true, "italic": true },
+            { "text": " c", "italic": true },
+            { "text": " and " },
+            { "text": "d ", "bold": true },
+            { "text": "e", "bold": true, "italic": true },
+            { "text": " f", "bold": true }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "letters that look like marks",
+      "markdown": "snake_case_name, 2 * 3 * 4, **open, a \\*star\\* and `tick",
+      "blocks": [{ "kind": "paragraph", "spans": [{ "text": "snake_case_name, 2 * 3 * 4, **open, a *star* and `tick" }] }]
+    },
+    {
+      "name": "code keeps its marks",
+      "markdown": "Type `**not bold**` here.",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [{ "text": "Type " }, { "text": "**not bold**", "code": true }, { "text": " here." }]
+        }
+      ]
+    },
+    {
+      "name": "links",
+      "markdown": "See [the rules](https://example.com/rules), [**mail**](mailto:help@example.com) and [a file](file:///etc/passwd).",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "spans": [
+            { "text": "See " },
+            { "text": "the rules", "link": "https://example.com/rules" },
+            { "text": ", " },
+            { "text": "mail", "bold": true, "link": "mailto:help@example.com" },
+            { "text": " and a file." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a bracket that is no link",
+      "markdown": "Squares [1] to [9] (left to right).",
+      "blocks": [{ "kind": "paragraph", "spans": [{ "text": "Squares [1] to [9] (left to right)." }] }]
+    },
+    {
+      "name": "bullet and numbered items",
+      "markdown": "- Click a square\n* Wait for the computer\n+ Repeat\n\n1. First\n2) Second\n10. Tenth",
+      "blocks": [
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "Click a square" }] },
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "Wait for the computer" }] },
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "Repeat" }] },
+        { "kind": "item", "depth": 0, "ordered": true, "number": 1, "spans": [{ "text": "First" }] },
+        { "kind": "item", "depth": 0, "ordered": true, "number": 2, "spans": [{ "text": "Second" }] },
+        { "kind": "item", "depth": 0, "ordered": true, "number": 10, "spans": [{ "text": "Tenth" }] }
+      ]
+    },
+    {
+      "name": "deeper items, and lines that join an item",
+      "markdown": "- Win\n  - a row\n    - across\n          - very deep\n- Lose when\n  the computer\nhas three",
+      "blocks": [
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "Win" }] },
+        { "kind": "item", "depth": 1, "ordered": false, "spans": [{ "text": "a row" }] },
+        { "kind": "item", "depth": 2, "ordered": false, "spans": [{ "text": "across" }] },
+        { "kind": "item", "depth": 3, "ordered": false, "spans": [{ "text": "very deep" }] },
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "Lose when the computer has three" }] }
+      ]
+    },
+    {
+      "name": "a paragraph after items needs a blank line",
+      "markdown": "- one\n\nAfter the list.",
+      "blocks": [
+        { "kind": "item", "depth": 0, "ordered": false, "spans": [{ "text": "one" }] },
+        { "kind": "paragraph", "spans": [{ "text": "After the list." }] }
+      ]
+    },
+    {
+      "name": "a code block",
+      "markdown": "Like this:\n```clarity\nbutton @newGameCaption\n  **as written**\n```\nDone.",
+      "blocks": [
+        { "kind": "paragraph", "spans": [{ "text": "Like this:" }] },
+        { "kind": "code", "text": "button @newGameCaption\n  **as written**" },
+        { "kind": "paragraph", "spans": [{ "text": "Done." }] }
+      ]
+    },
+    {
+      "name": "a code block never closed runs to the end",
+      "markdown": "```\nline one\n\nline three",
+      "blocks": [{ "kind": "code", "text": "line one\n\nline three" }]
+    },
+    {
+      "name": "HTML is text",
+      "markdown": "<b>bold?</b> & <script>",
+      "blocks": [{ "kind": "paragraph", "spans": [{ "text": "<b>bold?</b> & <script>" }] }]
+    },
+    {
+      "name": "nothing",
+      "markdown": "\n\n   \n",
+      "blocks": []
+    }
+  ]
+}

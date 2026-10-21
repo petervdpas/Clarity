@@ -116,20 +116,39 @@ translation nl
 - A project written before texts had keys gets them with **Make texts keys**, or `clarity spec keys <folder>`: each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value, and old translation files give the same keys their translations.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
 
-### Pictures
+### Resources
 
-The `images` folder of the module folder holds the fixed pictures of the application, such as a logo. An image part shows one by its file name:
+The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, and its Markdown files, such as the rules of a game. Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the resources as they are in the folder, and shows them again when the folder changes.
+
+#### Pictures
+
+An image part shows a picture by its file name:
 
 ```clarity
-// records/images/logo.png
+// records/resources/logo.png
 page AlbumBrowse: window
     image name image1 at 12,1 span 1 rows 1 source "logo.png"
 ```
 
-- The picture must be in the `images` folder; a name that is not there is an error that lists what is.
+- The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are.
 - A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file, which every stack shows without extra libraries.
-- Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the pictures as they are in the folder, and shows them again when the folder changes.
 - The picture keeps its proportions inside the part.
+
+#### Markdown
+
+A markdown part shows a Markdown file by its name, in the language the application shows:
+
+```clarity
+// noughts/resources/rules.md, and rules.nl.md in Dutch
+sidebar left name help width 320 grid 1 columns
+    markdown name rulesText at 1,1 span 1 rows 12 source "rules.md"
+```
+
+- `rules.md` is the default language's; each other language of the project has its own file beside it, `rules.nl.md` for Dutch. A language without its file is an error, as every language file has every key.
+- A markdown part can show a text instead, `bind notes`, of a field or a plain value of the window. It never shows a key: long texts belong in the resources, not in the language files.
+- Every stack reads the same Markdown: headings (`#` to `######`), paragraphs, bullet and numbered items (indented two spaces per level), `**bold**`, `*italic*`, `` `code` ``, code blocks between three backticks, and links `[text](https://...)`. HTML is text. `conformance/markdown.json` gives each case.
+- A link opens in the person's browser when it is an `http`, `https` or `mailto` address; with any other address only its text shows.
+- The part wraps its text and scrolls when it is longer than the part.
 
 ## 3. Modules
 
@@ -494,6 +513,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `help` | nothing | `for input` | none |
 | `heading` | nothing | none | none |
 | `text` | a field of any type: `bind customer.name` | none | none |
+| `markdown` | a Markdown file of the resources folder, `source "rules.md"`, or a text: `bind notes` | `source "file"` | none |
 
 **Input**
 
@@ -532,7 +552,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the images folder | `click` |
+| `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
 | `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `draw`, `click`, `pointer`, `key` |
 

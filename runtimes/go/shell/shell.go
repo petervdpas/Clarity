@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
@@ -92,12 +93,27 @@ type Service struct {
 	mu    sync.Mutex
 	apart map[string]apart
 	next  int
+	// openURL opens a link in the person's browser.
+	openURL func(address string) error
 }
 
 func New(options Options) *Service {
 	// Text code makes is translated from the model's translations.
 	clarity.LoadTranslations(options.Model)
-	return &Service{options: options, apart: map[string]apart{}}
+	return &Service{options: options, apart: map[string]apart{}, openURL: func(address string) error {
+		return application.Get().Browser.OpenURL(address)
+	}}
+}
+
+// opensLink says whether a link of a markdown part may open: a web or a
+// mail address, as every stack allows.
+func opensLink(address string) bool {
+	for _, scheme := range []string{"http://", "https://", "mailto:"} {
+		if strings.HasPrefix(address, scheme) {
+			return true
+		}
+	}
+	return false
 }
 
 func failed(err error) Answer {
@@ -160,6 +176,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Field    string              `json:"field"`
 		Store    string              `json:"store"`
 		Path     string              `json:"path"`
+		Address  string              `json:"address"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -217,6 +234,14 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	case "set_title":
 		if window := caller(ctx); window != nil {
 			window.SetTitle(a.Title)
+		}
+		return Answer{}
+	case "open_link":
+		if !opensLink(a.Address) {
+			return Answer{Error: "a link opens only an http, https or mailto address, not " + a.Address}
+		}
+		if err := c.openURL(a.Address); err != nil {
+			return Answer{Error: fmt.Sprintf("cannot open %s: %v", a.Address, err)}
 		}
 		return Answer{}
 	case "quit_app":

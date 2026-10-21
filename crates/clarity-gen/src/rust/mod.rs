@@ -548,6 +548,22 @@ fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<Str
     locked(&app, |db| clarity_runtime::picture::data_url(&db.store_file(&store, &path)?))
 }}
 
+/// Opens a link of a markdown part in the person's browser: only a web or a
+/// mail address, as on every stack.
+#[tauri::command]
+fn open_link(address: String) -> Result<(), String> {{
+    if !["http://", "https://", "mailto:"].iter().any(|scheme| address.starts_with(scheme)) {{
+        return Err(format!("a link opens only an http, https or mailto address, not {{address}}"));
+    }}
+    #[cfg(target_os = "windows")]
+    let opened = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &address]).spawn();
+    #[cfg(target_os = "macos")]
+    let opened = std::process::Command::new("open").arg(&address).spawn();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let opened = std::process::Command::new("xdg-open").arg(&address).spawn();
+    opened.map(|_| ()).map_err(|err| format!("cannot open {{address}}: {{err}}"))
+}}
+
 #[tauri::command]
 fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
@@ -589,6 +605,7 @@ fn main() {{
             store_file,{apart_commands}
             set_language,
             set_title,
+            open_link,
             quit_app
         ])
         .run(tauri::generate_context!())

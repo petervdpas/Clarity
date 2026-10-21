@@ -13,6 +13,7 @@ import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
 import { scheme, themeChoice } from "./scheme.svelte";
 import { keepsItsDigits } from "./windowData";
+import { markdownIn } from "./markdownBlocks";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -49,6 +50,12 @@ export function languageOf(preview: Preview): string | null {
 /** The values to look keys up in, in the language texts show in. */
 export function textsOf(preview: Preview): Texts {
   return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en" };
+}
+
+/** Markdown file `name` of the project's resources, in the language texts show in. */
+export function markdownOf(preview: Preview, name: string): string {
+  const texts = textsOf(preview);
+  return markdownIn(preview.project.resources?.markdown, name, texts.picked ?? texts.fallback, texts.fallback);
 }
 
 /** A text of the project as the person reads it: a key's value, or as written. */

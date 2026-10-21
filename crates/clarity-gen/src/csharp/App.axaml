@@ -38,6 +38,11 @@
     <Style Selector="TextBlock.label, TextBlock.value, TextBlock.status">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- A text over several rows: read from the top, wrapped; its ScrollViewer scrolls it. -->
+    <Style Selector="TextBlock.value.lines">
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
     <Style Selector="TextBlock.help">
       <Setter Property="FontSize" Value="{DynamicResource ClaritySizeSmall}" />
       <Setter Property="Foreground" Value="{DynamicResource ClarityMuted}" />

@@ -4,8 +4,8 @@ import { Pictures, bundled } from "./pictures.ts";
 
 test("a generated application finds a picture next to its renderer", () => {
   const pictures = new Pictures(null, () => {});
-  assert.equal(pictures.url("logo.png"), "images/logo.png");
-  assert.equal(bundled("my logo.png"), "images/my%20logo.png");
+  assert.equal(pictures.url("logo.png"), "resources/logo.png");
+  assert.equal(bundled("my logo.png"), "resources/my%20logo.png");
 });
 
 test("the designer loads a picture once, and shows it when it has come", async () => {
@@ -39,7 +39,7 @@ test("a program that carries its pictures in the page gives them from there", ()
   page.clarityPictures = { "logo.png": "data:image/png;base64,iVBORw0KGgo=" };
   try {
     assert.equal(bundled("logo.png"), "data:image/png;base64,iVBORw0KGgo=");
-    assert.equal(bundled("other.png"), "images/other.png");
+    assert.equal(bundled("other.png"), "resources/other.png");
   } finally {
     delete page.clarityPictures;
   }

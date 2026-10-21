@@ -23,7 +23,7 @@ Clarity writes a .NET project into the output folder (`out` by default). `<Name>
 - `Schema.cs`: the migration steps of every database Clarity owns.
 - `Texts.resx` with the texts as written, `Texts.<language>.resx` per language, and `Texts.cs`, a typed class with a property per text. See [Languages](languages.md).
 - `Themes/<Theme>.axaml` per offered theme, with its Light and Dark colors, and `AppThemes.cs`, which lists them. See [Themes](themes.md).
-- `images/`: the project's pictures, embedded in the program.
+- `resources/`: the project's resources (pictures and Markdown files), embedded in the program.
 - `README.md`: how to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again.

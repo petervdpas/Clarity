@@ -33,7 +33,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Entities and enums](data.entities.md): How you describe your data with entities and enums, the field types and modifiers, and how the entity editor writes them for you.
 - [Migrations](data.migrations.md): How a database follows your entities through migration steps, written as Clarity files that Clarity proposes and the program runs when it starts.
 - [Data sources](data.sources.md): Where your records live: SQLite and the server databases, keeping passwords out of the project, several sources, and external databases that Clarity reads without owning.
-- [Pictures and files](data.pictures-files.md): How an application shows fixed pictures from the images folder, keeps pictures in records (in the database or in a file store), and reads and writes files from code.
+- [Pictures and files](data.pictures-files.md): How an application shows fixed pictures from the resources folder, keeps pictures in records (in the database or in a file store), and reads and writes files from code.
 
 ## Languages and looks
 

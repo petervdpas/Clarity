@@ -233,12 +233,12 @@
     }
   }
 
-  /** The pictures the designer has loaded, by the names of the images folder. */
+  /** The pictures the designer has loaded, by the names of the resources folder. */
   let pictureNames: string | null = null;
 
   function applyPreview(next: Preview) {
-    // Pictures load again when the images folder changes.
-    const names = JSON.stringify(next.project.images?.map((i) => i.name) ?? []);
+    // Pictures load again when the resources folder changes.
+    const names = JSON.stringify(next.project.resources?.files.map((f) => f.name) ?? []);
     if (names !== pictureNames) {
       pictureNames = names;
       loadPicturesWith((name) => invoke<string>("project_picture", { name }));

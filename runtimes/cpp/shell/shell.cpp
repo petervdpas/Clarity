@@ -2,6 +2,14 @@
 
 #include <cstdlib>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <spawn.h>
+extern char** environ;
+#endif
+
 #include "webview/webview.h"
 
 namespace clarity::shell {
@@ -19,6 +27,30 @@ json failed(const std::exception& e) {
 json value(json v) { return {{"value", std::move(v)}}; }
 
 std::string text_of(const json& args, const char* key) { return args.contains(key) && args[key].is_string() ? args[key].get<std::string>() : ""; }
+
+}  // namespace
+
+bool open_in_browser(const std::string& address) {
+#if defined(_WIN32)
+    return reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", address.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32;
+#else
+#if defined(__APPLE__)
+    const char* opener = "open";
+#else
+    const char* opener = "xdg-open";
+#endif
+    char* argv[] = {const_cast<char*>(opener), const_cast<char*>(address.c_str()), nullptr};
+    pid_t pid;
+    return posix_spawnp(&pid, opener, nullptr, nullptr, argv, environ) == 0;
+#endif
+}
+
+namespace {
+
+/// Whether a link of a markdown part may open: a web or a mail address, as on every stack.
+bool link_opens(const std::string& address) {
+    return address.rfind("http://", 0) == 0 || address.rfind("https://", 0) == 0 || address.rfind("mailto:", 0) == 0;
+}
 
 }  // namespace
 
@@ -65,6 +97,12 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         }
         if (command == "set_title") {
             if (caller) caller->set_title(text_of(args, "title"));
+            return value(nullptr);
+        }
+        if (command == "open_link") {
+            std::string address = text_of(args, "address");
+            if (!link_opens(address)) return {{"error", "a link opens only an http, https or mailto address, not " + address}};
+            if (!open_link || !open_link(address)) return {{"error", "cannot open " + address}};
             return value(nullptr);
         }
         if (command == "quit_app") {

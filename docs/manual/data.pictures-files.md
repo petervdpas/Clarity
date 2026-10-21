@@ -1,18 +1,18 @@
 # Pictures and files
 
-How an application shows fixed pictures from the images folder, keeps pictures in records (in the database or in a file store), and reads and writes files from code.
+How an application shows fixed pictures from the resources folder, keeps pictures in records (in the database or in a file store), and reads and writes files from code.
 
 ## Fixed pictures
 
-The `images` folder of the module folder holds the application's fixed pictures, such as a logo. An image part shows one by its file name, given as its `source` (the **Source** property in the designer):
+The `resources` folder of the module folder holds the application's fixed pictures, such as a logo, beside its Markdown files (see [Parts](design.parts.md)). An image part shows one by its file name, given as its `source` (the **Source** property in the designer):
 
 ```clarity
-// records/images/logo.png
+// records/resources/logo.png
 page AlbumBrowse: window
     image name image1 at 12,1 span 1 rows 1 source "logo.png"
 ```
 
-The picture must be in the `images` folder; a name that is not there is an error that lists what is. A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file. Every generated application carries the folder, and the designer shows the pictures again when the folder changes. A picture keeps its proportions inside its part.
+The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are. A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file. Every generated application carries the folder, and the designer shows the pictures again when the folder changes. A picture keeps its proportions inside its part.
 
 ## Pictures in records
 

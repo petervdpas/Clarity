@@ -17,6 +17,7 @@ pub enum WidgetKind {
     Help,
     Heading,
     Text,
+    Markdown,
     Textbox,
     Memo,
     Password,
@@ -309,6 +310,12 @@ const ENTRIES: &[Entry] = &[
     text_part(WidgetKind::Help, "help", "Help text", (4, 1), None, BindTarget::Nothing, &[WidgetProperty::For]),
     text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Nothing, &[]),
     text_part(WidgetKind::Text, "text", "Text", (4, 1), None, BindTarget::Field, &[]),
+    // Text written in Markdown: a file of the resources folder
+    // (`source "rules.md"`, one per language) or a text it binds.
+    Entry {
+        field_types: &["text"],
+        ..text_part(WidgetKind::Markdown, "markdown", "Markdown", (6, 4), None, BindTarget::Field, &[WidgetProperty::Source])
+    },
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Password, "password", "Password", (4, 1), &["text"], INPUT_EVENTS, TYPED),
@@ -466,7 +473,7 @@ const ENTRIES: &[Entry] = &[
         size: (3, 3),
         caption: None,
         // A picture of a record (`bind album.cover`), or a fixed one of the
-        // images folder (`source "logo.png"`).
+        // resources folder (`source "logo.png"`).
         bind: BindTarget::Field,
         field_types: &["image"],
         // Bound, it takes a picture from a file: a label or help is for it.
@@ -967,6 +974,7 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::List
             | WidgetKind::Image
             | WidgetKind::Canvas
+            | WidgetKind::Markdown
     )
 }
 

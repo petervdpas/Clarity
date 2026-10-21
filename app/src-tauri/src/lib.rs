@@ -2,6 +2,7 @@
 //! and their history; the frontend only renders the `Preview` it receives.
 
 mod build;
+mod links;
 mod engines;
 mod external;
 mod themes;
@@ -106,12 +107,12 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     ) && event.paths.iter().any(|p| {
         let folder = p.parent();
-        let images = dir.join(clarity_spec::images::IMAGES_DIR);
+        let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
         let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
         p == file
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
-            || *p == images
-            || folder == Some(&images)
+            || *p == resources
+            || folder == Some(&resources)
             || *p == engines
             || folder == Some(&engines)
     })
@@ -130,12 +131,12 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    // The migration steps, the pictures and the engines too, once the project has them.
+    // The migration steps, the resources and the engines too, once the project has them.
     let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
-    let images = dir.join(clarity_spec::images::IMAGES_DIR);
+    let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
     let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
     let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    for extra in [&steps, &images, &engines] {
+    for extra in [&steps, &resources, &engines] {
         if extra.is_dir() {
             folders.push(extra);
         }
@@ -812,7 +813,8 @@ pub fn run() {
             agent::agent_send,
             agent::agent_stop,
             agent::agent_answer,
-            agent::agent_forget
+            agent::agent_forget,
+            links::open_link
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");
@@ -960,13 +962,13 @@ mod tests {
         assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/migrations/0002.clarity"));
     }
 
-    /// A picture added, changed or removed, and the images folder itself.
+    /// A resource added, changed or removed, and the resources folder itself.
     #[test]
-    fn reacts_to_changes_of_the_pictures() {
-        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/images/logo.png"));
-        assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/images/logo.png"));
-        assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/images/logo.png"));
-        assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/images"));
+    fn reacts_to_changes_of_the_resources() {
+        assert!(changes(EventKind::Create(CreateKind::File), "/p/shop/resources/logo.png"));
+        assert!(changes(EventKind::Modify(ModifyKind::Any), "/p/shop/resources/rules.nl.md"));
+        assert!(changes(EventKind::Remove(notify::event::RemoveKind::File), "/p/shop/resources/logo.png"));
+        assert!(changes(EventKind::Create(CreateKind::Folder), "/p/shop/resources"));
         assert!(!changes(EventKind::Create(CreateKind::File), "/p/shop/notes.txt"));
     }
 

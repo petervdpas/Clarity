@@ -672,3 +672,32 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    });");
     has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickAt_DialCommand}\"");
 }
+
+/// A text over more rows than one is for reading: it wraps from the top,
+/// keeps its paragraphs and scrolls when it is longer than its rows. A text
+/// of one row stays one line.
+#[test]
+fn a_text_over_several_rows_wraps_and_scrolls() {
+    let source = format!(
+        "{SHOP}
+page Rules: window
+    title \"Rules\"
+    data rules: text, default \"one\"
+    text name rulesText at 1,1 span 4 rows 3 bind rules
+    text name shortText at 1,4 span 4 bind rules
+"
+    );
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let view = file(&files, "Windows/RulesView.axaml");
+    has(
+        view,
+        "<ScrollViewer Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Grid.RowSpan=\"3\" HorizontalScrollBarVisibility=\"Disabled\" VerticalScrollBarVisibility=\"Auto\" IsVisible=\"{Binding RulesText.IsVisible}\">",
+    );
+    has(view, "<TextBlock x:Name=\"rulesText\" Classes=\"value lines\" Text=\"{Binding Rules, Converter={x:Static local:Shown.Converter}}\" IsEnabled=\"{Binding RulesText.IsEnabled}\" />");
+    has(view, "<TextBlock x:Name=\"shortText\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Classes=\"value\" ");
+    // The style of the lines: wrapped, from the top.
+    let app = file(&files, "App.axaml");
+    has(app, "<Style Selector=\"TextBlock.value.lines\">\n      <Setter Property=\"VerticalAlignment\" Value=\"Top\" />\n      <Setter Property=\"TextWrapping\" Value=\"Wrap\" />\n    </Style>");
+}

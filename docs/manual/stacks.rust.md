@@ -21,7 +21,7 @@ Clarity writes a Cargo project into the output folder (`out` by default):
 - `src/schema.rs`: the migration steps of every database Clarity owns.
 - `src/main.rs`: opens and migrates the databases and starts the Tauri application.
 - `src/model.json`: the windows as the renderer reads them.
-- `ui/`: the web renderer (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme, and the project's pictures in `ui/images`.
+- `ui/`: the web renderer (`index.html`, `runtime.js`, `runtime.css`), a CSS file per theme, and the project's pictures in `ui/resources`.
 - `icons/icon.png` and a `README.md` that says how to build the project without Clarity.
 
 Do not edit these files. Change the project in Clarity; it writes the folder again. See [Run and Build](project.run-build.md).

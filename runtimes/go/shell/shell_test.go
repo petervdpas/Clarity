@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
@@ -236,5 +237,24 @@ func TestAClosedWindowIsReported(t *testing.T) {
 	}
 	if len(closed) != 1 || closed[0] != opened.State.Instance {
 		t.Fatalf("closed %v, window %d", closed, opened.State.Instance)
+	}
+}
+
+func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
+	c, _ := service(t)
+	var opened []string
+	c.openURL = func(address string) error {
+		opened = append(opened, address)
+		return nil
+	}
+	if got := wire(t, call(t, c, "open_link", `{"address":"https://example.com/rules"}`)); got != `{"value":null}` {
+		t.Fatal(got)
+	}
+	call(t, c, "open_link", `{"address":"mailto:help@example.com"}`)
+	if got := wire(t, call(t, c, "open_link", `{"address":"file:///etc/passwd"}`)); got != `{"error":"a link opens only an http, https or mailto address, not file:///etc/passwd"}` {
+		t.Fatal(got)
+	}
+	if strings.Join(opened, " ") != "https://example.com/rules mailto:help@example.com" {
+		t.Fatal(opened)
 	}
 }

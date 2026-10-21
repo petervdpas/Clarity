@@ -79,6 +79,14 @@ static void fake_open(void* context, ClarityDesktop* opener, const char* name, i
     fake->height = height;
 }
 
+/// The last link the shell opened, in place of the browser.
+static const char* last_link;
+
+static bool fake_link(const char* address) {
+    last_link = clarity_copy(address);
+    return true;
+}
+
 static cJSON* invoked(ClarityService* s, const char* command, const char* args, ClarityDesktop* caller) {
     return clarity_service_invoke(s, command, cJSON_Parse(args), caller);
 }
@@ -111,6 +119,14 @@ void the_shell_answers_the_renderers_commands(void) {
     CHECK_JSON(invoked(s, "nonsense", "{}", NULL), "{\"error\":\"there is no command nonsense\"}");
     CHECK_JSON(invoked(s, "start_app", "{}", NULL),
                "{\"value\":{\"state\":{\"window\":\"\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],\"open\":[],\"close\":false}}");
+
+    // A link of a markdown part opens in the browser: only a web or a mail address.
+    clarity_service_on_link(s, fake_link);
+    CHECK_JSON(invoked(s, "open_link", "{\"address\":\"https://example.com/rules\"}", NULL), "{\"value\":null}");
+    CHECK_TEXT(last_link, "https://example.com/rules");
+    CHECK_JSON(invoked(s, "open_link", "{\"address\":\"file:///etc/passwd\"}", NULL),
+               "{\"error\":\"a link opens only an http, https or mailto address, not file:///etc/passwd\"}");
+    CHECK_TEXT(last_link, "https://example.com/rules");
 
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL, 0, 0};

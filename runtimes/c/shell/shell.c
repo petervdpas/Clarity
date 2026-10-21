@@ -11,6 +11,14 @@
 #include <gtk/gtk.h>
 #endif
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <spawn.h>
+extern char** environ;
+#endif
+
 /// A window of its own that `open_apart` asked for: what it shows, and who opened it.
 typedef struct {
     char* name;
@@ -27,6 +35,7 @@ struct ClarityService {
     size_t apart_count;
     int next;
     void (*quit)(void* context);
+    bool (*open_link)(const char* address);
     void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name, int width, int height);
     void* context;
 };
@@ -57,6 +66,27 @@ void clarity_window_size(int* width, int* height) {
         *width = 1100;
         *height = 760;
     }
+}
+
+bool clarity_open_in_browser(const char* address) {
+#if defined(_WIN32)
+    return (INT_PTR)ShellExecuteA(NULL, "open", address, NULL, NULL, SW_SHOWNORMAL) > 32;
+#else
+#if defined(__APPLE__)
+    char* argv[] = {"open", (char*)address, NULL};
+#else
+    char* argv[] = {"xdg-open", (char*)address, NULL};
+#endif
+    pid_t pid;
+    return posix_spawnp(&pid, argv[0], NULL, NULL, argv, environ) == 0;
+#endif
+}
+
+void clarity_service_on_link(ClarityService* service, bool (*open_link)(const char* address)) { service->open_link = open_link; }
+
+/// Whether a link of a markdown part may open: a web or a mail address, as on every stack.
+static bool link_opens(const char* address) {
+    return strncmp(address, "http://", 7) == 0 || strncmp(address, "https://", 8) == 0 || strncmp(address, "mailto:", 7) == 0;
 }
 
 void clarity_service_on_desktop(ClarityService* service, void (*quit)(void*), void (*open_desktop)(void*, ClarityDesktop*, const char*, int, int), void* context) {
@@ -177,6 +207,12 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
     if (strcmp(command, "set_title") == 0) {
         if (caller) caller->set_title(caller, text_of(args, "title"));
         return value(NULL);
+    }
+    if (strcmp(command, "open_link") == 0) {
+        const char* address = text_of(args, "address");
+        if (!link_opens(address)) return error_text(clarity_format("a link opens only an http, https or mailto address, not %s", address));
+        bool (*open_link)(const char*) = s->open_link ? s->open_link : clarity_open_in_browser;
+        return open_link(address) ? value(NULL) : error_text(clarity_format("cannot open %s", address));
     }
     if (strcmp(command, "quit_app") == 0) {
         if (s->quit) s->quit(s->context);

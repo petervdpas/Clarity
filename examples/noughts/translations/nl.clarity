@@ -13,7 +13,6 @@ translation nl
     quitItem "Afsluiten"
     gameTitle "Boter, kaas en eieren"
     gameStatus "Jij bent aan zet"
-    gameRules "Klik op een vakje om er je kruisje te zetten; de computer antwoordt met een rondje. Drie op een rij wint."
     helpHeadingCaption "Zo speel je"
     newGameCaption "Nieuw spel"
     yes "Ja"

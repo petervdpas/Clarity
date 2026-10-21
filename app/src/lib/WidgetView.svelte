@@ -11,6 +11,8 @@
   import TextInput from "./ui/TextInput.svelte";
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
   import CanvasView from "./ui/CanvasView.svelte";
+  import MarkdownView from "./ui/MarkdownView.svelte";
+  import { openLink } from "./backend";
   import { DEFAULT_DIGITS } from "./display";
   import { DEFAULT_UNITS } from "./drawing";
   import GridBox from "./GridBox.svelte";
@@ -18,7 +20,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, markdownOf, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
@@ -327,7 +329,9 @@
     {:else if p.kind === "heading"}
       <h2 class="heading-text">{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}</h2>
     {:else if p.kind === "text"}
-      <span class="text-value" {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
+      <span class="text-value" class:lines={p.height > 1} {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
+    {:else if p.kind === "markdown"}
+      <MarkdownView {id} text={p.source ? markdownOf(preview, p.source) : typeof value === "string" ? value : ""} onlink={openLink} />
     {:else if p.kind === "display"}
       <SegmentDisplay {id} value={bound ? value : null} digits={p.digits ?? DEFAULT_DIGITS} />
     {:else if p.kind === "textbox" || p.kind === "password" || p.kind === "memo"}
@@ -708,6 +712,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Over several rows: lines to read, wrapped from the top, with their
+     paragraphs, scrolling when longer than the rows. */
+  .text-value.lines {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: auto;
+    text-overflow: clip;
+    align-self: stretch;
+    height: 100%;
   }
 
   .widget.invalid :global(input),

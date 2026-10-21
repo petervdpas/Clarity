@@ -39,6 +39,11 @@ export function transport(global: object): "tauri" | "webview" | "wails" {
 
 let wails: Promise<WailsRuntime> | null = null;
 
+/** Opens a link of a markdown part in the person's browser, through the application's shell. */
+export function openLink(address: string) {
+  invoke("open_link", { address }).catch((err) => console.error(`cannot open ${address}: ${err}`));
+}
+
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   const shell = transport(globalThis);
   if (shell === "tauri") return tauriInvoke<T>(command, args);

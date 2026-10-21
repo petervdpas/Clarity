@@ -77,6 +77,18 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("nonsense", json::object()), json::parse(R"({"error":"there is no command nonsense"})"));
     CHECK_EQ(service.invoke("start_app", json::object()), json::parse(R"({"value":{"state":{"window":"","instance":0,"data":{},"parts":{},"selected":{}},"messages":[],"open":[],"close":false}})"));
 
+    // A link of a markdown part opens in the browser: only a web or a mail address.
+    std::string opened_link;
+    service.open_link = [&](const std::string& address) {
+        opened_link = address;
+        return true;
+    };
+    CHECK_EQ(service.invoke("open_link", {{"address", "https://example.com/rules"}}), json::parse(R"({"value":null})"));
+    CHECK_EQ(opened_link, "https://example.com/rules");
+    CHECK_EQ(service.invoke("open_link", {{"address", "file:///etc/passwd"}}),
+             json::parse(R"({"error":"a link opens only an http, https or mailto address, not file:///etc/passwd"})"));
+    CHECK_EQ(opened_link, "https://example.com/rules");
+
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main;
     service.invoke("set_title", {{"title", "Customer card"}}, &main);

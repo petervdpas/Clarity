@@ -702,7 +702,28 @@ impl<'a> Window<'a> {
                     (Some(path), None) => shown(path),
                     _ => String::new(),
                 };
-                let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"value\" Text=\"{text}\"{plain_state}{extra} />");
+                if p.height > 1 {
+                    // Over several rows: lines to read, wrapped, scrolling when longer than the rows.
+                    let place = at.split_once("Grid.").map(|(_, rest)| format!("Grid.{rest}")).unwrap_or_default();
+                    let name = named.map(|n| format!("x:Name=\"{}\" ", control(n))).unwrap_or_default();
+                    let visible = named.map(|n| format!(" IsVisible=\"{{Binding {}.IsVisible}}\"", member(n))).unwrap_or_default();
+                    let enabled = named.map(|n| format!(" IsEnabled=\"{{Binding {}.IsEnabled}}\"", member(n))).unwrap_or_default();
+                    let _ = writeln!(out, "{pad}<ScrollViewer {place} HorizontalScrollBarVisibility=\"Disabled\" VerticalScrollBarVisibility=\"Auto\"{visible}>");
+                    let _ = writeln!(out, "{pad}  <TextBlock {name}Classes=\"value lines\" Text=\"{text}\"{enabled}{extra} />");
+                    let _ = writeln!(out, "{pad}</ScrollViewer>");
+                } else {
+                    let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"value\" Text=\"{text}\"{plain_state}{extra} />");
+                }
+            }
+            // Markdown, drawn by the runtime: a file of the resources folder in
+            // the language shown, or a text it binds.
+            WidgetKind::Markdown => {
+                let content = match (p.source.as_deref(), bound.as_deref()) {
+                    (Some(source), _) => format!(" Source=\"{}\"", attr(source)),
+                    (None, Some(path)) => format!(" Markdown=\"{{Binding {path}}}\""),
+                    (None, None) => String::new(),
+                };
+                let _ = writeln!(out, "{pad}<c:MarkdownView {at}{content}{plain_state}{extra} />");
             }
             // Clarity's own inputs (Clarity.Avalonia), which tell when the person
             // changed their value and only then, the same as on the web.
@@ -900,7 +921,7 @@ impl<'a> Window<'a> {
             }
             WidgetKind::Image if p.source.is_some() => {
                 let source = p.source.as_deref().unwrap_or_default();
-                let _ = writeln!(out, "{pad}<Image {at} Source=\"/images/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
+                let _ = writeln!(out, "{pad}<Image {at} Source=\"/resources/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
             }
             // A canvas drawn by its draw handler, through the runtime.
             WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {

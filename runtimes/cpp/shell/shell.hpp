@@ -74,6 +74,9 @@ public:
     virtual void close() = 0;
 };
 
+/// Opens a link in the person's browser; whether it could.
+bool open_in_browser(const std::string& address);
+
 /// Answers the renderer's commands.
 class Service {
 public:
@@ -86,6 +89,8 @@ public:
 
     /// Ends the program; set by `run`.
     std::function<void()> quit;
+    /// Opens a link of a markdown part in the person's browser; whether it could.
+    std::function<bool(const std::string& address)> open_link = open_in_browser;
     /// Opens a desktop window of its own, named `name`, for the opener, at
     /// `size` (its window's, or the standard one); set by `run`.
     std::function<void(Desktop& opener, const std::string& name, Size size)> open_desktop;

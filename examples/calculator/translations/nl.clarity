@@ -1,0 +1,12 @@
+// Dutch. The keys stay as they are: digits and signs read the same.
+translation nl
+    "Calculator" "Rekenmachine"
+    "C" "C"
+    "Nothing" "Niets"
+    "Add" "Optellen"
+    "Subtract" "Aftrekken"
+    "Multiply" "Vermenigvuldigen"
+    "Divide" "Delen"
+    "Cannot divide by zero" "Delen door nul kan niet"
+    "Yes" "Ja"
+    "No" "Nee"

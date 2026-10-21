@@ -18,6 +18,7 @@
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";
   import EngineEditor from "./lib/EngineEditor.svelte";
+  import TranslationsPanel from "./lib/TranslationsPanel.svelte";
   import { fixOf } from "./lib/codeParts";
   import { engineProblems, recordBuilt } from "./lib/engineBuilds.svelte";
   import type { EngineBuilt } from "./lib/generated/EngineBuilt";
@@ -261,6 +262,8 @@
         return all.some((f) => (f.module?.name ?? "") === o.name);
       case "engine":
         return all.some((f) => f.engines.some((e) => e.name.name === o.name));
+      case "language":
+        return o.name === "" || o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
       case "settings":
         return true;
     }
@@ -955,6 +958,8 @@
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+        {:else if current?.kind === "language"}
+          <TranslationsPanel {preview} language={current.name} onapplied={applyPreview} onopen={(language) => select({ kind: "language", name: language })} />
         {:else if entity && file}
           <EntityEditor
             {preview}

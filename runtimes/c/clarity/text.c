@@ -1,5 +1,6 @@
 #include "clarity/text.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static const char* named(const char* format) { return format && *format ? format : NULL; }
@@ -169,4 +170,84 @@ bool clarity_text_from_json(const cJSON* in, ClarityText** out) {
     }
     *out = t;
     return true;
+}
+
+/// The translations of one language, outside the scratch arena.
+static struct Language {
+    char* name;
+    char** texts;
+    char** translations;
+    size_t count;
+}* languages;
+static size_t language_count;
+static char* language_picked;
+
+static char* lasting(const char* text) {
+    size_t n = strlen(text) + 1;
+    char* copy = malloc(n);
+    if (copy) memcpy(copy, text, n);
+    return copy;
+}
+
+static void forget_translations(void) {
+    for (size_t i = 0; i < language_count; ++i) {
+        for (size_t j = 0; j < languages[i].count; ++j) {
+            free(languages[i].texts[j]);
+            free(languages[i].translations[j]);
+        }
+        free(languages[i].texts);
+        free(languages[i].translations);
+        free(languages[i].name);
+    }
+    free(languages);
+    languages = NULL;
+    language_count = 0;
+}
+
+void clarity_load_translations(const char* model) {
+    forget_translations();
+    cJSON* parsed = cJSON_Parse(model ? model : "");
+    const cJSON* all = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(parsed, "project"), "translations");
+    size_t n = (size_t)cJSON_GetArraySize(all);
+    if (n == 0) return;
+    languages = calloc(n, sizeof *languages);
+    if (!languages) return;
+    const cJSON* language;
+    cJSON_ArrayForEach(language, all) {
+        struct Language* l = &languages[language_count++];
+        size_t count = (size_t)cJSON_GetArraySize(language);
+        l->name = lasting(language->string);
+        l->texts = calloc(count ? count : 1, sizeof *l->texts);
+        l->translations = calloc(count ? count : 1, sizeof *l->translations);
+        const cJSON* pair;
+        cJSON_ArrayForEach(pair, language) {
+            if (!cJSON_IsString(pair) || !l->texts || !l->translations) continue;
+            l->texts[l->count] = lasting(pair->string);
+            l->translations[l->count] = lasting(pair->valuestring);
+            l->count++;
+        }
+    }
+}
+
+void clarity_set_language(const char* language) {
+    free(language_picked);
+    language_picked = language ? lasting(language) : NULL;
+}
+
+const char* clarity_language(void) { return language_picked; }
+
+const char* clarity_translate(const char* text) {
+    if (!text || !language_picked) return text ? text : "";
+    for (size_t i = 0; i < language_count; ++i) {
+        if (strcmp(languages[i].name, language_picked) != 0) continue;
+        for (size_t j = 0; j < languages[i].count; ++j) {
+            if (strcmp(languages[i].texts[j], text) == 0) return clarity_copy(languages[i].translations[j]);
+        }
+    }
+    return text;
+}
+
+ClarityText* clarity_text_translated(ClarityText* text) {
+    if (text) text->text = clarity_translate(text->text);
+    return text;
 }

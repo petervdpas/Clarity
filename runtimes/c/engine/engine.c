@@ -10,12 +10,15 @@
 #include "wasm3/m3_env.h"
 #include "wasm3/wasm3.h"
 
+/// How many services an engine may use.
+#define SERVICE_COUNT 4
+
 struct ClarityEngine {
     char* name;
     uint8_t* bytes;
     uint32_t size;
     IM3Environment environment;
-    bool uses[3];
+    bool uses[SERVICE_COUNT];
     ClarityEngineLimits limits;
     ClarityEngineState state;
     bool opens;
@@ -123,13 +126,34 @@ static m3ApiRawFunction(log_service) {
     m3ApiSuccess();
 }
 
+// The language as it is at the call, written into the engine's room; gives its whole length.
+static m3ApiRawFunction(language_service) {
+    (void)_ctx;
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(int32_t, at);
+    m3ApiGetArg(int32_t, room);
+    uint32_t size = 0;
+    uint8_t* memory = m3_GetMemory(runtime, &size, 0);
+    if (!memory || at < 0 || room < 0 || (uint64_t)(uint32_t)at + (uint32_t)room > size) m3ApiTrap(m3Err_trapOutOfBoundsMemoryAccess);
+    (void)_mem;
+    const char* language = serving->services.fixed_language ? serving->services.language : clarity_language();
+    size_t length = language ? strlen(language) : 0;
+    memcpy(memory + at, language ? language : "", length < (size_t)room ? length : (size_t)room);
+    m3ApiReturn((int32_t)length);
+}
+
 /// The services an engine may use: functions of module `clarity`, with their
 /// types as wasm3 writes signatures.
 static const struct {
     const char* name;
     const char* type;
     M3RawCall function;
-} SERVICES[3] = {{"clock", "I()", clock_service}, {"random", "I()", random_service}, {"log", "v(ii)", log_service}};
+} SERVICES[SERVICE_COUNT] = {
+    {"clock", "I()", clock_service},
+    {"random", "I()", random_service},
+    {"log", "v(ii)", log_service},
+    {"language", "i(ii)", language_service},
+};
 
 /// Asked by wasm3 at every call and every turn of a loop.
 static M3Result watch(void) {
@@ -235,7 +259,7 @@ static bool check_imports(const char* engine, const uint8_t* bytes, size_t size,
                 if (strcmp(from, "clarity") != 0 || !used)
                     return clarity_fail(CLARITY_ENGINE, "engine %s imports %s.%s; an engine imports only the services it uses", engine, from, what);
                 bool fits = false;
-                for (size_t s = 0; s < 3; ++s) fits = fits || (strcmp(SERVICES[s].name, what) == 0 && strcmp(SERVICES[s].type, type) == 0);
+                for (size_t s = 0; s < SERVICE_COUNT; ++s) fits = fits || (strcmp(SERVICES[s].name, what) == 0 && strcmp(SERVICES[s].type, type) == 0);
                 if (!fits) return clarity_fail(CLARITY_ENGINE, "engine %s imports clarity.%s with another type than Clarity gives it", engine, what);
             }
         }
@@ -325,7 +349,7 @@ bool clarity_engine_load(const char* name, const uint8_t* bytes, size_t size, Cl
     // A window that closes takes its instance along.
     if (engine->state == CLARITY_ENGINE_PER_WINDOW) clarity_on_window_closed(window_closed, engine);
     engine->services = (ClarityEngineServices){0};
-    for (size_t s = 0; s < 3; ++s) {
+    for (size_t s = 0; s < SERVICE_COUNT; ++s) {
         engine->uses[s] = false;
         for (size_t u = 0; u < use_count; ++u) engine->uses[s] = engine->uses[s] || strcmp(uses[u], SERVICES[s].name) == 0;
     }
@@ -372,7 +396,7 @@ static M3Result instance(ClarityEngine* engine, IM3Runtime* out) {
     uint32_t pages = engine->limits.megabytes * 16;
     if (!failed && runtime->memory.maxPages > pages) runtime->memory.maxPages = pages;
     // The services it uses; one it does not import stays unlinked.
-    for (size_t s = 0; s < 3 && !failed; ++s) {
+    for (size_t s = 0; s < SERVICE_COUNT && !failed; ++s) {
         if (!engine->uses[s]) continue;
         M3Result linked = m3_LinkRawFunction(module, "clarity", SERVICES[s].name, SERVICES[s].type, SERVICES[s].function);
         if (linked != m3Err_functionLookupFailed) failed = linked;

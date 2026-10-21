@@ -51,6 +51,16 @@ TEST(a_handler_replies_as_the_other_runtimes_do) {
     CHECK_EQ(json(WindowState{"Card"}).dump(), R"({"data":{},"instance":0,"parts":{},"selected":{},"window":"Card"})");
 }
 
+// A text value a handler sets travels as the text as written with its slots,
+// so the screen shows it in the person's language and format.
+TEST(a_reply_carries_the_texts_shown_in_text_values) {
+    Ui ui(WindowState{"Game", json::object(), {}, {}, 0});
+    CHECK_EQ(json(ui.reply("Game", json::object())).contains("shown"), false);
+    ui.set_shown("rules", Text("Your move, {name}").with("name", slot_text("Ada")));
+    ui.set_shown("hint", Text::plain("Pick a square"));
+    CHECK_EQ(json(ui.reply("Game", json::object()))["shown"], json::parse(R"({"rules":{"text":"Your move, {name}","values":{"name":{"kind":"text","value":"Ada"}}},"hint":"Pick a square"})"));
+}
+
 TEST(rows_read_again_have_no_selected_row) {
     WindowState state = json::parse(R"({"window":"Orders","data":{},"parts":{},"selected":{"grid":1,"other":0}})").get<WindowState>();
     Ui ui(state);

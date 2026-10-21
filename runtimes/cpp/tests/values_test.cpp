@@ -80,3 +80,18 @@ TEST(sin_and_cos_take_degrees_as_every_runtime_does) {
     }
     CHECK(units(Decimal::parse("40.5")) == 40.5);
 }
+
+// Text code makes is translated in the backend, in the language the screen
+// picked, as every runtime does (conformance/translations.json, `code`).
+TEST(code_texts_are_translated_as_every_runtime_does) {
+    auto code = conformance("translations.json")["code"];
+    load_translations(code["model"].dump());
+    CHECK(!code["cases"].empty());
+    for (const auto& c : code["cases"]) {
+        set_language(c["language"].is_string() ? std::optional(c["language"].get<std::string>()) : std::nullopt);
+        Text text(c["text"].get<std::string>());
+        for (const auto& [path, value] : c["values"].items()) text = text.with(path, slot_text(value.get<std::string>()));
+        CHECK_EQ(text.translated().show(), c["gives"].get<std::string>());
+    }
+    set_language(std::nullopt);
+}

@@ -258,11 +258,19 @@ code Calc
         word = \"x\"
 ";
 
+/// A function that returns texts, plain and with a slot: both are translated.
+const VERDICT: &str = "
+function verdict(n: integer) -> text
+    if n > 2
+        return \"Draw\"
+    return \"Turn {n}\"
+";
+
 /// A window holds plain values: fields of its data, at their default or
 /// empty when it opens, read and changed by its handlers.
 #[test]
 fn a_window_holds_plain_values() {
-    let source = format!("{SALES}{CALC}");
+    let source = format!("{SALES}{CALC}{VERDICT}");
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -277,6 +285,11 @@ fn a_window_holds_plain_values() {
     has(sales, "if (pending_name) w->pending = order_status_from(pending_name);");
     has(sales, "w->fresh = false;\n");
     has(sales, "w->pending = ORDER_STATUS_APPROVED;\n");
+    // A text value shows its text in the person's language.
+    has(sales, "clarity_ui_set_shown(ui, \"word\", clarity_plain_text(\"x\"));\n");
+    // The texts code makes are translated.
+    has(sales, "clarity_translate(\"Draw\")");
+    has(sales, "clarity_text_show(clarity_text_translated(clarity_text_with(clarity_text(\"Turn {n}\"), \"n\", clarity_slot_integer(n, NULL))))");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

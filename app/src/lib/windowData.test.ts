@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DataDecl } from "./generated/DataDecl.ts";
-import { dataEntity, dataType, isList, startValue, valueField } from "./windowData.ts";
+import { dataEntity, dataType, isList, startValue, translatedDefaults, valueField } from "./windowData.ts";
 
 const span = { start: 0, end: 0, line: 1, col: 1 };
 const ident = (name: string) => ({ name, span });
@@ -48,4 +48,13 @@ test("a plain value starts at its default, or empty", () => {
   assert.equal(startValue(shown, null), "0");
   assert.equal(startValue(pending, "Add"), "Add");
   assert.equal(startValue({ ...shown, of: { kind: "value", ty: { kind: { kind: "integer" }, span }, default: { kind: "number", value: "2" } } }, null), 2);
+});
+
+test("a text value starts at its default in the person's language", () => {
+  const nl: Record<string, string> = { 'say "hi"': "zeg hoi" };
+  const tr = (text: string) => nl[text] ?? text;
+  // Still at its default as written: shown translated.
+  assert.deepEqual(translatedDefaults([word, fresh], { word: 'say "hi"', fresh: true }, tr), { word: "zeg hoi", fresh: true });
+  // Changed by a handler: kept as it is.
+  assert.deepEqual(translatedDefaults([word], { word: "bye" }, tr), { word: "bye" });
 });

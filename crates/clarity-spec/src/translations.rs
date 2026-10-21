@@ -1,7 +1,7 @@
 //! Translations (design section 1.5, I1c). Every text a person sees is in
 //! the project already: labels, help texts, titles, captions, enum labels,
-//! menu items, messages and refusals. Clarity collects them, so nobody
-//! marks a text for translation. A file per language in the module folder,
+//! menu items, the texts values start with, messages and refusals. Clarity
+//! collects them, so nobody marks a text for translation. A file per language in the module folder,
 //! `translations/nl.clarity`, gives each text in that language, found by
 //! what the text says:
 //!
@@ -18,7 +18,7 @@ use crate::code::{Expr, ExprKind, Stmt, StmtKind, template};
 use crate::diagnostic::Diagnostic;
 use crate::formats::language_problem;
 use crate::lexer::{TokenKind, lex, quote};
-use crate::model::{Command, Frame, Project, Widget};
+use crate::model::{Command, DataDecl, DataKind, Frame, Literal, Project, Widget};
 use crate::span::Span;
 
 /// The folder of translation files in a project's module folder.
@@ -42,6 +42,9 @@ pub struct Used {
 #[derive(Default)]
 struct Texts {
     used: Vec<Used>,
+    /// The text values of the window or app whose code is collected: a text
+    /// a handler puts in one is shown.
+    text_values: Vec<String>,
 }
 
 impl Texts {
@@ -79,6 +82,15 @@ impl Texts {
         }
     }
 
+    /// The text a text value starts with: `data rules: text, default "..."`.
+    fn data(&mut self, data: &[DataDecl], place: &str) {
+        for decl in data {
+            if let DataKind::Value { default: Some(Literal::Str(text)), .. } = &decl.of {
+                self.add(text, place);
+            }
+        }
+    }
+
     fn commands(&mut self, commands: &[Command], place: &str) {
         for command in commands {
             self.some(&command.props.caption, place);
@@ -111,12 +123,19 @@ impl Texts {
         }
     }
 
-    /// Text a statement shows: a message, a refusal, a caption or an error.
+    /// Text a statement shows: a message, a refusal, a caption or an error,
+    /// a text put in a text value, and the text a function returns.
     fn statements(&mut self, body: &[Stmt], place: &str) {
         for stmt in body {
             match &stmt.kind {
                 StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.shown(text, place),
                 StmtKind::Assign { target, value } if is_shown_property(target) => self.shown(value, place),
+                StmtKind::Assign { target, value }
+                    if matches!(&target.kind, ExprKind::Name { name } if self.text_values.iter().any(|v| v == name)) =>
+                {
+                    self.shown(value, place)
+                }
+                StmtKind::Return { value: Some(value) } => self.shown(value, place),
                 StmtKind::If { branches, otherwise } => {
                     for branch in branches {
                         self.statements(&branch.body, place);
@@ -138,6 +157,17 @@ impl Texts {
             _ => {}
         }
     }
+}
+
+/// The names of the text values of the window or app `owner`.
+fn text_values(project: &Project, owner: &str) -> Vec<String> {
+    let pages = project.files.iter().flat_map(|f| &f.pages).filter(|p| p.name.name == owner).flat_map(|p| &p.data);
+    let apps = project.files.iter().flat_map(|f| &f.apps).filter(|a| a.name.name == owner).flat_map(|a| &a.data);
+    pages
+        .chain(apps)
+        .filter(|d| matches!(&d.of, DataKind::Value { ty, .. } if ty.kind == crate::code::TypeRefKind::Text))
+        .map(|d| d.name.name.clone())
+        .collect()
 }
 
 /// `part.caption` or `part.error`: a property whose text is shown.
@@ -171,16 +201,19 @@ pub fn texts(project: &Project) -> Vec<Used> {
         for app in &file.apps {
             let place = format!("app {}", app.name.name);
             texts.some(&app.title, &place);
+            texts.data(&app.data, &place);
             texts.frame(&app.frame, &place);
         }
         for page in &file.pages {
             let place = format!("window {}", page.name.name);
             texts.some(&page.title, &place);
+            texts.data(&page.data, &place);
             texts.widgets(&page.widgets, &place);
             texts.frame(&page.frame, &place);
         }
         for block in &file.code {
             let place = format!("code {}", block.name.name);
+            texts.text_values = text_values(project, &block.name.name);
             for handler in &block.handlers {
                 texts.statements(&handler.body, &place);
             }
@@ -188,6 +221,13 @@ pub fn texts(project: &Project) -> Vec<Used> {
                 texts.statements(&event.body, &place);
             }
         }
+        for engine in &file.engines {
+            let place = format!("engine {}", engine.name.name);
+            for text in &engine.says {
+                texts.add(text, &place);
+            }
+        }
+        texts.text_values.clear();
         for decl in &file.functions {
             let place = format!("{} {}", decl.kind.keyword(), decl.name.name);
             texts.statements(&decl.body, &place);
@@ -370,10 +410,25 @@ pub struct TranslationTable {
 }
 
 /// The Translations table of a project.
+/// Whether `text` needs a translation: it has letters. Digits and signs,
+/// such as a calculator's `7` or `+`, read the same in every language.
+pub fn needs_translation(text: &str) -> bool {
+    let mut outside_slots = true;
+    text.chars().any(|c| {
+        match c {
+            '{' => outside_slots = false,
+            '}' => outside_slots = true,
+            _ => {}
+        }
+        outside_slots && c.is_alphabetic()
+    })
+}
+
 pub fn table(project: &Project) -> TranslationTable {
     let languages: Vec<String> = project.translations.keys().cloned().collect();
     let rows: Vec<TranslationRow> = texts(project)
         .into_iter()
+        .filter(|used| needs_translation(&used.text))
         .map(|used| TranslationRow {
             translations: languages
                 .iter()

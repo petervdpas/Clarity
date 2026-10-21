@@ -459,6 +459,14 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "{place} = {code};");
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name));
+                    // A text value shows its text in the person's language, as a label does.
+                    if matches!(self.types.name_of(target), Some(NameKind::Data)) && self.types.type_of(target) == TypeInfo::Text {
+                        let shown = match value.kind {
+                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value),
+                            _ => format!("clarity::Text::plain({place})"),
+                        };
+                        let _ = writeln!(out, "ui.set_shown({}, {shown});", string(name));
+                    }
                 }
             }
             StmtKind::If { branches, otherwise } => {
@@ -483,7 +491,11 @@ impl<'a> Emitter<'a> {
                 let _ = write!(out, "for (auto& {} : {list}) {{\n{}}}\n", ident(&var.name), indent(&inner, 1));
             }
             StmtKind::Return { value: Some(value) } => {
-                let code = self.value(value);
+                // The text a function returns is in the person's language.
+                let code = match &value.kind {
+                    ExprKind::Str { value } => format!("clarity::translate({})", string(value)),
+                    _ => self.value(value),
+                };
                 let _ = writeln!(out, "return {code};");
             }
             StmtKind::Return { value: None } => out.push_str("return;\n"),
@@ -746,10 +758,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("int64_t{{{value}}}"),
             ExprKind::Str { value } => format!("std::string({})", string(value)),
-            ExprKind::Text { .. } => {
-                self.errors.push("text with slots is text to show".into());
-                String::new()
-            }
+            // A text with slots in code takes its translation, then its values.
+            ExprKind::Text { .. } => format!("{}.translated().show()", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "std::nullopt".to_string(),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
@@ -795,7 +805,14 @@ impl<'a> Emitter<'a> {
                 };
                 let args = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
                 let call = format!("engines::{}().{call}({window}{}, {args})", snake(&engine.name), string(&function.name));
-                if bytes_back { format!("clarity::from_base64({call})") } else { call }
+                if bytes_back {
+                    format!("clarity::from_base64({call})")
+                } else if self.types.type_of(expr) == TypeInfo::Text {
+                    // The text an engine gives is in the person's language, as its `says` lists it.
+                    format!("clarity::translate({call})")
+                } else {
+                    call
+                }
             }
             ExprKind::New { entity } => format!("{}{{}}", entity.name),
         }

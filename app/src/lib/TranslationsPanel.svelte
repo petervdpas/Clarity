@@ -1,7 +1,9 @@
 <script lang="ts">
-  // The project's translations: every text a person sees, with a column per
-  // language. The backend collects the texts and writes the files; this
-  // shows them and sends what is typed.
+  // A language of the project, opened from the project tree: every text a
+  // person sees with its translation in that language, or, for the language
+  // the texts are written in, with a column per translation. The backend
+  // collects the texts and writes the files; this shows them and sends what
+  // is typed.
 
   import { invoke } from "@tauri-apps/api/core";
   import type { Preview } from "./generated/Preview";
@@ -10,11 +12,17 @@
 
   let {
     preview,
+    language,
     onapplied,
+    onopen,
   }: {
     /** The loaded project; the table is read again when it changes. */
     preview: Preview;
+    /** The language opened: a translation, the one written in, or "" to add one. */
+    language: string;
     onapplied: (preview: Preview) => void;
+    /** Opens a language, as one just added. */
+    onopen: (language: string) => void;
   } = $props();
 
   let table = $state<TranslationTable | null>(null);
@@ -32,15 +40,19 @@
       .catch((err) => (error = String(err)));
   });
 
-  const rows = $derived((table?.rows ?? []).filter((r) => !onlyMissing || r.translations.some((t) => t === null)));
+  /** The translations shown: the opened one, or all of them from the language written in. */
+  const shown = $derived((table?.languages ?? []).map((l, i) => ({ l, i })).filter(({ l }) => !(table?.languages ?? []).includes(language) || l === language));
+  const rows = $derived((table?.rows ?? []).filter((r) => !onlyMissing || shown.some(({ i }) => r.translations[i] === null)));
   const base = $derived(preview.project.locale.language ?? "en");
 
-  async function apply(command: string, args: Record<string, unknown>) {
+  async function apply(command: string, args: Record<string, unknown>): Promise<boolean> {
     try {
       onapplied(await invoke<Preview>(command, args));
       error = null;
+      return true;
     } catch (err) {
       error = String(err);
+      return false;
     }
   }
 
@@ -52,8 +64,8 @@
     e.preventDefault();
     const language = newLanguage.trim();
     if (!language) return;
-    apply("add_language", { language });
     newLanguage = "";
+    apply("add_language", { language }).then((added) => added && onopen(language));
   }
 
   /** The designer's language: the texts as written, or a translation. */
@@ -63,7 +75,7 @@
 </script>
 
 <section>
-  <h2>Translations</h2>
+  <h2>{language === "" ? "New language" : language === base ? `${base}, as written` : `${language}, a translation`}</h2>
   <p class="intro">
     Every text people see, collected from the whole project. The texts are written in {base}; a translation file per language,
     <code>translations/nl.clarity</code>, gives them in another. A text without a translation shows as written, and text with slots keeps
@@ -95,7 +107,7 @@
           <tr>
             <th>Text</th>
             <th>Used in</th>
-            {#each table.languages as language, i (language)}
+            {#each shown as { l: language, i } (language)}
               <th>{language} <span class="muted">{table.missing[i] === 0 ? "complete" : `${table.missing[i]} missing`}</span></th>
             {/each}
           </tr>
@@ -105,7 +117,7 @@
             <tr>
               <td class="text">{row.text}</td>
               <td class="muted">{row.places.join(", ")}</td>
-              {#each table.languages as language, i (language)}
+              {#each shown as { l: language, i } (language)}
                 <td>
                   <input
                     value={row.translations[i] ?? ""}

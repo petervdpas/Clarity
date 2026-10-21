@@ -943,6 +943,7 @@ An engine is a processing module compiled to WebAssembly, which every stack runs
 ```clarity
 engine Pricing from "pricing.wasm"
     uses clock, random
+    says "Out of stock"
     limit 2 seconds, 64 MB
     state per app
     on open
@@ -960,7 +961,8 @@ function order_total(order: Order) -> money
 - **Each function** has a signature like a function's, and always a result: `-> type`. Parameters and results are values (`text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`), `bytes`, enums, records and `list<Entity>`; not `file` or `list<file>`. An engine that works on a document gets its bytes: `Reader.pages(read bytes of f)`.
 - **A call** is `Engine.function(args)`. The checker types it against the declaration, as it does a call to a function. Handlers, functions and actions can all call an engine: it has no effects.
 - **The engine computes; the application does all input and output.** An engine reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
-- **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number) and `log` (a line in the application's log). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
+- **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number), `log` (a line in the application's log) and `language` (the language the person picked, such as `nl`). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
+- **`says`** lists the texts the engine gives people to read, comma separated: `says "You win", "A draw"`. They join the project's texts, so a translation file gives them in its language, and a text an engine function returns is translated in the person's language, as is an engine's refusal.
 - **`limit`** says what one call may take: `limit 2 seconds`, `limit 64 MB` or both, `limit 2 seconds, 64 MB`. A call that runs longer is stopped, and fails with an error that says so; the engine never gets more memory than its limit. Without a limit line, a call may take 5 seconds and the engine 256 MB. A time limit is between 1 and 3600 seconds, a memory limit between 1 and 4096 MB.
 - **State.** Without a state line, each call starts the engine afresh, so nothing carries over from one call to the next. `state per app` keeps one instance for the whole application: what the engine holds in its memory carries from call to call, such as a loaded dictionary. `state per window` keeps an instance for each open window, made at its first call there and dropped when the window closes: a game's board, a document being edited. Only a window's handlers call an engine with state per window, each in its own window. A call that fails or runs past its limit drops the instance, since its memory may be half changed; the next call starts a new one. A refusal keeps it.
 - **`on open`** runs the engine's own `clarity_open` whenever an instance is made: once per instance with state, before every call without. There is no `on close`: an engine cannot save or show anything, so a window that must keep what an engine holds asks it in its own `on close` handler and saves the answer.
@@ -1040,9 +1042,17 @@ code OrderForm
 - A slot is a name or a member path in braces: `{total}`, `{order.customer.name}`. It is checked like any expression; a whole record or list is no value to show, so `{order.customer}` is an error that suggests one of its fields.
 - `{{` and `}}` are braces in the text; a `}` on its own is an error.
 - A value shows as its field shows it: money with its currency, a date in the locale and the field's `format`, an enum value by its label. A slot of a local or a parameter shows as its type does.
-- Text with slots is text to show: it goes in `message`, `refuse`, and a part's `caption` or `error`. Anywhere else it is an error.
+- Text with slots is a text like any other: code keeps it in a local, passes it to a function, returns it, and puts it in a text value. It is always translated.
 - Text joined with `+` in a message, a refusal, a caption or an error is a warning that suggests slots, since such text cannot be translated and its values do not follow the locale.
-- The backend never formats a value for a person: it sends the text as written and the value of each slot, and the screen fills the slots. Text read back in code (a caption, an error) has its slots filled plainly.
+- Where text goes straight to the screen (a message, a refusal, a caption, an error, a text value a handler sets), the backend sends it as written with the value of each slot, and the screen translates it and fills the slots in the person's format.
+- Anywhere else, such as a function's result, the backend translates it in the language the screen picked and fills its slots plainly. A plain text a function returns (`return "Draw"`) is translated too, so a value code compares belongs in an enum, not a text.
+
+```clarity
+function credit_note(order: Order) -> text
+    if within_credit(order)
+        return "Order {order.number} is within the credit limit"
+    return "Order {order.number} is above the customer's credit limit"
+```
 
 ### Queries
 

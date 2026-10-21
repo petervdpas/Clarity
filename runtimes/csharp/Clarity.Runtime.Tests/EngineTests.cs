@@ -85,7 +85,7 @@ public class EngineTests
         var lines = new List<string>();
         var services = Cases.GetProperty("services");
         var engine = Engine.Load("Test", TestEngine, new EngineDeclaration(Names(Cases.GetProperty("functions")), Uses, Limits))
-            .WithServices(new EngineServices(services.GetProperty("clock").GetInt64(), services.GetProperty("seed").GetUInt64(), lines.Add));
+            .WithServices(new EngineServices(services.GetProperty("clock").GetInt64(), services.GetProperty("seed").GetUInt64(), lines.Add, () => services.GetProperty("language").GetString()));
         foreach (var call in Cases.GetProperty("served").EnumerateArray())
         {
             lines.Clear();

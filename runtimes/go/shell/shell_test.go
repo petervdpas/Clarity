@@ -113,6 +113,21 @@ func TestStartGivesTheModelAndTheMainWindow(t *testing.T) {
 	}
 }
 
+func TestTheScreenSetsTheLanguageCodeTextsAreTranslatedTo(t *testing.T) {
+	c := New(Options{Model: []byte(`{"project":{"translations":{"nl":{"Draw":"Gelijkspel"}}}}`)})
+	defer clarity.SetLanguage(nil)
+	if got := wire(t, call(t, c, "set_language", `{"language":"nl"}`)); got != `{"value":null}` {
+		t.Fatal(got)
+	}
+	if got := clarity.Translate("Draw"); got != "Gelijkspel" {
+		t.Fatal(got)
+	}
+	call(t, c, "set_language", `{"language":null}`)
+	if got := clarity.Translate("Draw"); got != "Draw" {
+		t.Fatal(got)
+	}
+}
+
 func TestOpeningAWindowRunsItsOpenHandler(t *testing.T) {
 	c, windows := service(t)
 	answer := call(t, c, "open_window", `{"window":"Card","with":{"name":"Ada"}}`)

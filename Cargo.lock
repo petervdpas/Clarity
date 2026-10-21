@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -700,7 +700,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",

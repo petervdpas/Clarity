@@ -14,6 +14,14 @@ use std::process::Command;
 
 use clarity_project::SourceKind;
 
+/// Where builds go: target/generated in the repository, on disk; never the
+/// system's temporary folder, which may live in memory.
+fn scratch() -> std::path::PathBuf {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated");
+    std::fs::create_dir_all(&dir).expect("target/generated can be made");
+    dir
+}
+
 /// Which runtime a generated project builds on.
 #[derive(Clone, Copy, PartialEq)]
 enum Runtime {
@@ -42,7 +50,7 @@ fn builds_with_cargo(name: &str, runtime: Runtime) {
     settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
-    let out = std::env::temp_dir().join(format!("clarity-gen-build-{name}-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-build-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
@@ -115,7 +123,7 @@ fn the_shop_example_builds_for_every_database() {
         // The database's driver, beside the engines the shop has.
         assert!(cargo.text.contains(&format!("features = [\"engines\", {feature}]")), "{}", cargo.text);
 
-        let out = std::env::temp_dir().join(format!("clarity-gen-build-{feature}-{}", std::process::id()).replace('"', ""));
+        let out = scratch().join(format!("clarity-gen-build-{feature}-{}", std::process::id()).replace('"', ""));
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
         clarity_gen::write_out(&out, &files, &["target"]).unwrap();
@@ -267,7 +275,7 @@ fn generated_logic_runs() {
     let project = clarity_spec::load_with_migrations([("sales.clarity", SALES)], STEPS);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = clarity_gen::generate(&project, &clarity_project::starter("Sales", "sales")).unwrap();
-    let out = std::env::temp_dir().join(format!("clarity-gen-logic-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-logic-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
@@ -290,7 +298,7 @@ fn generated_logic_runs() {
 
 #[test]
 fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
-    let dir = std::env::temp_dir().join(format!("clarity-write-out-{}", std::process::id()));
+    let dir = scratch().join(format!("clarity-write-out-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = |path: &str, text: &str| clarity_gen::OutFile {
         path: path.into(),
@@ -312,7 +320,7 @@ fn write_out_keeps_unchanged_files_and_removes_stale_ones() {
 
 #[test]
 fn write_out_never_writes_into_a_folder_with_other_work() {
-    let dir = std::env::temp_dir().join(format!("clarity-foreign-{}", std::process::id()));
+    let dir = scratch().join(format!("clarity-foreign-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("thesis.txt"), "years of work").unwrap();
@@ -341,7 +349,7 @@ fn write_out_never_writes_into_a_folder_with_other_work() {
 #[test]
 fn the_output_folder_holds_only_the_current_stacks_project() {
     use clarity_project::Backend;
-    let dir = std::env::temp_dir().join(format!("clarity-switch-{}", std::process::id()));
+    let dir = scratch().join(format!("clarity-switch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let file = |path: &str| clarity_gen::OutFile {
         path: path.into(),
@@ -426,7 +434,7 @@ fn an_engine_answers_in_the_generated_application() {
     clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE.to_vec() }]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = clarity_gen::generate(&project, &clarity_project::starter("Shop", "shop")).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = std::env::temp_dir().join(format!("clarity-gen-engine-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-engine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();

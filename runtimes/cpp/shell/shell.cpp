@@ -58,6 +58,11 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             // A picture linked from a file of a store, before its record is saved.
             return value(data_url(db.store_file(text_of(args, "store"), text_of(args, "path"))));
         }
+        if (command == "set_language") {
+            // The language the screen picked, which text code makes is translated to.
+            set_language(args.contains("language") && args["language"].is_string() ? std::optional(args["language"].get<std::string>()) : std::nullopt);
+            return value(nullptr);
+        }
         if (command == "set_title") {
             if (caller) caller->set_title(text_of(args, "title"));
             return value(nullptr);

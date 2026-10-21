@@ -97,6 +97,8 @@ TEST(an_engine_uses_the_services_it_declares) {
     services.clock = file["services"]["clock"].get<int64_t>();
     services.seed = file["services"]["seed"].get<uint64_t>();
     services.log = [&](const std::string& line) { lines.push_back(line); };
+    std::string language = file["services"]["language"].get<std::string>();
+    services.language = [language] { return std::optional(language); };
     auto engine = Engine::load("Test", read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), uses(file), limits(file)}).with_services(services);
     for (const auto& call : file["served"]) {
         lines.clear();

@@ -9,6 +9,8 @@ struct ClarityUi {
     size_t part_room;
     ClarityMessage* messages;
     size_t message_count, message_room;
+    ClarityShown* shown;
+    size_t shown_count, shown_room;
     ClarityOpen* open;
     size_t open_count, open_room;
     bool close;
@@ -224,6 +226,17 @@ void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* te
     ui->messages[ui->message_count++] = (ClarityMessage){level, text};
 }
 
+void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* text) {
+    for (size_t i = 0; i < ui->shown_count; ++i) {
+        if (strcmp(ui->shown[i].data, data) == 0) {
+            ui->shown[i].text = text;
+            return;
+        }
+    }
+    clarity_grow((void**)&ui->shown, &ui->shown_room, ui->shown_count, sizeof *ui->shown);
+    ui->shown[ui->shown_count++] = (ClarityShown){clarity_copy(data), text};
+}
+
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with) {
     clarity_grow((void**)&ui->open, &ui->open_room, ui->open_count, sizeof *ui->open);
     ui->open[ui->open_count++] = (ClarityOpen){clarity_copy(window), with ? with : cJSON_CreateObject()};
@@ -238,6 +251,8 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->state.data = cJSON_IsObject(data) ? data : cJSON_CreateObject();
     r->messages = ui->messages;
     r->message_count = ui->message_count;
+    r->shown = ui->shown;
+    r->shown_count = ui->shown_count;
     r->open = ui->open;
     r->open_count = ui->open_count;
     r->close = ui->close;
@@ -361,6 +376,10 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
         cJSON_AddStringToObject(m, "level", level_name(r->messages[i].level));
         cJSON_AddItemToObject(m, "text", clarity_text_json(r->messages[i].text));
         cJSON_AddItemToArray(messages, m);
+    }
+    if (r->shown_count > 0) {
+        cJSON* shown = cJSON_AddObjectToObject(out, "shown");
+        for (size_t i = 0; i < r->shown_count; ++i) cJSON_AddItemToObject(shown, r->shown[i].data, clarity_text_json(r->shown[i].text));
     }
     cJSON* open = cJSON_AddArrayToObject(out, "open");
     for (size_t i = 0; i < r->open_count; ++i) {

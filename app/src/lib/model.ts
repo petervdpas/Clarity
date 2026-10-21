@@ -41,11 +41,15 @@ export function formatsOf(preview: Preview): Formats {
 /** The translations to show texts in: the designer's choice, or those for
  *  the person's locale; undefined shows the texts as written. */
 export function translationsOf(preview: Preview): Record<string, string> | undefined {
-  const all = preview.project.translations;
+  const language = languageOf(preview);
+  return language ? preview.project.translations[language] : undefined;
+}
+
+/** The language of the translations texts show in, as the backend is told it; null for the texts as written. */
+export function languageOf(preview: Preview): string | null {
   const chosen = languageChoice.language;
-  const language =
-    chosen !== undefined ? chosen : pickLanguage(formatsOf(preview).locale, Object.keys(all), preview.project.locale.language);
-  return language ? all[language] : undefined;
+  const all = Object.keys(preview.project.translations);
+  return (chosen !== undefined ? chosen : pickLanguage(formatsOf(preview).locale, all, preview.project.locale.language)) ?? null;
 }
 
 /** A text of the project as the person reads it: translated, or as written. */

@@ -13,7 +13,7 @@ use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
 use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT};
-use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Page, PageKind, Widget, WidgetProps};
+use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Literal, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
 
@@ -1045,6 +1045,8 @@ public partial class {name}View : UserControl
             let info = logic::type_ref_info(self.project, ty);
             let ty_name = super::names::value_type(&info);
             let start = match (default, &info) {
+                // A text starts in the person's language, as a label shows.
+                (Some(Literal::Str(text)), _) => self.texts.code(text),
                 (Some(value), _) => logic::literal(self.project, ty, value),
                 (None, clarity_spec::code::check::TypeInfo::Text) => "\"\"".into(),
                 (None, _) => "default".into(),

@@ -23,21 +23,21 @@ fn has(files: &[OutFile], path: &str, expected: &str) {
 
 #[test]
 fn every_stack_loads_an_engine_with_its_services_and_limits() {
-    has(&files(Backend::Rust, Ui::Web), "src/engines.rs", "uses: &[\"clock\", \"random\", \"log\"], limits: Limits { seconds: 2, megabytes: 64 }, state: State::None, opens: false }");
-    has(&files(Backend::Go, Ui::Web), "engines.go", "Uses: []string{\"clock\", \"random\", \"log\"}, Limits: engine.Limits{Seconds: 2, Megabytes: 64}, State: engine.NoState, Opens: false}");
-    has(&files(Backend::Csharp, Ui::Avalonia), "Engines.cs", "[\"clock\", \"random\", \"log\"], new EngineLimits(2, 64), EngineState.None, false)");
-    has(&files(Backend::C, Ui::Web), "src/engines.c", "3, pricing_uses, (ClarityEngineLimits){2, 64}, CLARITY_ENGINE_NO_STATE, false}");
-    has(&files(Backend::C, Ui::Web), "src/engines.c", "static const char* const pricing_uses[] = {\"clock\", \"random\", \"log\"};");
-    has(&files(Backend::Cpp, Ui::Web), "src/engines.cpp", "{\"clock\", \"random\", \"log\"}, clarity::EngineLimits{2, 64}, clarity::EngineState::none, false}");
+    has(&files(Backend::Rust, Ui::Web), "src/engines.rs", "uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 2, megabytes: 64 }, state: State::None, opens: false }");
+    has(&files(Backend::Go, Ui::Web), "engines.go", "Uses: []string{\"clock\", \"random\", \"log\", \"language\"}, Limits: engine.Limits{Seconds: 2, Megabytes: 64}, State: engine.NoState, Opens: false}");
+    has(&files(Backend::Csharp, Ui::Avalonia), "Engines.cs", "[\"clock\", \"random\", \"log\", \"language\"], new EngineLimits(2, 64), EngineState.None, false)");
+    has(&files(Backend::C, Ui::Web), "src/engines.c", "4, pricing_uses, (ClarityEngineLimits){2, 64}, CLARITY_ENGINE_NO_STATE, false}");
+    has(&files(Backend::C, Ui::Web), "src/engines.c", "static const char* const pricing_uses[] = {\"clock\", \"random\", \"log\", \"language\"};");
+    has(&files(Backend::Cpp, Ui::Web), "src/engines.cpp", "{\"clock\", \"random\", \"log\", \"language\"}, clarity::EngineLimits{2, 64}, clarity::EngineState::none, false}");
 }
 
 #[test]
 fn every_stack_loads_an_engine_with_its_state_and_on_open() {
-    has(&files(Backend::Rust, Ui::Web), "src/engines.rs", "Declaration { functions: &[\"count\"], uses: &[\"clock\", \"random\", \"log\"], limits: Limits { seconds: 5, megabytes: 256 }, state: State::App, opens: true }");
-    has(&files(Backend::Go, Ui::Web), "engines.go", "engine.Declaration{Functions: []string{\"count\"}, Uses: []string{\"clock\", \"random\", \"log\"}, Limits: engine.Limits{Seconds: 5, Megabytes: 256}, State: engine.PerApp, Opens: true}");
-    has(&files(Backend::Csharp, Ui::Avalonia), "Engines.cs", "new EngineDeclaration([\"count\"], [\"clock\", \"random\", \"log\"], new EngineLimits(5, 256), EngineState.PerApp, true)");
-    has(&files(Backend::C, Ui::Web), "src/engines.c", "(ClarityEngineDeclaration){1, counter_functions, 3, counter_uses, (ClarityEngineLimits){5, 256}, CLARITY_ENGINE_PER_APP, true}");
-    has(&files(Backend::Cpp, Ui::Web), "src/engines.cpp", "{{\"count\"}, {\"clock\", \"random\", \"log\"}, clarity::EngineLimits{5, 256}, clarity::EngineState::per_app, true}");
+    has(&files(Backend::Rust, Ui::Web), "src/engines.rs", "Declaration { functions: &[\"count\"], uses: &[\"clock\", \"random\", \"log\", \"language\"], limits: Limits { seconds: 5, megabytes: 256 }, state: State::App, opens: true }");
+    has(&files(Backend::Go, Ui::Web), "engines.go", "engine.Declaration{Functions: []string{\"count\"}, Uses: []string{\"clock\", \"random\", \"log\", \"language\"}, Limits: engine.Limits{Seconds: 5, Megabytes: 256}, State: engine.PerApp, Opens: true}");
+    has(&files(Backend::Csharp, Ui::Avalonia), "Engines.cs", "new EngineDeclaration([\"count\"], [\"clock\", \"random\", \"log\", \"language\"], new EngineLimits(5, 256), EngineState.PerApp, true)");
+    has(&files(Backend::C, Ui::Web), "src/engines.c", "(ClarityEngineDeclaration){1, counter_functions, 4, counter_uses, (ClarityEngineLimits){5, 256}, CLARITY_ENGINE_PER_APP, true}");
+    has(&files(Backend::Cpp, Ui::Web), "src/engines.cpp", "{{\"count\"}, {\"clock\", \"random\", \"log\", \"language\"}, clarity::EngineLimits{5, 256}, clarity::EngineState::per_app, true}");
 }
 
 /// An engine with state per window is called in the handler's own window,

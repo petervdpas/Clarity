@@ -4,6 +4,9 @@ module noughts
 // is in engines/board.
 engine Board from "board.wasm"
     uses random
+    // What the board says, translated like the project's own texts.
+    says "Your move", "You win", "I win", "A draw"
+    says "The game is over; start a new one", "There are nine squares", "That square is taken"
     state per window
     on open
     function play(square: integer) -> text
@@ -25,7 +28,7 @@ page Game: window
     data status: text, default "Your move"
     data rules: text, default "Click a square to put your cross there; the computer answers with a nought. Three in a row wins."
     // How to play: folded to a button until the person opens it.
-    sidebar right name help width 260 min 200 max 420 resizable collapsible collapsed maximizable
+    sidebar left name help width 260 min 200 max 420 resizable collapsible collapsed maximizable
         heading "How to play" name helpHeading at 1,1 span 3
         text name rulesText at 1,2 span 3 rows 4 bind rules
     canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked

@@ -138,6 +138,8 @@ unsafe extern "C" {
     fn clarity_random() -> i64;
     #[link_name = "log"]
     fn clarity_log(at: *const u8, len: i32);
+    #[link_name = "language"]
+    fn clarity_language(at: *mut u8, room: i32) -> i32;
 }
 
 /// The time, in milliseconds since 1970-01-01 UTC (`uses clock`).
@@ -195,5 +197,31 @@ mod tests {
         let bytes = Bytes(vec![1, 2, 3]);
         assert_eq!(serde_json::to_value(&bytes).unwrap(), serde_json::json!("AQID"));
         assert_eq!(serde_json::from_value::<Bytes>(serde_json::json!("AQID")).unwrap(), bytes);
+    }
+}
+
+/// The language the person picked, as its tag such as `nl` (`uses
+/// language`); none for the texts as the project writes them.
+pub fn language() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut room = [0u8; 64];
+        // SAFETY: the host writes at most `room.len()` bytes at the place it is given.
+        let len = unsafe { clarity_language(room.as_mut_ptr(), room.len() as i32) }.max(0) as usize;
+        if len == 0 {
+            return None;
+        }
+        let mut tag = room[..len.min(room.len())].to_vec();
+        if len > room.len() {
+            // A longer tag than any language has: ask again with room for all of it.
+            tag = vec![0u8; len];
+            // SAFETY: as above, with room for the whole tag.
+            unsafe { clarity_language(tag.as_mut_ptr(), len as i32) };
+        }
+        String::from_utf8(tag).ok()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
     }
 }

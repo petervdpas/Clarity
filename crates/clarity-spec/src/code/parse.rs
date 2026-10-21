@@ -69,6 +69,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let mut functions = Vec::new();
     let (mut seconds, mut megabytes, mut limited) = (None, None, false);
     let mut uses = Vec::new();
+    let mut says = Vec::new();
     let (mut state, mut stated, mut opens) = (EngineState::None, false, false);
     for child in &node.children {
         let mut line = Cursor::new(child.line);
@@ -105,6 +106,22 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
                     return Err(line.error_here("an engine has one on open line"));
                 }
                 opens = true;
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
+        if line.eat_keyword("says") {
+            let parsed = (|| {
+                loop {
+                    says.push(line.expect_string("says gives texts, as in 'says \"You win\", \"A draw\"'")?);
+                    if !line.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
                 line.expect_end()?;
                 no_children(child)
             })();
@@ -168,7 +185,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             Err(diag) => diagnostics.push(diag),
         }
     }
-    Ok(EngineDecl { name, file, uses, state, opens, seconds, megabytes, functions, span: node.span() })
+    Ok(EngineDecl { name, file, uses, says, state, opens, seconds, megabytes, functions, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {

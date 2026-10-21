@@ -19,6 +19,14 @@ use clarity_project::{Backend, SourceKind, Ui};
 mod scratch;
 use scratch::empty;
 
+/// Where builds go: target/generated in the repository, on disk; never the
+/// system's temporary folder, which may live in memory.
+fn scratch() -> std::path::PathBuf {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated");
+    std::fs::create_dir_all(&dir).expect("target/generated can be made");
+    dir
+}
+
 /// Clarity's Go runtime module.
 const RUNTIME: &str = "github.com/petervdpas/Clarity/runtimes/go";
 
@@ -82,7 +90,7 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.stack.backend = Backend::Go;
     settings.stack.ui = Ui::Web;
-    let out = std::env::temp_dir().join(format!("clarity-gen-go-{name}-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-go-{name}-{}", std::process::id()));
     // The database in the scratch folder, not in the example.
     settings.datasources[0].url = "data/app.db".into();
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -122,7 +130,7 @@ fn the_shop_example_builds_and_runs_on_the_published_runtime() {
 #[ignore]
 fn the_published_runtime_sums_are_recorded() {
     let version = clarity_gen::go_runtime_version();
-    let scratch = std::env::temp_dir().join(format!("clarity-gen-go-sums-{}", std::process::id()));
+    let scratch = scratch().join(format!("clarity-gen-go-sums-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
     let out = Command::new("go")
         .args(["mod", "download", "-json", &format!("{RUNTIME}@{version}")])
@@ -182,7 +190,7 @@ fn the_shop_example_builds_and_migrates_on_every_server_database_in_go() {
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = clarity_gen::generate(&project, &settings).unwrap();
 
-        let out = std::env::temp_dir().join(format!("clarity-gen-go-{variable}-{}", std::process::id()));
+        let out = scratch().join(format!("clarity-gen-go-{variable}-{}", std::process::id()));
         write(&out, &files, Runtime::Local);
         checks(&out, Runtime::Local);
         run(&out, "go", &["build", "-o", "shop", "."]);
@@ -309,7 +317,7 @@ fn an_engine_answers_in_the_generated_application_in_go() {
     settings.stack.backend = clarity_project::Backend::Go;
     settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = std::env::temp_dir().join(format!("clarity-gen-go-engine-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-go-engine-{}", std::process::id()));
     write(&out, &files, Runtime::Local);
     checks(&out, Runtime::Local);
     std::fs::write(out.join("engine_test.go"), ENGINE_TEST).unwrap();
@@ -345,7 +353,7 @@ fn functions_named_like_types_build_in_go() {
     settings.stack.backend = clarity_project::Backend::Go;
     settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = std::env::temp_dir().join(format!("clarity-gen-go-names-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-go-names-{}", std::process::id()));
     write(&out, &files, Runtime::Local);
     checks(&out, Runtime::Local);
     std::fs::write(out.join("names_test.go"), NAME_CLASH_TEST).unwrap();

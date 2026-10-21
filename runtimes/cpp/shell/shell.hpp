@@ -77,7 +77,8 @@ public:
 /// Answers the renderer's commands.
 class Service {
 public:
-    explicit Service(Options options) : options_(std::move(options)) {}
+    /// Text code makes is translated from the model's translations.
+    explicit Service(Options options) : options_(std::move(options)) { load_translations(options_.model); }
 
     /// Runs a command: the same commands, with the same arguments, as the
     /// Tauri shell has. Answers `{"value": ...}` or `{"error": ...}`.

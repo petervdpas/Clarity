@@ -231,6 +231,24 @@
         </section>
 
         <section>
+          <h3>Texts it gives</h3>
+          <textarea
+            rows="4"
+            value={form.says.join("\n")}
+            placeholder={"You win\nA draw"}
+            title="One text a line: what the engine gives people to read, translated like the project's own texts"
+            onchange={(e) =>
+              change(
+                (n) =>
+                  (n.says = e.currentTarget.value
+                    .split("\n")
+                    .map((t) => t.trim())
+                    .filter((t) => t !== "")),
+              )}
+          ></textarea>
+        </section>
+
+        <section>
           <h3>State</h3>
           {#each [["none", "None: every call starts fresh"], ["app", "Per app: one instance for the whole application"], ["window", "Per window: an instance for each open window"]] as [value, label] (value)}
             <label class="check">
@@ -292,6 +310,13 @@
 </div>
 
 <style>
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    resize: vertical;
+  }
+
   .engine-editor {
     display: flex;
     flex-direction: column;

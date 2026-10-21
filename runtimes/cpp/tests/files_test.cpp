@@ -73,7 +73,8 @@ TEST(bytes_are_read_and_written_as_they_are) {
     fs::path root = planted();
     Db db = Db::memory();
     db.add_store("photos", root.string());
-    for (const auto& c : conformance("files.json")["bytes"]) {
+    auto cases = conformance("files.json");
+    for (const auto& c : cases["bytes"]) {
         auto path = c["path"].get<std::string>();
         Bytes bytes = from_base64(c["base64"].get<std::string>());
         db.write_bytes("photos", path, bytes);

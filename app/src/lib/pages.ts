@@ -13,8 +13,8 @@ import type { WidgetInfo } from "./generated/WidgetInfo";
 import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetProps } from "./generated/WidgetProps";
 import { frameGrids } from "./frame";
-import { findEntity, findEnum, type Row } from "./model";
-import { dataEntity, isList, startValue, valueField } from "./windowData";
+import { findEntity, findEnum, tr, type Row } from "./model";
+import { dataEntity, isList, startValue, translatedDefaults, valueField } from "./windowData";
 import type { DataDecl } from "./generated/DataDecl";
 
 export { CONTENT_PADDING, GAP, ROW_HEIGHT, WINDOW_HEIGHT, WINDOW_WIDTH, resizeEdits, rowAt, rowIn, scaledColumns, windowSize } from "./grid";
@@ -154,7 +154,9 @@ export function pageData(preview: Preview, page: Page): PageData {
   for (const decl of page.data) {
     const name = dataEntity(decl);
     if (name === null) {
-      const entry = valueEntry(decl, { [decl.name.name]: startValue(decl, firstValue(preview, decl)) });
+      // A text default shows in the designer's language, as labels do.
+      const start = translatedDefaults([decl], { [decl.name.name]: startValue(decl, firstValue(preview, decl)) }, (text) => tr(preview, text));
+      const entry = valueEntry(decl, start as Row);
       if (entry) data[decl.name.name] = entry;
       continue;
     }

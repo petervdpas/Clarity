@@ -56,6 +56,19 @@ ClarityText* clarity_text_with(ClarityText* text, const char* path, ClaritySlot 
 /// The text with its slots filled plainly, without a person's format.
 const char* clarity_text_show(const ClarityText* text);
 
+/// Takes the translations from the model (`project.translations`), for
+/// the text code makes (conformance/translations.json, `code`). They last
+/// until the next load, outside the scratch arena.
+void clarity_load_translations(const char* model);
+/// The language texts show in, as the screen picked it; NULL for the texts as written.
+void clarity_set_language(const char* language);
+/// The language the screen picked; NULL for the texts as written.
+const char* clarity_language(void);
+/// `text` in the language picked, or as written when it has no translation there.
+const char* clarity_translate(const char* text);
+/// The same text in the language the screen picked, its values kept; gives `text` back.
+ClarityText* clarity_text_translated(ClarityText* text);
+
 /// A plain string, or the text with its slot values.
 cJSON* clarity_text_json(const ClarityText* text);
 bool clarity_text_from_json(const cJSON* in, ClarityText** out);

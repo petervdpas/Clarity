@@ -55,7 +55,7 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, open_, close_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_};
 }
 
 namespace {
@@ -146,6 +146,11 @@ void to_json(nlohmann::json& out, const Reply& r) {
     nlohmann::json open = nlohmann::json::array();
     for (const auto& o : r.open) open.push_back({{"window", o.window}, {"with", o.with}});
     out = {{"state", r.state}, {"messages", messages}, {"open", open}, {"close", r.close}};
+    if (!r.shown.empty()) {
+        nlohmann::json shown = nlohmann::json::object();
+        for (const auto& [data, text] : r.shown) shown[data] = text;
+        out["shown"] = shown;
+    }
 }
 
 void to_json(nlohmann::json& out, const RefOption& o) { out = {{"id", o.id}, {"text", o.text}}; }

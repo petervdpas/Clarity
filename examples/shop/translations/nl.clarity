@@ -64,6 +64,7 @@ translation nl
     "Quantity" "Aantal"
     "Price" "Prijs"
     "Add line" "Regel toevoegen"
-    "The total is above the customer's credit limit" "Het totaal is hoger dan het kredietlimiet van de klant"
+    "Order {order.number} is within the credit limit" "Bestelling {order.number} blijft binnen het kredietlimiet"
+    "Order {order.number} is above the customer's credit limit" "Bestelling {order.number} gaat boven het kredietlimiet van de klant"
     "Order {order.number} is over its customer's credit limit" "Bestelling {order.number} gaat over het kredietlimiet van de klant"
     "Only pending orders can be deleted" "Alleen bestellingen in behandeling kunnen worden verwijderd"

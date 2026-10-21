@@ -664,6 +664,16 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "{place} = {};", bare(code));
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name));
+                    // A text value shows its text in the person's language, as a label does.
+                    if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
+                        let mut pre = String::new();
+                        let shown = match value.kind {
+                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value, &mut pre),
+                            _ => format!("clarity_plain_text({place})"),
+                        };
+                        out.push_str(&pre);
+                        let _ = writeln!(out, "clarity_ui_set_shown(ui, {}, {shown});", string(name));
+                    }
                 }
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
@@ -709,6 +719,8 @@ impl<'a> Emitter<'a> {
                 let ty = self.returns().unwrap_or(TypeInfo::Unknown);
                 let code = match &ty {
                     _ if matches!(value.kind, ExprKind::Empty) => zero(&ty),
+                    // The text a function returns is in the person's language.
+                    _ if matches!(value.kind, ExprKind::Str { .. }) => format!("clarity_translate({})", self.value(value, &mut pre)),
                     t if is_decimal(t) => self.decimal(value, &mut pre),
                     TypeInfo::Record(_) => deref(&self.value(value, &mut pre)),
                     _ => self.value(value, &mut pre),
@@ -1136,10 +1148,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => value.clone(),
             ExprKind::Str { value } => string(value),
-            ExprKind::Text { .. } => {
-                self.errors.push("text with slots is text to show".into());
-                String::new()
-            }
+            // A text with slots in code takes its translation, then its values.
+            ExprKind::Text { .. } => format!("clarity_text_show(clarity_text_translated({}))", self.shown(expr, pre)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => zero(&ty),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr, pre),
@@ -1201,6 +1211,8 @@ impl<'a> Emitter<'a> {
                 let call = format!("{}({})", super::engine_function(&engine.name, &function.name), values.join(", "));
                 match returns {
                     TypeInfo::Record(entity) => self.lift_record(&entity, &call, pre),
+                    // The text an engine gives is in the person's language, as its `says` lists it.
+                    TypeInfo::Text => format!("clarity_translate({})", self.lift(&value_type(&TypeInfo::Text), &call, pre)),
                     other => self.lift(&value_type(&other), &call, pre),
                 }
             }

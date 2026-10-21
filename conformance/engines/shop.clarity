@@ -13,7 +13,7 @@ entity Order
     total: money
 
 engine Pricing from "test.wasm"
-    uses clock, random, log
+    uses clock, random, log, language
     limit 2 seconds, 64 MB
     function add(a: integer, b: integer) -> integer
     function greet(name: text) -> text
@@ -25,13 +25,13 @@ engine Pricing from "test.wasm"
     function length(content: bytes) -> integer
 
 engine Counter from "test.wasm"
-    uses clock, random, log
+    uses clock, random, log, language
     state per app
     on open
     function count() -> integer
 
 engine Board from "test.wasm"
-    uses clock, random, log
+    uses clock, random, log, language
     state per window
     on open
     function count() -> integer

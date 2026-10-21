@@ -22,3 +22,6 @@ translation nl
     "{person.name} has finished tasks and cannot be deleted" "{person.name} heeft taken afgerond en kan niet worden verwijderd"
     "Yes" "Ja"
     "No" "Nee"
+    "Home" "Start"
+    "People" "Mensen"
+    "Settings" "Instellingen"

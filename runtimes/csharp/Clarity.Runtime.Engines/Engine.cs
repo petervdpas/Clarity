@@ -52,7 +52,12 @@ public sealed record EngineDeclaration(
     EngineState State = EngineState.None,
     bool Opens = false);
 
-public sealed record EngineServices(long? Clock = null, ulong? Seed = null, Action<string>? Log = null);
+/// <summary>
+/// What the services give in place of the system's: a fixed clock or seed,
+/// where the log goes, and the language <c>language</c> gives (none for
+/// <see cref="Engine.Language"/>, the one the screen picked).
+/// </summary>
+public sealed record EngineServices(long? Clock = null, ulong? Seed = null, Action<string>? Log = null, Func<string?>? Language = null);
 
 public sealed class Engine
 {
@@ -88,7 +93,11 @@ public sealed class Engine
         ["clock"] = ([], [Wasmtime.ValueKind.Int64]),
         ["random"] = ([], [Wasmtime.ValueKind.Int64]),
         ["log"] = ([Wasmtime.ValueKind.Int32, Wasmtime.ValueKind.Int32], []),
+        ["language"] = ([Wasmtime.ValueKind.Int32, Wasmtime.ValueKind.Int32], [Wasmtime.ValueKind.Int32]),
     };
+
+    /// <summary>The language the screen picked, as its tag (<c>nl</c>); null for the texts as written. The application sets it.</summary>
+    public static Func<string?> Language { get; set; } = () => null;
 
     /// The engine with `services` in place of the system's.
     public Engine WithServices(EngineServices services) => new(name, engine, module, declared, services);
@@ -329,6 +338,18 @@ public sealed class Engine
             {
                 var memory = caller.GetMemory("memory") ?? throw new EngineException($"engine {name} has no memory");
                 log($"engine {name}: {memory.ReadString(at, len, Encoding.UTF8)}");
+            });
+        }
+        if (uses.Contains("language"))
+        {
+            // The language as it is at the call, written into the engine's room.
+            var language = services.Language ?? Language;
+            linker.DefineFunction("clarity", "language", (Wasmtime.Caller caller, int at, int room) =>
+            {
+                var memory = caller.GetMemory("memory") ?? throw new EngineException($"engine {name} has no memory");
+                var bytes = Encoding.UTF8.GetBytes(language() ?? "");
+                bytes.AsSpan(0, Math.Min(bytes.Length, Math.Max(room, 0))).CopyTo(memory.GetSpan(at, Math.Max(room, 0)));
+                return bytes.Length;
             });
         }
         return linker;

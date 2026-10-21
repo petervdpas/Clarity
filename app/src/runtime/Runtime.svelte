@@ -10,14 +10,15 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState, type Pointer } from "../lib/live";
-  import { errorText, offeredThemes, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import { errorText, languageOf, offeredThemes, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import { themeChoice } from "../lib/scheme.svelte";
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
   import { findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
-  import { dataEntity, isList } from "../lib/windowData";
+  import { dataEntity, isList, translatedDefaults } from "../lib/windowData";
+  import { findApp } from "../lib/frame";
   import { Navigator } from "../lib/navigator";
 
   /** One open window, as the backend sends it. */
@@ -31,6 +32,8 @@
   type Reply = {
     state: WindowState;
     messages: Message[];
+    /** The texts handlers put in text values, which show in the person's language and format. */
+    shown?: Record<string, ShownText>;
     open: { window: string; with: Record<string, unknown> }[];
     close: boolean;
   };
@@ -92,6 +95,29 @@
   /** Set when this is a desktop window of its own (`in new window`), not the main one. */
   let apart = false;
 
+  /** A reply with the texts its handlers put in text values filled in the person's language and format. */
+  function received(reply: Reply): Reply {
+    if (!model || !reply.shown) return reply;
+    const data = { ...reply.state.data };
+    for (const [name, text] of Object.entries(reply.shown)) data[name] = shownText(model, text);
+    return { ...reply, shown: undefined, state: { ...reply.state, data } };
+  }
+
+  /** A window as it opens: its text values still at their defaults in the person's language. */
+  function opened(reply: Reply): Reply {
+    const target = model ? findPage(model, reply.state.window) : undefined;
+    if (!model || !target) return received(reply);
+    const decls = [...target.data, ...(findApp(model)?.data ?? [])];
+    return received({ ...reply, state: { ...reply.state, data: translatedDefaults(decls, reply.state.data, (text) => tr(model!, text)) } });
+  }
+
+  /** Tells the backend the language the screen picked, so the text code makes is in it too. */
+  async function tellLanguage() {
+    if (!model) return;
+    const language = languageOf(model);
+    await invoke("set_language", { language }).catch(() => {});
+  }
+
   // Opening and closing windows, as on every stack (lib/navigator.ts). The
   // backend gets snapshots, so what the user types is in the state it sees.
   const nav = new Navigator<WindowState, Message>(
@@ -104,9 +130,9 @@
       },
     },
     {
-      open: (window, withData) => invoke<Reply>("open_window", { window, with: withData }),
-      close: (state) => invoke<Reply>("close_window", { state: $state.snapshot(state) }),
-      returnTo: (state) => invoke<Reply>("return_to", { state: $state.snapshot(state) }),
+      open: async (window, withData) => opened(await invoke<Reply>("open_window", { window, with: withData })),
+      close: async (state) => received(await invoke<Reply>("close_window", { state: $state.snapshot(state) })),
+      returnTo: async (state) => received(await invoke<Reply>("return_to", { state: $state.snapshot(state) })),
       // A desktop window of its own opens at the size of the window it shows.
       openApart: (window, withData) => {
         const target = model ? findPage(model, window) : undefined;
@@ -126,7 +152,7 @@
     busy = true;
     const index = stack.length - 1;
     try {
-      const reply = await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler });
+      const reply = received(await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler }));
       await nav.apply(index, reply);
     } catch (err) {
       say({ level: "error", text: errorText(err) });
@@ -266,6 +292,7 @@
     languageChoice.language = language === base ? null : language;
     choosing = null;
     store(LANGUAGE_KEY, language);
+    void tellLanguage();
   }
 
   function chooseTheme(theme: string) {
@@ -279,6 +306,7 @@
   invoke<{ model: Preview; main: string }>("start").then(async (start) => {
     model = start.model;
     remember(start.model);
+    await tellLanguage();
     try {
       // A desktop window of its own starts with the window it was opened for.
       const own = await invoke<{ window: string; with: Record<string, unknown> } | null>("apart_start").catch(() => null);
@@ -287,7 +315,7 @@
         await nav.open(own.window, own.with);
         return;
       }
-      const started = await invoke<Reply>("start_app");
+      const started = received(await invoke<Reply>("start_app"));
       await nav.open(start.main);
       await nav.follow(started);
     } catch (err) {

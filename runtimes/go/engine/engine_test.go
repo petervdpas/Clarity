@@ -25,8 +25,9 @@ type cases struct {
 	Limits   engine.Limits `json:"limits"`
 	Uses     []string      `json:"uses"`
 	Services struct {
-		Clock int64  `json:"clock"`
-		Seed  uint64 `json:"seed"`
+		Clock    int64  `json:"clock"`
+		Seed     uint64 `json:"seed"`
+		Language string `json:"language"`
 	} `json:"services"`
 	Served []struct {
 		Function string         `json:"function"`
@@ -166,7 +167,8 @@ func TestAnEngineUsesTheServicesItDeclares(t *testing.T) {
 	}
 	var lines []string
 	clock, seed := c.Services.Clock, c.Services.Seed
-	e.Serve(engine.Services{Clock: &clock, Seed: &seed, Log: func(line string) { lines = append(lines, line) }})
+	language := c.Services.Language
+	e.Serve(engine.Services{Clock: &clock, Seed: &seed, Log: func(line string) { lines = append(lines, line) }, Language: func() string { return language }})
 	for _, call := range c.Served {
 		lines = nil
 		value, err := e.Call(call.Function, call.Args...)

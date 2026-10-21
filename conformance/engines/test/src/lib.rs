@@ -9,7 +9,7 @@ use std::str::FromStr;
 use rust_decimal::Decimal;
 use serde_json::{Value, json};
 
-// The services of Clarity an engine may use (`uses clock, random, log`).
+// The services of Clarity an engine may use (`uses clock, random, log, language`).
 #[link(wasm_import_module = "clarity")]
 unsafe extern "C" {
     /// Milliseconds since 1970-01-01 UTC.
@@ -18,6 +18,8 @@ unsafe extern "C" {
     fn random() -> i64;
     /// A line of UTF-8 text into the application's log.
     fn log(at: *const u8, len: i32);
+    /// The language the screen picked: up to `room` bytes at `at`, and its whole length.
+    fn language(at: *mut u8, room: i32) -> i32;
 }
 
 /// Room in the engine's memory for the host to write into.
@@ -135,6 +137,13 @@ function!(note, |args| {
     let line = text(&args[0])?;
     unsafe { log(line.as_ptr(), line.len() as i32) };
     Ok(json!(true))
+});
+
+// speaks() -> text: the language the screen picked, "" for the texts as written.
+function!(speaks, |_args| {
+    let mut room = [0u8; 64];
+    let len = unsafe { language(room.as_mut_ptr(), room.len() as i32) } as usize;
+    Ok(json!(String::from_utf8_lossy(&room[..len.min(room.len())])))
 });
 
 /// How often `count` was called in this instance, from where `clarity_open` set it.

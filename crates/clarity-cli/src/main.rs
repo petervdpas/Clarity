@@ -87,6 +87,12 @@ enum SpecCommand {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
+    /// List every text people see, and per language the texts its
+    /// translation file misses, written as lines to fill in.
+    Texts {
+        /// The project file, or the folder with its modules.
+        dir: PathBuf,
+    },
     /// Print the checked model as JSON.
     Model {
         /// The project file, or the folder with its modules.
@@ -104,6 +110,7 @@ fn main() -> ExitCode {
             SpecCommand::Check { dir } => check(&dir),
             SpecCommand::Model { dir, samples } => model(&dir, samples),
             SpecCommand::Names { dir } => names(&dir),
+            SpecCommand::Texts { dir } => texts(&dir),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
         Command::Migrate {
@@ -253,6 +260,30 @@ fn check(dir: &std::path::Path) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+fn texts(dir: &std::path::Path) -> ExitCode {
+    let project = match load(dir) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let used: Vec<_> = clarity_spec::translations::texts(&project).into_iter().filter(|u| clarity_spec::translations::needs_translation(&u.text)).collect();
+    let quoted = |text: &str| clarity_spec::lexer::quote(text);
+    if project.translations.is_empty() {
+        println!("// {} texts, and no translation yet", used.len());
+        for u in &used {
+            println!("    {}", quoted(&u.text));
+        }
+        return ExitCode::SUCCESS;
+    }
+    for (language, translated) in &project.translations {
+        let missing: Vec<_> = used.iter().filter(|u| !translated.contains_key(&u.text)).collect();
+        println!("// {language}: {} of {} texts miss a translation", missing.len(), used.len());
+        for u in missing {
+            println!("    {} \"\"  // {}", quoted(&u.text), u.places.join(", "));
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn model(dir: &std::path::Path, samples: bool) -> ExitCode {

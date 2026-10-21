@@ -14,9 +14,13 @@ export type EngineDecl = { name: Ident,
  */
 file: string, 
 /**
- * `uses clock, random, log`: the services of Clarity it may import.
+ * `uses clock, random, log, language`: the services of Clarity it may import.
  */
 uses: Array<Ident>, 
+/**
+ * `says "You win", "A draw"`: the texts it gives, translated like the project's own.
+ */
+says: Array<string>, 
 /**
  * `state per app` or `state per window`: what an instance serves; none
  * keeps no state.

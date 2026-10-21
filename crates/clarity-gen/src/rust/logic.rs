@@ -213,10 +213,18 @@ impl<'a> Emitter<'a> {
                     return;
                 }
                 let place = self.place(target);
-                let value = coerce(self.value(value), &from, &to);
-                out.push_str(&format!("{pad}{place} = {value};\n"));
+                let code = coerce(self.value(value), &from, &to);
+                out.push_str(&format!("{pad}{place} = {code};\n"));
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name, &pad));
+                    // A text value shows its text in the person's language, as a label does.
+                    if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
+                        let shown = match value.kind {
+                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value),
+                            _ => format!("Text::plain({place}.clone())"),
+                        };
+                        out.push_str(&format!("{pad}ui.set_shown({name:?}, {shown});\n"));
+                    }
                 }
             }
             StmtKind::If { branches, otherwise } => {
@@ -257,7 +265,12 @@ impl<'a> Emitter<'a> {
             StmtKind::Return { value: Some(value) } => {
                 let to = self.returns().unwrap_or(TypeInfo::Unknown);
                 let from = self.types.type_of(value);
-                out.push_str(&format!("{pad}return Ok({});\n", coerce(self.value(value), &from, &to)));
+                // The text a function returns is in the person's language.
+                let code = match &value.kind {
+                    ExprKind::Str { value } => format!("clarity_runtime::i18n::translate({value:?})"),
+                    _ => coerce(self.value(value), &from, &to),
+                };
+                out.push_str(&format!("{pad}return Ok({code});\n"));
             }
             StmtKind::Return { value: None } => out.push_str(&format!("{pad}return Ok(());\n")),
             StmtKind::Call { call } => {
@@ -541,11 +554,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("{value}i64"),
             ExprKind::Str { value } => format!("String::from({value:?})"),
-            // The checker allows text with slots only where it is shown.
-            ExprKind::Text { .. } => {
-                self.errors.push("text with slots is text to show".into());
-                String::new()
-            }
+            // A text with slots in code takes its translation, then its values.
+            ExprKind::Text { .. } => format!("{}.translated().show()", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "None".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
@@ -613,13 +623,15 @@ impl<'a> Emitter<'a> {
                 // An engine with state per window is called in the handler's own window.
                 let per_window = self.project.files.iter().flat_map(|f| &f.engines).any(|e| e.name.name == engine.name && e.state == clarity_spec::code::EngineState::Window);
                 let call = if per_window { "call_in(ui.instance(), " } else { "call(" };
-                format!(
+                let called = format!(
                     "clarity_runtime::engine::{from}({e:?}, {f:?}, crate::engines::{}()?.{call}{f:?}, vec![{}])?)?",
                     super::names::snake(&engine.name),
                     values.join(", "),
                     e = engine.name,
                     f = function.name
-                )
+                );
+                // The text an engine gives is in the person's language, as its `says` lists it.
+                if returns == "String" { format!("clarity_runtime::i18n::translate(&{called})") } else { called }
             }
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),

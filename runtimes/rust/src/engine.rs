@@ -56,7 +56,12 @@ pub struct Declaration<'a> {
 
 /// The services an engine may use, each a function of module `clarity`
 /// with its parameters and results.
-const SERVICES: [(&str, &[ValType], &[ValType]); 3] = [("clock", &[], &[ValType::I64]), ("random", &[], &[ValType::I64]), ("log", &[ValType::I32, ValType::I32], &[])];
+const SERVICES: [(&str, &[ValType], &[ValType]); 4] = [
+    ("clock", &[], &[ValType::I64]),
+    ("random", &[], &[ValType::I64]),
+    ("log", &[ValType::I32, ValType::I32], &[]),
+    ("language", &[ValType::I32, ValType::I32], &[ValType::I32]),
+];
 
 /// What the services give: the system's clock, a fresh seed for every call
 /// and the standard error, unless a test fixes the clock or the seed, or
@@ -69,11 +74,13 @@ pub struct Services {
     pub seed: Option<u64>,
     /// Where a line of the log goes, as `engine <Name>: <text>`.
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
+    /// The language `language` gives: the one the screen picked (crate::i18n); none for the texts as written.
+    pub language: Arc<dyn Fn() -> Option<String> + Send + Sync>,
 }
 
 impl Default for Services {
     fn default() -> Self {
-        Services { clock: None, seed: None, log: Arc::new(|line: &str| eprintln!("{line}")) }
+        Services { clock: None, seed: None, log: Arc::new(|line: &str| eprintln!("{line}")), language: Arc::new(crate::i18n::language) }
     }
 }
 
@@ -85,6 +92,7 @@ struct Data {
     /// The state of splitmix64, the random sequence every host gives alike.
     random: u64,
     log: Arc<dyn Fn(&str) + Send + Sync>,
+    language: Arc<dyn Fn() -> Option<String> + Send + Sync>,
 }
 
 /// The next number of splitmix64.
@@ -275,6 +283,7 @@ impl Engine {
             clock: self.services.clock,
             random: 0,
             log: self.services.log.clone(),
+            language: self.services.language.clone(),
         };
         let mut store = Store::new(&self.engine, data);
         store.limiter(|data: &mut Data| &mut data.limits);
@@ -335,6 +344,17 @@ impl Engine {
                 let data = caller.data();
                 (data.log)(&format!("engine {}: {}", data.name, String::from_utf8_lossy(&text)));
                 Ok(())
+            })?;
+        }
+        if uses("language") {
+            // The language as it is at the call, written into the engine's room.
+            linker.func_wrap("clarity", "language", |mut caller: Caller<'_, Data>, at: i32, room: i32| -> std::result::Result<i32, wasmi::Error> {
+                let memory = caller.get_export("memory").and_then(|e| e.into_memory()).ok_or_else(|| wasmi::Error::new("no memory"))?;
+                let language = (caller.data().language)().unwrap_or_default();
+                let bytes = language.as_bytes();
+                let written = bytes.len().min(room.max(0) as usize);
+                memory.write(&mut caller, at as u32 as usize, &bytes[..written]).map_err(|e| wasmi::Error::new(e.to_string()))?;
+                Ok(bytes.len() as i32)
             })?;
         }
         Ok(linker)

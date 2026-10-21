@@ -10,6 +10,14 @@ use std::process::Command;
 
 use clarity_project::{Backend, Ui};
 
+/// Where builds go: target/generated in the repository, on disk; never the
+/// system's temporary folder, which may live in memory.
+fn scratch() -> std::path::PathBuf {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated");
+    std::fs::create_dir_all(&dir).expect("target/generated can be made");
+    dir
+}
+
 fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
     let out = Command::new(tool).args(args).current_dir(dir).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
@@ -24,7 +32,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
     settings.stack.backend = Backend::Cpp;
     settings.stack.ui = Ui::Web;
-    let out = std::env::temp_dir().join(format!("clarity-gen-cpp-{name}-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-cpp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     // The database and stores in the scratch folder, not in the example.
@@ -144,7 +152,7 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     settings.stack.backend = Backend::Cpp;
     settings.stack.ui = Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = std::env::temp_dir().join(format!("clarity-gen-cpp-engine-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-cpp-engine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["build"]).unwrap();

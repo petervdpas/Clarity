@@ -157,6 +157,11 @@ impl Text {
         self
     }
 
+    /// The same text in the language the screen picked (crate::i18n), its values kept.
+    pub fn translated(self) -> Text {
+        Text { text: crate::i18n::translate(&self.text), values: self.values }
+    }
+
     /// The text with its slots filled plainly, without a person's format:
     /// for logs, and for code that reads a caption back.
     pub fn show(&self) -> String {
@@ -333,6 +338,10 @@ pub struct OpenRequest {
 pub struct Reply {
     pub state: WindowState,
     pub messages: Vec<Message>,
+    /// The texts the handler put in text values, by the value's name: the
+    /// screen fills them in the person's language and format.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub shown: BTreeMap<String, Text>,
     pub open: Vec<OpenRequest>,
     pub close: bool,
 }
@@ -344,6 +353,7 @@ pub struct Ui {
     parts: BTreeMap<String, PartState>,
     selected: BTreeMap<String, usize>,
     messages: Vec<Message>,
+    shown: BTreeMap<String, Text>,
     open: Vec<OpenRequest>,
     pub close: bool,
 }
@@ -507,6 +517,11 @@ impl Ui {
         self.messages.push(Message { level, text });
     }
 
+    /// The text value `data` shows `text`, translated and formatted by the screen.
+    pub fn set_shown(&mut self, data: &str, text: Text) {
+        self.shown.insert(data.to_string(), text);
+    }
+
     pub fn open(&mut self, window: &str, with: Vec<(&str, Value)>) {
         self.open.push(OpenRequest {
             window: window.to_string(),
@@ -525,6 +540,7 @@ impl Ui {
                 selected: self.selected,
             },
             messages: self.messages,
+            shown: self.shown,
             open: self.open,
             close: self.close,
         }

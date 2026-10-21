@@ -132,7 +132,9 @@ void an_engine_uses_the_services_it_declares(void) {
                                                          .clock = (int64_t)cJSON_GetObjectItem(services, "clock")->valuedouble,
                                                          .fixed_seed = true,
                                                          .seed = (uint64_t)cJSON_GetObjectItem(services, "seed")->valuedouble,
-                                                         .log = keep_line});
+                                                         .log = keep_line,
+                                                         .fixed_language = true,
+                                                         .language = cJSON_GetObjectItem(services, "language")->valuestring});
     const cJSON* call;
     cJSON_ArrayForEach(call, cJSON_GetObjectItem(file, "served")) {
         logged = cJSON_CreateArray();

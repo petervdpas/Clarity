@@ -68,6 +68,12 @@ typedef struct {
     const ClarityText* text;
 } ClarityMessage;
 
+/// A text a handler put in a text value, which the screen shows translated.
+typedef struct {
+    const char* data;
+    const ClarityText* text;
+} ClarityShown;
+
 /// `open Window with name = value, ...`
 typedef struct {
     const char* window;
@@ -79,6 +85,8 @@ typedef struct {
     ClarityWindowState state;
     ClarityMessage* messages;
     size_t message_count;
+    ClarityShown* shown;
+    size_t shown_count;
     ClarityOpen* open;
     size_t open_count;
     bool close;
@@ -150,6 +158,8 @@ bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, si
 void clarity_ui_deselect(ClarityUi* ui, const char* part);
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text);
+/// The text value `data` shows `text`, translated and formatted by the screen.
+void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* text);
 /// Asks the screen to open `window` with its data filled by name, as the values are now.
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with);
 /// Asks the screen to close the window.

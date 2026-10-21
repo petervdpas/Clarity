@@ -18,6 +18,14 @@ use clarity_project::{Backend, SourceKind, Ui};
 mod scratch;
 use scratch::empty;
 
+/// Where builds go: target/generated in the repository, on disk; never the
+/// system's temporary folder, which may live in memory.
+fn scratch() -> std::path::PathBuf {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated");
+    std::fs::create_dir_all(&dir).expect("target/generated can be made");
+    dir
+}
+
 /// Which runtime a generated project builds on.
 #[derive(Clone, Copy)]
 enum Runtime {
@@ -57,7 +65,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
         assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
     }
 
-    let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{name}-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-csharp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
@@ -136,7 +144,7 @@ fn the_shop_example_builds_and_migrates_on_every_server_database() {
         settings.datasources[0].url = "env:SHOP_DATABASE".into();
         let files = clarity_gen::generate(&project, &settings).unwrap();
 
-        let out = std::env::temp_dir().join(format!("clarity-gen-csharp-{variable}-{}", std::process::id()));
+        let out = scratch().join(format!("clarity-gen-csharp-{variable}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
         clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
@@ -227,7 +235,7 @@ fn an_engine_answers_in_the_generated_application_in_csharp() {
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let root = std::env::temp_dir().join(format!("clarity-gen-csharp-engine-{}", std::process::id()));
+    let root = scratch().join(format!("clarity-gen-csharp-engine-{}", std::process::id()));
     let (out, check) = (root.join("Shop"), root.join("Check"));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&out).unwrap();
@@ -259,7 +267,7 @@ fn functions_named_like_types_build_in_csharp() {
     settings.stack.backend = Backend::Csharp;
     settings.stack.ui = Ui::Avalonia;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = std::env::temp_dir().join(format!("clarity-gen-csharp-names-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-csharp-names-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
@@ -272,12 +280,12 @@ fn functions_named_like_types_build_in_csharp() {
 #[test]
 #[ignore]
 fn the_dial_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("dial", "Dial", None, Runtime::Local);
+    builds_and_runs_in_csharp("dial", "Dial", Some("nl"), Runtime::Local);
 }
 
 /// The fifth example: noughts and crosses, each window's game kept by an engine.
 #[test]
 #[ignore]
 fn the_noughts_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("noughts", "Noughts", None, Runtime::Local);
+    builds_and_runs_in_csharp("noughts", "Noughts", Some("nl"), Runtime::Local);
 }

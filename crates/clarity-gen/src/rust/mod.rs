@@ -543,6 +543,12 @@ fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
 }}
 
+/// The language the screen picked, which text code makes is translated to.
+#[tauri::command]
+fn set_language(language: Option<String>) {{
+    clarity_runtime::i18n::set_language(language.as_deref());
+}}
+
 /// A desktop window takes the title of the Clarity window it shows.
 #[tauri::command]
 fn set_title(window: tauri::WebviewWindow, title: String) {{
@@ -550,7 +556,9 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
 }}
 {apart_code}
 fn main() {{
-{check_engines}    let mut db = Db::connect(DATABASES).expect("cannot open the databases");
+{check_engines}    // Text code makes is translated from the model's translations.
+    clarity_runtime::i18n::load(MODEL);
+    let mut db = Db::connect(DATABASES).expect("cannot open the databases");
     for (source, steps) in schema::SOURCES {{
         db.migrate_source(source, steps).expect("cannot bring the database up to date");
     }}
@@ -569,6 +577,7 @@ fn main() {{
             ref_options,
             picture,
             store_file,{apart_commands}
+            set_language,
             set_title,
             quit_app
         ])

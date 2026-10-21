@@ -46,11 +46,12 @@ test("a function of an engine reads as it is declared", () => {
 });
 
 test("an engine's declaration reads into the inspector's form and writes back as Clarity text", () => {
-  const form = formOf({ ...pricing, uses: [ident("clock"), ident("log")], state: "window", opens: true, seconds: 2, megabytes: null } as never);
+  const form = formOf({ ...pricing, uses: [ident("clock"), ident("log")], says: ["You win", "A draw"], state: "window", opens: true, seconds: 2, megabytes: null } as never);
   assert.deepEqual(form, {
     name: "Pricing",
     file: "pricing.wasm",
     uses: ["clock", "log"],
+    says: ["You win", "A draw"],
     state: "window",
     opens: true,
     seconds: 2,
@@ -59,10 +60,10 @@ test("an engine's declaration reads into the inspector's form and writes back as
   });
   assert.equal(
     engineText(form),
-    'engine Pricing from "pricing.wasm"\n    uses clock, log\n    state per window\n    on open\n    limit 2 seconds\n    function total(lines: list<Line>) -> money\n',
+    'engine Pricing from "pricing.wasm"\n    uses clock, log\n    says "You win", "A draw"\n    state per window\n    on open\n    limit 2 seconds\n    function total(lines: list<Line>) -> money\n',
   );
   // Only what is said: no services, no state, the default limits.
-  const plain = { ...form, uses: [], state: "none" as const, opens: false, seconds: null, megabytes: null };
+  const plain = { ...form, uses: [], says: [], state: "none" as const, opens: false, seconds: null, megabytes: null };
   assert.equal(engineText(plain), 'engine Pricing from "pricing.wasm"\n    function total(lines: list<Line>) -> money\n');
   assert.equal(engineText({ ...plain, seconds: 2, megabytes: 64 }).split("\n")[1], "    limit 2 seconds, 64 MB");
   assert.equal(engineText({ ...plain, megabytes: 64 }).split("\n")[1], "    limit 64 MB");

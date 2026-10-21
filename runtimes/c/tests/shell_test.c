@@ -89,6 +89,9 @@ void the_shell_answers_the_renderers_commands(void) {
     ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
     ClarityService* s = clarity_service_new(&options);
     CHECK_JSON(invoked(s, "start", "{}", NULL), "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}");
+    // The screen names the language text code makes is translated to.
+    invoked(s, "set_language", "{\"language\":\"nl\"}", NULL);
+    invoked(s, "set_language", "{\"language\":null}", NULL);
     cJSON* opened = invoked(s, "open_window", "{\"window\":\"Card\",\"with\":{\"name\":\"Grace\"}}", NULL);
     const cJSON* title = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(opened, "value"), "state"), "parts"), "title"), "caption");
     CHECK_JSON(title, "\"Card of Grace\"");

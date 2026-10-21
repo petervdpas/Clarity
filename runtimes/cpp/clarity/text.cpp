@@ -1,5 +1,7 @@
 #include "clarity/text.hpp"
 
+#include <mutex>
+
 #include "clarity/errors.hpp"
 
 namespace clarity {
@@ -138,6 +140,65 @@ void from_json(const nlohmann::json& in, Text& text) {
     Text t(in.at("text").get<std::string>());
     for (auto& [path, value] : in.at("values").items()) t = t.with(path, value.get<Slot>());
     text = t;
+}
+
+}  // namespace clarity
+
+namespace clarity {
+
+namespace {
+
+struct Translations {
+    std::mutex mutex;
+    std::map<std::string, std::map<std::string, std::string>> by_language;
+    std::optional<std::string> language;
+};
+
+Translations& translations() {
+    static Translations all;
+    return all;
+}
+
+}  // namespace
+
+void load_translations(const std::string& model) {
+    auto parsed = nlohmann::json::parse(model, nullptr, false);
+    std::map<std::string, std::map<std::string, std::string>> all;
+    if (parsed.is_object() && parsed.contains("project") && parsed["project"].contains("translations")) {
+        for (const auto& [language, texts] : parsed["project"]["translations"].items()) {
+            for (const auto& [text, translation] : texts.items()) {
+                if (translation.is_string()) all[language][text] = translation.get<std::string>();
+            }
+        }
+    }
+    std::lock_guard lock(translations().mutex);
+    translations().by_language = std::move(all);
+}
+
+void set_language(std::optional<std::string> language) {
+    std::lock_guard lock(translations().mutex);
+    translations().language = std::move(language);
+}
+
+std::optional<std::string> language() {
+    std::lock_guard lock(translations().mutex);
+    return translations().language;
+}
+
+std::string translate(const std::string& text) {
+    std::lock_guard lock(translations().mutex);
+    auto& t = translations();
+    if (!t.language) return text;
+    auto of = t.by_language.find(*t.language);
+    if (of == t.by_language.end()) return text;
+    auto found = of->second.find(text);
+    return found == of->second.end() ? text : found->second;
+}
+
+Text Text::translated() const {
+    Text out = *this;
+    out.template_ = translate(template_);
+    return out;
 }
 
 }  // namespace clarity

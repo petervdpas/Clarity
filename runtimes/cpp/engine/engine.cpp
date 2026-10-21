@@ -34,6 +34,9 @@ struct Engine::Loaded {
     /// Hears of the windows that close, for state per window; it goes first when the engine does.
     std::shared_ptr<void> listening;
     ~Loaded() {
+        // The kept instances live in the environment, so they go before it.
+        listening.reset();
+        kept.clear();
         if (environment) m3_FreeEnvironment(environment);
     }
 };
@@ -111,6 +114,22 @@ m3ApiRawFunction(log_service) {
     m3ApiSuccess();
 }
 
+// The language as it is at the call, written into the engine's room; gives its whole length.
+m3ApiRawFunction(language_service) {
+    (void)_ctx;
+    (void)_mem;
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(int32_t, at);
+    m3ApiGetArg(int32_t, room);
+    uint32_t size = 0;
+    uint8_t* memory = m3_GetMemory(runtime, &size, 0);
+    if (!memory || at < 0 || room < 0 || static_cast<uint64_t>(static_cast<uint32_t>(at)) + static_cast<uint32_t>(room) > size)
+        m3ApiTrap(m3Err_trapOutOfBoundsMemoryAccess);
+    std::string language = (serving->services->language ? serving->services->language() : clarity::language()).value_or("");
+    std::memcpy(memory + at, language.data(), std::min(language.size(), static_cast<size_t>(room)));
+    m3ApiReturn(static_cast<int32_t>(language.size()));
+}
+
 /// The services an engine may use: functions of module `clarity`, with
 /// their types as wasm3 writes signatures.
 struct Service {
@@ -118,7 +137,12 @@ struct Service {
     const char* type;
     M3RawCall function;
 };
-constexpr Service services[] = {{"clock", "I()", clock_service}, {"random", "I()", random_service}, {"log", "v(ii)", log_service}};
+constexpr Service services[] = {
+    {"clock", "I()", clock_service},
+    {"random", "I()", random_service},
+    {"log", "v(ii)", log_service},
+    {"language", "i(ii)", language_service},
+};
 
 /// Sets the deadline of a call while it runs.
 struct Timed {

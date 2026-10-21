@@ -713,7 +713,7 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
         let mut used: Vec<&str> = Vec::new();
         for service in &engine.uses {
             if !crate::engines::SERVICES.contains(&service.name.as_str()) {
-                out.push(Diagnostic::error(format!("'{}' is no service; an engine uses clock, random or log", service.name), service.span));
+                out.push(Diagnostic::error(format!("'{}' is no service; an engine uses clock, random, log or language", service.name), service.span));
             } else if used.contains(&service.name.as_str()) {
                 out.push(Diagnostic::error(format!("engine {} uses {} twice", engine.name.name, service.name), service.span));
             }
@@ -1601,11 +1601,8 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             ExprKind::Str { .. } => Ty::Text,
+            // A text with slots is a text, translated where code makes it.
             ExprKind::Text { parts } => {
-                self.error(
-                    "text with slots is text to show; use it in 'message', 'refuse', or a part's caption or error",
-                    expr.span,
-                );
                 self.slots(parts);
                 Ty::Text
             }

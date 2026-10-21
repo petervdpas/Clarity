@@ -466,8 +466,10 @@ pub struct EngineDecl {
     pub name: Ident,
     /// The file in the `engines` folder: `pricing.wasm`.
     pub file: String,
-    /// `uses clock, random, log`: the services of Clarity it may import.
+    /// `uses clock, random, log, language`: the services of Clarity it may import.
     pub uses: Vec<Ident>,
+    /// `says "You win", "A draw"`: the texts it gives, translated like the project's own.
+    pub says: Vec<String>,
     /// `state per app` or `state per window`: what an instance serves; none
     /// keeps no state.
     pub state: EngineState,

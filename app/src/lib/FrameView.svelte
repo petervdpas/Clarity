@@ -1,6 +1,6 @@
 <script lang="ts">
   import { shownTab } from "./ribbons";
-  import { STRIP_WIDTH, sidebarWidth } from "./sidebars";
+  import { STRIP_WIDTH, sidebarNow, sidebarWidth, type SidebarHere } from "./sidebars";
   // The frame around a window: menu, toolbar and ribbon at the top, sidebars
   // at the sides, the footer at the bottom, and the window body in between.
   // In design mode the window's own regions can be picked; regions that come
@@ -111,20 +111,18 @@
   // dragged to, and whether it is folded or fills the window. Live, the
   // part's state carries folded and filling to the handlers (conformance/sidebars.json).
   let draggedWidth = $state<Partial<Record<Side, number>>>({});
-  let here = $state<Partial<Record<Side, { collapsed?: boolean; maximized?: boolean }>>>({});
+  let here = $state<Partial<Record<Side, SidebarHere>>>({});
 
+  // In the designer too the person folds a sidebar and lets it fill the
+  // window, to see it so; that changes the canvas, not the design.
   function stateOf(s: Sidebar): { collapsed: boolean; maximized: boolean } {
     const part = live && s.props.name ? live.parts[s.props.name] : undefined;
-    const own = here[s.props.side];
-    return {
-      collapsed: !design && s.props.collapsible && (part?.collapsed ?? own?.collapsed ?? s.props.collapsed),
-      maximized: !design && s.props.maximizable && (part?.maximized ?? own?.maximized ?? false),
-    };
+    return sidebarNow(s.props, part, here[s.props.side]);
   }
 
   function setState(s: Sidebar, change: { collapsed?: boolean; maximized?: boolean }) {
-    if (live && s.props.name) live.setSidebar(s.props.name, change);
-    else here[s.props.side] = { ...here[s.props.side], ...change };
+    if (live && s.props.name && !design) live.setSidebar(s.props.name, change);
+    else here[s.props.side] = { ...stateOf(s), ...change, designed: s.props.collapsed };
   }
 
   function widthOf(s: Sidebar): number {
@@ -229,12 +227,12 @@
       <!-- The person folds it to this button and back, and lets it fill the window. -->
       <div class="sidebar-buttons">
         {#if s.props.maximizable && !now.collapsed}
-          <button type="button" disabled={design} title={now.maximized ? "Give the window back" : "Fill the window"} onclick={() => setState(s, { maximized: !now.maximized })}
+          <button type="button" title={now.maximized ? "Give the window back" : "Fill the window"} onclick={() => setState(s, { maximized: !now.maximized })}
             >{now.maximized ? "\u2921" : "\u2922"}</button
           >
         {/if}
         {#if s.props.collapsible}
-          <button type="button" disabled={design} title={now.collapsed ? "Show the sidebar" : "Fold the sidebar away"} onclick={() => setState(s, { collapsed: !now.collapsed, maximized: false })}
+          <button type="button" title={now.collapsed ? "Show the sidebar" : "Fold the sidebar away"} onclick={() => setState(s, { collapsed: !now.collapsed, maximized: false })}
             >{(s.props.side === "left") !== now.collapsed ? "\u2039" : "\u203A"}</button
           >
         {/if}

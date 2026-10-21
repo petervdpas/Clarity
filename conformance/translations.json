@@ -1,11 +1,117 @@
 {
   "about": "Which translation a renderer uses (DESIGN section 1.5, I1c): the person's locale, the languages the project has translation files for, and the project's base language. picks is the file's language, or null for the texts as written. Every renderer must pick the same.",
   "picks": [
-    { "what": "the exact language", "locale": "nl-NL", "available": ["nl-NL", "nl", "de"], "base": "en", "picks": "nl-NL" },
-    { "what": "the language without its region", "locale": "nl-BE", "available": ["nl", "de"], "base": "en", "picks": "nl" },
-    { "what": "a region of a language without its own file", "locale": "de-AT", "available": ["de-DE"], "base": "en", "picks": "de-DE" },
-    { "what": "the base language is shown as written", "locale": "en-GB", "available": ["nl", "en"], "base": "en", "picks": null },
-    { "what": "a language nobody translated", "locale": "fr-FR", "available": ["nl"], "base": "en", "picks": null },
-    { "what": "no base language named means English", "locale": "en-US", "available": ["nl"], "base": null, "picks": null }
-  ]
+    {
+      "what": "the exact language",
+      "locale": "nl-NL",
+      "available": [
+        "nl-NL",
+        "nl",
+        "de"
+      ],
+      "base": "en",
+      "picks": "nl-NL"
+    },
+    {
+      "what": "the language without its region",
+      "locale": "nl-BE",
+      "available": [
+        "nl",
+        "de"
+      ],
+      "base": "en",
+      "picks": "nl"
+    },
+    {
+      "what": "a region of a language without its own file",
+      "locale": "de-AT",
+      "available": [
+        "de-DE"
+      ],
+      "base": "en",
+      "picks": "de-DE"
+    },
+    {
+      "what": "the base language is shown as written",
+      "locale": "en-GB",
+      "available": [
+        "nl",
+        "en"
+      ],
+      "base": "en",
+      "picks": null
+    },
+    {
+      "what": "a language nobody translated",
+      "locale": "fr-FR",
+      "available": [
+        "nl"
+      ],
+      "base": "en",
+      "picks": null
+    },
+    {
+      "what": "no base language named means English",
+      "locale": "en-US",
+      "available": [
+        "nl"
+      ],
+      "base": null,
+      "picks": null
+    }
+  ],
+  "code": {
+    "about": "Text code makes (a function's result, a text with slots in a value) is translated in the backend: it loads the translations from the model (model.project.translations), the screen tells it the language it picked with set_language (null for the texts as written), and a text takes its translation in that language with its slots filled. A text without a translation, or in a language without a file, is as written.",
+    "model": {
+      "project": {
+        "translations": {
+          "nl": {
+            "Draw": "Gelijkspel",
+            "Your move, {name}": "{name}, jij bent aan zet"
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "what": "a plain text",
+        "language": "nl",
+        "text": "Draw",
+        "values": {},
+        "gives": "Gelijkspel"
+      },
+      {
+        "what": "a text with a slot moves it",
+        "language": "nl",
+        "text": "Your move, {name}",
+        "values": {
+          "name": "Ada"
+        },
+        "gives": "Ada, jij bent aan zet"
+      },
+      {
+        "what": "as written",
+        "language": null,
+        "text": "Your move, {name}",
+        "values": {
+          "name": "Ada"
+        },
+        "gives": "Your move, Ada"
+      },
+      {
+        "what": "a text nobody translated",
+        "language": "nl",
+        "text": "You win",
+        "values": {},
+        "gives": "You win"
+      },
+      {
+        "what": "a language without a file",
+        "language": "de",
+        "text": "Draw",
+        "values": {},
+        "gives": "Draw"
+      }
+    ]
+  }
 }

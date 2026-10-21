@@ -22,3 +22,6 @@ translation de
     "{person.name} has finished tasks and cannot be deleted" "{person.name} hat Aufgaben erledigt und kann nicht gelöscht werden"
     "Yes" "Ja"
     "No" "Nein"
+    "Home" "Start"
+    "People" "Personen"
+    "Settings" "Einstellungen"

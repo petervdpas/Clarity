@@ -95,6 +95,8 @@ type Service struct {
 }
 
 func New(options Options) *Service {
+	// Text code makes is translated from the model's translations.
+	clarity.LoadTranslations(options.Model)
 	return &Service{options: options, apart: map[string]apart{}}
 }
 
@@ -145,18 +147,19 @@ func (c *Service) dispatch(state clarity.WindowState, handler string) (clarity.R
 // arguments, as the Tauri shell has.
 func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessage) Answer {
 	var a struct {
-		Window  string              `json:"window"`
-		With    map[string]any      `json:"with"`
-		Width   int                 `json:"width"`
-		Height  int                 `json:"height"`
-		State   clarity.WindowState `json:"state"`
-		Handler string              `json:"handler"`
-		Entity  string              `json:"entity"`
-		Title   string              `json:"title"`
-		ID      int64               `json:"id"`
-		Field   string              `json:"field"`
-		Store   string              `json:"store"`
-		Path    string              `json:"path"`
+		Window   string              `json:"window"`
+		With     map[string]any      `json:"with"`
+		Language *string             `json:"language"`
+		Width    int                 `json:"width"`
+		Height   int                 `json:"height"`
+		State    clarity.WindowState `json:"state"`
+		Handler  string              `json:"handler"`
+		Entity   string              `json:"entity"`
+		Title    string              `json:"title"`
+		ID       int64               `json:"id"`
+		Field    string              `json:"field"`
+		Store    string              `json:"store"`
+		Path     string              `json:"path"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -172,6 +175,10 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	switch command {
 	case "start":
 		return Answer{Value: map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}}
+	case "set_language":
+		// The language the screen picked, which text code makes is translated to.
+		clarity.SetLanguage(a.Language)
+		return Answer{}
 	case "open_window":
 		state, err := c.options.Windows.Open(db, a.Window, a.With)
 		if err != nil {

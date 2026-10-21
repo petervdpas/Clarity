@@ -20,7 +20,7 @@ entity Line
     count: integer
 
 engine Pricing from \"test.wasm\"
-    uses clock, random, log
+    uses clock, random, log, language
     function add(a: integer, b: integer) -> integer
     function total(lines: list<Line>) -> money
     function size_of(n: integer) -> Size
@@ -97,7 +97,7 @@ fn the_engine_file_is_checked_against_its_declaration() {
 /// part optional, the defaults for what is not written.
 #[test]
 fn an_engine_may_limit_its_calls() {
-    let source = |limit: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log\n{limit}    function add(a: integer, b: integer) -> integer\n");
+    let source = |limit: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log, language\n{limit}    function add(a: integer, b: integer) -> integer\n");
     let limits = |limit: &str| {
         let (file, diags) = parse(&source(limit), "shop.clarity");
         assert!(diags.is_empty(), "{diags:#?}");
@@ -121,16 +121,30 @@ fn an_engine_may_limit_its_calls() {
 #[test]
 fn an_engine_declares_the_services_it_uses() {
     let source = |uses: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n{uses}    function add(a: integer, b: integer) -> integer\n");
-    let (file, diags) = parse(&source("    uses clock, random, log\n"), "shop.clarity");
+    let (file, diags) = parse(&source("    uses clock, random, log, language\n"), "shop.clarity");
     assert!(diags.is_empty(), "{diags:#?}");
     let uses: Vec<&str> = file.engines[0].uses.iter().map(|u| u.name.as_str()).collect();
-    assert_eq!(uses, ["clock", "random", "log"]);
-    assert!(errors(&source("    uses clock, random, log\n"), test_engine()).is_empty());
+    assert_eq!(uses, ["clock", "random", "log", "language"]);
+    assert!(errors(&source("    uses clock, random, log, language\n"), test_engine()).is_empty());
 
-    // The test engine imports all three, so leaving one out is an error.
-    assert_has(&errors(&source("    uses clock, log\n"), test_engine()), "imports clarity.random; an engine imports only the services it uses");
-    assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random or log");
-    assert_has(&errors(&source("    uses clock, clock, random, log\n"), test_engine()), "uses clock twice");
+    // The test engine imports all four, so leaving one out is an error.
+    assert_has(&errors(&source("    uses clock, log, language\n"), test_engine()), "imports clarity.random; an engine imports only the services it uses");
+    assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random, log or language");
+    assert_has(&errors(&source("    uses clock, clock, random, log, language\n"), test_engine()), "uses clock twice");
+}
+
+/// An engine lists the texts it gives, so they are translated like the
+/// project's own: `says "You win", "A draw"`.
+#[test]
+fn an_engine_says_the_texts_it_gives() {
+    let source = "module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log, language\n    says \"You win\", \"A draw\"\n    function add(a: integer, b: integer) -> integer\n";
+    let (file, diags) = parse(source, "shop.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.engines[0].says, ["You win", "A draw"]);
+    let texts = clarity_spec::translations::texts(&project(source, test_engine()));
+    let said = texts.iter().find(|u| u.text == "You win").expect("collected");
+    assert_eq!(said.places, ["engine Pricing"]);
+    assert_has(&parse("module shop\n\nengine Pricing from \"test.wasm\"\n    says You\n", "shop.clarity").1.iter().map(|d| d.message.clone()).collect::<Vec<_>>(), "says gives texts");
 }
 
 /// `state per app` keeps one instance for every call; `on open` runs the
@@ -138,7 +152,7 @@ fn an_engine_declares_the_services_it_uses() {
 #[test]
 fn an_engine_may_keep_state_and_open() {
     use clarity_spec::code::EngineState;
-    let source = |lines: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log\n{lines}    function add(a: integer, b: integer) -> integer\n");
+    let source = |lines: &str| format!("module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log, language\n{lines}    function add(a: integer, b: integer) -> integer\n");
     let declared = |lines: &str| {
         let (file, diags) = parse(&source(lines), "shop.clarity");
         assert!(diags.is_empty(), "{diags:#?}");
@@ -156,7 +170,7 @@ fn an_engine_may_keep_state_and_open() {
     assert_has(&wrong("    on close\n"), "an engine has on open only");
     // A file without clarity_open cannot open.
     let plain = vec![EngineFile { name: "test.wasm".into(), bytes: TEST_ENGINE_WITHOUT_OPEN.to_vec() }];
-    assert_has(&errors(&source("    on open\n").replace("    uses clock, random, log\n", ""), plain), "lacks clarity_open, which its on open needs");
+    assert_has(&errors(&source("    on open\n").replace("    uses clock, random, log, language\n", ""), plain), "lacks clarity_open, which its on open needs");
 }
 
 /// The smallest engine: memory, clarity_alloc and clarity_free, no clarity_open
@@ -176,7 +190,7 @@ fn an_engine_with_state_per_window_is_called_by_a_window() {
     use clarity_spec::code::EngineState;
     let source = |callers: &str| {
         format!(
-            "module shop\n\nengine Board from \"test.wasm\"\n    uses clock, random, log\n    state per window\n    on open\n    function count() -> integer\n\n{callers}"
+            "module shop\n\nengine Board from \"test.wasm\"\n    uses clock, random, log, language\n    state per window\n    on open\n    function count() -> integer\n\n{callers}"
         )
     };
     let (file, diags) = parse(&source(""), "shop.clarity");

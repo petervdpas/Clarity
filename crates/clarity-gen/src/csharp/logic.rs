@@ -278,7 +278,15 @@ impl<'a> Emitter<'a> {
                     return;
                 }
                 let place = self.place(target);
-                let value = self.value(value);
+                // A text value shows its text in the person's language and format, as a label does.
+                let value = if matches!(target.kind, ExprKind::Name { .. })
+                    && matches!(self.types.name_of(target), Some(NameKind::Data))
+                    && self.types.type_of(target) == TypeInfo::Text
+                {
+                    format!("Locale.Show({})", self.shown(value))
+                } else {
+                    self.value(value)
+                };
                 out.push_str(&format!("{pad}{place} = {value};\n"));
             }
             StmtKind::Write { text, store, path } => {
@@ -305,7 +313,11 @@ impl<'a> Emitter<'a> {
                 self.braced(body, depth, out);
             }
             StmtKind::Return { value: Some(value) } => {
-                let value = self.value(value);
+                // The text a function returns is in the person's language.
+                let value = match &value.kind {
+                    ExprKind::Str { value } => format!("Locale.Translate({})", string(value)),
+                    _ => self.value(value),
+                };
                 out.push_str(&format!("{pad}return {value};\n"));
             }
             StmtKind::Return { value: None } => out.push_str(&format!("{pad}return;\n")),
@@ -556,11 +568,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => format!("{value}m"),
             ExprKind::Number { value } => format!("{value}L"),
             ExprKind::Str { value } => string(value),
-            // The checker allows text with slots only where it is shown.
-            ExprKind::Text { .. } => {
-                self.errors.push("text with slots is text to show".into());
-                String::new()
-            }
+            // A text with slots in code takes its translation, then its values.
+            ExprKind::Text { .. } => format!("Locale.Show({})", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "null".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
@@ -611,7 +620,9 @@ impl<'a> Emitter<'a> {
                 let window = per_window.then(|| "Instance".to_string());
                 let values: Vec<String> = window.into_iter().chain(std::iter::once(string(&function.name))).chain(args.iter().map(|a| self.value(a))).collect();
                 let call = if per_window { "CallIn" } else { "Call" };
-                format!("Engines.{}.{call}<{returns}>({})", pascal(&engine.name), values.join(", "))
+                let called = format!("Engines.{}.{call}<{returns}>({})", pascal(&engine.name), values.join(", "));
+                // The text an engine gives is in the person's language, as its `says` lists it.
+                if self.types.type_of(expr) == TypeInfo::Text { format!("Locale.Translate({called})") } else { called }
             }
             ExprKind::New { entity } => format!("new {}()", entity.name),
         }

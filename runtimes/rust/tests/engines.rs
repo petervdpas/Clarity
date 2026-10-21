@@ -104,6 +104,10 @@ fn an_engine_uses_the_services_it_declares() {
         clock: cases["services"]["clock"].as_i64(),
         seed: cases["services"]["seed"].as_u64(),
         log: Arc::new(move |line: &str| written.lock().unwrap().push(line.to_string())),
+        language: {
+            let language = cases["services"]["language"].as_str().map(str::to_string);
+            Arc::new(move || language.clone())
+        },
     };
     let engine = Engine::load("Test", TEST_ENGINE, &declared(&cases, &functions, &uses(&cases["uses"]))).unwrap().with_services(services);
     for case in cases["served"].as_array().unwrap() {

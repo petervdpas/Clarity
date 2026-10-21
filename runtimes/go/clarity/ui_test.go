@@ -130,3 +130,32 @@ func TestAClosedWindowIsReportedToWhatListens(t *testing.T) {
 		t.Fatal(closed)
 	}
 }
+
+// A text value a handler sets travels as the text as written with its
+// slots, so the screen shows it in the person's language and format.
+func TestAReplyCarriesTheTextsShownInTextValues(t *testing.T) {
+	ui := NewUi(WindowState{Window: "Game"})
+	ui.SetShown("rules", NewText("Your move, {name}").With("name", SlotText("Ada")))
+	ui.SetShown("hint", PlainText("Pick a square"))
+	reply, err := ui.Reply("Game", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	text, _ := json.Marshal(reply)
+	_ = json.Unmarshal(text, &got)
+	shown := got["shown"].(map[string]any)
+	if shown["hint"] != "Pick a square" {
+		t.Fatalf("hint: %v", shown["hint"])
+	}
+	rules := shown["rules"].(map[string]any)
+	if rules["text"] != "Your move, {name}" || rules["values"].(map[string]any)["name"].(map[string]any)["value"] != "Ada" {
+		t.Fatalf("rules: %v", rules)
+	}
+	quiet, _ := NewUi(WindowState{Window: "Game"}).Reply("Game", nil)
+	text, _ = json.Marshal(quiet)
+	var none map[string]any
+	if json.Unmarshal(text, &none); none["shown"] != nil {
+		t.Fatalf("a reply without shown texts carries none: %s", text)
+	}
+}

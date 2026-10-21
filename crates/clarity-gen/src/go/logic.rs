@@ -575,6 +575,16 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{place} = {}\n", bare(code)));
                 if let ExprKind::Name { name } = &target.kind {
                     out.push_str(&self.deselect(name));
+                    // A text value shows its text in the person's language, as a label does.
+                    if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
+                        let mut pre = String::new();
+                        let shown = match value.kind {
+                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value, &mut pre),
+                            _ => format!("clarity.PlainText({place})"),
+                        };
+                        out.push_str(&pre);
+                        out.push_str(&format!("ui.SetShown({}, {shown})\n", string(name)));
+                    }
                 }
             }
             StmtKind::If { branches, otherwise } => self.if_chain(branches, otherwise.as_deref(), out),
@@ -608,7 +618,12 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Return { value: Some(value) } => {
                 let ty = self.returns().unwrap_or(TypeInfo::Unknown);
-                let code = if is_decimal(&ty) { self.decimal(value, &mut pre) } else { self.value(value, &mut pre) };
+                let code = match &value.kind {
+                    // The text a function returns is in the person's language.
+                    ExprKind::Str { value } => format!("clarity.Translate({})", string(value)),
+                    _ if is_decimal(&ty) => self.decimal(value, &mut pre),
+                    _ => self.value(value, &mut pre),
+                };
                 out.push_str(&pre);
                 out.push_str(&format!("return {}, nil\n", bare(code)));
             }
@@ -970,10 +985,8 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal_literal(value),
             ExprKind::Number { value } => value.clone(),
             ExprKind::Str { value } => string(value),
-            ExprKind::Text { .. } => {
-                self.errors.push("text with slots is text to show".into());
-                String::new()
-            }
+            // A text with slots in code takes its translation, then its values.
+            ExprKind::Text { .. } => format!("{}.Translated().Show()", self.shown(expr, pre)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "nil".to_string(),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr, pre),
@@ -1025,7 +1038,9 @@ impl<'a> Emitter<'a> {
                     values.push(bare(if is_decimal(&ty) { self.decimal(arg, pre) } else { self.value(arg, pre) }));
                 }
                 let call = format!("{}({})", super::engine_function(&engine.name, &function.name), values.join(", "));
-                self.lift(call, pre)
+                let value = self.lift(call, pre);
+                // The text an engine gives is in the person's language, as its `says` lists it.
+                if self.types.type_of(expr) == TypeInfo::Text { format!("clarity.Translate({value})") } else { value }
             }
             ExprKind::New { entity } => format!("clarity.New(New{}())", entity.name),
         }

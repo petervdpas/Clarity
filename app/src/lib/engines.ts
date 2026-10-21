@@ -34,13 +34,15 @@ export function signature(f: EngineFunction): string {
 }
 
 /** The services an engine may use, in the order Clarity lists them (clarity_spec::engines::SERVICES). */
-export const SERVICES = ["clock", "random", "log"] as const;
+export const SERVICES = ["clock", "random", "log", "language"] as const;
 
 /** An engine's declaration as its inspector edits it. */
 export type EngineForm = {
   name: string;
   file: string;
   uses: string[];
+  /** The texts it gives, translated like the project's own. */
+  says: string[];
   state: "none" | "app" | "window";
   opens: boolean;
   /** How long one call may run; null keeps the default. */
@@ -55,6 +57,7 @@ export function formOf(decl: EngineDecl): EngineForm {
     name: decl.name.name,
     file: decl.file,
     uses: decl.uses.map((u) => u.name),
+    says: decl.says,
     state: decl.state,
     opens: decl.opens,
     seconds: decl.seconds,
@@ -74,6 +77,7 @@ export function engineText(form: EngineForm): string {
   const lines = [`engine ${form.name} from ${JSON.stringify(form.file)}`];
   const uses = SERVICES.filter((s) => form.uses.includes(s));
   if (uses.length > 0) lines.push(`uses ${uses.join(", ")}`);
+  if (form.says.length > 0) lines.push(`says ${form.says.map((t) => JSON.stringify(t)).join(", ")}`);
   const state = STATE_LINES[form.state];
   if (state) lines.push(state);
   if (form.opens) lines.push("on open");

@@ -17,7 +17,31 @@ The language is a tag such as `"en"` or `"nl-NL"`. The currency is an ISO 4217 c
 
 ## Translations
 
-Every text a person sees is in the project already: labels (also those derived from names), help texts, titles, captions, placeholders, tooltips, tab titles, enum labels, menu items, the status text, messages, refusals, and captions and errors set in code. Clarity collects them, so you never mark a text for translation.
+Every text a person sees is in the project already: labels (also those derived from names), help texts, titles, captions, placeholders, tooltips, tab titles, enum labels, menu items, the status text, the text a value starts with (`data rules: text, default "..."`), messages, refusals, and captions and errors set in code. Clarity collects them, so you never mark a text for translation.
+
+A text value starts in the person's language when its window opens, so a text block bound to it shows the translation. A text a handler puts in it is translated too, with its slots filled in the person's format.
+
+## Texts in code
+
+Every text written in code is translated, with its slots: a message, a refusal, a caption or an error, a text a handler puts in a text value, and the text a function or action returns. A text with slots is an ordinary value, which code keeps, passes on and returns:
+
+```clarity
+function credit_note(order: Order) -> text
+    if within_credit(order)
+        return "Order {order.number} is within the credit limit"
+    return "Order {order.number} is above the customer's credit limit"
+```
+
+```clarity
+translation nl
+    "Order {order.number} is above the customer's credit limit" "Bestelling {order.number} gaat boven het kredietlimiet van de klant"
+```
+
+The slots are named after their values, so the translator sees what each one holds and may move it. A text that goes to the screen gets its values in the person's format; a text a function returns gets them plainly. Since a plain text a function returns is translated too, a value code compares belongs in an enum. An engine lists the texts it gives with `says`; see [Engines](code.engines.md#texts-and-languages).
+
+A text without letters, such as a calculator's `7` or `+`, reads the same in every language and needs no translation.
+
+To see what a project's translations still miss without opening Clarity, run `clarity spec texts <project folder>`: it lists, per language, each missing text as a line to fill in.
 
 A file per language, in the `translations` folder of the module folder, gives them in that language:
 
@@ -35,11 +59,13 @@ translation nl
 - A text without a translation shows as written, so a language can grow text by text.
 - When a text changes, its old translation no longer applies. The checker warns that the old line is not shown anywhere, and the new text shows as written until it has a translation.
 
-## The Translations panel
+## i18n in the project tree
 
-The Translations panel is at the bottom of the Project tab. It lists every text with where it is used and a column per language, and says per language how many texts miss a translation. What you type goes into the translation files.
+The project tree lists the languages under i18n: first the one the texts are written in, then each translation. Click one to open it.
 
-- **Add language** starts a new language from a tag such as `nl`.
+- A translation lists every text with where it is used and its translation, and says how many texts miss one. What you type goes into its translation file.
+- The language the texts are written in shows a column per translation.
+- **+ New language**, or **Add language** on any language, starts a new one from a tag such as `nl` and opens it.
 - **Only texts that miss a translation** narrows the list.
 - **Show the designer in** shows the canvas and Preview in one of the project's languages, or in the system's.
 

@@ -13,7 +13,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 /// The version of the `clarity-engine` library a new engine depends on.
-pub const ENGINE_LIBRARY_VERSION: &str = "0.1";
+pub const ENGINE_LIBRARY_VERSION: &str = "0.2";
 
 /// The target an engine is built for: WebAssembly without an operating system.
 pub const TARGET: &str = "wasm32-unknown-unknown";

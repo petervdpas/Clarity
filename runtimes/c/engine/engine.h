@@ -62,6 +62,9 @@ typedef struct {
     /// Takes a line of the log, as "engine <Name>: <text>"; NULL for the standard error.
     void (*log)(const char* line, void* context);
     void* log_context;
+    /// The language `language` gives in place of the one the screen picked; NULL for the texts as written.
+    bool fixed_language;
+    const char* language;
 } ClarityEngineServices;
 
 /// Loads `bytes` as engine `name` as it is declared; refuses

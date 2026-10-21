@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The project as one tree: the app, its windows, its data, its themes, its engines and
+  // The project as one tree: the app, its windows, its data, its themes, its languages, its engines and
   // the modules its files form.
 
   import type { Page } from "./generated/Page";
@@ -54,6 +54,9 @@
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
+  /** The language the texts are written in, and those the project translates them to. */
+  const written = $derived(preview.project.locale.language ?? "en");
+  const languages = $derived(Object.keys(preview.project.translations).toSorted());
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -139,6 +142,23 @@
       {/each}
       {#if onnewtheme}
         <button class="row add" onclick={onnewtheme}>+ New theme</button>
+      {/if}
+    </details>
+
+    <details open>
+      <summary>i18n <span class="count">{languages.length + 1}</span></summary>
+      <button class="row" class:current={is("language", written)} title="The language the texts are written in" onclick={() => onselect({ kind: "language", name: written })}>
+        {written}
+        <span class="note">as written</span>
+      </button>
+      {#each languages as language (language)}
+        <button class="row" class:current={is("language", language)} title="translations/{language}.clarity" onclick={() => onselect({ kind: "language", name: language })}>
+          {language}
+          <span class="note">translation</span>
+        </button>
+      {/each}
+      {#if full}
+        <button class="row add" class:current={is("language", "")} onclick={() => onselect({ kind: "language", name: "" })}>+ New language</button>
       {/if}
     </details>
 

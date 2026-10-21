@@ -57,6 +57,8 @@ public:
     Text with(const std::string& path, Slot value) const;
     /// The text with its slots filled plainly, without a person's format.
     std::string show() const;
+    /// The same text in the language the screen picked, its values kept.
+    Text translated() const;
 
     const std::string& text() const { return template_; }
     const std::map<std::string, Slot>& values() const { return values_; }
@@ -65,6 +67,16 @@ private:
     std::string template_;
     std::map<std::string, Slot> values_;
 };
+
+/// Takes the translations from the model (`project.translations`), for the
+/// text code makes (conformance/translations.json, `code`).
+void load_translations(const std::string& model);
+/// The language texts show in, as the screen picked it; none for the texts as written.
+void set_language(std::optional<std::string> language);
+/// The language the screen picked; none for the texts as written.
+std::optional<std::string> language();
+/// `text` in the language picked, or as written when it has no translation there.
+std::string translate(const std::string& text);
 
 /// Decimals travel as text, so no precision is lost; dates as `2026-10-17`.
 void to_json(nlohmann::json& out, const Decimal& value);

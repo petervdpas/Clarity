@@ -26,6 +26,7 @@ app Shop
 page Card: window
     title \"Customer card\"
     data customer: Customer
+    data note: text, default \"Ask for the invoice address\"
     tabs name tabs1 at 1,1 span 12 rows 3
         tab \"General\"
             textbox name nameInput at 1,1 span 4 bind customer.name placeholder \"Full name\" tooltip \"Who buys\"
@@ -36,6 +37,10 @@ code Card
         message \"Saved {customer.name}\"
         save.caption = \"Saved\"
         nameInput.error = \"Taken\"
+        note = \"Checked by {customer.name}\"
+
+function greeting(name: text) -> text
+    return \"Welcome, {name}\"
 
 action check(customer: Customer)
     refuse \"Not allowed\"
@@ -68,8 +73,12 @@ fn every_text_a_person_sees_is_collected() {
         "Name", "Kind", "As on the invoice", "Private person", "Business",
         // Windows and the app.
         "The shop", "Customer card", "General", "Full name", "Who buys", "Save", "File", "Quit", "Ready to sell",
+        // The text a value starts with.
+        "Ask for the invoice address",
         // Code: messages with their slots, captions, errors and refusals.
         "Saved {customer.name}", "Saved", "Taken", "Not allowed",
+        // A text put in a text value, and the text a function returns.
+        "Checked by {customer.name}", "Welcome, {name}",
         // The renderer's own words.
         "Yes", "No",
     ] {
@@ -158,6 +167,21 @@ fn the_translations_table_has_a_column_per_language() {
     assert_eq!(card.translations, [None, Some("Klantkaart".to_string())]);
     // What each language still misses.
     assert_eq!(table.missing, [table.rows.len() - 1, table.rows.len() - 2]);
+}
+
+/// A text without letters, such as a calculator's `7` or `+`, reads the same
+/// in every language: it needs no translation.
+#[test]
+fn a_text_without_letters_needs_no_translation() {
+    assert!(!translations::needs_translation("7"));
+    assert!(!translations::needs_translation("+/-"));
+    assert!(!translations::needs_translation("÷"));
+    assert!(translations::needs_translation("C"));
+    assert!(translations::needs_translation("Saved {customer.name}"));
+    let project = load_sources([("calc.clarity", "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n    button \"Clear\" name clear at 2,1\n")]);
+    let table = translations::table(&project);
+    assert!(table.rows.iter().all(|r| r.text != "7"), "{:?}", table.rows);
+    assert!(table.rows.iter().any(|r| r.text == "Clear"));
 }
 
 #[test]

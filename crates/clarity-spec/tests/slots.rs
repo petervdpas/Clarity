@@ -69,10 +69,15 @@ fn a_slot_is_a_path_to_a_value() {
     assert_eq!(errors("message \"done}\""), ["'}' ends a slot; write '}}' for a brace"]);
 }
 
+/// A text with slots is a text like any other: code keeps it, passes it on
+/// and returns it, translated in the person's language.
 #[test]
-fn text_with_slots_is_only_for_showing() {
+fn text_with_slots_is_a_text_value() {
     let errors = messages(&window("let t = \"Saved {customer.name}\"\nmessage t"), Severity::Error);
-    assert_eq!(errors, ["text with slots is text to show; use it in 'message', 'refuse', or a part's caption or error"]);
+    assert!(errors.is_empty(), "{errors:?}");
+    // Its slots are checked wherever it is.
+    let errors = messages(&window("let t = \"Saved {customer}\""), Severity::Error);
+    assert_eq!(errors, ["a slot shows a value, and {customer} is Customer; name one of its fields, like {customer.name}"]);
 }
 
 #[test]

@@ -27,6 +27,8 @@
     X(the_server_scenario_on_sqlite)                              \
     X(a_handler_replies_as_the_other_runtimes_do)                 \
     X(rows_read_again_have_no_selected_row)                       \
+    X(a_reply_carries_the_texts_shown_in_text_values)             \
+    X(code_texts_are_translated_as_every_runtime_does)            \
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
     X(every_open_window_has_its_own_number)                       \

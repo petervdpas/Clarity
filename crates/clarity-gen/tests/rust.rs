@@ -234,6 +234,19 @@ fn a_desktop_window_takes_the_title_of_its_window() {
     assert!(runtime.contains("invoke(\"set_title\", { title })"), "the renderer sets the title");
 }
 
+/// The backend translates text code makes: it loads the model's
+/// translations, and the renderer names the language it picked.
+#[test]
+fn the_backend_translates_in_the_language_the_screen_picked() {
+    let files = files();
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
+    assert!(main.contains("fn set_language(language: Option<String>) {\n    clarity_runtime::i18n::set_language(language.as_deref());\n}"), "{main}");
+    assert!(main.contains("            set_language,\n"), "{main}");
+    let runtime = include_str!("../../../app/src/runtime/Runtime.svelte");
+    assert!(runtime.contains("invoke(\"set_language\", { language })"), "the renderer names the language");
+}
+
 #[test]
 fn handlers_set_errors_and_readonly_on_inputs() {
     let files = files();
@@ -784,11 +797,19 @@ code Calc
         word = \"x\"
 ";
 
+/// A function that returns texts, plain and with a slot: both are translated.
+const VERDICT: &str = "
+function verdict(n: integer) -> text
+    if n > 2
+        return \"Draw\"
+    return \"Turn {n}\"
+";
+
 /// A window holds plain values: fields of its data, at their default or
 /// empty when it opens, read and changed by its handlers.
 #[test]
 fn a_window_holds_plain_values() {
-    let source = format!("{SALES}{CALC}");
+    let source = format!("{SALES}{CALC}{VERDICT}");
     let project = load_sources([("sales.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
@@ -801,6 +822,12 @@ fn a_window_holds_plain_values() {
     }
     assert!(sales.contains("w.fresh = false;"), "{sales}");
     assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
+    // A text value shows its text in the person's language.
+    assert!(sales.contains("ui.set_shown(\"word\", Text::plain(\"x\"));"), "{sales}");
+    // The texts code makes are translated.
+    assert!(sales.contains("clarity_runtime::i18n::translate(\"Draw\")"), "{sales}");
+    assert!(sales.contains("Text::new(\"Turn {n}\")"), "{sales}");
+    assert!(sales.contains(".translated().show()"), "{sales}");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

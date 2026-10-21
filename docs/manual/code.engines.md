@@ -13,7 +13,8 @@ An engine only computes. It has no database, files, network or screen. Your code
 1. Click **+ New engine** under Engines in the project tree, and give it a name, such as `Pricing`. Clarity declares it with one function to start from, writes its code in Rust with a stub for that function, builds it, and opens it.
 2. The engine opens in its own editor. On the left, its inspector holds what the declaration says:
    - **Functions**: name, values and what each gives. **+ Add function** adds one, and its stub appears in the code.
-   - **Services**: clock, random and log.
+   - **Services**: clock, random, log and language.
+   - **Texts it gives**: one a line, translated like the project's own; see [Texts and languages](#texts-and-languages).
    - **State**: none, per app or per window, and **On open**.
    - **Limits**: the time a call may run and the memory it may use.
 3. On the right is the engine's code. Write what each function computes there, and save with Ctrl+S. Double-click a function in the inspector, or click its name above the code, to go to it.
@@ -61,8 +62,22 @@ An engine reaches nothing by itself. `uses` names the services of Clarity it may
 | `clock` | The time, in milliseconds since 1970-01-01 UTC. |
 | `random` | A random number. Every call starts a fresh random sequence; the sequence is the same on every stack for the same start. |
 | `log` | A line in the application's log, written as `engine Pricing: <the line>` to the standard error. |
+| `language` | The language the person picked, as its tag such as `nl`; none for the texts as the project writes them. With `clarity-engine`, call `clarity_engine::language()`. |
 
 There is no service for the database, files or the network, and there won't be: an engine that needs data gets it as a value from your code.
+
+## Texts and languages
+
+An engine that gives people something to read lists those texts with `says`:
+
+```clarity
+engine Board from "board.wasm"
+    uses random
+    says "Your move", "You win", "I win", "A draw"
+    says "That square is taken"
+```
+
+The texts join the project's own, under i18n in the project tree, so each translation file gives them in its language. A text an engine function returns is shown in the person's language, and so is an error the engine gives back. An engine that needs the language itself, to sort or to format, uses `language`.
 
 ## Limits
 

@@ -124,10 +124,13 @@ type OpenRequest struct {
 
 // Reply is what the screen does after a handler ran.
 type Reply struct {
-	State    WindowState   `json:"state"`
-	Messages []Message     `json:"messages"`
-	Open     []OpenRequest `json:"open"`
-	Close    bool          `json:"close"`
+	State    WindowState `json:"state"`
+	Messages []Message   `json:"messages"`
+	// Shown holds the texts the handler put in text values, by the value's
+	// name: the screen fills them in the person's language and format.
+	Shown map[string]Text `json:"shown,omitempty"`
+	Open  []OpenRequest   `json:"open"`
+	Close bool            `json:"close"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -142,6 +145,7 @@ type Ui struct {
 	parts    map[string]PartState
 	selected map[string]int
 	messages []Message
+	shown    map[string]Text
 	open     []OpenRequest
 	close    bool
 	err      error
@@ -337,6 +341,15 @@ func (u *Ui) Deselect(part string) { delete(u.selected, part) }
 
 func (u *Ui) Message(level Level, text Text) { u.messages = append(u.messages, Message{level, text}) }
 
+// SetShown says the text value data shows text, translated and formatted by
+// the screen.
+func (u *Ui) SetShown(data string, text Text) {
+	if u.shown == nil {
+		u.shown = map[string]Text{}
+	}
+	u.shown[data] = text
+}
+
 // Open asks the screen to open window with its data filled by name, as the
 // values are now.
 func (u *Ui) Open(window string, with map[string]any) {
@@ -372,6 +385,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 	return Reply{
 		State:    WindowState{Window: window, Instance: u.instance, Data: values, Parts: u.parts, Selected: u.selected},
 		Messages: u.messages,
+		Shown:    u.shown,
 		Open:     u.open,
 		Close:    u.close,
 	}, nil

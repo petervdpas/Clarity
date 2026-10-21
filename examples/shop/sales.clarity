@@ -66,6 +66,13 @@ page OrderForm: window
 function within_credit(order: Order) -> bool
     return order.total <= order.customer.credit_limit
 
+// Says how an order stands against its customer's credit, in the person's
+// language: a text with slots is translated wherever code makes it.
+function credit_note(order: Order) -> text
+    if within_credit(order)
+        return "Order {order.number} is within the credit limit"
+    return "Order {order.number} is above the customer's credit limit"
+
 action approve(order: Order)
     require order.status == Pending
     require within_credit(order)
@@ -99,7 +106,7 @@ code OrderForm
 
     handler approveClicked
         if not within_credit(order)
-            message warning "The total is above the customer's credit limit"
+            message warning credit_note(order)
             return
         approve(order)
         message "Order {order.number} is approved"

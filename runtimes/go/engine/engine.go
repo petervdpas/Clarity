@@ -52,14 +52,18 @@ type Services struct {
 	Seed *uint64
 	// Log takes a line of the log, as "engine <Name>: <text>"; nil for the standard error.
 	Log func(line string)
+	// Language gives the language language gives; nil for the one the screen
+	// picked (clarity.Language), "" for the texts as written.
+	Language func() string
 }
 
 // services are the services an engine may use, each a function of module
 // clarity with its parameters and results.
 var services = map[string]struct{ params, results []api.ValueType }{
-	"clock":  {nil, []api.ValueType{api.ValueTypeI64}},
-	"random": {nil, []api.ValueType{api.ValueTypeI64}},
-	"log":    {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, nil},
+	"clock":    {nil, []api.ValueType{api.ValueTypeI64}},
+	"random":   {nil, []api.ValueType{api.ValueTypeI64}},
+	"log":      {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, nil},
+	"language": {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI32}},
 }
 
 // State is whether an engine keeps an instance from call to call.
@@ -110,10 +114,11 @@ type live struct {
 
 // call is the state of the services during one call.
 type call struct {
-	name   string
-	clock  *int64
-	random uint64
-	log    func(string)
+	name     string
+	clock    *int64
+	random   uint64
+	log      func(string)
+	language func() string
 }
 
 type callKey struct{}
@@ -146,6 +151,18 @@ func serve(ctx context.Context, runtime wazero.Runtime) error {
 		c := state(ctx)
 		c.log("engine " + c.name + ": " + string(text))
 	}).Export("log").
+		// The language as it is at the call, written into the engine's room.
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, m api.Module, at, room uint32) uint32 {
+		language := []byte(state(ctx).language())
+		written := language
+		if uint32(len(written)) > room {
+			written = written[:room]
+		}
+		if !m.Memory().Write(at, written) {
+			panic("the room for the language is outside the engine's memory")
+		}
+		return uint32(len(language))
+	}).Export("language").
 		Instantiate(ctx)
 	return err
 }
@@ -242,6 +259,10 @@ func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error
 	}
 	if state.log == nil {
 		state.log = func(line string) { fmt.Fprintln(os.Stderr, line) }
+	}
+	state.language = e.services.Language
+	if state.language == nil {
+		state.language = clarity.Language
 	}
 	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), callKey{}, state), time.Duration(e.limits.Seconds)*time.Second)
 	defer cancel()

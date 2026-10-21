@@ -129,3 +129,17 @@ export function startValue(decl: DataDecl, firstValue: string | null): JsonValue
       return null;
   }
 }
+
+/**
+ * A window's data as it opens, with each text value that is still at its
+ * default in the person's language (`tr`): a default is a text of the
+ * project, translated as a label is.
+ */
+export function translatedDefaults(decls: DataDecl[], data: Record<string, unknown>, tr: (text: string) => string): Record<string, unknown> {
+  const out = { ...data };
+  for (const decl of decls) {
+    const start = decl.of.kind === "value" ? decl.of.default : null;
+    if (start?.kind === "str" && out[decl.name.name] === start.value) out[decl.name.name] = tr(start.value);
+  }
+  return out;
+}

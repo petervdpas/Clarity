@@ -1,0 +1,18 @@
+// Dutch, the board's own texts too.
+translation nl
+    "Noughts and crosses" "Boter, kaas en eieren"
+    "Game" "Spel"
+    "Another window" "Nog een venster"
+    "Quit" "Afsluiten"
+    "Your move" "Jij bent aan zet"
+    "Click a square to put your cross there; the computer answers with a nought. Three in a row wins." "Klik op een vakje om er je kruisje te zetten; de computer antwoordt met een rondje. Drie op een rij wint."
+    "New game" "Nieuw spel"
+    "How to play" "Zo speel je"
+    "You win" "Jij wint"
+    "I win" "Ik win"
+    "A draw" "Gelijkspel"
+    "The game is over; start a new one" "Het spel is voorbij; begin een nieuw"
+    "There are nine squares" "Er zijn negen vakjes"
+    "That square is taken" "Dat vakje is al bezet"
+    "Yes" "Ja"
+    "No" "Nee"

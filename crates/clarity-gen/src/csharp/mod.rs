@@ -346,6 +346,12 @@ public static class Program
 /// The application: it starts in the language and theme kept from the last
 /// run (or the system's), opens the databases and shows the main window.
 fn app_cs(project: &Project, name: &str, main_window: &str) -> String {
+    // Engines ask for the language the person picked.
+    let engines_language = if !crate::engines(project).is_empty() {
+        "            Clarity.Runtime.Engine.Language = () => Locale.Language?.Name;\n"
+    } else {
+        ""
+    };
     let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
     let application = string(name);
     format!(
@@ -368,7 +374,7 @@ public partial class App : Application
         {{
             Remembered.Use({application});
             Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
-            Themes.Start(AppThemes.Offered);
+{engines_language}            Themes.Start(AppThemes.Offered);
             var db = Program.OpenDatabases();
             desktop.Exit += (_, _) => db.Dispose();
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;

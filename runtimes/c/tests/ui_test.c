@@ -121,3 +121,37 @@ void a_closed_window_is_reported_to_what_listens(void) {
     clarity_window_closed(8);
     CHECK(heard == 7);
 }
+
+// A text value a handler sets travels as the text as written with its slots,
+// so the screen shows it in the person's language and format.
+void a_reply_carries_the_texts_shown_in_text_values(void) {
+    ClarityWindowState state = {.window = "Game", .data = cJSON_CreateObject()};
+    ClarityUi* ui = clarity_ui(&state);
+    CHECK_JSON(clarity_reply_json(clarity_ui_reply(ui, "Game", cJSON_CreateObject())),
+               "{\"state\":{\"window\":\"Game\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],\"open\":[],\"close\":false}");
+    clarity_ui_set_shown(ui, "rules", clarity_text_with(clarity_text("Your move, {name}"), "name", clarity_slot_text("Ada")));
+    clarity_ui_set_shown(ui, "hint", clarity_plain_text("Pick a square"));
+    CHECK_JSON(clarity_reply_json(clarity_ui_reply(ui, "Game", cJSON_CreateObject())),
+               "{\"state\":{\"window\":\"Game\",\"instance\":0,\"data\":{},\"parts\":{},\"selected\":{}},\"messages\":[],"
+               "\"shown\":{\"rules\":{\"text\":\"Your move, {name}\",\"values\":{\"name\":{\"kind\":\"text\",\"value\":\"Ada\"}}},\"hint\":\"Pick a square\"},"
+               "\"open\":[],\"close\":false}");
+}
+
+// Text code makes is translated in the backend, in the language the screen
+// picked, as every runtime does (conformance/translations.json, `code`).
+void code_texts_are_translated_as_every_runtime_does(void) {
+    const cJSON* code = cJSON_GetObjectItem(conformance("translations.json"), "code");
+    clarity_load_translations(cJSON_PrintUnformatted(cJSON_GetObjectItem(code, "model")));
+    const cJSON* cases = cJSON_GetObjectItem(code, "cases");
+    CHECK(cJSON_GetArraySize(cases) > 0);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cases) {
+        const cJSON* language = cJSON_GetObjectItem(c, "language");
+        clarity_set_language(cJSON_IsString(language) ? language->valuestring : NULL);
+        ClarityText* text = clarity_text(cJSON_GetObjectItem(c, "text")->valuestring);
+        const cJSON* value;
+        cJSON_ArrayForEach(value, cJSON_GetObjectItem(c, "values")) text = clarity_text_with(text, value->string, clarity_slot_text(value->valuestring));
+        CHECK_TEXT(clarity_text_show(clarity_text_translated(text)), cJSON_GetObjectItem(c, "gives")->valuestring);
+    }
+    clarity_set_language(NULL);
+}

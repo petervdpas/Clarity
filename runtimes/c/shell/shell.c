@@ -35,6 +35,8 @@ ClarityService* clarity_service_new(const ClarityShellOptions* options) {
     clarity_start();
     ClarityService* service = calloc(1, sizeof *service);
     if (service) service->options = *options;
+    // Text code makes is translated from the model's translations.
+    clarity_load_translations(options->model);
     return service;
 }
 
@@ -165,6 +167,12 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         const char* url;
         if (!clarity_store_file(db, text_of(args, "store"), text_of(args, "path"), &bytes) || !clarity_data_url(bytes, &url)) return failed();
         return value(cJSON_CreateString(url));
+    }
+    if (strcmp(command, "set_language") == 0) {
+        // The language the screen picked, which text code makes is translated to.
+        const cJSON* language = cJSON_GetObjectItemCaseSensitive(args, "language");
+        clarity_set_language(cJSON_IsString(language) ? language->valuestring : NULL);
+        return value(NULL);
     }
     if (strcmp(command, "set_title") == 0) {
         if (caller) caller->set_title(caller, text_of(args, "title"));

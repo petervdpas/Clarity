@@ -68,6 +68,8 @@ struct EngineServices {
     std::optional<uint64_t> seed;
     /// Takes a line of the log, as "engine <Name>: <text>"; none for the standard error.
     std::function<void(const std::string&)> log;
+    /// Gives the language `language` gives; none for the one the screen picked (clarity::language).
+    std::function<std::optional<std::string>()> language;
 };
 
 class Engine {

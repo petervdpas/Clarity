@@ -86,6 +86,9 @@ struct OpenRequest {
 struct Reply {
     WindowState state;
     std::vector<Message> messages;
+    /// The texts the handler put in text values, by the value's name: the
+    /// screen fills them in the person's language and format.
+    std::map<std::string, Text> shown;
     std::vector<OpenRequest> open;
     bool close = false;
 };
@@ -161,6 +164,8 @@ public:
     }
 
     void message(Level level, Text text) { messages_.push_back({level, std::move(text)}); }
+    /// The text value `data` shows `text`, translated and formatted by the screen.
+    void set_shown(const std::string& data, Text text) { shown_[data] = std::move(text); }
     /// Asks the screen to open `window` with its data filled by name, as the values are now.
     void open(const std::string& window, nlohmann::json with) { open_.push_back({window, std::move(with)}); }
     /// Asks the screen to close the window.
@@ -175,6 +180,7 @@ private:
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;
     std::vector<Message> messages_;
+    std::map<std::string, Text> shown_;
     std::vector<OpenRequest> open_;
     bool close_ = false;
 };

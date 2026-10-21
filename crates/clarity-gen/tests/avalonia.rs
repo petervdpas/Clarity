@@ -546,22 +546,36 @@ code Calc
         word = \"x\"
 ";
 
+/// A function that returns texts, plain and with a slot: both are translated.
+const VERDICT: &str = "
+function verdict(n: integer) -> text
+    if n > 2
+        return \"Draw\"
+    return \"Turn {n}\"
+";
+
 /// A window holds plain values: properties of its ViewModel, at their
 /// default or empty when it opens, read and changed by its handlers.
 #[test]
 fn a_window_holds_plain_values() {
-    let source = format!("{SHOP}{CALC}");
+    let source = format!("{SHOP}{CALC}{VERDICT}");
     let project = load_sources([("shop.clarity", source.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/CalcViewModel.cs");
     has(vm, "    public decimal Shown { get => _shown; set => SetProperty(ref _shown, value); }\n    decimal _shown = default;\n");
-    for start in ["    OrderStatus _pending = default;\n", "    bool _fresh = true;\n", "    string _word = \"hi\";\n", "    long _count = 2L;\n", "    decimal _rate = 0.5m;\n"] {
+    for start in ["    OrderStatus _pending = default;\n", "    bool _fresh = true;\n", "    string _word = Texts.Hi;\n", "    long _count = 2L;\n", "    decimal _rate = 0.5m;\n"] {
         has(vm, start);
     }
     has(vm, "        Fresh = false;\n");
     has(vm, "        Pending = OrderStatus.Approved;\n");
+    // A text value shows its text in the person's language.
+    has(vm, "        Word = Locale.Show(Text.Plain(\"x\"));\n");
     has(file(&files, "Windows/CalcView.axaml"), "Text=\"{Binding Shown, Converter={x:Static local:Shown.Converter}}\"");
+    // The texts code makes are translated.
+    let code: String = files.iter().filter(|f| f.path.ends_with(".cs")).map(|f| f.text.as_str()).collect();
+    has(&code, "Locale.Translate(\"Draw\")");
+    has(&code, "Locale.Show(new Text(\"Turn {n}\")");
 }
 
 /// A character key (`7`, `+`) is what is typed, from the keyboard or the

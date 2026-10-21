@@ -194,6 +194,24 @@ fn a_reply_carries_the_state_messages_and_windows() {
     assert!(!reply.close);
 }
 
+/// A text value a handler sets travels as the text as written with its slots,
+/// so the screen shows it in the person's language and format.
+#[test]
+fn a_reply_carries_the_texts_shown_in_text_values() {
+    use clarity_runtime::ui::{Slot, Text, Ui, WindowState};
+
+    let mut ui = Ui::from_state(&WindowState::new("Game", serde_json::Map::new()));
+    ui.set_shown("rules", Text::new("Your move, {name}").with("name", Slot::text("Ada")));
+    ui.set_shown("hint", Text::plain("Pick a square"));
+    let reply = serde_json::to_value(ui.reply("Game", serde_json::Map::new())).unwrap();
+    assert_eq!(reply["shown"]["hint"], "Pick a square");
+    assert_eq!(reply["shown"]["rules"]["text"], "Your move, {name}");
+    assert_eq!(reply["shown"]["rules"]["values"]["name"]["value"], "Ada");
+    // A reply without them carries none.
+    let quiet = serde_json::to_value(Ui::default().reply("Game", serde_json::Map::new())).unwrap();
+    assert!(quiet.get("shown").is_none());
+}
+
 fn customer(name: &str, kind: CustomerKind, limit: &str, active: bool) -> Customer {
     Customer {
         name: name.into(),

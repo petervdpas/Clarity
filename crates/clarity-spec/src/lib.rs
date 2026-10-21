@@ -12,6 +12,7 @@ pub mod keyed;
 pub mod themes;
 pub mod translations;
 pub mod frame;
+pub mod highlight;
 pub mod layout;
 pub mod lexer;
 pub mod migrate;

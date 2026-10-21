@@ -395,6 +395,7 @@
           navPattern={/function!\(\s*([A-Za-z0-9_]+)/}
           opensBlock={OPENS_BRACED_BLOCK}
           errorsBlockSave={false}
+          language="rust"
         />
       {:else}
         <div class="no-code">

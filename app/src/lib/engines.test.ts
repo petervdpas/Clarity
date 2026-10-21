@@ -105,3 +105,9 @@ test("a line of an engine written in Clarity is set, replaced or taken away abov
   // A comment above a line stays where it is.
   assert.equal(withEngineLine("engine Dice\n    // Rolls.\n    function roll() -> integer\n        return 1\n", "uses", "uses random"), "engine Dice\n    uses random\n    // Rolls.\n    function roll() -> integer\n        return 1\n");
 });
+
+test("the project tree says what an engine is written in, beside its functions", async () => {
+  const { engineNote } = await import("./engines.ts");
+  assert.equal(engineNote({ body: { keeps: [], functions: [] }, functions: [{}, {}] } as never), "Clarity, 2 functions");
+  assert.equal(engineNote({ body: null, functions: [{}] } as never), "WebAssembly, 1 function");
+});

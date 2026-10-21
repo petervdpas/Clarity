@@ -27,6 +27,13 @@ export function projectEngines(project: Project): ProjectEngine[] {
   );
 }
 
+/** What the project tree says beside an engine: what it is written in, and its functions. */
+export function engineNote(engine: EngineDecl): string {
+  const kind = engine.body ? "Clarity" : "WebAssembly";
+  const count = engine.functions.length;
+  return `${kind}, ${count === 1 ? "1 function" : `${count} functions`}`;
+}
+
 /** A function of an engine as it is declared: `total(lines: list<Line>) -> money`. */
 export function signature(f: EngineFunction): string {
   const params = f.params.map((p) => `${p.name.name}: ${typeText(p.ty.kind)}`).join(", ");

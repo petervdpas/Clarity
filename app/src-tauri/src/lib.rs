@@ -331,6 +331,12 @@ pub struct DeclTrial {
     pub preview: Preview,
 }
 
+/// Clarity text in colored pieces, as the lexer reads it, for the code editors.
+#[tauri::command]
+fn highlight(text: String) -> Vec<clarity_spec::highlight::Piece> {
+    clarity_spec::highlight::highlight(&text)
+}
+
 #[tauri::command]
 fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> Result<DeclTrial, String> {
     let (dir, file) = spec_file_of(&state, &path)?;
@@ -765,6 +771,7 @@ pub fn run() {
             check_code,
             decl_text,
             try_decl,
+            highlight,
             build_app,
             stop_app,
             engines::engine_info,

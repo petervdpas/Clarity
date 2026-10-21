@@ -13,7 +13,7 @@ An engine only computes. It has no database, files, network or screen. Your code
 
 ## An engine written in Clarity
 
-Click **+ New engine** under Engines in the project tree, give it a name, and leave **Written in** at Clarity. Clarity writes it with one function to start from and opens it:
+Click **+ New engine** under Engines in the project tree, give it a name, and pick Clarity under **Written in** (the dialog starts with the choice you made last time). Clarity writes it with one function to start from and opens it. The project tree says what each engine is written in, beside its functions: `Board  Clarity, 8 functions`, `Pricing  WebAssembly, 3 functions`.
 
 ```clarity
 engine Dice

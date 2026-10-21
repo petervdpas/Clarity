@@ -11,7 +11,10 @@
   // behind, a function) is up to the caller, through `load`, `check` and
   // `save`; the backend decides what is valid.
 
+  import { invoke } from "./backend";
   import type { Diagnostic } from "./generated/Diagnostic";
+  import type { Piece } from "./generated/Piece";
+  import { linesOf, rustPieces, type Segment } from "./highlight";
 
   let {
     load,
@@ -22,6 +25,7 @@
     placeholder = "",
     opensBlock = OPENS_CLARITY_BLOCK,
     errorsBlockSave = true,
+    language = "clarity",
     ondirty = () => {},
     onclose = () => {},
   }: {
@@ -39,12 +43,16 @@
     opensBlock?: RegExp;
     /** Whether errors keep the text from being saved: true for Clarity, which must be valid; false for a compiler's errors, which saving and building fix. */
     errorsBlockSave?: boolean;
+    /** How the text is colored: Clarity as the lexer reads it, Rust, or not at all. */
+    language?: "clarity" | "rust" | "plain";
     ondirty?: (dirty: boolean) => void;
     onclose?: () => void;
   } = $props();
 
   const INDENT = "    ";
   const CHECK_DELAY = 300;
+  /** How long typing rests before the colors are asked again. */
+  const PAINT_DELAY = 40;
 
   let saved = $state("");
   let text = $state("");
@@ -53,6 +61,10 @@
   let saving = $state(false);
   let editor: HTMLTextAreaElement | undefined = $state();
   let gutter: HTMLElement | undefined = $state();
+  let paint: HTMLElement | undefined = $state();
+  /** The colored runs of the lines last colored, by their text. */
+  let colored = $state.raw(new Map<string, Segment[]>());
+  const painted = $derived(text.split("\n").map((line) => colored.get(line) ?? [{ text: line, kind: null }]));
 
   const dirty = $derived(text !== saved);
   const lineCount = $derived(text.split("\n").length);
@@ -90,6 +102,33 @@
       reload();
     }
   });
+
+  // Color the text while it is typed; a line typed since shows plain until then.
+  $effect(() => {
+    const draft = text;
+    if (language === "plain") return;
+    if (language === "rust") {
+      colored = linesOf(draft, rustPieces(draft));
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        colored = linesOf(draft, await invoke<Piece[]>("highlight", { text: draft }));
+      } catch {
+        // Without the backend the text stays plain.
+      }
+    }, PAINT_DELAY);
+    return () => clearTimeout(timer);
+  });
+
+  function scrolled() {
+    if (!editor) return;
+    if (gutter) gutter.scrollTop = editor.scrollTop;
+    if (paint) {
+      paint.scrollTop = editor.scrollTop;
+      paint.scrollLeft = editor.scrollLeft;
+    }
+  }
 
   // Check the text while it is typed.
   $effect(() => {
@@ -213,15 +252,21 @@
         <div class:error={errorLines.has(i + 1)} class:warning={!errorLines.has(i + 1) && warningLines.has(i + 1)}>{i + 1}</div>
       {/each}
     </div>
-    <textarea
-      bind:this={editor}
-      bind:value={text}
-      {onkeydown}
-      onscroll={() => gutter && editor && (gutter.scrollTop = editor.scrollTop)}
-      spellcheck="false"
-      wrap="off"
-      {placeholder}
-    ></textarea>
+    <div class="surface">
+      <pre class="paint" bind:this={paint} aria-hidden="true">{#each painted as line, i (i)}{#each line as run, j (j)}{#if run.kind}<span
+                class={run.kind}>{run.text}</span
+              >{:else}{run.text}{/if}{/each}{"\n"}{/each}{" "}</pre>
+      <textarea
+        class:colored={language !== "plain"}
+        bind:this={editor}
+        bind:value={text}
+        {onkeydown}
+        onscroll={scrolled}
+        spellcheck="false"
+        wrap="off"
+        {placeholder}
+      ></textarea>
+    </div>
   </div>
 
   <footer>
@@ -307,18 +352,80 @@
     color: var(--warning, #d9a400);
   }
 
-  textarea {
+  /* The text area on top takes the typing; the colored copy under it shows. */
+  .surface {
     flex: 1;
-    resize: none;
-    border: none;
-    border-radius: 0;
+    position: relative;
+    min-width: 0;
+    background: var(--bg, var(--panel));
+  }
+
+  textarea,
+  .paint {
+    position: absolute;
+    inset: 0;
+    margin: 0;
     padding: 8px 12px;
     font: inherit;
     line-height: inherit;
-    background: var(--bg, var(--panel));
+    tab-size: 4;
+    white-space: pre;
+    border: none;
+  }
+
+  textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+    border-radius: 0;
+    background: transparent;
     color: var(--text);
     outline: none;
-    tab-size: 4;
+  }
+
+  textarea.colored {
+    color: transparent;
+    caret-color: var(--text);
+  }
+
+  textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .paint {
+    overflow: hidden;
+    color: var(--text);
+    pointer-events: none;
+  }
+
+  .paint .keyword {
+    color: var(--code-keyword);
+  }
+
+  .paint .type {
+    color: var(--code-type);
+  }
+
+  .paint .literal,
+  .paint .number {
+    color: var(--code-literal);
+  }
+
+  .paint .text {
+    color: var(--code-text);
+  }
+
+  .paint .slot {
+    color: var(--code-slot);
+  }
+
+  .paint .key {
+    color: var(--code-key);
+  }
+
+  .paint .comment {
+    color: var(--code-comment);
+    font-style: italic;
   }
 
   footer {

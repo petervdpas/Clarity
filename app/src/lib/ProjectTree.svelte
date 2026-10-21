@@ -4,7 +4,7 @@
 
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
-  import { projectEngines } from "./engines";
+  import { projectEngines, engineNote } from "./engines";
   import { findApp } from "./frame";
   import { languageName } from "./translate";
   import { tr } from "./model";
@@ -173,14 +173,14 @@
         <button
           class="row"
           class:current={is("engine", engine.name.name)}
-          title={problems.length > 0 ? problems.join("\n") : `${engine.file} in module ${module}`}
+          title={problems.length > 0 ? problems.join("\n") : engine.body ? `Written in Clarity, in module ${module}` : `${engine.file} in module ${module}`}
           onclick={() => onselect({ kind: "engine", name: engine.name.name })}
         >
           {engine.name.name}
           {#if problems.length > 0}
-            <span class="note problem">does not fit its file</span>
+            <span class="note problem">{engine.body ? "has problems" : "does not fit its file"}</span>
           {:else}
-            <span class="note">{engine.functions.length === 1 ? "1 function" : `${engine.functions.length} functions`}</span>
+            <span class="note">{engineNote(engine)}</span>
           {/if}
         </button>
       {:else}

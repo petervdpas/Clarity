@@ -23,8 +23,8 @@
     /** The module proposed first. */
     file: SpecFile;
     error: string | null;
-    /** A choice to make with the name, its first option picked to start with. */
-    choice?: { label: string; options: { value: string; label: string }[] } | null;
+    /** A choice to make with the name, `picked` (or its first option) picked to start with. */
+    choice?: { label: string; options: { value: string; label: string }[]; picked?: string } | null;
     onsubmit: (file: SpecFile, name: string, picked: string) => void;
     oncancel: () => void;
   } = $props();
@@ -33,7 +33,7 @@
   let path = $state("");
   let picked = $state("");
   $effect.pre(() => {
-    picked = choice?.options[0]?.value ?? "";
+    picked = choice?.picked ?? choice?.options[0]?.value ?? "";
   });
   $effect.pre(() => {
     path = file.path;

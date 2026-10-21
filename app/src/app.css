@@ -17,6 +17,14 @@
   --warning: #9a6700;
   --warning-soft: #fff4d6;
   --selection: #d6e4fb;
+  /* Code in the editors (highlight.ts). */
+  --code-keyword: #8a3ab9;
+  --code-type: #0f7b8a;
+  --code-literal: #b35900;
+  --code-text: #2e7d32;
+  --code-slot: #1f5fbf;
+  --code-key: #9a6700;
+  --code-comment: #6b7385;
   --radius: 6px;
   --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, Menlo, "DejaVu Sans Mono", "Noto Sans Mono", monospace;
   color-scheme: light;
@@ -41,6 +49,13 @@
   --warning: #e3b341;
   --warning-soft: #3a3020;
   --selection: #2b4166;
+  --code-keyword: #c792ea;
+  --code-type: #5fc4d0;
+  --code-literal: #f5a35c;
+  --code-text: #a5d17a;
+  --code-slot: #82aaff;
+  --code-key: #e3b341;
+  --code-comment: #7f8899;
   color-scheme: dark;
 }
 

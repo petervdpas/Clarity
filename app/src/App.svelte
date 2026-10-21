@@ -342,6 +342,17 @@
     }
   }
 
+  /** Where the last choice of what a new engine is written in is kept. */
+  const ENGINE_LANGUAGE_KEY = "clarity-new-engine-language";
+
+  function lastEngineLanguage(): string | undefined {
+    try {
+      return localStorage.getItem(ENGINE_LANGUAGE_KEY) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The module a new engine goes into, while its dialog is open. */
   let newEngine = $state<SpecFile | null>(null);
   let newEngineError = $state<string | null>(null);
@@ -360,6 +371,12 @@
    * stub it writes and builds.
    */
   async function addEngine(target: SpecFile, name: string, how: string) {
+    // The next new engine starts with the same choice.
+    try {
+      localStorage.setItem(ENGINE_LANGUAGE_KEY, how);
+    } catch {
+      // Not kept: the dialog starts with Clarity.
+    }
     const stem = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
     const text =
       how === "rust"
@@ -1173,6 +1190,7 @@
     error={newEngineError}
     choice={{
       label: "Written in",
+      picked: lastEngineLanguage(),
       options: [
         { value: "clarity", label: "Clarity: generated with the application on every stack" },
         { value: "rust", label: "Rust, built to WebAssembly" },

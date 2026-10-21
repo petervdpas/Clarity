@@ -23,6 +23,7 @@
     onnewtheme = null,
     onnewengine = null,
     onnewlanguage = null,
+    onmenu = null,
   }: {
     preview: Preview;
     /** What is open: a window, the app, an entity, an enum or a module. */
@@ -41,7 +42,16 @@
     onnewengine?: (() => void) | null;
     /** Asks for a new language and writes its translation file; null where the tree only shows. */
     onnewlanguage?: (() => void) | null;
+    /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
+    onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
+
+  /** Hands a right click to `onmenu`, in place of the page's own menu. */
+  function menu(e: MouseEvent, item: Selected) {
+    if (!onmenu) return;
+    e.preventDefault();
+    onmenu(e, item);
+  }
 
   function is(kind: Selected["kind"], name: string): boolean {
     return selected?.kind === kind && selected.name === name;
@@ -86,6 +96,7 @@
         class:current={is("window", page.name.name)}
         title="{page.name.name} in module {module}"
         onclick={() => onwindow(page)}
+        oncontextmenu={(e) => menu(e, { kind: "window", name: page.name.name })}
       >
         {page.name.name}
         {#if page.name.name === app?.main?.name}<span class="note">main</span>{/if}
@@ -103,13 +114,13 @@
     <details open>
       <summary>Data <span class="count">{entities.length + enums.length}</span></summary>
       {#each entities as { entity, module } (entity.name.name)}
-        <button class="row" class:current={is("entity", entity.name.name)} title="in module {module}" onclick={() => onselect({ kind: "entity", name: entity.name.name })}>
+        <button class="row" class:current={is("entity", entity.name.name)} title="in module {module}" onclick={() => onselect({ kind: "entity", name: entity.name.name })} oncontextmenu={(e) => menu(e, { kind: "entity", name: entity.name.name })}>
           {entity.name.name}
           <span class="note">{entity.fields.length} fields</span>
         </button>
       {/each}
       {#each enums as { decl, module } (decl.name.name)}
-        <button class="row" class:current={is("enum", decl.name.name)} title="in module {module}" onclick={() => onselect({ kind: "enum", name: decl.name.name })}>
+        <button class="row" class:current={is("enum", decl.name.name)} title="in module {module}" onclick={() => onselect({ kind: "enum", name: decl.name.name })} oncontextmenu={(e) => menu(e, { kind: "enum", name: decl.name.name })}>
           {decl.name.name}
           <span class="note">enum, {decl.variants.length} values</span>
         </button>
@@ -136,7 +147,7 @@
       </button>
       {#each themes as { theme, module } (theme.name.name)}
         {@const name = theme.name.name}
-        <button class="row" class:current={is("theme", name)} title="in module {module}" onclick={() => onselect({ kind: "theme", name })}>
+        <button class="row" class:current={is("theme", name)} title="in module {module}" onclick={() => onselect({ kind: "theme", name })} oncontextmenu={(e) => menu(e, { kind: "theme", name })}>
           {name}
           {#if preview.project.themes[0] === name}
             <span class="note">offered, starts with it</span>
@@ -175,6 +186,7 @@
           class:current={is("engine", engine.name.name)}
           title={problems.length > 0 ? problems.join("\n") : engine.body ? `Written in Clarity, in module ${module}` : `${engine.file} in module ${module}`}
           onclick={() => onselect({ kind: "engine", name: engine.name.name })}
+          oncontextmenu={(e) => menu(e, { kind: "engine", name: engine.name.name })}
         >
           {engine.name.name}
           {#if problems.length > 0}

@@ -26,6 +26,7 @@
     opensBlock = OPENS_CLARITY_BLOCK,
     errorsBlockSave = true,
     language = "clarity",
+    readonly = false,
     ondirty = () => {},
     onclose = () => {},
   }: {
@@ -45,6 +46,8 @@
     errorsBlockSave?: boolean;
     /** How the text is colored: Clarity as the lexer reads it, Rust, or not at all. */
     language?: "clarity" | "rust" | "plain";
+    /** Shown to read, not to change: no Save, Revert or problems. */
+    readonly?: boolean;
     ondirty?: (dirty: boolean) => void;
     onclose?: () => void;
   } = $props();
@@ -119,6 +122,22 @@
       }
     }, PAINT_DELAY);
     return () => clearTimeout(timer);
+  });
+
+  /** The colored copy covers what the text area shows, not its scrollbars. */
+  function fit() {
+    if (!editor || !paint) return;
+    paint.style.right = `${editor.offsetWidth - editor.clientWidth}px`;
+    paint.style.bottom = `${editor.offsetHeight - editor.clientHeight}px`;
+  }
+
+  $effect(() => {
+    void text;
+    if (!editor) return;
+    fit();
+    const watching = new ResizeObserver(fit);
+    watching.observe(editor);
+    return () => watching.disconnect();
   });
 
   function scrolled() {
@@ -224,6 +243,7 @@
 </script>
 
 <div class="source">
+  {#if !readonly}
   <div class="bar">
     {#if jumps.length > 0}
       <nav class="jumps">
@@ -245,6 +265,7 @@
       >
     </div>
   </div>
+  {/if}
 
   <div class="editor">
     <div class="gutter" bind:this={gutter} aria-hidden="true">
@@ -264,11 +285,13 @@
         onscroll={scrolled}
         spellcheck="false"
         wrap="off"
+        {readonly}
         {placeholder}
       ></textarea>
     </div>
   </div>
 
+  {#if !readonly}
   <footer>
     {#if error}<p class="refused" role="alert">{error}</p>{/if}
     <ul>
@@ -281,6 +304,7 @@
       {/each}
     </ul>
   </footer>
+  {/if}
 </div>
 
 <style>

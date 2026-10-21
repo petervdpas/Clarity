@@ -4,6 +4,7 @@
   // theme changes.
 
   import { invoke } from "@tauri-apps/api/core";
+  import RenameField from "./RenameField.svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import ThemeSample from "./ThemeSample.svelte";
   import type { CodeView } from "./generated/CodeView";
@@ -19,6 +20,8 @@
     file,
     onapply,
     onopensettings,
+    onrename = () => {},
+    ondelete = () => {},
   }: {
     preview: Preview;
     theme: ThemeDecl;
@@ -28,6 +31,9 @@
     onapply: (edit: Edit) => Promise<void>;
     /** Opens the project settings, where the offered themes are chosen. */
     onopensettings: () => void;
+    /** Renames the theme, where it is declared and where the project offers it. */
+    onrename?: (newName: string) => void;
+    ondelete?: () => void;
   } = $props();
 
   const name = $derived(theme.name.name);
@@ -43,10 +49,14 @@
 
 <div class="view">
   <header>
-    <h2>{name}</h2>
     {#if file}
+      <div class="title">
+        <RenameField {name} title="Rename the theme, here and where the project offers it" {onrename} />
+        <button class="danger" onclick={ondelete}>Delete theme</button>
+      </div>
       <span class="muted">theme in module {file.module?.name ?? ""}, file <code>{file.path}</code></span>
     {:else}
+      <h2>{name}</h2>
       <span class="muted">Clarity's own theme, built in: the base every theme changes</span>
     {/if}
   </header>
@@ -75,7 +85,10 @@
       />
     </div>
   {:else if baseText !== null}
-    <pre class="base">{baseText}</pre>
+    {@const text = baseText}
+    <div class="editor">
+      <SourceEditor load={async () => ({ text, problems: [] })} check={async () => []} save={async () => {}} reloadKey={name} readonly />
+    </div>
   {/if}
 
   <ThemeSample {theme} />
@@ -103,6 +116,13 @@
     font-family: var(--mono);
   }
 
+  .title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .link {
     border: none;
     background: none;
@@ -120,15 +140,4 @@
     overflow: hidden;
   }
 
-  .base {
-    font-family: var(--mono);
-    font-size: 12px;
-    max-height: 460px;
-    overflow: auto;
-    margin: 0;
-    background: var(--panel-alt);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 10px;
-  }
 </style>

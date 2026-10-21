@@ -18,3 +18,4 @@ translation nl
     newGameCaption "Nieuw spel"
     yes "Ja"
     no "Nee"
+    themeTheme ""

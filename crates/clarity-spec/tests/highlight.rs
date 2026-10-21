@@ -98,7 +98,8 @@ fn every_line_of_every_example_starts_with_a_word_the_highlighter_knows() {
     // as a keyword, so a new word of the language cannot go uncolored.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     let mut files = Vec::new();
-    let mut folders = vec![root];
+    // The examples, and Clarity's own theme, which the designer shows too.
+    let mut folders = vec![root, std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("themes")];
     while let Some(folder) = folders.pop() {
         for entry in std::fs::read_dir(&folder).unwrap().flatten() {
             let path = entry.path();

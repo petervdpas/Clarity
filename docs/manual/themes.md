@@ -53,7 +53,7 @@ and on the window: `text name display at 1,1 span 4 rows 2 bind shown style disp
 
 ## Themes in the designer
 
-Themes are listed under Themes in the project tree. Clarity's own theme opens read only, as the reference of every value. **New theme** adds a full copy of it to a module and opens it. A theme opens in its own view: its text, checked as you type, beside a sample window drawn with it.
+Themes are listed under Themes in the project tree. Clarity's own theme opens read only, as the reference of every value. **New theme** asks for the theme's name, its module, and what it starts as: light and dark as the system is (a full copy of Clarity's own), **Light**, **Dark**, or **Cream and green**. It writes every value a theme can set, so each is there to change, and opens the theme. A theme opens in its own view: its text, checked as you type, beside a sample window drawn with it. The name at the top renames it, also where the project offers it; **Delete theme** removes it, and the application stops offering it. A right click on a theme in the project tree opens it or deletes it too, as it does for windows, entities, enums and engines.
 
 ## Offering themes
 

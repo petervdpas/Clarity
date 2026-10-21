@@ -283,3 +283,39 @@ fn a_style_sets_the_size_font_and_alignment_of_its_text() {
 fn project_of(text: &str) -> Project {
     project(text, &["Calc"])
 }
+
+/// A new theme can start from each of Clarity's own looks: light and dark
+/// as the system is, light, dark, or cream and green.
+#[test]
+fn a_new_theme_starts_from_a_look_of_its_choice() {
+    use themes::ThemeStart;
+    let theme = |start| {
+        let source = format!("module shop\n\n{}", themes::starter_from("Ocean", start));
+        let project = load_sources([("shop.clarity", source.as_str())]);
+        assert!(project.diagnostics.is_empty(), "{start:?}: {:#?}", project.diagnostics);
+        project.files[0].themes[0].clone()
+    };
+    let own = themes::built_in();
+    let color = |t: &clarity_spec::model::ThemeDecl, name: &str| t.colors.iter().find(|c| c.name.name == name).cloned().unwrap();
+
+    let system = theme(ThemeStart::System);
+    assert_eq!(system.mode, Some(ThemeMode::System));
+    assert_eq!((color(&system, "panel").light, color(&system, "panel").dark), (color(&own, "panel").light, color(&own, "panel").dark));
+
+    let light = theme(ThemeStart::Light);
+    assert_eq!(light.mode, Some(ThemeMode::Light));
+    assert_eq!(color(&light, "panel").light, color(&own, "panel").light);
+    assert!(light.colors.iter().all(|c| c.dark.is_none()));
+
+    let dark = theme(ThemeStart::Dark);
+    assert_eq!(dark.mode, Some(ThemeMode::Dark));
+    assert_eq!(Some(color(&dark, "panel").light), color(&own, "panel").dark);
+
+    let cream = theme(ThemeStart::CreamGreen);
+    assert_eq!(cream.mode, Some(ThemeMode::Light));
+    assert_eq!(color(&cream, "panel").light, "#fbf8ee");
+    assert_eq!(color(&cream, "accent").light, "#2e6b3a");
+    // Every color of Clarity's own has its cream and green value.
+    assert_eq!(cream.colors.len(), own.colors.len());
+    assert!(cream.colors.iter().all(|c| c.dark.is_none()));
+}

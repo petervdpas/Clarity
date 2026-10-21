@@ -42,6 +42,8 @@ The ribbon at the top has four tabs:
 
 The **Agent** button at the right of the tabs opens the Agent panel on the right side of every tab. It talks to an AI model that reads and changes the open project; see [The agent](ai.agent.md).
 
+**Clarity settings**, at the right of the tabs, holds the settings of Clarity itself, kept for you on this computer and the same in every project; a project's own settings are under **Settings** on the Project tab. **Theme** colors Clarity: **System** (light or dark, as the system is), **Light**, **Dark**, or **Cream and green** (cream pages ruled in green, with a dark green binding). The code editors' colors follow the theme. A window you design keeps its own application's theme.
+
 The **Manual** button beside it, or **F1**, opens this manual in a window of its own beside Clarity's, on the page about the tab you are on. The topics are on its left, with a box to find one; links lead to other pages and to the language reference, and **Back** (or Alt+Left) goes back. It opens again on the page you last read, and closes with Clarity.
 
 Below the sidebar is the Problems list: errors and warnings of the whole project, each with its file, line and column.

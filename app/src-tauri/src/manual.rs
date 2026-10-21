@@ -122,6 +122,7 @@ pub async fn open_manual(app: tauri::AppHandle, topic: String) -> Result<(), Str
         .title("Clarity manual")
         .inner_size(860.0, 720.0)
         .min_inner_size(480.0, 360.0)
+        .devtools(false)
         .build()
         .map(|_| ())
         .map_err(|err| err.to_string())

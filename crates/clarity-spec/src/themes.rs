@@ -17,6 +17,9 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
 use crate::diagnostic::Diagnostic;
 use crate::lexer::TokenKind;
 use crate::model::{
@@ -562,6 +565,78 @@ pub fn resolve(theme: &ThemeDecl, system_dark: bool) -> Resolved {
 /// A class name for a theme or style: `theme-night-owl`, `style-primary`.
 fn class_name(kind: &str, name: &str) -> String {
     format!("{kind}-{}", crate::model::snake_case(name).replace('_', "-"))
+}
+
+/// The look a new theme starts from, as Clarity's own themes look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum ThemeStart {
+    /// Light and dark, as the system is: Clarity's own theme as it is.
+    System,
+    Light,
+    Dark,
+    /// Cream pages ruled in green, with a dark green frame.
+    CreamGreen,
+}
+
+/// The colors of cream and green, for each color of Clarity's own theme.
+const CREAM_GREEN: &[(&str, &str)] = &[
+    ("background", "#efe9d4"),
+    ("panel", "#fbf8ee"),
+    ("raised", "#f2edda"),
+    ("frame", "#23402b"),
+    ("frame_text", "#fbf8ee"),
+    ("text", "#2b2a26"),
+    ("muted", "#6f6b5e"),
+    ("border", "#cddcc6"),
+    ("strong_border", "#9fbf98"),
+    ("accent", "#2e6b3a"),
+    ("accent_soft", "#e2ecd9"),
+    ("on_accent", "#fbf8ee"),
+    ("selection", "#d4e5cc"),
+    ("focus", "#2e6b3a"),
+    ("input", "#fffdf6"),
+    ("error", "#a62b1f"),
+    ("error_soft", "#f6e3dc"),
+    ("warning", "#b45309"),
+    ("warning_soft", "#f8ecd2"),
+    ("success", "#3d7a2a"),
+    ("success_soft", "#e2ecd9"),
+];
+
+/// The text of a new theme called `name`, starting from `start`: every
+/// value it can set is there to change. Light, dark and cream and green
+/// write one value per color and keep to their mode.
+pub fn starter_from(name: &str, start: ThemeStart) -> String {
+    let text = starter(name);
+    if start == ThemeStart::System {
+        return text;
+    }
+    let mode = if start == ThemeStart::Dark { "dark" } else { "light" };
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let pad = &line[..line.len() - trimmed.len()];
+            if trimmed.starts_with("mode ") {
+                return format!("{pad}mode {mode}");
+            }
+            let Some(rest) = trimmed.strip_prefix("color ") else { return line.to_string() };
+            let mut words = rest.splitn(2, ' ');
+            let (role, values) = (words.next().unwrap_or_default(), words.next().unwrap_or_default());
+            let (light, dark) = match values.split_once(" dark ") {
+                Some((light, dark)) => (light.trim(), dark.trim()),
+                None => (values.trim(), values.trim()),
+            };
+            let value = match start {
+                ThemeStart::Dark => dark.to_string(),
+                ThemeStart::CreamGreen => CREAM_GREEN.iter().find(|(r, _)| *r == role).map_or(light.to_string(), |(_, v)| format!("{v:?}")),
+                _ => light.to_string(),
+            };
+            format!("{pad}color {role} {value}")
+        })
+        .map(|l| l + "\n")
+        .collect()
 }
 
 /// The text of a new theme called `name`: a copy of Clarity's own, so

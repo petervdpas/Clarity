@@ -59,6 +59,36 @@
   color-scheme: dark;
 }
 
+/* Cream and green, a theme of Clarity itself (its app settings): cream pages
+   ruled in green, with a dark green binding for the ribbon. Areas showing a
+   designed application keep that application's theme. */
+:root[data-ide-theme="cream-green"] {
+  --bg: #efe9d4;
+  --panel: #fbf8ee;
+  --panel-alt: #f2edda;
+  --border: #cddcc6;
+  --border-strong: #9fbf98;
+  --text: #2b2a26;
+  --text-muted: #6f6b5e;
+  --accent: #2e6b3a;
+  --accent-soft: #e2ecd9;
+  --titlebar: #23402b;
+  --titlebar-text: #fbf8ee;
+  --error: #a62b1f;
+  --error-soft: #f6e3dc;
+  --warning: #b45309;
+  --warning-soft: #f8ecd2;
+  --selection: #d4e5cc;
+  --code-keyword: #7a3b69;
+  --code-type: #22636b;
+  --code-literal: #a0521d;
+  --code-text: #3d6b25;
+  --code-slot: #2e5a9a;
+  --code-key: #8a6500;
+  --code-comment: #8a8473;
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
 }

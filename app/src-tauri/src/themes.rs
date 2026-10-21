@@ -16,9 +16,10 @@ pub fn theme_styles(state: State<WatchState>) -> Result<String, String> {
     Ok(std::iter::once(clarity_gen::base_css()).chain(themes).collect::<Vec<_>>().join("\n"))
 }
 
-/// The text of a new theme called `name`: a copy of Clarity's own, so every
+/// The text of a new theme called `name`, starting from one of Clarity's own
+/// looks (light and dark as the system is, when none is given), so every
 /// value a theme can set is there. With `Clarity` it is Clarity's own theme.
 #[tauri::command]
-pub fn theme_starter(name: String) -> String {
-    clarity_spec::themes::starter(name.trim())
+pub fn theme_starter(name: String, start: Option<clarity_spec::themes::ThemeStart>) -> String {
+    clarity_spec::themes::starter_from(name.trim(), start.unwrap_or(clarity_spec::themes::ThemeStart::System))
 }

@@ -55,6 +55,9 @@
   import AgentPanel from "./lib/AgentPanel.svelte";
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import { agent } from "./lib/agentStore.svelte";
+  import AppSettingsDialog from "./lib/AppSettingsDialog.svelte";
+  import ContextMenu from "./lib/ContextMenu.svelte";
+  import type { CodeView } from "./lib/generated/CodeView";
   import { themeArea, themeOf, tr } from "./lib/model";
   import ThemeStyles from "./lib/ThemeStyles.svelte";
 
@@ -397,6 +400,8 @@
 
   /** Whether the dialog for a new language is open, and what went wrong adding it. */
   let newLanguageOpen = $state(false);
+  /** Clarity's own settings, open in their dialog. */
+  let appSettingsOpen = $state(false);
   let newLanguageError = $state<string | null>(null);
 
   function startNewLanguage() {
@@ -428,22 +433,100 @@
     }
   }
 
-  /** Adds a theme with a free name, a full copy of Clarity's own, and opens it.
-      It goes into the module that already declares themes, or the first one. */
-  async function addTheme() {
-    if (!preview) return;
-    const target = files.find((f) => f.themes.length > 0) ?? files[0];
-    if (!target) return;
-    const taken = new Set(files.flatMap((f) => f.themes.map((t) => t.name.name)));
-    let name = "Theme";
-    for (let n = 2; taken.has(name); n++) name = "Theme" + n;
-    actionError = null;
+  /** The module a new theme goes into, while its dialog asks for the name. */
+  let newTheme = $state<SpecFile | null>(null);
+  let newThemeError = $state<string | null>(null);
+
+  /** Asks for the name of a new theme, proposing the module that already declares themes, or the first one. */
+  function startNewTheme() {
+    const target = files.find((f) => f.themes.length > 0) ?? file ?? files[0];
+    if (target) {
+      newThemeError = null;
+      newTheme = target;
+    }
+  }
+
+  /** Adds a theme as a full copy of Clarity's own, and opens it. */
+  async function addTheme(target: SpecFile, name: string, start: string) {
+    newThemeError = null;
     try {
-      const text = await invoke<string>("theme_starter", { name });
+      const text = await invoke<string>("theme_starter", { name, start });
       applyPreview((await applyEdit(target, { op: "appendDecl", text })).preview);
+      newTheme = null;
       select({ kind: "theme", name });
     } catch (err) {
+      newThemeError = String(err);
+    }
+  }
+
+  /** The project's settings with `change` made to the themes it offers, saved; nothing when it does not offer `name`. */
+  async function changeOffered(name: string, change: (themes: string[]) => string[]) {
+    if (!projectFile?.settings || !projectFile.settings.themes.includes(name)) return;
+    await saveSettings({ ...projectFile.settings, themes: change(projectFile.settings.themes) });
+  }
+
+  /** Renames a theme where it is declared, and where the project offers it. */
+  async function renameTheme(target: SpecFile, theme: { name: string; item: number }, newName: string) {
+    actionError = null;
+    try {
+      const now = await invoke<CodeView>("decl_text", { path: target.path, item: theme.item });
+      const text = now.text.replace(/^theme\s+\S+/, `theme ${newName}`);
+      applyPreview((await applyEdit(target, { op: "replaceDecl", item: theme.item, text })).preview);
+      await changeOffered(theme.name, (themes) => themes.map((t) => (t === theme.name ? newName : t)));
+      select({ kind: "theme", name: newName });
+    } catch (err) {
       actionError = String(err);
+    }
+  }
+
+  async function deleteTheme(target: SpecFile, name: string, item: number) {
+    const offered = projectFile?.settings?.themes.includes(name);
+    const note = offered ? " The application stops offering it." : "";
+    if (!(await ask(`Delete theme ${name}?${note}`, { title: "Clarity", kind: "warning" }))) return;
+    actionError = null;
+    try {
+      await changeOffered(name, (themes) => themes.filter((t) => t !== name));
+      applyPreview((await applyEdit(target, { op: "remove", item })).preview);
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** The menu a right click on the project tree opened, with what it was on. */
+  let treeMenu = $state<{ x: number; y: number; item: Selected } | null>(null);
+
+  /** Opens what the tree shows, as a click on it does. */
+  function openItem(item: Selected) {
+    const page = item.kind === "window" ? files.flatMap((f) => f.pages).find((p) => p.name.name === item.name) : undefined;
+    if (page) selectPage(page);
+    else select(item);
+  }
+
+  /** Deletes a window, entity, enum, theme or engine the tree shows, after asking. */
+  async function deleteItem(item: Selected) {
+    for (const f of files) {
+      const theme = item.kind === "theme" ? f.themes.find((t) => t.name.name === item.name) : undefined;
+      if (theme) return deleteTheme(f, item.name, theme.span.start);
+      const engine = item.kind === "engine" ? f.engines.find((e) => e.name.name === item.name) : undefined;
+      if (engine) return deleteEngine(f, item.name, engine.span.start);
+      const decl =
+        item.kind === "window"
+          ? f.pages.find((p) => p.name.name === item.name)
+          : item.kind === "entity"
+            ? f.entities.find((e) => e.name.name === item.name)
+            : item.kind === "enum"
+              ? f.enums.find((e) => e.name.name === item.name)
+              : undefined;
+      if (!decl) continue;
+      const noun = item.kind === "window" ? "window" : item.kind;
+      if (!(await ask(`Delete ${noun} ${item.name}?`, { title: "Clarity", kind: "warning" }))) return;
+      actionError = null;
+      try {
+        applyPreview((await applyEdit(f, { op: "remove", item: decl.span.start })).preview);
+      } catch (err) {
+        actionError = String(err);
+      }
+      return;
     }
   }
 
@@ -765,7 +848,8 @@
       onwindow={selectPage}
       onselect={select}
       onnewdata={full ? startNewData : null}
-      onnewtheme={full ? addTheme : null}
+      onnewtheme={full ? startNewTheme : null}
+      onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
       onnewengine={full ? startNewEngine : null}
       onnewlanguage={full ? startNewLanguage : null}
       onnewwindow={full ? startNewWindow : null}
@@ -782,6 +866,7 @@
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => (tab = t.key)}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
+      <button class="corner settings-button" onclick={() => (appSettingsOpen = true)} title="Clarity's own settings, such as its theme">Clarity settings</button>
       <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
@@ -1086,6 +1171,8 @@
               if (openTheme.file) applyPreview((await applyEdit(openTheme.file, edit)).preview);
             }}
             onopensettings={selectSettings}
+            onrename={(newName) => openTheme.file && renameTheme(openTheme.file, { name: openTheme.theme.name.name, item: openTheme.theme.span.start }, newName)}
+            ondelete={() => openTheme.file && deleteTheme(openTheme.file, openTheme.theme.name.name, openTheme.theme.span.start)}
           />
         {:else if openEngine}
           <EngineEditor
@@ -1199,6 +1286,45 @@
     onsubmit={addEngine}
     oncancel={() => (newEngine = null)}
   />
+{/if}
+
+{#if treeMenu}
+  {@const item = treeMenu.item}
+  <ContextMenu
+    x={treeMenu.x}
+    y={treeMenu.y}
+    items={[
+      { label: "Open", run: () => openItem(item) },
+      { label: `Delete ${item.kind}`, danger: true, run: () => deleteItem(item) },
+    ]}
+    onclose={() => (treeMenu = null)}
+  />
+{/if}
+
+{#if newTheme && preview}
+  <NameDialog
+    {preview}
+    title="New theme"
+    placeholder="Night"
+    action="Add theme"
+    file={newTheme}
+    error={newThemeError}
+    choice={{
+      label: "Starts as",
+      options: [
+        { value: "system", label: "Light and dark, as the system is" },
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+        { value: "cream-green", label: "Cream and green" },
+      ],
+    }}
+    onsubmit={addTheme}
+    oncancel={() => (newTheme = null)}
+  />
+{/if}
+
+{#if appSettingsOpen}
+  <AppSettingsDialog onclose={() => (appSettingsOpen = false)} />
 {/if}
 
 {#if newLanguageOpen && preview}
@@ -1328,12 +1454,16 @@
     border-radius: var(--radius);
   }
 
-  .ribbon-tabs .manual-button {
+  .ribbon-tabs .settings-button {
     margin: 0 0 0 auto;
   }
 
-  .ribbon-tabs .project-name + .manual-button {
+  .ribbon-tabs .project-name + .settings-button {
     margin-left: 12px;
+  }
+
+  .ribbon-tabs .manual-button {
+    margin: 0 0 0 8px;
   }
 
   .ribbon-tabs .agent-toggle {

@@ -4,8 +4,10 @@ import { mount } from "svelte";
 import Runtime from "./Runtime.svelte";
 import "../render.css";
 import { followSystemScheme } from "../lib/scheme.svelte";
+import { pageMenuOff } from "../lib/pageMenu";
 
 followSystemScheme();
+pageMenuOff();
 
 const target = document.getElementById("app");
 if (!target) throw new Error("missing #app element");

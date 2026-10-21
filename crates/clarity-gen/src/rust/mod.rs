@@ -201,7 +201,8 @@ fn tauri_conf(title: &str, crate_name: &str, (width, height): (u32, u32)) -> Str
         "identifier": format!("app.clarity.{}", crate_name.replace('_', "-")),
         "build": { "frontendDist": "ui" },
         "app": {
-            "windows": [{ "title": title, "width": width, "height": height }],
+            // No web inspector: the window is the application, not a page.
+            "windows": [{ "title": title, "width": width, "height": height, "devtools": false }],
             "security": { "csp": null }
         },
         "bundle": { "active": false }
@@ -619,6 +620,7 @@ fn open_apart(handle: tauri::AppHandle, opener: tauri::WebviewWindow, apart: tau
     tauri::WebviewWindowBuilder::new(&handle, &label, tauri::WebviewUrl::App("index.html".into()))
         .title(TITLE)
         .inner_size(width.unwrap_or({width}.0), height.unwrap_or({height}.0))
+        .devtools(false)
         .build()
         .map_err(|err| Value::from(err.to_string()))?;
     Ok(())

@@ -30,7 +30,7 @@ From the Marketplace: search for **Clarity** in the Extensions view, or
 
 From a package, such as one attached to a release:
 
-    code --install-extension clarity-designer-0.1.0.vsix
+    code --install-extension clarity-designer-0.1.1.vsix
 
 ## For the repository
 

@@ -811,6 +811,7 @@ pub fn run() {
             vault::connection_remove,
             agent::agent_send,
             agent::agent_stop,
+            agent::agent_answer,
             agent::agent_forget
         ])
         .run(tauri::generate_context!())

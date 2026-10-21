@@ -1,8 +1,11 @@
 // The agent panel's list of what was said and done, built from the events
 // of a turn, and the line each tool use shows as.
 
+import type { AgentAnswered } from "./generated/AgentAnswered";
+import type { AgentAsk } from "./generated/AgentAsk";
 import type { AgentEvent } from "./generated/AgentEvent";
 import type { ConnectionRow } from "./generated/ConnectionRow";
+import type { Runs } from "./generated/Runs";
 import type { Usage } from "./generated/Usage";
 
 export type Item =
@@ -10,7 +13,30 @@ export type Item =
   | { kind: "assistant"; text: string }
   | { kind: "tool"; id: string; name: string; input: unknown; result?: string; isError?: boolean }
   | { kind: "note"; text: string }
-  | { kind: "error"; text: string };
+  | { kind: "error"; text: string }
+  /** The agent asks whether it may run something; `allowed` once answered. */
+  | { kind: "ask"; id: number; what: string; allowed?: boolean };
+
+/** What the agent may run, as Clarity's settings (Agent) offer it. */
+export const RUNS_CHOICES: { value: Runs; label: string; note: string }[] = [
+  { value: "ask", label: "Ask every time", note: "The agent asks before it runs or builds the application; you allow or deny it." },
+  { value: "allow", label: "Allow without asking", note: "The agent runs and builds the application when its task needs it." },
+  { value: "never", label: "Never", note: "The agent cannot run or build; it asks you to press Run or Build." },
+];
+
+export function isRuns(value: unknown): value is Runs {
+  return RUNS_CHOICES.some((c) => c.value === value);
+}
+
+/** The list with the agent's question at the end. */
+export function applyAsk(items: Item[], ask: AgentAsk): Item[] {
+  return [...items, { kind: "ask", id: ask.id, what: ask.what }];
+}
+
+/** The list with the answer on its question. */
+export function applyAnswer(items: Item[], answered: AgentAnswered): Item[] {
+  return items.map((i) => (i.kind === "ask" && i.id === answered.id ? { ...i, allowed: answered.allowed } : i));
+}
 
 /** The list after one event of a turn. */
 export function applyEvent(items: Item[], event: AgentEvent): Item[] {
@@ -88,6 +114,12 @@ export function toolLine(name: string, input: unknown): string {
       return `Read the manual: ${text(input, "topic")}`;
     case "reference":
       return text(input, "section") ? `Read the reference: ${text(input, "section")}` : "Read the reference's contents";
+    case "build_output":
+      return "Read the build output";
+    case "read_generated":
+      return path ? `Read the generated ${path}` : "Listed the generated files";
+    case "build":
+      return (input as { run?: boolean } | null)?.run ? "Ran the application" : "Built the application";
     case "show_window":
       return `Showed ${text(input, "name")}`;
     default:

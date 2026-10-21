@@ -15,7 +15,7 @@ use clarity_spec::code::EngineDecl;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::WatchState;
-use crate::build::{BUILD_DONE, BUILD_LINE, BuildDone, BuildState};
+use crate::build::{BuildDone, BuildState, send_done, send_line};
 
 /// The problems of an engine's last build, sent when it ends.
 const ENGINE_BUILT: &str = "engine-built";
@@ -105,13 +105,14 @@ pub fn build_engine(name: String, app: AppHandle, state: State<WatchState>) -> R
     if builds.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
+    crate::build::begin_output(&app);
     std::thread::spawn(move || {
         let done = match build(&app, &folder, &engine, &source) {
             Ok(()) => BuildDone { ok: true, message: format!("built {}", engine.file), binary: None },
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
-        let _ = app.emit(BUILD_DONE, done);
+        send_done(&app, done);
     });
     Ok(())
 }
@@ -149,7 +150,7 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
         return Err(format!("to build engine {name}, install {}", missing.join(", and ")));
     }
     let command = engines::build_command(source, library().as_deref());
-    let _ = app.emit(BUILD_LINE, format!("{} {} (in {})", command.tool, command.args.join(" "), command.dir.display()));
+    send_line(app, format!("{} {} (in {})", command.tool, command.args.join(" "), command.dir.display()));
     let mut child = Command::new(command.tool)
         .args(&command.args)
         .current_dir(&command.dir)
@@ -162,7 +163,7 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
     if let Some(stderr) = child.stderr.take() {
         for line in BufReader::new(stderr).lines().map_while(Result::ok) {
             problems.extend(engines::problem_in(&command.dir, &line));
-            let _ = app.emit(BUILD_LINE, line);
+            send_line(app, line);
         }
     }
     let ok = child.wait().is_ok_and(|status| status.success());
@@ -172,6 +173,6 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
     }
     let wasm = folder.join(&engine.file);
     std::fs::copy(&command.artifact, &wasm).map_err(|err| format!("cannot copy {} to {}: {err}", command.artifact.display(), wasm.display()))?;
-    let _ = app.emit(BUILD_LINE, format!("{} is built", engine.file));
+    send_line(app, format!("{} is built", engine.file));
     Ok(())
 }

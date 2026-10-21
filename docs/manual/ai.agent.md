@@ -19,8 +19,23 @@ The agent is a model that knows Clarity and works on the open project through to
 - Show a window in Preview when it is done.
 - Read the design document, for what Clarity can do and what is planned.
 - Read this manual and the language reference, the pages it needs for the task.
+- Read the **Output** of the last Run or Build, such as compiler errors, so you need not paste it.
+- Read the application Clarity generated, in the folder the project's output setting names, to see what an error points at. It only reads there; it fixes the project instead.
+- Run or build the application, only as **Clarity settings** allow; see below.
 
 The agent cannot reach files outside the project's folder, and it writes only Clarity files. The designer follows its changes as they are written.
+
+Hover over an answer for **Copy**, which puts the answer on the clipboard as Markdown.
+
+## Running and building
+
+The agent executes nothing by itself. It can only run or build the application the way **Run** and **Build** do, and **Clarity settings**, section **Agent**, says when:
+
+- **Ask every time** (the default): the panel asks "The agent asks to: Run the application" with **Allow** and **Deny**. Nothing runs until you allow it; **Stop** denies it. After a deny the agent does not ask again in that turn.
+- **Allow without asking**: the agent runs and builds when its task needs it.
+- **Never**: the agent cannot run or build, and asks you to press **Run** or **Build**.
+
+The build shows in the **Output** panel as one you started, and the agent reads its output when it ends.
 
 ## Undo, Stop and New
 

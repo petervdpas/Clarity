@@ -8,12 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{RecvTimeoutError, Sender};
+use std::time::Duration;
 
 use clarity_agent::{Agent, Event, Message, ToolDef, ToolResult, Tools};
 use clarity_project::Stack;
 use clarity_spec::Severity;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager, State};
 use ts_rs::TS;
@@ -113,9 +115,15 @@ after where it is: the part and what the text is to it.
 their inputs, buttons sit together at the bottom right.
 - After adding or changing entities, write a migration step with migrate, so the database follows.
 - When a window is done, show it with show_window so the person sees it.
+- When the person mentions a failed build or run, or errors in the output, read them with build_output; never ask \
+for the output to be pasted. Read the generated code it points at with read_generated. The generated code is \
+not edited: fix the project, or say what in Clarity needs fixing.
 - When asked what Clarity can do, which stacks support something, or what is planned, read the manual or the design \
 document (design tool, its Stacks and Roadmap sections) rather than guess; never promise what is not built.
 - Read only what the task needs: every page you read is sent again with each later message.
+- You execute nothing yourself. To run or build the application use the build tool, which may ask the person \
+first; use it only when the task needs it, and when they deny it, do not ask again in this turn. Without a build \
+tool (Clarity's settings turned it off), ask the person to press Run or Build, then read build_output.
 - Say briefly what you did when you finish. Write plain, short sentences.
 
 Clarity's manual (read a topic with the manual tool):
@@ -135,6 +143,28 @@ pub struct Written {
     pub after: String,
 }
 
+/// Whether the agent may run or build the application, as Clarity's
+/// settings (Agent) say: ask every time, allow without asking, or never.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Runs {
+    #[default]
+    Ask,
+    Allow,
+    Never,
+}
+
+/// What the agent does only after the person allows it: running or building
+/// the application. The agent executes nothing else.
+pub trait Execute {
+    /// Asks the person, in the panel, whether the agent may do `what`; true when they allow it.
+    fn ask(&mut self, what: &str) -> bool;
+    /// Generates and builds the project (with `run`, starts it too), as the
+    /// toolbar does, and waits for the end; gives the build's output.
+    fn build(&mut self, file: &Path, run: bool) -> Result<String, String>;
+}
+
 /// The tools, on one project: the project file and its folder of modules.
 pub struct ProjectTools {
     project: Option<(PathBuf, PathBuf)>,
@@ -146,11 +176,17 @@ pub struct ProjectTools {
     pub shown: Option<String>,
     /// The folder new projects go in by default.
     projects_folder: PathBuf,
+    /// The Output panel as the turn started: the last build's lines and how it ended.
+    pub output: String,
+    /// How the build tool asks the person and builds; without it, nothing runs.
+    pub execute: Option<Box<dyn Execute>>,
+    /// Whether the build tool asks first, runs without asking, or is not there.
+    pub runs: Runs,
 }
 
 impl ProjectTools {
     pub fn new(project: Option<(PathBuf, PathBuf)>, projects_folder: PathBuf) -> ProjectTools {
-        ProjectTools { project, written: Vec::new(), made: None, shown: None, projects_folder }
+        ProjectTools { project, written: Vec::new(), made: None, shown: None, projects_folder, output: crate::build::Output::default().text(), execute: None, runs: Runs::Ask }
     }
 
     fn open(&self) -> Result<&(PathBuf, PathBuf), String> {
@@ -250,6 +286,62 @@ impl ProjectTools {
         Ok(format!("Wrote the step {}:\n{text}\n{}", path.display(), self.problems()?))
     }
 
+    /// The folder the project is generated into, as its `output` setting says.
+    fn out(&self) -> Result<PathBuf, String> {
+        let (file, _) = self.open()?;
+        let loaded = clarity_project::load(file);
+        let settings = loaded.settings.ok_or_else(|| format!("the project file cannot be read: {}", loaded.problems.join("; ")))?;
+        let out = clarity_project::out_dir(file, &settings);
+        if !out.is_dir() {
+            return Err(format!("the project is not generated yet ({} does not exist); Run or Build generates it", out.display()));
+        }
+        Ok(out)
+    }
+
+    /// The generated project, read only: without a path, its files; with one,
+    /// that file. The toolchain's own folders (bin, obj, target) are left out
+    /// of the list but can be read by name.
+    fn generated(&self, path: &str) -> Result<String, String> {
+        let out = self.out()?;
+        let path = path.trim();
+        if path.is_empty() {
+            let (file, _) = self.open()?;
+            let skipped: &[&str] = clarity_project::load(file).settings.map_or(&[], |s| clarity_gen::build_output(s.stack.backend));
+            let mut files = Vec::new();
+            collect_generated(&out, &out, skipped, &mut files);
+            files.sort();
+            let list: Vec<String> = files.iter().take(500).map(|f| format!("- {}", f.display())).collect();
+            return Ok(format!("The generated project in {} ({} files; read one by its path):\n{}", out.display(), files.len(), list.join("\n")));
+        }
+        let relative = Path::new(path);
+        if !relative.is_relative() || !relative.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
+            return Err(format!("'{path}' is not inside the generated project: use a path like Modules/Todo.cs, as the list gives it"));
+        }
+        let bytes = std::fs::read(out.join(relative)).map_err(|_| format!("the generated project has no file {path}"))?;
+        let text = String::from_utf8(bytes).map_err(|_| format!("{path} is not a text file"))?;
+        Ok(match text.char_indices().nth(GENERATED_LIMIT) {
+            Some((cut, _)) => format!("{}\n[the first {GENERATED_LIMIT} characters of {path}; the rest is left out]", &text[..cut]),
+            None => text,
+        })
+    }
+
+    /// Runs or builds the application, after the person allows it.
+    fn build(&mut self, input: &Value) -> Result<String, String> {
+        let run = input["run"].as_bool().unwrap_or(false);
+        let file = self.open()?.0.clone();
+        if self.runs == Runs::Never {
+            return Err("running and building are turned off in Clarity's settings (Agent); ask the person to press Run or Build".into());
+        }
+        let execute = self.execute.as_mut().ok_or("running and building are not available here")?;
+        let what = if run { "Run the application: generate it, build it and start it" } else { "Build the application: generate it and build it" };
+        if self.runs == Runs::Ask && !execute.ask(what) {
+            return Ok("The person denied this, so nothing ran. Do not ask again in this turn; say what they can do instead.".into());
+        }
+        let output = execute.build(&file, run)?;
+        self.output = output.clone();
+        Ok(output)
+    }
+
     fn new_project(&mut self, input: &Value) -> Result<String, String> {
         let name = input["name"].as_str().unwrap_or_default().trim();
         if name.is_empty() {
@@ -265,6 +357,26 @@ impl ProjectTools {
         self.project = Some((file.clone(), dir));
         self.made = Some(file.clone());
         Ok(format!("Made the project {}; it is the open project now.\n\n{}", file.display(), self.overview()?))
+    }
+}
+
+/// How much of one generated file the agent reads.
+const GENERATED_LIMIT: usize = 60_000;
+
+/// Every file under `folder`, relative to `root`, leaving out the names in
+/// `skipped` at the top (the toolchain's output).
+fn collect_generated(root: &Path, folder: &Path, skipped: &[&str], out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(folder) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if folder == root && skipped.iter().any(|s| entry.file_name() == *s) {
+            continue;
+        }
+        if path.is_dir() {
+            collect_generated(root, &path, skipped, out);
+        } else {
+            out.push(path.strip_prefix(root).unwrap_or(&path).to_path_buf());
+        }
     }
 }
 
@@ -288,7 +400,7 @@ fn schema(properties: Value, required: &[&str]) -> Value {
 impl Tools for ProjectTools {
     fn definitions(&self) -> Vec<ToolDef> {
         let tool = |name: &str, description: &str, input_schema: Value| ToolDef { name: name.into(), description: description.into(), input_schema };
-        vec![
+        let mut tools = vec![
             tool("project_overview", "The open project: its project file, its modules and its problems.", schema(json!({}), &[])),
             tool(
                 "read_file",
@@ -334,8 +446,27 @@ impl Tools for ProjectTools {
                     &["name"],
                 ),
             ),
+            tool(
+                "read_generated",
+                "Reads the application Clarity generated from the project (in the folder the project's output setting names), read only. Without a path it lists the generated files; with one (like Modules/Todo.cs) it gives that file. Use it with build_output to see why a build failed.",
+                schema(json!({ "path": { "type": "string", "description": "A path inside the generated project, as the list gives it." } }), &[]),
+            ),
+            tool(
+                "build_output",
+                "Reads Clarity's Output panel: the last Run or Build of the application (or of an engine), how it ended, and the toolchain's lines, such as compiler errors in the generated code.",
+                schema(json!({}), &[]),
+            ),
             tool("show_window", "Shows a window of the project in Clarity's Preview.", schema(json!({ "name": { "type": "string" } }), &["name"])),
-        ]
+        ];
+        // Clarity's settings can turn running off; then the agent has no such tool.
+        if self.runs != Runs::Never {
+            tools.push(tool(
+                "build",
+                "Runs the application (run: true: generate, build and start it, as the Run button does) or builds it (run: false, as the Build button does). The person may be asked first and may deny it. Gives the build's output.",
+                schema(json!({ "run": { "type": "boolean", "description": "true to start the application after building it." } }), &["run"]),
+            ));
+        }
+        tools
     }
 
     fn call(&mut self, name: &str, input: &Value) -> ToolResult {
@@ -351,6 +482,9 @@ impl Tools for ProjectTools {
             "reference" => section(LANGUAGE, "language reference", &text("section")),
             "new_project" => self.new_project(input),
             "migrate" => self.migrate(input),
+            "build_output" => Ok(self.output.clone()),
+            "read_generated" => self.generated(&text("path")),
+            "build" => self.build(input),
             "show_window" => {
                 self.shown = Some(text("name"));
                 Ok(format!("Showing {} in Preview.", text("name")))
@@ -383,6 +517,79 @@ pub struct AgentState {
     conversation: Mutex<Vec<Message>>,
     running: AtomicBool,
     stop: Arc<AtomicBool>,
+    /// The question waiting for the person's answer, and where the answer goes.
+    asking: Mutex<Option<(u32, Sender<bool>)>>,
+    last_ask: AtomicU32,
+}
+
+/// The agent asks the person whether it may do something.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct AgentAsk {
+    pub id: u32,
+    pub what: String,
+}
+
+/// The person's answer (or a stop, which denies).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct AgentAnswered {
+    pub id: u32,
+    pub allowed: bool,
+}
+
+/// Asks in the panel and builds with the toolbar's Run and Build.
+struct AppExecute {
+    app: AppHandle,
+    stop: Arc<AtomicBool>,
+}
+
+impl Execute for AppExecute {
+    fn ask(&mut self, what: &str) -> bool {
+        let state = self.app.state::<AgentState>();
+        let id = state.last_ask.fetch_add(1, Ordering::SeqCst) + 1;
+        let (send, answer) = std::sync::mpsc::channel();
+        if let Ok(mut asking) = state.asking.lock() {
+            *asking = Some((id, send));
+        }
+        let _ = self.app.emit("agent-ask", AgentAsk { id, what: what.to_string() });
+        // Waits for Allow or Deny; Stop denies.
+        let allowed = loop {
+            match answer.recv_timeout(Duration::from_millis(200)) {
+                Ok(allowed) => break allowed,
+                Err(RecvTimeoutError::Timeout) if !self.stop.load(Ordering::SeqCst) => {}
+                Err(_) => break false,
+            }
+        };
+        if let Ok(mut asking) = state.asking.lock() {
+            *asking = None;
+        }
+        let _ = self.app.emit("agent-answered", AgentAnswered { id, allowed });
+        allowed
+    }
+
+    fn build(&mut self, file: &Path, run: bool) -> Result<String, String> {
+        // As the toolbar: Run is a debug build that starts, Build a release build.
+        crate::build::start(self.app.clone(), file.to_path_buf(), !run, run)?;
+        let builds = self.app.state::<crate::build::BuildState>();
+        while builds.busy.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        Ok(builds.output.lock().map(|o| o.text()).unwrap_or_default())
+    }
+}
+
+/// The person's answer to the agent's question.
+#[tauri::command]
+pub fn agent_answer(id: u32, allowed: bool, agent: State<AgentState>) -> Result<(), String> {
+    let asking = agent.asking.lock().map_err(|_| "the question is not available".to_string())?;
+    match asking.as_ref() {
+        Some((asked, send)) if *asked == id => {
+            let _ = send.send(allowed);
+            Ok(())
+        }
+        _ => Err("the agent is no longer asking this".into()),
+    }
 }
 
 /// Sent to the screen while a turn runs, and when it ends.
@@ -455,7 +662,7 @@ fn turn_budget(text: &str) -> Result<Option<u64>, String> {
 /// Starts a turn: the person's words go to the model, which works on the
 /// open project. Returns at once; the turn reports through events.
 #[tauri::command]
-pub fn agent_send(text: String, connection: String, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
+pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, agent: State<AgentState>) -> Result<(), String> {
     // The key is read before the turn starts, so a locked vault asks for its password first.
     let mut model = model_of(&app, &connection)?;
     let budget = {
@@ -475,6 +682,11 @@ pub fn agent_send(text: String, connection: String, app: AppHandle, agent: State
     std::thread::spawn(move || {
         let state = app.state::<AgentState>();
         let mut tools = ProjectTools::new(project, projects_folder);
+        tools.execute = Some(Box::new(AppExecute { app: app.clone(), stop: stop.clone() }));
+        tools.runs = runs;
+        if let Ok(output) = app.state::<crate::build::BuildState>().output.lock() {
+            tools.output = output.text();
+        }
         let mut conversation = state.conversation.lock().map(|c| c.clone()).unwrap_or_default();
         let agent = Agent { system: instructions(), max_steps: MAX_STEPS, budget };
         let _ = agent.run(&mut model, &mut tools, &mut conversation, &text, &stop, &mut |event| {
@@ -590,7 +802,142 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    const DOC: &str = "# Design\n\nIntro.\n\n## 1. Purpose\n\nWhy.\n\n### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```\n\n### 1.3 Data\n\nSQLite.\n\n## 19. Roadmap\n\nG5 is next.\n\n## 20. Open questions\n\nMany.\n";
+    /// The agent executes nothing by itself: its tools read, write project
+    /// files and check them. Only `build` runs something, and it asks the
+    /// person first. Any other tool that runs something needs this list
+    /// changed on purpose.
+    #[test]
+    fn only_the_build_tool_executes_and_it_asks_first() {
+        let tools = ProjectTools::new(None, std::env::temp_dir());
+        let mut names: Vec<String> = tools.definitions().into_iter().map(|t| t.name).collect();
+        names.sort();
+        let allowed = [
+            // Reading.
+            "build_output", "check", "design", "manual", "parts", "project_overview", "read_file", "read_generated", "reference",
+            // Writing project files, checked at once and undone with one Undo.
+            "migrate", "new_project", "write_file",
+            // Showing a window in Preview, which draws it without running it.
+            "show_window",
+            // Running or building, only after the person allows it.
+            "build",
+        ];
+        let mut allowed: Vec<String> = allowed.iter().map(|n| n.to_string()).collect();
+        allowed.sort();
+        assert_eq!(names, allowed);
+    }
+
+    /// Stands in for the person and the toolchain.
+    struct Asked {
+        allow: bool,
+        asked: Vec<String>,
+        built: Vec<bool>,
+    }
+
+    impl Execute for std::rc::Rc<std::cell::RefCell<Asked>> {
+        fn ask(&mut self, what: &str) -> bool {
+            let mut asked = self.borrow_mut();
+            asked.asked.push(what.to_string());
+            asked.allow
+        }
+
+        fn build(&mut self, _file: &Path, run: bool) -> Result<String, String> {
+            self.borrow_mut().built.push(run);
+            Ok("The last build succeeded: running. Its output (1 line):\ndotnet build".into())
+        }
+    }
+
+    #[test]
+    fn the_build_tool_asks_the_person_first() {
+        let (root, file, dir) = project("build");
+        let person = std::rc::Rc::new(std::cell::RefCell::new(Asked { allow: false, asked: vec![], built: vec![] }));
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        // Without a way to ask, nothing runs.
+        assert!(tools.call("build", &json!({"run": true})).is_error);
+
+        tools.execute = Some(Box::new(person.clone()));
+        let denied = tools.call("build", &json!({"run": true}));
+        assert!(!denied.is_error && denied.text.contains("denied"), "{}", denied.text);
+        assert_eq!(person.borrow().asked, ["Run the application: generate it, build it and start it"]);
+        assert!(person.borrow().built.is_empty(), "a denied build does not run");
+
+        person.borrow_mut().allow = true;
+        let built = tools.call("build", &json!({"run": false}));
+        assert!(!built.is_error && built.text.ends_with("dotnet build"), "{}", built.text);
+        assert_eq!(person.borrow().asked[1], "Build the application: generate it and build it");
+        assert_eq!(person.borrow().built, [false]);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Clarity's settings say whether the agent asks, may run without asking, or never runs.
+    #[test]
+    fn the_settings_say_whether_the_agent_asks() {
+        let (root, file, dir) = project("runs");
+        let person = std::rc::Rc::new(std::cell::RefCell::new(Asked { allow: false, asked: vec![], built: vec![] }));
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        tools.execute = Some(Box::new(person.clone()));
+
+        tools.runs = Runs::Allow;
+        assert!(!tools.call("build", &json!({"run": true})).is_error);
+        assert!(person.borrow().asked.is_empty(), "allowed in the settings: no question");
+        assert_eq!(person.borrow().built, [true]);
+
+        // Never: the agent is not even offered the tool, and a call does nothing.
+        tools.runs = Runs::Never;
+        assert!(!tools.definitions().iter().any(|t| t.name == "build"));
+        let refused = tools.call("build", &json!({"run": true}));
+        assert!(refused.is_error && refused.text.contains("settings"), "{}", refused.text);
+        assert_eq!(person.borrow().built, [true]);
+        assert_eq!(serde_json::from_value::<Runs>(json!("ask")).unwrap(), Runs::Ask);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_agent_reads_the_generated_project() {
+        let (root, file, dir) = project("generated");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let none = tools.call("read_generated", &json!({}));
+        assert!(none.is_error && none.text.contains("not generated yet"), "{}", none.text);
+
+        // The project's own output folder, not always `out`.
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.contains("output \"out\""), "{text}");
+        std::fs::write(&file, text.replace("output \"out\"", "output \"build/app\"")).unwrap();
+        let out = dir.join("build/app");
+        std::fs::create_dir_all(out.join("Modules")).unwrap();
+        std::fs::create_dir_all(out.join("obj")).unwrap();
+        std::fs::write(out.join("Modules/Todo.cs"), "Lists.At(xs, 1)").unwrap();
+        std::fs::write(out.join("App.csproj"), "<Project />").unwrap();
+        std::fs::write(out.join("obj/project.assets.json"), "{}").unwrap();
+
+        // The listing leaves the toolchain's own folders out; the stack here is the starter's.
+        let listed = tools.call("read_generated", &json!({}));
+        assert!(!listed.is_error, "{}", listed.text);
+        assert!(listed.text.contains(&out.display().to_string()), "{}", listed.text);
+        assert!(listed.text.contains("- Modules/Todo.cs") && listed.text.contains("- App.csproj"), "{}", listed.text);
+        let read = tools.call("read_generated", &json!({"path": "Modules/Todo.cs"}));
+        assert_eq!(read.text, "Lists.At(xs, 1)");
+        // What the toolchain wrote can still be read when asked by name.
+        assert_eq!(tools.call("read_generated", &json!({"path": "obj/project.assets.json"})).text, "{}");
+        // Only inside out, and only reading.
+        for path in ["../todo.clarity", "/etc/passwd", "Modules/../../todo.clarity"] {
+            assert!(tools.call("read_generated", &json!({"path": path})).is_error, "{path}");
+        }
+        assert!(tools.call("read_generated", &json!({"path": "Missing.cs"})).text.contains("no file Missing.cs"));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_agent_reads_the_build_output() {
+        let mut tools = ProjectTools::new(None, std::env::temp_dir());
+        assert_eq!(tools.call("build_output", &json!({})).text, "Nothing was built or run since Clarity started.");
+        tools.output = "The last build failed: the build failed. Its output (1 line):\nerror CS0103".into();
+        let read = tools.call("build_output", &json!({}));
+        assert!(!read.is_error && read.text.ends_with("error CS0103"), "{}", read.text);
+        // The model is told to read it rather than ask for a paste.
+        assert!(instructions().contains("build_output"));
+    }
+
+    const DOC: &str ="# Design\n\nIntro.\n\n## 1. Purpose\n\nWhy.\n\n### 1.2 Stacks\n\nRust and Go.\n\n```\n## not a heading\n```\n\n### 1.3 Data\n\nSQLite.\n\n## 19. Roadmap\n\nG5 is next.\n\n## 20. Open questions\n\nMany.\n";
 
     #[test]
     fn the_design_tool_gives_the_contents_and_a_section() {

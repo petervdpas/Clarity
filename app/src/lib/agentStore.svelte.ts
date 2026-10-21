@@ -5,7 +5,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { addUsage, agentConnections, applyEvent, NO_USAGE, type Item } from "./agent";
+import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, NO_USAGE, type Item } from "./agent";
+import { isRuns } from "./agent";
+import type { AgentAnswered } from "./generated/AgentAnswered";
+import type { Runs } from "./generated/Runs";
+import type { AgentAsk } from "./generated/AgentAsk";
 import type { AgentEnded } from "./generated/AgentEnded";
 import type { AgentEvent } from "./generated/AgentEvent";
 import type { ConnectionRow } from "./generated/ConnectionRow";
@@ -14,6 +18,7 @@ import { unlock } from "./unlockStore.svelte";
 
 const OPEN_KEY = "clarity.agent.open";
 const CONNECTION_KEY = "clarity.agent.connection";
+const RUNS_KEY = "clarity.agent.runs";
 
 function remembered(key: string): string | null {
   try {
@@ -37,6 +42,8 @@ class AgentStore {
   running = $state(false);
   connections = $state<string[]>([]);
   connection = $state(remembered(CONNECTION_KEY) ?? "anthropic");
+  /** Whether the agent asks before it runs, may run without asking, or never runs (Clarity's settings). */
+  runs = $state<Runs>(((value) => (isRuns(value) ? value : "ask"))(remembered(RUNS_KEY)));
   /** The tokens of the turn that runs or ran last, and of the conversation. */
   turnUsage = $state<Usage>(NO_USAGE);
   sessionUsage = $state<Usage>(NO_USAGE);
@@ -52,6 +59,8 @@ class AgentStore {
       }
       this.items = applyEvent(this.items, event);
     });
+    listen<AgentAsk>("agent-ask", (e) => (this.items = applyAsk(this.items, e.payload)));
+    listen<AgentAnswered>("agent-answered", (e) => (this.items = applyAnswer(this.items, e.payload)));
     listen<AgentEnded>("agent-ended", (e) => {
       this.running = false;
       this.onEnded(e.payload);
@@ -73,6 +82,11 @@ class AgentStore {
     if (this.connections.length > 0 && !this.connections.includes(this.connection)) this.pick(this.connections[0]);
   }
 
+  setRuns(runs: Runs) {
+    this.runs = runs;
+    remember(RUNS_KEY, runs);
+  }
+
   pick(connection: string) {
     this.connection = connection;
     remember(CONNECTION_KEY, connection);
@@ -86,12 +100,21 @@ class AgentStore {
     this.running = true;
     try {
       // The key comes from the vault: a locked vault asks for its password, then the turn starts.
-      await unlock.invoke("agent_send", { text: said, connection: this.connection });
+      await unlock.invoke("agent_send", { text: said, connection: this.connection, runs: this.runs });
     } catch (err) {
       this.running = false;
       this.items = [...this.items, { kind: "error", text: String(err) }];
     }
     return true;
+  }
+
+  /** Allow or Deny on the agent's question; the answer shows when the backend has it. */
+  async answer(id: number, allowed: boolean) {
+    try {
+      await invoke("agent_answer", { id, allowed });
+    } catch (err) {
+      this.items = [...this.items, { kind: "error", text: String(err) }];
+    }
   }
 
   async stop() {

@@ -21,6 +21,22 @@
     if (await agent.send(text)) text = "";
   }
 
+  /** The answer whose text was copied last, to say so for a moment. */
+  let copied = $state<number | null>(null);
+
+  /** Copies an answer as its model wrote it (Markdown), to paste elsewhere. */
+  async function copy(i: number, answer: string) {
+    try {
+      await navigator.clipboard.writeText(answer);
+      copied = i;
+      setTimeout(() => {
+        if (copied === i) copied = null;
+      }, 1500);
+    } catch {
+      copied = null;
+    }
+  }
+
   function keydown(event: KeyboardEvent) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -49,7 +65,10 @@
         <p class="user">{item.text}</p>
       {:else if item.kind === "assistant"}
         <!-- Escaped first: the answer brings no HTML of its own. -->
-        <div class="assistant">{@html markdown(item.text)}</div>
+        <div class="assistant">
+          <button class="copy" onclick={() => copy(i, item.text)} title="Copy this answer as Markdown">{copied === i ? "Copied" : "Copy"}</button>
+          {@html markdown(item.text)}
+        </div>
       {:else if item.kind === "tool"}
         <details class="tool" class:failed={item.isError}>
           <summary>
@@ -58,6 +77,18 @@
           </summary>
           {#if item.result !== undefined}<pre>{item.result}</pre>{/if}
         </details>
+      {:else if item.kind === "ask"}
+        <div class="ask" role="group" aria-label="The agent asks">
+          <p>The agent asks to: {item.what}.</p>
+          {#if item.allowed === undefined}
+            <div class="answers">
+              <button class="primary" onclick={() => agent.answer(item.id, true)}>Allow</button>
+              <button onclick={() => agent.answer(item.id, false)}>Deny</button>
+            </div>
+          {:else}
+            <p class="answered">{item.allowed ? "Allowed." : "Denied."}</p>
+          {/if}
+        </div>
       {:else if item.kind === "note"}
         <p class="note">{item.text}</p>
       {:else}
@@ -138,8 +169,25 @@
   }
 
   .assistant {
+    position: relative;
     font-size: 13px;
     overflow-wrap: anywhere;
+    user-select: text;
+  }
+
+  /* Shown on the answer under the pointer, top right. */
+  .copy {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 1px 7px;
+    font-size: 11px;
+    opacity: 0;
+  }
+
+  .assistant:hover .copy,
+  .copy:focus-visible {
+    opacity: 1;
   }
 
   .assistant :global(p),
@@ -217,6 +265,22 @@
     border-radius: var(--radius);
   }
 
+  .ask {
+    padding: 8px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .answers {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .answered,
   .note,
   .empty {
     color: var(--text-muted);

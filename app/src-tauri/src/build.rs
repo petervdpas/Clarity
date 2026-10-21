@@ -15,6 +15,8 @@ use ts_rs::TS;
 
 /// One line of toolchain output.
 pub(crate) const BUILD_LINE: &str = "build-line";
+/// A build starts.
+pub(crate) const BUILD_STARTED: &str = "build-started";
 /// The end of a build.
 pub(crate) const BUILD_DONE: &str = "build-done";
 
@@ -24,6 +26,85 @@ pub struct BuildState {
     pub(crate) busy: AtomicBool,
     /// The application Run started, so Stop and the next Run can end it.
     running: Mutex<Option<Child>>,
+    /// What the Output panel shows of the last build, for the agent.
+    pub(crate) output: Mutex<Output>,
+}
+
+/// How many lines of a build's output are kept, as many as the Output panel keeps.
+pub(crate) const OUTPUT_LINES: usize = 400;
+
+/// The output of the last build: its lines and how it ended.
+#[derive(Debug, Default)]
+pub struct Output {
+    started: bool,
+    lines: std::collections::VecDeque<String>,
+    left_out: usize,
+    /// Whether it succeeded, and its message; none while it runs.
+    ended: Option<(bool, String)>,
+}
+
+impl Output {
+    /// A build starts: the output of the one before goes.
+    pub fn begin(&mut self) {
+        *self = Output { started: true, ..Output::default() };
+    }
+
+    pub fn line(&mut self, line: &str) {
+        if self.lines.len() == OUTPUT_LINES {
+            self.lines.pop_front();
+            self.left_out += 1;
+        }
+        self.lines.push_back(line.to_string());
+    }
+
+    pub fn finish(&mut self, ok: bool, message: &str) {
+        self.ended = Some((ok, message.to_string()));
+    }
+
+    /// The output as the agent reads it: how the build ended, then its lines.
+    pub fn text(&self) -> String {
+        if !self.started {
+            return "Nothing was built or run since Clarity started.".into();
+        }
+        let state = match &self.ended {
+            None => "The build is still running.".to_string(),
+            Some((true, message)) => format!("The last build succeeded: {message}."),
+            Some((false, message)) => format!("The last build failed: {message}."),
+        };
+        let count = self.lines.len();
+        let which = match (self.left_out, count) {
+            (0, 1) => "Its output (1 line)".to_string(),
+            (0, n) => format!("Its output ({n} lines)"),
+            (left, n) => format!("Its last {n} lines ({left} earlier ones are left out)"),
+        };
+        let lines: Vec<&str> = self.lines.iter().map(String::as_str).collect();
+        format!("{state} {which}:\n{}", lines.join("\n"))
+    }
+}
+
+/// A build starts: the Output panel's lines are kept from here.
+pub(crate) fn begin_output(app: &AppHandle) {
+    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+        output.begin();
+    }
+    // The Output panel opens and empties, also when the agent started the build.
+    let _ = app.emit(BUILD_STARTED, ());
+}
+
+/// Sends a line to the Output panel and keeps it.
+pub(crate) fn send_line(app: &AppHandle, line: String) {
+    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+        output.line(&line);
+    }
+    let _ = app.emit(BUILD_LINE, line);
+}
+
+/// Ends a build: keeps how it ended and tells the screen.
+pub(crate) fn send_done(app: &AppHandle, done: BuildDone) {
+    if let Ok(mut output) = app.state::<BuildState>().output.lock() {
+        output.finish(done.ok, &done.message);
+    }
+    let _ = app.emit(BUILD_DONE, done);
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -103,7 +184,7 @@ pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Optio
 
 fn send_lines(app: &AppHandle, from: impl std::io::Read) {
     for line in BufReader::new(from).lines().map_while(Result::ok) {
-        let _ = app.emit(BUILD_LINE, line);
+        send_line(app, line);
     }
 }
 
@@ -114,6 +195,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
+    begin_output(&app);
     // Generating works without the stack's tools; building needs them.
     let found = generate_out(&file, release).and_then(|(out, toolchain, stack)| {
         let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
@@ -126,6 +208,9 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
+            if let Ok(mut output) = state.output.lock() {
+                output.finish(false, &err);
+            }
             return Err(err);
         }
     };
@@ -137,7 +222,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
-        let _ = app.emit(BUILD_DONE, done);
+        send_done(&app, done);
     });
     Ok(())
 }
@@ -157,7 +242,7 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     // The command first, so the output says what runs where.
-    let _ = app.emit(BUILD_LINE, format!("{} {} (in {})", toolchain.tool, toolchain.args.join(" "), out.display()));
+    send_line(app, format!("{} {} (in {})", toolchain.tool, toolchain.args.join(" "), out.display()));
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => return failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing)),
@@ -264,6 +349,31 @@ mod tests {
         );
         let ready = clarity_gen::tools::StackTools { missing: vec![], found: vec![".NET SDK 10.0.402".into()], ..check };
         assert_eq!(cannot_build(&ready, Path::new("/p/shop/out")), None);
+    }
+
+    /// What the Output panel shows is kept, so the agent can read it.
+    #[test]
+    fn the_output_is_kept_for_the_agent() {
+        let mut output = Output::default();
+        assert_eq!(output.text(), "Nothing was built or run since Clarity started.");
+
+        output.begin();
+        output.line("dotnet build (in /p/out)");
+        output.line("Noughts.cs(58,14): error CS0103: The name 'Lists' does not exist");
+        assert_eq!(output.text(), "The build is still running. Its output (2 lines):\ndotnet build (in /p/out)\nNoughts.cs(58,14): error CS0103: The name 'Lists' does not exist");
+        output.finish(false, "the build failed; see the output");
+        assert!(output.text().starts_with("The last build failed: the build failed; see the output. Its output (2 lines):\ndotnet build"), "{}", output.text());
+
+        // A new build starts a new output; a long one keeps its last lines, as the panel does.
+        output.begin();
+        for i in 1..=OUTPUT_LINES + 5 {
+            output.line(&format!("line {i}"));
+        }
+        output.finish(true, "running");
+        let text = output.text();
+        assert!(text.starts_with(&format!("The last build succeeded: running. Its last {OUTPUT_LINES} lines (5 earlier ones are left out):\nline 6\n")), "{}", &text[..120]);
+        assert!(text.ends_with(&format!("line {}", OUTPUT_LINES + 5)));
+        assert!(!text.contains("dotnet build"));
     }
 
     #[test]

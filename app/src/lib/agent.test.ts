@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { addUsage, agentConnections, applyEvent, NO_USAGE, tokens, toolLine, usageLine, type Item } from "./agent.ts";
+import { addUsage, agentConnections, applyAnswer, applyAsk, applyEvent, isRuns, NO_USAGE, RUNS_CHOICES, tokens, toolLine, usageLine, type Item } from "./agent.ts";
 import type { ConnectionRow } from "./generated/ConnectionRow";
 
 test("text pieces join the answer, and tools show with their results", () => {
@@ -39,6 +39,27 @@ test("a tool line says what the tool did to what", () => {
   assert.equal(toolLine("new_project", { name: "todo" }), "Made the project todo");
   assert.equal(toolLine("show_window", { name: "TaskBrowse" }), "Showed TaskBrowse");
   assert.equal(toolLine("check", {}), "Checked the project");
+  assert.equal(toolLine("build_output", {}), "Read the build output");
+  assert.equal(toolLine("read_generated", {}), "Listed the generated files");
+  assert.equal(toolLine("read_generated", { path: "Modules/Todo.cs" }), "Read the generated Modules/Todo.cs");
+  assert.equal(toolLine("build", { run: true }), "Ran the application");
+  assert.equal(toolLine("build", { run: false }), "Built the application");
+});
+
+test("the settings offer asking, allowing and never, asking by default", () => {
+  assert.deepEqual(RUNS_CHOICES.map((c) => c.value), ["ask", "allow", "never"]);
+  assert.ok(RUNS_CHOICES.every((c) => c.label && c.note));
+  assert.ok(isRuns("never") && !isRuns("sometimes") && !isRuns(null));
+});
+
+test("the agent asks before it runs anything, and the answer shows", () => {
+  let items: Item[] = [{ kind: "user", text: "Run it" }];
+  items = applyAsk(items, { id: 1, what: "Run the application" });
+  assert.deepEqual(items.at(-1), { kind: "ask", id: 1, what: "Run the application" });
+  // Another question's answer changes nothing here.
+  assert.deepEqual(applyAnswer(items, { id: 2, allowed: true }), items);
+  assert.deepEqual(applyAnswer(items, { id: 1, allowed: false }).at(-1), { kind: "ask", id: 1, what: "Run the application", allowed: false });
+  assert.deepEqual(applyAnswer(items, { id: 1, allowed: true }).at(-1), { kind: "ask", id: 1, what: "Run the application", allowed: true });
 });
 
 test("the agent picks from connections that name a model kind, anthropic first", () => {

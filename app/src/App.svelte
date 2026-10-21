@@ -55,7 +55,7 @@
   import AgentPanel from "./lib/AgentPanel.svelte";
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import { agent } from "./lib/agentStore.svelte";
-  import AppSettingsDialog from "./lib/AppSettingsDialog.svelte";
+  import AppSettingsView from "./lib/AppSettingsView.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import type { CodeView } from "./lib/generated/CodeView";
   import { themeArea, themeOf, tr } from "./lib/model";
@@ -787,6 +787,13 @@
     };
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
     const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
+    // A build starts, from the toolbar or from the agent once the person allowed it.
+    const unlistenStarted = listen("build-started", () => {
+      buildLog = [];
+      buildDone = null;
+      showOutput = true;
+      building = true;
+    });
     const unlistenLine = listen<string>("build-line", (e) => {
       buildLog = [...buildLog.slice(-(BUILD_LOG_LINES - 1)), e.payload];
     });
@@ -804,6 +811,7 @@
       unlisten.then((stop) => stop());
       unlistenProject.then((stop) => stop());
       unlistenLine.then((stop) => stop());
+      unlistenStarted.then((stop) => stop());
       unlistenDone.then((stop) => stop());
       unlistenBuilt.then((stop) => stop());
     };
@@ -863,10 +871,10 @@
     <div class="ribbon-tabs" role="tablist">
       <div class="brand"><img class="logo" src={logo} alt="" /> Clarity</div>
       {#each TABS as t (t.key)}
-        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => (tab = t.key)}>{t.name}</button>
+        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), (appSettingsOpen = false))}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
-      <button class="corner settings-button" onclick={() => (appSettingsOpen = true)} title="Clarity's own settings, such as its theme">Clarity settings</button>
+      <button class="corner settings-button" class:active={appSettingsOpen} aria-pressed={appSettingsOpen} onclick={() => (appSettingsOpen = !appSettingsOpen)} title="Clarity's own settings: its display and what the agent may run">Clarity settings</button>
       <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
@@ -1012,7 +1020,11 @@
     </div>
   </header>
 
-  <div class="shell" style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
+  <!-- Clarity's settings take the place of the work below the ribbon; the work stays as it was. -->
+  {#if appSettingsOpen}
+    <AppSettingsView onclose={() => (appSettingsOpen = false)} />
+  {/if}
+  <div class="shell" class:hidden={appSettingsOpen} style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
     <aside>
       {#if tab === "design" && designing}
         <div class="side-tabs" role="tablist">
@@ -1323,9 +1335,6 @@
   />
 {/if}
 
-{#if appSettingsOpen}
-  <AppSettingsDialog onclose={() => (appSettingsOpen = false)} />
-{/if}
 
 {#if newLanguageOpen && preview}
   <NewLanguageDialog
@@ -1367,6 +1376,10 @@
     display: grid;
     grid-template-rows: minmax(0, 1fr);
     min-height: 0;
+  }
+
+  .shell.hidden {
+    display: none;
   }
 
   /* Everything right of the sidebar: the main area, the docked output below

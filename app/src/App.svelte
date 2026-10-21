@@ -19,6 +19,9 @@
   import EnumEditor from "./lib/EnumEditor.svelte";
   import EngineEditor from "./lib/EngineEditor.svelte";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
+  import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
+  import { languageChoice } from "./lib/i18n.svelte";
+  import { languageName } from "./lib/translate";
   import { fixOf } from "./lib/codeParts";
   import { engineProblems, recordBuilt } from "./lib/engineBuilds.svelte";
   import type { EngineBuilt } from "./lib/generated/EngineBuilt";
@@ -263,7 +266,7 @@
       case "engine":
         return all.some((f) => f.engines.some((e) => e.name.name === o.name));
       case "language":
-        return o.name === "" || o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
+        return o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
       case "settings":
         return true;
     }
@@ -364,6 +367,27 @@
     } catch (err) {
       newEngineError = String(err);
       actionError = String(err);
+    }
+  }
+
+  /** Whether the dialog for a new language is open, and what went wrong adding it. */
+  let newLanguageOpen = $state(false);
+  let newLanguageError = $state<string | null>(null);
+
+  function startNewLanguage() {
+    newLanguageError = null;
+    newLanguageOpen = true;
+  }
+
+  /** Writes the translation file of `tag` and opens it. */
+  async function addLanguage(tag: string) {
+    try {
+      applyPreview(await invoke<Preview>("add_language", { language: tag }));
+      newLanguageOpen = false;
+      select({ kind: "language", name: tag });
+      tab = "project";
+    } catch (err) {
+      newLanguageError = String(err);
     }
   }
 
@@ -672,6 +696,30 @@
 
 {#if preview}<ThemeStyles {preview} />{/if}
 
+{#snippet languageGroup()}
+  <!-- The language the canvas and Preview show the texts in. -->
+  {#if preview}
+    {@const written = preview.project.locale.language ?? "en"}
+    <div class="group">
+      <div class="buttons language-pick">
+        <select
+          aria-label="The language the designer shows"
+          value={languageChoice.language === undefined ? "" : (languageChoice.language ?? written)}
+          onchange={(e) => {
+            const value = e.currentTarget.value;
+            languageChoice.language = value === "" ? undefined : value === written ? null : value;
+          }}
+        >
+          <option value="">System's language</option>
+          <option value={written}>{languageName(written)} (as written)</option>
+          {#each Object.keys(preview.project.translations).toSorted() as tag (tag)}<option value={tag}>{languageName(tag)}</option>{/each}
+        </select>
+      </div>
+      <div class="group-name">Language</div>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet tree(full: boolean)}
   {#if preview}
     <ProjectTree
@@ -684,6 +732,7 @@
       onnewdata={full ? startNewData : null}
       onnewtheme={full ? addTheme : null}
       onnewengine={full ? startNewEngine : null}
+      onnewlanguage={full ? startNewLanguage : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -747,6 +796,7 @@
           </div>
           <div class="group-name">Window</div>
         </div>
+        {@render languageGroup()}
         <div class="group">
           <div class="buttons">
             <RibbonButton
@@ -803,6 +853,7 @@
           </div>
           <div class="group-name">Preview</div>
         </div>
+        {@render languageGroup()}
         <div class="group">
           <div class="buttons">
             <RibbonButton
@@ -959,7 +1010,13 @@
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
         {:else if current?.kind === "language"}
-          <TranslationsPanel {preview} language={current.name} onapplied={applyPreview} onopen={(language) => select({ kind: "language", name: language })} />
+          <TranslationsPanel
+            {preview}
+            language={current.name}
+            onapplied={applyPreview}
+            onopen={(language) => select({ kind: "language", name: language })}
+            onnewlanguage={startNewLanguage}
+          />
         {:else if entity && file}
           <EntityEditor
             {preview}
@@ -1091,6 +1148,15 @@
     error={newEngineError}
     onsubmit={addEngine}
     oncancel={() => (newEngine = null)}
+  />
+{/if}
+
+{#if newLanguageOpen && preview}
+  <NewLanguageDialog
+    taken={[preview.project.locale.language ?? "en", ...Object.keys(preview.project.translations)]}
+    error={newLanguageError}
+    onsubmit={addLanguage}
+    oncancel={() => (newLanguageOpen = false)}
   />
 {/if}
 
@@ -1250,6 +1316,10 @@
     display: flex;
     gap: 2px;
     flex: 1;
+  }
+
+  .language-pick {
+    align-items: center;
   }
 
   .group-name {

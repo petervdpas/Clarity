@@ -61,13 +61,13 @@ translation nl
 
 ## i18n in the project tree
 
-The project tree lists the languages under i18n: first the one the texts are written in, then each translation. Click one to open it.
+The project tree lists the languages under i18n by name: first the one the texts are written in, then each translation. Click one to open it.
 
-- A translation lists every text with where it is used and its translation, and says how many texts miss one. What you type goes into its translation file.
-- The language the texts are written in shows a column per translation.
-- **+ New language**, or **Add language** on any language, starts a new one from a tag such as `nl` and opens it.
-- **Only texts that miss a translation** narrows the list.
-- **Show the designer in** shows the canvas and Preview in one of the project's languages, or in the system's.
+- A translation lists every text with where it is used and its translation, and says how many are translated. Type a translation next to its text; it goes into the language's file. A long text wraps in its box.
+- The language the texts are written in gives an overview: every text with a mark per translation (translated or missing), and a button per translation that opens it.
+- **Find a text** narrows the list to texts that hold what you type, in either language; **Missing only** to the texts still to translate.
+- **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, and opens it.
+- **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, the one the texts are written in, or the system's.
 
 ## Which language shows
 

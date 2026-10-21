@@ -1,34 +1,37 @@
 <script lang="ts">
-  // A language of the project, opened from the project tree: every text a
-  // person sees with its translation in that language, or, for the language
-  // the texts are written in, with a column per translation. The backend
-  // collects the texts and writes the files; this shows them and sends what
-  // is typed.
+  // A language of the project, opened from i18n in the project tree. A
+  // translation lists every text people see with its translation, to type
+  // in place. The language the texts are written in gives an overview: each
+  // text with how far each translation is. The backend collects the texts
+  // and writes the translation files.
 
   import { invoke } from "@tauri-apps/api/core";
   import type { Preview } from "./generated/Preview";
   import type { TranslationTable } from "./generated/TranslationTable";
-  import { languageChoice } from "./i18n.svelte";
+  import { languageName } from "./translate";
 
   let {
     preview,
     language,
     onapplied,
     onopen,
+    onnewlanguage,
   }: {
     /** The loaded project; the table is read again when it changes. */
     preview: Preview;
-    /** The language opened: a translation, the one written in, or "" to add one. */
+    /** The language opened: a translation, or the one the texts are written in. */
     language: string;
     onapplied: (preview: Preview) => void;
-    /** Opens a language, as one just added. */
+    /** Opens another language. */
     onopen: (language: string) => void;
+    /** Asks for a new language and writes its file. */
+    onnewlanguage: () => void;
   } = $props();
 
   let table = $state<TranslationTable | null>(null);
   let error = $state<string | null>(null);
-  let newLanguage = $state("");
   let onlyMissing = $state(false);
+  let filter = $state("");
 
   $effect(() => {
     void preview;
@@ -40,125 +43,190 @@
       .catch((err) => (error = String(err)));
   });
 
-  /** The translations shown: the opened one, or all of them from the language written in. */
-  const shown = $derived((table?.languages ?? []).map((l, i) => ({ l, i })).filter(({ l }) => !(table?.languages ?? []).includes(language) || l === language));
-  const rows = $derived((table?.rows ?? []).filter((r) => !onlyMissing || shown.some(({ i }) => r.translations[i] === null)));
-  const base = $derived(preview.project.locale.language ?? "en");
+  /** The column of the opened translation; -1 for the language the texts are written in. */
+  const column = $derived(table?.languages.indexOf(language) ?? -1);
+  const total = $derived(table?.rows.length ?? 0);
 
-  async function apply(command: string, args: Record<string, unknown>): Promise<boolean> {
+  const rows = $derived(
+    (table?.rows ?? []).filter((r) => {
+      const words = filter.trim().toLocaleLowerCase();
+      const translated = column >= 0 ? (r.translations[column] ?? "") : "";
+      if (words && !r.text.toLocaleLowerCase().includes(words) && !translated.toLocaleLowerCase().includes(words)) return false;
+      if (!onlyMissing) return true;
+      return column >= 0 ? r.translations[column] === null : r.translations.some((t) => t === null);
+    }),
+  );
+
+  /** A language as people know it: its own name and its tag. */
+  function named(tag: string): string {
+    const name = languageName(tag);
+    return name === tag ? tag : `${name} (${tag})`;
+  }
+
+  async function translate(text: string, translation: string) {
     try {
-      onapplied(await invoke<Preview>(command, args));
+      onapplied(await invoke<Preview>("set_translation", { language, text, translation }));
       error = null;
-      return true;
     } catch (err) {
       error = String(err);
-      return false;
     }
   }
 
-  function translate(language: string, text: string, translation: string) {
-    apply("set_translation", { language, text, translation });
-  }
-
-  function addLanguage(e: SubmitEvent) {
-    e.preventDefault();
-    const language = newLanguage.trim();
-    if (!language) return;
-    newLanguage = "";
-    apply("add_language", { language }).then((added) => added && onopen(language));
-  }
-
-  /** The designer's language: the texts as written, or a translation. */
-  function choose(value: string) {
-    languageChoice.language = value === "" ? undefined : value === base ? null : value;
+  /** A box grows with its text, so a long translation reads whole. */
+  function grow(box: HTMLTextAreaElement) {
+    const fit = () => {
+      box.style.height = "auto";
+      box.style.height = `${box.scrollHeight}px`;
+    };
+    fit();
+    box.addEventListener("input", fit);
+    return { destroy: () => box.removeEventListener("input", fit) };
   }
 </script>
 
-<section>
-  <h2>{language === "" ? "New language" : language === base ? `${base}, as written` : `${language}, a translation`}</h2>
-  <p class="intro">
-    Every text people see, collected from the whole project. The texts are written in {base}; a translation file per language,
-    <code>translations/nl.clarity</code>, gives them in another. A text without a translation shows as written, and text with slots keeps
-    its slots: <code>{"{customer.name} opgeslagen"}</code>.
-  </p>
+<section class="languages">
+  <header>
+    <h2>{named(language)}</h2>
+    {#if table}
+      {#if column >= 0}
+        {@const missing = table.missing[column]}
+        <p class="lead">{total - missing} of {total} texts translated{missing === 0 ? ": complete" : ""}. Type a translation next to its text; one left empty shows as written.</p>
+      {:else}
+        <p class="lead">The texts as the project writes them, {total} in all. Change a text where it is used; open a translation to translate them.</p>
+      {/if}
+    {/if}
+  </header>
 
   {#if error}<p class="problem">{error}</p>{/if}
 
-  <div class="bar">
-    <form onsubmit={addLanguage}>
-      <input class="mono" bind:value={newLanguage} placeholder="nl" spellcheck="false" aria-label="Language to add" />
-      <button type="submit" disabled={!newLanguage.trim()}>Add language</button>
-    </form>
-    <label class="check"><input type="checkbox" bind:checked={onlyMissing} /> Only texts that miss a translation</label>
-    <label>
-      Show the designer in
-      <select value={languageChoice.language === undefined ? "" : (languageChoice.language ?? base)} onchange={(e) => choose(e.currentTarget.value)}>
-        <option value="">the system's language</option>
-        <option value={base}>{base} (as written)</option>
-        {#each table?.languages ?? [] as language (language)}<option value={language}>{language}</option>{/each}
-      </select>
-    </label>
-  </div>
+  {#if table && column < 0}
+    <div class="translations">
+      {#each table.languages as tag, i (tag)}
+        <button class="language" onclick={() => onopen(tag)}>
+          {named(tag)}
+          <span class:done={table.missing[i] === 0}>{table.missing[i] === 0 ? "complete" : `${table.missing[i]} missing`}</span>
+        </button>
+      {/each}
+      <button class="language" onclick={onnewlanguage}>+ New language</button>
+    </div>
+  {/if}
 
-  {#if table && table.languages.length > 0}
+  {#if table}
+    <div class="bar">
+      <input class="search" type="search" bind:value={filter} placeholder="Find a text" aria-label="Find a text" />
+      {#if column >= 0 || table.languages.length > 0}
+        <label class="check"><input type="checkbox" bind:checked={onlyMissing} /> Missing only</label>
+      {/if}
+    </div>
+
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Text</th>
             <th>Used in</th>
-            {#each shown as { l: language, i } (language)}
-              <th>{language} <span class="muted">{table.missing[i] === 0 ? "complete" : `${table.missing[i]} missing`}</span></th>
-            {/each}
+            {#if column >= 0}
+              <th>{named(language)}</th>
+            {:else}
+              {#each table.languages as tag (tag)}<th class="status">{tag}</th>{/each}
+            {/if}
           </tr>
         </thead>
         <tbody>
           {#each rows as row (row.text)}
             <tr>
               <td class="text">{row.text}</td>
-              <td class="muted">{row.places.join(", ")}</td>
-              {#each shown as { l: language, i } (language)}
-                <td>
-                  <input
-                    value={row.translations[i] ?? ""}
-                    class:missing={row.translations[i] === null}
-                    aria-label={`${row.text} in ${language}`}
-                    onchange={(e) => translate(language, row.text, e.currentTarget.value)}
-                  />
+              <td class="where">{row.places.join(", ")}</td>
+              {#if column >= 0}
+                <td class="translation">
+                  <textarea
+                    rows="1"
+                    use:grow
+                    value={row.translations[column] ?? ""}
+                    class:missing={row.translations[column] === null}
+                    placeholder={row.text}
+                    aria-label={`${row.text} in ${named(language)}`}
+                    onchange={(e) => translate(row.text, e.currentTarget.value)}
+                  ></textarea>
                 </td>
-              {/each}
+              {:else}
+                {#each table.languages as tag, i (tag)}
+                  <td class="status" class:missing={row.translations[i] === null} title={row.translations[i] ?? "Not translated yet"}>
+                    {row.translations[i] === null ? "missing" : "✓"}
+                  </td>
+                {/each}
+              {/if}
             </tr>
+          {:else}
+            <tr><td colspan="3" class="muted">{onlyMissing ? "Nothing is missing." : "No text fits."}</td></tr>
           {/each}
         </tbody>
       </table>
     </div>
-  {:else if table}
-    <p class="muted">No translations yet: add a language to start one.</p>
   {/if}
 </section>
 
 <style>
+  .languages {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  h2 {
+    margin: 0;
+  }
+
+  .lead {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+  }
+
+  .translations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .language {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .language span {
+    color: var(--warning, var(--text-muted));
+    font-size: 12px;
+  }
+
+  .language span.done {
+    color: var(--success, var(--text-muted));
+  }
+
   .bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
   }
 
-  .bar form,
-  .bar label {
+  .search {
+    flex: 1;
+    max-width: 360px;
+  }
+
+  .check {
     display: flex;
     gap: 6px;
     align-items: center;
   }
 
-  .bar input.mono {
-    width: 80px;
-  }
-
   .table-wrap {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
-    max-height: 480px;
   }
 
   table {
@@ -166,36 +234,63 @@
     width: 100%;
   }
 
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
   th,
   td {
     text-align: left;
-    padding: 3px 6px;
+    padding: 4px 8px;
     border-bottom: 1px solid var(--border);
-    vertical-align: middle;
+    vertical-align: top;
   }
 
-  td input {
-    width: 100%;
-    min-width: 160px;
+  td.text {
+    width: 40%;
+    padding-top: 8px;
   }
 
-  td input.missing {
-    border-color: var(--warning, var(--border));
-  }
-
-  .text {
-    font-family: var(--mono);
+  td.where {
+    width: 15%;
+    padding-top: 9px;
+    color: var(--text-muted);
     font-size: 12px;
   }
 
-  .mono {
-    font-family: var(--mono);
+  th.status,
+  td.status {
+    width: 80px;
+    text-align: center;
+  }
+
+  td.status {
+    padding-top: 8px;
+    color: var(--success, var(--text-muted));
+  }
+
+  td.status.missing {
+    color: var(--warning, var(--text-muted));
+    font-size: 12px;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    resize: none;
+    overflow: hidden;
+  }
+
+  textarea.missing {
+    border-color: var(--warning, var(--border));
   }
 
   .muted {
     color: var(--text-muted);
-    font-size: 12px;
-    font-weight: normal;
   }
 
   .problem {

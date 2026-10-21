@@ -6,6 +6,7 @@
   import type { Preview } from "./generated/Preview";
   import { projectEngines } from "./engines";
   import { findApp } from "./frame";
+  import { languageName } from "./translate";
   import type { Selected } from "./selection";
 
   let {
@@ -20,6 +21,7 @@
     onnewdata = null,
     onnewtheme = null,
     onnewengine = null,
+    onnewlanguage = null,
   }: {
     preview: Preview;
     /** What is open: a window, the app, an entity, an enum or a module. */
@@ -36,6 +38,8 @@
     onnewtheme?: (() => void) | null;
     /** Starts a new engine; null where the tree only shows. */
     onnewengine?: (() => void) | null;
+    /** Asks for a new language and writes its translation file; null where the tree only shows. */
+    onnewlanguage?: (() => void) | null;
   } = $props();
 
   function is(kind: Selected["kind"], name: string): boolean {
@@ -148,17 +152,17 @@
     <details open>
       <summary>i18n <span class="count">{languages.length + 1}</span></summary>
       <button class="row" class:current={is("language", written)} title="The language the texts are written in" onclick={() => onselect({ kind: "language", name: written })}>
-        {written}
-        <span class="note">as written</span>
+        {languageName(written)}
+        <span class="note">{written}, as written</span>
       </button>
       {#each languages as language (language)}
         <button class="row" class:current={is("language", language)} title="translations/{language}.clarity" onclick={() => onselect({ kind: "language", name: language })}>
-          {language}
-          <span class="note">translation</span>
+          {languageName(language)}
+          <span class="note">{language}</span>
         </button>
       {/each}
-      {#if full}
-        <button class="row add" class:current={is("language", "")} onclick={() => onselect({ kind: "language", name: "" })}>+ New language</button>
+      {#if onnewlanguage}
+        <button class="row add" onclick={onnewlanguage}>+ New language</button>
       {/if}
     </details>
 

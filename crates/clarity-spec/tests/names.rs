@@ -130,3 +130,59 @@ fn translations_follow_the_renamed_slots() {
         "    \"{loanGrid.selected.title} is back\" = \"{loanGrid.selected.title} ist zur\u{fc}ck\"\n"
     );
 }
+
+const MENU: &str = "module game
+
+app Game
+    title \"Game\"
+    main Main
+    menu
+        item \"Game\" name gameMenu
+            item \"New game\" name newGameItem key \"Ctrl+N\" on click: newGameClicked
+            separator
+            item \"Quit\" name quitItem on click -> quit
+    toolbar
+        button \"New\" name newButton on click: newGameClicked
+
+code Game
+    handler newGameClicked
+        message \"new\"
+
+page Main: window
+    text name statusText at 1,1 span 6
+";
+
+/// Menu items and toolbar and ribbon buttons are named like parts; a separator is not.
+#[test]
+fn menu_items_and_buttons_have_camel_case_names() {
+    assert!(errors(MENU).is_empty(), "{:#?}", errors(MENU));
+    let unnamed = MENU.replace("item \"New game\" name newGameItem key", "item \"New game\" key");
+    assert_has(&errors(&unnamed), "item \"New game\" has no name; every menu item and button has one");
+    let snake = MENU.replace("button \"New\" name newButton", "button \"New\" name new_button");
+    assert_has(&errors(&snake), "item or button 'new_button' is not camelCase");
+}
+
+/// Name them names a command after its caption, and Make them camelCase renames it.
+#[test]
+fn menu_items_are_named_after_their_captions() {
+    let unnamed = MENU
+        .replace("item \"Game\" name gameMenu", "item \"Game\"")
+        .replace("item \"New game\" name newGameItem key", "item \"New game\" key")
+        .replace("button \"New\" name newButton on", "button \"New\" on");
+    let named = clarity_spec::edit::apply(&unnamed, &clarity_spec::edit::Edit::NameParts).unwrap().text;
+    assert!(named.contains("        item \"Game\" name gameItem\n"), "{named}");
+    assert!(named.contains("            item \"New game\" name newGameItem key \"Ctrl+N\""), "{named}");
+    assert!(named.contains("        button \"New\" name newButton on click"), "{named}");
+    assert!(named.contains("            separator\n"), "{named}");
+    assert!(errors(&named).is_empty(), "{:#?}", errors(&named));
+    let snake = MENU.replace("name newGame key", "name new_game key");
+    assert!(clarity_spec::names::camel_names(&snake).contains("item \"New game\" name newGameItem key"));
+}
+
+/// A menu item or button of the app shows in every window, so it cannot have
+/// the name of a window's data.
+#[test]
+fn a_menu_item_is_not_named_like_a_windows_data() {
+    let clash = MENU.replace("page Main: window\n", "page Main: window\n    data quitItem: text\n");
+    assert_has(&errors(&clash), "item or button 'quitItem' has the name of data of Main; give one of them another name");
+}

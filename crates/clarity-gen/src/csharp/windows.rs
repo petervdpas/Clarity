@@ -385,10 +385,12 @@ impl<'a> Window<'a> {
             return Some(format!("{command}Command"));
         }
         match on_click? {
-            QUIT => Some("QuitCommand".into()),
-            CLOSE => Some("CloseWindowCommand".into()),
+            // The commands Clarity makes itself have an underscore in their
+            // names, which no part's name (camelCase) has, so they never clash.
+            QUIT => Some("Quit_Command".into()),
+            CLOSE => Some("CloseWindow_Command".into()),
             target if self.project.pages().any(|p| p.name.name == target) => {
-                Some(format!("Open{target}{}Command", if new_window { "InNewWindow" } else { "" }))
+                Some(format!("{}_{target}Command", if new_window { "OpenNew" } else { "Open" }))
             }
             _ => None,
         }
@@ -845,7 +847,7 @@ impl<'a> Window<'a> {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
                 let name = member(named.unwrap_or_default());
                 let click = match Self::handler(widget, Event::Click) {
-                    Some(_) => format!(" Command=\"{{Binding Click{name}AtCommand}}\""),
+                    Some(_) => format!(" Command=\"{{Binding ClickAt_{name}Command}}\""),
                     None => String::new(),
                 };
                 let _ = writeln!(
@@ -1113,7 +1115,7 @@ public partial class {name}View : UserControl
             let (Some(canvas), Some(click)) = (&widget.props.name, Self::handler(widget, Event::Click)) else { continue };
             let _ = write!(
                 events,
-                "    [RelayCommand]\n    void Click{c}At(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }});\n\n",
+                "    [RelayCommand]\n    void ClickAt_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }});\n\n",
                 pascal(&click.handler),
                 c = member(canvas)
             );
@@ -1143,10 +1145,10 @@ public partial class {name}View : UserControl
             if *new_window {
                 let _ = write!(
                     clicks,
-                    "    [RelayCommand]\n    void Open{target}InNewWindow() => Handle(() => Open(new {target}ViewModel(Db), newWindow: true));\n\n"
+                    "    [RelayCommand]\n    void OpenNew_{target}() => Handle(() => Open(new {target}ViewModel(Db), newWindow: true));\n\n"
                 );
             } else {
-                let _ = write!(clicks, "    [RelayCommand]\n    void Open{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
+                let _ = write!(clicks, "    [RelayCommand]\n    void Open_{target}() => Handle(() => Open(new {target}ViewModel(Db)));\n\n");
             }
         }
         // The calls with values its parts wire, a command each.
@@ -1156,10 +1158,10 @@ public partial class {name}View : UserControl
             let _ = write!(clicks, "    [RelayCommand]\n    void {command}() => Handle(() => On{}({}));\n\n", pascal(&call.handler), values.join(", "));
         }
         if quit {
-            clicks.push_str("    [RelayCommand]\n    void Quit() => Handle(QuitApplication);\n\n");
+            clicks.push_str("    [RelayCommand]\n    void Quit_() => Handle(QuitApplication);\n\n");
         }
         if close {
-            clicks.push_str("    [RelayCommand]\n    void CloseWindow() => Handle(Close);\n\n");
+            clicks.push_str("    [RelayCommand]\n    void CloseWindow_() => Handle(Close);\n\n");
         }
         if !errors.is_empty() {
             return Err(errors);

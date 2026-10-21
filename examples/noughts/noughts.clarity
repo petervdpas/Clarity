@@ -14,10 +14,10 @@ app Noughts
     title "Noughts and crosses"
     main Game
     menu
-        item "Game"
-            item "Another window" on click -> Game in new window
+        item "Game" name gameItem
+            item "Another window" name anotherWindowItem on click -> Game in new window
             separator
-            item "Quit" key "Ctrl+Q" on click -> quit
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
 
 page Game: window
     title "Noughts and crosses"

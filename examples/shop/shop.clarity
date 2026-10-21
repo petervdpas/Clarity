@@ -9,22 +9,22 @@ app Shop
     title "Shop"
     main CustomerCard
     menu
-        item "File"
-            item "Customer card" key "Ctrl+K" on click -> CustomerCard
+        item "File" name fileItem
+            item "Customer card" name customerCardItem key "Ctrl+K" on click -> CustomerCard
             separator
-            item "Language" on click -> language
-            item "Theme" on click -> theme
-            item "Quit" key "Ctrl+Q" on click -> quit
-        item "Customers"
-            item "All customers" on click -> CustomerBrowse
-            item "New customer" on click -> CustomerForm in new window
-        item "Orders"
-            item "All orders" on click -> OrderBrowse
+            item "Language" name languageItem on click -> language
+            item "Theme" name themeItem on click -> theme
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+        item "Customers" name customersItem
+            item "All customers" name allCustomersItem on click -> CustomerBrowse
+            item "New customer" name newCustomerItem on click -> CustomerForm in new window
+        item "Orders" name ordersItem
+            item "All orders" name allOrdersItem on click -> OrderBrowse
     toolbar
-        button "Customers" icon "people" on click -> CustomerBrowse
-        button "Orders" icon "cart" on click -> OrderBrowse
+        button "Customers" name customers2 icon "people" on click -> CustomerBrowse
+        button "Orders" name orders2 icon "cart" on click -> OrderBrowse
         separator
-        button "Card" icon "card" on click -> CustomerCard
+        button "Card" name cardButton icon "card" on click -> CustomerCard
     footer
         status "Ready"
 

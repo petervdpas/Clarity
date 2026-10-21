@@ -350,6 +350,7 @@ impl<'a> Checker<'a> {
         }
         self.check_frame(file, &context, &page.frame);
         self.check_names(file, &page.widgets, &page.frame);
+        self.check_commands_and_data(file, page);
         self.check_forms(file, &page.widgets, None);
         for sidebar in &page.frame.sidebars {
             self.check_forms(file, &sidebar.widgets, None);
@@ -467,6 +468,55 @@ impl<'a> Checker<'a> {
 
     /// Part names are unique in a window, its sidebars and its footer
     /// included: the code behind refers to parts by name.
+    /// The menu items and buttons a window shows (its own, and the app's) are
+    /// members of it beside its data, so they cannot share a name with it.
+    fn check_commands_and_data(&mut self, file: usize, page: &'a Page) {
+        fn named<'c>(items: &'c [Command], out: &mut Vec<(&'c str, Span)>) {
+            for c in items {
+                if let Some(name) = &c.props.name {
+                    out.push((name, c.span));
+                }
+                named(&c.items, out);
+            }
+        }
+        let mut commands: Vec<(&str, Span, Option<usize>)> = Vec::new();
+        let mut collect = |frame: &'a Frame, from: Option<usize>| {
+            let mut found = Vec::new();
+            if let Some(menu) = &frame.menu {
+                named(&menu.items, &mut found);
+            }
+            if let Some(toolbar) = &frame.toolbar {
+                named(&toolbar.items, &mut found);
+            }
+            if let Some(ribbon) = &frame.ribbon {
+                for tab in &ribbon.tabs {
+                    for group in &tab.groups {
+                        named(&group.items, &mut found);
+                    }
+                }
+            }
+            commands.extend(found.into_iter().map(|(n, s)| (n, s, from)));
+        };
+        collect(&page.frame, None);
+        if page.kind == PageKind::Window {
+            for (index, f) in self.files.iter().enumerate() {
+                for app in &f.apps {
+                    collect(&app.frame, Some(index));
+                }
+            }
+        }
+        for (name, span, from) in commands {
+            if page.data.iter().any(|d| d.name.name == name) {
+                // Reported where the item is written.
+                self.error(
+                    from.unwrap_or(file),
+                    format!("item or button '{name}' has the name of data of {}; give one of them another name", page.name.name),
+                    span,
+                );
+            }
+        }
+    }
+
     fn check_names(&mut self, file: usize, widgets: &[Widget], frame: &Frame) {
         fn collect<'w>(widgets: &'w [Widget], out: &mut Vec<&'w Widget>) {
             for w in widgets {
@@ -645,6 +695,24 @@ impl<'a> Checker<'a> {
     fn check_commands(&mut self, file: usize, commands: &[Command]) {
         for command in commands {
             let p = &command.props;
+            // Every menu item and button has a name, in camelCase, as a part has.
+            if p.kind != CommandKind::Separator {
+                match p.name.as_deref() {
+                    None => self.error(
+                        file,
+                        format!(
+                            "{} \"{}\" has no name; every menu item and button has one (Name them, in Problems, names them all)",
+                            frame::command_keyword(p.kind),
+                            p.caption.as_deref().unwrap_or_default()
+                        ),
+                        command.span,
+                    ),
+                    Some(name) if !crate::names::is_camel_case(name) => {
+                        self.error(file, crate::names::camel_case_problem("item or button", name), command.span)
+                    }
+                    Some(_) => {}
+                }
+            }
             if p.kind == CommandKind::Item && !command.items.is_empty() && p.on_click.is_some() {
                 self.error(
                     file,

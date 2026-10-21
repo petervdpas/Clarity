@@ -18,8 +18,8 @@ app Shop
     title \"The shop\"
     main Card
     menu
-        item \"File\"
-            item \"Quit\" on click -> quit
+        item \"File\" name fileItem
+            item \"Quit\" name quitItem on click -> quit
     footer
         status \"Ready to sell\"
 
@@ -181,7 +181,7 @@ fn the_example_translation_fits_the_example() {
 
 #[test]
 fn a_menu_item_can_switch_the_language() {
-    let text = SHOP.replace("            item \"Quit\" on click -> quit", "            item \"Language\" on click -> language\n            item \"Quit\" on click -> quit");
+    let text = SHOP.replace("            item \"Quit\" name quit2 on click -> quit", "            item \"Language\" on click -> language\n            item \"Quit\" name quit3 on click -> quit");
     let project = load_sources([("shop.clarity", text.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(clarity_spec::Preview::new(project).commands.contains(&"language".to_string()));

@@ -12,16 +12,16 @@ app Todo
     title "Todo"
     main Main
     menu
-        item "File"
-            item "Users" on click -> Users
+        item "File" name fileItem
+            item "Users" name usersItem on click -> Users
             separator
-            item "Language" on click -> language
+            item "Language" name languageItem on click -> language
             separator
-            item "Quit" key "Ctrl+Q" on click -> quit
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
     toolbar
-        button "Users" icon "list" on click -> Users
+        button "Users" name users2 icon "list" on click -> Users
         separator
-        button "Language" icon "language" on click -> language
+        button "Language" name language2 icon "language" on click -> language
 
 page Main: window
     title "Todo"

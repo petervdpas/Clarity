@@ -997,6 +997,16 @@ impl Doc {
                         child.set_text(text);
                     }
                 }
+                // A menu item or button is named after its caption and kind: "New game" is `newGameItem`.
+                if child_kind == Kind::Command && !named && child.tokens.first().is_some_and(|t| t.text != "separator") {
+                    let caption = child.tokens.get(1).filter(|t| t.kind == TokenKind::Str);
+                    let base = crate::names::command_name(caption.map(|t| t.text.as_str()), &child.tokens[0].text);
+                    let name = if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base };
+                    let at = caption.unwrap_or(&child.tokens[0]).span.end as usize;
+                    let text = format!("{} name {name}{}", &child.text[..at], &child.text[at..]);
+                    used.push(name);
+                    child.set_text(text);
+                }
                 name_in(child, child_kind, used);
             }
         }
@@ -1581,7 +1591,11 @@ impl Doc {
                     CommandKind::Item => caption.or(Some("Item".into())),
                     CommandKind::Button => caption.or(Some("Button".into())),
                 };
-                let props = new_command(command, caption);
+                let mut props = new_command(command, caption);
+                // A new item or button is named after its caption, like a new part.
+                if command != CommandKind::Separator {
+                    props.name = Some(self.command_name(path[0], &props));
+                }
                 validate_command(&props).map_err(EditError)?;
                 command_line(&props)
             }
@@ -1603,11 +1617,28 @@ impl Doc {
         Ok(Some(id))
     }
 
+    /// The first free name for a command after its caption and kind: "New game" is `newGameItem`.
+    fn command_name(&self, top: usize, props: &CommandProps) -> String {
+        let base = crate::names::command_name(props.caption.as_deref(), frame::command_keyword(props.kind));
+        let used = self.used_names(top);
+        if used.contains(&base) { (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists") } else { base }
+    }
+
     fn update_command(&mut self, item: u32, props: &CommandProps) -> EditResult<Option<u32>> {
         validate_command(props).map_err(EditError)?;
         let (path, _) = self.find(item, "a menu item, button or separator", |k| {
             k == Kind::Command
         })?;
+        // Every item and button has a name: one written without gets one now.
+        let named;
+        let props = if props.name.is_none() && props.kind != CommandKind::Separator {
+            let mut with = props.clone();
+            with.name = Some(self.command_name(path[0], props));
+            named = with;
+            &named
+        } else {
+            props
+        };
         let node = self.node_mut(&path);
         let current = node.tokens[0].text.clone();
         if current != frame::command_keyword(props.kind) {

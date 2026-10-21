@@ -151,7 +151,7 @@ fn the_designer_wires_and_unwires_window_events() {
     .unwrap()
     .text;
     assert!(
-        wired.contains("    on close: windowClosed\n    on return: windowReturned\n    button \"Close\""),
+        wired.contains("    on close: windowClosed\n    on return: windowReturned\n    button \"Close\" name closeButton"),
         "{wired}"
     );
 

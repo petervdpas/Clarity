@@ -404,7 +404,7 @@ page CustomerForm: window
     label "Name" name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
-    button "Save" name save at 11,10 span 2 default on click: saveClicked
+    button "Save" name saveButton at 11,10 span 2 default on click: saveClicked
 ```
 
 ### Kinds
@@ -455,7 +455,7 @@ The checker reports parts that start outside the grid, run past its last column,
 A part is one line: its kind, then an optional caption in quotes, then its properties.
 
 ```clarity
-textbox name email at 4,2 span 6 bind customer.email placeholder "name@example.com" on change: email_changed
+textbox name email at 4,2 span 6 bind customer.email placeholder "name@example.com" on change: emailChanged
 ```
 
 Properties may be written in any order. The designer writes them in a fixed order, which is the order the tables below use.
@@ -536,9 +536,9 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 `edit` names the columns whose cells are inputs, so a row can be changed where it is shown:
 
-    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done edit done on change: task_changed
+    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done edit done on change: taskChanged
 
-    handler task_changed
+    handler taskChanged
         save grid.selected
 
 - A `bool` column holds a checkbox, or a switch when it is written `as switch`: `edit title, done as switch`. An enum column is a dropdown of its values, and a `ref` column a dropdown of the records it can point at, as a dropdown in a form shows them. Dates are picked with a date picker, as in a date input. A moment (`datetime`) is a day from the date picker and a time typed on a 24-hour clock (`14:30`), in a cell and in a date input alike. Text and numbers are edited in place, like a text box or number input.
@@ -627,21 +627,21 @@ app Shop
     title "Shop"
     main CustomerCard
     data session: Session
-    on start: app_started
+    on start: appStarted
     menu
-        item "File"
-            item "New customer" key "Ctrl+N" on click -> CustomerForm
+        item "File" name fileItem
+            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
-            item "Quit" key "Ctrl+Q" on click -> quit
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
     toolbar
-        button "Customers" icon "list" on click -> CustomerBrowse
+        button "Customers" name customersButton icon "list" on click -> CustomerBrowse
         separator
-        button "Orders" on click: orders_clicked
+        button "Orders" name ordersButton on click: ordersClicked
     ribbon
         tab "Home"
             group "Customers"
-                button "New" icon "add" large on click -> CustomerForm
-                button "Browse" icon "list" on click -> CustomerBrowse
+                button "New" name newButton icon "add" large on click -> CustomerForm
+                button "Browse" name browseButton icon "list" on click -> CustomerBrowse
     sidebar left span 3
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
@@ -667,6 +667,8 @@ app Shop
 | `ribbon` | at the top | `tab "Title"` blocks with `group "Title"` blocks of `button` and `separator` |
 | `sidebar left` or `sidebar right` | at that side, `span n` columns wide (default 3) | parts, on its own grid |
 | `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
+
+Every menu item and button has a name, in camelCase like a part's (`item "New customer" name newCustomerItem`); a separator has none. Its name is unique among the window's parts, menus and toolbars. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
 
 A window can declare its own regions. A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
 
@@ -1160,7 +1162,7 @@ page CustomerForm: window
         help name help2 at 8,3 span 5 for vatNumber
         label "Notes" name label4 at 1,4 span 3 for notes
         textbox name notes at 4,4 span 9 bind customer.notes
-    button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
+    button "Save" name saveButton at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
     button "Close" name closeForm at 11,6 span 2 cancel on click: closeClicked
 
 code Customer

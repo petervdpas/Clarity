@@ -129,7 +129,7 @@ fn adds_menu_items_and_submenus() {
     );
     assert!(
         text.contains(
-            "            item \"Open\" // opens a file\n                item \"Recent\"\n"
+            "            item \"Open\" // opens a file\n                item \"Recent\" name recentItem\n"
         ),
         "{text}"
     );
@@ -171,9 +171,11 @@ fn rewrites_a_command_and_keeps_its_comment() {
             props,
         },
     );
-    assert!(text.contains(
-        "            item \"Open...\" key \"Ctrl+O\" on click -> Card // opens a file\n"
-    ));
+    // An item written without a name gets one, after its caption.
+    assert!(
+        text.contains("            item \"Open...\" name openItem key \"Ctrl+O\" on click -> Card // opens a file\n"),
+        "{text}"
+    );
 }
 
 #[test]

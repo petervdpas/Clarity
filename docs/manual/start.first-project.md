@@ -56,7 +56,7 @@ page Main: window
         textbox name title at 4,1 span 6 bind task.title
         label "Done" name label2 at 1,2 span 3 for done
         checkbox name done at 4,2 span 3 bind task.done
-    button "Add" name add at 11,3 span 2 default on click: addClick
+    button "Add" name addButton at 11,3 span 2 default on click: addClick
     table name table1 at 1,4 span 12 rows 6 bind tasks columns title, done
 ```
 

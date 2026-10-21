@@ -99,7 +99,7 @@ Code calls an engine's function by the engine's name:
 function order_total(order: Order) -> money
     return Pricing.total(order.lines)
 
-handler discount_clicked
+handler discountClicked
     order = Pricing.discounted(order)
     save order
 ```

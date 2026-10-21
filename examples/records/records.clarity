@@ -8,24 +8,24 @@ app Records
     title "My Record Collection"
     main AlbumBrowse
     menu
-        item "File"
-            item "Albums" key "Ctrl+1" on click -> AlbumBrowse
-            item "New album" key "Ctrl+N" on click -> AlbumForm
+        item "File" name fileItem
+            item "Albums" name albumsItem key "Ctrl+1" on click -> AlbumBrowse
+            item "New album" name newAlbumItem key "Ctrl+N" on click -> AlbumForm
             separator
-            item "Language" on click -> language
-            item "Theme" on click -> theme
-            item "Quit" key "Ctrl+Q" on click -> quit
-        item "Collection"
-            item "Artists" on click -> ArtistBrowse
-            item "Genres" on click -> GenreBrowse
-        item "Loans"
-            item "On loan" on click -> LoanBrowse
-            item "Friends" on click -> FriendBrowse
+            item "Language" name languageItem on click -> language
+            item "Theme" name themeItem on click -> theme
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+        item "Collection" name collectionItem
+            item "Artists" name artistsItem on click -> ArtistBrowse
+            item "Genres" name genresItem on click -> GenreBrowse
+        item "Loans" name loansItem
+            item "On loan" name onLoanItem on click -> LoanBrowse
+            item "Friends" name friendsItem on click -> FriendBrowse
     toolbar
-        button "Albums" on click -> AlbumBrowse
-        button "Artists" on click -> ArtistBrowse
+        button "Albums" name albums2 on click -> AlbumBrowse
+        button "Artists" name artists2 on click -> ArtistBrowse
         separator
-        button "On loan" on click -> LoanBrowse
+        button "On loan" name onLoan2 on click -> LoanBrowse
     footer
         status "Ready"
 

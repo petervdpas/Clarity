@@ -72,7 +72,7 @@ The window model maps onto a toolkit without loss, because it does not depend on
 | `textbox at 4,2 span 6 bind customer.email` | `<TextBox Grid.Column="3" Grid.Row="1" Grid.ColumnSpan="6" Text="{Binding Email}"/>` |
 | panel, tabs, splitter | `HeaderedContentControl` in a `Border`, `TabControl`, `GridSplitter` |
 | menu, toolbar, footer | `Menu`, a toolbar panel, a status bar `DockPanel` |
-| `on click: save_click` | `Command="{Binding SaveClick}"`, a generated command that calls the handler |
+| `on click: saveClick` | `Command="{Binding SaveClick}"`, a generated command that calls the handler |
 | data and validation | a generated ViewModel with typed properties and validation from the dictionary |
 
 The designer is the same for every UI: a window is designed once, and the stack decides how it is rendered. For a native toolkit the preview shows the layout faithfully but not pixel for pixel; the real window appears with Run.
@@ -170,7 +170,7 @@ Superseded by this: section 7.4 (persistence), which assumed SQLite first and Po
 - **Logic:** functions and actions become Rust functions that take the database and return a `Result`. `require` and `ensure` become runtime checks whose failure names the condition as written in Clarity. The emitter takes every type from the checker, so the checker is the only place types are decided.
 - **Window data:** list data loads all records when the window opens, single data starts as a new record, and `open Window with ...` passes records in. Handlers narrow a list with a query (`customers = find c in Customer where ...`).
 - **Queries:** `find` becomes a `Query` of the runtime: a tree of conditions on columns with the values as parameters, which the runtime writes as SQL. Generated code never contains SQL text, so another database is another way of writing the same tree in the runtime. Decimals and money are stored as text and compared and ordered as numbers. Unique text fields get a unique index that leaves empty text out, since empty text means no value.
-- **The binding.** The renderer and the backend are bound three ways, all declared in Clarity: data (`bind customer.name`: the window's data goes to the parts, and what the user types goes back with the next event), events (`on click: save_clicked`: the screen reports the event, the backend runs the handler) and properties (`save.enabled = ...`: the reply carries part properties to the screen). Each window becomes a Rust struct of its data; each handler a function on it with a `Ui` for messages, windows to open and `close`. The frontend is the designer's renderer, built once (`npm run build:runtime`) and copied into `out/ui`; the shell is Tauri. For a native toolkit (G2) the same Clarity becomes that toolkit's own bindings.
+- **The binding.** The renderer and the backend are bound three ways, all declared in Clarity: data (`bind customer.name`: the window's data goes to the parts, and what the user types goes back with the next event), events (`on click: saveClicked`: the screen reports the event, the backend runs the handler) and properties (`save.enabled = ...`: the reply carries part properties to the screen). Each window becomes a Rust struct of its data; each handler a function on it with a `Ui` for messages, windows to open and `close`. The frontend is the designer's renderer, built once (`npm run build:runtime`) and copied into `out/ui`; the shell is Tauri. For a native toolkit (G2) the same Clarity becomes that toolkit's own bindings.
 - **Run and Build** on the Preview tab generate `out/`, build it with the stack's own tools (cargo for Rust, dotnet for C#; `clarity_gen::toolchain` says how) with their output in an Output panel, and start the program (Run) or build a release (Build); Stop ends it. The build output and the application's `data` are left alone by generation.
 - **The output folder** is set in the project file (`output "out"`, the default): a folder in the project's folder or a full path elsewhere, never the project folder itself. Because generation removes what it no longer produces, Clarity writes only into an empty folder or one that carries its `.clarity-out` marker.
 - **Fluid display.** Windows always resize with the screen, on the web and the desktop alike. The columns share the width; rows that hold a part that grows (a table, a list, an image or a canvas, or a panel, tabs or a splitter that holds one) share the extra height, and the other rows keep their height, so inputs never stretch. A window smaller than its design scrolls. The designer keeps every row at its fixed height, so placing parts stays exact. A native toolkit gets the same rule from its own layout: in Avalonia, rows of growing parts become `*` rows. Sidebars in a running application have a splitter on their inner edge; the designed width is where they start.
@@ -462,11 +462,11 @@ Every part has a name, unique in its window (sidebars, footer, menus and toolbar
 | canvas | `pointer`, `key` |
 
 ```clarity
-button "Save" name save at 9,10 span 2 on click: save_clicked
-textbox name email at 4,2 span 6 bind customer.email on change: email_changed
+button "Save" name save at 9,10 span 2 on click: saveClicked
+textbox name email at 4,2 span 6 bind customer.email on change: emailChanged
 ```
 
-`on click: save_clicked` wires the event to a handler, written in Clarity in the window's code behind (section 1.1). Parts placed in the designer get a free name at once (`button1`, `textbox2`), and templates name their parts after the field or caption, so events can be wired straight away. `on click -> Window` remains as the one built-in action, opening a window, so the preview can navigate before code behind exists; a click is wired to a handler or opens a window, not both.
+`on click: saveClicked` wires the event to a handler, written in Clarity in the window's code behind (section 1.1). Parts placed in the designer get a free name at once (`button1`, `textbox2`), and templates name their parts after the field or caption, so events can be wired straight away. `on click -> Window` remains as the one built-in action, opening a window, so the preview can navigate before code behind exists; a click is wired to a handler or opens a window, not both.
 
 #### Forms, labels and help texts
 
@@ -479,8 +479,8 @@ form name details at 1,1 span 12 rows 4 bind customer
     help at 10,1 span 3 for name
     label "Kind" at 1,2 span 3 for kind
     radio name kind at 4,2 span 6 bind customer.kind
-button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: save_clicked
-button "Close" name close at 11,6 span 2 cancel on click: close_clicked
+button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
+button "Close" name close at 11,6 span 2 cancel on click: closeClicked
 ```
 
 - **Label.** Clicking it focuses its input, and screen readers announce them together. A label only shows text: it cannot be bound. A field's value, read-only, is a `text` part.
@@ -509,17 +509,17 @@ Application chrome is not placed on the grid. It docks to the edges of a window,
 app Shop
     main CustomerCard
     menu
-        item "File"
-            item "New customer" key "Ctrl+N" on click -> CustomerCard
+        item "File" name fileItem
+            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerCard
             separator
-            item "Quit" key "Ctrl+Q" on click -> quit
-        item "Help"
-            item "About" on click -> About
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+        item "Help" name helpItem
+            item "About" name aboutItem on click -> About
     ribbon
         tab "Home"
             group "Customers"
-                button "New" icon "add" large on click -> CustomerCard
-                button "Browse" icon "list" on click -> CustomerBrowse
+                button "New" name newButton icon "add" large on click -> CustomerCard
+                button "Browse" name browseButton icon "list" on click -> CustomerBrowse
     sidebar left span 3
         list at 1,1 span 3 rows 10 bind recent show name
     footer
@@ -604,15 +604,15 @@ page CustomerForm: window
     title "Customer"
     data customer: Customer
     ...
-    dropdown name kind at 4,2 span 4 bind customer.kind on change: kind_changed
-    textbox name vat_number at 4,3 span 4 bind customer.vat_number
-    button "Save" name save at 9,8 span 2 on click: save_clicked
+    dropdown name kind at 4,2 span 4 bind customer.kind on change: kindChanged
+    textbox name vatNumber at 4,3 span 4 bind customer.vat_number
+    button "Save" name saveButton at 9,8 span 2 on click: saveClicked
 
 code CustomerForm
-    handler kind_changed
-        vat_number.visible = customer.kind == Business
+    handler kindChanged
+        vatNumber.visible = customer.kind == Business
 
-    handler save_clicked
+    handler saveClicked
         if customer.name == ""
             message error "Name is required"
             return
@@ -623,7 +623,7 @@ code CustomerForm
 
 **Where handlers run.** In the backend. When an event fires, the UI sends it with the window's state; the handler runs and the backend returns what changed: data, part properties, messages, windows to open or close. With a native toolkit (Avalonia) the same handler becomes a ViewModel command. The UI never holds behavior of its own.
 
-**Names in a handler.** A handler sees the window's data (`customer`), its parts by name (`vat_number`, `save`) and its own local values (`let`). Enum values are written bare (`Business`) when the expected type says which enum they belong to, or qualified (`CustomerKind.Business`). A name that is both data and a part is an error.
+**Names in a handler.** A handler sees the window's data (`customer`), its parts by name (`vatNumber`, `save`) and its own local values (`let`). Enum values are written bare (`Business`) when the expected type says which enum they belong to, or qualified (`CustomerKind.Business`). A name that is both data and a part is an error.
 
 **Part properties.** Every part has `visible` and `enabled` (bool). Labels, help texts, headings and buttons have `caption` (text). Inputs have `error` (text: a message shown at the input and in its help text, empty clears it) and `readonly` (bool). Tables and lists have `selected`, the record of the selected row (read-only). Bound inputs are changed through their data: `customer.name = "..."` updates the text box bound to it.
 
@@ -653,11 +653,11 @@ code CustomerForm
 ```clarity
 page CustomerBrowse: window
     data customers: list<Customer>
-    on return: window_returned
+    on return: windowReturned
     table name grid at 1,1 span 12 rows 8 bind customers columns name, credit_limit
 
 code CustomerBrowse
-    handler window_returned
+    handler windowReturned
         reload customers
 ```
 
@@ -801,12 +801,12 @@ engine Asteroids from "asteroids.wasm"
     hears start(level: integer)
 
 page Play: window
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Asteroids on finished: game_over
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Asteroids on finished: gameOver
 ```
 
 - **One instance per canvas.** The engine starts when its window opens (`on open`) and goes when it closes; it keeps its state while it runs, like state per window.
 - **The loop.** At every frame the renderer calls the engine's `clarity_tick(ms)` with the time since the last frame, then `clarity_draw()`, which answers the canvas's shapes in its units, the same shapes as a draw handler's (`conformance/drawing.json`), so both renderers already know how to show them. Pointer and keys on the canvas go to `clarity_pointer(kind, x, y)` in canvas units and `clarity_key(kind, key)`.
-- **Back to the window: tells.** What the engine has to say to the application (the game is over, with its score) it tells: its answer to a tick or an input carries `{"tell": "finished", "values": [1200]}`, and the window's handler wired to that tell runs on the backend as any handler does, with the values as its parameters (`handler game_over(score: integer)`).
+- **Back to the window: tells.** What the engine has to say to the application (the game is over, with its score) it tells: its answer to a tick or an input carries `{"tell": "finished", "values": [1200]}`, and the window's handler wired to that tell runs on the backend as any handler does, with the values as its parameters (`handler gameOver(score: integer)`).
 - **From the window: hears.** A handler sends the engine an order with `sky.start(2)`; the reply carries it to the renderer, which calls the engine's export of that name.
 - **Where it runs.** On the web stacks in a Web Worker of its own, with the browser engine's WebAssembly: the worker draws nothing itself, it answers shapes, and the page shows them. A worker can be stopped from outside, so the limits hold here too: a frame that takes longer than its limit ends the engine, and the canvas shows the failure. On Avalonia in Wasmtime in the same process, on a timer at the screen's rate, stopped by its epoch. (Decided 2026-10-20: a worker, not the page's own thread, where an engine that loops would freeze the window.)
 - **Written in Clarity too.** An engine beside the screen can be a Clarity engine (N2): `on tick(ms)`, `on draw` (with the same drawing statements as a draw handler: `sky.circle(...)`), `on pointer(kind, x, y)`, `on key(kind, key)`, its `tell` statements, and functions for what it hears. That is where N2 earns its place: work that must run beside the screen, written in the same language as the rest.

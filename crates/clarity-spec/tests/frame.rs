@@ -19,19 +19,19 @@ app Shop
     main CustomerCard
     data recent: list<Customer>
     menu
-        item \"File\"
-            item \"New customer\" key \"Ctrl+N\" on click -> CustomerCard
+        item \"File\" name fileItem
+            item \"New customer\" name newCustomerItem key \"Ctrl+N\" on click -> CustomerCard
             separator
-            item \"Quit\" on click -> quit
-        item \"Help\"
-            item \"About\" on click -> Overview
+            item \"Quit\" name quitItem on click -> quit
+        item \"Help\" name helpItem
+            item \"About\" name aboutItem on click -> Overview
     toolbar
-        button \"New\" icon \"add\" on click -> CustomerCard
+        button \"New\" name newButton icon \"add\" on click -> CustomerCard
         separator
     ribbon
         tab \"Home\"
             group \"Customers\"
-                button \"New\" icon \"add\" large on click -> CustomerCard
+                button \"New\" name newRibbon icon \"add\" large on click -> CustomerCard
     sidebar left span 3
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
@@ -85,7 +85,7 @@ fn the_example_app_checks_clean() {
 #[test]
 fn reports_misplaced_commands() {
     let source =
-        "module m\napp A\n    menu\n        button \"X\"\n    toolbar\n        item \"Y\"\n";
+        "module m\napp A\n    menu\n        button \"X\" name xButton\n    toolbar\n        item \"Y\" name yItem\n";
     let (_, diags) = parse(source, "a.clarity");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert!(
@@ -102,7 +102,7 @@ fn reports_misplaced_commands() {
 
 #[test]
 fn reports_duplicate_regions() {
-    let source = "module m\napp A\n    menu\n        item \"A\"\n    menu\n        item \"B\"\n    sidebar left\n    sidebar left\n";
+    let source = "module m\napp A\n    menu\n        item \"A\" name aItem\n    menu\n        item \"B\" name bItem\n    sidebar left\n    sidebar left\n";
     let (_, diags) = parse(source, "a.clarity");
     let messages: Vec<_> = diags.iter().map(|d| d.message.as_str()).collect();
     assert!(messages.contains(&"duplicate 'menu'"));
@@ -111,7 +111,7 @@ fn reports_duplicate_regions() {
 
 #[test]
 fn only_windows_have_regions() {
-    let pages = "module p\npage V: view\n    menu\n        item \"A\"\n";
+    let pages = "module p\npage V: view\n    menu\n        item \"A\" name a2\n";
     let errors: Vec<_> = load_sources([("p.clarity", pages)])
         .diagnostics
         .into_iter()
@@ -187,21 +187,21 @@ fn a_submenu_item_has_no_click_target() {
 #[test]
 fn commands_have_names_and_click_handlers() {
     let app = APP.replace(
-        "button \"New\" icon \"add\" on click -> CustomerCard\n        separator",
-        "button \"New\" name new_customer icon \"add\" on click: new_clicked\n        separator",
+        "button \"New\" name newButton icon \"add\" on click -> CustomerCard\n        separator",
+        "button \"New\" name newButton icon \"add\" on click: newClicked\n        separator",
     );
     // Wired but without code behind yet: a warning, not an error.
     assert_eq!(
         diagnostics(&app),
-        vec![(Severity::Warning, "handler 'new_clicked' is wired but not written yet".to_string())]
+        vec![(Severity::Warning, "handler 'newClicked' is wired but not written yet".to_string())]
     );
     let (file, _) = parse(&app, "shop.clarity");
     let toolbar = file.apps[0].frame.toolbar.as_ref().unwrap();
-    assert_eq!(toolbar.items[0].props.name.as_deref(), Some("new_customer"));
-    assert_eq!(toolbar.items[0].props.handler.as_deref(), Some("new_clicked"));
+    assert_eq!(toolbar.items[0].props.name.as_deref(), Some("newButton"));
+    assert_eq!(toolbar.items[0].props.handler.as_deref(), Some("newClicked"));
     // A name is unique across the window, menus and toolbars included.
-    let clash = app.replace("item \"Quit\"", "item \"Quit\" name new_customer");
-    assert!(errors(&clash).iter().any(|e| e.contains("duplicate part name 'new_customer'")));
+    let clash = app.replace("item \"Quit\" name quitItem", "item \"Quit\" name newButton");
+    assert!(errors(&clash).iter().any(|e| e.contains("duplicate part name 'newButton'")), "{:#?}", errors(&clash));
 }
 
 /// A window shows the app's regions, each of its own replacing the app's of
@@ -213,7 +213,7 @@ page Plain: window
     title \"Plain\"
 page Own: window
     toolbar
-        button \"Mine\" on click -> Plain
+        button \"Mine\" name mineButton on click -> Plain
     sidebar right span 2
 page Ask: dialog
     title \"Ask\"
@@ -224,9 +224,9 @@ use p
 app Shop
     main Plain
     menu
-        item \"File\"
+        item \"File\" name file2
     toolbar
-        button \"Theirs\" on click -> Plain
+        button \"Theirs\" name theirsButton on click -> Plain
     sidebar left span 3
     footer
         status \"Ready\"
@@ -260,9 +260,9 @@ use p
 app Shop
     main CustomerCard
     menu
-        item \"File\"
-            item \"New customer\" on click -> CustomerCard in new window
-            item \"Card\" on click -> CustomerCard
+        item \"File\" name file3
+            item \"New customer\" name newCustomerItem on click -> CustomerCard in new window
+            item \"Card\" name cardItem on click -> CustomerCard
 ";
     let pages = "module p
 page CustomerCard: window
@@ -275,12 +275,12 @@ page CustomerCard: window
     let items = &app.frame.menu.as_ref().unwrap().items[0].items;
     assert!(items[0].props.new_window);
     assert!(!items[1].props.new_window);
-    assert_eq!(clarity_spec::frame::command_line(&items[0].props), "item \"New customer\" on click -> CustomerCard in new window");
+    assert_eq!(clarity_spec::frame::command_line(&items[0].props), "item \"New customer\" name newCustomerItem on click -> CustomerCard in new window");
     let button = &project.pages().next().unwrap().widgets[0].props;
     assert!(button.new_window);
     assert!(clarity_spec::widgets::widget_line(button).ends_with("on click -> CustomerCard in new window"), "{}", clarity_spec::widgets::widget_line(button));
 
     // Only a window opens in a new window.
-    let quit = "module shop\nuse p\n\napp Shop\n    menu\n        item \"Quit\" on click -> quit in new window\n";
+    let quit = "module shop\nuse p\n\napp Shop\n    menu\n        item \"Quit\" name quitItem on click -> quit in new window\n";
     assert!(errors(quit).iter().any(|e| e == "only a window opens in a new window"), "{:?}", errors(quit));
 }

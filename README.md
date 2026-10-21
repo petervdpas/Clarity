@@ -90,7 +90,7 @@ Every window is designed the same way:
 - Drag parts onto a grid cell: frame regions, basic input, containers, data and graphics. Drag a field of the window's data to get a caption label plus a bound input in one step; a list becomes a table.
 - Drag parts to move them, also into panels, tabs and splitter panes; drag the corner handle of the picked part to resize it.
 - Pick a part on the window or in the Window tab to edit its caption, position, size, binding and part-specific properties. Delete removes it, Escape clears the pick.
-- Every part has a name (new parts get one like `button1`) and an Events list. **Wire** connects an event to a handler named after the part and the event, such as `on click: save_click`; the handlers will be written in Clarity in the window's code behind.
+- Every part has a name (new parts get one like `button1`) and an Events list. **Wire** connects an event to a handler named after the part and the event, such as `on click: saveClick`; the handlers will be written in Clarity in the window's code behind.
 - "+ New window" in the Project tab starts a window blank, as a form for an entity, or as a browse for an entity. The templates produce ordinary windows that you then design like any other.
 
 For the application frame (an `app` block, see `examples/shop/shop.clarity`):

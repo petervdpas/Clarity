@@ -80,7 +80,7 @@ It lists the themes by their titles, switches at once and remembers the choice f
 A part picks a style by name, never raw colors:
 
 ```clarity
-button "Save" at 9,6 span 2 style primary default on click: save_clicked
+button "Save" at 9,6 span 2 style primary default on click: saveClicked
 ```
 
 The **Style** field in the part properties (see [Parts](design.parts.md)) lists the styles of the project's theme. Every theme the application offers must have each style a part uses, so switching themes never drops one; a theme that misses it is an error.

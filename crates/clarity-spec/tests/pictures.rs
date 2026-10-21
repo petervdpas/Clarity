@@ -155,7 +155,7 @@ fn the_dictionary_writes_the_store() {
 /// be for it, and an image field is placed as one.
 #[test]
 fn a_picture_part_takes_a_label_and_help() {
-    let source = with("    button \"Clear\"", "    help name button2 at 4,1 span 3 for cover\n    button \"Clear\"");
+    let source = with("    button \"Clear\"", "    help name coverHelp at 4,1 span 3 for cover\n    button \"Clear\"");
     assert_eq!(errors(&load(&source, Some(&["photos"]))), Vec::<String>::new());
     let cover = load(MUSIC, Some(&["photos"])).entity("Album").unwrap().field("cover").unwrap().ty.clone();
     assert_eq!(clarity_spec::widgets::widget_for(&cover), clarity_spec::widgets::WidgetKind::Image);

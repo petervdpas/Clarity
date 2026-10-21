@@ -10,19 +10,19 @@ A project has one `app` block, in any module. It names the window the applicatio
 app Shop
     title "Shop"
     main CustomerBrowse
-    on start: app_started
+    on start: appStarted
     menu
-        item "File"
-            item "New customer" key "Ctrl+N" on click -> CustomerForm
+        item "File" name fileItem
+            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
-            item "Quit" key "Ctrl+Q" on click -> quit
-        item "View"
-            item "Language" on click -> language
-            item "Theme" on click -> theme
+            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+        item "View" name viewItem
+            item "Language" name languageItem on click -> language
+            item "Theme" name themeItem on click -> theme
     toolbar
-        button "Customers" icon "list" on click -> CustomerBrowse
+        button "Customers" name customersButton icon "list" on click -> CustomerBrowse
         separator
-        button "Orders" on click: orders_clicked
+        button "Orders" name ordersButton on click: ordersClicked
     footer
         status "Ready"
 ```
@@ -38,6 +38,7 @@ To design it, click **App** on the Project tab, or App at the top of the project
 In the Parts tab, the Frame group holds the regions. Drag one onto an edge of the window: a menu, toolbar or ribbon docks at the top, a sidebar on the left or right, a footer at the bottom. A new menu starts with File and Quit.
 
 - `menu`: `item "Caption"` lines, which can hold items below them (a submenu), and `separator`.
+- Every menu item and button has a camelCase name, as every part does: `item "New customer" name newCustomerItem`. A new one is named after its caption and kind, as `ordersButton`; a separator has none. Double-click an item or button to go to its click handler, which Clarity writes when there is none yet.
 - `toolbar`: `button` and `separator`.
 - `ribbon`: `tab "Title"` blocks with `group "Title"` blocks of buttons and separators; a button can be `large`.
 - `sidebar left` or `sidebar right`, `span n` columns wide (3 by default): parts on a grid of its own.

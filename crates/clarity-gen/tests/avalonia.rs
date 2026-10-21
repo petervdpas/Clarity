@@ -32,15 +32,15 @@ app Shop
     title \"Shop\"
     main OrderForm
     menu
-        item \"File\"
-            item \"Orders\" key \"Ctrl+O\" on click -> OrderForm
-            item \"Another order\" on click -> OrderForm in new window
+        item \"File\" name fileItem
+            item \"Orders\" name ordersItem key \"Ctrl+O\" on click -> OrderForm
+            item \"Another order\" name anotherOrderItem on click -> OrderForm in new window
             separator
-            item \"Quit\" on click -> quit
-            item \"Language\" on click -> language
-            item \"Theme\" on click -> theme
+            item \"Quit\" name quitItem on click -> quit
+            item \"Language\" name languageItem on click -> language
+            item \"Theme\" name themeItem on click -> theme
     toolbar
-        button \"Look\" on click -> theme
+        button \"Look\" name lookButton on click -> theme
     footer
         status \"Ready\"
 
@@ -186,7 +186,7 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.Total}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
     has(window, "<c:TextInput x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Value=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
-    has(window, "<Button x:Name=\"button1\" Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{Binding Button1.Caption}\" Command=\"{Binding OpenOrderFormCommand}\"");
+    has(window, "<Button x:Name=\"button1\" Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{Binding Button1.Caption}\" Command=\"{Binding Open_OrderFormCommand}\"");
     has(window, "<TabItem Header=\"{x:Static local:Texts.Notes}\">");
     has(window, "<c:TextInput x:Name=\"memo1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Value=\"{Binding Order.Number}\"");
     // No stock input is placed directly: the library's own decide when `change` runs.
@@ -214,11 +214,11 @@ fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
     has(window, "<Menu DockPanel.Dock=\"Top\">\n");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.Orders}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding OpenOrderFormCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.Orders}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" />");
     has(window, "<Separator />");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.Quit}\" Command=\"{Binding QuitCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.Quit}\" Command=\"{Binding Quit_Command}\" />");
     // A window opens in a desktop window of its own only where the design says so.
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrder}\" Command=\"{Binding OpenOrderFormInNewWindowCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrder}\" Command=\"{Binding OpenNew_OrderFormCommand}\" />");
     has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.Ready}\" />");
 }
 
@@ -259,9 +259,9 @@ fn handlers_are_viewmodel_methods() {
     has(vm, "        NumberInput.IsReadOnly = Order.Paid;");
     has(vm, "    protected override void OnOpen() => OnWindowOpened();");
     has(vm, "    protected override void OnReturn() => OnWindowReturned();");
-    has(vm, "    [RelayCommand]\n    void OpenOrderForm() => Handle(() => Open(new OrderFormViewModel(Db)));");
-    has(vm, "    [RelayCommand]\n    void Quit() => Handle(QuitApplication);");
-    has(vm, "    [RelayCommand]\n    void OpenOrderFormInNewWindow() => Handle(() => Open(new OrderFormViewModel(Db), newWindow: true));");
+    has(vm, "    [RelayCommand]\n    void Open_OrderForm() => Handle(() => Open(new OrderFormViewModel(Db)));");
+    has(vm, "    [RelayCommand]\n    void Quit_() => Handle(QuitApplication);");
+    has(vm, "    [RelayCommand]\n    void OpenNew_OrderForm() => Handle(() => Open(new OrderFormViewModel(Db), newWindow: true));");
 }
 
 #[test]
@@ -644,6 +644,6 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let vm = file(&files, "Windows/DialViewModel.cs");
     has(vm, "Dial.X + Dial.Y");
     // The canvas gives the window where it was clicked, then runs the handler.
-    has(vm, "    [RelayCommand]\n    void ClickDialAt(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    });");
-    has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickDialAtCommand}\"");
+    has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    });");
+    has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickAt_DialCommand}\"");
 }

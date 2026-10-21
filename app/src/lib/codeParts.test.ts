@@ -131,5 +131,6 @@ test("a naming problem offers the fix that solves it for the whole file", () => 
     label: "Make them camelCase",
     edit: { op: "camelNames" },
   });
+  assert.equal(fixOf('item "New game" has no name; every menu item and button has one (Name them, in Problems, names them all)')?.label, "Name them");
   assert.equal(fixOf("unknown name 'x'"), null);
 });

@@ -177,7 +177,7 @@ export function freePartName(taken: string[], keyword: string): string {
 
 /** The fixes the Problems list offers, by what the checker says (clarity_spec::names and the part checks). */
 const FIXES: { says: string; label: string; edit: Edit }[] = [
-  { says: "has no name; every part has one", label: "Name them", edit: { op: "nameParts" } },
+  { says: "has no name; every", label: "Name them", edit: { op: "nameParts" } },
   { says: "is not camelCase:", label: "Make them camelCase", edit: { op: "camelNames" } },
 ];
 

@@ -75,7 +75,9 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
     let mut renames: Vec<(String, String)> = Vec::new();
     for line in lines.iter().zip(&scoped).filter(|(_, s)| **s).map(|(l, _)| l) {
         let tokens = &line.tokens;
-        let is_part = line.indent > 0 && tokens.first().is_some_and(|t| crate::widgets::by_keyword(&t.text).is_some());
+        // A part, or a menu item or button of the frame.
+        let is_part = line.indent > 0
+            && tokens.first().is_some_and(|t| crate::widgets::by_keyword(&t.text).is_some() || crate::frame::command_by_keyword(&t.text).is_some());
         let declared = if line.indent > 0 && tokens.first().is_some_and(|t| t.text == "handler") {
             tokens.get(1)
         } else if is_part {
@@ -151,4 +153,16 @@ pub fn rename_slots(text: &str, renames: &[(String, String)]) -> String {
         out = out.replace(&format!("{{{old}."), &format!("{{{new}.")).replace(&format!("{{{old}}}"), &format!("{{{new}}}"));
     }
     out
+}
+
+/// The name a menu item or button gets: its caption and its kind, as
+/// `newGameItem` for `item "New game"` and `ordersButton` for `button
+/// "Orders"`. The kind keeps it apart from the window's data and parts of
+/// the same word.
+pub fn command_name(caption: Option<&str>, keyword: &str) -> String {
+    let kind = if keyword == "item" { "Item" } else { "Button" };
+    match caption.map(camel_case).filter(|c| !c.is_empty()) {
+        Some(caption) => format!("{caption}{kind}"),
+        None => keyword.to_string(),
+    }
 }

@@ -320,11 +320,11 @@ fn app_code_handles_its_frame_commands() {
 app Shop
     main CustomerForm
     menu
-        item \"Quit\" name quit on click: quitClicked
+        item \"Quit\" name quitItem on click: quitClicked
 
 code Shop
     handler quitClicked
-        quit.enabled = false
+        quitItem.enabled = false
         close
 ";
     let code = format!("{app}{}", CODE);

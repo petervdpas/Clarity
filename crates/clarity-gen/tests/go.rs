@@ -304,15 +304,15 @@ app Shop
     title \"Shop\"
     main OrderForm
     menu
-        item \"File\"
-            item \"Orders\" key \"Ctrl+O\" on click -> OrderForm
-            item \"Another order\" on click -> OrderForm in new window
+        item \"File\" name fileItem
+            item \"Orders\" name ordersItem key \"Ctrl+O\" on click -> OrderForm
+            item \"Another order\" name anotherOrderItem on click -> OrderForm in new window
             separator
-            item \"Quit\" on click -> quit
-            item \"Language\" on click -> language
-            item \"Theme\" on click -> theme
+            item \"Quit\" name quitItem on click -> quit
+            item \"Language\" name languageItem on click -> language
+            item \"Theme\" name themeItem on click -> theme
     toolbar
-        button \"Look\" on click -> theme
+        button \"Look\" name lookButton on click -> theme
     footer
         status \"Ready\"
 

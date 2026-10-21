@@ -272,7 +272,7 @@ fn handlers_set_errors_and_readonly_on_inputs_only() {
 #[test]
 fn menu_items_and_buttons_take_the_same_keys() {
     let menu = |key: &str| {
-        format!("module m\napp A\n    menu\n        item \"File\"\n            item \"Save\" key \"{key}\"\n")
+        format!("module m\napp A\n    menu\n        item \"File\" name fileItem\n            item \"Save\" name save2 key \"{key}\"\n")
     };
     assert!(errors(&menu("Ctrl+Shift+F2")).is_empty());
     assert_has(&errors(&menu("Hyper+S")), "'Hyper+S' is not a shortcut");

@@ -22,3 +22,5 @@ github.com/petervdpas/Clarity/runtimes/go v0.8.0 h1:5BrJsKs0Y8DYbycPrlfIOoF7nds4
 github.com/petervdpas/Clarity/runtimes/go v0.8.0/go.mod h1:XPJR04dLWKu5HNwNSbi/QB+t4Tv9rXpTZybxXFYuYfI=
 github.com/petervdpas/Clarity/runtimes/go v0.9.0 h1:K/AjsDEWWLY8hIpLybmXkOpPBjzaAwD8ITMehzXxPrA=
 github.com/petervdpas/Clarity/runtimes/go v0.9.0/go.mod h1:XPJR04dLWKu5HNwNSbi/QB+t4Tv9rXpTZybxXFYuYfI=
+github.com/petervdpas/Clarity/runtimes/go v0.10.0 h1:pbr7yN7Xb73su9mANpHpghqKyVGOrl6xZ9IGnfaENgQ=
+github.com/petervdpas/Clarity/runtimes/go v0.10.0/go.mod h1:XPJR04dLWKu5HNwNSbi/QB+t4Tv9rXpTZybxXFYuYfI=

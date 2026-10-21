@@ -1,20 +1,25 @@
-//! Translations (design section 1.5, I1c). Every text a person sees is in
-//! the project already: labels, help texts, titles, captions, enum labels,
-//! menu items, the texts values start with, messages and refusals. Clarity
-//! collects them, so nobody marks a text for translation. A file per language in the module folder,
-//! `translations/nl.clarity`, gives each text in that language, found by
-//! what the text says:
+//! Translations by key (design section 1.5, I1c). Design and code name every
+//! text people read by its key, `@saveCaption`, with its slots filled by
+//! name in code: `@orderApproved(number = order.number)`. A file per
+//! language in the module folder, `translations/nl.clarity`, gives each key
+//! its value:
 //!
 //! ```text
 //! translation nl
-//!     "Customer card" "Klantkaart"
-//!     "Saved {customer.name}" "{customer.name} opgeslagen"
+//!     saveCaption "Opslaan"
+//!     orderApproved "Bestelling {number} is goedgekeurd"
 //! ```
+//!
+//! Every language file has the same keys. The default language, the
+//! project's own (`language "en"`), is such a file too and gives every key a
+//! value; another language may leave one empty, which shows the default's
+//! until it is translated. A text without letters, such as a calculator's
+//! `7`, may be written as it is.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::code::{Expr, ExprKind, Stmt, StmtKind, template};
+use crate::code::{Expr, ExprKind, Stmt, StmtKind, each_expr_in};
 use crate::diagnostic::Diagnostic;
 use crate::formats::language_problem;
 use crate::lexer::{TokenKind, lex, quote};
@@ -24,150 +29,185 @@ use crate::span::Span;
 /// The folder of translation files in a project's module folder.
 pub const TRANSLATIONS_DIR: &str = "translations";
 
-/// The renderer's own words, which a translation can give too.
-pub const RENDERER_TEXTS: [&str; 2] = ["Yes", "No"];
+/// The renderer's own words, by key, with their value in English: a bool as
+/// it shows in a table or a list.
+pub const RENDERER_KEYS: [(&str, &str); 2] = [("yes", "Yes"), ("no", "No")];
 
-/// What an image part bound to a picture shows of its own: in its empty
-/// state, and on its buttons to load a picture and to remove it.
-pub const PICTURE_TEXTS: [&str; 3] = ["No picture", "Load a picture", "Remove the picture"];
+/// What an image part bound to a picture shows of its own, by key: in its
+/// empty state, and on its buttons to load a picture and to remove it.
+pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
-/// A text people see, and where it is used: `window Card`, `entity Customer`.
+/// The key a text names, without its `@`; none for a text written as it is.
+pub fn key_of(text: &str) -> Option<&str> {
+    text.strip_prefix('@')
+}
+
+/// Whether `text` has letters outside its slots. A text without, such as a
+/// calculator's `7` or `+`, reads the same in every language.
+pub fn has_letters(text: &str) -> bool {
+    let mut outside_slots = true;
+    text.chars().any(|c| {
+        match c {
+            '{' => outside_slots = false,
+            '}' => outside_slots = true,
+            _ => {}
+        }
+        outside_slots && c.is_alphabetic()
+    })
+}
+
+/// A key the project uses, and where: `window Card`, `entity Customer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Used {
-    pub text: String,
+pub struct KeyUse {
+    pub key: String,
     pub places: Vec<String>,
 }
 
-/// The texts of a project, each once, in the order they are first used.
-#[derive(Default)]
-struct Texts {
-    used: Vec<Used>,
-    /// The text values of the window or app whose code is collected: a text
-    /// a handler puts in one is shown.
-    text_values: Vec<String>,
+/// One use of a key, where it is written.
+struct Use {
+    key: String,
+    place: String,
+    path: String,
+    span: Span,
+    /// The slots code gives values to; none in the design, which gives none.
+    args: Option<Vec<String>>,
 }
 
-impl Texts {
-    fn add(&mut self, text: &str, place: &str) {
-        if text.trim().is_empty() {
-            return;
-        }
-        match self.used.iter_mut().find(|u| u.text == text) {
-            Some(used) if !used.places.iter().any(|p| p == place) => used.places.push(place.to_string()),
-            Some(_) => {}
-            None => self.used.push(Used {
-                text: text.to_string(),
-                places: vec![place.to_string()],
-            }),
+/// Everything the project shows: the keys it uses, and the texts it writes
+/// as they are where people read them.
+#[derive(Default)]
+struct Shown {
+    uses: Vec<Use>,
+    /// A text with letters written as it is: what it says, and where.
+    literals: Vec<(String, String, Span)>,
+    /// What shows a text people read without one: why, and where.
+    unnamed: Vec<(String, String, Span)>,
+    path: String,
+    place: String,
+}
+
+impl Shown {
+    /// A text in the design: a key, or a text as written.
+    fn text(&mut self, text: &str, span: Span) {
+        match key_of(text) {
+            Some(key) => self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span, args: None }),
+            None if has_letters(text) => self.literals.push((text.to_string(), self.path.clone(), span)),
+            None => {}
         }
     }
 
-    fn some(&mut self, text: &Option<String>, place: &str) {
+    fn some(&mut self, text: &Option<String>, span: Span) {
         if let Some(text) = text {
-            self.add(text, place);
+            self.text(text, span);
         }
     }
 
-    fn widgets(&mut self, widgets: &[Widget], place: &str) {
+    fn widgets(&mut self, widgets: &[Widget]) {
         for widget in widgets {
             let p = &widget.props;
-            self.some(&p.caption, place);
-            self.some(&p.placeholder, place);
-            self.some(&p.tooltip, place);
-            self.widgets(&widget.children, place);
+            self.some(&p.caption, widget.span);
+            self.some(&p.placeholder, widget.span);
+            self.some(&p.tooltip, widget.span);
+            self.widgets(&widget.children);
             for page in &widget.pages {
-                self.some(&page.title, place);
-                self.widgets(&page.children, place);
+                self.some(&page.title, page.span);
+                self.widgets(&page.children);
             }
         }
     }
 
-    /// The text a text value starts with: `data rules: text, default "..."`.
-    fn data(&mut self, data: &[DataDecl], place: &str) {
-        for decl in data {
-            if let DataKind::Value { default: Some(Literal::Str(text)), .. } = &decl.of {
-                self.add(text, place);
-            }
-        }
-    }
-
-    fn commands(&mut self, commands: &[Command], place: &str) {
+    fn commands(&mut self, commands: &[Command]) {
         for command in commands {
-            self.some(&command.props.caption, place);
-            self.commands(&command.items, place);
+            self.some(&command.props.caption, command.span);
+            self.commands(&command.items);
         }
     }
 
-    fn frame(&mut self, frame: &Frame, place: &str) {
+    fn frame(&mut self, frame: &Frame) {
         if let Some(menu) = &frame.menu {
-            self.commands(&menu.items, place);
+            self.commands(&menu.items);
         }
         if let Some(toolbar) = &frame.toolbar {
-            self.commands(&toolbar.items, place);
+            self.commands(&toolbar.items);
         }
         if let Some(ribbon) = &frame.ribbon {
             for tab in &ribbon.tabs {
-                self.add(&tab.title, place);
+                self.text(&tab.title, tab.span);
                 for group in &tab.groups {
-                    self.add(&group.title, place);
-                    self.commands(&group.items, place);
+                    self.text(&group.title, group.span);
+                    self.commands(&group.items);
                 }
             }
         }
         for sidebar in &frame.sidebars {
-            self.widgets(&sidebar.widgets, place);
+            self.widgets(&sidebar.widgets);
         }
         if let Some(footer) = &frame.footer {
-            self.some(&footer.status, place);
-            self.widgets(&footer.widgets, place);
+            self.some(&footer.status, footer.status_span.unwrap_or(footer.span));
+            self.widgets(&footer.widgets);
         }
     }
 
-    /// Text a statement shows: a message, a refusal, a caption or an error,
-    /// a text put in a text value, and the text a function returns.
-    fn statements(&mut self, body: &[Stmt], place: &str) {
+    /// The text a value starts with may name a key: `data note: text, default @noteStart`.
+    fn data(&mut self, data: &[DataDecl]) {
+        for decl in data {
+            if let DataKind::Value { default: Some(Literal::Str(text)), .. } = &decl.of
+                && let Some(key) = key_of(text)
+            {
+                self.uses.push(Use { key: key.to_string(), place: self.place.clone(), path: self.path.clone(), span: decl.span, args: None });
+            }
+        }
+    }
+
+    /// Every key code names, with the slots it fills, and the texts it
+    /// shows as written.
+    fn code(&mut self, body: &[Stmt]) {
+        each_expr_in(body, &mut |expr| {
+            if let ExprKind::Key { key, args } = &expr.kind {
+                self.uses.push(Use {
+                    key: key.name.clone(),
+                    place: self.place.clone(),
+                    path: self.path.clone(),
+                    span: key.span,
+                    args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
+                });
+            }
+        });
+        self.shown_as_written(body);
+    }
+
+    /// A message, a refusal, a caption or an error written as a text.
+    fn shown_as_written(&mut self, body: &[Stmt]) {
         for stmt in body {
             match &stmt.kind {
-                StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.shown(text, place),
-                StmtKind::Assign { target, value } if is_shown_property(target) => self.shown(value, place),
-                StmtKind::Assign { target, value }
-                    if matches!(&target.kind, ExprKind::Name { name } if self.text_values.iter().any(|v| v == name)) =>
-                {
-                    self.shown(value, place)
-                }
-                StmtKind::Return { value: Some(value) } => self.shown(value, place),
+                StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.written(text),
+                StmtKind::Assign { target, value } if is_shown_property(target) => self.written(value),
                 StmtKind::If { branches, otherwise } => {
                     for branch in branches {
-                        self.statements(&branch.body, place);
+                        self.shown_as_written(&branch.body);
                     }
                     if let Some(body) = otherwise {
-                        self.statements(body, place);
+                        self.shown_as_written(body);
                     }
                 }
-                StmtKind::For { body, .. } => self.statements(body, place),
+                StmtKind::For { body, .. } => self.shown_as_written(body),
                 _ => {}
             }
         }
     }
 
-    fn shown(&mut self, expr: &Expr, place: &str) {
+    fn written(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Str { value } => self.add(value, place),
-            ExprKind::Text { parts } => self.add(&template(parts), place),
+            ExprKind::Str { value } if has_letters(value) => self.literals.push((value.clone(), self.path.clone(), expr.span)),
+            ExprKind::Text { parts } => {
+                let text = crate::code::template(parts);
+                if has_letters(&text) {
+                    self.literals.push((text, self.path.clone(), expr.span));
+                }
+            }
             _ => {}
         }
     }
-}
-
-/// The names of the text values of the window or app `owner`.
-fn text_values(project: &Project, owner: &str) -> Vec<String> {
-    let pages = project.files.iter().flat_map(|f| &f.pages).filter(|p| p.name.name == owner).flat_map(|p| &p.data);
-    let apps = project.files.iter().flat_map(|f| &f.apps).filter(|a| a.name.name == owner).flat_map(|a| &a.data);
-    pages
-        .chain(apps)
-        .filter(|d| matches!(&d.of, DataKind::Value { ty, .. } if ty.kind == crate::code::TypeRefKind::Text))
-        .map(|d| d.name.name.clone())
-        .collect()
 }
 
 /// `part.caption` or `part.error`: a property whose text is shown.
@@ -176,82 +216,116 @@ fn is_shown_property(target: &Expr) -> bool {
         if matches!(object.kind, ExprKind::Name { .. }) && matches!(member.name.as_str(), "caption" | "error"))
 }
 
-/// Every text a person sees in the project, each once, with where it is
-/// used, in the order the project first uses them; the renderer's own
-/// words last.
-pub fn texts(project: &Project) -> Vec<Used> {
-    let mut texts = Texts::default();
+/// Every text the project shows, by key or as written.
+fn shown(project: &Project) -> Shown {
+    let mut shown = Shown::default();
     for file in &project.files {
+        shown.path = file.path.clone();
         for entity in &file.entities {
-            let place = format!("entity {}", entity.name.name);
+            shown.place = format!("entity {}", entity.name.name);
             for field in &entity.fields {
-                texts.add(&field.label, &place);
-                texts.some(&field.modifiers.help, &place);
+                match &field.modifiers.label {
+                    Some(label) => shown.text(label, field.span),
+                    None => shown.unnamed.push((
+                        format!("field {} of {} shows its name as its label; give it a key: label @{}", field.name.name, entity.name.name, crate::names::camel_case(&format!("{} {}", entity.name.name, field.name.name))),
+                        file.path.clone(),
+                        field.span,
+                    )),
+                }
+                shown.some(&field.modifiers.help, field.span);
             }
         }
         for decl in &file.enums {
-            let place = format!("enum {}", decl.name.name);
+            shown.place = format!("enum {}", decl.name.name);
             for variant in &decl.variants {
-                texts.add(&variant.label, &place);
+                match key_of(&variant.label) {
+                    Some(_) => shown.text(&variant.label, variant.name.span),
+                    None if has_letters(&variant.label) => shown.unnamed.push((
+                        format!("{} of {} shows a text without a key; give it one: label @{}", variant.name.name, decl.name.name, crate::names::camel_case(&format!("{} {}", decl.name.name, variant.name.name))),
+                        file.path.clone(),
+                        variant.name.span,
+                    )),
+                    None => {}
+                }
             }
         }
         for theme in &file.themes {
-            texts.add(&theme.label, &format!("theme {}", theme.name.name));
+            shown.place = format!("theme {}", theme.name.name);
+            match &theme.title {
+                Some(title) => shown.text(title, theme.span),
+                None if project.themes.contains(&theme.name.name) => shown.unnamed.push((
+                        format!("theme {} is offered, so people read its name; give it a key: title @{}", theme.name.name, crate::names::camel_case(&format!("{} theme", theme.name.name))),
+                    file.path.clone(),
+                    theme.span,
+                )),
+                None => {}
+            }
         }
         for app in &file.apps {
-            let place = format!("app {}", app.name.name);
-            texts.some(&app.title, &place);
-            texts.data(&app.data, &place);
-            texts.frame(&app.frame, &place);
+            shown.place = format!("app {}", app.name.name);
+            shown.some(&app.title, app.span);
+            shown.data(&app.data);
+            shown.frame(&app.frame);
         }
         for page in &file.pages {
-            let place = format!("window {}", page.name.name);
-            texts.some(&page.title, &place);
-            texts.data(&page.data, &place);
-            texts.widgets(&page.widgets, &place);
-            texts.frame(&page.frame, &place);
+            shown.place = format!("window {}", page.name.name);
+            shown.some(&page.title, page.span);
+            shown.data(&page.data);
+            shown.widgets(&page.widgets);
+            shown.frame(&page.frame);
         }
         for block in &file.code {
-            let place = format!("code {}", block.name.name);
-            texts.text_values = text_values(project, &block.name.name);
+            shown.place = format!("code {}", block.name.name);
             for handler in &block.handlers {
-                texts.statements(&handler.body, &place);
+                shown.code(&handler.body);
             }
             for event in &block.events {
-                texts.statements(&event.body, &place);
+                shown.code(&event.body);
             }
+        }
+        for decl in &file.functions {
+            shown.place = format!("{} {}", decl.kind.keyword(), decl.name.name);
+            shown.code(&decl.body);
         }
         for engine in &file.engines {
-            let place = format!("engine {}", engine.name.name);
+            shown.place = format!("engine {}", engine.name.name);
             for text in &engine.says {
-                texts.add(text, &place);
+                shown.text(text, engine.span);
             }
         }
-        texts.text_values.clear();
-        for decl in &file.functions {
-            let place = format!("{} {}", decl.kind.keyword(), decl.name.name);
-            texts.statements(&decl.body, &place);
-        }
     }
+    // Clarity's own words.
+    shown.place = "Clarity".to_string();
+    shown.path = project.files.first().map(|f| f.path.clone()).unwrap_or_default();
     let bound_picture = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
-    if bound_picture {
-        for text in PICTURE_TEXTS {
-            texts.add(text, "Clarity");
-        }
+    let own = RENDERER_KEYS.iter().chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] });
+    for (key, _) in own {
+        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: None });
     }
-    for text in RENDERER_TEXTS {
-        texts.add(text, "Clarity");
-    }
-    texts.used
+    shown
 }
 
-/// One line of a translation file.
+/// Every key the project uses, each once, in the order the project first
+/// uses them, with where; Clarity's own words last.
+pub fn keys(project: &Project) -> Vec<KeyUse> {
+    let mut keys: Vec<KeyUse> = Vec::new();
+    for found in shown(project).uses {
+        match keys.iter_mut().find(|k| k.key == found.key) {
+            Some(k) if !k.places.contains(&found.place) => k.places.push(found.place),
+            Some(_) => {}
+            None => keys.push(KeyUse { key: found.key, places: vec![found.place] }),
+        }
+    }
+    keys
+}
+
+/// One line of a translation file: a key and its value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
-    pub text: String,
-    pub translation: String,
+    pub key: String,
+    pub value: String,
     pub span: Span,
 }
 
@@ -287,22 +361,17 @@ pub fn parse(text: &str) -> (Translation, Vec<Diagnostic>) {
     }
     for line in lines {
         match line.tokens.as_slice() {
-            [from, to] if from.kind == TokenKind::Str && to.kind == TokenKind::Str => translation.entries.push(Entry {
-                text: from.text.clone(),
-                translation: to.text.clone(),
-                span: line.span,
-            }),
-            _ => diagnostics.push(Diagnostic::error(
-                "write a text and its translation, each in quotes: \"Save\" \"Opslaan\"",
-                line.span,
-            )),
+            [key, value] if key.kind == TokenKind::Ident && value.kind == TokenKind::Str => {
+                translation.entries.push(Entry { key: key.text.clone(), value: value.text.clone(), span: line.span })
+            }
+            _ => diagnostics.push(Diagnostic::error("write a key and its text in quotes: saveCaption \"Save\"", line.span)),
         }
     }
     (translation, diagnostics)
 }
 
-/// The slots of a text: `{customer.name}`, without the braces of `{{`.
-fn slots(text: &str) -> Vec<String> {
+/// The slots of a text: `{name}`, without the braces of `{{`.
+pub fn slots(text: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut rest = text;
     while let Some(at) = rest.find('{') {
@@ -318,128 +387,168 @@ fn slots(text: &str) -> Vec<String> {
     found
 }
 
-/// Reads the translation files `(path, text)` of a project, checks them
-/// against the texts it shows, and hands them to the project for the
-/// renderer.
+/// The language the project is written in: its texts' default.
+pub fn default_language(project: &Project) -> String {
+    project.locale.language.clone().unwrap_or_else(|| "en".to_string())
+}
+
+/// Reads the translation files `(path, text)` of a project, checks them and
+/// the keys the project uses against each other, and hands them to the
+/// project for the renderer.
 pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a str, &'a str)>) {
-    let used: Vec<String> = texts(project).into_iter().map(|u| u.text).collect();
+    let default = default_language(project);
+    let mut found = Vec::new();
+    // Each file's entries, by language, with its path.
+    let mut read: Vec<(String, String, Translation)> = Vec::new();
     for (path, text) in files {
-        let (translation, mut found) = parse(text);
+        let (translation, diagnostics) = parse(text);
+        found.extend(diagnostics.into_iter().map(|d| d.in_file(path)));
         let named = Path::new(path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         if !translation.language.is_empty() && named != translation.language {
-            found.push(Diagnostic::error(
-                format!("this file is for language '{named}' (its name), but it says '{}'", translation.language),
-                Span::default(),
-            ));
+            found.push(
+                Diagnostic::error(format!("this file is for language '{named}' (its name), but it says '{}'", translation.language), Span::default())
+                    .in_file(path),
+            );
         }
         let mut map = BTreeMap::new();
         for entry in &translation.entries {
-            let quoted = quote(&entry.text);
-            if map.insert(entry.text.clone(), entry.translation.clone()).is_some() {
-                found.push(Diagnostic::error(format!("{quoted} is translated twice"), entry.span));
-                continue;
+            if !crate::names::is_camel_case(&entry.key) {
+                found.push(Diagnostic::error(format!("key '{}' is not camelCase, as names are", entry.key), entry.span).in_file(path));
             }
-            if !used.contains(&entry.text) {
-                found.push(Diagnostic::warning(
-                    format!("{quoted} is no longer shown anywhere; its translation can go"),
-                    entry.span,
-                ));
-            }
-            let (from, to) = (slots(&entry.text), slots(&entry.translation));
-            for slot in from.iter().filter(|s| !to.contains(s)) {
-                found.push(Diagnostic::error(
-                    format!("the translation of {quoted} must keep the slot {{{slot}}}"),
-                    entry.span,
-                ));
-            }
-            for slot in to.iter().filter(|s| !from.contains(s)) {
-                found.push(Diagnostic::error(
-                    format!("the translation of {quoted} has a slot {{{slot}}} that the text does not have"),
-                    entry.span,
-                ));
+            if map.insert(entry.key.clone(), entry.value.clone()).is_some() {
+                found.push(Diagnostic::error(format!("key '{}' is in this file twice", entry.key), entry.span).in_file(path));
             }
         }
-        project.diagnostics.extend(found.into_iter().map(|d| d.in_file(path)));
-        project.translations.insert(named, map);
+        project.translations.insert(named.clone(), map);
+        read.push((named, path.to_string(), translation));
     }
+
+    let shown = shown(project);
+    for (text, path, span) in &shown.literals {
+        found.push(Diagnostic::error(format!("{} is read by people, so it is a key: write @key, with its text in the language files", quote(text)), *span).in_file(path));
+    }
+    for (problem, path, span) in &shown.unnamed {
+        found.push(Diagnostic::error(problem.clone(), *span).in_file(path));
+    }
+
+    let defaults = read.iter().find(|(language, _, _)| *language == default);
+    if defaults.is_none() && !shown.uses.iter().all(|u| u.place == "Clarity") {
+        let at = shown.uses.iter().find(|u| u.place != "Clarity").expect("a use outside Clarity");
+        found.push(Diagnostic::error(format!("the default language {default} has no file; add translations/{default}.clarity"), at.span).in_file(&at.path));
+    }
+    let values = project.translations.get(&default).cloned().unwrap_or_default();
+    if defaults.is_some() {
+        // Every key used has a value in the default language, and gets the
+        // slots that value has.
+        for u in &shown.uses {
+            let place = |d: Diagnostic| if u.path.is_empty() { d.in_file(&defaults.map(|(_, p, _)| p.clone()).unwrap_or_default()) } else { d.in_file(&u.path) };
+            match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
+                None => found.push(place(Diagnostic::error(format!("key '{}' has no value in {default}, the default language", u.key), u.span))),
+                Some(value) => {
+                    let wanted = slots(value);
+                    let given = u.args.clone().unwrap_or_default();
+                    for slot in wanted.iter().filter(|s| !given.contains(s)) {
+                        found.push(place(Diagnostic::error(format!("@{} needs a value for {{{slot}}}", u.key), u.span)));
+                    }
+                    for slot in given.iter().filter(|s| !wanted.contains(s)) {
+                        found.push(place(Diagnostic::error(format!("@{} has no slot {{{slot}}}", u.key), u.span)));
+                    }
+                }
+            }
+        }
+    }
+    if let Some((_, default_path, default_file)) = defaults {
+        // A key nobody uses can go.
+        for entry in &default_file.entries {
+            if !shown.uses.iter().any(|u| u.key == entry.key) {
+                found.push(Diagnostic::warning(format!("key '{}' is not used anywhere; it can go", entry.key), entry.span).in_file(default_path));
+            }
+        }
+        // Every other language has the same keys, and keeps the slots of each value.
+        for (language, path, translation) in read.iter().filter(|(l, _, _)| *l != default) {
+            for entry in &default_file.entries {
+                if !translation.entries.iter().any(|e| e.key == entry.key) {
+                    found.push(Diagnostic::error(format!("key '{}' is missing in {language}; every language file has the same keys", entry.key), Span::default()).in_file(path));
+                }
+            }
+            for entry in &translation.entries {
+                let Some(value) = values.get(&entry.key) else {
+                    found.push(Diagnostic::error(format!("key '{}' is in {language} but not in {default}, the default language", entry.key), entry.span).in_file(path));
+                    continue;
+                };
+                if entry.value.is_empty() {
+                    continue;
+                }
+                let (from, to) = (slots(value), slots(&entry.value));
+                for slot in from.iter().filter(|s| !to.contains(s)) {
+                    found.push(Diagnostic::error(format!("{} in {language} must keep the slot {{{slot}}}", entry.key), entry.span).in_file(path));
+                }
+                for slot in to.iter().filter(|s| !from.contains(s)) {
+                    found.push(Diagnostic::error(format!("{} in {language} has a slot {{{slot}}} that {default} does not have", entry.key), entry.span).in_file(path));
+                }
+            }
+        }
+    }
+    project.diagnostics.extend(found);
 }
 
 /// The text of translation file `existing` (or a new one for `language`)
-/// with `text` translated as `translation`: a changed line keeps its place
-/// and the lines around it, a new one goes at the end, and an empty
-/// translation removes the line.
-pub fn set(existing: Option<&str>, language: &str, text: &str, translation: &str) -> String {
-    let line = format!("    {} {}", quote(text), quote(translation));
+/// with `key` given `value`: a changed line keeps its place and the lines
+/// around it, a new key goes at the end. An empty value stays, as "": every
+/// language file has the same keys.
+pub fn set(existing: Option<&str>, language: &str, key: &str, value: &str) -> String {
+    let line = format!("    {key} {}", quote(value));
     let source = existing.map_or_else(|| format!("translation {language}\n"), str::to_string);
     let (parsed, _) = parse(&source);
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-    match parsed.entries.iter().find(|e| e.text == text) {
-        Some(entry) => {
-            let index = entry.span.line as usize - 1;
-            if translation.is_empty() {
-                lines.remove(index);
-            } else {
-                lines[index] = line;
-            }
-        }
-        None if translation.is_empty() => {}
+    match parsed.entries.iter().find(|e| e.key == key) {
+        Some(entry) => lines[entry.span.line as usize - 1] = line,
         None => lines.push(line),
     }
     lines.join("\n") + "\n"
 }
 
-/// One text in the Translations table: where it is used, and its
-/// translation per language, in the order of `TranslationTable::languages`.
+/// One key in the languages table: where it is used, and its value per
+/// language, in the order of `TranslationTable::languages`; none where a
+/// language leaves it empty.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TranslationRow {
-    pub text: String,
+    pub key: String,
     pub places: Vec<String>,
-    pub translations: Vec<Option<String>>,
+    pub values: Vec<Option<String>>,
 }
 
-/// Every text a person sees with its translations, for the Project tab.
+/// Every key the project uses with its value per language, for i18n.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TranslationTable {
-    /// The languages the project has translation files for.
+    /// The default language: the project's own, which gives every key a value.
+    pub default: String,
+    /// The languages the project has files for, the default first.
     pub languages: Vec<String>,
     pub rows: Vec<TranslationRow>,
-    /// How many texts each language does not translate yet.
+    /// How many keys each language leaves empty.
     pub missing: Vec<usize>,
 }
 
-/// The Translations table of a project.
-/// Whether `text` needs a translation: it has letters. Digits and signs,
-/// such as a calculator's `7` or `+`, read the same in every language.
-pub fn needs_translation(text: &str) -> bool {
-    let mut outside_slots = true;
-    text.chars().any(|c| {
-        match c {
-            '{' => outside_slots = false,
-            '}' => outside_slots = true,
-            _ => {}
-        }
-        outside_slots && c.is_alphabetic()
-    })
-}
-
+/// The languages table of a project.
 pub fn table(project: &Project) -> TranslationTable {
-    let languages: Vec<String> = project.translations.keys().cloned().collect();
-    let rows: Vec<TranslationRow> = texts(project)
+    let default = default_language(project);
+    let mut languages: Vec<String> = project.translations.keys().filter(|l| **l != default).cloned().collect();
+    if project.translations.contains_key(&default) {
+        languages.insert(0, default.clone());
+    }
+    let rows: Vec<TranslationRow> = keys(project)
         .into_iter()
-        .filter(|used| needs_translation(&used.text))
         .map(|used| TranslationRow {
-            translations: languages
-                .iter()
-                .map(|l| project.translations[l].get(&used.text).filter(|t| !t.is_empty()).cloned())
-                .collect(),
-            text: used.text,
+            values: languages.iter().map(|l| project.translations[l].get(&used.key).filter(|v| !v.is_empty()).cloned()).collect(),
+            key: used.key,
             places: used.places,
         })
         .collect();
-    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.translations[i].is_none()).count()).collect();
-    TranslationTable { languages, rows, missing }
+    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.values[i].is_none()).count()).collect();
+    TranslationTable { default, languages, rows, missing }
 }
 
 /// Whether any part in `widgets`, inside containers too, is one `test` picks.

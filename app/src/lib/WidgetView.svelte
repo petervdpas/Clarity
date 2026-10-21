@@ -18,7 +18,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
@@ -527,14 +527,14 @@
           <img class="picture" src={shownPicture} alt={caption ?? ""} />
         {:else}
           <div class="placeholder image" class:problem={pictureProblem}>
-            <span>{tr(preview, "No picture")}</span>
+            <span>{ownWord(preview, "No picture")}</span>
           </div>
         {/if}
         {#if canLoadPicture}
           <div class="picture-actions">
-            <button type="button" onclick={() => fileInput?.click()}>{tr(preview, "Load a picture")}</button>
+            <button type="button" onclick={() => fileInput?.click()}>{ownWord(preview, "Load a picture")}</button>
             {#if value}
-              <button type="button" onclick={removePicture}>{tr(preview, "Remove the picture")}</button>
+              <button type="button" onclick={removePicture}>{ownWord(preview, "Remove the picture")}</button>
             {/if}
           </div>
           <input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden onchange={pictureChosen} />

@@ -19,20 +19,36 @@ namespace Clarity.Avalonia.Tests;
 /// A window whose title is a text of the project.
 sealed class TitledViewModel(Db db) : WindowViewModel(db)
 {
-    public override string Title => Locale.Translate("Customers");
+    public override string Title => Locale.Translate("customers");
 }
 
 public sealed class LocaleTests : IDisposable
 {
+    /// The project's texts by key: English, the default, and Dutch, which leaves one empty.
+    static readonly Dictionary<string, string> English = new()
+    {
+        ["customers"] = "Customers",
+        ["save"] = "Save",
+        ["savedOn"] = "Saved {name} on {when}",
+        ["saveCount"] = "Save {n}",
+        ["yes"] = "Yes",
+        ["business"] = "Business",
+        ["nameRequired"] = "Name is required",
+        ["fullNameHelp"] = "The full name",
+        ["onlyEnglish"] = "Only in English",
+    };
+
     static readonly Dictionary<string, string> Dutch = new()
     {
-        ["Customers"] = "Klanten",
-        ["Save"] = "Opslaan",
-        ["Saved {customer.name} on {when}"] = "{customer.name} opgeslagen op {when}",
-        ["Yes"] = "Ja",
-        ["Business"] = "Zakelijk",
-        ["Name is required"] = "Naam is verplicht",
-        ["The full name"] = "De volledige naam",
+        ["customers"] = "Klanten",
+        ["save"] = "Opslaan",
+        ["savedOn"] = "{name} opgeslagen op {when}",
+        ["saveCount"] = "Bewaar {n}",
+        ["yes"] = "Ja",
+        ["business"] = "Zakelijk",
+        ["nameRequired"] = "Naam is verplicht",
+        ["fullNameHelp"] = "De volledige naam",
+        ["onlyEnglish"] = "",
     };
 
     readonly string folder = Directory.CreateTempSubdirectory("clarity-locale-").FullName;
@@ -55,28 +71,31 @@ public sealed class LocaleTests : IDisposable
         baseLanguage: "en",
         available: ["nl"],
         currency: "EUR",
-        lookup: (text, language) => language.Name == "nl" && Dutch.TryGetValue(text, out var t) ? t : null,
-        label: (enumName, value) => enumName == "Kind" && value == "Business" ? Locale.Translate("Business") : value,
+        // As .NET resources look them up: a language that leaves a key empty falls back to the default.
+        lookup: (key, language) => language.Name == "nl" && Dutch.TryGetValue(key, out var t) && t != "" ? t : English.GetValueOrDefault(key),
+        label: (enumName, value) => enumName == "Kind" && value == "Business" ? Locale.Translate("business") : value,
         system: system);
 
     [AvaloniaFact]
     public void TheSystemLocalePicksTheLanguageAndFormats()
     {
-        Assert.Equal("Customers", Locale.Translate("Customers"));
+        Assert.Equal("Customers", Locale.Translate("customers"));
         Assert.Equal("en", Locale.Current);
         Start(new CultureInfo("nl-BE"));
-        Assert.Equal("Klanten", Locale.Translate("Customers"));
+        Assert.Equal("Klanten", Locale.Translate("customers"));
         Assert.Equal("nl", Locale.Current);
         Assert.Equal("nl-BE", Locale.Formats.Culture.Name);
-        Assert.Equal("Unknown", Locale.Translate("Unknown"));
+        // A key a language leaves empty shows the default's; a text that is no key stays as it is.
+        Assert.Equal("Only in English", Locale.Translate("onlyEnglish"));
+        Assert.Equal("7", Locale.Translate("7"));
     }
 
     [AvaloniaFact]
     public void TextIsTranslatedThenFilledInThePersonsFormat()
     {
         Start(new CultureInfo("nl-NL"));
-        var saved = new Text("Saved {customer.name} on {when}")
-            .With("customer.name", Slot.OfText("Ada"))
+        var saved = Text.Of("savedOn")
+            .With("name", Slot.OfText("Ada"))
             .With("when", Slot.OfDate(new DateOnly(2026, 10, 17), "long"));
         Assert.Equal("Ada opgeslagen op 17 oktober 2026", Locale.Show(saved));
         Assert.Equal("Zakelijk, Ja", Locale.Show(new Text("{k}, {b}").With("k", new Slot(SlotKind.Enum, "Business", EnumName: "Kind")).With("b", Slot.OfBoolean(true))));
@@ -98,33 +117,35 @@ public sealed class LocaleTests : IDisposable
             Locale.Changed -= Count;
         }
         Assert.Equal(1, changed);
-        Assert.Equal("Klanten", Locale.Translate("Customers"));
+        Assert.Equal("Klanten", Locale.Translate("customers"));
         Assert.Equal("nl", Locale.Formats.Culture.Name);
         Assert.Equal("nl", CultureInfo.CurrentUICulture.Name);
         // The next start keeps the choice, whatever the system says.
         Start(new CultureInfo("en-US"));
-        Assert.Equal("Klanten", Locale.Translate("Customers"));
-        // Choosing the base language shows the texts as written, in the system's formats.
+        Assert.Equal("Klanten", Locale.Translate("customers"));
+        // Choosing the default language shows its texts, in the system's formats.
         Locale.Choose("en");
-        Assert.Equal("Customers", Locale.Translate("Customers"));
+        Assert.Equal("Customers", Locale.Translate("customers"));
         Assert.Equal("en-US", Locale.Formats.Culture.Name);
         Start(new CultureInfo("nl-NL"));
-        Assert.Equal("Customers", Locale.Translate("Customers"));
+        Assert.Equal("Customers", Locale.Translate("customers"));
     }
 
     [AvaloniaFact]
     public void PartsShowTheirTextsTranslated()
     {
-        var save = new PartState("save", caption: "Save", help: "The full name");
+        var save = new PartState("save", caption: "save", help: "fullNameHelp");
         Locale.Choose("nl");
         Assert.Equal("Opslaan", save.Caption);
         Assert.Equal("De volledige naam", save.Shown);
-        save.ErrorText = Text.Plain("Name is required");
+        save.ErrorText = Text.Of("nameRequired");
         Assert.True(save.HasError);
         Assert.Equal("Naam is verplicht", save.Error);
         Assert.Equal("Naam is verplicht", save.Shown);
-        save.CaptionText = new Text("Save {n}").With("n", Slot.OfInteger(1234, null));
-        Assert.Equal("Save 1.234", save.Caption);
+        save.CaptionText = Text.Of("saveCount").With("n", Slot.OfInteger(1234, null));
+        Assert.Equal("Bewaar 1.234", save.Caption);
+        // A caption without letters is no key: it shows as written.
+        Assert.Equal("7", new PartState("seven", caption: "7").Caption);
         save.ErrorText = Text.Plain("");
         Assert.False(save.HasError);
     }

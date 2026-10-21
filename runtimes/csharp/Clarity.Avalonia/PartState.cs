@@ -1,14 +1,18 @@
 // What a handler can change about a part while the window is open, and what
 // the window binds to: shown, enabled, read-only, its caption, an error, the
 // text of an unbound input and the selected row of a table or list. Captions,
-// errors and help are kept as written and shown translated, their slots in
-// the person's format (Locale).
+// errors and help are kept by their keys and shown in the person's language,
+// their slots in the person's format (Locale).
 
 using Clarity.Runtime;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Clarity.Avalonia;
 
+/// <param name="name">The part's name in Clarity.</param>
+/// <param name="caption">The caption's key, or a text without letters written as it is.</param>
+/// <param name="readOnly">Whether an input starts read-only.</param>
+/// <param name="help">The help text's key.</param>
 public sealed class PartState(string name, string? caption = null, bool readOnly = false, string help = "") : ObservableObject
 {
     /// <summary>The part's name in Clarity, for messages.</summary>
@@ -33,7 +37,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
             OnPropertyChanged(nameof(Caption));
         }
     }
-    Text caption_ = Clarity.Runtime.Text.Plain(caption ?? "");
+    Text caption_ = Clarity.Runtime.Text.Of(caption ?? "");
 
     /// <summary>The caption as shown.</summary>
     public string Caption => Locale.Show(CaptionText);
@@ -126,7 +130,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>The help text of the input, shown while there is no error.</summary>
     public string Help => Locale.Translate(help);
 
-    public bool HasError => ErrorText.Template != "";
+    public bool HasError => ErrorText.Key is not null || ErrorText.Template != "";
 
     /// <summary>What the help text under an input shows: its error, or its help.</summary>
     public string Shown => HasError ? Error : Help;

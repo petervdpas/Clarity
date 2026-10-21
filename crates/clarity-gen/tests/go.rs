@@ -579,24 +579,23 @@ function verdict(n: integer) -> text
 #[test]
 fn a_window_holds_plain_values() {
     let source = format!("{SALES}{CALC}{VERDICT}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().filter(|f| f.path.ends_with("_module.go")).map(|f| f.text.as_str()).collect();
     for field in [["Shown", "decimal.Decimal", "`json:\"shown\"`"], ["Pending", "OrderStatus", "`json:\"pending\"`"], ["Fresh", "bool", "`json:\"fresh\"`"], ["Word", "string", "`json:\"word\"`"], ["Count", "int64", "`json:\"count\"`"]] {
         assert!(code.lines().any(|l| l.split_whitespace().eq(field)), "{field:?} in {code}");
     }
-    for load in ["\tw.Fresh = true\n", "\tw.Word = \"hi\"\n", "\tw.Count = 2\n", "\tw.Rate = decimal.RequireFromString(\"0.5\")\n", "\tw.Pending = OrderStatusPending\n"] {
+    for load in ["\tw.Fresh = true\n", "\tw.Word = clarity.TextOf(\"calcWord\")\n", "\tw.Count = 2\n", "\tw.Rate = decimal.RequireFromString(\"0.5\")\n", "\tw.Pending = OrderStatusPending\n"] {
         has(&code, load);
     }
     has(&code, "w.Fresh = false\n");
     has(&code, "w.Pending = OrderStatusApproved\n");
     // A text value shows its text in the person's language.
-    has(&code, "ui.SetShown(\"word\", clarity.PlainText(\"x\"))\n");
-    // The texts code makes are translated.
-    has(&code, "clarity.Translate(\"Draw\")");
-    has(&code, "clarity.NewText(\"Turn {n}\")");
-    has(&code, ".Translated().Show()");
+    has(&code, "ui.SetShown(\"word\", clarity.KeyText(\"x\"))\n");
+    // A key in code takes its value in the language the screen picked.
+    has(&code, "clarity.KeyText(\"draw\").Show()");
+    has(&code, "clarity.KeyText(\"turnN\").With(\"n\", ");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

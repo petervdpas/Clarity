@@ -260,19 +260,18 @@ function verdict(n: integer) -> text
 #[test]
 fn a_window_holds_plain_values() {
     let source = format!("{SALES}{CALC}{VERDICT}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "src/app.hpp"), "struct CalcWindow {\n    clarity::Decimal shown{};\n    OrderStatus pending{};\n    bool fresh = true;\n    std::string word = \"hi\";\n    int64_t count = 2;\n    clarity::Decimal rate = clarity::Decimal::parse(\"0.5\");\n");
+    has(file(&files, "src/app.hpp"), "struct CalcWindow {\n    clarity::Decimal shown{};\n    OrderStatus pending{};\n    bool fresh = true;\n    std::string word = clarity::text_of(\"calcWord\");\n    int64_t count = 2;\n    clarity::Decimal rate = clarity::Decimal::parse(\"0.5\");\n");
     let sales = file(&files, "src/modules/sales.cpp");
     has(sales, "    fresh = false;\n");
     has(sales, "    pending = OrderStatus::Approved;\n");
     // A text value shows its text in the person's language.
-    has(sales, "ui.set_shown(\"word\", clarity::Text::plain(\"x\"));\n");
-    // The texts code makes are translated.
-    has(sales, "clarity::translate(\"Draw\")");
-    has(sales, "clarity::Text(\"Turn {n}\")");
-    has(sales, ".translated().show()");
+    has(sales, "ui.set_shown(\"word\", clarity::Text::key(\"x\"));\n");
+    // A key in code takes its value in the language the screen picked.
+    has(sales, "clarity::Text::key(\"draw\").show()");
+    has(sales, "clarity::Text::key(\"turnN\").with(\"n\", ");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

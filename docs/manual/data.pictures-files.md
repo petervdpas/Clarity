@@ -20,13 +20,13 @@ An `image` field holds a picture, or none. Without `store`, the picture is kept 
 
 ```clarity
 entity Album
-    cover: image, help "The scan of the front cover"
+    cover: image, help @albumCoverHelp, label @albumCoverLabel
 
 entity Artist
-    photo: image, store photos
+    photo: image, store photos, label @artistPhotoLabel
 ```
 
-An image part bound to the field shows it, or "No picture" while there is none. While the pointer is on it, it offers a button to load a picture from a file and one to remove it.
+An image part bound to the field shows it, or its `noPicture` text while there is none. While the pointer is on it, it offers a button to load a picture from a file and one to remove it.
 
 ```clarity
 image name cover at 1,1 span 4 rows 6 bind album.cover

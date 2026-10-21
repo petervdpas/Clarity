@@ -128,17 +128,17 @@ fn a_migration_step_keeps_the_store() {
     assert!(steps(&done).is_empty(), "{:?}", steps(&done));
 }
 
-/// The words an image part shows of its own are texts to translate, in a
-/// project that has one bound to a picture.
+/// The words an image part shows of its own are keys the language files
+/// give, in a project that has one bound to a picture.
 #[test]
-fn an_image_part_brings_its_own_words_to_translate() {
-    let texts: Vec<String> = clarity_spec::translations::texts(&load(MUSIC, Some(&["photos"]))).into_iter().map(|u| u.text).collect();
-    for word in clarity_spec::translations::PICTURE_TEXTS {
-        assert!(texts.iter().any(|t| t == word), "{word} in {texts:?}");
+fn an_image_part_brings_its_own_keys() {
+    let keys: Vec<String> = clarity_spec::translations::keys(&load(MUSIC, Some(&["photos"]))).into_iter().map(|u| u.key).collect();
+    for (key, _) in clarity_spec::translations::PICTURE_KEYS {
+        assert!(keys.iter().any(|k| k == key), "{key} in {keys:?}");
     }
     let without = MUSIC.replace("    image name cover at 1,1 span 3 rows 3 bind album.cover\n", "");
-    let texts: Vec<String> = clarity_spec::translations::texts(&load(&without, Some(&["photos"]))).into_iter().map(|u| u.text).collect();
-    assert!(!texts.iter().any(|t| t == "No picture"), "{texts:?}");
+    let keys: Vec<String> = clarity_spec::translations::keys(&load(&without, Some(&["photos"]))).into_iter().map(|u| u.key).collect();
+    assert!(!keys.iter().any(|k| k == "noPicture"), "{keys:?}");
 }
 
 /// The data dictionary writes a field back with its store.

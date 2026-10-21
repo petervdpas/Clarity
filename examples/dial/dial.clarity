@@ -7,16 +7,16 @@ engine Gauge from "gauge.wasm"
     function zone(speed: integer) -> text
 
 app Dial
-    title "Dial"
+    title @dialTitle
     main Main
 
 page Main: window
-    title "Dial"
+    title @mainTitle
     size 360 x 360
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button "Slower" name button1 at 1,8 span 6 key "-" on click: change(-10)
-    button "Faster" name button2 at 7,8 span 6 key "+" on click: change(10)
+    button @button1Caption name button1 at 1,8 span 6 key "-" on click: change(-10)
+    button @button2Caption name button2 at 7,8 span 6 key "+" on click: change(10)
 
 code Main
     // The needle turns from 210 degrees at 0 km/h to -30 at 200, and

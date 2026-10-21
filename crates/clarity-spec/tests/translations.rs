@@ -1,59 +1,56 @@
-//! Translations (I1c): every text a person sees is collected from the
-//! project, and a file per language gives its translation.
+//! Translation files (I1c): a file per language gives every key its value,
+//! read, checked and written by key. What design and code name by key is in
+//! tests/keys.rs.
 
-use clarity_spec::translations::{self, Used};
+use clarity_spec::model::Locale;
+use clarity_spec::translations;
 use clarity_spec::{Project, Severity, load_sources};
 
 const SHOP: &str = "module shop
 
-enum Kind
-    Private label \"Private person\"
-    Business
-
-entity Customer
-    name: text(80), help \"As on the invoice\"
-    kind: Kind
-
 app Shop
-    title \"The shop\"
+    title @shopTitle
     main Card
     menu name mainMenu
-        item \"File\" name fileItem
-            item \"Quit\" name quitItem on click -> quit
-    footer
-        status \"Ready to sell\"
+        item @fileItem name fileItem
+            item @quitItem name quitItem on click -> quit
 
 page Card: window
-    title \"Customer card\"
-    data customer: Customer
-    data note: text, default \"Ask for the invoice address\"
-    tabs name tabs1 at 1,1 span 12 rows 3
-        tab \"General\"
-            textbox name nameInput at 1,1 span 4 bind customer.name placeholder \"Full name\" tooltip \"Who buys\"
-    button \"Save\" name save at 1,4 span 2 on click: saved
+    title @cardTitle
+    button @saveCaption name save at 1,1 span 2 on click: saveClick
 
 code Card
-    handler saved
-        message \"Saved {customer.name}\"
-        save.caption = \"Saved\"
-        nameInput.error = \"Taken\"
-        note = \"Checked by {customer.name}\"
+    handler saveClick
+        message @savedOrder(number = 7)
+";
 
-function greeting(name: text) -> text
-    return \"Welcome, {name}\"
-
-action check(customer: Customer)
-    refuse \"Not allowed\"
+const EN: &str = "// English, the default.
+translation en
+    shopTitle \"The shop\"
+    fileItem \"File\"
+    quitItem \"Quit\"
+    cardTitle \"Customer card\"
+    saveCaption \"Save\"
+    savedOrder \"Saved order {number}\"
+    yes \"Yes\"
+    no \"No\"
 ";
 
 const NL: &str = "// Dutch.
 translation nl
-    \"Customer card\" \"Klantkaart\"
-    \"Saved {customer.name}\" \"{customer.name} opgeslagen\"
+    shopTitle \"De winkel\"
+    fileItem \"Bestand\"
+    quitItem \"Afsluiten\"
+    cardTitle \"Klantkaart\"
+    saveCaption \"\"
+    savedOrder \"Bestelling {number} opgeslagen\"
+    yes \"Ja\"
+    no \"Nee\"
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
     let mut project = load_sources([("shop.clarity", SHOP)]);
+    project.locale = Locale { language: Some("en".into()), currency: None };
     translations::attach(&mut project, files.iter().copied());
     project
 }
@@ -63,162 +60,110 @@ fn messages(project: &Project, severity: Severity) -> Vec<String> {
 }
 
 #[test]
-fn every_text_a_person_sees_is_collected() {
-    let project = load_sources([("shop.clarity", SHOP)]);
+fn a_language_file_gives_every_key_a_value() {
+    let project = project_with(&[("translations/en.clarity", EN), ("translations/nl.clarity", NL)]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let used = translations::texts(&project);
-    let texts: Vec<&str> = used.iter().map(|u| u.text.as_str()).collect();
-    for text in [
-        // The dictionary: labels, derived or written, and help texts.
-        "Name", "Kind", "As on the invoice", "Private person", "Business",
-        // Windows and the app.
-        "The shop", "Customer card", "General", "Full name", "Who buys", "Save", "File", "Quit", "Ready to sell",
-        // The text a value starts with.
-        "Ask for the invoice address",
-        // Code: messages with their slots, captions, errors and refusals.
-        "Saved {customer.name}", "Saved", "Taken", "Not allowed",
-        // A text put in a text value, and the text a function returns.
-        "Checked by {customer.name}", "Welcome, {name}",
-        // The renderer's own words.
-        "Yes", "No",
-    ] {
-        assert!(texts.contains(&text), "{text} is not collected: {texts:?}");
-    }
-    // Each text once, with where it is used.
-    let save: &Used = used.iter().find(|u| u.text == "Save").unwrap();
-    assert_eq!(save.places, ["window Card"]);
-    assert_eq!(texts.iter().filter(|t| **t == "Name").count(), 1);
+    assert_eq!(project.translations["nl"]["cardTitle"], "Klantkaart");
+    assert_eq!(project.translations["nl"]["savedOrder"], "Bestelling {number} opgeslagen");
+    // Left empty: shows the default's until it is translated.
+    assert_eq!(project.translations["nl"]["saveCaption"], "");
 }
 
 #[test]
-fn a_translation_file_gives_texts_in_its_language() {
-    let project = project_with(&[("translations/nl.clarity", NL)]);
-    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    assert_eq!(project.translations["nl"]["Customer card"], "Klantkaart");
-    assert_eq!(project.translations["nl"]["Saved {customer.name}"], "{customer.name} opgeslagen");
-}
-
-#[test]
-fn a_translation_keeps_the_slots_of_its_text() {
-    let lost = NL.replace("\"{customer.name} opgeslagen\"", "\"Opgeslagen\"");
-    let extra = NL.replace("\"{customer.name} opgeslagen\"", "\"{customer.name} {klant} opgeslagen\"");
-    assert_eq!(messages(&project_with(&[("translations/nl.clarity", &lost)]), Severity::Error), [
-        "the translation of \"Saved {customer.name}\" must keep the slot {customer.name}"
-    ]);
-    assert_eq!(messages(&project_with(&[("translations/nl.clarity", &extra)]), Severity::Error), [
-        "the translation of \"Saved {customer.name}\" has a slot {klant} that the text does not have"
-    ]);
-}
-
-#[test]
-fn translation_files_are_checked() {
-    let unused = NL.to_string() + "    \"Gone\" \"Weg\"\n";
-    assert_eq!(messages(&project_with(&[("translations/nl.clarity", &unused)]), Severity::Warning), [
-        "\"Gone\" is no longer shown anywhere; its translation can go"
-    ]);
-    let twice = NL.to_string() + "    \"Customer card\" \"Kaart\"\n";
-    assert_eq!(messages(&project_with(&[("translations/nl.clarity", &twice)]), Severity::Error), [
-        "\"Customer card\" is translated twice"
-    ]);
-    assert_eq!(messages(&project_with(&[("translations/de.clarity", NL)]), Severity::Error), [
+fn language_files_are_checked() {
+    let errors = |nl: &str| messages(&project_with(&[("translations/en.clarity", EN), ("translations/nl.clarity", nl)]), Severity::Error);
+    let twice = NL.to_string() + "    cardTitle \"Kaart\"\n";
+    assert_eq!(errors(&twice), ["key 'cardTitle' is in this file twice"]);
+    let wrong = NL.replace("    cardTitle \"Klantkaart\"", "    \"Customer card\" \"Klantkaart\"");
+    assert!(errors(&wrong).contains(&"write a key and its text in quotes: saveCaption \"Save\"".to_string()), "{:#?}", errors(&wrong));
+    assert_eq!(messages(&project_with(&[("translations/en.clarity", EN), ("translations/de.clarity", NL)]), Severity::Error), [
         "this file is for language 'de' (its name), but it says 'nl'"
     ]);
-    let wrong = NL.replace("    \"Customer card\" \"Klantkaart\"", "    \"Customer card\" Klantkaart");
-    assert_eq!(messages(&project_with(&[("translations/nl.clarity", &wrong)]), Severity::Error), [
-        "write a text and its translation, each in quotes: \"Save\" \"Opslaan\""
-    ]);
-    assert_eq!(messages(&project_with(&[("translations/xx-y.clarity", "translation xx-y\n")]), Severity::Error), [
-        "'xx-y' is not a language tag; write one like en, nl or nl-NL"
-    ]);
+    let lost = NL.replace("Bestelling {number} opgeslagen", "Opgeslagen");
+    assert_eq!(errors(&lost), ["savedOrder in nl must keep the slot {number}"]);
+    let extra = NL.replace("Bestelling {number} opgeslagen", "Bestelling {number} {klant}");
+    assert_eq!(errors(&extra), ["savedOrder in nl has a slot {klant} that en does not have"]);
+    assert!(
+        messages(&project_with(&[("translations/en.clarity", EN), ("translations/xx-y.clarity", "translation xx-y\n")]), Severity::Error)
+            .contains(&"'xx-y' is not a language tag; write one like en, nl or nl-NL".to_string())
+    );
 }
 
 #[test]
-fn a_translation_is_set_changed_and_removed_in_the_file() {
-    let added = translations::set(Some(NL), "nl", "Save", "Opslaan");
-    assert_eq!(added, NL.to_string() + "    \"Save\" \"Opslaan\"\n");
-    let changed = translations::set(Some(&added), "nl", "Customer card", "Kaart van de klant");
-    assert!(changed.starts_with("// Dutch.\ntranslation nl\n    \"Customer card\" \"Kaart van de klant\"\n"), "{changed}");
-    let removed = translations::set(Some(&changed), "nl", "Save", "");
-    assert!(!removed.contains("Opslaan"), "{removed}");
-    assert_eq!(translations::set(None, "de", "Save", "Speichern"), "translation de\n    \"Save\" \"Speichern\"\n");
+fn a_value_is_set_changed_and_emptied_in_the_file() {
+    let added = translations::set(Some(NL), "nl", "newKey", "Nieuw");
+    assert_eq!(added, NL.to_string() + "    newKey \"Nieuw\"\n");
+    let changed = translations::set(Some(&added), "nl", "shopTitle", "Onze winkel");
+    assert!(changed.starts_with("// Dutch.\ntranslation nl\n    shopTitle \"Onze winkel\"\n"), "{changed}");
+    // Emptied, the key stays: every language file has the same keys.
+    let emptied = translations::set(Some(&changed), "nl", "newKey", "");
+    assert!(emptied.contains("    newKey \"\"\n"), "{emptied}");
+    assert_eq!(translations::set(None, "de", "saveCaption", "Speichern"), "translation de\n    saveCaption \"Speichern\"\n");
 }
 
 #[test]
-fn a_project_folder_brings_its_translations() {
-    let dir = std::env::temp_dir().join(format!("clarity-translations-{}", std::process::id()));
+fn a_project_folder_brings_its_languages() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/clarity-translations-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("translations")).unwrap();
     std::fs::write(dir.join("shop.clarity"), SHOP).unwrap();
+    std::fs::write(dir.join("translations/en.clarity"), EN).unwrap();
     std::fs::write(dir.join("translations/nl.clarity"), NL).unwrap();
     let project = clarity_spec::load_dir(&dir).unwrap();
     assert!(messages(&project, Severity::Error).is_empty(), "{:#?}", project.diagnostics);
-    assert_eq!(project.translations["nl"]["Customer card"], "Klantkaart");
+    assert_eq!(project.translations["nl"]["cardTitle"], "Klantkaart");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
-fn the_translations_table_has_a_column_per_language() {
-    let de = "translation de\n    \"Save\" \"Speichern\"\n";
-    let project = project_with(&[("translations/de.clarity", de), ("translations/nl.clarity", NL)]);
+fn the_languages_table_has_a_column_per_language_the_default_first() {
+    let de = EN.replace("translation en", "translation de").replace("\"Customer card\"", "\"Kundenkarte\"").replace("// English, the default.\n", "");
+    let project = project_with(&[("translations/de.clarity", &de), ("translations/en.clarity", EN), ("translations/nl.clarity", NL)]);
     let table = translations::table(&project);
-    assert_eq!(table.languages, ["de", "nl"]);
-    let card = table.rows.iter().find(|r| r.text == "Customer card").unwrap();
+    assert_eq!(table.default, "en");
+    assert_eq!(table.languages, ["en", "de", "nl"]);
+    let card = table.rows.iter().find(|r| r.key == "cardTitle").unwrap();
     assert_eq!(card.places, ["window Card"]);
-    assert_eq!(card.translations, [None, Some("Klantkaart".to_string())]);
-    // What each language still misses.
-    assert_eq!(table.missing, [table.rows.len() - 1, table.rows.len() - 2]);
+    assert_eq!(card.values, [Some("Customer card".to_string()), Some("Kundenkarte".to_string()), Some("Klantkaart".to_string())]);
+    // What each language leaves empty.
+    assert_eq!(table.missing, [0, 0, 1]);
 }
 
 /// A text without letters, such as a calculator's `7` or `+`, reads the same
-/// in every language: it needs no translation.
+/// in every language: it may be written as it is.
 #[test]
-fn a_text_without_letters_needs_no_translation() {
-    assert!(!translations::needs_translation("7"));
-    assert!(!translations::needs_translation("+/-"));
-    assert!(!translations::needs_translation("÷"));
-    assert!(translations::needs_translation("C"));
-    assert!(translations::needs_translation("Saved {customer.name}"));
-    let project = load_sources([("calc.clarity", "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n    button \"Clear\" name clear at 2,1\n")]);
-    let table = translations::table(&project);
-    assert!(table.rows.iter().all(|r| r.text != "7"), "{:?}", table.rows);
-    assert!(table.rows.iter().any(|r| r.text == "Clear"));
-}
-
-#[test]
-fn the_example_translation_fits_the_example() {
-    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/shop"));
-    let project = clarity_spec::load_dir(dir).unwrap();
-    let in_translations: Vec<String> = project
-        .diagnostics
-        .iter()
-        .filter(|d| d.path.contains("translations"))
-        .map(|d| d.message.clone())
-        .collect();
-    assert!(in_translations.is_empty(), "{in_translations:#?}");
-    assert_eq!(project.translations["nl"]["Customers"], "Klanten");
-    // The example shows the whole application in Dutch.
-    let table = clarity_spec::translations::table(&project);
-    let nl = table.languages.iter().position(|l| l == "nl").unwrap();
-    let untranslated: Vec<&str> = table.rows.iter().filter(|r| r.translations[nl].is_none()).map(|r| r.text.as_str()).collect();
-    assert!(untranslated.is_empty(), "not in nl.clarity: {untranslated:?}");
+fn a_text_without_letters_needs_no_key() {
+    assert!(!translations::has_letters("7"));
+    assert!(!translations::has_letters("+/-"));
+    assert!(!translations::has_letters("÷"));
+    assert!(translations::has_letters("C"));
+    assert!(!translations::has_letters("{name}"));
+    let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
+    let mut project = load_sources([("calc.clarity", calc)]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n")]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 
 #[test]
 fn a_menu_item_can_switch_the_language() {
-    let text = SHOP.replace("            item \"Quit\" name quit2 on click -> quit", "            item \"Language\" on click -> language\n            item \"Quit\" name quit3 on click -> quit");
+    let text = SHOP.replace("            item @quitItem name quitItem on click -> quit", "            item @languageItem name languageItem on click -> language");
     let project = load_sources([("shop.clarity", text.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     assert!(clarity_spec::Preview::new(project).commands.contains(&"language".to_string()));
 }
 
+/// Every example's languages are complete: each key has a value in each.
 #[test]
-fn the_records_example_is_translated_to_german() {
-    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/records"));
-    let project = clarity_spec::load_dir(dir).unwrap();
-    let problems: Vec<String> = project.diagnostics.iter().map(|d| d.message.clone()).collect();
-    assert!(problems.is_empty(), "{problems:#?}");
-    let table = clarity_spec::translations::table(&project);
-    let de = table.languages.iter().position(|l| l == "de").expect("a German translation");
-    let untranslated: Vec<&str> = table.rows.iter().filter(|r| r.translations[de].is_none()).map(|r| r.text.as_str()).collect();
-    assert!(untranslated.is_empty(), "not in de.clarity: {untranslated:#?}");
+fn every_example_is_complete_in_every_language() {
+    let examples = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples"));
+    for name in ["calculator", "dial", "noughts", "records", "shop", "todo"] {
+        let project = clarity_spec::load_dir(&examples.join(name)).unwrap();
+        let problems: Vec<String> = project.diagnostics.iter().map(|d| format!("{}: {}", d.path, d.message)).collect();
+        assert!(problems.is_empty(), "{name}: {problems:#?}");
+        let table = translations::table(&project);
+        assert!(table.languages.len() >= 2, "{name} has a language besides its default");
+        for (language, missing) in table.languages.iter().zip(&table.missing) {
+            assert_eq!(*missing, 0, "{name}: {language} leaves keys empty");
+        }
+    }
 }

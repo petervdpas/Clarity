@@ -18,7 +18,8 @@ Words like `page` or `data` are keywords only where the grammar expects them, so
 
 ## Values and types
 
-- Text in double quotes: `"Customer card"`. `\"` is a quote, `\\` a backslash, `\n` a new line.
+- Text people read is a key: `@customerCardTitle`, whose text the language files give; see [Languages and formats](languages.md).
+- Other text goes in double quotes: `"logo.png"`. `\"` is a quote, `\\` a backslash, `\n` a new line.
 - Numbers without quotes: `12`, `9.95`.
 - `true` and `false`.
 - Enum values, bare (`Business`) where the type says which enum is meant, else qualified (`CustomerKind.Business`).
@@ -26,18 +27,24 @@ Words like `page` or `data` are keywords only where the grammar expects them, so
 
 Every value has a type that follows the data dictionary: `text`, `integer`, `decimal` (also money), `bool`, `date`, `datetime`, `duration`, an enum, a record, a list of records, `image`, and `file` for files of a file store. An integer is accepted where a decimal is expected; nothing else converts by itself. See [Types](../LANGUAGE.md#types).
 
-## Text with slots
+## Texts by key
 
-Text that people read names its values in braces instead of adding them together:
+Text that people read is a key, whose text names its values in braces; code gives each its value by name:
 
 ```clarity
-message "Order {order.number} of {order.total} is approved"
-approve_button.caption = "Approved on {order.ordered_on}"
+message @orderApproved(number = order.number, total = order.total)
+approve_button.caption = @approvedOn(day = order.ordered_on)
 ```
 
-A slot is a name or a member path. Each value shows as its field does: money with its currency, a date in the person's format, an enum by its label. A translator can move the slots; see [Languages](languages.md). Write `{{` and `}}` for a brace.
+```clarity
+translation en
+    orderApproved "Order {number} of {total} is approved"
+    approvedOn "Approved on {day}"
+```
 
-Text with slots belongs in `message`, `refuse`, and a part's `caption` or `error`. Text joined with `+` there is a warning, since it cannot be translated. See [Text with slots](../LANGUAGE.md#text-with-slots).
+Each value shows as its field does: money with its currency, a date in the person's format, an enum by its label. A translator can move the slots; see [Languages](languages.md). Text joined with `+` in a message, a refusal, a caption or an error is a warning, since it cannot be translated. See [Texts by key](../LANGUAGE.md#texts-by-key).
+
+A string in code may have slots too, `"{album.title}.txt"`, filled plainly in no language: for a file's name or a line written to a file, not for what people read. Write `{{` and `}}` for a brace.
 
 ## Operators
 

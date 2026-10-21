@@ -271,12 +271,12 @@ function verdict(n: integer) -> text
 #[test]
 fn a_window_holds_plain_values() {
     let source = format!("{SALES}{CALC}{VERDICT}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "src/app.h"), "typedef struct {\n    ClarityDecimal shown;\n    OrderStatus pending;\n    bool fresh;\n    const char* word;\n    int64_t count;\n    ClarityDecimal rate;\n} CalcWindow;");
     let sales = file(&files, "src/modules/sales.c");
-    for load in ["    w->shown = (ClarityDecimal){0};\n", "    w->fresh = true;\n", "    w->word = \"hi\";\n", "    w->count = 2;\n", "    w->rate = clarity_decimal(5, 1);\n"] {
+    for load in ["    w->shown = (ClarityDecimal){0};\n", "    w->fresh = true;\n", "    w->word = clarity_text_of(\"calcWord\");\n", "    w->count = 2;\n", "    w->rate = clarity_decimal(5, 1);\n"] {
         has(sales, load);
     }
     has(sales, "cJSON_AddItemToObject(out, \"fresh\", clarity_json_bool(w->fresh));");
@@ -286,10 +286,10 @@ fn a_window_holds_plain_values() {
     has(sales, "w->fresh = false;\n");
     has(sales, "w->pending = ORDER_STATUS_APPROVED;\n");
     // A text value shows its text in the person's language.
-    has(sales, "clarity_ui_set_shown(ui, \"word\", clarity_plain_text(\"x\"));\n");
-    // The texts code makes are translated.
-    has(sales, "clarity_translate(\"Draw\")");
-    has(sales, "clarity_text_show(clarity_text_translated(clarity_text_with(clarity_text(\"Turn {n}\"), \"n\", clarity_slot_integer(n, NULL))))");
+    has(sales, "clarity_ui_set_shown(ui, \"word\", clarity_key_text(\"x\"));\n");
+    // A key in code takes its value in the language the screen picked.
+    has(sales, "clarity_text_show(clarity_key_text(\"draw\"))");
+    has(sales, "clarity_text_show(clarity_text_with(clarity_key_text(\"turnN\"), \"n\", clarity_slot_integer(n, NULL)))");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

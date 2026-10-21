@@ -4,7 +4,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Settings, Ui, starter};
-use clarity_spec::load_sources;
+use clarity_spec::keyed::load_keyed;
 use clarity_spec::model::Locale;
 
 const SHOP: &str = "module shop
@@ -106,7 +106,7 @@ fn settings() -> Settings {
 }
 
 fn files() -> Vec<OutFile> {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = load_keyed([("shop.clarity", SHOP)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"))
 }
@@ -143,8 +143,8 @@ fn records_tell_the_window_when_they_change() {
     has(shop, "    public decimal Total { get => _total; set => SetProperty(ref _total, value); }\n    decimal _total;");
     has(shop, "    public string Number { get => _number; set => SetProperty(ref _number, value); }\n    string _number = \"\";");
     // Labels and choices read their texts each time, so they follow the language.
-    has(shop, "public static partial class Choices\n{\n    public static Choice[] OrderStatus =>\n    [\n        new(global::Shop.OrderStatus.Pending, Texts.Pending),\n        new(global::Shop.OrderStatus.Approved, Texts.ApprovedBySales),\n    ];");
-    has(shop, "        OrderStatus.Approved => Texts.ApprovedBySales,");
+    has(shop, "public static partial class Choices\n{\n    public static Choice[] OrderStatus =>\n    [\n        new(global::Shop.OrderStatus.Pending, Texts.OrderStatusPending),\n        new(global::Shop.OrderStatus.Approved, Texts.OrderStatusApproved),\n    ];");
+    has(shop, "        OrderStatus.Approved => Texts.OrderStatusApproved,");
 }
 
 #[test]
@@ -168,26 +168,26 @@ fn parts_bind_to_the_data_and_to_their_state() {
     has(window, "<TextBlock x:Name=\"label1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"2\" Classes=\"label\"><Run Text=\"{Binding Label1.Caption}\" /><Run Text=\" *\" /></TextBlock>");
     has(
         window,
-        "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.ORD1}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
+        "<c:TextInput x:Name=\"numberInput\" Grid.Column=\"2\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Order.Number}\" PlaceholderText=\"{x:Static local:Texts.NumberInputPlaceholder}\" IsEnabled=\"{Binding NumberInput.IsEnabled}\" IsVisible=\"{Binding NumberInput.IsVisible}\" IsReadOnly=\"{Binding NumberInput.IsReadOnly}\" />",
     );
     has(window, "<TextBlock x:Name=\"help1\" Grid.Column=\"2\" Grid.Row=\"1\" Grid.ColumnSpan=\"4\" Classes=\"help\" Classes.error=\"{Binding NumberInput.HasError}\" Text=\"{Binding NumberInput.Shown}\" />");
     // Clarity's own inputs: each tells when the person changed its value, and only then.
     has(window, "<c:NumberInput x:Name=\"number1\" Grid.Column=\"0\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Format=\"{x:Static local:Edit.OrderTotal}\" Value=\"{Binding Order.Total}\"");
-    has(window, "<c:CheckInput x:Name=\"checkbox1\" Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Paid}\" IsChecked=\"{Binding Order.Paid}\"");
+    has(window, "<c:CheckInput x:Name=\"checkbox1\" Grid.Column=\"3\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.Checkbox1Caption}\" IsChecked=\"{Binding Order.Paid}\"");
     // The caption beside the switch, as on the web, so it fits its row.
-    has(window, "<c:SwitchInput x:Name=\"switch1\" Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Rush}\" OffContent=\"{x:Static local:Texts.Rush}\" IsChecked=\"{Binding Order.Paid}\"");
+    has(window, "<c:SwitchInput x:Name=\"switch1\" Grid.Column=\"6\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" OnContent=\"{x:Static local:Texts.Switch1Caption}\" OffContent=\"{x:Static local:Texts.Switch1Caption}\" IsChecked=\"{Binding Order.Paid}\"");
     has(window, "<c:ChoiceInput x:Name=\"dropdown1\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{x:Static local:Choices.OrderStatus}\" Value=\"{Binding Order.Status}\"");
     has(window, "<c:ChoiceInput x:Name=\"customerPick\" Grid.Column=\"4\" Grid.Row=\"3\" Grid.ColumnSpan=\"4\" Choices=\"{Binding CustomerChoices}\" Value=\"{Binding Order.Customer}\"");
     has(window, "<c:DateInput x:Name=\"date1\" Grid.Column=\"8\" Grid.Row=\"3\" Grid.ColumnSpan=\"3\" Value=\"{Binding Order.OrderedOn}\"");
     has(window, "Text=\"{Binding Order.Status, Converter={x:Static local:Shown.Converter}}\"");
     has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"5\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"4\" ItemsSource=\"{Binding Orders}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
-    has(window, "<c:TableColumn Field=\"Status\" Header=\"{x:Static local:Texts.Status}\" Kind=\"Choice\" Shown=\"{x:Static local:Shown.Converter}\" />");
+    has(window, "<c:TableColumn Field=\"Status\" Header=\"{x:Static local:Texts.OrderStatusLabel}\" Kind=\"Choice\" Shown=\"{x:Static local:Shown.Converter}\" />");
     // A value with a format shows in the person's format.
-    has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.Total}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
+    has(window, "<c:TableColumn Field=\"Total\" Header=\"{x:Static local:Texts.OrderTotalLabel}\" Kind=\"Number\" Shown=\"{x:Static local:Shown.OrderTotal}\" />");
     has(window, "<c:TextInput x:Name=\"numberFilter\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"4\" Value=\"{Binding NumberFilter.Text}\"");
     has(window, "Content=\"{Binding ApproveButton.Caption}\" Command=\"{Binding ApproveClickedCommand}\" IsDefault=\"True\"");
     has(window, "<Button x:Name=\"button1\" Grid.Column=\"10\" Grid.Row=\"9\" Grid.ColumnSpan=\"2\" Content=\"{Binding Button1.Caption}\" Command=\"{Binding Open_OrderFormCommand}\"");
-    has(window, "<TabItem Header=\"{x:Static local:Texts.Notes}\">");
+    has(window, "<TabItem Header=\"{x:Static local:Texts.OrderFormNotesTab}\">");
     has(window, "<c:TextInput x:Name=\"memo1\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"3\" Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\" Value=\"{Binding Order.Number}\"");
     // No stock input is placed directly: the library's own decide when `change` runs.
     for stock in ["<TextBox ", "<CheckBox ", "<ToggleSwitch ", "<ComboBox ", "<CalendarDatePicker ", "<RadioButton "] {
@@ -199,7 +199,7 @@ fn parts_bind_to_the_data_and_to_their_state() {
 #[test]
 fn a_radio_group_picks_an_enum_value() {
     let source = SHOP.replace("    dropdown name dropdown1 at 1,4 span 4 bind order.status\n", "    radio name statusPick at 1,4 span 4 bind order.status vertical on change: filterChanged\n");
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(
@@ -213,12 +213,12 @@ fn a_radio_group_picks_an_enum_value() {
 fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.Orders}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.OrdersItem}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" />");
     has(window, "<Separator />");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.Quit}\" Command=\"{Binding Quit_Command}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.QuitItem}\" Command=\"{Binding Quit_Command}\" />");
     // A window opens in a desktop window of its own only where the design says so.
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrder}\" Command=\"{Binding OpenNew_OrderFormCommand}\" />");
-    has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.Ready}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrderItem}\" Command=\"{Binding OpenNew_OrderFormCommand}\" />");
+    has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.ShopStatus}\" />");
 }
 
 /// The menu and the toolbar are parts: code hides and disables them by name.
@@ -238,11 +238,11 @@ fn handlers_are_viewmodel_methods() {
     let files = files();
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "public sealed partial class OrderFormViewModel : WindowViewModel");
-    has(vm, "    public override string Title => Texts.Order;");
+    has(vm, "    public override string Title => Texts.OrderFormTitle;");
     has(vm, "    public Order Order { get => _order; set => SetProperty(ref _order, value); }\n    Order _order = new();");
     has(vm, "    public List<Order> Orders { get => _orders; set => SetProperty(ref _orders, value); }");
     has(vm, "    public PartState NumberInput { get; } = new(\"numberInput\");");
-    has(vm, "    public PartState ApproveButton { get; } = new(\"approveButton\", caption: \"Approve\");");
+    has(vm, "    public PartState ApproveButton { get; } = new(\"approveButton\", caption: \"approveButtonCaption\");");
     has(vm, "        _orders = Db.All<Order>();");
     has(vm, "        CustomerChoices = Choice.Of(Db.All<Customer>(), r => r.Name);");
     has(vm, "    [RelayCommand]\n    void ApproveClicked() => Handle(OnApproveClicked);");
@@ -252,14 +252,14 @@ fn handlers_are_viewmodel_methods() {
     {
         if (!Logic.WithinCredit(Db, Order))
         {
-            Say(Level.Warning, new Text(\"Order {order.number} is too large\").With(\"order.number\", Slot.OfText(Order.Number)));
+            Say(Level.Warning, Text.Of(\"orderNumberIsTooLarge\").With(\"number\", Slot.OfText(Order.Number)));
             ApproveButton.IsEnabled = false;
             return;
         }
         Order.Status = OrderStatus.Approved;
         Db.Save(Order);
         NumberInput.ErrorText = Text.Plain(\"\");
-        Say(Level.Info, Text.Plain(\"Approved\"));
+        Say(Level.Info, Text.Of(\"approved\"));
         OnFilterChanged();
     }",
     );
@@ -305,8 +305,7 @@ const NL: &str = "translation nl
 ";
 
 fn translated() -> Vec<OutFile> {
-    let mut project = load_sources([("shop.clarity", SHOP)]);
-    clarity_spec::translations::attach(&mut project, [("translations/nl.clarity", NL)]);
+    let mut project = load_keyed([("shop.clarity", SHOP)], &[("translations/nl.clarity", NL)], "en");
     project.locale = Locale {
         language: Some("en".into()),
         currency: Some("EUR".into()),
@@ -315,30 +314,31 @@ fn translated() -> Vec<OutFile> {
     generate(&project, &settings()).unwrap_or_else(|errors| panic!("{errors:#?}"))
 }
 
-/// Texts as Visual Studio keeps them (DESIGN 1.5): a .resx file per language
-/// and a typed accessor, found by what a text says as written.
+/// Texts as Visual Studio keeps them (DESIGN 1.5): a .resx file for the
+/// default language and one per other language, and a typed accessor, each
+/// key a resource by its name.
 #[test]
 fn texts_are_resx_files_with_a_typed_accessor() {
     let files = translated();
     let base = file(&files, "Texts.resx");
     has(base, "<resheader name=\"resmimetype\">\n    <value>text/microsoft-resx</value>\n  </resheader>");
-    has(base, "  <data name=\"ApprovedBySales\" xml:space=\"preserve\">\n    <value>Approved by sales</value>\n    <comment>enum OrderStatus</comment>\n  </data>");
-    has(base, "  <data name=\"OrderOrderNumberIsTooLarge\" xml:space=\"preserve\">\n    <value>Order {order.number} is too large</value>");
+    has(base, "  <data name=\"OrderStatusApproved\" xml:space=\"preserve\">\n    <value>Approved by sales</value>\n    <comment>enum OrderStatus</comment>\n  </data>");
+    has(base, "  <data name=\"OrderNumberIsTooLarge\" xml:space=\"preserve\">\n    <value>Order {number} is too large</value>");
     let nl = file(&files, "Texts.nl.resx");
-    has(nl, "  <data name=\"Order\" xml:space=\"preserve\">\n    <value>Bestelling</value>");
-    has(nl, "    <value>Bestelling {order.number} is te groot</value>");
-    // A text without a translation falls back to the base file.
-    assert!(!nl.contains("name=\"Paid\""), "{nl}");
+    has(nl, "  <data name=\"OrderFormTitle\" xml:space=\"preserve\">\n    <value>Bestelling</value>");
+    has(nl, "    <value>Bestelling {number} is te groot</value>");
+    // A key the language leaves empty falls back to the default's file.
+    assert!(!nl.contains("name=\"Checkbox1Caption\""), "{nl}");
 
     let texts = file(&files, "Texts.cs");
     has(texts, "public static class Texts");
     has(texts, "    static readonly ResourceManager Resources = new(\"Shop.Texts\", typeof(Texts).Assembly);");
     has(texts, "    public const string? BaseLanguage = \"en\";");
     has(texts, "    public static readonly string[] Languages = [\"nl\"];");
-    has(texts, "        [\"Order {order.number} is too large\"] = \"OrderOrderNumberIsTooLarge\",");
-    has(texts, "    /// <summary>Approved by sales</summary>\n    public static string ApprovedBySales => Locale.Translate(\"Approved by sales\");");
-    // The renderer's own words are texts too.
-    has(texts, "    public static string Yes => Locale.Translate(\"Yes\");");
+    has(texts, "        [\"orderNumberIsTooLarge\"] = \"OrderNumberIsTooLarge\",");
+    has(texts, "    /// <summary>Approved by sales</summary>\n    public static string OrderStatusApproved => Locale.Translate(\"orderStatusApproved\");");
+    // The renderer's own words are keys too.
+    has(texts, "    public static string Yes => Locale.Translate(\"yes\");");
 }
 
 #[test]
@@ -377,9 +377,9 @@ fn values_show_and_read_in_the_persons_format() {
 fn the_language_and_theme_targets_pick_in_place() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<MenuItem x:Name=\"picker1\" Header=\"{x:Static local:Texts.Language}\" />");
-    has(window, "<MenuItem x:Name=\"picker2\" Header=\"{x:Static local:Texts.Theme}\" />");
-    has(window, "<Button x:Name=\"picker3\" Content=\"{x:Static local:Texts.Look}\" />");
+    has(window, "<MenuItem x:Name=\"picker1\" Header=\"{x:Static local:Texts.LanguageItem}\" />");
+    has(window, "<MenuItem x:Name=\"picker2\" Header=\"{x:Static local:Texts.ThemeItem}\" />");
+    has(window, "<Button x:Name=\"picker3\" Content=\"{x:Static local:Texts.LookButtonCaption}\" />");
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "        Pickers.Language(picker1);\n        Pickers.Theme(picker2);\n        Pickers.Theme(picker3);\n");
 }
@@ -391,12 +391,12 @@ fn the_selected_row_is_a_record_in_any_expression() {
         "    handler gridOpened\n",
         "    handler gridOpened\n        if within_credit(grid.selected)\n            message \"{grid.selected.number} of {grid.selected.customer.name} fits\"\n",
     );
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "if (Logic.WithinCredit(Db, Selected<Order>(Grid)))");
-    has(vm, ".With(\"grid.selected.number\", Slot.OfText(Selected<Order>(Grid).Number))");
+    has(vm, ".With(\"number\", Slot.OfText(Selected<Order>(Grid).Number))");
     has(vm, "Db.Load<Customer>(Selected<Order>(Grid).Customer).Name");
 }
 
@@ -406,10 +406,10 @@ fn an_unbound_checkbox_is_checked_in_its_state() {
     let source = SHOP
         .replace("    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid\n", "    checkbox \"Paid\" name checkbox1 at 4,3 span 3 bind order.paid\n    checkbox \"Only mine\" name mine at 10,3 span 3\n")
         .replace("    handler gridSelected\n", "    handler gridSelected\n        if mine.checked\n            mine.checked = false\n");
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
-    has(file(&files, "Windows/OrderFormView.axaml"), "<c:CheckInput x:Name=\"mine\" Grid.Column=\"9\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.OnlyMine}\" IsChecked=\"{Binding Mine.IsChecked}\"");
+    has(file(&files, "Windows/OrderFormView.axaml"), "<c:CheckInput x:Name=\"mine\" Grid.Column=\"9\" Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Content=\"{x:Static local:Texts.MineCaption}\" IsChecked=\"{Binding Mine.IsChecked}\"");
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
     has(vm, "if (Mine.IsChecked)");
     has(vm, "Mine.IsChecked = false;");
@@ -447,7 +447,7 @@ code Main
 
 #[test]
 fn edited_columns_hold_the_inputs_a_form_would() {
-    let project = load_sources([("todo.clarity", TODO)]);
+    let project = load_keyed([("todo.clarity", TODO)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = settings();
     settings.name = "Todo".into();
@@ -456,18 +456,18 @@ fn edited_columns_hold_the_inputs_a_form_would() {
     // The table is Clarity's own part: the window only describes its columns.
     has(window, "<c:ClarityTable x:Name=\"grid\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"12\" Grid.RowSpan=\"6\" ItemsSource=\"{Binding Tasks}\" SelectedItem=\"{Binding Grid.SelectedItem}\"");
     let column = |attributes: &str| format!("<c:TableColumn {attributes} />");
-    has(window, &column("Field=\"Title\" Header=\"{x:Static local:Texts.Title}\" Kind=\"Text\" Edit=\"True\""));
-    has(window, &column("Field=\"Done\" Header=\"{x:Static local:Texts.Done}\" Kind=\"Bool\" Edit=\"True\""));
+    has(window, &column("Field=\"Title\" Header=\"{x:Static local:Texts.TaskTitleLabel}\" Kind=\"Text\" Edit=\"True\""));
+    has(window, &column("Field=\"Done\" Header=\"{x:Static local:Texts.TaskDoneLabel}\" Kind=\"Bool\" Edit=\"True\""));
     // A bool column written `as switch` is a switch, as the switch part of a form.
-    has(window, &column("Field=\"Urgent\" Header=\"{x:Static local:Texts.Urgent}\" Kind=\"Bool\" Edit=\"True\" Switch=\"True\""));
-    has(window, &column("Field=\"Priority\" Header=\"{x:Static local:Texts.Priority}\" Kind=\"Choice\" Edit=\"True\" Choices=\"{x:Static local:Choices.Priority}\""));
-    has(window, &column("Field=\"Due\" Header=\"{x:Static local:Texts.Due}\" Kind=\"Date\" Edit=\"True\""));
+    has(window, &column("Field=\"Urgent\" Header=\"{x:Static local:Texts.TaskUrgentLabel}\" Kind=\"Bool\" Edit=\"True\" Switch=\"True\""));
+    has(window, &column("Field=\"Priority\" Header=\"{x:Static local:Texts.TaskPriorityLabel}\" Kind=\"Choice\" Edit=\"True\" Choices=\"{x:Static local:Choices.Priority}\""));
+    has(window, &column("Field=\"Due\" Header=\"{x:Static local:Texts.TaskDueLabel}\" Kind=\"Date\" Edit=\"True\""));
     // A moment is picked as a day and a time, in a cell and in a form alike.
-    has(window, &column("Field=\"Added\" Header=\"{x:Static local:Texts.Added}\" Kind=\"Moment\" Edit=\"True\""));
+    has(window, &column("Field=\"Added\" Header=\"{x:Static local:Texts.TaskAddedLabel}\" Kind=\"Moment\" Edit=\"True\""));
     has(window, "<c:DateTimeInput x:Name=\"addedPick\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"4\" Value=\"{Binding Task.Added}\"");
-    has(window, &column("Field=\"Hours\" Header=\"{x:Static local:Texts.Hours}\" Kind=\"Number\" Edit=\"True\" Number=\"{x:Static local:Edit.TaskHours}\""));
+    has(window, &column("Field=\"Hours\" Header=\"{x:Static local:Texts.TaskHoursLabel}\" Kind=\"Number\" Edit=\"True\" Number=\"{x:Static local:Edit.TaskHours}\""));
     // A reference picks from the records the window reads, as a dropdown in a form does.
-    has(window, &column("Field=\"Owner\" Header=\"{x:Static local:Texts.Owner}\" Kind=\"Choice\" Edit=\"True\" ChoicesFrom=\"PersonChoices\""));
+    has(window, &column("Field=\"Owner\" Header=\"{x:Static local:Texts.TaskOwnerLabel}\" Kind=\"Choice\" Edit=\"True\" ChoicesFrom=\"PersonChoices\""));
     has(file(&files, "Windows/MainViewModel.cs"), "PersonChoices = Choice.Of(Db.All<Person>(), r => ");
     // An edit by the person (not by a handler) selects its row, then the table's change runs.
     let code = file(&files, "Windows/MainView.axaml.cs");
@@ -484,7 +484,7 @@ fn a_window_opens_at_its_size() {
     assert!(!vm.contains("WindowSize"), "{vm}");
     let sized = SHOP.replace("page OrderForm: window\n", "page OrderForm: window\n    size 640 x 480\n");
     assert_ne!(sized, SHOP);
-    let project = load_sources([("shop.clarity", sized.as_str())]);
+    let project = load_keyed([("shop.clarity", sized.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Windows/OrderFormViewModel.cs"), "    public override global::Avalonia.Size? WindowSize => new(640, 480);\n");
@@ -504,7 +504,7 @@ fn a_click_passes_values_to_its_handler() {
             "    handler digit(d: integer)\n        numberInput.error = \"\"\n\n    handler scale(by: decimal, word: text, status: OrderStatus)\n        digit(3)\n\n    handler gridSelected\n",
         );
     assert_ne!(source, SHOP);
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/OrderFormViewModel.cs");
@@ -559,23 +559,23 @@ function verdict(n: integer) -> text
 #[test]
 fn a_window_holds_plain_values() {
     let source = format!("{SHOP}{CALC}{VERDICT}");
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/CalcViewModel.cs");
     has(vm, "    public decimal Shown { get => _shown; set => SetProperty(ref _shown, value); }\n    decimal _shown = default;\n");
-    for start in ["    OrderStatus _pending = default;\n", "    bool _fresh = true;\n", "    string _word = Texts.Hi;\n", "    long _count = 2L;\n", "    decimal _rate = 0.5m;\n"] {
+    for start in ["    OrderStatus _pending = default;\n", "    bool _fresh = true;\n", "    string _word = Texts.CalcWord;\n", "    long _count = 2L;\n", "    decimal _rate = 0.5m;\n"] {
         has(vm, start);
     }
     has(vm, "        Fresh = false;\n");
     has(vm, "        Pending = OrderStatus.Approved;\n");
     // A text value shows its text in the person's language.
-    has(vm, "        Word = Locale.Show(Text.Plain(\"x\"));\n");
+    has(vm, "        Word = Locale.Show(Text.Of(\"x\"));\n");
     has(file(&files, "Windows/CalcView.axaml"), "Text=\"{Binding Shown, Converter={x:Static local:Shown.Converter}}\"");
     // The texts code makes are translated.
     let code: String = files.iter().filter(|f| f.path.ends_with(".cs")).map(|f| f.text.as_str()).collect();
-    has(&code, "Locale.Translate(\"Draw\")");
-    has(&code, "Locale.Show(new Text(\"Turn {n}\")");
+    has(&code, "Locale.Show(Text.Of(\"draw\"))");
+    has(&code, "Locale.Show(Text.Of(\"turnN\").With(\"n\", ");
 }
 
 /// A character key (`7`, `+`) is what is typed, from the keyboard or the
@@ -587,7 +587,7 @@ fn keys_are_written_as_avalonia_names_them() {
         "    button \"New\" name button1 at 11,10 span 2 on click -> OrderForm\n    button \"7\" name d7 at 1,13 span 1 key \"7\" on click: approveClicked\n    button \"+\" name plus at 2,13 span 1 key \"+\" on click: approveClicked\n    button \"Back\" name back at 3,13 span 1 key \"Backspace\" on click: approveClicked\n    button \"Save\" name keep at 4,13 span 1 key \"Ctrl+S\" on click: approveClicked\n    button \"Zoom\" name zoom at 5,13 span 1 key \"Ctrl++\" on click: approveClicked\n",
     );
     assert_ne!(source, SHOP);
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let axaml = file(&files, "Windows/OrderFormView.axaml");
@@ -603,7 +603,7 @@ fn keys_are_written_as_avalonia_names_them() {
 #[test]
 fn round_rounds_through_the_runtime() {
     let source = format!("{SHOP}\nfunction rounded(x: decimal) -> decimal\n    return round(x, 2)\n");
-    let project = load_sources([("m.clarity", source.as_str())]);
+    let project = load_keyed([("m.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let code: String = files.iter().map(|f| f.text.as_str()).collect();
@@ -617,7 +617,7 @@ fn a_display_is_the_runtimes_segment_display() {
         "    text name display at 1,1 span 4 bind shown\n",
         "    display name screen at 1,1 span 4 rows 1 bind shown digits 10\n",
     );
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Windows/CalcView.axaml"), "<c:SegmentDisplay x:Name=\"screen\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"4\" Value=\"{Binding Shown}\" Digits=\"10\"");
@@ -646,7 +646,7 @@ code Dial
 #[test]
 fn a_canvas_is_drawn_by_its_draw_handler() {
     let source = format!("{SHOP}{DIAL}");
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/DialViewModel.cs");
@@ -663,7 +663,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
 #[test]
 fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let source = format!("{SHOP}{DIAL}").replace("on draw: drawDial\n", "on draw: drawDial on click: dialClicked\n") + "\n    handler dialClicked\n        speed = dial.x + dial.y\n";
-    let project = load_sources([("shop.clarity", source.as_str())]);
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let vm = file(&files, "Windows/DialViewModel.cs");

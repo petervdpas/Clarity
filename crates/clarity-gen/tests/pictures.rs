@@ -3,7 +3,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, FileStore, SourceKind, Ui, starter};
-use clarity_spec::{Project, load_sources};
+use clarity_spec::Project;
 
 const MUSIC: &str = "module music
 
@@ -19,7 +19,7 @@ page AlbumForm: window
 ";
 
 fn project() -> Project {
-    let mut project = load_sources([("music.clarity", MUSIC)]);
+    let mut project = clarity_spec::keyed::load_keyed([("music.clarity", MUSIC)], &[], "en");
     clarity_spec::attach_stores(&mut project, vec!["photos".into()]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     project

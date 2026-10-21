@@ -467,7 +467,8 @@ bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* 
     }
     if (failed) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: %s", engine->name, function, failed);
     const cJSON* error = cJSON_GetObjectItemCaseSensitive(answer, "error");
-    if (cJSON_IsString(error)) return clarity_refuse(clarity_plain_text(error->valuestring));
+    // An engine refuses by the key of its text (its `says`), or in its own words.
+    if (cJSON_IsString(error)) return clarity_refuse(clarity_key_text(error->valuestring));
     cJSON* value = cJSON_DetachItemFromObjectCaseSensitive(answer, "value");
     if (!value) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: its answer has no value", engine->name, function);
     *out = value;

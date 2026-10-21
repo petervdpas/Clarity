@@ -810,24 +810,23 @@ function verdict(n: integer) -> text
 #[test]
 fn a_window_holds_plain_values() {
     let source = format!("{SALES}{CALC}{VERDICT}");
-    let project = load_sources([("sales.clarity", source.as_str())]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", source.as_str())], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &shop()).unwrap_or_else(|e| panic!("{e:#?}"));
     let sales = file(&files, "src/modules/sales.rs");
     for field in ["pub shown: Decimal,", "pub pending: OrderStatus,", "pub fresh: bool,", "pub word: String,", "pub count: i64,", "pub rate: Decimal,"] {
         assert!(sales.contains(field), "{field} in {sales}");
     }
-    for load in ["shown: Default::default(),", "pending: Default::default(),", "fresh: true,", "word: String::from(\"hi\"),", "count: 2i64,", "rate: Decimal::new(5, 1),"] {
+    for load in ["shown: Default::default(),", "pending: Default::default(),", "fresh: true,", "word: clarity_runtime::i18n::text(\"calcWord\"),", "count: 2i64,", "rate: Decimal::new(5, 1),"] {
         assert!(sales.contains(load), "{load} in {sales}");
     }
     assert!(sales.contains("w.fresh = false;"), "{sales}");
     assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
     // A text value shows its text in the person's language.
-    assert!(sales.contains("ui.set_shown(\"word\", Text::plain(\"x\"));"), "{sales}");
-    // The texts code makes are translated.
-    assert!(sales.contains("clarity_runtime::i18n::translate(\"Draw\")"), "{sales}");
-    assert!(sales.contains("Text::new(\"Turn {n}\")"), "{sales}");
-    assert!(sales.contains(".translated().show()"), "{sales}");
+    assert!(sales.contains("ui.set_shown(\"word\", Text::key(\"x\"));"), "{sales}");
+    // A key in code takes its value in the language the screen picked.
+    assert!(sales.contains("Text::key(\"draw\").show()"), "{sales}");
+    assert!(sales.contains("Text::key(\"turnN\").with(\"n\", "), "{sales}");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

@@ -436,6 +436,8 @@ fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal
     match (type_ref_info(project, ty), value) {
         (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => decimal(n),
         (_, Literal::Number(n)) => n.clone(),
+        // A key starts in the language the screen picked.
+        (_, Literal::Str(text)) if text.starts_with('@') => format!("clarity_text_of({})", string(&text[1..])),
         (_, Literal::Str(text)) => string(text),
         (_, Literal::Bool(b)) => b.to_string(),
         (TypeInfo::Enum(e), Literal::Ident(v)) => constant(&e, v),
@@ -668,7 +670,7 @@ impl<'a> Emitter<'a> {
                     if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
                         let mut pre = String::new();
                         let shown = match value.kind {
-                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value, &mut pre),
+                            ExprKind::Str { .. } | ExprKind::Text { .. } | ExprKind::Key { .. } => self.shown(value, &mut pre),
                             _ => format!("clarity_plain_text({place})"),
                         };
                         out.push_str(&pre);
@@ -719,8 +721,6 @@ impl<'a> Emitter<'a> {
                 let ty = self.returns().unwrap_or(TypeInfo::Unknown);
                 let code = match &ty {
                     _ if matches!(value.kind, ExprKind::Empty) => zero(&ty),
-                    // The text a function returns is in the person's language.
-                    _ if matches!(value.kind, ExprKind::Str { .. }) => format!("clarity_translate({})", self.value(value, &mut pre)),
                     t if is_decimal(t) => self.decimal(value, &mut pre),
                     TypeInfo::Record(_) => deref(&self.value(value, &mut pre)),
                     _ => self.value(value, &mut pre),
@@ -916,6 +916,15 @@ impl<'a> Emitter<'a> {
     fn shown(&mut self, expr: &Expr, pre: &mut String) -> String {
         match &expr.kind {
             ExprKind::Str { value } => format!("clarity_plain_text({})", string(value)),
+            // A key, whose value the screen looks up, with its slots by name.
+            ExprKind::Key { key, args } => {
+                let mut code = format!("clarity_key_text({})", string(&key.name));
+                for arg in args {
+                    let slot = self.slot(&arg.value, pre);
+                    code = format!("clarity_text_with({code}, {}, {slot})", string(&arg.name.name));
+                }
+                code
+            }
             ExprKind::Text { parts } => {
                 let mut code = format!("clarity_text({})", string(&template(parts)));
                 for part in parts {
@@ -1148,8 +1157,9 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => value.clone(),
             ExprKind::Str { value } => string(value),
-            // A text with slots in code takes its translation, then its values.
-            ExprKind::Text { .. } => format!("clarity_text_show(clarity_text_translated({}))", self.shown(expr, pre)),
+            // A text with slots in code is filled plainly; a key takes its value
+            // in the language the screen picked, then its values.
+            ExprKind::Text { .. } | ExprKind::Key { .. } => format!("clarity_text_show({})", self.shown(expr, pre)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => zero(&ty),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr, pre),
@@ -1211,8 +1221,8 @@ impl<'a> Emitter<'a> {
                 let call = format!("{}({})", super::engine_function(&engine.name, &function.name), values.join(", "));
                 match returns {
                     TypeInfo::Record(entity) => self.lift_record(&entity, &call, pre),
-                    // The text an engine gives is in the person's language, as its `says` lists it.
-                    TypeInfo::Text => format!("clarity_translate({})", self.lift(&value_type(&TypeInfo::Text), &call, pre)),
+                    // The text an engine gives is the value of its key, as its `says` lists it.
+                    TypeInfo::Text => format!("clarity_text_of({})", self.lift(&value_type(&TypeInfo::Text), &call, pre)),
                     other => self.lift(&value_type(&other), &call, pre),
                 }
             }

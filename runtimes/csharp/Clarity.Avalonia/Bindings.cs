@@ -39,7 +39,7 @@ public sealed class ShownConverter(Func<object?, string?> labels, FieldFormat? f
         {
             null => "",
             string s => s,
-            bool b => Locale.Translate(b ? "Yes" : "No"),
+            bool b => b ? Locale.Translate("yes", "Yes") : Locale.Translate("no", "No"),
             long or int => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.Integer), value),
             decimal => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.Decimal), value),
             DateOnly => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.Date), value),

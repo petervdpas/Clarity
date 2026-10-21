@@ -65,6 +65,13 @@ ClarityText* clarity_text(const char* text) {
     return t;
 }
 
+ClarityText* clarity_key_text(const char* key) {
+    ClarityText* t = CLARITY_NEW(ClarityText, 1);
+    t->text = "";
+    t->key = clarity_copy(key);
+    return t;
+}
+
 ClarityText* clarity_plain_text(const char* text) {
     ClarityBuffer escaped = {0};
     for (const char* c = text ? text : ""; *c; ++c) {
@@ -94,7 +101,8 @@ ClarityText* clarity_text_with(ClarityText* text, const char* path, ClaritySlot 
 const char* clarity_text_show(const ClarityText* text) {
     if (!text) return "";
     ClarityBuffer out = {0};
-    const char* t = text->text;
+    // A key takes its value in the language the screen picked.
+    const char* t = text->key ? clarity_text_of(text->key) : text->text;
     size_t length = strlen(t);
     size_t i = 0;
     while (i < length) {
@@ -146,6 +154,15 @@ bool clarity_slot_from_json(const cJSON* in, ClaritySlot* out) {
 
 cJSON* clarity_text_json(const ClarityText* text) {
     if (!text) return cJSON_CreateString("");
+    if (text->key) {
+        cJSON* keyed = cJSON_CreateObject();
+        cJSON_AddStringToObject(keyed, "key", text->key);
+        if (text->count > 0) {
+            cJSON* values = cJSON_AddObjectToObject(keyed, "values");
+            for (size_t i = 0; i < text->count; ++i) cJSON_AddItemToObject(values, text->paths[i], clarity_slot_json(&text->slots[i]));
+        }
+        return keyed;
+    }
     if (text->count == 0) return cJSON_CreateString(clarity_text_show(text));
     cJSON* out = cJSON_CreateObject();
     cJSON_AddStringToObject(out, "text", text->text);
@@ -160,8 +177,9 @@ bool clarity_text_from_json(const cJSON* in, ClarityText** out) {
         return true;
     }
     const cJSON* text = cJSON_GetObjectItemCaseSensitive(in, "text");
-    if (!cJSON_IsString(text)) return clarity_fail(CLARITY_INVALID, "text to show has no text");
-    ClarityText* t = clarity_text(text->valuestring);
+    const cJSON* key = cJSON_GetObjectItemCaseSensitive(in, "key");
+    if (!cJSON_IsString(text) && !cJSON_IsString(key)) return clarity_fail(CLARITY_INVALID, "text to show has no text");
+    ClarityText* t = cJSON_IsString(key) ? clarity_key_text(key->valuestring) : clarity_text(text->valuestring);
     const cJSON* value;
     cJSON_ArrayForEach(value, cJSON_GetObjectItemCaseSensitive(in, "values")) {
         ClaritySlot s;
@@ -172,15 +190,16 @@ bool clarity_text_from_json(const cJSON* in, ClarityText** out) {
     return true;
 }
 
-/// The translations of one language, outside the scratch arena.
+/// The values of one language, by key, outside the scratch arena.
 static struct Language {
     char* name;
-    char** texts;
-    char** translations;
+    char** keys;
+    char** values;
     size_t count;
 }* languages;
 static size_t language_count;
 static char* language_picked;
+static char* language_default;
 
 static char* lasting(const char* text) {
     size_t n = strlen(text) + 1;
@@ -192,22 +211,27 @@ static char* lasting(const char* text) {
 static void forget_translations(void) {
     for (size_t i = 0; i < language_count; ++i) {
         for (size_t j = 0; j < languages[i].count; ++j) {
-            free(languages[i].texts[j]);
-            free(languages[i].translations[j]);
+            free(languages[i].keys[j]);
+            free(languages[i].values[j]);
         }
-        free(languages[i].texts);
-        free(languages[i].translations);
+        free(languages[i].keys);
+        free(languages[i].values);
         free(languages[i].name);
     }
     free(languages);
     languages = NULL;
     language_count = 0;
+    free(language_default);
+    language_default = NULL;
 }
 
 void clarity_load_translations(const char* model) {
     forget_translations();
     cJSON* parsed = cJSON_Parse(model ? model : "");
-    const cJSON* all = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(parsed, "project"), "translations");
+    const cJSON* project = cJSON_GetObjectItemCaseSensitive(parsed, "project");
+    const cJSON* fallback = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(project, "locale"), "language");
+    language_default = lasting(cJSON_IsString(fallback) ? fallback->valuestring : "en");
+    const cJSON* all = cJSON_GetObjectItemCaseSensitive(project, "translations");
     size_t n = (size_t)cJSON_GetArraySize(all);
     if (n == 0) return;
     languages = calloc(n, sizeof *languages);
@@ -217,13 +241,13 @@ void clarity_load_translations(const char* model) {
         struct Language* l = &languages[language_count++];
         size_t count = (size_t)cJSON_GetArraySize(language);
         l->name = lasting(language->string);
-        l->texts = calloc(count ? count : 1, sizeof *l->texts);
-        l->translations = calloc(count ? count : 1, sizeof *l->translations);
+        l->keys = calloc(count ? count : 1, sizeof *l->keys);
+        l->values = calloc(count ? count : 1, sizeof *l->values);
         const cJSON* pair;
         cJSON_ArrayForEach(pair, language) {
-            if (!cJSON_IsString(pair) || !l->texts || !l->translations) continue;
-            l->texts[l->count] = lasting(pair->string);
-            l->translations[l->count] = lasting(pair->valuestring);
+            if (!cJSON_IsString(pair) || !l->keys || !l->values) continue;
+            l->keys[l->count] = lasting(pair->string);
+            l->values[l->count] = lasting(pair->valuestring);
             l->count++;
         }
     }
@@ -236,18 +260,26 @@ void clarity_set_language(const char* language) {
 
 const char* clarity_language(void) { return language_picked; }
 
-const char* clarity_translate(const char* text) {
-    if (!text || !language_picked) return text ? text : "";
+/// The value of `key` in `language`, when it gives one that is not empty.
+static const char* value_in(const char* language, const char* key) {
+    if (!language) return NULL;
     for (size_t i = 0; i < language_count; ++i) {
-        if (strcmp(languages[i].name, language_picked) != 0) continue;
+        if (strcmp(languages[i].name, language) != 0) continue;
         for (size_t j = 0; j < languages[i].count; ++j) {
-            if (strcmp(languages[i].texts[j], text) == 0) return clarity_copy(languages[i].translations[j]);
+            if (strcmp(languages[i].keys[j], key) == 0 && languages[i].values[j][0] != '\0') return languages[i].values[j];
         }
     }
-    return text;
+    return NULL;
 }
 
-ClarityText* clarity_text_translated(ClarityText* text) {
-    if (text) text->text = clarity_translate(text->text);
-    return text;
+const char* clarity_key_value(const char* key) {
+    if (!key) return NULL;
+    const char* value = value_in(language_picked, key);
+    if (!value) value = value_in(language_default, key);
+    return value ? clarity_copy(value) : NULL;
+}
+
+const char* clarity_text_of(const char* key_or_text) {
+    const char* value = clarity_key_value(key_or_text);
+    return value ? value : (key_or_text ? key_or_text : "");
 }

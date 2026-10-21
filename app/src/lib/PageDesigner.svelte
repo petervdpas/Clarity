@@ -487,7 +487,7 @@
         <button class="undock" title="Fold the inspector away" onclick={() => layout.toggle("properties")}>Hide &rsaquo;</button>
       </div>
       <div class="properties" class:hidden={coding}>
-        <PageProperties {preview} {page} {app} onedit={edit} />
+        <PageProperties {preview} {page} {app} onedit={edit} {onapplied} />
       </div>
       <!-- Mounted once opened, so switching tabs keeps unsaved text. -->
       {#if codeOpened}

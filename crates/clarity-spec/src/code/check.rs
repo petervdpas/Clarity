@@ -1601,6 +1601,21 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             ExprKind::Str { .. } => Ty::Text,
+            // A text by its key; each slot gets a value, once. That the key has
+            // these slots is checked against the language files.
+            ExprKind::Key { args, .. } => {
+                let mut seen = std::collections::HashSet::new();
+                for arg in args {
+                    if !seen.insert(arg.name.name.as_str()) {
+                        self.error(format!("the slot {{{}}} gets two values", arg.name.name), arg.name.span);
+                    }
+                    let ty = self.expr(&arg.value, None);
+                    if !ty.is_value() {
+                        self.error(format!("a slot shows a value, and {} is {}; name one of its fields", arg.name.name, ty.name()), arg.value.span);
+                    }
+                }
+                Ty::Text
+            }
             // A text with slots is a text, translated where code makes it.
             ExprKind::Text { parts } => {
                 self.slots(parts);
@@ -2261,6 +2276,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
+        ExprKind::Key { args, .. } => args.iter().any(|a| mentions(&a.value, var)),
         ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => false,
     }
 }
@@ -2513,6 +2529,11 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
+        ExprKind::Key { args, .. } => {
+            for arg in args {
+                each_expr(&arg.value, found);
+            }
+        }
         ExprKind::Text { parts } => {
             for part in parts {
                 if let TextPart::Slot { value } = part {

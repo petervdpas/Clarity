@@ -213,6 +213,14 @@ refuse "Order {order.number} is over its customer's credit limit"
 - The generated application carries the texts as explicit literal key maps (section 6.7), and changes language while it runs, without restarting.
 - The designer gets a Translations table on the Project tab (base text, where it is used, one column per language) and a language choice for the canvas and Preview, so a window can be checked in German before it ships.
 
+**Texts by key (2026-10-21), replacing texts found by what they say.** Design and code name every text people read by a key, `@saveCaption`, and a file per language gives each key its text; the default language (the project's `language`) is such a file too. Finding a text by what it said made a changed text lose its translations silently, gave one word two meanings no way apart (the open point above), and put the default language in the code, where it could not be swapped. With keys:
+- Every language file has the same keys (a key one lacks or adds is an error); the default gives every key a text, another may leave one empty, which shows the default's.
+- A key's slots are named, and code gives each its value by name: `@orderApproved(number = order.number)` with `orderApproved "Order {number} is approved"`. A translator sees what each slot holds and moves it; the same key works wherever code gives its values.
+- A text with letters written in quotes where people read it is an error. A text without letters (a calculator's `"7"`) stays as written.
+- The designer proposes a key from the part and what the text is to it (`saveCaption`, `customerNameLabel`), writes it into every language file, and lets it be renamed; Properties edit the default's text. Any edit that writes a text makes it a key (`edit::apply_in`, `keyed`).
+- **Make texts keys** (`clarity spec keys`) migrates a project written before: each text becomes a key, old translation files give the same keys their texts.
+- Runtimes: `Text` carries a key with its slot values (`{"key": ..., "values": ...}` on the wire); the screen looks it up, a backend fills it itself from the model's languages (falling back to the default). .NET keeps each key as a resource name, the default language as the neutral `.resx`.
+
 **Themes (T1).** A theme is a set of named values, not a style sheet:
 
 ```clarity
@@ -342,23 +350,23 @@ Entities are the data dictionary. Everything about a field is defined here once:
 
 ```clarity
 enum OrderStatus
-    Pending
-    Approved
-    Shipped
-    Cancelled
+    Pending label @orderStatusPending
+    Approved label @orderStatusApproved
+    Shipped label @orderStatusShipped
+    Cancelled label @orderStatusCancelled
 
 entity Customer
-    name: text(80), required, label "Name"
-    email: email, unique, label "E-mail"
-    credit_limit: money, min 0, default 0, label "Credit limit"
-    notes: text, help "Internal notes, not shown to the customer"
+    name: text(80), required, label @customerNameLabel
+    email: email, unique, label @customerEmailLabel
+    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    notes: text, help @customerNotesHelp, label @customerNotesLabel
 
 entity Order
-    number: text(12), unique, pattern "^ORD-[0-9]{8}$"
-    customer: ref Customer, required
-    status: OrderStatus, default Pending
-    lines: list<OrderLine>, owned
-    total: money, computed
+    number: text(12), unique, pattern "^ORD-[0-9]{8}$", label @orderNumberLabel
+    customer: ref Customer, required, label @orderCustomerLabel
+    status: OrderStatus, default Pending, label @orderStatusLabel
+    lines: list<OrderLine>, owned, label @orderLinesLabel
+    total: money, computed, label @orderTotalLabel
 ```
 
 Types: `text`, `text(n)`, `integer`, `decimal(p, s)`, `money`, `bool`, `date`, `datetime`, `email`, `url`, `id`, enums, `ref Entity`, `list<T>`.
@@ -412,18 +420,18 @@ Windows are built widget-first, the way RAD tools such as Turbo C++ for Windows 
 
 ```clarity
 page CustomerEdit: window
-    title "Customer"
+    title @customerEditTitle
     data customer: Customer
     data orders: list<Order>
     grid 12 columns
 
-    label "Name" at 1,1 span 3
+    label @nameLabel at 1,1 span 3
     textbox at 4,1 span 6 bind customer.name
     dropdown at 4,2 span 4 bind customer.kind
-    checkbox "Active" at 4,3 span 3 bind customer.active
-    panel "Orders" at 1,5 span 12 rows 6
+    checkbox @activeCaption at 4,3 span 3 bind customer.active
+    panel @ordersCaption at 1,5 span 12 rows 6
         table at 1,1 span 12 rows 5 bind orders columns number, ordered_on, total
-    button "Close" at 11,12 span 2 on click -> CustomerBrowse
+    button @closeCaption at 11,12 span 2 on click -> CustomerBrowse
 ```
 
 - **Page kinds:** `window` (a top-level window), `dialog` (modal) and `view` (a part embedded in another page).
@@ -474,13 +482,13 @@ A label, its input and the input's help text are three separate parts, each plac
 
 ```clarity
 form name details at 1,1 span 12 rows 4 bind customer
-    label "Name" at 1,1 span 3 for name
-    textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
-    help at 10,1 span 3 for name
-    label "Kind" at 1,2 span 3 for kind
+    label @nameLabel name nameLabel at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind customer.name placeholder @fullName
+    help name nameHelp at 10,1 span 3 for name
+    label @kindLabel name kindLabel at 1,2 span 3 for kind
     radio name kind at 4,2 span 6 bind customer.kind
-button "Save" name save at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
-button "Close" name close at 11,6 span 2 cancel on click: closeClicked
+button @saveCaption name save at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
+button @closeCaption name close at 11,6 span 2 cancel on click: closeClicked
 ```
 
 - **Label.** Clicking it focuses its input, and screen readers announce them together. A label only shows text: it cannot be bound. A field's value, read-only, is a `text` part.
@@ -509,21 +517,21 @@ Application chrome is not placed on the grid. It docks to the edges of a window,
 app Shop
     main CustomerCard
     menu name mainMenu
-        item "File" name fileItem
-            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerCard
+        item @fileItem name fileItem
+            item @newCustomerItem name newCustomerItem key "Ctrl+N" on click -> CustomerCard
             separator
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-        item "Help" name helpItem
-            item "About" name aboutItem on click -> About
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @helpItem name helpItem
+            item @aboutItem name aboutItem on click -> About
     ribbon name mainRibbon collapsible
-        tab "Home" name homeTab
-            group "Customers" name customersGroup
-                button "New" name newButton icon "add" large on click -> CustomerCard
-                button "Browse" name browseButton icon "list" on click -> CustomerBrowse
+        tab @homeTab name homeTab
+            group @customersGroup name customersGroup
+                button @newButtonCaption name newButton icon "add" large on click -> CustomerCard
+                button @browseButtonCaption name browseButton icon "list" on click -> CustomerBrowse
     sidebar left name leftSidebar width 192
         list name recentList at 1,1 span 3 rows 10 bind recent show name
     footer
-        status "Ready"
+        status @shopStatus
         text at 10,1 span 3 bind session.user
 ```
 
@@ -601,12 +609,12 @@ A window's handlers live in a `code` block with the window's name, in the same f
 
 ```clarity
 page CustomerForm: window
-    title "Customer"
+    title @customerFormTitle
     data customer: Customer
     ...
     dropdown name kind at 4,2 span 4 bind customer.kind on change: kindChanged
     textbox name vatNumber at 4,3 span 4 bind customer.vat_number
-    button "Save" name saveButton at 9,8 span 2 on click: saveClicked
+    button @saveButtonCaption name saveButton at 9,8 span 2 on click: saveClicked
 
 code CustomerForm
     handler kindChanged
@@ -614,10 +622,10 @@ code CustomerForm
 
     handler saveClicked
         if customer.name == ""
-            message error "Name is required"
+            message error @nameIsRequired
             return
         save customer
-        message "Saved " + customer.name
+        message @savedName(name = customer.name)
         close
 ```
 

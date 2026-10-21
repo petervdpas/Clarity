@@ -14,7 +14,7 @@ A theme is declared in a module:
 
 ```clarity
 theme Shop
-    title "Shop"
+    title @shopTheme
     mode system
     color accent "#1f6f5c" dark "#4fb393"
     color brand "#f5c400"
@@ -70,7 +70,7 @@ On the Project tab, under **Language, formats and theme**, you tick the themes t
 To let people switch, give a menu item or button the click target `theme`:
 
 ```clarity
-item "Theme" on click -> theme
+item @themeItem name themeItem on click -> theme
 ```
 
 It lists the themes by their titles, switches at once and remembers the choice for the next start.
@@ -80,7 +80,7 @@ It lists the themes by their titles, switches at once and remembers the choice f
 A part picks a style by name, never raw colors:
 
 ```clarity
-button "Save" at 9,6 span 2 style primary default on click: saveClicked
+button @saveCaption name save at 9,6 span 2 style primary default on click: saveClicked
 ```
 
 The **Style** field in the part properties (see [Parts](design.parts.md)) lists the styles of the project's theme. Every theme the application offers must have each style a part uses, so switching themes never drops one; a theme that misses it is an error.

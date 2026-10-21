@@ -210,7 +210,9 @@ export type Slot = {
 
 /** Text the backend sends to show: plain, or with values in slots
  *  (design section 1.5, I1b). */
-export type ShownText = string | { text: string; values: Record<string, Slot> };
+/** Text from the backend: as it is, written with its slot values, or a key
+ *  with its slot values, whose value the language gives. */
+export type ShownText = string | { text: string; values: Record<string, Slot> } | { key: string; values?: Record<string, Slot> };
 
 function slotText(
   slot: Slot | undefined,
@@ -242,6 +244,8 @@ export function fillText(
   word: (text: string) => string = (t) => t,
 ): string {
   if (typeof text === "string") return text;
+  // A key the language gives no value shows as the key.
+  if ("key" in text) return text.key;
   const t = text.text;
   let out = "";
   let i = 0;

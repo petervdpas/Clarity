@@ -30,7 +30,7 @@ For every part, its own properties, events and binding rules are in [the languag
 
 - `form`: binds to one record (`bind customer`) and holds the inputs of that record on its own grid. Event: `submit`, when Enter is pressed in one of its inputs.
 - `panel`: parts in a frame with the caption. Tick **The person can fold it by its header** under Folding in its properties (`foldable`), and **Starts folded** to start it folded (`foldable folded`); a form folds the same way. Code reads and sets it as `details.folded`.
-- `tabs`: `tab "Title"` blocks, each with parts. Event: `change`. Add tab is in the properties.
+- `tabs`: `tab @key` blocks, each with parts. Event: `change`. Add tab is in the properties.
 - `splitter`: exactly two `pane` blocks, side by side or stacked.
 
 ## Data

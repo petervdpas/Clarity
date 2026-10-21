@@ -1,4 +1,4 @@
-// Text code makes is translated in the backend, in the language the screen
+// A text by its key, filled in the backend in the language the screen
 // picked, as every runtime does (conformance/translations.json, `code`).
 
 package clarity
@@ -20,7 +20,7 @@ func TestCodeTextsAreTranslatedAsEveryRuntimeDoes(t *testing.T) {
 			Cases []struct {
 				What     string            `json:"what"`
 				Language *string           `json:"language"`
-				Text     string            `json:"text"`
+				Key      string            `json:"key"`
 				Values   map[string]string `json:"values"`
 				Gives    string            `json:"gives"`
 			} `json:"cases"`
@@ -36,11 +36,11 @@ func TestCodeTextsAreTranslatedAsEveryRuntimeDoes(t *testing.T) {
 	}
 	for _, c := range all.Code.Cases {
 		SetLanguage(c.Language)
-		shown := NewText(c.Text)
+		shown := KeyText(c.Key)
 		for path, value := range c.Values {
 			shown = shown.With(path, SlotText(value))
 		}
-		if got := shown.Translated().Show(); got != c.Gives {
+		if got := shown.Show(); got != c.Gives {
 			t.Errorf("%s: %q, want %q", c.What, got, c.Gives)
 		}
 	}

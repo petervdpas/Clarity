@@ -652,6 +652,16 @@
     }
   }
 
+  /** A fix for the whole project, by its command (Make texts keys). */
+  async function runFix(command: "make_texts_keys") {
+    actionError = null;
+    try {
+      applyPreview(await invoke<Preview>(command));
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
   function location(d: Diagnostic): string {
     return `${fileName(d.path)}:${d.span.line}:${d.span.col}`;
   }
@@ -987,7 +997,11 @@
                 <code>{location(d)}</code>
                 <span>{d.message}</span>
                 {#if fix}
-                  <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
+                  {#if "edit" in fix}
+                    <button class="fix" title="For every such problem in {fileName(d.path)}" onclick={() => applyFix(d.path, fix.edit)}>{fix.label}</button>
+                  {:else}
+                    <button class="fix" title="For every text in the project" onclick={() => runFix(fix.command)}>{fix.label}</button>
+                  {/if}
                 {/if}
               </li>
             {:else}
@@ -1026,9 +1040,12 @@
             onedit={editData}
             ondelete={deletePicked}
             onrename={(newName) => renameData("entity", entity.name.name, newName)}
+            onapplied={applyPreview}
           />
         {:else if enumDecl && file}
           <EnumEditor
+            {preview}
+            onapplied={applyPreview}
             decl={enumDecl}
             module={file.module?.name ?? ""}
             onedit={editData}

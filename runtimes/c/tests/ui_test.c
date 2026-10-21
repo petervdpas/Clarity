@@ -148,10 +148,10 @@ void code_texts_are_translated_as_every_runtime_does(void) {
     cJSON_ArrayForEach(c, cases) {
         const cJSON* language = cJSON_GetObjectItem(c, "language");
         clarity_set_language(cJSON_IsString(language) ? language->valuestring : NULL);
-        ClarityText* text = clarity_text(cJSON_GetObjectItem(c, "text")->valuestring);
+        ClarityText* text = clarity_key_text(cJSON_GetObjectItem(c, "key")->valuestring);
         const cJSON* value;
         cJSON_ArrayForEach(value, cJSON_GetObjectItem(c, "values")) text = clarity_text_with(text, value->string, clarity_slot_text(value->valuestring));
-        CHECK_TEXT(clarity_text_show(clarity_text_translated(text)), cJSON_GetObjectItem(c, "gives")->valuestring);
+        CHECK_TEXT(clarity_text_show(text), cJSON_GetObjectItem(c, "gives")->valuestring);
     }
     clarity_set_language(NULL);
 }

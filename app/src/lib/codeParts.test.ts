@@ -133,6 +133,13 @@ test("a naming problem offers the fix that solves it for the whole file", () => 
   });
   assert.equal(fixOf('item "New game" has no name; every menu item and button has one (Name them, in Problems, names them all)')?.label, "Name them");
   assert.equal(fixOf("a sidebar's width is in pixels now; Update the sidebars, in Problems, writes it so ('width 192 grid 3 columns')")?.label, "Update the sidebars");
+  // Texts people read become keys across the project: a command, not an edit of one file.
+  const keys = { label: "Make texts keys", command: "make_texts_keys" };
+  assert.deepEqual(fixOf('"Save" is read by people, so it is a key: write @key, with its text in the language files'), keys);
+  assert.deepEqual(fixOf("field name of Customer shows its name as its label; give it a key: label @customerName"), keys);
+  assert.deepEqual(fixOf("Business of Kind shows a text without a key; give it one: label @kindBusiness"), keys);
+  assert.deepEqual(fixOf("theme Night is offered, so people read its name; give it a key: title @nightTheme"), keys);
+  assert.deepEqual(fixOf("the default language en has no file; add translations/en.clarity"), keys);
   assert.equal(fixOf("unknown name 'x'"), null);
 });
 

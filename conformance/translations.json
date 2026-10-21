@@ -61,56 +61,72 @@
     }
   ],
   "code": {
-    "about": "Text code makes (a function's result, a text with slots in a value) is translated in the backend: it loads the translations from the model (model.project.translations), the screen tells it the language it picked with set_language (null for the texts as written), and a text takes its translation in that language with its slots filled. A text without a translation, or in a language without a file, is as written.",
+    "about": "A text by its key, filled in the backend (a function's result, an engine's answer): the backend loads every language's values from the model (model.project.translations, with the default language in model.project.locale.language), the screen tells it the language it picked with set_language (null for the default), and a key takes its value in that language, or the default's when that language leaves it empty or has no file; a key no file has stays as it is. Its slots are filled by name, plainly. A text that is no key (an engine's own words, written as they are) stays as it is.",
     "model": {
       "project": {
+        "locale": {
+          "language": "en"
+        },
         "translations": {
+          "en": {
+            "draw": "Draw",
+            "yourMove": "Your move, {name}",
+            "onlyEnglish": "Only in English"
+          },
           "nl": {
-            "Draw": "Gelijkspel",
-            "Your move, {name}": "{name}, jij bent aan zet"
+            "draw": "Gelijkspel",
+            "yourMove": "{name}, jij bent aan zet",
+            "onlyEnglish": ""
           }
         }
       }
     },
     "cases": [
       {
-        "what": "a plain text",
+        "what": "a key in the language picked",
         "language": "nl",
-        "text": "Draw",
+        "key": "draw",
         "values": {},
         "gives": "Gelijkspel"
       },
       {
-        "what": "a text with a slot moves it",
+        "what": "a key with a slot, moved by the translation",
         "language": "nl",
-        "text": "Your move, {name}",
+        "key": "yourMove",
         "values": {
           "name": "Ada"
         },
         "gives": "Ada, jij bent aan zet"
       },
       {
-        "what": "as written",
+        "what": "the default language",
         "language": null,
-        "text": "Your move, {name}",
+        "key": "yourMove",
         "values": {
           "name": "Ada"
         },
         "gives": "Your move, Ada"
       },
       {
-        "what": "a text nobody translated",
+        "what": "a value the language leaves empty shows the default's",
         "language": "nl",
-        "text": "You win",
+        "key": "onlyEnglish",
         "values": {},
-        "gives": "You win"
+        "gives": "Only in English"
       },
       {
-        "what": "a language without a file",
+        "what": "a language without a file shows the default's",
         "language": "de",
-        "text": "Draw",
+        "key": "draw",
         "values": {},
         "gives": "Draw"
+      },
+      {
+        "what": "a key no file has stays as it is",
+        "language": "nl",
+        "key": "nowhere",
+        "values": {},
+        "gives": "nowhere"
       }
     ]
   }

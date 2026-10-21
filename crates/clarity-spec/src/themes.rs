@@ -240,7 +240,7 @@ fn parse_line(node: &Node, theme: &mut ThemeDecl) -> ParseResult<()> {
             };
             theme.colors.push(ThemeColor { name, light, dark, span });
         }
-        "title" => theme.title = Some(cursor.expect_string("the name people see")?),
+        "title" => theme.title = Some(cursor.expect_text("the name people see")?),
         "font" => {
             let role = role(&mut cursor, "text", &FONTS, |r| {
                 format!("unknown font '{r}'; a theme sets the fonts {}", listed_str(&FONTS))

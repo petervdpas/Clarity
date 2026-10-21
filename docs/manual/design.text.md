@@ -24,12 +24,12 @@ In the Text tab, type as you like: move a part by changing its `at`, add a line 
 
 ```clarity
 page CustomerForm: dialog
-    title "Customer"
+    title @customerFormTitle
     data customer: Customer
 
-    label "Name" name label1 at 1,1 span 3 for name
+    label @nameLabel name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
-    button "Save" name saveButton at 11,3 span 2 default on click: saveClicked
+    button @saveButtonCaption name saveButton at 11,3 span 2 default on click: saveClicked
 ```
 
 While the canvas shows unsaved text, it does not take changes of its own: dragging or editing a property there says to save or revert the text first.

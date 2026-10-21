@@ -892,9 +892,10 @@ impl<'a> Window<'a> {
                     "{pad}<c:PictureBox {at} Picture=\"{{Binding {path}}}\" Record=\"{{Binding {record}}}\" Fetch=\"{{Binding {fetch}}}\"{fetch_file} EmptyText=\"{empty}\" LoadText=\"{load}\" RemoveText=\"{remove}\"{read_only}{text_state}{extra} />",
                     record = member(data),
                     fetch = picture_fetch(data, field),
-                    empty = self.text("No picture"),
-                    load = self.text("Load a picture"),
-                    remove = self.text("Remove the picture"),
+                    // Clarity's own words, by key.
+                    empty = self.text("@noPicture"),
+                    load = self.text("@loadPicture"),
+                    remove = self.text("@removePicture"),
                 );
             }
             WidgetKind::Image if p.source.is_some() => {
@@ -1108,14 +1109,14 @@ public partial class {name}View : UserControl
             if let Some(c) = &widget.props.caption
                 && matches!(widget.props.kind, WidgetKind::Button | WidgetKind::Label | WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Heading)
             {
-                args.push(format!("caption: {}", string(c)));
+                args.push(format!("caption: {}", Texts::kept(c)));
             }
             if widget.props.readonly {
                 args.push("readOnly: true".into());
             }
             let help = self.help_of(n);
             if !help.is_empty() {
-                args.push(format!("help: {}", string(&help)));
+                args.push(format!("help: {}", Texts::kept(&help)));
             }
             // A foldable part starts as designed.
             let starts = if widget.props.foldable && widget.props.folded { " { IsFolded = true }" } else { "" };
@@ -1152,7 +1153,7 @@ public partial class {name}View : UserControl
         for command in &self.commands {
             let Some(n) = &command.props.name else { continue };
             if seen.insert(n.clone()) {
-                let caption = command.props.caption.as_deref().map(|c| format!(", caption: {}", string(c))).unwrap_or_default();
+                let caption = command.props.caption.as_deref().map(|c| format!(", caption: {}", Texts::kept(c))).unwrap_or_default();
                 let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}{caption});", member(n), string(n));
             }
         }

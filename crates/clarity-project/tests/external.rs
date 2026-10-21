@@ -6,7 +6,10 @@ use clarity_spec::Severity;
 
 const PROJECT: &str = "project Shop\n    stack rust web desktop\n    datasource main sqlite \"data/shop.db\"\n    datasource erp sqlite \"legacy/erp.db\" external\n";
 
-const ERP: &str = "module erp\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\"\n";
+const ERP: &str = "module erp\nsource erp\n\nentity Invoice\n    table \"tblInvoice\"\n    key \"InvoiceID\"\n    number: text(20), column \"InvNo\", label @invoiceNumberLabel\n";
+
+/// The default language, with the keys ERP uses.
+const EN: &str = "translation en\n    invoiceNumberLabel \"Number\"\n    yes \"Yes\"\n    no \"No\"\n";
 
 #[test]
 fn loading_checks_external_tables() {
@@ -16,6 +19,8 @@ fn loading_checks_external_tables() {
     std::fs::create_dir_all(dir.join("legacy")).unwrap();
     std::fs::write(root.join("shop.clarity"), PROJECT).unwrap();
     std::fs::write(dir.join("erp.clarity"), ERP).unwrap();
+    std::fs::create_dir_all(dir.join("translations")).unwrap();
+    std::fs::write(dir.join("translations/en.clarity"), EN).unwrap();
 
     // Without the database, its tables are not checked.
     let project = load_modules(&dir).unwrap();

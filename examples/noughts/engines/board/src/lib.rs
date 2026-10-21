@@ -28,13 +28,13 @@ fn full(board: &[Mark; 9]) -> bool {
     board.iter().all(|m| *m != Mark::Empty)
 }
 
-/// How the game stands, as the window shows it.
+/// How the game stands, by the key of its text (the window's `says`).
 fn status(board: &[Mark; 9]) -> &'static str {
     match winner(board) {
-        Some(Mark::Cross) => "You win",
-        Some(_) => "I win",
-        None if full(board) => "A draw",
-        None => "Your move",
+        Some(Mark::Cross) => "youWin",
+        Some(_) => "iWin",
+        None if full(board) => "aDraw",
+        None => "yourMove",
     }
 }
 
@@ -66,11 +66,11 @@ clarity_engine::on_open!(|| {
 clarity_engine::function!(play, |(square,): (i64,)| {
     let mut board = BOARD.lock().map_err(|e| e.to_string())?;
     if winner(&board).is_some() || full(&board) {
-        return Err("The game is over; start a new one".to_string());
+        return Err("gameIsOver".to_string());
     }
-    let at = usize::try_from(square - 1).ok().filter(|&i| i < 9).ok_or("There are nine squares")?;
+    let at = usize::try_from(square - 1).ok().filter(|&i| i < 9).ok_or("thereAreNineSquares")?;
     if board[at] != Mark::Empty {
-        return Err("That square is taken".to_string());
+        return Err("thatSquareIsTaken".to_string());
     }
     board[at] = Mark::Cross;
     if winner(&board).is_none()
@@ -84,7 +84,7 @@ clarity_engine::function!(play, |(square,): (i64,)| {
 // mark(square) -> text: what is on square 1 to 9: X, O or nothing.
 clarity_engine::function!(mark, |(square,): (i64,)| {
     let board = BOARD.lock().map_err(|e| e.to_string())?;
-    let at = usize::try_from(square - 1).ok().filter(|&i| i < 9).ok_or("There are nine squares")?;
+    let at = usize::try_from(square - 1).ok().filter(|&i| i < 9).ok_or("thereAreNineSquares")?;
     Ok(match board[at] {
         Mark::Empty => "",
         Mark::Cross => "X",
@@ -95,5 +95,5 @@ clarity_engine::function!(mark, |(square,): (i64,)| {
 // restart() -> text: an empty board.
 clarity_engine::function!(restart, |(): ()| {
     *BOARD.lock().map_err(|e| e.to_string())? = [Mark::Empty; 9];
-    Ok("Your move")
+    Ok("yourMove")
 });

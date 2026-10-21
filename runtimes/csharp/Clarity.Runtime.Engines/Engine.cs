@@ -245,7 +245,8 @@ public sealed class Engine
             throw failed($"its answer is no JSON: {e.Message}");
         }
         if (answer?["error"] is { } error)
-            throw new RefusedException(Text.Plain(error.GetValue<string>()));
+            // An engine refuses by the key of its text (its `says`), or in its own words.
+            throw new RefusedException(Text.Of(error.GetValue<string>()));
         if (answer is not JsonObject found || !found.ContainsKey("value"))
             throw failed("its answer has no value");
         return found["value"];

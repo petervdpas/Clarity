@@ -1,59 +1,59 @@
 module todo
 
 entity Person
-    name: text(80), required, unique, label "Name"
+    name: text(80), required, unique, label @personNameLabel
 
 entity Task
-    title: text(120), required, label "Task"
-    done: bool, default false, label "Done"
-    finished_by: ref Person, label "Finished by"
+    title: text(120), required, label @taskTitleLabel
+    done: bool, default false, label @taskDoneLabel
+    finished_by: ref Person, label @taskFinishedByLabel
 
 app Todo
-    title "Todo"
+    title @todoTitle
     main Main
     menu name mainMenu
-        item "File" name fileItem
-            item "Users" name usersItem on click -> Users
+        item @fileItem name fileItem
+            item @usersItem name usersItem on click -> Users
             separator
-            item "Language" name languageItem on click -> language
+            item @languageItem name languageItem on click -> language
             separator
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
     // A ribbon the person folds to its tabs with a double click.
     ribbon name mainRibbon collapsible
-        tab "Home" name homeTab
-            group "People" name peopleGroup
-                button "Users" name usersButton icon "list" large on click -> Users
-            group "Settings" name settingsGroup
-                button "Language" name languageButton icon "language" large on click -> language
+        tab @homeTab name homeTab
+            group @peopleGroup name peopleGroup
+                button @usersButtonCaption name usersButton icon "list" large on click -> Users
+            group @settingsGroup name settingsGroup
+                button @languageButtonCaption name languageButton icon "language" large on click -> language
 
 page Main: window
-    title "Todo"
+    title @mainTitle
     data tasks: list<Task>
     on open: windowOpened
     on return: windowReturned
 
-    label "New task" name label1 at 1,1 span 2 for newTitle
-    textbox name newTitle at 3,1 span 8 placeholder "What needs to be done?"
-    button "Add" name addButton at 11,1 span 2 default on click: addClicked
+    label @newTitleLabel name label1 at 1,1 span 2 for newTitle
+    textbox name newTitle at 3,1 span 8 placeholder @newTitlePlaceholder
+    button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
     table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
-    button "Users" name usersButton at 1,10 span 2 on click -> Users
-    button "Delete" name deleteButton at 11,10 span 2 on click: deleteClicked
+    button @usersButtonCaption name usersButton at 1,10 span 2 on click -> Users
+    button @deleteButtonCaption name deleteButton at 11,10 span 2 on click: deleteClicked
 
 page Users: window
-    title "Users"
+    title @usersTitle
     data people: list<Person>
     data person: Person
     on open: usersOpened
 
     table name peopleGrid at 1,1 span 12 rows 6 bind people columns name on select: personSelected
     form name personForm at 1,7 span 12 rows 1 bind person
-        label "Name" name label1 at 1,1 span 2 for name
-        textbox name name at 3,1 span 8 bind person.name placeholder "Full name"
+        label @nameLabel name label1 at 1,1 span 2 for name
+        textbox name name at 3,1 span 8 bind person.name placeholder @namePlaceholder
         help name help1 at 11,1 span 2 for name
-    button "New" name newButton at 5,9 span 2 on click: newClicked
-    button "Save" name saveButton at 7,9 span 2 key "Ctrl+S" default on click: saveClicked
-    button "Delete" name deletePersonButton at 9,9 span 2 on click: deletePersonClicked
-    button "Close" name closeButton at 11,9 span 2 cancel on click: closeClicked
+    button @newButtonCaption name newButton at 5,9 span 2 on click: newClicked
+    button @saveButtonCaption name saveButton at 7,9 span 2 key "Ctrl+S" default on click: saveClicked
+    button @deletePersonButtonCaption name deletePersonButton at 9,9 span 2 on click: deletePersonClicked
+    button @closeButtonCaption name closeButton at 11,9 span 2 cancel on click: closeClicked
 
 code Main
     handler windowOpened
@@ -69,7 +69,7 @@ code Main
 
     handler addClicked
         if newTitle.text == ""
-            message warning "Please type a task first"
+            message warning @pleaseTypeATaskFirst
             return
         let task = new Task
         task.title = newTitle.text
@@ -103,16 +103,16 @@ code Users
     handler saveClicked
         name.error = ""
         if person.name == ""
-            name.error = "Name is required"
+            name.error = @nameIsRequired
             return
         save person
         reload people
-        message "Saved {person.name}"
+        message @savedName(name = person.name)
 
     handler deletePersonClicked
         let tasks = find t in Task where t.finished_by == person
         if count(tasks) > 0
-            message error "{person.name} has finished tasks and cannot be deleted"
+            message error @nameHasFinishedTasksAnd(name = person.name)
             return
         delete person
         reload people

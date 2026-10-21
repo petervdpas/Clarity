@@ -8,17 +8,17 @@ A window is a `page` block in a module. Its settings come first, then its parts:
 
 ```clarity
 page CustomerForm: window
-    title "Customer"
+    title @customerFormTitle
     data customer: Customer
     data orders: list<Order>
     grid 12 columns
     on open: windowOpened
     on return: windowReturned
 
-    label "Name" name label1 at 1,1 span 3 for name
+    label @nameLabel name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
-    button "Save" name saveButton at 11,10 span 2 default on click: saveClicked
+    button @saveButtonCaption name saveButton at 11,10 span 2 default on click: saveClicked
 ```
 
 The kind after the colon is `window` (a window of its own, which can have a menu, toolbar and other frame regions), `dialog` (a modal window) or `view`. Only a `window` has frame regions; see [The app and its frame](design.frame.md).
@@ -70,8 +70,8 @@ Rows have a fixed height in the designer. In the running application the columns
 A button, image, menu item or toolbar button can open a window without code:
 
 ```clarity
-button "All customers" at 1,12 span 3 on click -> CustomerBrowse
-button "New customer" at 4,12 span 3 on click -> CustomerForm in new window
+button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> CustomerBrowse
+button @newCustomerCaption name newCustomer at 4,12 span 3 on click -> CustomerForm in new window
 ```
 
 In the properties, pick the window under "On click, open". From a handler, `open CustomerForm with customer = grid.selected` opens a window and fills its data, and `close` closes the current one.

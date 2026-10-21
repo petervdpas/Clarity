@@ -10,14 +10,14 @@ Data events live in a `code` block with the entity's name, in the same file as t
 code Order
     before save
         if order.status == Approved and not within_credit(order)
-            refuse "Order {order.number} is over its customer's credit limit"
+            refuse @orderOverCreditLimit(number = order.number)
 
     after save
         log_change("saved " + order.number)
 
     before delete
         if order.status != Pending
-            refuse "Only pending orders can be deleted"
+            refuse @onlyPendingDeletable
 ```
 
 | Event | Runs |

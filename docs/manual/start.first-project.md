@@ -14,11 +14,11 @@ Clarity writes three things: the project file, a first module `tasks/tasks.clari
 module tasks
 
 app Tasks
-    title "Tasks"
+    title @tasksTitle
     main Main
 
 page Main: window
-    title "Main"
+    title @mainTitle
 ```
 
 The project file has one SQLite database, `main`, in `data/tasks.db`. See [The project file](project.file.md).
@@ -47,16 +47,16 @@ The window is now text like this; see [Windows](design.windows.md) and [Parts](d
 
 ```clarity
 page Main: window
-    title "Main"
+    title @mainTitle
     data task: Task
     data tasks: list<Task>
 
     form name form1 at 1,1 span 12 rows 2 bind task
-        label "Title" name label1 at 1,1 span 3 for title
+        label @titleLabel name label1 at 1,1 span 3 for title
         textbox name title at 4,1 span 6 bind task.title
-        label "Done" name label2 at 1,2 span 3 for done
+        label @doneLabel name label2 at 1,2 span 3 for done
         checkbox name done at 4,2 span 3 bind task.done
-    button "Add" name addButton at 11,3 span 2 default on click: addClick
+    button @addButtonCaption name addButton at 11,3 span 2 default on click: addClick
     table name table1 at 1,4 span 12 rows 6 bind tasks columns title, done
 ```
 

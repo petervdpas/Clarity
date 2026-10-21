@@ -67,6 +67,24 @@ public sealed record Text(string Template)
     /// <summary>The value of each slot, by its path as written: <c>customer.name</c>.</summary>
     public SortedDictionary<string, Slot> Values { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>The key the text is, when it is one: it shows its value in the person's language.</summary>
+    public string? Key { get; init; }
+
+    /// <summary>
+    /// The text of key <paramref name="key"/>, with its value in the person's
+    /// language; a text that names no key shows as it is.
+    /// </summary>
+    public static Text Of(string key) => new("") { Key = key };
+
+    /// <summary>
+    /// The value of a key in the language shown, or null when no language has
+    /// it; the application's locale sets it.
+    /// </summary>
+    public static Func<string, string?> KeyValue { get; set; } = _ => null;
+
+    /// <summary>The text as written, or for a key its value in the language shown.</summary>
+    public string Written => Key is { } key ? KeyValue(key) ?? key.Replace("{", "{{").Replace("}", "}}") : Template;
+
     /// <summary>Text that is shown as it is: a brace in it is no slot.</summary>
     public static Text Plain(string text) => new(text.Replace("{", "{{").Replace("}", "}}"));
 
@@ -79,7 +97,7 @@ public sealed record Text(string Template)
     /// <summary>The same values in another text, such as its translation.</summary>
     public Text WithTemplate(string template)
     {
-        var other = new Text(template);
+        var other = new Text(template) { Key = null };
         foreach (var (path, value) in Values)
             other.Values[path] = value;
         return other;
@@ -92,7 +110,7 @@ public sealed record Text(string Template)
     public string Show()
     {
         var out_ = new StringBuilder();
-        var rest = Template.AsSpan();
+        var rest = Written.AsSpan();
         while (rest.IndexOfAny('{', '}') is var at && at >= 0)
         {
             out_.Append(rest[..at]);

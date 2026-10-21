@@ -19,7 +19,11 @@ fn add_window(template: PageTemplate) -> (String, Project) {
         template,
     };
     let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
-    let after = load_dir_with(&dir, &path, &outcome.text).unwrap();
+    // The texts the template wrote are keys, which the language files get.
+    let languages = clarity_spec::keyed::plan_keys(&dir, "en", &outcome.keys).unwrap();
+    let mut replaced: Vec<(&std::path::Path, &str)> = vec![(path.as_path(), outcome.text.as_str())];
+    replaced.extend(languages.iter().map(|(p, _, t)| (p.as_path(), t.as_str())));
+    let after = clarity_spec::load_dir_with_files_in(&dir, &replaced, &[]).unwrap();
     (outcome.text, after)
 }
 
@@ -36,7 +40,7 @@ fn every_template_gives_a_clean_window() {
     ] {
         let (text, after) = add_window(template.clone());
         assert!(
-            text.contains("\n\npage FreshWindow: window\n    title \"Fresh window\""),
+            text.contains("\n\npage FreshWindow: window\n    title @freshWindowTitle"),
             "{text}"
         );
         assert!(
@@ -60,7 +64,7 @@ fn a_form_has_a_label_and_input_per_field() {
     );
     assert!(
         page.contains(
-            "        label \"Name\" name nameLabel at 1,1 span 3 for name\n        textbox name name at 4,1 span 6 bind customer.name\n"
+            "        label @customerNameLabel name nameLabel at 1,1 span 3 for name\n        textbox name name at 4,1 span 6 bind customer.name\n"
         ),
         "{page}"
     );
@@ -75,8 +79,8 @@ fn a_form_has_a_label_and_input_per_field() {
         page.contains("        memo name notes at 4,8 span 6 rows 3 bind customer.notes\n        help name notesHelp at 10,8 span 3 for notes\n"),
         "{page}"
     );
-    assert!(page.contains("    button \"Save\" name save at 9,12 span 2 default\n"), "{page}");
-    assert!(page.contains("    button \"Close\" name close at 11,12 span 2 cancel"), "{page}");
+    assert!(page.contains("    button @saveCaption name save at 9,12 span 2 default\n"), "{page}");
+    assert!(page.contains("    button @closeCaption name close at 11,12 span 2 cancel"), "{page}");
 }
 
 #[test]
@@ -88,7 +92,7 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
     assert!(page.contains("    data customers: list<Customer>\n"), "{page}");
     assert!(
         page.contains(
-            "    label \"Name\" name nameFilterLabel at 1,1 span 2 for nameFilter\n    textbox name nameFilter at 3,1 span 4 on change: filterChanged\n"
+            "    label @customerNameLabel name nameFilterLabel at 1,1 span 2 for nameFilter\n    textbox name nameFilter at 3,1 span 4 on change: filterChanged\n"
         ),
         "{page}"
     );
@@ -96,7 +100,7 @@ fn a_browse_has_a_filter_a_table_and_buttons() {
         page.contains("table name customersTable at 1,2 span 12 rows 8 bind customers columns name, email, kind, vat_number, credit_limit"),
         "{page}"
     );
-    assert!(page.contains("button \"Open\""), "{page}");
+    assert!(page.contains("button @openCaption"), "{page}");
 }
 
 #[test]
@@ -164,7 +168,7 @@ fn a_dropped_field_brings_its_label_and_help() {
     let outcome = apply_in(&project, &source, &edit).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         outcome.text.contains(
-            "    label \"Vat number\" name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vat_number\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
+            "    label @customerVatNumberLabel name vatNumberLabel at 1,20 span 3 for vatNumber\n    textbox name vatNumber at 4,20 span 4 bind customer.vat_number\n    help name vatNumberHelp at 8,20 span 5 for vatNumber\n"
         ),
         "{}",
         outcome.text

@@ -238,18 +238,32 @@ fn apply_edit(
     let before = clarity_project::load_modules(&dir).map_err(read_err)?;
     let outcome = edit::apply_in(&before, &source, &edit).map_err(|err| err.to_string())?;
     if outcome.text != source {
+        // A text the edit wrote became a key: every language file gets it,
+        // the default language with its text.
+        let default = clarity_spec::translations::default_language(&before);
+        let languages = clarity_spec::keyed::plan_keys(&dir, &default, &outcome.keys).map_err(read_err)?;
+        let mut replaced: Vec<(&Path, &str)> = vec![(file.as_path(), outcome.text.as_str())];
+        replaced.extend(languages.iter().map(|(path, _, after)| (path.as_path(), after.as_str())));
         // The checker decides what is valid: an edit that adds an error
         // anywhere in the project (an overlap, a wrong binding) is refused.
-        let after = clarity_project::load_modules_with(&dir, &file, &outcome.text).map_err(read_err)?;
+        let after = clarity_project::load_modules_with_files(&dir, &replaced).map_err(read_err)?;
         if let Some(error) = clarity_spec::new_error(&before, &after) {
             return Err(error.message.clone());
         }
         write_atomically(&file, &outcome.text)?;
-        record(&history, vec![FileChange {
+        let mut changes = vec![FileChange {
             file: file.clone(),
             before: Some(source),
             after: outcome.text,
-        }])?;
+        }];
+        for (path, before_text, after_text) in languages {
+            if let Some(folder) = path.parent() {
+                std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
+            }
+            write_atomically(&path, &after_text)?;
+            changes.push(FileChange { file: path, before: before_text, after: after_text });
+        }
+        record(&history, changes)?;
     }
     Ok(EditApplied {
         preview: load(&dir)?,
@@ -621,9 +635,14 @@ fn write_new_project(path: &Path, stack: Stack) -> Result<PathBuf, String> {
     let module_text = format!(
         "module {module}\n\napp {app_name}\n    title \"{title}\"\n    main Main\n\npage Main: window\n    title \"Main\"\n"
     );
+    // Its texts by key, with the default language's file giving their values.
+    let language = settings.language.clone().unwrap_or_else(|| "en".to_string());
+    let module_file = format!("{module}.clarity");
+    let keyed = clarity_spec::keyed::make_keys(&[(module_file.as_str(), module_text.as_str())], &[], &language);
     let failed = |err: std::io::Error| format!("cannot write the project: {err}");
-    std::fs::create_dir_all(&dir).map_err(failed)?;
-    std::fs::write(dir.join(format!("{module}.clarity")), module_text).map_err(failed)?;
+    std::fs::create_dir_all(dir.join(clarity_spec::translations::TRANSLATIONS_DIR)).map_err(failed)?;
+    std::fs::write(dir.join(&module_file), &keyed.modules[0].1).map_err(failed)?;
+    std::fs::write(dir.join(clarity_spec::translations::TRANSLATIONS_DIR).join(format!("{language}.clarity")), keyed.language_file(&language)).map_err(failed)?;
     std::fs::write(dir.join(".gitignore"), GITIGNORE).map_err(failed)?;
     std::fs::write(&file, project).map_err(failed)?;
     Ok(file)
@@ -762,6 +781,8 @@ pub fn run() {
             external::take_ownership,
             translations::translation_table,
             translations::set_translation,
+            translations::rename_key,
+            translations::make_texts_keys,
             translations::add_language,
             themes::theme_styles,
             themes::theme_starter,

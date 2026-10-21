@@ -8,13 +8,13 @@ An entity is a kind of record that is stored in a data source, such as a custome
 
 ```clarity
 entity Customer
-    name: text(80), required, label "Name"
-    email: email, unique, label "E-mail"
-    kind: CustomerKind, default Private
-    credit_limit: money, min 0, default 0
-    active: bool, default true
-    since: date
-    notes: text, help "Internal notes, not shown to the customer"
+    name: text(80), required, label @customerNameLabel
+    email: email, unique, label @customerEmailLabel
+    kind: CustomerKind, default Private, label @customerKindLabel
+    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    active: bool, default true, label @customerActiveLabel
+    since: date, label @customerSinceLabel
+    notes: text, help @customerNotesHelp, label @customerNotesLabel
 ```
 
 A field is `name: type`, followed by modifiers separated by commas. Every record also has an `id`, which Clarity adds itself. Only `save` sets it; a new record has id 0.
@@ -25,8 +25,8 @@ An enum is a fixed list of values. Each value can have a label; without one, the
 
 ```clarity
 enum CustomerKind
-    Private label "Private person"
-    Business
+    Private label @customerKindPrivate
+    Business label @customerKindBusiness
 ```
 
 A field whose type is an enum holds one of its values.

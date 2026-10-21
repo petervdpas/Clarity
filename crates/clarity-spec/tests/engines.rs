@@ -133,18 +133,18 @@ fn an_engine_declares_the_services_it_uses() {
     assert_has(&errors(&source("    uses clock, clock, random, log, language\n"), test_engine()), "uses clock twice");
 }
 
-/// An engine lists the texts it gives, so they are translated like the
-/// project's own: `says "You win", "A draw"`.
+/// An engine lists the keys of the texts it gives, so the project's
+/// language files give them their values: `says @youWin, @aDraw`.
 #[test]
-fn an_engine_says_the_texts_it_gives() {
-    let source = "module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log, language\n    says \"You win\", \"A draw\"\n    function add(a: integer, b: integer) -> integer\n";
+fn an_engine_says_the_keys_of_its_texts() {
+    let source = "module shop\n\nengine Pricing from \"test.wasm\"\n    uses clock, random, log, language\n    says @youWin, @aDraw\n    function add(a: integer, b: integer) -> integer\n";
     let (file, diags) = parse(source, "shop.clarity");
     assert!(diags.is_empty(), "{diags:#?}");
-    assert_eq!(file.engines[0].says, ["You win", "A draw"]);
-    let texts = clarity_spec::translations::texts(&project(source, test_engine()));
-    let said = texts.iter().find(|u| u.text == "You win").expect("collected");
+    assert_eq!(file.engines[0].says, ["@youWin", "@aDraw"]);
+    let keys = clarity_spec::translations::keys(&project(source, test_engine()));
+    let said = keys.iter().find(|u| u.key == "youWin").expect("collected");
     assert_eq!(said.places, ["engine Pricing"]);
-    assert_has(&parse("module shop\n\nengine Pricing from \"test.wasm\"\n    says You\n", "shop.clarity").1.iter().map(|d| d.message.clone()).collect::<Vec<_>>(), "says gives texts");
+    assert_has(&parse("module shop\n\nengine Pricing from \"test.wasm\"\n    says You\n", "shop.clarity").1.iter().map(|d| d.message.clone()).collect::<Vec<_>>(), "says gives the keys of its texts");
 }
 
 /// `state per app` keeps one instance for every call; `on open` runs the

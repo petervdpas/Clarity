@@ -5,33 +5,33 @@ use loans
 
 // The application frame, shared by every window.
 app Records
-    title "My Record Collection"
+    title @recordsTitle
     main AlbumBrowse
     menu name mainMenu
-        item "File" name fileItem
-            item "Albums" name albumsItem key "Ctrl+1" on click -> AlbumBrowse
-            item "New album" name newAlbumItem key "Ctrl+N" on click -> AlbumForm
+        item @fileItem name fileItem
+            item @albumsItem name albumsItem key "Ctrl+1" on click -> AlbumBrowse
+            item @newAlbumItem name newAlbumItem key "Ctrl+N" on click -> AlbumForm
             separator
-            item "Language" name languageItem on click -> language
-            item "Theme" name themeItem on click -> theme
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-        item "Collection" name collectionItem
-            item "Artists" name artistsItem on click -> ArtistBrowse
-            item "Genres" name genresItem on click -> GenreBrowse
-        item "Loans" name loansItem
-            item "On loan" name onLoanItem on click -> LoanBrowse
-            item "Friends" name friendsItem on click -> FriendBrowse
+            item @languageItem name languageItem on click -> language
+            item @themeItem name themeItem on click -> theme
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @collectionItem name collectionItem
+            item @artistsItem name artistsItem on click -> ArtistBrowse
+            item @genresItem name genresItem on click -> GenreBrowse
+        item @loansItem name loansItem
+            item @onLoanItem name onLoanItem on click -> LoanBrowse
+            item @friendsItem name friendsItem on click -> FriendBrowse
     toolbar name mainToolbar
-        button "Albums" name albums2 on click -> AlbumBrowse
-        button "Artists" name artists2 on click -> ArtistBrowse
+        button @albums2Caption name albums2 on click -> AlbumBrowse
+        button @artists2Caption name artists2 on click -> ArtistBrowse
         separator
-        button "On loan" name onLoan2 on click -> LoanBrowse
+        button @onLoan2Caption name onLoan2 on click -> LoanBrowse
     footer
-        status "Ready"
+        status @recordsStatus
 
 // Grey and square, like a desktop program of 2003.
 theme Classic
-    title "Classic"
+    title @classicTheme
     mode light
     color background "#d4d0c8"
     color panel "#ece9d8"
@@ -55,7 +55,7 @@ theme Classic
 
 // The music player look: dark, with a green display.
 theme Midnight
-    title "Midnight"
+    title @midnightTheme
     mode dark
     color accent "#2fd25a"
     color accent_soft "#1d3a25"

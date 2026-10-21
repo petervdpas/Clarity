@@ -2,43 +2,43 @@ module music
 
 // What an album came out on.
 enum Format
-    Vinyl label "LP"
-    Single
-    Cd label "CD"
-    Cassette
-    Digital
+    Vinyl label @formatVinyl
+    Single label @formatSingle
+    Cd label @formatCd
+    Cassette label @formatCassette
+    Digital label @formatDigital
 
 // Genres form a tree: Bebop belongs to Jazz.
 entity Genre
-    name: text(40), required, unique
-    parent: ref Genre, help "The genre this one belongs to, like Jazz for Bebop"
+    name: text(40), required, unique, label @genreNameLabel
+    parent: ref Genre, help @genreParentHelp, label @genreParentLabel
 
 entity Artist
-    name: text(80), required, unique
-    country: text(40)
-    formed: integer, format plain, label "Formed in"
-    website: url
-    photo: image, store photos
+    name: text(80), required, unique, label @artistNameLabel
+    country: text(40), label @artistCountryLabel
+    formed: integer, format plain, label @artistFormedLabel
+    website: url, label @artistWebsiteLabel
+    photo: image, store photos, label @artistPhotoLabel
 
 entity Album
-    title: text(120), required
-    artist: ref Artist, required
-    genre: ref Genre
-    year: integer, format plain, min 1900, max 2100
-    format: Format, default Cd
-    record_label: text(60), label "Label"
-    bought_on: date
-    price: money, min 0
-    rating: integer, min 0, max 5, help "From 0 to 5 stars"
-    cover: image, help "The scan of the front cover"
-    notes: text
+    title: text(120), required, label @albumTitleLabel
+    artist: ref Artist, required, label @albumArtistLabel
+    genre: ref Genre, label @albumGenreLabel
+    year: integer, format plain, min 1900, max 2100, label @albumYearLabel
+    format: Format, default Cd, label @albumFormatLabel
+    record_label: text(60), label @albumRecordLabelLabel
+    bought_on: date, label @albumBoughtOnLabel
+    price: money, min 0, label @albumPriceLabel
+    rating: integer, min 0, max 5, help @albumRatingHelp, label @albumRatingLabel
+    cover: image, help @albumCoverHelp, label @albumCoverLabel
+    notes: text, label @albumNotesLabel
 
 // A track of an album; the album form lists them in order.
 entity Track
-    album: ref Album, required
-    number: integer, min 1, label "No."
-    title: text(120), required
-    length: duration, min 0
+    album: ref Album, required, label @trackAlbumLabel
+    number: integer, min 1, label @trackNumberLabel
+    title: text(120), required, label @trackTitleLabel
+    length: duration, min 0, label @trackLengthLabel
 
 // The length of a set of tracks.
 function total_length(tracks: list<Track>) -> duration
@@ -87,21 +87,21 @@ action export_collection()
     write lines to exports "collection.txt"
 
 page AlbumBrowse: window
-    title "Albums"
+    title @albumBrowseTitle
     data albums: list<Album>
     on return: windowReturned
 
-    heading "The collection" name heading1 at 1,1 span 6
-    image name image1 at 12,1 span 1 rows 1 source "logo.png" tooltip "My Record Collection"
-    label "Find" name label1 at 1,2 span 2 for titleFilter
-    textbox name titleFilter at 3,2 span 10 placeholder "Part of the title or the artist" on change: filterChanged
+    heading @heading1Caption2 name heading1 at 1,1 span 6
+    image name image1 at 12,1 span 1 rows 1 source "logo.png" tooltip @image1Tooltip
+    label @titleFilterLabel name label1 at 1,2 span 2 for titleFilter
+    textbox name titleFilter at 3,2 span 10 placeholder @titleFilterPlaceholder on change: filterChanged
     table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: openClicked
-    button "Export list" name button1 at 1,11 span 2 on click: exportClicked
-    button "New album" name button2 at 9,11 span 2 on click -> AlbumForm
-    button "Open" name button3 at 11,11 span 2 on click: openClicked
+    button @button1Caption4 name button1 at 1,11 span 2 on click: exportClicked
+    button @button2Caption4 name button2 at 9,11 span 2 on click -> AlbumForm
+    button @button3Caption name button3 at 11,11 span 2 on click: openClicked
 
 page AlbumForm: window
-    title "Album"
+    title @albumFormTitle
     data album: Album
     data tracks: list<Track>
     on open: albumOpened
@@ -109,107 +109,107 @@ page AlbumForm: window
 
     splitter name splitter1 at 1,1 span 12 rows 10 horizontal
         pane
-            panel "Album" name panel1 at 1,1 span 12 rows 9
-                label "Title" name label1 at 1,1 span 3 for title
+            panel @panel1Caption name panel1 at 1,1 span 12 rows 9
+                label @titleLabel name label1 at 1,1 span 3 for title
                 textbox name title at 4,1 span 9 bind album.title
-                label "Artist" name label2 at 1,2 span 3 for artist
+                label @artistLabel name label2 at 1,2 span 3 for artist
                 dropdown name artist at 4,2 span 9 bind album.artist
-                label "Genre" name label3 at 1,3 span 3 for genre
+                label @genreLabel name label3 at 1,3 span 3 for genre
                 dropdown name genre at 4,3 span 9 bind album.genre
-                label "Year" name label4 at 1,4 span 3 for year
+                label @yearLabel name label4 at 1,4 span 3 for year
                 number name year at 4,4 span 3 bind album.year
-                label "Format" name label5 at 1,5 span 3 for format
+                label @formatLabel name label5 at 1,5 span 3 for format
                 radio name format at 4,5 span 9 bind album.format vertical rows 3
-                label "Label" name label6 at 1,8 span 3 for recordLabel
+                label @recordLabelLabel name label6 at 1,8 span 3 for recordLabel
                 textbox name recordLabel at 4,8 span 9 bind album.record_label
         pane
             tabs name tabs1 at 1,1 span 12 rows 9
-                tab "Tracks"
+                tab @albumFormTracksTab
                     table name trackGrid at 1,1 span 12 rows 6 bind tracks columns number, title, length on open: trackOpened
                     label name length at 1,7 span 9
-                    button "Add track" name button1 at 10,7 span 3 on click: addTrackClicked
-                tab "Purchase"
-                    label "Bought on" name label7 at 1,1 span 3 for boughtOn
+                    button @button1Caption5 name button1 at 10,7 span 3 on click: addTrackClicked
+                tab @albumFormPurchaseTab
+                    label @boughtOnLabel name label7 at 1,1 span 3 for boughtOn
                     date name boughtOn at 4,1 span 4 bind album.bought_on
-                    label "Price" name label8 at 1,2 span 3 for price
+                    label @priceLabel name label8 at 1,2 span 3 for price
                     number name price at 4,2 span 4 bind album.price
-                    label "Rating" name label9 at 1,3 span 3 for rating
+                    label @ratingLabel name label9 at 1,3 span 3 for rating
                     number name rating at 4,3 span 2 bind album.rating
                     help name help1 at 6,3 span 7 for rating
-                tab "Cover"
+                tab @albumFormCoverTab
                     image name cover at 1,1 span 12 rows 6 bind album.cover
                     help name help2 at 1,7 span 12 for cover
-                tab "Notes"
+                tab @albumFormNotesTab
                     memo name memo1 at 1,1 span 12 rows 7 bind album.notes
-    button "Save" name save at 9,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
-    button "Close" name button2 at 11,11 span 2 cancel on click -> close
+    button @saveCaption name save at 9,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
+    button @button2Caption5 name button2 at 11,11 span 2 cancel on click -> close
 
 // One track, in a dialog over the album.
 page TrackDialog: dialog
-    title "Track"
+    title @trackDialogTitle
     data album: Album
     data track: Track
 
-    label "No." name label1 at 1,1 span 3 for number
+    label @numberLabel name label1 at 1,1 span 3 for number
     number name number at 4,1 span 2 bind track.number
-    label "Title" name label2 at 1,2 span 3 for title
+    label @titleLabel name label2 at 1,2 span 3 for title
     textbox name title at 4,2 span 9 bind track.title
-    label "Length" name label3 at 1,3 span 3 for length
+    label @lengthLabel name label3 at 1,3 span 3 for length
     number name length at 4,3 span 3 bind track.length placeholder "3:45"
-    button "Delete" name deleteButton at 1,5 span 2 on click: deleteClicked
-    button "Save" name button1 at 9,5 span 2 style primary default on click: saveClicked
-    button "Cancel" name button2 at 11,5 span 2 cancel on click -> close
+    button @deleteButtonCaption name deleteButton at 1,5 span 2 on click: deleteClicked
+    button @button1Caption2 name button1 at 9,5 span 2 style primary default on click: saveClicked
+    button @button2Caption2 name button2 at 11,5 span 2 cancel on click -> close
 
 page ArtistBrowse: window
-    title "Artists"
+    title @artistBrowseTitle
     data artists: list<Artist>
     on return: windowReturned
 
-    label "Name" name label1 at 1,1 span 2 for nameFilter
+    label @nameFilterLabel name label1 at 1,1 span 2 for nameFilter
     textbox name nameFilter at 3,1 span 10 on change: filterChanged
     list name artistList at 1,2 span 12 rows 8 bind artists show name, country, formed on open: openClicked
-    button "Find photos" name button1 at 1,10 span 2 on click: photosClicked
-    button "Back up photos" name button2 at 3,10 span 2 on click: backupClicked
-    button "New artist" name button3 at 9,10 span 2 on click -> ArtistForm
-    button "Open" name button4 at 11,10 span 2 on click: openClicked
+    button @button1Caption6 name button1 at 1,10 span 2 on click: photosClicked
+    button @button2Caption6 name button2 at 3,10 span 2 on click: backupClicked
+    button @button3Caption2 name button3 at 9,10 span 2 on click -> ArtistForm
+    button @button4Caption name button4 at 11,10 span 2 on click: openClicked
 
 page ArtistForm: window
-    title "Artist"
+    title @artistFormTitle
     data artist: Artist
 
     image name photo at 10,1 span 3 rows 4 bind artist.photo
     form name form1 at 1,1 span 9 rows 4 bind artist
-        label "Name" name label1 at 1,1 span 3 for name
+        label @nameLabel name label1 at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind artist.name
-        label "Country" name label2 at 1,2 span 3 for country
+        label @countryLabel name label2 at 1,2 span 3 for country
         textbox name country at 4,2 span 6 bind artist.country
-        label "Formed in" name label3 at 1,3 span 3 for formed
+        label @formedLabel name label3 at 1,3 span 3 for formed
         number name formed at 4,3 span 2 bind artist.formed
-        label "Website" name label4 at 1,4 span 3 for website
-        textbox name website at 4,4 span 6 bind artist.website placeholder "https://"
-    button "Save" name button1 at 9,6 span 2 style primary default on click: saveClicked
-    button "Close" name button2 at 11,6 span 2 cancel on click -> close
+        label @websiteLabel name label4 at 1,4 span 3 for website
+        textbox name website at 4,4 span 6 bind artist.website placeholder @websitePlaceholder
+    button @button1Caption2 name button1 at 9,6 span 2 style primary default on click: saveClicked
+    button @button2Caption5 name button2 at 11,6 span 2 cancel on click -> close
 
 page GenreBrowse: window
-    title "Genres"
+    title @genreBrowseTitle
     data genres: list<Genre>
     on return: windowReturned
 
     table name genreGrid at 1,1 span 10 rows 8 bind genres columns name, parent on open: openClicked
-    button "New genre" name button1 at 11,1 span 2 on click -> GenreDialog
-    button "Open" name button2 at 11,2 span 2 on click: openClicked
+    button @button1Caption7 name button1 at 11,1 span 2 on click -> GenreDialog
+    button @button2Caption3 name button2 at 11,2 span 2 on click: openClicked
 
 page GenreDialog: dialog
-    title "Genre"
+    title @genreDialogTitle
     data genre: Genre
 
-    label "Name" name label1 at 1,1 span 3 for name
+    label @nameLabel name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 9 bind genre.name
-    label "Belongs to" name label2 at 1,2 span 3 for parent
+    label @parentLabel name label2 at 1,2 span 3 for parent
     dropdown name parent at 4,2 span 9 bind genre.parent
     help name help1 at 4,3 span 9 for parent
-    button "Save" name button1 at 9,5 span 2 style primary default on click: saveClicked
-    button "Cancel" name button2 at 11,5 span 2 cancel on click -> close
+    button @button1Caption2 name button1 at 9,5 span 2 style primary default on click: saveClicked
+    button @button2Caption2 name button2 at 11,5 span 2 cancel on click -> close
 
 code AlbumBrowse
     handler windowReturned
@@ -223,21 +223,21 @@ code AlbumBrowse
 
     handler exportClicked
         export_collection()
-        message "Saved the list in collection.txt"
+        message @savedTheListInCollection
 
 code AlbumForm
     handler albumOpened
         tracks = find t in Track where t.album == album order by t.number
         let total = total_length(tracks)
         let count = count(tracks)
-        length.caption = "{count} tracks, {total}"
+        length.caption = @countTracksTotal(count = count, total = total)
 
     handler trackOpened
         open TrackDialog with album = album, track = trackGrid.selected
 
     handler addTrackClicked
         if album.title == ""
-            message warning "Save the album before adding tracks"
+            message warning @saveTheAlbumBeforeAdding
             return
         save album
         open TrackDialog with album = album
@@ -245,17 +245,17 @@ code AlbumForm
     handler saveClicked
         title.error = ""
         if album.title == ""
-            title.error = "An album needs a title"
+            title.error = @anAlbumNeedsATitle
             return
         save album
-        message "Saved {album.title}"
+        message @savedTitle(title = album.title)
         close
 
 code TrackDialog
     handler saveClicked
         title.error = ""
         if track.title == ""
-            title.error = "A track needs a title"
+            title.error = @aTrackNeedsATitle
             return
         track.album = album
         save track
@@ -281,16 +281,16 @@ code ArtistBrowse
 
     handler backupClicked
         back_up_photos()
-        message "Copied the photos to the exports folder"
+        message @copiedThePhotosToThe
 
 code ArtistForm
     handler saveClicked
         name.error = ""
         if artist.name == ""
-            name.error = "An artist needs a name"
+            name.error = @anArtistNeedsAName
             return
         save artist
-        message "Saved {artist.name}"
+        message @savedName(name = artist.name)
         close
 
 code GenreBrowse
@@ -304,7 +304,7 @@ code GenreDialog
     handler saveClicked
         name.error = ""
         if genre.name == ""
-            name.error = "A genre needs a name"
+            name.error = @aGenreNeedsAName
             return
         save genre
         close
@@ -312,10 +312,10 @@ code GenreDialog
 code Track
     before save
         if track.length > 7200
-            refuse "Track {track.number} is longer than two hours"
+            refuse @trackNumberIsLongerThan(number = track.number)
 
 code Genre
     before delete
         let below = find g in Genre where g.parent == genre
         if count(below) > 0
-            refuse "{genre.name} still has genres below it"
+            refuse @nameStillHasGenresBelow(name = genre.name)

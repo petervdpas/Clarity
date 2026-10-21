@@ -27,15 +27,16 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 - **Comments** start with `//` and run to the end of the line. They can stand on their own line or follow code. The designer keeps them when it rewrites a file.
 - **Blank lines** are free and are kept too.
 - **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. Entities, enums, windows and the app are written in `PascalCase` by convention. The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `square1`, `saveClicked`); the checker reports any other. Fields, data and functions are `snake_case` by convention.
-- **Every part has a name** (`button "Save" name save at 1,3`), which its events and code go by. The designer names a part when it is placed (`button1`); a part written without one is an error, and **Name them** under Problems names every such part in the file.
-- **Strings** are written in double quotes: `"Customer card"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
-  In code, a string is also read for slots: `{customer.name}` is a value, and `{{` and `}}` are braces (see [Text with slots](#text-with-slots)). Strings in settings, such as titles and patterns, have no slots.
+- **Every part has a name** (`button @saveCaption name save at 1,3`), which its events and code go by. The designer names a part when it is placed (`button1`); a part written without one is an error, and **Name them** under Problems names every such part in the file.
+- **Keys** name the texts people read: `@saveCaption`, `@customerCardTitle`. A key's text is in the language files, one per language (see [Translations](#translations)); a title, a caption, a label, a message are keys. Only a text without letters, such as a calculator's `"7"`, is written as it is.
+- **Strings** are written in double quotes: `"logo.png"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
+  In code, a string is also read for slots: `{customer.name}` is a value, and `{{` and `}}` are braces (see [Text with slots](#text-with-slots) and [Texts by key](#texts-by-key)). Strings in settings, such as patterns and file names, have no slots.
 - **Numbers** are written without quotes: `12`, `9.95`.
 - **Booleans** are `true` and `false`.
 
 Words such as `page`, `data` and `bind` are keywords only where the grammar expects them. Outside those places they are ordinary names, so a field may be called `data` and a part may be called `close_button`. The words `and`, `or`, `not` and `in` are reserved in expressions.
 
-When a name has a label that people see, Clarity derives it from the name unless one is given: `vat_number` becomes "Vat number", and `CustomerCard` becomes "Customer card".
+A text people see is a key (`label @customerVatNumberLabel`), whose text the language files give; see [Translations](#translations). **Make texts keys** writes a key for each text a project wrote as it was, and gives it a text derived from the name where there was none: `vat_number` becomes "Vat number", and `CustomerCard` becomes "Customer card".
 
 ## 2. The project file
 
@@ -85,23 +86,34 @@ Five stacks are generated today: Rust with the web UI (Tauri), C# with Avalonia,
 
 ### Translations
 
-Every text a person sees is in the project already: labels (written or derived from a name), help texts, titles, captions, placeholders, tooltips, tab titles, enum labels, menu items, the status text, messages, refusals, and the captions and errors code sets. Clarity collects them, so nobody marks a text for translation. The project's `language` is the language they are written in.
+Every text a person reads is a key, written with `@`: titles, captions, labels, help texts, placeholders, tooltips, tab titles, enum labels, menu items, the status text, messages, refusals, and the captions and errors code sets. A file per language, in the `translations` folder of the module folder, gives each key its text in that language. The project's `language` is the default language, which has a file too:
 
-A file per language, in the `translations` folder of the module folder, gives them in that language:
+```clarity
+// shop/translations/en.clarity: the default language
+translation en
+    customerCardTitle "Customer card"
+    savedName "Saved {name}"
+    yes "Yes"
+    no "No"
+```
 
 ```clarity
 // shop/translations/nl.clarity
 translation nl
-    "Customer card" "Klantkaart"
-    "Saved {customer.name}" "{customer.name} opgeslagen"
-    "Yes" "Ja"
+    customerCardTitle "Klantkaart"
+    savedName "{name} opgeslagen"
+    yes "Ja"
+    no "Nee"
 ```
 
 - The file's name is its language: `nl.clarity` says `translation nl`, `nl-BE.clarity` says `translation nl-BE`.
-- A text is found by what it says, for the whole project. When a text changes, its translation no longer applies: the checker warns that the old line is no longer shown anywhere, and the new text shows as written until it has a translation.
-- A translation keeps the slots of its text and may move them; a slot missing or added is an error.
-- A text without a translation shows as written, so a language can grow text by text. The Project tab lists every text with a column per language, says how many each misses, and writes what is typed into the files. `Yes` and `No`, which the screen shows for bools, can be translated too.
-- The application shows the translation for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, and the project's own language shows as written. The designer can show the canvas and Preview in any of the project's languages.
+- Every language file has the same keys: a key one file has and another lacks is an error. A key is camelCase, as names are, and is used anywhere in the project.
+- The default language gives every key a text; an empty one is an error. Another language may leave a key empty (`savedName ""`): it shows the default's text until it is translated.
+- A key's text may have slots, which code gives values by name: `message @savedName(name = customer.name)`. Each language keeps the slots of the default's text and may move them; a slot missing or added is an error, and so is a use that leaves one out or gives one the text does not have.
+- A key no design or code uses is a warning; it can go. A text with letters written in quotes where people read it is an error that asks for a key.
+- `yes` and `no` are what the screen shows for bools; `noPicture`, `loadPicture` and `removePicture` what an image part bound to a picture shows of its own. Every project gives them their texts.
+- The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, else the default. The designer can show the canvas and Preview in any of the project's languages.
+- A project written before texts had keys gets them with **Make texts keys**, or `clarity spec keys <folder>`: each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value, and old translation files give the same keys their translations.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
 
 ### Pictures
@@ -172,8 +184,8 @@ An enum is a fixed list of values. Each value can have a label; without one, the
 
 ```clarity
 enum CustomerKind
-    Private label "Private person"
-    Business
+    Private label @customerKindPrivate
+    Business label @customerKindBusiness
 ```
 
 ### Entities
@@ -182,14 +194,14 @@ An entity is a kind of record that is stored in a data source. It is the data di
 
 ```clarity
 entity Customer
-    name: text(80), required, label "Name"
-    email: email, unique, label "E-mail"
-    kind: CustomerKind, default Private
-    vat_number: text(14), help "Only for business customers"
-    credit_limit: money, min 0, default 0
-    active: bool, default true
-    since: date
-    notes: text, help "Internal notes, not shown to the customer"
+    name: text(80), required, label @customerNameLabel
+    email: email, unique, label @customerEmailLabel
+    kind: CustomerKind, default Private, label @customerKindLabel
+    vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
+    credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
+    active: bool, default true, label @customerActiveLabel
+    since: date, label @customerSinceLabel
+    notes: text, help @customerNotesHelp, label @customerNotesLabel
 ```
 
 A field is `name: type`, followed by modifiers separated by commas. Every record also has an `id`, which Clarity adds itself. Code can read it, to tell two records apart (`other.id != loan.id`); only `save` sets it, and a new record has id 0.
@@ -224,8 +236,8 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `min value`, `max value` | The lowest and highest value allowed. |
 | `pattern "regex"` | Text must match the regular expression. |
 | `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
-| `label "text"` | The label people see, instead of the derived one. |
-| `help "text"` | A help text, shown next to the field's input in windows. |
+| `label @key` | The label people see, by its key. Every field has one. |
+| `help @key` | A help text, by its key, shown next to the field's input in windows. |
 | `format name` | How the value is shown, by name; see [Formats](#formats). |
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
@@ -240,10 +252,10 @@ An `image` field holds a picture, or none. Without `store`, the picture is kept 
 
 ```clarity
 entity Album
-    cover: image, help "The scan of the front cover"
+    cover: image, help @albumCoverHelp, label @albumCoverLabel
 
 entity Artist
-    photo: image, store photos
+    photo: image, store photos, label @artistPhotoLabel
 ```
 
 ```clarity
@@ -251,7 +263,7 @@ entity Artist
     filestore photos "data/photos"
 ```
 
-- An image part shows it: `image name cover at 1,1 span 4 rows 6 bind album.cover`. It shows "No picture" while there is none, and, while the pointer is on it, a button to load a picture from a file and one to remove it. A label or help text can be for it.
+- An image part shows it: `image name cover at 1,1 span 4 rows 6 bind album.cover`. It shows its `noPicture` text while there is none, and, while the pointer is on it, a button to load a picture from a file and one to remove it. A label or help text can be for it.
 - Reading records never carries their pictures, so a list of thousands stays light; the screen fetches each picture on its own when it shows.
 - A picture is a png, jpg, gif, bmp or webp file, told by its first bytes; any other file is refused.
 - In a file store, a picture's file is named after the SHA-256 of its bytes, so the same picture is kept once. Files are never deleted: a store can be a folder of photos that are not the application's alone.
@@ -280,7 +292,7 @@ entity Invoice
 
 - A number input reads what is typed in the same locale: in Dutch `1.250,50` is 1250.5 and a point is a thousands separator. The currency sign, the percent sign and thousands separators may be typed or left out. Text that is no number marks the input and keeps the last value.
 - Every stack shows the same thing: the cases in `conformance/formats.json` are what each renderer must show and read.
-- Values in text that is shown follow the locale when they are in slots: `message "Saved on {order.placed}"`. See [Text with slots](#text-with-slots).
+- Values in text that is shown follow the locale when they are in slots: `message @savedOn(day = order.placed)`. See [Texts by key](#texts-by-key).
 
 ### Migrations
 
@@ -395,16 +407,16 @@ A window is a `page` block. Its settings come first, then its parts, which sit o
 
 ```clarity
 page CustomerForm: window
-    title "Customer"
+    title @customerFormTitle
     data customer: Customer
     data orders: list<Order>
     grid 12 columns
     on return: windowReturned
 
-    label "Name" name label1 at 1,1 span 3 for name
+    label @nameLabel name label1 at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
-    button "Save" name saveButton at 11,10 span 2 default on click: saveClicked
+    button @saveButtonCaption name saveButton at 11,10 span 2 default on click: saveClicked
 ```
 
 ### Kinds
@@ -504,7 +516,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 |---|---|---|---|
 | `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded` | `submit` |
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
-| `tabs` | `tab "Title"` blocks, each with parts | none | `change` |
+| `tabs` | `tab @key` blocks, each with parts | none | `change` |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
@@ -564,10 +576,10 @@ A label, its input and the input's help text are three separate parts. `for` tie
 
 ```clarity
 form name details at 1,1 span 12 rows 3 bind customer
-    label "Name" at 1,1 span 3 for name
-    textbox name name at 4,1 span 6 bind customer.name placeholder "Full name"
-    help at 10,1 span 3 for name
-    label "Kind" at 1,2 span 3 for kind
+    label @nameLabel name nameLabel at 1,1 span 3 for name
+    textbox name name at 4,1 span 6 bind customer.name placeholder @fullName
+    help name nameHelp at 10,1 span 3 for name
+    label @kindLabel name kindLabel at 1,2 span 3 for kind
     radio name kind at 4,2 span 6 bind customer.kind
 ```
 
@@ -580,7 +592,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 
 | Property | On | Meaning |
 |---|---|---|
-| `placeholder "text"` | textbox, memo, password, number | Shown while the input is empty. |
+| `placeholder @key` | textbox, memo, password, number | Shown while the input is empty. |
 | `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
 | `taborder n` | inputs, buttons | Position in the keyboard order, from 1. Parts without one follow in reading order. |
 | `key "Ctrl+S"` | buttons | The key that clicks the button. |
@@ -595,7 +607,7 @@ A key is written as modifiers, then one key, joined by `+`: `"Ctrl+S"`, `"Ctrl+S
 A button, an image, a menu item, or a toolbar or ribbon button can open a window without code:
 
 ```clarity
-button "All customers" at 1,12 span 3 on click -> CustomerBrowse
+button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> CustomerBrowse
 ```
 
 `on click -> Target` opens the window `Target`, in place, on top of the window the click is in. `on click -> Target in new window` opens it in a desktop window of its own instead: the one way, besides a `dialog`, that an application gets a second desktop window. Closing the last window there closes that desktop window, and the window that opened it gets its `on return`. In menus, toolbars and on buttons, `close` closes the current window and `quit` ends the application. In menus and toolbars, `language` lets the person choose the language the application shows (see [Translations](#translations)), and `theme` one of the themes it offers (see [Themes](#themes)). A click either opens a window this way or runs a handler (`on click: handler`), not both.
@@ -606,15 +618,15 @@ A container has its own grid, as many columns wide as its `span`. Its parts are 
 
 ```clarity
 tabs at 1,5 span 12 rows 7
-    tab "Orders"
+    tab @ordersTab
         table at 1,1 span 12 rows 5 bind orders columns number, total
-    tab "Notes"
+    tab @notesTab
         text at 1,1 span 12 bind customer.notes
 splitter at 1,1 span 12 rows 10 vertical
     pane
         list at 1,1 span 12 rows 4 bind customers show name
     pane
-        panel "Details" at 1,1 span 12 rows 4
+        panel @detailsCaption name details at 1,1 span 12 rows 4
             text at 1,1 span 6 bind customer.name
 ```
 
@@ -626,28 +638,28 @@ A project has one `app` block. It names the main window and declares the frame e
 
 ```clarity
 app Shop
-    title "Shop"
+    title @shopTitle
     main CustomerCard
     data session: Session
     on start: appStarted
     menu name mainMenu
-        item "File" name fileItem
-            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
+        item @fileItem name fileItem
+            item @newCustomerItem name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
     toolbar name mainToolbar
-        button "Customers" name customersButton icon "list" on click -> CustomerBrowse
+        button @customersButtonCaption name customersButton icon "list" on click -> CustomerBrowse
         separator
-        button "Orders" name ordersButton on click: ordersClicked
+        button @ordersButtonCaption name ordersButton on click: ordersClicked
     ribbon name mainRibbon collapsible
-        tab "Home" name homeTab
-            group "Customers" name customersGroup
-                button "New" name newButton icon "add" large on click -> CustomerForm
-                button "Browse" name browseButton icon "list" on click -> CustomerBrowse
+        tab @homeTab name homeTab
+            group @customersGroup name customersGroup
+                button @newButtonCaption name newButton icon "add" large on click -> CustomerForm
+                button @browseButtonCaption name browseButton icon "list" on click -> CustomerBrowse
     sidebar left name leftSidebar width 192
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
-        status "Ready"
+        status @shopStatus
         text name text1 at 10,1 span 3 bind session.user
 ```
 
@@ -664,17 +676,17 @@ app Shop
 
 | Region | Docks | Holds |
 |---|---|---|
-| `menu` | at the top | `item "Caption"` lines, which can hold more items below them (a submenu), and `separator` |
+| `menu` | at the top | `item @key` lines, which can hold more items below them (a submenu), and `separator` |
 | `toolbar` | at the top, below the menu | `button` and `separator` |
-| `ribbon` | at the top | `tab "Title"` blocks with `group "Title"` blocks of `button` and `separator` |
+| `ribbon` | at the top | `tab @key` blocks with `group @key` blocks of `button` and `separator` |
 | `sidebar left` or `sidebar right` | at that side, `width` pixels wide (240 without it) | parts, on its own grid of `grid n columns` (3 without it) |
 | `footer` | at the bottom | an optional `status "text"` and parts on a one-row grid of 12 columns |
 
-Every menu item and button has a name, in camelCase like a part's (`item "New customer" name newCustomerItem`); a separator has none. Its name is unique among the window's parts, including the menu and the toolbar themselves. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
+Every menu item and button has a name, in camelCase like a part's (`item @newCustomerItem name newCustomerItem`); a separator has none. Its name is unique among the window's parts, including the menu and the toolbar themselves. The designer names a new one after its caption and kind, as `newCustomerItem`, which keeps it apart from data and parts of the same word.
 
 The menu and the toolbar are named parts: `menu name mainMenu`, `toolbar name mainToolbar`. Code hides one with its `visible` and turns it off with its `enabled`.
 
-A ribbon is a named part too, and so are its tabs and groups: `ribbon name mainRibbon collapsible collapsed`, `tab "Home" name homeTab`, `group "Clipboard" name clipboardGroup`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
+A ribbon is a named part too, and so are its tabs and groups: `ribbon name mainRibbon collapsible collapsed`, `tab @homeTab name homeTab`, `group @clipboardGroup name clipboardGroup`. With `collapsible` the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it; `collapsed` starts it folded. Code reads and sets the open tab as `part.tab` (from 1; a hidden tab gives way to the first visible one) and the folding as `part.collapsed`, and hides a tab or group with its `visible`.
 
 A sidebar is a named part: `sidebar left name nav width 280 min 200 max 480 resizable collapsible collapsed maximizable grid 4 columns`. Its width is in pixels (240 without `width`, 100 to 1600). With `resizable` the person drags its inner edge between `min` and `max`; with `collapsible` a button folds it to a narrow strip and back, and `collapsed` starts it folded; with `maximizable` a button lets it fill the window. `grid n columns` gives its own grid (3 without it). Code reads and sets `part.collapsed` and `part.maximized`. The old form `sidebar left span 3` is an error that **Update the sidebars** fixes.
 
@@ -724,7 +736,7 @@ theme Shop
 
 | Line | Meaning |
 |---|---|
-| `title "Night owl"` | The name people see when they choose the theme; without it, one derived from the name (`NightOwl` reads "Night owl"). It is translated like every other text. |
+| `title @nightOwlTheme` | The name people see when they choose the theme, by its key. A theme the application offers needs one. |
 | `mode light`, `mode dark`, `mode system` | The theme is always light, always dark, or follows the system. |
 | `color name "#rrggbb"` | A color, written `#rrggbb` or `#rgb`; `dark "#rrggbb"` after it gives its value in dark mode. |
 | `font "Families"`, `font heading ...`, `font mono ...` | The fonts of text, headings and code, as a list of families: `"Inter, sans-serif"`. |
@@ -774,10 +786,10 @@ code CustomerForm
     handler saveClicked
         name.error = ""
         if customer.name == ""
-            name.error = "Name is required"
+            name.error = @nameIsRequired
             return
         save customer
-        message "Saved {customer.name}"
+        message @savedName(name = customer.name)
         close
 ```
 
@@ -824,7 +836,7 @@ A canvas is drawn by its draw handler, wired with `on draw`. The handler draws s
 page Main: window
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button "Faster" name button1 at 7,8 span 6 key "+" on click: change(10)
+    button @button1Caption name button1 at 7,8 span 6 key "+" on click: change(10)
 
 code Main
     handler drawDial
@@ -882,14 +894,14 @@ An entity's code block holds its data events: code that runs whenever one of its
 code Order
     before save
         if order.status == Approved and not within_credit(order)
-            refuse "Order {order.number} is over its customer's credit limit"
+            refuse @orderOverCreditLimit(number = order.number)
 
     after save
         log_change("saved " + order.number)
 
     before delete
         if order.status != Pending
-            refuse "Only pending orders can be deleted"
+            refuse @onlyPendingDeletable
 ```
 
 | Event | Runs |
@@ -943,7 +955,7 @@ An engine is a processing module compiled to WebAssembly, which every stack runs
 ```clarity
 engine Pricing from "pricing.wasm"
     uses clock, random
-    says "Out of stock"
+    says @outOfStock
     limit 2 seconds, 64 MB
     state per app
     on open
@@ -962,7 +974,7 @@ function order_total(order: Order) -> money
 - **A call** is `Engine.function(args)`. The checker types it against the declaration, as it does a call to a function. Handlers, functions and actions can all call an engine: it has no effects.
 - **The engine computes; the application does all input and output.** An engine reaches no database, file, network or screen. Code reads the records, hands them in, and saves what comes back: a record an engine returns is a copy, saved only when code saves it.
 - **`uses`** names the services of Clarity the engine may call, comma separated: `clock` (the time), `random` (a random number), `log` (a line in the application's log) and `language` (the language the person picked, such as `nl`). Each is a function the file imports from module `clarity`; a file that imports anything else, or a service the declaration does not name, is refused. Without `uses`, an engine imports nothing.
-- **`says`** lists the texts the engine gives people to read, comma separated: `says "You win", "A draw"`. They join the project's texts, so a translation file gives them in its language, and a text an engine function returns is translated in the person's language, as is an engine's refusal.
+- **`says`** lists the keys of the texts the engine gives people to read, comma separated: `says @youWin, @aDraw`. The engine returns a key (`"youWin"`), whose text the language files give in the person's language; an engine's refusal by a key shows the same way. A text an engine gives that is no key shows as it is.
 - **`limit`** says what one call may take: `limit 2 seconds`, `limit 64 MB` or both, `limit 2 seconds, 64 MB`. A call that runs longer is stopped, and fails with an error that says so; the engine never gets more memory than its limit. Without a limit line, a call may take 5 seconds and the engine 256 MB. A time limit is between 1 and 3600 seconds, a memory limit between 1 and 4096 MB.
 - **State.** Without a state line, each call starts the engine afresh, so nothing carries over from one call to the next. `state per app` keeps one instance for the whole application: what the engine holds in its memory carries from call to call, such as a loaded dictionary. `state per window` keeps an instance for each open window, made at its first call there and dropped when the window closes: a game's board, a document being edited. Only a window's handlers call an engine with state per window, each in its own window. A call that fails or runs past its limit drops the instance, since its memory may be half changed; the next call starts a new one. A refusal keeps it.
 - **`on open`** runs the engine's own `clarity_open` whenever an instance is made: once per instance with state, before every call without. There is no `on close`: an engine cannot save or show anything, so a window that must keep what an engine holds asks it in its own `on close` handler and saves the answer.
@@ -1005,7 +1017,8 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | Expression | Meaning |
 |---|---|
 | `12`, `9.95`, `"text"`, `true`, `false` | literals |
-| `"Saved {customer.name}"` | text with slots, for text that is shown; see [Text with slots](#text-with-slots) |
+| `@savedName(name = customer.name)` | a text by its key, its slots filled by name; see [Texts by key](#texts-by-key) |
+| `"{album.title}.txt"` | text with slots, filled plainly; see [Text with slots](#text-with-slots) |
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
@@ -1027,32 +1040,42 @@ One statement per line; `if`, `else` and `for` take an indented block.
 
 From tightest to loosest: member access (`.`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
 
-### Text with slots
+### Texts by key
 
-Text that people read names its values in slots, instead of adding them together, so a translator can move them and each value shows in the person's format:
+A text people read is a key, and its slots get their values by name, so a translator can move them and each value shows in the person's format:
 
 ```clarity
 code OrderForm
     handler approveClicked
         approve(order)
-        message "Order {order.number} of {order.total} is approved"
-        approve_button.caption = "Approved on {order.ordered_on}"
+        message @orderApproved(number = order.number, total = order.total)
+        approve_button.caption = @approvedOn(day = order.ordered_on)
 ```
 
-- A slot is a name or a member path in braces: `{total}`, `{order.customer.name}`. It is checked like any expression; a whole record or list is no value to show, so `{order.customer}` is an error that suggests one of its fields.
-- `{{` and `}}` are braces in the text; a `}` on its own is an error.
-- A value shows as its field shows it: money with its currency, a date in the locale and the field's `format`, an enum value by its label. A slot of a local or a parameter shows as its type does.
-- Text with slots is a text like any other: code keeps it in a local, passes it to a function, returns it, and puts it in a text value. It is always translated.
-- Text joined with `+` in a message, a refusal, a caption or an error is a warning that suggests slots, since such text cannot be translated and its values do not follow the locale.
-- Where text goes straight to the screen (a message, a refusal, a caption, an error, a text value a handler sets), the backend sends it as written with the value of each slot, and the screen translates it and fills the slots in the person's format.
-- Anywhere else, such as a function's result, the backend translates it in the language the screen picked and fills its slots plainly. A plain text a function returns (`return "Draw"`) is translated too, so a value code compares belongs in an enum, not a text.
+```clarity
+translation en
+    orderApproved "Order {number} of {total} is approved"
+    approvedOn "Approved on {day}"
+```
+
+- A key is `@` and its name; with slots, `@key(slot = value, ...)` gives each slot of its text a value. Every slot the default language's text has gets one, and no other.
+- A value is checked like any expression; a whole record or list is no value to show, so `customer = order.customer` is an error that suggests one of its fields.
+- A value shows as its field shows it: money with its currency, a date in the locale and the field's `format`, an enum value by its label. A local or a parameter shows as its type does.
+- A keyed text is a text like any other: code keeps it in a local, passes it to a function, returns it, and puts it in a text value.
+- Where it goes straight to the screen (a message, a refusal, a caption, an error, a text value a handler sets), the backend sends the key with each value, and the screen shows its text in the person's language and fills the slots in the person's format.
+- Anywhere else, such as a function's result, the backend takes the key's text in the language the screen picked and fills its slots plainly.
+- Text joined with `+` in a message, a refusal, a caption or an error is a warning that suggests a key with slots, since such text cannot be translated and its values do not follow the locale.
 
 ```clarity
 function credit_note(order: Order) -> text
     if within_credit(order)
-        return "Order {order.number} is within the credit limit"
-    return "Order {order.number} is above the customer's credit limit"
+        return @withinCredit(number = order.number)
+    return @overCredit(number = order.number)
 ```
+
+### Text with slots
+
+A string in code may have slots too: `"{album.title}.txt"`, `{{` and `}}` for braces. It is filled plainly, in no language, for what people do not read: a file's name, a line written to a file, a value to compare. Where people read it, it is a key.
 
 ### Queries
 
@@ -1147,46 +1170,46 @@ project Shop
 module customers
 
 enum CustomerKind
-    Private label "Private person"
-    Business
+    Private label @customerKindPrivate
+    Business label @customerKindBusiness
 
 entity Customer
-    name: text(80), required
-    kind: CustomerKind, default Private
-    vat_number: text(14), help "Only for business customers"
-    notes: text
+    name: text(80), required, label @customerNameLabel
+    kind: CustomerKind, default Private, label @customerKindLabel
+    vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
+    notes: text, label @customerNotesLabel
 
 app Shop
     main CustomerBrowse
 
 page CustomerBrowse: window
-    title "Customers"
+    title @customerBrowseTitle
     data customers: list<Customer>
     on return: windowReturned
 
-    label "Name" name label1 at 1,1 span 2 for nameFilter
-    textbox name nameFilter at 3,1 span 4 placeholder "Part of the name" on change: filterChanged
+    label @nameFilterLabel name label1 at 1,1 span 2 for nameFilter
+    textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
     table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: openClicked
-    button "New" name button1 at 9,10 span 2 on click -> CustomerForm
-    button "Open" name openButton at 11,10 span 2 on click: openClicked
+    button @button1Caption name button1 at 9,10 span 2 on click -> CustomerForm
+    button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
 
 page CustomerForm: window
-    title "Customer"
+    title @customerFormTitle
     data customer: Customer
 
     form name customerForm at 1,1 span 12 rows 4 bind customer
-        label "Name" name label1 at 1,1 span 3 for name
+        label @nameLabel name label1 at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind customer.name
         help name help1 at 10,1 span 3 for name
-        label "Kind" name label2 at 1,2 span 3 for kind
+        label @kindLabel name label2 at 1,2 span 3 for kind
         radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
-        label "Vat number" name label3 at 1,3 span 3 for vatNumber
+        label @vatNumberLabel name label3 at 1,3 span 3 for vatNumber
         textbox name vatNumber at 4,3 span 4 bind customer.vat_number
         help name help2 at 8,3 span 5 for vatNumber
-        label "Notes" name label4 at 1,4 span 3 for notes
+        label @notesLabel name label4 at 1,4 span 3 for notes
         textbox name notes at 4,4 span 9 bind customer.notes
-    button "Save" name saveButton at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
-    button "Close" name closeForm at 11,6 span 2 cancel on click: closeClicked
+    button @saveButtonCaption name saveButton at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
+    button @closeFormCaption name closeForm at 11,6 span 2 cancel on click: closeClicked
 
 code Customer
     before save
@@ -1213,13 +1236,13 @@ code CustomerForm
         name.error = ""
         vatNumber.error = ""
         if customer.name == ""
-            name.error = "Name is required"
+            name.error = @nameIsRequired
             return
         if customer.kind == Business and customer.vat_number == ""
-            vatNumber.error = "Needed for business customers"
+            vatNumber.error = @neededForBusinessCustomers
             return
         save customer
-        message "Saved {customer.name}"
+        message @savedName(name = customer.name)
         close
 
     handler closeClicked

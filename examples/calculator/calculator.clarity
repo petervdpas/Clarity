@@ -1,11 +1,11 @@
 module calculator
 
 app Calculator
-    title "Calculator"
+    title @calculatorTitle
     main Main
 
 theme Calculator
-    title "Calculator"
+    title @calculatorTheme
     mode system
     color lcd "#c7d3a8" dark "#1d2618"
     color lcd_text "#1f2a14" dark "#a8e890"
@@ -14,11 +14,11 @@ theme Calculator
     style equals background accent, text on_accent, weight bold
 
 enum Operation
-    Nothing
-    Add
-    Subtract
-    Multiply
-    Divide
+    Nothing label @operationNothing
+    Add label @operationAdd
+    Subtract label @operationSubtract
+    Multiply label @operationMultiply
+    Divide label @operationDivide
 
 function calculate(a: decimal, op: Operation, b: decimal) -> decimal
     if op == Add
@@ -29,12 +29,12 @@ function calculate(a: decimal, op: Operation, b: decimal) -> decimal
         return a * b
     if op == Divide
         if b == 0
-            refuse "Cannot divide by zero"
+            refuse @cannotDivideByZero
         return a / b
     return b
 
 page Main: window
-    title "Calculator"
+    title @mainTitle
     size 320 x 340
     data shown: decimal
     data entry: decimal
@@ -46,7 +46,7 @@ page Main: window
     grid 4 columns
 
     display name screen at 1,1 span 4 rows 2 bind shown digits 12 style display
-    button "C" name button1 at 1,3 span 1 key "Escape" on click: clear
+    button @button1Caption name button1 at 1,3 span 1 key "Escape" on click: clear
     button "+/-" name button2 at 2,3 span 1 on click: changeSign
     button "%" name button3 at 3,3 span 1 on click: percent
     button "÷" name button4 at 4,3 span 1 style operator key "/" on click: operation(Divide)

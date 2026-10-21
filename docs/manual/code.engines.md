@@ -14,7 +14,7 @@ An engine only computes. It has no database, files, network or screen. Your code
 2. The engine opens in its own editor. On the left, its inspector holds what the declaration says:
    - **Functions**: name, values and what each gives. **+ Add function** adds one, and its stub appears in the code.
    - **Services**: clock, random, log and language.
-   - **Texts it gives**: one a line, translated like the project's own; see [Texts and languages](#texts-and-languages).
+   - **Keys it says**: one a line, the keys of the texts it gives; see [Texts and languages](#texts-and-languages).
    - **State**: none, per app or per window, and **On open**.
    - **Limits**: the time a call may run and the memory it may use.
 3. On the right is the engine's code. Write what each function computes there, and save with Ctrl+S. Double-click a function in the inspector, or click its name above the code, to go to it.
@@ -68,16 +68,16 @@ There is no service for the database, files or the network, and there won't be: 
 
 ## Texts and languages
 
-An engine that gives people something to read lists those texts with `says`:
+An engine that gives people something to read returns keys, and lists them with `says`:
 
 ```clarity
 engine Board from "board.wasm"
     uses random
-    says "Your move", "You win", "I win", "A draw"
-    says "That square is taken"
+    says @yourMove, @youWin, @iWin, @aDraw
+    says @thatSquareIsTaken
 ```
 
-The texts join the project's own, under i18n in the project tree, so each translation file gives them in its language. A text an engine function returns is shown in the person's language, and so is an error the engine gives back. An engine that needs the language itself, to sort or to format, uses `language`.
+The engine returns `"youWin"`; the language files give the key its text, so the person reads it in their language, and a refusal by a key shows the same way. A text an engine gives that is no key shows as it is. An engine that needs the language itself, to sort or to format, uses `language`.
 
 ## Limits
 

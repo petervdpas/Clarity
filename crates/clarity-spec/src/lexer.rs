@@ -34,6 +34,8 @@ pub enum TokenKind {
     Slash,
     LBracket,
     RBracket,
+    /// `@saveCaption`: a text by its key; the token's text is the key.
+    Key,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,6 +175,30 @@ fn lex_line(
                 pos += 2;
                 TokenKind::Arrow
             }
+            b'@' => {
+                let from = pos + 1;
+                let mut end = from;
+                while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                    end += 1;
+                }
+                if end == from || bytes[from].is_ascii_digit() {
+                    diagnostics.push(Diagnostic::error(
+                        "'@' starts a key, as in @saveCaption",
+                        span_at(line_start, line_no, start, end.max(pos + 1)),
+                    ));
+                    pos = end.max(pos + 1);
+                    content_end = pos;
+                    continue;
+                }
+                pos = end;
+                tokens.push(Token {
+                    kind: TokenKind::Key,
+                    text: text[from..end].to_string(),
+                    span: span_at(line_start, line_no, start, pos),
+                });
+                content_end = pos;
+                continue;
+            }
             b'"' => match lex_string(text, pos) {
                 Ok((value, end)) => {
                     pos = end;
@@ -263,6 +289,15 @@ fn lex_string(text: &str, start: usize) -> Result<(String, usize), String> {
         }
     }
     Err("unterminated string".to_string())
+}
+
+/// Writes a text people read as Clarity does: a key (`@saveCaption`) as
+/// itself, any other text as a string literal.
+pub fn text_token(text: &str) -> String {
+    match text.strip_prefix('@') {
+        Some(key) if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => text.to_string(),
+        _ => quote(text),
+    }
 }
 
 /// Writes `text` as a string literal that `lex_string` reads back unchanged.

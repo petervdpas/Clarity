@@ -4,7 +4,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::load_sources;
+
 
 const SHOP: &str = "module shop
 
@@ -24,7 +24,7 @@ code Main
 ";
 
 fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = clarity_spec::keyed::load_keyed([("shop.clarity", SHOP)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = backend;
@@ -62,7 +62,7 @@ fn code_reads_and_sets_folded_from_the_design_on_every_stack() {
 fn avalonia_folds_with_an_expander() {
     let files = files(Backend::Csharp, Ui::Avalonia);
     let view = text(&files, "Windows/MainView.axaml");
-    has(view, "<Expander x:Name=\"details\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"4\" Header=\"{x:Static local:Texts.Details}\" IsExpanded=\"{Binding Details.IsOpen}\"");
+    has(view, "<Expander x:Name=\"details\" Grid.Column=\"0\" Grid.Row=\"0\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"4\" Header=\"{x:Static local:Texts.DetailsCaption}\" IsExpanded=\"{Binding Details.IsOpen}\"");
     let vm = text(&files, "Windows/MainViewModel.cs");
     has(vm, "public PartState Details { get; } = new(\"details\") { IsFolded = true };");
     has(vm, "if (Details.IsFolded)");

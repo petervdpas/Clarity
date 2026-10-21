@@ -15,68 +15,93 @@ project Shop
 
 The language is a tag such as `"en"` or `"nl-NL"`. The currency is an ISO 4217 code; without it, amounts show without a currency sign. Both are also under **Language, formats and theme** on the Project tab.
 
-## Translations
+## Texts and keys
 
-Every text a person sees is in the project already: labels (also those derived from names), help texts, titles, captions, placeholders, tooltips, tab titles, enum labels, menu items, the status text, the text a value starts with (`data rules: text, default "..."`), messages, refusals, and captions and errors set in code. Clarity collects them, so you never mark a text for translation.
-
-A text value starts in the person's language when its window opens, so a text block bound to it shows the translation. A text a handler puts in it is translated too, with its slots filled in the person's format.
-
-## Texts in code
-
-Every text written in code is translated, with its slots: a message, a refusal, a caption or an error, a text a handler puts in a text value, and the text a function or action returns. A text with slots is an ordinary value, which code keeps, passes on and returns:
+Every text people read is a key, written with `@`: a title, a caption, a label, a help text, a placeholder, a tooltip, a tab's title, an enum value's label, a menu item, the status text, a message, a refusal, and a caption or an error that code sets.
 
 ```clarity
-function credit_note(order: Order) -> text
-    if within_credit(order)
-        return "Order {order.number} is within the credit limit"
-    return "Order {order.number} is above the customer's credit limit"
+page CustomerCard: window
+    title @customerCardTitle
+    button @saveCaption name save at 9,12 span 2 on click: saveClick
+
+code CustomerCard
+    handler saveClick
+        save customer
+        message @savedName(name = customer.name)
 ```
+
+A file per language, in the `translations` folder of the module folder, gives every key its text in that language. The project's language (`language "en"`) is the default, and has a file too:
 
 ```clarity
-translation nl
-    "Order {order.number} is above the customer's credit limit" "Bestelling {order.number} gaat boven het kredietlimiet van de klant"
+// shop/translations/en.clarity
+translation en
+    customerCardTitle "Customer card"
+    saveCaption "Save"
+    savedName "Saved {name}"
+    yes "Yes"
+    no "No"
 ```
-
-The slots are named after their values, so the translator sees what each one holds and may move it. A text that goes to the screen gets its values in the person's format; a text a function returns gets them plainly. Since a plain text a function returns is translated too, a value code compares belongs in an enum. An engine lists the texts it gives with `says`; see [Engines](code.engines.md#texts-and-languages).
-
-A text without letters, such as a calculator's `7` or `+`, reads the same in every language and needs no translation.
-
-To see what a project's translations still miss without opening Clarity, run `clarity spec texts <project folder>`: it lists, per language, each missing text as a line to fill in.
-
-A file per language, in the `translations` folder of the module folder, gives them in that language:
 
 ```clarity
 // shop/translations/nl.clarity
 translation nl
-    "Customer card" "Klantkaart"
-    "Saved {customer.name}" "{customer.name} opgeslagen"
-    "Yes" "Ja"
+    customerCardTitle "Klantkaart"
+    saveCaption "Opslaan"
+    savedName "{name} opgeslagen"
+    yes "Ja"
+    no ""
 ```
 
 - The file's name is its language: `nl.clarity` says `translation nl`, `nl-BE.clarity` says `translation nl-BE`.
-- Each line is the text as written, then its translation. A text is found by what it says, for the whole project.
-- A translation keeps the slots of its text and may move them. A slot missing or added is an error.
-- A text without a translation shows as written, so a language can grow text by text.
-- When a text changes, its old translation no longer applies. The checker warns that the old line is not shown anywhere, and the new text shows as written until it has a translation.
+- Every language file has the same keys. A key one file lacks is an error, so a new key goes into every file at once; Clarity does that for you.
+- The default language gives every key a text. Another language may leave a key empty, as `no ""` above: it shows the default's text until it is translated.
+- A key is camelCase, as names are. You type a text in the designer, and Clarity makes its key from the part and what the text is to it: `saveCaption`, `customerNameLabel`, `customerCardTitle`. Rename it under the field in Properties.
+- A text people read that is written in quotes is an error that asks for a key. A text without letters, such as a calculator's `"7"` or `"+"`, reads the same in every language and stays as it is.
+- `yes` and `no` are how the screen shows a bool; an image part bound to a picture has `noPicture`, `loadPicture` and `removePicture`. Every project gives them their texts.
+
+## Slots
+
+A key's text names its values in slots, and code gives each slot its value by name:
+
+```clarity
+function credit_note(order: Order) -> text
+    if within_credit(order)
+        return @withinCredit(number = order.number)
+    return @overCredit(number = order.number)
+```
+
+```clarity
+translation nl
+    withinCredit "Bestelling {number} blijft binnen het kredietlimiet"
+    overCredit "Bestelling {number} gaat boven het kredietlimiet van de klant"
+```
+
+Each language keeps the slots of the default's text and may move them. A text that goes to the screen gets its values in the person's format; a text a function returns gets them plainly. An engine lists the keys of the texts it gives with `says`; see [Engines](code.engines.md#texts-and-languages).
+
+## Making a project's texts keys
+
+A project written before texts had keys gets them with **Make texts keys**, under Problems, or with `clarity spec keys <project folder>`. Each text becomes a key named after where it is, its text the default language's value; a translation file that translated texts by what they said gives the same keys their translations.
+
+To see what each language still leaves empty without opening Clarity, run `clarity spec texts <project folder>`: it lists, per language, each key without a text as a line to fill in.
 
 ## i18n in the project tree
 
-The project tree lists the languages under i18n by name: first the one the texts are written in, then each translation. Click one to open it.
+The project tree lists the languages under i18n by name: first the default, then each other language. Click one to open it.
 
-- A translation lists every text with where it is used and its translation, and says how many are translated. Type a translation next to its text; it goes into the language's file. A long text wraps in its box.
-- The language the texts are written in gives an overview: every text with a mark per translation (translated or missing), and a button per translation that opens it.
-- **Find a text** narrows the list to texts that hold what you type, in either language; **Missing only** to the texts still to translate.
-- **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, and opens it.
-- **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, the one the texts are written in, or the system's.
+- The default language lists every key with where it is used and its text, which you can change; each needs one. A mark per other language says whether it translates the key, and a button per language opens it.
+- Another language lists every key with where it is used, the default's text, and its own to type; it says how many keys it translates. A key left empty shows the default's text.
+- **Find a key or a text** narrows the list to what holds what you type; **Missing only** to the keys still to translate.
+- **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, with every key, and opens it.
+- **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, or the system's.
 
 ## Which language shows
 
-The application shows the translation for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else another region of Dutch. The project's own language shows as written.
+The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else another region of Dutch, else the default language.
 
 To let people choose, give a menu item or a button the click target `language`:
 
 ```clarity
-item "Language" on click -> language
+item @languageItem name languageItem on click -> language
 ```
 
 It lists the project's languages, each by its own name (Nederlands, Deutsch). The application switches at once and remembers the choice for its next start.
@@ -101,7 +126,7 @@ entity Invoice
     year: integer, format plain
 ```
 
-A number input reads what is typed in the same locale: in Dutch `1.250,50` is 1250.5. Values in slots follow the locale too: `message "Saved on {order.placed}"`.
+A number input reads what is typed in the same locale: in Dutch `1.250,50` is 1250.5. Values in slots follow the locale too: `message @savedOn(day = order.placed)`.
 
 ## On each stack
 

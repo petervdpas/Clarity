@@ -1,17 +1,24 @@
 <script lang="ts">
   // An enum of the data dictionary: its variants and their labels.
 
+  import TextField from "./TextField.svelte";
+  import type { Preview } from "./generated/Preview";
   import RenameField from "./RenameField.svelte";
   import type { Edit } from "./generated/Edit";
   import type { EnumDecl } from "./generated/EnumDecl";
 
   let {
+    preview,
     decl,
     module,
     onedit,
     ondelete,
     onrename,
+    onapplied,
   }: {
+    preview: Preview;
+    /** Takes the project after a text's value or key changed in the language files. */
+    onapplied: (preview: Preview) => void;
     decl: EnumDecl;
     module: string;
     onedit: (edit: Edit) => void;
@@ -58,10 +65,7 @@
               />
             </td>
             <td>
-              <input
-                value={v.label}
-                onchange={(e) => onedit({ op: "updateVariant", item, name: v.name.name, label: e.currentTarget.value.trim() || null })}
-              />
+              <TextField {preview} {onapplied} text={v.label} onwrite={(text) => onedit({ op: "updateVariant", item, name: v.name.name, label: text })} />
             </td>
             <td class="actions">
               <button title="Move up" disabled={i === 0} onclick={() => onedit({ op: "moveSibling", item, delta: -1 })}>&uarr;</button>

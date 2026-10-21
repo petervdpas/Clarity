@@ -2,6 +2,7 @@
   // The data dictionary for one entity: a row per field with its name, type
   // and modifiers. Every change is one edit, checked by the Rust backend.
 
+  import TextField from "./TextField.svelte";
   import RenameField from "./RenameField.svelte";
   import type { Edit } from "./generated/Edit";
   import type { Entity } from "./generated/Entity";
@@ -18,9 +19,12 @@
     onedit,
     ondelete,
     onrename,
+    onapplied,
     stores,
   }: {
     preview: Preview;
+    /** Takes the project after a text's value or key changed in the language files. */
+    onapplied: (preview: Preview) => void;
     entity: Entity;
     module: string;
     onedit: (edit: Edit) => void;
@@ -150,7 +154,7 @@
             <td class="center">
               <input type="checkbox" checked={m.unique} onchange={(e) => update(field, { modifiers: { unique: e.currentTarget.checked } })} />
             </td>
-            <td><input value={m.label ?? ""} placeholder={field.label} onchange={(e) => update(field, { modifiers: { label: textOf(e) } })} /></td>
+            <td><TextField {preview} {onapplied} text={m.label} placeholder={field.label} onwrite={(text) => update(field, { modifiers: { label: text } })} /></td>
             <td>
               <input
                 class="mono"
@@ -166,7 +170,7 @@
                 </select>
               {/if}
             </td>
-            <td><input value={m.help ?? ""} onchange={(e) => update(field, { modifiers: { help: textOf(e) } })} /></td>
+            <td><TextField {preview} {onapplied} text={m.help} onwrite={(text) => update(field, { modifiers: { help: text } })} /></td>
             <td>
               {#if field.type.kind === "image"}
                 <select value={m.store ?? ""} onchange={(e) => update(field, { modifiers: { store: e.currentTarget.value || null } })}>

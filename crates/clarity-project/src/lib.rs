@@ -549,6 +549,15 @@ pub fn load_modules(dir: &Path) -> std::io::Result<clarity_spec::Project> {
 }
 
 /// Like `load_modules`, with `text` in place of the file at `path`.
+/// Like `load_modules_with`, with several files in place of what the folder
+/// holds: a module and the language files an edit writes beside it.
+pub fn load_modules_with_files(dir: &Path, replaced: &[(&Path, &str)]) -> std::io::Result<clarity_spec::Project> {
+    let mut project = clarity_spec::load_dir_with_files_in(dir, replaced, &sources_of(dir))?;
+    check_external(dir, &mut project);
+    hand_over(dir, &mut project);
+    Ok(project)
+}
+
 pub fn load_modules_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<clarity_spec::Project> {
     let mut project = clarity_spec::load_dir_with_in(dir, Some((path, text)), &sources_of(dir))?;
     check_external(dir, &mut project);
@@ -696,10 +705,17 @@ pub fn import_tables(dir: &Path, source: &str, module: &str, tables: &[String]) 
     }
     let taken: Vec<String> = project.entities().map(|e| e.name.name.clone()).collect();
     let imported = clarity_db::import(&schema, tables, module, source, &taken);
-    std::fs::write(&path, &imported.text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+    // Its fields' labels are read by people: keys, with their texts in the language files.
+    let default = clarity_spec::translations::default_language(&project);
+    let existing = project.translations.get(&default).cloned().unwrap_or_default();
+    let keyed = clarity_spec::keyed::make_keys_beside(&[(path.to_string_lossy().as_ref(), imported.text.as_str())], &[], &default, &existing);
+    let text = keyed.modules[0].1.clone();
+    let keys: Vec<(String, String)> = keyed.order.iter().map(|k| (k.clone(), keyed.languages[&default][k].clone())).collect();
+    std::fs::write(&path, &text).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+    clarity_spec::keyed::add_keys(dir, &default, &keys).map_err(|err| format!("cannot write the language files: {err}"))?;
     Ok(ImportDone {
         path,
-        text: imported.text,
+        text,
         skipped: imported.skipped,
     })
 }

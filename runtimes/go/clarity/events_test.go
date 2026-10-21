@@ -214,4 +214,12 @@ func TestTextTravelsAsTheOtherRuntimesSendIt(t *testing.T) {
 	var back Text
 	must(t, json.Unmarshal(wire, &back))
 	equal(t, back.Show(), saved.Show())
+	// A key travels with its slot values; the screen looks up its value.
+	keyed, _ := json.Marshal(KeyText("orderApproved").With("number", SlotText("A-7")))
+	equal(t, string(keyed), `{"key":"orderApproved","values":{"number":{"kind":"text","value":"A-7"}}}`)
+	bare, _ := json.Marshal(KeyText("save"))
+	equal(t, string(bare), `{"key":"save"}`)
+	var keyBack Text
+	must(t, json.Unmarshal(keyed, &keyBack))
+	equal(t, keyBack.Key, "orderApproved")
 }

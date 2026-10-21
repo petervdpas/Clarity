@@ -8,6 +8,7 @@ pub mod edit;
 pub mod formats;
 pub mod engines;
 pub mod images;
+pub mod keyed;
 pub mod themes;
 pub mod translations;
 pub mod frame;
@@ -244,11 +245,18 @@ pub fn load_dir_in(dir: &Path, sources: &[SourceRef]) -> std::io::Result<Project
 /// Like `load_dir_in`, but with `text` in place of the file at `path`. Used
 /// to check an edit against the whole project before it is written.
 pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[SourceRef]) -> std::io::Result<Project> {
+    load_dir_with_files_in(dir, replaced.as_slice(), sources)
+}
+
+/// Like `load_dir_in`, with `replaced` (a module, a language file, one not
+/// written yet) in place of what the folder holds. Used to check an edit
+/// that writes several files against the whole project first.
+pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &[SourceRef]) -> std::io::Result<Project> {
     let mut files = Vec::new();
     for p in spec_files(dir)? {
-        let content = match replaced {
-            Some((path, text)) if p == path => text.to_string(),
-            _ => std::fs::read_to_string(&p)?,
+        let content = match replaced.iter().find(|(path, _)| *path == p) {
+            Some((_, text)) => text.to_string(),
+            None => std::fs::read_to_string(&p)?,
         };
         files.push((p.display().to_string(), content));
     }
@@ -271,17 +279,22 @@ pub fn load_dir_with_in(dir: &Path, replaced: Option<(&Path, &str)>, sources: &[
 /// The translation files of the project in `dir`, as (path, text): one
 /// per language, `translations/nl.clarity`. `replaced` stands in for the
 /// file it names, as it does for the modules.
-pub fn translation_sources(dir: &Path, replaced: Option<(&Path, &str)>) -> std::io::Result<Vec<(String, String)>> {
+pub fn translation_sources(dir: &Path, replaced: &[(&Path, &str)]) -> std::io::Result<Vec<(String, String)>> {
     let folder = dir.join(translations::TRANSLATIONS_DIR);
-    if !folder.is_dir() {
-        return Ok(Vec::new());
+    let mut paths = if folder.is_dir() { spec_files(&folder)? } else { Vec::new() };
+    // A language file about to be written, which is not on disk yet.
+    for (path, _) in replaced {
+        if path.parent() == Some(folder.as_path()) && !paths.iter().any(|p| p == path) {
+            paths.push(path.to_path_buf());
+        }
     }
-    spec_files(&folder)?
+    paths.sort();
+    paths
         .into_iter()
         .map(|p| {
-            let text = match replaced {
-                Some((path, text)) if p == path => text.to_string(),
-                _ => std::fs::read_to_string(&p)?,
+            let text = match replaced.iter().find(|(path, _)| *path == p) {
+                Some((_, text)) => text.to_string(),
+                None => std::fs::read_to_string(&p)?,
             };
             Ok((p.display().to_string(), text))
         })

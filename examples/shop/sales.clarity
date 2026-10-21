@@ -3,24 +3,24 @@ module sales
 use customers
 
 enum OrderStatus
-    Pending
-    Approved
-    Shipped
-    Cancelled
+    Pending label @orderStatusPending
+    Approved label @orderStatusApproved
+    Shipped label @orderStatusShipped
+    Cancelled label @orderStatusCancelled
 
 entity Order
-    number: text(12), unique, required, pattern "^ORD-[0-9]{8}$"
-    customer: ref Customer, required
-    status: OrderStatus, default Pending
-    ordered_on: date, required
-    total: money, computed
-    remarks: text(200)
+    number: text(12), unique, required, pattern "^ORD-[0-9]{8}$", label @orderNumberLabel
+    customer: ref Customer, required, label @orderCustomerLabel
+    status: OrderStatus, default Pending, label @orderStatusLabel
+    ordered_on: date, required, label @orderOrderedOnLabel
+    total: money, computed, label @orderTotalLabel
+    remarks: text(200), label @orderRemarksLabel
 
 entity OrderLine
-    order: ref Order, required
-    product: text(80), required, label "Product"
-    quantity: integer, default 1, min 1, label "Quantity"
-    price: money, label "Price"
+    order: ref Order, required, label @orderLineOrderLabel
+    product: text(80), required, label @orderLineProductLabel
+    quantity: integer, default 1, min 1, label @orderLineQuantityLabel
+    price: money, label @orderLinePriceLabel
 
 // Prices an order from its lines, with volume discounts; its source is in
 // engines/pricing.
@@ -28,40 +28,40 @@ engine Pricing from "pricing.wasm"
     function total(lines: list<OrderLine>) -> money
 
 page OrderBrowse: window
-    title "Orders"
+    title @orderBrowseTitle
     data orders: list<Order>
     on return: windowReturned
 
-    label "Number" name label1 at 1,1 span 2 for numberFilter
-    textbox name numberFilter at 3,1 span 4 placeholder "Part of the number" on change: filterChanged
+    label @numberFilterLabel name label1 at 1,1 span 2 for numberFilter
+    textbox name numberFilter at 3,1 span 4 placeholder @numberFilterPlaceholder on change: filterChanged
     table name table1 at 1,2 span 12 rows 8 bind orders columns number, customer, ordered_on, status, total
-    button "New" name button1 at 9,10 span 2 on click -> OrderForm
-    button "Open" name button2 at 11,10 span 2 on click -> OrderForm
+    button @button1Caption name button1 at 9,10 span 2 on click -> OrderForm
+    button @button2Caption2 name button2 at 11,10 span 2 on click -> OrderForm
 
 page OrderForm: window
-    title "Order"
+    title @orderFormTitle
     data order: Order
     data lines: list<OrderLine>
     on open: orderOpened
 
-    panel "Order" name panel1 at 1,1 span 12 rows 4
-        label "Number" name label1 at 1,1 span 2
+    panel @panel1Caption2 name panel1 at 1,1 span 12 rows 4
+        label @label1Caption2 name label1 at 1,1 span 2
         textbox name textbox1 at 3,1 span 4 bind order.number
-        label "Ordered on" name label2 at 7,1 span 2
+        label @label2Caption2 name label2 at 7,1 span 2
         date name date1 at 9,1 span 3 bind order.ordered_on
-        label "Customer" name label3 at 1,2 span 3
+        label @label3Caption2 name label3 at 1,2 span 3
         dropdown name dropdown1 at 4,2 span 4 bind order.customer
-        label "Status" name label4 at 1,3 span 3
+        label @label4Caption name label4 at 1,3 span 3
         dropdown name dropdown2 at 4,3 span 4 bind order.status
     table name linesGrid at 1,5 span 12 rows 4 bind lines columns product, quantity, price edit product, quantity, price on change: lineChanged
-    button "Add line" name button1 at 1,9 span 2 on click: addLineClicked
-    label "Total" name label5 at 7,9 span 2
+    button @button1Caption3 name button1 at 1,9 span 2 on click: addLineClicked
+    label @label5Caption name label5 at 7,9 span 2
     number name number1 at 9,9 span 3 bind order.total readonly
-    label "Remarks" name label6 at 1,10 span 3
+    label @label6Caption name label6 at 1,10 span 3
     textbox name textbox2 at 4,10 span 6 bind order.remarks
-    button "Approve" name approveButton at 7,11 span 2 on click: approveClicked
-    button "Save" name button2 at 9,11 span 2
-    button "Close" name button3 at 11,11 span 2
+    button @approveButtonCaption name approveButton at 7,11 span 2 on click: approveClicked
+    button @button2Caption3 name button2 at 9,11 span 2
+    button @button3Caption name button3 at 11,11 span 2
 
 function within_credit(order: Order) -> bool
     return order.total <= order.customer.credit_limit
@@ -70,8 +70,8 @@ function within_credit(order: Order) -> bool
 // language: a text with slots is translated wherever code makes it.
 function credit_note(order: Order) -> text
     if within_credit(order)
-        return "Order {order.number} is within the credit limit"
-    return "Order {order.number} is above the customer's credit limit"
+        return @orderNumberIsWithinThe(number = order.number)
+    return @orderNumberIsAboveThe(number = order.number)
 
 action approve(order: Order)
     require order.status == Pending
@@ -109,17 +109,17 @@ code OrderForm
             message warning credit_note(order)
             return
         approve(order)
-        message "Order {order.number} is approved"
+        message @orderNumberIsApproved(number = order.number)
 
 code Order
     before save
         // The total is always what the stored lines cost.
         order.total = Pricing.total(find l in OrderLine where l.order == order)
         if order.status == Approved and not within_credit(order)
-            refuse "Order {order.number} is over its customer's credit limit"
+            refuse @orderNumberIsOverIts(number = order.number)
 
     before delete
         if order.status != Pending
-            refuse "Only pending orders can be deleted"
+            refuse @onlyPendingOrdersCanBe
         for line in find l in OrderLine where l.order == order
             delete line

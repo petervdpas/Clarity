@@ -1,7 +1,8 @@
 // Dutch.
 translation nl
-    "Dial" "Meter"
-    "Slower" "Langzamer"
-    "Faster" "Sneller"
-    "Yes" "Ja"
-    "No" "Nee"
+    dialTitle "Meter"
+    mainTitle "Meter"
+    button1Caption "Langzamer"
+    button2Caption "Sneller"
+    yes "Ja"
+    no "Nee"

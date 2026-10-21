@@ -388,7 +388,8 @@ func answer(output []byte, failed func(string) error) (any, error) {
 		if err := json.Unmarshal(raw, &why); err != nil {
 			return nil, failed("its error is no text")
 		}
-		return nil, clarity.Refuse(clarity.PlainText(why))
+		// An engine refuses by the key of its text (its says), or in its own words.
+		return nil, clarity.Refuse(clarity.KeyText(why))
 	}
 	raw, ok := answer["value"]
 	if !ok {

@@ -14,10 +14,10 @@ code CustomerForm
     handler saveClicked
         name.error = ""
         if customer.name == ""
-            name.error = "Name is required"
+            name.error = @nameIsRequired
             return
         save customer
-        message "Saved {customer.name}"
+        message @savedName(name = customer.name)
         close
 ```
 
@@ -114,7 +114,7 @@ Only a canvas's own draw handler draws on it, and the handlers it calls that not
 
 ## Messages, windows and data
 
-- `message "Saved {customer.name}"` shows a message. Write `message warning ...` or `message error ...` for another level; the default is info. Values go in slots, see [The language](code.language.md).
+- `message @savedName(name = customer.name)` shows a message by its key. Write `message warning ...` or `message error ...` for another level; the default is info. Values go in slots, see [The language](code.language.md).
 - `open CustomerForm` opens a window on top of this one. `open CustomerForm with customer = grid.selected` fills its data by name.
 - `close` closes this window. The window below then runs its `on return` handler, the place to read a list again.
 - `return` leaves the handler at once.

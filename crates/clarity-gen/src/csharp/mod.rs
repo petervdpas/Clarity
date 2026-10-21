@@ -112,11 +112,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("App.axaml.cs", app_cs(project, &name, &main_window)));
     files.push(text("Views.cs", views_cs(project, &name)));
     files.push(text("Shown.cs", shown_cs(project, &name)));
-    // Texts as written, and per language.
+    // The default language's texts, and each other language's.
     files.push(text("Texts.cs", texts.class(project, &name)));
-    files.push(text("Texts.resx", texts.base_resx()));
-    for (language, translations) in &project.translations {
-        files.push(text(&format!("Texts.{language}.resx"), texts.language_resx(translations)));
+    files.push(text("Texts.resx", texts.base_resx(project)));
+    let default = clarity_spec::translations::default_language(project);
+    for (language, values) in project.translations.iter().filter(|(l, _)| **l != default) {
+        files.push(text(&format!("Texts.{language}.resx"), texts.language_resx(values)));
     }
     // The themes offered, each merged with Clarity's own; without any, Clarity's own.
     let built_in = clarity_spec::themes::built_in();

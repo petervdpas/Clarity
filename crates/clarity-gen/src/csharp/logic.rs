@@ -313,11 +313,7 @@ impl<'a> Emitter<'a> {
                 self.braced(body, depth, out);
             }
             StmtKind::Return { value: Some(value) } => {
-                // The text a function returns is in the person's language.
-                let value = match &value.kind {
-                    ExprKind::Str { value } => format!("Locale.Translate({})", string(value)),
-                    _ => self.value(value),
-                };
+                let value = self.value(value);
                 out.push_str(&format!("{pad}return {value};\n"));
             }
             StmtKind::Return { value: None } => out.push_str(&format!("{pad}return;\n")),
@@ -405,6 +401,15 @@ impl<'a> Emitter<'a> {
     fn shown(&mut self, expr: &Expr) -> String {
         match &expr.kind {
             ExprKind::Str { value } => format!("Text.Plain({})", string(value)),
+            // A key, whose value the language shown gives, with its slots by name.
+            ExprKind::Key { key, args } => {
+                let mut code = format!("Text.Of({})", string(&key.name));
+                for arg in args {
+                    let slot = self.slot(&arg.value);
+                    code.push_str(&format!(".With({}, {slot})", string(&arg.name.name)));
+                }
+                code
+            }
             ExprKind::Text { parts } => {
                 let mut code = format!("new Text({})", string(&template(parts)));
                 for part in parts {
@@ -568,8 +573,10 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => format!("{value}m"),
             ExprKind::Number { value } => format!("{value}L"),
             ExprKind::Str { value } => string(value),
-            // A text with slots in code takes its translation, then its values.
-            ExprKind::Text { .. } => format!("Locale.Show({})", self.shown(expr)),
+            // A text with slots in code is filled plainly; a key takes its value
+            // in the language shown, then its values in the person's format.
+            ExprKind::Text { .. } => format!("{}.Show()", self.shown(expr)),
+            ExprKind::Key { .. } => format!("Locale.Show({})", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "null".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),

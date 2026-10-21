@@ -8,23 +8,23 @@ A project has one `app` block, in any module. It names the window the applicatio
 
 ```clarity
 app Shop
-    title "Shop"
+    title @shopTitle
     main CustomerBrowse
     on start: appStarted
     menu name mainMenu
-        item "File" name fileItem
-            item "New customer" name newCustomerItem key "Ctrl+N" on click -> CustomerForm
+        item @fileItem name fileItem
+            item @newCustomerItem name newCustomerItem key "Ctrl+N" on click -> CustomerForm
             separator
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-        item "View" name viewItem
-            item "Language" name languageItem on click -> language
-            item "Theme" name themeItem on click -> theme
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @viewItem name viewItem
+            item @languageItem name languageItem on click -> language
+            item @themeItem name themeItem on click -> theme
     toolbar name mainToolbar
-        button "Customers" name customersButton icon "list" on click -> CustomerBrowse
+        button @customersButtonCaption name customersButton icon "list" on click -> CustomerBrowse
         separator
-        button "Orders" name ordersButton on click: ordersClicked
+        button @ordersButtonCaption name ordersButton on click: ordersClicked
     footer
-        status "Ready"
+        status @shopStatus
 ```
 
 - `main Window` is the window shown at start; it must be a `window`.
@@ -37,11 +37,11 @@ To design it, click **App** on the Project tab, or App at the top of the project
 
 In the Parts tab, the Frame group holds the regions. Drag one onto an edge of the window: a menu, toolbar or ribbon docks at the top, a sidebar on the left or right, a footer at the bottom. A new menu starts with File and Quit.
 
-- `menu name mainMenu`: `item "Caption"` lines, which can hold items below them (a submenu), and `separator`.
-- Every menu item and button has a camelCase name, as every part does: `item "New customer" name newCustomerItem`. A new one is named after its caption and kind, as `ordersButton`; a separator has none. Double-click an item or button to go to its click handler, which Clarity writes when there is none yet.
+- `menu name mainMenu`: `item @key` lines, which can hold items below them (a submenu), and `separator`.
+- Every menu item and button has a camelCase name, as every part does: `item @newCustomerItem name newCustomerItem`. A new one is named after its caption and kind, as `ordersButton`; a separator has none. Double-click an item or button to go to its click handler, which Clarity writes when there is none yet.
 - `toolbar name mainToolbar`: `button` and `separator`.
 - The menu and the toolbar are parts with a camelCase name, as `mainMenu` and `mainToolbar`, which a new one gets. Code hides one with `mainToolbar.visible = false` and turns it off with `mainMenu.enabled = false`.
-- `ribbon`: `tab "Title"` blocks with `group "Title"` blocks of buttons and separators; a button can be `large`.
+- `ribbon`: `tab @key` blocks with `group @key` blocks of buttons and separators; a button can be `large`.
 - `sidebar left` or `sidebar right`: parts on a grid of its own, docked to that edge; see [Sidebars](#sidebars).
 - `footer`: an optional `status "text"` and parts on a one-row grid of 12 columns.
 
@@ -57,12 +57,12 @@ A ribbon is a named part of the frame, docked at the top, and its tabs and group
 app Shop
     main CustomerCard
     ribbon name mainRibbon collapsible
-        tab "Home" name homeTab
-            group "Clipboard" name clipboardGroup
-                button "Paste" name pasteButton icon "paste" large on click: pasteClicked
-        tab "View" name viewTab
-            group "Zoom" name zoomGroup
-                button "Zoom in" name zoomInButton on click: zoomInClicked
+        tab @homeTab name homeTab
+            group @clipboardGroup name clipboardGroup
+                button @pasteButtonCaption name pasteButton icon "paste" large on click: pasteClicked
+        tab @viewTab name viewTab
+            group @zoomGroup name zoomGroup
+                button @zoomInButtonCaption name zoomInButton on click: zoomInClicked
 ```
 
 - `collapsible`: the person double-clicks a tab to fold the ribbon to its tabs, and opening a tab unfolds it again. `collapsible collapsed` starts it folded.

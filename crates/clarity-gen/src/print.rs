@@ -30,6 +30,12 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
         ExprKind::New { entity } => format!("new {}", entity.name),
+        ExprKind::Key { key, args } if args.is_empty() => format!("@{}", key.name),
+        ExprKind::Key { key, args } => format!(
+            "@{}({})",
+            key.name,
+            args.iter().map(|a| format!("{} = {}", a.name.name, expr(&a.value))).collect::<Vec<_>>().join(", ")
+        ),
         ExprKind::EngineCall { engine, function, args } => {
             format!("{}.{}({})", engine.name, function.name, args.iter().map(expr).collect::<Vec<_>>().join(", "))
         }

@@ -655,7 +655,7 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
     use crate::model::Literal;
     match value {
         Literal::Number(n) | Literal::Ident(n) => n.clone(),
-        Literal::Str(s) => quote(s),
+        Literal::Str(s) => crate::lexer::text_token(s),
         Literal::Bool(b) => b.to_string(),
     }
 }
@@ -663,7 +663,7 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 pub fn widget_line(props: &WidgetProps) -> String {
     let mut parts = vec![keyword(props.kind).to_string()];
     if let Some(caption) = &props.caption {
-        parts.push(quote(caption));
+        parts.push(crate::lexer::text_token(caption));
     }
     if let Some(name) = &props.name {
         parts.push(format!("name {name}"));
@@ -714,10 +714,10 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push(format!("for {target}"));
     }
     if let Some(placeholder) = &props.placeholder {
-        parts.push(format!("placeholder {}", quote(placeholder)));
+        parts.push(format!("placeholder {}", crate::lexer::text_token(placeholder)));
     }
     if let Some(tooltip) = &props.tooltip {
-        parts.push(format!("tooltip {}", quote(tooltip)));
+        parts.push(format!("tooltip {}", crate::lexer::text_token(tooltip)));
     }
     if let Some(style) = &props.style {
         parts.push(format!("style {style}"));

@@ -135,11 +135,13 @@ fn a_style_must_be_in_every_offered_theme() {
     assert!(errors(&project(&format!("{THEME}\n{without}\n{WINDOW}"), &["Shop"])).is_empty());
 }
 
+/// An offered theme's name is read by people, so its title is a key.
 #[test]
-fn theme_names_are_texts_to_translate() {
-    let project = project(&format!("{THEME}\n{NIGHT}"), &["Shop", "NightOwl"]);
-    let texts: Vec<String> = clarity_spec::translations::texts(&project).into_iter().map(|u| u.text).collect();
-    assert!(texts.contains(&"Night owl".to_string()), "{texts:?}");
+fn an_offered_themes_title_is_a_key() {
+    let titled = NIGHT.replace("    mode dark\n", "    mode dark\n    title @nightOwlTheme\n");
+    let project = project(&format!("{THEME}\n{titled}"), &["Shop", "NightOwl"]);
+    let keys: Vec<String> = clarity_spec::translations::keys(&project).into_iter().map(|u| u.key).collect();
+    assert!(keys.contains(&"nightOwlTheme".to_string()), "{keys:?}");
 }
 
 #[test]

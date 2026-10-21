@@ -186,15 +186,25 @@ export function freePartName(taken: string[], keyword: string): string {
   return keyword + n;
 }
 
-/** The fixes the Problems list offers, by what the checker says (clarity_spec::names and the part checks). */
-const FIXES: { says: string; label: string; edit: Edit }[] = [
+/** A fix: an edit of the problem's file, or a command for the whole project. */
+export type Fix = { label: string; edit: Edit } | { label: string; command: "make_texts_keys" };
+
+/** The fixes the Problems list offers, by what the checker says (clarity_spec::names,
+ *  the part checks and clarity_spec::translations). */
+const FIXES: ({ says: string } & Fix)[] = [
   { says: "has no name; every", label: "Name them", edit: { op: "nameParts" } },
   { says: "is not camelCase:", label: "Make them camelCase", edit: { op: "camelNames" } },
   { says: "a sidebar's width is in pixels now", label: "Update the sidebars", edit: { op: "updateSidebars" } },
+  { says: "is read by people, so it is a key", label: "Make texts keys", command: "make_texts_keys" },
+  { says: "shows its name as its label; give it a key", label: "Make texts keys", command: "make_texts_keys" },
+  { says: "shows a text without a key; give it one", label: "Make texts keys", command: "make_texts_keys" },
+  { says: "so people read its name; give it a key", label: "Make texts keys", command: "make_texts_keys" },
+  { says: "has no file; add translations/", label: "Make texts keys", command: "make_texts_keys" },
 ];
 
-/** The fix for a problem the checker reports, for every such problem of its file; null when there is none. */
-export function fixOf(message: string): { label: string; edit: Edit } | null {
+/** The fix for a problem the checker reports, for every such problem of its file or the project; null when there is none. */
+export function fixOf(message: string): Fix | null {
   const fix = FIXES.find((f) => message.includes(f.says));
-  return fix ? { label: fix.label, edit: fix.edit } : null;
+  if (!fix) return null;
+  return "edit" in fix ? { label: fix.label, edit: fix.edit } : { label: fix.label, command: fix.command };
 }

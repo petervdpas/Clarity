@@ -318,6 +318,9 @@ pub enum ExprKind {
     ReadBytes { file: Box<Expr> },
     /// `new Photo`: a new record of the entity, with its defaults.
     New { entity: Ident },
+    /// A text by its key, in the person's language, its slots filled by
+    /// name: `@orderApproved(number = order.number)`.
+    Key { key: Ident, args: Vec<Arg> },
 }
 
 /// `c.name` or `c.name desc` in `order by`.
@@ -555,5 +558,79 @@ pub fn path_text(expr: &Expr) -> String {
         ExprKind::Name { name } => name.clone(),
         ExprKind::Member { object, member } => format!("{}.{}", path_text(object), member.name),
         _ => String::new(),
+    }
+}
+
+/// Calls `found` for every expression in `body` and inside them, nested
+/// blocks too, outer expressions first.
+pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
+    for stmt in body {
+        match &stmt.kind {
+            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } => each_expr(value, found),
+            StmtKind::Assign { target, value } => {
+                each_expr(target, found);
+                each_expr(value, found);
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    each_expr(&branch.condition, found);
+                    each_expr_in(&branch.body, found);
+                }
+                if let Some(body) = otherwise {
+                    each_expr_in(body, found);
+                }
+            }
+            StmtKind::Return { value } => {
+                if let Some(value) = value {
+                    each_expr(value, found);
+                }
+            }
+            StmtKind::For { list, body, .. } => {
+                each_expr(list, found);
+                each_expr_in(body, found);
+            }
+            StmtKind::Call { call } => each_expr(call, found),
+            StmtKind::Draw { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
+            StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
+            StmtKind::Write { text, path, .. } => {
+                each_expr(text, found);
+                each_expr(path, found);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Calls `found` for `expr` and every expression inside it, outer first.
+pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
+    found(expr);
+    match &expr.kind {
+        ExprKind::Member { object, .. } => each_expr(object, found),
+        ExprKind::Unary { operand, .. } => each_expr(operand, found),
+        ExprKind::Binary { left, right, .. } => {
+            each_expr(left, found);
+            each_expr(right, found);
+        }
+        ExprKind::In { value, options } => {
+            each_expr(value, found);
+            options.iter().for_each(|o| each_expr(o, found));
+        }
+        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
+        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
+            if let Some(filter) = filter {
+                each_expr(filter, found);
+            }
+        }
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
+        ExprKind::Key { args, .. } => args.iter().for_each(|a| each_expr(&a.value, found)),
+        ExprKind::Text { parts } => {
+            for part in parts {
+                if let TextPart::Slot { value } = part {
+                    each_expr(value, found);
+                }
+            }
+        }
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::Name { .. } | ExprKind::New { .. } => {}
     }
 }

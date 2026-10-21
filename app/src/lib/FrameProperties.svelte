@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TextField from "./TextField.svelte";
   import { NARROWEST, WIDEST } from "./sidebars";
   import type { SidebarProps } from "./generated/SidebarProps";
   import { commandHandler, wireCommand } from "./codeParts";
@@ -18,11 +19,14 @@
     preview,
     element,
     onedit,
+    onapplied,
     owner,
   }: {
     preview: Preview;
     element: FrameElement;
     onedit: (edit: Edit) => void;
+    /** Takes the project after a text's value or key changed in the language files. */
+    onapplied: (preview: Preview) => void;
     /** The window or app whose code behind holds the handlers. */
     owner: string;
   } = $props();
@@ -98,7 +102,7 @@
     </label>
     <label class="prop">
       <span>Caption</span>
-      <input value={p.caption ?? ""} onchange={(e) => update(p, { caption: textOf(e) })} />
+      <TextField {preview} {onapplied} text={p.caption} onwrite={(text) => update(p, { caption: text })} />
     </label>
     <label class="prop">
       <span>Icon</span>
@@ -212,7 +216,7 @@
     {@render nameField(item)}
     <label class="prop">
       <span>Title</span>
-      <input value={item.title} onchange={(e) => onedit({ op: "setTitle", target: item.span.start, title: e.currentTarget.value })} />
+      <TextField {preview} {onapplied} text={item.title} onwrite={(text) => onedit({ op: "setTitle", target: item.span.start, title: text ?? "" })} />
     </label>
     <div class="actions">
       {#if element.kind === "ribbonTab"}
@@ -272,7 +276,7 @@
       {@const statusId = f.statusSpan.start}
       <label class="prop">
         <span>Status text</span>
-        <input value={f.status ?? ""} onchange={(e) => onedit({ op: "setTitle", target: statusId, title: e.currentTarget.value })} />
+        <TextField {preview} {onapplied} text={f.status} onwrite={(text) => onedit({ op: "setTitle", target: statusId, title: text ?? "" })} />
       </label>
     {/if}
     <p class="hint">Drag widgets onto the footer row next to the status text.</p>

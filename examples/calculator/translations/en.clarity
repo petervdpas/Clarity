@@ -1,0 +1,13 @@
+translation en
+    calculatorTitle "Calculator"
+    calculatorTheme "Calculator"
+    operationNothing "Nothing"
+    operationAdd "Add"
+    operationSubtract "Subtract"
+    operationMultiply "Multiply"
+    operationDivide "Divide"
+    cannotDivideByZero "Cannot divide by zero"
+    mainTitle "Calculator"
+    button1Caption "C"
+    yes "Yes"
+    no "No"

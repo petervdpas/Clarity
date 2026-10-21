@@ -114,16 +114,16 @@ func TestStartGivesTheModelAndTheMainWindow(t *testing.T) {
 }
 
 func TestTheScreenSetsTheLanguageCodeTextsAreTranslatedTo(t *testing.T) {
-	c := New(Options{Model: []byte(`{"project":{"translations":{"nl":{"Draw":"Gelijkspel"}}}}`)})
+	c := New(Options{Model: []byte(`{"project":{"locale":{"language":"en"},"translations":{"en":{"draw":"Draw"},"nl":{"draw":"Gelijkspel"}}}}`)})
 	defer clarity.SetLanguage(nil)
 	if got := wire(t, call(t, c, "set_language", `{"language":"nl"}`)); got != `{"value":null}` {
 		t.Fatal(got)
 	}
-	if got := clarity.Translate("Draw"); got != "Gelijkspel" {
+	if got := clarity.TextOf("draw"); got != "Gelijkspel" {
 		t.Fatal(got)
 	}
 	call(t, c, "set_language", `{"language":null}`)
-	if got := clarity.Translate("Draw"); got != "Draw" {
+	if got := clarity.TextOf("draw"); got != "Draw" {
 		t.Fatal(got)
 	}
 }

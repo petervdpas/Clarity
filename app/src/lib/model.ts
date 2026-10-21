@@ -8,7 +8,7 @@ import type { Preview } from "./generated/Preview";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
 import { fillText, formatValue, userLocale, type FieldFormat, type Formats, type ShownText } from "./format";
 import { languageChoice } from "./i18n.svelte";
-import { pickLanguage, translate, translateText } from "./translate";
+import { keyValue, pickLanguage, translate, translateText, type Texts } from "./translate";
 import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
 import { scheme, themeChoice } from "./scheme.svelte";
@@ -38,23 +38,37 @@ export function formatsOf(preview: Preview): Formats {
   return { locale: userLocale(system, language), currency };
 }
 
-/** The translations to show texts in: the designer's choice, or those for
- *  the person's locale; undefined shows the texts as written. */
-export function translationsOf(preview: Preview): Record<string, string> | undefined {
-  const language = languageOf(preview);
-  return language ? preview.project.translations[language] : undefined;
-}
-
-/** The language of the translations texts show in, as the backend is told it; null for the texts as written. */
+/** The language texts show in, as the backend is told it: the designer's
+ *  choice, or the one for the person's locale; null for the default. */
 export function languageOf(preview: Preview): string | null {
   const chosen = languageChoice.language;
   const all = Object.keys(preview.project.translations);
   return (chosen !== undefined ? chosen : pickLanguage(formatsOf(preview).locale, all, preview.project.locale.language)) ?? null;
 }
 
-/** A text of the project as the person reads it: translated, or as written. */
+/** The values to look keys up in, in the language texts show in. */
+export function textsOf(preview: Preview): Texts {
+  return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en" };
+}
+
+/** A text of the project as the person reads it: a key's value, or as written. */
 export function tr(preview: Preview, text: string): string {
-  return translate(text, translationsOf(preview));
+  return translate(text, textsOf(preview));
+}
+
+/** Clarity's own words by key, with how they read when the project gives them no value. */
+const OWN_WORDS: Record<string, { key: string; written: string }> = {
+  Yes: { key: "yes", written: "Yes" },
+  No: { key: "no", written: "No" },
+  "No picture": { key: "noPicture", written: "No picture" },
+  "Load a picture": { key: "loadPicture", written: "Load a picture" },
+  "Remove the picture": { key: "removePicture", written: "Remove the picture" },
+};
+
+/** One of Clarity's own words (`Yes`, `No`, a picture's) in the language texts show in. */
+export function ownWord(preview: Preview, word: string): string {
+  const own = OWN_WORDS[word];
+  return own ? (keyValue(own.key, textsOf(preview)) ?? own.written) : word;
 }
 
 /** How a field's values are formatted, for the types that have formats. */
@@ -81,7 +95,7 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
   if (value === null || value === undefined) return "";
   switch (field.type.kind) {
     case "bool":
-      return tr(preview, value ? "Yes" : "No");
+      return ownWord(preview, value ? "Yes" : "No");
     case "enum": {
       const decl = findEnum(preview, field.type.name.name);
       const variant = decl?.variants.find((v) => v.name.name === value);
@@ -134,12 +148,12 @@ export function describeType(field: Field): string {
 /** Text from the backend as shown: its slots filled in the person's
  *  format, an enum value by its label. */
 export function shownText(preview: Preview, text: ShownText): string {
-  const table = translationsOf(preview);
+  const texts = textsOf(preview);
   const label = (enumName: string, value: string) => {
     const variant = findEnum(preview, enumName)?.variants.find((v) => v.name.name === value);
-    return variant ? translate(variant.label, table) : value;
+    return variant ? translate(variant.label, texts) : value;
   };
-  return fillText(translateText(text, table), formatsOf(preview), label, (word) => translate(word, table));
+  return fillText(translateText(text, texts), formatsOf(preview), label, (word) => ownWord(preview, word));
 }
 
 /** What went wrong in the backend, as text to show: a refusal arrives as

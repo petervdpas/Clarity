@@ -2,14 +2,18 @@
 import type { TranslationRow } from "./TranslationRow";
 
 /**
- * Every text a person sees with its translations, for the Project tab.
+ * Every key the project uses with its value per language, for i18n.
  */
 export type TranslationTable = { 
 /**
- * The languages the project has translation files for.
+ * The default language: the project's own, which gives every key a value.
+ */
+default: string, 
+/**
+ * The languages the project has files for, the default first.
  */
 languages: Array<string>, rows: Array<TranslationRow>, 
 /**
- * How many texts each language does not translate yet.
+ * How many keys each language leaves empty.
  */
 missing: Array<number>, };

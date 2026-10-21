@@ -5,7 +5,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::diagnostic::Severity;
-use crate::lexer::quote;
+use crate::lexer::{quote, text_token};
 use crate::model::{FieldType, Literal, Modifiers};
 use crate::parser::parse;
 use crate::widgets::is_identifier;
@@ -49,7 +49,7 @@ pub fn type_text(ty: &FieldType) -> String {
 pub fn literal_text(literal: &Literal) -> String {
     match literal {
         Literal::Number(n) => n.clone(),
-        Literal::Str(s) => quote(s),
+        Literal::Str(s) => text_token(s),
         Literal::Bool(b) => b.to_string(),
         Literal::Ident(name) => name.clone(),
     }
@@ -84,7 +84,9 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (&m.column, "column"),
     ] {
         if let Some(value) = value {
-            parts.push(format!("{word} {}", quote(value)));
+            // A label and a help text are read by people: keys.
+            let written = if matches!(word, "label" | "help") { text_token(value) } else { quote(value) };
+            parts.push(format!("{word} {written}"));
         }
     }
     if let Some(store) = &m.store {

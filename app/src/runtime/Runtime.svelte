@@ -83,7 +83,8 @@
 
   function say(message: Message) {
     const id = nextMessage++;
-    const text = model ? shownText(model, message.text) : typeof message.text === "string" ? message.text : message.text.text;
+    const raw = message.text;
+    const text = model ? shownText(model, raw) : typeof raw === "string" ? raw : "key" in raw ? raw.key : raw.text;
     messages = [...messages, { level: message.level, text, id }];
     if (message.level === "info") setTimeout(() => dismiss(id), MESSAGE_MS);
   }

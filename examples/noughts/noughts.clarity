@@ -4,9 +4,9 @@ module noughts
 // is in engines/board.
 engine Board from "board.wasm"
     uses random
-    // What the board says, translated like the project's own texts.
-    says "Your move", "You win", "I win", "A draw"
-    says "The game is over; start a new one", "There are nine squares", "That square is taken"
+    // The keys of what the board says; the language files give its texts.
+    says @yourMove, @youWin, @iWin, @aDraw
+    says @gameIsOver, @thereAreNineSquares, @thatSquareIsTaken
     state per window
     on open
     function play(square: integer) -> text
@@ -14,26 +14,26 @@ engine Board from "board.wasm"
     function restart() -> text
 
 app Noughts
-    title "Noughts and crosses"
+    title @noughtsTitle
     main Game
     menu name mainMenu
-        item "Game" name gameItem
-            item "Another window" name anotherWindowItem on click -> Game in new window
+        item @gameItem name gameItem
+            item @anotherWindowItem name anotherWindowItem on click -> Game in new window
             separator
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
 
 page Game: window
-    title "Noughts and crosses"
+    title @gameTitle
     size 405 x 510
-    data status: text, default "Your move"
-    data rules: text, default "Click a square to put your cross there; the computer answers with a nought. Three in a row wins."
+    data status: text, default @gameStatus
+    data rules: text, default @gameRules
     // How to play: folded to a button until the person opens it.
     sidebar left name help width 260 min 200 max 420 resizable collapsible collapsed maximizable
-        heading "How to play" name helpHeading at 1,1 span 3
+        heading @helpHeadingCaption name helpHeading at 1,1 span 3
         text name rulesText at 1,2 span 3 rows 4 bind rules
     canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
     text name statusText at 1,9 span 12 bind status
-    button "New game" name newGame at 1,10 span 12 key "Ctrl+N" on click: restartClicked
+    button @newGameCaption name newGame at 1,10 span 12 key "Ctrl+N" on click: restartClicked
 
 code Game
     // A click on a square plays it: three columns and three rows of 100.

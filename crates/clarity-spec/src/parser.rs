@@ -226,6 +226,21 @@ impl<'a> Cursor<'a> {
         Ok(self.expect(TokenKind::Str, what)?.text.clone())
     }
 
+    /// A text people read: a key, `@saveCaption` (kept as written, with its
+    /// `@`), or a string, which only a text without letters may be.
+    pub(crate) fn expect_text(&mut self, what: &str) -> ParseResult<String> {
+        if self.peek_kind() == Some(TokenKind::Key) {
+            let token = self.expect(TokenKind::Key, what)?;
+            return Ok(format!("@{}", token.text));
+        }
+        self.expect_string(what)
+    }
+
+    /// Whether a text, a key or a string, comes next.
+    pub(crate) fn peek_is_text(&self) -> bool {
+        matches!(self.peek_kind(), Some(TokenKind::Str | TokenKind::Key))
+    }
+
     pub(crate) fn expect_number(&mut self, what: &str) -> ParseResult<u32> {
         let token = self.expect(TokenKind::Number, what)?;
         token
@@ -394,7 +409,7 @@ fn parse_variant(node: &Node) -> ParseResult<EnumVariant> {
     let mut cursor = Cursor::new(node.line);
     let name = cursor.expect_ident("a variant name")?;
     let label = if cursor.eat_keyword("label") {
-        cursor.expect_string("a label string")?
+        cursor.expect_text("a label string")?
     } else {
         default_label(&name.name)
     };
@@ -572,12 +587,12 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         ),
         "label" => set(
             &mut modifiers.label,
-            cursor.expect_string("a label string")?,
+            cursor.expect_text("a label string")?,
             duplicate,
         ),
         "help" => set(
             &mut modifiers.help,
-            cursor.expect_string("a help string")?,
+            cursor.expect_text("a help string")?,
             duplicate,
         ),
         "format" => set(
@@ -609,6 +624,7 @@ fn parse_literal(cursor: &mut Cursor) -> ParseResult<Literal> {
     let literal = match token.kind {
         TokenKind::Number => Literal::Number(token.text.clone()),
         TokenKind::Str => Literal::Str(token.text.clone()),
+        TokenKind::Key => Literal::Str(format!("@{}", token.text)),
         TokenKind::Ident if token.text == "true" => Literal::Bool(true),
         TokenKind::Ident if token.text == "false" => Literal::Bool(false),
         TokenKind::Ident => Literal::Ident(token.text.clone()),
@@ -636,7 +652,9 @@ pub(crate) fn starts_with_keyword(
     let starts_with = tokens
         .first()
         .is_some_and(|t| t.kind == TokenKind::Ident && t.text == keyword);
-    starts_with && tokens.get(1).map(|t| t.kind) == next
+    // A key stands where a text does: `title @cardTitle`.
+    let next_kind = tokens.get(1).map(|t| if t.kind == TokenKind::Key { TokenKind::Str } else { t.kind });
+    starts_with && next_kind == next
 }
 
 // ---------------------------------------------------------------------------
@@ -741,7 +759,7 @@ fn parse_page_setting(node: &Node, page: &mut Page, grid_seen: &mut bool) -> Par
             if page.title.is_some() {
                 return Err(Diagnostic::error("duplicate 'title'", node.line.span));
             }
-            page.title = Some(cursor.expect_string("a title string")?);
+            page.title = Some(cursor.expect_text("a title string")?);
         }
         "size" => {
             if page.size.is_some() {
@@ -895,7 +913,7 @@ fn parse_app_setting(node: &Node, app: &mut App) -> ParseResult<()> {
             if app.title.is_some() {
                 return Err(Diagnostic::error("duplicate 'title'", node.line.span));
             }
-            app.title = Some(cursor.expect_string("a title string")?);
+            app.title = Some(cursor.expect_text("a title string")?);
         }
         "main" => {
             if app.main.is_some() {
@@ -1076,7 +1094,7 @@ fn parse_region(
                         if footer.status.is_some() {
                             return Err(Diagnostic::error("duplicate 'status'", child.line.span));
                         }
-                        footer.status = Some(c.expect_string("a status text")?);
+                        footer.status = Some(c.expect_text("a status text")?);
                         footer.status_span = Some(child.line.span);
                         c.expect_end()
                     })();
@@ -1102,7 +1120,7 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
         return Err(cursor.error_here("expected 'tab \"Title\"'"));
     }
     cursor.next();
-    let title = cursor.expect_string("a tab title")?;
+    let title = cursor.expect_text("a tab title")?;
     let name = part_name(&mut cursor)?;
     let mut groups = Vec::new();
     for child in &node.children {
@@ -1112,7 +1130,7 @@ fn parse_ribbon_tab(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResu
             continue;
         }
         c.next();
-        let result = c.expect_string("a group title").and_then(|title| {
+        let result = c.expect_text("a group title").and_then(|title| {
             let name = part_name(&mut c)?;
             Ok(RibbonGroup {
                 title,
@@ -1197,8 +1215,8 @@ fn parse_command(
         }
     };
     let mut props = frame::new_command(kind, None);
-    if cursor.peek_kind() == Some(TokenKind::Str) {
-        props.caption = Some(cursor.expect_string("a caption")?);
+    if cursor.peek_is_text() {
+        props.caption = Some(cursor.expect_text("a caption")?);
     }
     let mut seen: Vec<String> = Vec::new();
     while cursor.peek().is_some() {
@@ -1334,7 +1352,7 @@ fn parse_widget_page(
         return Err(cursor.error_here(format!("expected {expected}")));
     }
     let title = if keyword == "tab" {
-        Some(cursor.expect_string("a tab title")?)
+        Some(cursor.expect_text("a tab title")?)
     } else {
         None
     };
@@ -1387,8 +1405,8 @@ fn parse_widget_props(
         default_button: false,
         cancel: false,
     };
-    if cursor.peek_kind() == Some(TokenKind::Str) {
-        props.caption = Some(cursor.expect_string("a caption")?);
+    if cursor.peek_is_text() {
+        props.caption = Some(cursor.expect_text("a caption")?);
     }
 
     let mut seen: Vec<String> = Vec::new();
@@ -1593,9 +1611,9 @@ fn parse_widget_props(
             }
             "placeholder" => {
                 applies(WidgetProperty::Placeholder)?;
-                props.placeholder = Some(cursor.expect_string("a placeholder text")?);
+                props.placeholder = Some(cursor.expect_text("a placeholder text")?);
             }
-            "tooltip" => props.tooltip = Some(cursor.expect_string("a tooltip text")?),
+            "tooltip" => props.tooltip = Some(cursor.expect_text("a tooltip text")?),
             "style" => props.style = Some(cursor.expect_ident("a style of the project's theme")?.name),
             "readonly" => {
                 applies(WidgetProperty::Readonly)?;

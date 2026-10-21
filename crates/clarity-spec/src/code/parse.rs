@@ -117,7 +117,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
         if line.eat_keyword("says") {
             let parsed = (|| {
                 loop {
-                    says.push(line.expect_string("says gives texts, as in 'says \"You win\", \"A draw\"'")?);
+                    says.push(line.expect_text("says gives the keys of its texts, as in 'says @youWin, @aDraw'")?);
                     if !line.eat(TokenKind::Comma) {
                         break;
                     }
@@ -789,6 +789,25 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             value: token.text.clone(),
         },
         TokenKind::Str => text_kind(token)?,
+        TokenKind::Key => {
+            cursor.next();
+            let key = Ident { name: token.text.clone(), span: token.span };
+            let mut args = Vec::new();
+            let mut end = token.span;
+            if cursor.eat(TokenKind::LParen) {
+                loop {
+                    let name = cursor.expect_ident("a slot of the text, as in @orderApproved(number = order.number)")?;
+                    cursor.expect(TokenKind::Assign, "'=' and the slot's value, as in number = order.number")?;
+                    let value = parse_expr(cursor)?;
+                    args.push(Arg { name, value });
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+                end = cursor.expect(TokenKind::RParen, "')'")?.span;
+            }
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::Key { key, args } });
+        }
         TokenKind::Ident if token.text == "true" || token.text == "false" => ExprKind::Bool {
             value: token.text == "true",
         },

@@ -220,7 +220,7 @@ impl<'a> Emitter<'a> {
                     // A text value shows its text in the person's language, as a label does.
                     if matches!(self.types.name_of(target), Some(NameKind::Data)) && to == TypeInfo::Text {
                         let shown = match value.kind {
-                            ExprKind::Str { .. } | ExprKind::Text { .. } => self.shown(value),
+                            ExprKind::Str { .. } | ExprKind::Text { .. } | ExprKind::Key { .. } => self.shown(value),
                             _ => format!("Text::plain({place}.clone())"),
                         };
                         out.push_str(&format!("{pad}ui.set_shown({name:?}, {shown});\n"));
@@ -265,11 +265,7 @@ impl<'a> Emitter<'a> {
             StmtKind::Return { value: Some(value) } => {
                 let to = self.returns().unwrap_or(TypeInfo::Unknown);
                 let from = self.types.type_of(value);
-                // The text a function returns is in the person's language.
-                let code = match &value.kind {
-                    ExprKind::Str { value } => format!("clarity_runtime::i18n::translate({value:?})"),
-                    _ => coerce(self.value(value), &from, &to),
-                };
+                let code = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}return Ok({code});\n"));
             }
             StmtKind::Return { value: None } => out.push_str(&format!("{pad}return Ok(());\n")),
@@ -368,6 +364,15 @@ impl<'a> Emitter<'a> {
     fn shown(&mut self, expr: &Expr) -> String {
         match &expr.kind {
             ExprKind::Str { value } => format!("Text::plain({value:?})"),
+            // A key, whose value the screen looks up, with its slots by name.
+            ExprKind::Key { key, args } => {
+                let mut code = format!("Text::key({:?})", key.name);
+                for arg in args {
+                    let slot = self.slot(&arg.value);
+                    code.push_str(&format!(".with({:?}, {slot})", arg.name.name));
+                }
+                code
+            }
             ExprKind::Text { parts } => {
                 let mut code = format!("Text::new({:?})", template(parts));
                 for part in parts {
@@ -554,8 +559,9 @@ impl<'a> Emitter<'a> {
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("{value}i64"),
             ExprKind::Str { value } => format!("String::from({value:?})"),
-            // A text with slots in code takes its translation, then its values.
-            ExprKind::Text { .. } => format!("{}.translated().show()", self.shown(expr)),
+            // A text with slots in code is filled plainly; a key takes its value
+            // in the language the screen picked, then its values.
+            ExprKind::Text { .. } | ExprKind::Key { .. } => format!("{}.show()", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "None".to_string(),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
@@ -630,8 +636,8 @@ impl<'a> Emitter<'a> {
                     e = engine.name,
                     f = function.name
                 );
-                // The text an engine gives is in the person's language, as its `says` lists it.
-                if returns == "String" { format!("clarity_runtime::i18n::translate(&{called})") } else { called }
+                // The text an engine gives is the value of its key, as its `says` lists it.
+                if returns == "String" { format!("clarity_runtime::i18n::text(&{called})") } else { called }
             }
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
@@ -1195,6 +1201,8 @@ fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal
     match (type_ref_info(project, ty), value) {
         (TypeInfo::Decimal | TypeInfo::Money, Literal::Number(n)) => decimal(n),
         (_, Literal::Number(n)) => format!("{n}i64"),
+        // A key starts in the language the screen picked.
+        (_, Literal::Str(text)) if text.starts_with('@') => format!("clarity_runtime::i18n::text({:?})", &text[1..]),
         (_, Literal::Str(text)) => format!("String::from({text:?})"),
         (_, Literal::Bool(b)) => b.to_string(),
         (TypeInfo::Enum(e), Literal::Ident(v)) => format!("{e}::{v}"),

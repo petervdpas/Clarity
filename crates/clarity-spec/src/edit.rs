@@ -15,7 +15,7 @@ use ts_rs::TS;
 use crate::diagnostic::Severity;
 use crate::dictionary::{FieldSpec, validate_field};
 use crate::frame::{self, RegionKind, command_line, new_command, validate_command};
-use crate::lexer::{Token, TokenKind, lex, quote};
+use crate::lexer::{Token, TokenKind, lex, quote, text_token};
 use crate::model::{
     Project,
     CommandKind, CommandProps, MAX_PAGE_COLUMNS, PageKind, Side, WidgetProps,
@@ -197,6 +197,9 @@ pub struct EditOutcome {
     pub text: String,
     /// Offset of the element the edit produced or moved, in the new text.
     pub focus: Option<u32>,
+    /// The keys the edit made of texts it wrote, with their values in the
+    /// default language: the language files get them (crate::keyed).
+    pub keys: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -224,7 +227,25 @@ pub fn apply(source: &str, edit: &Edit) -> EditResult<EditOutcome> {
 /// Applies one edit to a spec file of a project. Edits that build on
 /// declarations in other files (window templates) need this.
 pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<EditOutcome> {
-    apply_with(source, edit, Some(project))
+    let mut outcome = apply_with(source, edit, Some(project))?;
+    if outcome.text != source {
+        // A text people read that the edit wrote (a template's labels, a
+        // caption typed for a new part) becomes a key, beside the project's.
+        let default = crate::translations::default_language(project);
+        let existing = project.translations.get(&default).cloned().unwrap_or_default();
+        let before_focus = outcome.focus.map(|f| outcome.text[..f as usize].to_string());
+        let (text, keys) = crate::keyed::key_module("", &outcome.text, &default, &existing);
+        if !keys.is_empty() {
+            // The focus moves with the text before it.
+            if let Some(before) = before_focus {
+                let (keyed_before, _) = crate::keyed::key_module("", &before, &default, &existing);
+                outcome.focus = text.starts_with(&keyed_before).then_some(keyed_before.len() as u32).or(outcome.focus);
+            }
+            outcome.text = text;
+            outcome.keys = keys;
+        }
+    }
+    Ok(outcome)
 }
 
 /// Edits that work on the text instead of the line tree, so the comments
@@ -272,7 +293,7 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
     if text != source {
         reject_new_parse_errors(source, &text)?;
     }
-    Ok(EditOutcome { text, focus })
+    Ok(EditOutcome { text, focus, keys: Vec::new() })
 }
 
 fn apply_layout(source: &str, edit: &Edit, project: Option<&Project>) -> EditResult<(String, Option<u32>)> {
@@ -916,12 +937,12 @@ impl Doc {
                     self.node_mut(&path).children.remove(index);
                 }
                 (Some(index), false) => {
-                    replace_token(&mut self.node_mut(&path).children[index], 1, &quote(title));
+                    replace_token(&mut self.node_mut(&path).children[index], 1, &text_token(title));
                 }
                 (None, true) => {}
                 (None, false) => {
                     let indent = self.node(&path).child_indent();
-                    let line = self.fresh_node(indent, format!("title {}", quote(title)));
+                    let line = self.fresh_node(indent, format!("title {}", text_token(title)));
                     self.node_mut(&path).children.insert(0, line);
                 }
             }
@@ -931,7 +952,7 @@ impl Doc {
         if title.is_empty() {
             return fail("a tab or status needs a title");
         }
-        replace_token(self.node_mut(&path), 1, &quote(title));
+        replace_token(self.node_mut(&path), 1, &text_token(title));
         Ok(Some(target))
     }
 
@@ -1187,7 +1208,7 @@ impl Doc {
             return fail("a tab needs a title");
         }
         let indent = self.node(&path).child_indent();
-        let tab = self.fresh_node(indent, format!("tab {}", quote(title)));
+        let tab = self.fresh_node(indent, format!("tab {}", text_token(title)));
         let id = tab.id;
         self.node_mut(&path).children.push(tab);
         Ok(Some(id))
@@ -1716,11 +1737,11 @@ impl Doc {
             }
             (Kind::Region(RegionKind::Ribbon), FrameItem::Tab) => {
                 let title = caption.as_deref().unwrap_or("Tab");
-                format!("tab {} name {}", quote(title), self.free(path[0], &ribbon_part_base(title, "Tab")))
+                format!("tab {} name {}", text_token(title), self.free(path[0], &ribbon_part_base(title, "Tab")))
             }
             (Kind::RibbonTab, FrameItem::Group) => {
                 let title = caption.as_deref().unwrap_or("Group");
-                format!("group {} name {}", quote(title), self.free(path[0], &ribbon_part_base(title, "Group")))
+                format!("group {} name {}", text_token(title), self.free(path[0], &ribbon_part_base(title, "Group")))
             }
             _ => return fail("that cannot go there"),
         };
@@ -1955,7 +1976,7 @@ impl Doc {
             return fail(format!("'{name}' is not a valid variant name"));
         }
         Ok(match label.map(str::trim).filter(|l| !l.is_empty()) {
-            Some(label) => format!("{name} label {}", quote(label)),
+            Some(label) => format!("{name} label {}", text_token(label)),
             None => name.to_string(),
         })
     }

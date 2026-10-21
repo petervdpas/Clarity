@@ -21,6 +21,9 @@ pub struct Text {
     pub text: String,
     /// The value of each slot, by its path as written: `customer.name`.
     pub values: BTreeMap<String, Slot>,
+    /// The key the text is, when it is one: the screen shows its value in
+    /// the person's language (crate::i18n).
+    pub key: Option<String>,
 }
 
 /// The value of one slot, with what the screen needs to format it.
@@ -144,7 +147,13 @@ impl Text {
         Text {
             text: text.to_string(),
             values: BTreeMap::new(),
+            key: None,
         }
+    }
+
+    /// The text of key `key`, with its value in the person's language.
+    pub fn key(key: &str) -> Text {
+        Text { text: String::new(), values: BTreeMap::new(), key: Some(key.to_string()) }
     }
 
     /// Text that is shown as it is: a brace in it is no slot.
@@ -157,16 +166,13 @@ impl Text {
         self
     }
 
-    /// The same text in the language the screen picked (crate::i18n), its values kept.
-    pub fn translated(self) -> Text {
-        Text { text: crate::i18n::translate(&self.text), values: self.values }
-    }
-
     /// The text with its slots filled plainly, without a person's format:
     /// for logs, and for code that reads a caption back.
+    /// A key takes its value in the language the screen picked.
     pub fn show(&self) -> String {
+        let value = self.key.as_deref().map(|k| crate::i18n::value(k).unwrap_or_else(|| k.to_string()));
         let mut out = String::new();
-        let mut rest = self.text.as_str();
+        let mut rest = value.as_deref().unwrap_or(self.text.as_str());
         while let Some(at) = rest.find(['{', '}']) {
             out.push_str(&rest[..at]);
             let brace = &rest[at..at + 1];
@@ -204,17 +210,25 @@ impl From<String> for Text {
     }
 }
 
-/// Text on the wire: a plain string, or the text with its slot values.
+/// Text on the wire: a plain string, the text with its slot values, or a
+/// key with its slot values, whose value the screen looks up.
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 enum Wire {
     Plain(String),
+    Keyed {
+        key: String,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        values: BTreeMap<String, Slot>,
+    },
     Slots { text: String, values: BTreeMap<String, Slot> },
 }
 
 impl Serialize for Text {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        if self.values.is_empty() {
+        if let Some(key) = &self.key {
+            Wire::Keyed { key: key.clone(), values: self.values.clone() }.serialize(serializer)
+        } else if self.values.is_empty() {
             Wire::Plain(self.show()).serialize(serializer)
         } else {
             Wire::Slots {
@@ -230,7 +244,8 @@ impl<'de> Deserialize<'de> for Text {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Text, D::Error> {
         Ok(match Wire::deserialize(deserializer)? {
             Wire::Plain(text) => Text::plain(text),
-            Wire::Slots { text, values } => Text { text, values },
+            Wire::Keyed { key, values } => Text { text: String::new(), values, key: Some(key) },
+            Wire::Slots { text, values } => Text { text, values, key: None },
         })
     }
 }
@@ -603,6 +618,13 @@ mod tests {
         assert_eq!(saved.show(), "Saved Ada on 2026-10-17, {done}");
         assert_eq!(Slot::money(Decimal::new(125050, 2), None).value, Value::String("1250.50".into()));
         assert_eq!(Slot::name(&"Business", "CustomerKind").enum_name.as_deref(), Some("CustomerKind"));
+
+        // A key travels with its slot values; the screen looks up its value.
+        let keyed = Text::key("orderApproved").with("number", Slot::text("A-7"));
+        let wire = serde_json::to_value(&keyed).unwrap();
+        assert_eq!(wire, serde_json::json!({ "key": "orderApproved", "values": { "number": { "kind": "text", "value": "A-7" } } }));
+        assert_eq!(serde_json::from_value::<Text>(wire).unwrap(), keyed);
+        assert_eq!(serde_json::to_value(Text::key("save")).unwrap(), serde_json::json!({ "key": "save" }));
     }
     /// Every window that opens has a number of its own, which its handlers'
     /// replies keep, so what belongs to one open window (an engine's state)

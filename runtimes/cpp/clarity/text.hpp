@@ -52,31 +52,40 @@ public:
     explicit Text(std::string text) : template_(std::move(text)) {}
     /// Text shown as it is: a brace in it is no slot.
     static Text plain(const std::string& text);
+    /// The text of key `key`, with its value in the person's language.
+    static Text key(const std::string& key);
 
     /// The slot at `path` gets its value.
     Text with(const std::string& path, Slot value) const;
-    /// The text with its slots filled plainly, without a person's format.
+    /// The text with its slots filled plainly, without a person's format;
+    /// a key takes its value in the language the screen picked.
     std::string show() const;
-    /// The same text in the language the screen picked, its values kept.
-    Text translated() const;
 
     const std::string& text() const { return template_; }
+    /// The key the text is, when it is one: the screen shows its value in the person's language.
+    const std::optional<std::string>& key() const { return key_; }
     const std::map<std::string, Slot>& values() const { return values_; }
 
 private:
     std::string template_;
     std::map<std::string, Slot> values_;
+    std::optional<std::string> key_;
 };
 
-/// Takes the translations from the model (`project.translations`), for the
-/// text code makes (conformance/translations.json, `code`).
+/// Takes every language's values from the model (`project.translations`)
+/// and the default language (`project.locale.language`), for texts by key
+/// (conformance/translations.json, `code`).
 void load_translations(const std::string& model);
-/// The language texts show in, as the screen picked it; none for the texts as written.
+/// The language texts show in, as the screen picked it; none for the default.
 void set_language(std::optional<std::string> language);
-/// The language the screen picked; none for the texts as written.
+/// The language the screen picked; none for the default.
 std::optional<std::string> language();
-/// `text` in the language picked, or as written when it has no translation there.
-std::string translate(const std::string& text);
+/// The value of `key` in the language picked, or the default language's
+/// when that one leaves it empty; none when no language has the key.
+std::optional<std::string> key_value(const std::string& key);
+/// The value of the key `key_or_text` names, or the text itself when it
+/// names none: what an engine gives.
+std::string text_of(const std::string& key_or_text);
 
 /// Decimals travel as text, so no precision is lost; dates as `2026-10-17`.
 void to_json(nlohmann::json& out, const Decimal& value);

@@ -410,7 +410,8 @@ nlohmann::json Engine::call_in(uint64_t window, const std::string& function, con
     }
     // The engine answered, even with a refusal, so its memory is whole.
     if (keeps) loaded_->kept.emplace(key, std::move(runtime));
-    if (answer.contains("error") && answer["error"].is_string()) refuse(Text::plain(answer["error"].get<std::string>()));
+    // An engine refuses by the key of its text (its `says`), or in its own words.
+    if (answer.contains("error") && answer["error"].is_string()) refuse(Text::key(answer["error"].get<std::string>()));
     if (!answer.contains("value")) throw failed("its answer has no value");
     return answer["value"];
 }

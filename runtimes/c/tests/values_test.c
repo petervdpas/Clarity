@@ -80,6 +80,13 @@ void text_travels_as_the_other_runtimes_send_it(void) {
     REQUIRE_OK(clarity_text_from_json(clarity_text_json(saved), &back));
     CHECK_TEXT(clarity_text_show(back), clarity_text_show(saved));
     CHECK_TEXT(clarity_text_show(clarity_text("{{braces}} and }")), "{braces} and }");
+    // A key travels with its slot values; the screen looks up its value.
+    ClarityText* keyed = clarity_text_with(clarity_key_text("orderApproved"), "number", clarity_slot_text("A-7"));
+    CHECK_JSON(clarity_text_json(keyed), "{\"key\":\"orderApproved\",\"values\":{\"number\":{\"kind\":\"text\",\"value\":\"A-7\"}}}");
+    CHECK_JSON(clarity_text_json(clarity_key_text("save")), "{\"key\":\"save\"}");
+    ClarityText* keyed_back;
+    REQUIRE_OK(clarity_text_from_json(clarity_text_json(keyed), &keyed_back));
+    CHECK_TEXT(keyed_back->key, "orderApproved");
 }
 
 void the_scratch_arena_is_emptied_after_a_command(void) {

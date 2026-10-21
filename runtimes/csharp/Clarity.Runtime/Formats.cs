@@ -262,7 +262,8 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
     {
         null or { Value: null } => "",
         { Kind: SlotKind.Text } => slot.Value.ToString() ?? "",
-        { Kind: SlotKind.Bool } => word(slot.Value is true ? "Yes" : "No"),
+        // Clarity's own words, by key, as written when the project gives them no value.
+        { Kind: SlotKind.Bool } => slot.Value is true ? Own(word, "yes", "Yes") : Own(word, "no", "No"),
         { Kind: SlotKind.Enum } => label(slot.EnumName ?? "", slot.Value.ToString() ?? ""),
         _ => Show(new FieldFormat(KindOf(slot.Kind), slot.Scale, slot.Format), slot.Value),
     };
@@ -329,4 +330,7 @@ public sealed partial class Formats(CultureInfo culture, string? currency)
 
     [GeneratedRegex(@"(?<!H)H(?!H)")]
     private static partial Regex OneHour();
+
+    /// <summary>One of Clarity's own words by its key, or as written when <paramref name="word"/> gives the key back.</summary>
+    static string Own(Func<string, string> word, string key, string written) => word(key) is var value && value != key ? value : written;
 }

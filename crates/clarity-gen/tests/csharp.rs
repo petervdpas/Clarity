@@ -73,7 +73,7 @@ fn settings() -> Settings {
 }
 
 fn files() -> Vec<OutFile> {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     generate(&project, &settings()).unwrap()
 }
@@ -172,7 +172,7 @@ fn enums_and_entities_become_csharp_types() {
     let sales = file(&files, "Modules/Sales.cs");
     has(sales, "namespace Shop;");
     has(sales, "public enum OrderStatus\n{\n    Pending,\n    Approved,\n}");
-    has(sales, "        OrderStatus.Approved => Texts.ApprovedBySales,");
+    has(sales, "        OrderStatus.Approved => Texts.OrderStatusApproved,");
     has(sales, "public sealed partial class Customer : ObservableObject, IRecord<Customer>\n{");
     has(sales, "    public static string TableName => \"customer\";");
     has(sales, "    public static IReadOnlyList<string> ColumnNames { get; } = [\"name\", \"credit_limit\", \"active\", \"since\"];");
@@ -262,7 +262,7 @@ fn data_events_run_from_the_record() {
     has(sales, "    public void AfterDelete(Db db) => Logic.AfterDeleteOrder(db, this);");
     has(
         sales,
-        "            throw new RefusedException(new Text(\"Order {order.number} is over its customer's credit limit\").With(\"order.number\", Slot.OfText(order.Number)));",
+        "            throw new RefusedException(Text.Of(\"orderNumberIsOverIts\").With(\"number\", Slot.OfText(order.Number)));",
     );
 }
 
@@ -276,7 +276,7 @@ fn the_program_opens_and_migrates_every_database() {
 
 #[test]
 fn csharp_needs_avalonia_or_the_web_renderer() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
     let mut settings = settings();
     settings.stack.ui = Ui::Web;
     assert_eq!(generate(&project, &settings).unwrap_err(), ["C# with the web renderer is not generated yet; C# uses Avalonia"]);
@@ -288,7 +288,7 @@ fn csharp_needs_avalonia_or_the_web_renderer() {
 /// its databases.
 #[test]
 fn a_project_gets_the_drivers_of_its_databases_only() {
-    let project = load_sources([("sales.clarity", SALES)]);
+    let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
     let plain = generate(&project, &settings()).unwrap();
     let csproj = file(&plain, "Shop.csproj");
     assert!(!csproj.contains("Clarity.Runtime."), "{csproj}");
@@ -393,13 +393,13 @@ const MUSIC: &str = "module music\n\nentity Track\n    title: text(80)\n    leng
 /// A duration is whole seconds; its slot and its parts show it as 3:45 (X2).
 #[test]
 fn a_duration_is_seconds_shown_as_minutes_and_seconds() {
-    let project = load_sources([("music.clarity", MUSIC)]);
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", MUSIC)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
     let music = file(&files, "Modules/Music.cs");
     has(music, "public long Length");
     has(music, "long _length = 180L;");
-    has(music, ".With(\"track.length\", Slot.OfDuration(track.Length))");
+    has(music, ".With(\"length\", Slot.OfDuration(track.Length))");
     let shown = file(&files, "Shown.cs");
     has(shown, "public static readonly FormatConverter TrackLength = new(new FieldFormat(FormatKind.Duration));");
     has(shown, "public static readonly FieldFormat TrackLength = new FieldFormat(FormatKind.Duration);");

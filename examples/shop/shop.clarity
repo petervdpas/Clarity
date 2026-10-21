@@ -6,27 +6,27 @@ use desk
 
 // The application frame: shared by every window that has no region of its own.
 app Shop
-    title "Shop"
+    title @shopTitle
     main CustomerCard
     menu name mainMenu
-        item "File" name fileItem
-            item "Customer card" name customerCardItem key "Ctrl+K" on click -> CustomerCard
+        item @fileItem name fileItem
+            item @customerCardItem name customerCardItem key "Ctrl+K" on click -> CustomerCard
             separator
-            item "Language" name languageItem on click -> language
-            item "Theme" name themeItem on click -> theme
-            item "Quit" name quitItem key "Ctrl+Q" on click -> quit
-        item "Customers" name customersItem
-            item "All customers" name allCustomersItem on click -> CustomerBrowse
-            item "New customer" name newCustomerItem on click -> CustomerForm in new window
-        item "Orders" name ordersItem
-            item "All orders" name allOrdersItem on click -> OrderBrowse
+            item @languageItem name languageItem on click -> language
+            item @themeItem name themeItem on click -> theme
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+        item @customersItem name customersItem
+            item @allCustomersItem name allCustomersItem on click -> CustomerBrowse
+            item @newCustomerItem name newCustomerItem on click -> CustomerForm in new window
+        item @ordersItem name ordersItem
+            item @allOrdersItem name allOrdersItem on click -> OrderBrowse
     toolbar name mainToolbar
-        button "Customers" name customers2 icon "people" on click -> CustomerBrowse
-        button "Orders" name orders2 icon "cart" on click -> OrderBrowse
+        button @customers2Caption name customers2 icon "people" on click -> CustomerBrowse
+        button @orders2Caption name orders2 icon "cart" on click -> OrderBrowse
         separator
-        button "Card" name cardButton icon "card" on click -> CustomerCard
+        button @cardButtonCaption name cardButton icon "card" on click -> CustomerCard
     footer
-        status "Ready"
+        status @shopStatus
 
 // How the shop looks. The project file names it with: theme Shop
 theme Shop
@@ -37,7 +37,7 @@ theme Shop
 
 // A second look for the shop: always dark, with a warmer accent.
 theme Night
-    title "Night"
+    title @nightTheme
     mode dark
     color accent "#e0a030"
     radius 8
@@ -45,7 +45,7 @@ theme Night
 
 // A bright look for daytime: always light, with a blue accent.
 theme Day
-    title "Day"
+    title @dayTheme
     mode light
     color background "#f4f6f9"
     color panel "#ffffff"

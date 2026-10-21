@@ -1,5 +1,6 @@
 <script lang="ts">
   import FrameProperties from "./FrameProperties.svelte";
+  import TextField from "./TextField.svelte";
   import type { App } from "./generated/App";
   import type { Edit } from "./generated/Edit";
   import type { Event as PartEvent } from "./generated/Event";
@@ -21,11 +22,14 @@
     preview,
     page,
     onedit,
+    onapplied,
     app = null,
   }: {
     preview: Preview;
     page: Page;
     onedit: (edit: Edit) => void;
+    /** Takes the project after a text's value or key changed in the language files. */
+    onapplied: (preview: Preview) => void;
     /** Set when the page stands for the app (see `appAsPage`). */
     app?: App | null;
   } = $props();
@@ -182,11 +186,7 @@
     {#if info.caption !== null || p.caption !== null || info.container === "plain" || info.properties.includes("for")}
       <label class="prop">
         <span>Caption</span>
-        <input
-          value={p.caption ?? ""}
-          placeholder={p.kind === "help" ? "the field's help text" : ""}
-          onchange={(e) => update({ caption: textOf(e) })}
-        />
+        <TextField {preview} {onapplied} text={p.caption} placeholder={p.kind === "help" ? "the field's help text" : ""} onwrite={(text) => update({ caption: text })} />
       </label>
     {/if}
 
@@ -335,12 +335,12 @@
     {#if info.properties.includes("placeholder")}
       <label class="prop">
         <span>Placeholder</span>
-        <input value={p.placeholder ?? ""} placeholder="shown while the input is empty" onchange={(e) => update({ placeholder: textOf(e) })} />
+        <TextField {preview} {onapplied} text={p.placeholder} placeholder="shown while the input is empty" onwrite={(text) => update({ placeholder: text })} />
       </label>
     {/if}
     <label class="prop">
       <span>Tooltip</span>
-      <input value={p.tooltip ?? ""} placeholder="shown when the pointer rests on it" onchange={(e) => update({ tooltip: textOf(e) })} />
+      <TextField {preview} {onapplied} text={p.tooltip} placeholder="shown when the pointer rests on it" onwrite={(text) => update({ tooltip: text })} />
     </label>
     <label class="prop">
       <span>Style</span>
@@ -468,7 +468,7 @@
       <div class="kind">Tab</div>
       <label class="prop">
         <span>Title</span>
-        <input value={tab.title} onchange={(e) => onedit({ op: "setTitle", target: tab.span.start, title: e.currentTarget.value })} />
+        <TextField {preview} {onapplied} text={tab.title} onwrite={(text) => onedit({ op: "setTitle", target: tab.span.start, title: text ?? "" })} />
       </label>
       <div class="actions">
         <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>Remove tab</button>
@@ -477,7 +477,7 @@
       <div class="kind">Pane</div>
     {/if}
   {:else if frameElement}
-    <FrameProperties {preview} element={frameElement} {onedit} {owner} />
+    <FrameProperties {preview} element={frameElement} {onedit} {onapplied} {owner} />
   {:else}
     {#if app}
       <div class="kind">App <code>{app.name.name}</code></div>
@@ -486,7 +486,7 @@
     {/if}
     <label class="prop">
       <span>Title</span>
-      <input value={page.title ?? ""} placeholder={page.name.name} onchange={(e) => onedit({ op: "setTitle", target: page.span.start, title: e.currentTarget.value })} />
+      <TextField {preview} {onapplied} text={page.title} placeholder={page.name.name} onwrite={(text) => onedit({ op: "setTitle", target: page.span.start, title: text ?? "" })} />
     </label>
     {#if app}
       <label class="prop">

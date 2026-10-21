@@ -54,6 +54,12 @@ Text Text::plain(const std::string& text) {
     return Text(escaped);
 }
 
+Text Text::key(const std::string& key) {
+    Text t;
+    t.key_ = key;
+    return t;
+}
+
 Text Text::with(const std::string& path, Slot value) const {
     Text t = *this;
     t.values_[path] = std::move(value);
@@ -62,7 +68,7 @@ Text Text::with(const std::string& path, Slot value) const {
 
 std::string Text::show() const {
     std::string out;
-    const std::string& t = template_;
+    const std::string t = key_ ? text_of(*key_) : template_;
     size_t i = 0;
     while (i < t.size()) {
         char c = t[i];
@@ -125,6 +131,12 @@ void from_json(const nlohmann::json& in, Slot& slot) {
 }
 
 void to_json(nlohmann::json& out, const Text& text) {
+    if (text.key()) {
+        out = nlohmann::json::object();
+        out["key"] = *text.key();
+        if (!text.values().empty()) out["values"] = text.values();
+        return;
+    }
     if (text.values().empty()) {
         out = text.show();
         return;
@@ -137,8 +149,10 @@ void from_json(const nlohmann::json& in, Text& text) {
         text = Text::plain(in.get<std::string>());
         return;
     }
-    Text t(in.at("text").get<std::string>());
-    for (auto& [path, value] : in.at("values").items()) t = t.with(path, value.get<Slot>());
+    Text t = in.contains("key") ? Text::key(in.at("key").get<std::string>()) : Text(in.at("text").get<std::string>());
+    // The values kept in a name of their own: items() refers into them.
+    const nlohmann::json values = in.value("values", nlohmann::json::object());
+    for (auto& [path, value] : values.items()) t = t.with(path, value.get<Slot>());
     text = t;
 }
 
@@ -148,14 +162,15 @@ namespace clarity {
 
 namespace {
 
-struct Translations {
+struct Languages {
     std::mutex mutex;
-    std::map<std::string, std::map<std::string, std::string>> by_language;
-    std::optional<std::string> language;
+    std::map<std::string, std::map<std::string, std::string>> values;
+    std::string fallback = "en";
+    std::optional<std::string> picked;
 };
 
-Translations& translations() {
-    static Translations all;
+Languages& languages() {
+    static Languages all;
     return all;
 }
 
@@ -164,41 +179,51 @@ Translations& translations() {
 void load_translations(const std::string& model) {
     auto parsed = nlohmann::json::parse(model, nullptr, false);
     std::map<std::string, std::map<std::string, std::string>> all;
-    if (parsed.is_object() && parsed.contains("project") && parsed["project"].contains("translations")) {
-        for (const auto& [language, texts] : parsed["project"]["translations"].items()) {
-            for (const auto& [text, translation] : texts.items()) {
-                if (translation.is_string()) all[language][text] = translation.get<std::string>();
+    std::string fallback = "en";
+    if (parsed.is_object() && parsed.contains("project")) {
+        const auto& project = parsed["project"];
+        if (project.contains("translations")) {
+            for (const auto& [language, values] : project["translations"].items()) {
+                for (const auto& [key, value] : values.items()) {
+                    if (value.is_string()) all[language][key] = value.get<std::string>();
+                }
             }
         }
+        if (project.contains("locale") && project["locale"].contains("language") && project["locale"]["language"].is_string()) {
+            fallback = project["locale"]["language"].get<std::string>();
+        }
     }
-    std::lock_guard lock(translations().mutex);
-    translations().by_language = std::move(all);
+    std::lock_guard lock(languages().mutex);
+    languages().values = std::move(all);
+    languages().fallback = fallback;
 }
 
 void set_language(std::optional<std::string> language) {
-    std::lock_guard lock(translations().mutex);
-    translations().language = std::move(language);
+    std::lock_guard lock(languages().mutex);
+    languages().picked = std::move(language);
 }
 
 std::optional<std::string> language() {
-    std::lock_guard lock(translations().mutex);
-    return translations().language;
+    std::lock_guard lock(languages().mutex);
+    return languages().picked;
 }
 
-std::string translate(const std::string& text) {
-    std::lock_guard lock(translations().mutex);
-    auto& t = translations();
-    if (!t.language) return text;
-    auto of = t.by_language.find(*t.language);
-    if (of == t.by_language.end()) return text;
-    auto found = of->second.find(text);
-    return found == of->second.end() ? text : found->second;
+std::optional<std::string> key_value(const std::string& key) {
+    std::lock_guard lock(languages().mutex);
+    auto& l = languages();
+    auto in = [&](const std::string& language) -> std::optional<std::string> {
+        auto of = l.values.find(language);
+        if (of == l.values.end()) return std::nullopt;
+        auto found = of->second.find(key);
+        if (found == of->second.end() || found->second.empty()) return std::nullopt;
+        return found->second;
+    };
+    if (l.picked) {
+        if (auto value = in(*l.picked)) return value;
+    }
+    return in(l.fallback);
 }
 
-Text Text::translated() const {
-    Text out = *this;
-    out.template_ = translate(template_);
-    return out;
-}
+std::string text_of(const std::string& key_or_text) { return key_value(key_or_text).value_or(key_or_text); }
 
 }  // namespace clarity

@@ -1,4 +1,4 @@
-//! Text code makes is translated in the backend, in the language the screen
+//! A text by its key, filled in the backend in the language the screen
 //! picked, as every runtime does (conformance/translations.json, `code`).
 
 use clarity_runtime::i18n;
@@ -16,11 +16,11 @@ fn code_texts_are_translated_as_every_runtime_does() {
     assert!(!cases.is_empty());
     for case in cases {
         i18n::set_language(case["language"].as_str());
-        let mut text = Text::new(case["text"].as_str().unwrap());
+        let mut text = Text::key(case["key"].as_str().unwrap());
         for (path, value) in case["values"].as_object().unwrap() {
             text = text.with(path, Slot::text(value.as_str().unwrap()));
         }
-        assert_eq!(text.translated().show(), case["gives"].as_str().unwrap(), "{}", case["what"]);
+        assert_eq!(text.show(), case["gives"].as_str().unwrap(), "{}", case["what"]);
     }
     i18n::set_language(None);
 }

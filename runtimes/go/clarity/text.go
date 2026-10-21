@@ -99,7 +99,13 @@ type Text struct {
 	Template string
 	// Values are the value of each slot, by its path as written: customer.name.
 	Values map[string]Slot
+	// Key is the key the text is, when it is one: the screen shows its value
+	// in the person's language.
+	Key string
 }
+
+// KeyText is the text of key, with its value in the person's language.
+func KeyText(key string) Text { return Text{Key: key} }
 
 // NewText is text as written in Clarity, before its slots get values.
 func NewText(template string) Text { return Text{Template: template} }
@@ -122,9 +128,13 @@ func (t Text) With(path string, value Slot) Text {
 
 // Show is the text with its slots filled plainly, without a person's
 // format: for logs, and for code that reads a caption back.
+// A key takes its value in the language the screen picked.
 func (t Text) Show() string {
 	var out strings.Builder
 	rest := t.Template
+	if t.Key != "" {
+		rest = TextOf(t.Key)
+	}
 	for {
 		at := strings.IndexAny(rest, "{}")
 		if at < 0 {
@@ -161,8 +171,15 @@ func (t Text) Show() string {
 	return out.String()
 }
 
-// MarshalJSON writes a plain string, or the text with its slot values.
+// MarshalJSON writes a plain string, the text with its slot values, or a
+// key with its slot values, whose value the screen looks up.
 func (t Text) MarshalJSON() ([]byte, error) {
+	if t.Key != "" {
+		return json.Marshal(struct {
+			Key    string          `json:"key"`
+			Values map[string]Slot `json:"values,omitempty"`
+		}{t.Key, t.Values})
+	}
 	if len(t.Values) == 0 {
 		return json.Marshal(t.Show())
 	}
@@ -180,11 +197,12 @@ func (t *Text) UnmarshalJSON(data []byte) error {
 	}
 	var wire struct {
 		Text   string          `json:"text"`
+		Key    string          `json:"key"`
 		Values map[string]Slot `json:"values"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	*t = Text{wire.Text, wire.Values}
+	*t = Text{Template: wire.Text, Values: wire.Values, Key: wire.Key}
 	return nil
 }

@@ -87,8 +87,16 @@ enum SpecCommand {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
     },
-    /// List every text people see, and per language the texts its
-    /// translation file misses, written as lines to fill in.
+    /// Make every text people read a key: in the modules, a key in place of
+    /// each text, and a file per language giving every key its value, the
+    /// texts' own in the default language: what the checker asks of projects
+    /// written before texts had keys.
+    Keys {
+        /// The project file, or the folder with its modules.
+        dir: PathBuf,
+    },
+    /// List, per language, the keys its file gives no value yet, written as
+    /// lines to fill in.
     Texts {
         /// The project file, or the folder with its modules.
         dir: PathBuf,
@@ -111,6 +119,7 @@ fn main() -> ExitCode {
             SpecCommand::Model { dir, samples } => model(&dir, samples),
             SpecCommand::Names { dir } => names(&dir),
             SpecCommand::Texts { dir } => texts(&dir),
+            SpecCommand::Keys { dir } => keys(&dir),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
         Command::Migrate {
@@ -262,25 +271,72 @@ fn check(dir: &std::path::Path) -> ExitCode {
     }
 }
 
+fn keys(path: &std::path::Path) -> ExitCode {
+    let project = match load(path) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
+    let read = |folder: &std::path::Path| -> Vec<(String, String)> {
+        let Ok(entries) = std::fs::read_dir(folder) else { return Vec::new() };
+        let mut files: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "clarity")).collect();
+        files.sort();
+        files.into_iter().filter_map(|p| std::fs::read_to_string(&p).ok().map(|t| (p.display().to_string(), t))).collect()
+    };
+    let modules = read(&dir);
+    let folder = dir.join(clarity_spec::translations::TRANSLATIONS_DIR);
+    let languages = read(&folder);
+    let default = clarity_spec::translations::default_language(&project);
+    let made = clarity_spec::keyed::make_keys(
+        &modules.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
+        &languages.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect::<Vec<_>>(),
+        &default,
+    );
+    for ((path, before), (_, after)) in modules.iter().zip(&made.modules) {
+        if before != after {
+            if let Err(err) = std::fs::write(path, after) {
+                eprintln!("clarity: cannot write {path}: {err}");
+                return ExitCode::FAILURE;
+            }
+            eprintln!("keyed {path}");
+        }
+    }
+    if let Err(err) = std::fs::create_dir_all(&folder) {
+        eprintln!("clarity: cannot make {}: {err}", folder.display());
+        return ExitCode::FAILURE;
+    }
+    for language in made.languages.keys() {
+        let file = folder.join(format!("{language}.clarity"));
+        if let Err(err) = std::fs::write(&file, made.language_file(language)) {
+            eprintln!("clarity: cannot write {}: {err}", file.display());
+            return ExitCode::FAILURE;
+        }
+        eprintln!("wrote {}", file.display());
+    }
+    ExitCode::SUCCESS
+}
+
 fn texts(dir: &std::path::Path) -> ExitCode {
     let project = match load(dir) {
         Ok(project) => project,
         Err(code) => return code,
     };
-    let used: Vec<_> = clarity_spec::translations::texts(&project).into_iter().filter(|u| clarity_spec::translations::needs_translation(&u.text)).collect();
-    let quoted = |text: &str| clarity_spec::lexer::quote(text);
-    if project.translations.is_empty() {
-        println!("// {} texts, and no translation yet", used.len());
-        for u in &used {
-            println!("    {}", quoted(&u.text));
+    use clarity_spec::translations::{default_language, keys};
+    let used = keys(&project);
+    let default = default_language(&project);
+    let defaults = project.translations.get(&default);
+    for (language, values) in &project.translations {
+        let empty: Vec<_> = used.iter().filter(|u| values.get(&u.key).is_none_or(|v| v.is_empty())).collect();
+        println!("// {language}{}: {} of {} keys have no value", if *language == default { " (default)" } else { "" }, empty.len(), used.len());
+        for u in empty {
+            let said = defaults.and_then(|d| d.get(&u.key)).filter(|v| !v.is_empty()).map(|v| format!(" {}", clarity_spec::lexer::quote(v))).unwrap_or_default();
+            println!("    {} \"\"  // {}{said}", u.key, u.places.join(", "));
         }
-        return ExitCode::SUCCESS;
     }
-    for (language, translated) in &project.translations {
-        let missing: Vec<_> = used.iter().filter(|u| !translated.contains_key(&u.text)).collect();
-        println!("// {language}: {} of {} texts miss a translation", missing.len(), used.len());
-        for u in missing {
-            println!("    {} \"\"  // {}", quoted(&u.text), u.places.join(", "));
+    if project.translations.is_empty() {
+        println!("// {} keys, and no language file yet; add translations/{default}.clarity", used.len());
+        for u in &used {
+            println!("    {} \"\"  // {}", u.key, u.places.join(", "));
         }
     }
     ExitCode::SUCCESS

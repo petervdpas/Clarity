@@ -225,7 +225,7 @@ pub fn new_command(kind: CommandKind, caption: Option<String>) -> CommandProps {
 pub fn command_line(props: &CommandProps) -> String {
     let mut parts = vec![command_keyword(props.kind).to_string()];
     if let Some(caption) = &props.caption {
-        parts.push(quote(caption));
+        parts.push(crate::lexer::text_token(caption));
     }
     if let Some(name) = &props.name {
         parts.push(format!("name {name}"));

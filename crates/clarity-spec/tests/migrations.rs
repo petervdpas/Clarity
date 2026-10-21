@@ -208,8 +208,11 @@ fn the_next_step_gets_the_next_number() {
 fn a_written_step_is_the_next_file_in_the_folder() {
     let dir = std::env::temp_dir().join(format!("clarity-migrations-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("shop.clarity"), SHOP).unwrap();
+    std::fs::create_dir_all(dir.join("translations")).unwrap();
+    // A project with its texts by key, as the checker asks.
+    let keyed = clarity_spec::keyed::make_keys(&[("shop.clarity", SHOP)], &[], "en");
+    std::fs::write(dir.join("shop.clarity"), &keyed.modules[0].1).unwrap();
+    std::fs::write(dir.join("translations/en.clarity"), keyed.language_file("en")).unwrap();
 
     let before = clarity_spec::load_dir(&dir).unwrap();
     assert!(!messages(&before, Severity::Warning).is_empty());

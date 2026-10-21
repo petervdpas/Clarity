@@ -104,6 +104,11 @@ and finish only when check reports no errors.
 - Give every part a name, and name parts and handlers in camelCase: letters and digits only, starting with a small \
 letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, not its kind. Fields, \
 data and functions stay snake_case.
+- Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name save ...`, \
+`message @savedName(name = customer.name)`, `label @customerNameLabel` on every field. Give each key its text in the \
+default language's file, `translations/en.clarity` (read it first; lines like `saveCaption \"Save\"`), and the same \
+key in every other language file, empty (`saveCaption \"\"`) when you do not translate it. Name a key in camelCase \
+after where it is: the part and what the text is to it.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - After adding or changing entities, write a migration step with migrate, so the database follows.
@@ -541,12 +546,17 @@ mod tests {
         let broken = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: nonsense\n"}));
         assert!(!broken.is_error);
         assert!(broken.text.contains("error(s)") && broken.text.contains("tasks.clarity:"), "{}", broken.text);
-        let fixed = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: text(120), required"}));
+        // A label is a key, whose text the default language's file gives.
+        let en = tools.call("read_file", &json!({"path": "translations/en.clarity"}));
+        assert!(en.text.starts_with("translation en"), "{}", en.text);
+        let with_key = format!("{}\n    taskTitle \"Title\"\n", en.text.trim_end());
+        assert!(!tools.call("write_file", &json!({"path": "translations/en.clarity", "text": with_key})).is_error);
+        let fixed = tools.call("write_file", &json!({"path": "tasks.clarity", "text": "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle"}));
         assert!(fixed.text.contains("No errors") && fixed.text.contains("not in a migration yet"), "{}", fixed.text);
         // A migration step takes the warning away.
         let step = tools.call("migrate", &json!({"title": "Tasks"}));
         assert!(!step.is_error && step.text.contains("add entity Task") && step.text.ends_with("No problems."), "{}", step.text);
-        assert_eq!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap(), "module tasks\n\nentity Task\n    title: text(120), required\n");
+        assert_eq!(std::fs::read_to_string(dir.join("tasks.clarity")).unwrap(), "module tasks\n\nentity Task\n    title: text(120), required, label @taskTitle\n");
 
         // Paths stay inside the project.
         for path in ["../escape.clarity", "/etc/passwd", "notes.txt", ""] {
@@ -556,9 +566,10 @@ mod tests {
 
         // The turn is one change for Undo: each file from before the turn to after it.
         let one = merged(&tools.written);
-        assert_eq!(one.len(), 2, "the module and the step");
-        assert_eq!(one[0].before, None);
-        assert!(one[0].after.contains("text(120)"));
+        assert_eq!(one.len(), 3, "the module, the language file and the step");
+        let module = one.iter().find(|c| c.file.ends_with("tasks.clarity")).unwrap();
+        assert_eq!(module.before, None);
+        assert!(module.after.contains("text(120)"));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

@@ -82,7 +82,7 @@ public sealed class MessageList : StackPanel
             var button = new Button { Content = message.Shown, HorizontalAlignment = HorizontalAlignment.Stretch };
             button.Classes.Add("message");
             button.Classes.Add(message.Level.ToString().ToLowerInvariant());
-            ToolTip.SetTip(button, Locale.Translate("Dismiss"));
+            ToolTip.SetTip(button, Locale.Translate("dismiss", "Dismiss"));
             button.Click += (_, _) => Dismiss(message);
             Children.Add(button);
         }

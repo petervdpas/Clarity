@@ -2,8 +2,9 @@
 // the rules of the web renderer (app/src/lib/model.ts): the system's locale
 // picks the translations and formats values; a language chosen with the
 // `language` click target shows its texts and its formats, and is kept for
-// the next start. Texts are looked up by what they say as written, through
-// the application's generated `Texts` (its .resx files).
+// the next start. Texts are looked up by their keys, through the
+// application's generated `Texts` (its .resx files): a language that leaves
+// a key empty shows the default language's value.
 
 using System.Globalization;
 using Clarity.Runtime;
@@ -60,6 +61,7 @@ public static class Locale
         Locale.system = system ?? CultureInfo.CurrentCulture;
         chosen = Languages.Remembered(Remembered.Get(Key), baseLanguage, available, out choice);
         Apply();
+        Text.KeyValue = key => lookup(key, Language ?? CultureInfo.InvariantCulture);
     }
 
     /// <summary>Back to the texts as written, in the culture of the running thread: for tests.</summary>
@@ -89,11 +91,17 @@ public static class Locale
         CultureInfo.DefaultThreadCurrentUICulture = Language ?? culture;
     }
 
-    /// <summary>A text of the project as the person reads it: translated, or as written.</summary>
-    public static string Translate(string text) =>
-        Language is { } language && lookup(text, language) is { Length: > 0 } translated ? translated : text;
+    /// <summary>
+    /// The value of a key in the language shown, or the default language's
+    /// when that one leaves it empty; a text that is no key stays as it is.
+    /// </summary>
+    public static string Translate(string keyOrText) =>
+        lookup(keyOrText, Language ?? CultureInfo.InvariantCulture) is { Length: > 0 } value ? value : keyOrText;
 
-    /// <summary>Text with slots as shown: translated by its text as written, each slot in the person's format.</summary>
+    /// <summary>One of Clarity's own words by its key, or <paramref name="fallback"/> when the project gives it no value.</summary>
+    public static string Translate(string key, string fallback) => Translate(key) is var value && value != key ? value : fallback;
+
+    /// <summary>Text as shown: a key by its value in the language shown, each slot in the person's format.</summary>
     public static string Show(Text text) =>
-        Formats.Fill(text.WithTemplate(Translate(text.Template)), label, Translate);
+        Formats.Fill(text.WithTemplate(text.Key is { } key ? (Translate(key) is var value && value != key ? value : Text.Plain(key).Template) : text.Template), label, Translate);
 }

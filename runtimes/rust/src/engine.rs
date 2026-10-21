@@ -268,7 +268,8 @@ impl Engine {
         let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
         let answer: Value = serde_json::from_slice(output).map_err(|e| failed(format!("its answer is no JSON: {e}")))?;
         match (answer.get("value"), answer.get("error")) {
-            (_, Some(error)) => Err(Error::Refused(Text::plain(error.as_str().unwrap_or_default()))),
+            // An engine refuses by the key of its text (its `says`), or in its own words.
+            (_, Some(error)) => Err(Error::Refused(Text::key(error.as_str().unwrap_or_default()))),
             (Some(value), None) => Ok(value.clone()),
             (None, None) => Err(failed("its answer has no value".into())),
         }

@@ -59,6 +59,11 @@ TEST(text_travels_as_the_other_runtimes_send_it) {
     CHECK_EQ(saved.show(), "Saved Ada on 2026-10-17: 1250.50, yes, Business");
     CHECK_EQ(nlohmann::json(saved).get<Text>().show(), saved.show());
     CHECK_EQ(Text("{{braces}} and }").show(), "{braces} and }");
+    // A key travels with its slot values; the screen looks up its value.
+    auto keyed = Text::key("orderApproved").with("number", slot_text("A-7"));
+    CHECK_EQ(nlohmann::json(keyed), nlohmann::json::parse(R"({"key":"orderApproved","values":{"number":{"kind":"text","value":"A-7"}}})"));
+    CHECK_EQ(nlohmann::json(Text::key("save")), nlohmann::json::parse(R"({"key":"save"})"));
+    CHECK_EQ(*nlohmann::json(keyed).get<Text>().key(), std::string("orderApproved"));
 }
 
 TEST(every_rounding_case_rounds_as_every_runtime_does) {
@@ -89,9 +94,9 @@ TEST(code_texts_are_translated_as_every_runtime_does) {
     CHECK(!code["cases"].empty());
     for (const auto& c : code["cases"]) {
         set_language(c["language"].is_string() ? std::optional(c["language"].get<std::string>()) : std::nullopt);
-        Text text(c["text"].get<std::string>());
+        Text text = Text::key(c["key"].get<std::string>());
         for (const auto& [path, value] : c["values"].items()) text = text.with(path, slot_text(value.get<std::string>()));
-        CHECK_EQ(text.translated().show(), c["gives"].get<std::string>());
+        CHECK_EQ(text.show(), c["gives"].get<std::string>());
     }
     set_language(std::nullopt);
 }

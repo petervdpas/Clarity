@@ -41,6 +41,9 @@ const char* clarity_slot_plain(const ClaritySlot* slot);
 /// Text to show, with values in slots: Saved {customer.name}.
 struct ClarityText {
     const char* text;
+    /// The key the text is, when it is one (else NULL): the screen shows its
+    /// value in the person's language.
+    const char* key;
     const char** paths;
     ClaritySlot* slots;
     size_t count;
@@ -49,6 +52,8 @@ struct ClarityText {
 
 /// Text as written in Clarity, before its slots get values.
 ClarityText* clarity_text(const char* text);
+/// The text of key `key`, with its value in the person's language.
+ClarityText* clarity_key_text(const char* key);
 /// Text shown as it is: a brace in it is no slot.
 ClarityText* clarity_plain_text(const char* text);
 /// The slot at `path` gets its value; gives `text` back.
@@ -56,18 +61,21 @@ ClarityText* clarity_text_with(ClarityText* text, const char* path, ClaritySlot 
 /// The text with its slots filled plainly, without a person's format.
 const char* clarity_text_show(const ClarityText* text);
 
-/// Takes the translations from the model (`project.translations`), for
-/// the text code makes (conformance/translations.json, `code`). They last
-/// until the next load, outside the scratch arena.
+/// Takes every language's values from the model (`project.translations`)
+/// and the default language (`project.locale.language`), for texts by key
+/// (conformance/translations.json, `code`). They last until the next load,
+/// outside the scratch arena.
 void clarity_load_translations(const char* model);
-/// The language texts show in, as the screen picked it; NULL for the texts as written.
+/// The language texts show in, as the screen picked it; NULL for the default.
 void clarity_set_language(const char* language);
-/// The language the screen picked; NULL for the texts as written.
+/// The language the screen picked; NULL for the default.
 const char* clarity_language(void);
-/// `text` in the language picked, or as written when it has no translation there.
-const char* clarity_translate(const char* text);
-/// The same text in the language the screen picked, its values kept; gives `text` back.
-ClarityText* clarity_text_translated(ClarityText* text);
+/// The value of `key` in the language picked, or the default language's
+/// when that one leaves it empty; NULL when no language has the key.
+const char* clarity_key_value(const char* key);
+/// The value of the key `key_or_text` names, or the text itself when it
+/// names none: what an engine gives.
+const char* clarity_text_of(const char* key_or_text);
 
 /// A plain string, or the text with its slot values.
 cJSON* clarity_text_json(const ClarityText* text);

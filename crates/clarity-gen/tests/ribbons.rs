@@ -4,7 +4,7 @@
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui, starter};
-use clarity_spec::load_sources;
+
 
 const SHOP: &str = "module shop
 
@@ -27,7 +27,7 @@ code Main
 ";
 
 fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
-    let project = load_sources([("shop.clarity", SHOP)]);
+    let project = clarity_spec::keyed::load_keyed([("shop.clarity", SHOP)], &[], "en");
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = starter("Shop", "shop");
     settings.stack.backend = backend;
@@ -66,7 +66,7 @@ fn avalonia_ribbon_follows_its_state() {
     let files = files(Backend::Csharp, Ui::Avalonia);
     let view = text(&files, "Windows/MainView.axaml");
     has(view, "<c:RibbonView x:Name=\"mainRibbon\" DockPanel.Dock=\"Top\" Classes=\"ribbon\" Collapsible=\"True\" IsCollapsed=\"{Binding MainRibbon.IsCollapsed}\" Tab=\"{Binding MainRibbon.Tab}\">");
-    has(view, "<TabItem x:Name=\"homeTab\" Header=\"{x:Static local:Texts.Home}\" IsVisible=\"{Binding HomeTab.IsVisible}\">");
+    has(view, "<TabItem x:Name=\"homeTab\" Header=\"{x:Static local:Texts.HomeTab}\" IsVisible=\"{Binding HomeTab.IsVisible}\">");
     has(view, "IsVisible=\"{Binding ClipboardGroup.IsVisible}\"");
     let vm = text(&files, "Windows/MainViewModel.cs");
     has(vm, "public PartState MainRibbon { get; } = new(\"mainRibbon\") { IsCollapsed = true };");

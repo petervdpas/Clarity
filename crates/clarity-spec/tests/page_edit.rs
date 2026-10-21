@@ -514,12 +514,12 @@ fn no_op_edit_round_trips_exactly() {
         assert!(!pages.is_empty());
         for target in pages {
             // Setting a page's title to what it already is changes nothing.
+            // A title is a key, or a text without letters in quotes.
             let title = source[target as usize..]
                 .lines()
                 .find_map(|l| {
-                    l.trim()
-                        .strip_prefix("title \"")
-                        .map(|t| t.trim_end_matches('"').to_string())
+                    let rest = l.trim().strip_prefix("title ")?;
+                    Some(rest.strip_prefix('"').map_or(rest.to_string(), |t| t.trim_end_matches('"').to_string()))
                 })
                 .unwrap_or_default();
             let outcome = apply(source, &Edit::SetTitle { target, title }).unwrap();

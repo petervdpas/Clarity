@@ -49,7 +49,17 @@ jobs:
           cargo test -p clarity-runtime
           cargo build -p clarity-runtime --features postgres,mysql,mssql
 
+      # A version published already (by hand, or by an earlier run of this
+      # tag) is left as it is: crates.io never takes a version twice.
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p clarity-runtime
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust/v}"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'Clarity release (github.com/petervdpas/Clarity)' "https://crates.io/api/v1/crates/clarity-runtime/$version")"
+          if [ "$status" = "200" ]; then
+            echo "::notice::clarity-runtime $version is on crates.io already"
+            exit 0
+          fi
+          cargo publish -p clarity-runtime

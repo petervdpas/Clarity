@@ -1,0 +1,68 @@
+name: Release Rust engine library
+
+# Push a runtimes/rust-engine/v* tag (e.g. `git tag runtimes/rust-engine/v0.2.0
+# && git push origin runtimes/rust-engine/v0.2.0`) to publish the crate
+# clarity-engine to crates.io. The tag must name the version in
+# runtimes/rust-engine/Cargo.toml: bump that first, commit, then tag. New
+# engines Clarity writes require the same version
+# (clarity_project::engines::ENGINE_LIBRARY_VERSION).
+#
+# Publishes with the repository secret CARGO_REGISTRY_TOKEN (a crates.io API
+# token with publish-update, limited to clarity-*). A version on crates.io can
+# never be replaced, only yanked.
+
+on:
+  push:
+    tags:
+      - "runtimes/rust-engine/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish clarity-engine
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: The tag names the crate's version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#runtimes/rust-engine/v}"
+          crate="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clarity-engine") | .version')"
+          echo "tag $tag, crate $crate"
+          if [ "$tag" != "$crate" ]; then
+            echo "::error::the tag says $tag but runtimes/rust-engine/Cargo.toml says $crate"
+            exit 1
+          fi
+
+      # The library builds for WebAssembly, as engines do, and an engine
+      # written on it builds and fits its declaration.
+      - name: Test the library
+        run: |
+          cargo build -p clarity-engine --target wasm32-unknown-unknown
+          cargo test -p clarity-project --test engines -- --include-ignored
+
+      # A version published already (by hand, or by an earlier run of this
+      # tag) is left as it is: crates.io never takes a version twice.
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#runtimes/rust-engine/v}"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -A 'Clarity release (github.com/petervdpas/Clarity)' "https://crates.io/api/v1/crates/clarity-engine/$version")"
+          if [ "$status" = "200" ]; then
+            echo "::notice::clarity-engine $version is on crates.io already"
+            exit 0
+          fi
+          cargo publish -p clarity-engine

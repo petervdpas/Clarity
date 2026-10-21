@@ -1,6 +1,6 @@
 {
-  "name": "clarity-language",
-  "displayName": "Clarity",
+  "name": "clarity-designer",
+  "displayName": "Clarity Designer",
   "description": "Colors, snippets and a file icon for Clarity files (.clarity): the language of the Clarity designer.",
   "version": "0.1.0",
   "publisher": "petervdpas",

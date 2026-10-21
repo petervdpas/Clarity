@@ -58,7 +58,7 @@ jobs:
         run: cargo test -p clarity-spec --test highlight --test editor_snippets
 
       - name: Package
-        run: npx --yes @vscode/vsce@3.6.0 package --out clarity-language.vsix
+        run: npx --yes @vscode/vsce@3.6.0 package --out clarity-designer.vsix
 
       - name: Publish to the Marketplace
         env:
@@ -70,11 +70,11 @@ jobs:
             exit 0
           fi
           version="$(jq -r .version package.json)"
-          if npx --yes @vscode/vsce@3.6.0 show petervdpas.clarity-language --json 2>/dev/null | jq -e --arg v "$version" '.versions[] | select(.version == $v)' >/dev/null; then
-            echo "::notice::clarity-language $version is on the Marketplace already"
+          if npx --yes @vscode/vsce@3.6.0 show petervdpas.clarity-designer --json 2>/dev/null | jq -e --arg v "$version" '.versions[] | select(.version == $v)' >/dev/null 2>&1; then
+            echo "::notice::clarity-designer $version is on the Marketplace already"
             exit 0
           fi
-          npx --yes @vscode/vsce@3.6.0 publish --packagePath clarity-language.vsix
+          npx --yes @vscode/vsce@3.6.0 publish --packagePath clarity-designer.vsix
 
       - name: Publish to Open VSX
         env:
@@ -86,12 +86,12 @@ jobs:
             exit 0
           fi
           version="$(jq -r .version package.json)"
-          status="$(curl -s -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/petervdpas/clarity-language/$version")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/petervdpas/clarity-designer/$version")"
           if [ "$status" = "200" ]; then
-            echo "::notice::clarity-language $version is on Open VSX already"
+            echo "::notice::clarity-designer $version is on Open VSX already"
             exit 0
           fi
-          npx --yes ovsx@0.10.1 publish clarity-language.vsix -p "$OVSX_PAT"
+          npx --yes ovsx@0.10.1 publish clarity-designer.vsix -p "$OVSX_PAT"
 
       - name: Attach the package to a release of the tag
         env:
@@ -99,9 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           version="$(jq -r .version package.json)"
-          cp clarity-language.vsix "clarity-language-$version.vsix"
+          cp clarity-designer.vsix "clarity-designer-$version.vsix"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "clarity-language-$version.vsix" --clobber
+            gh release upload "$GITHUB_REF_NAME" "clarity-designer-$version.vsix" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "clarity-language-$version.vsix" --title "Clarity for VS Code $version" --notes "The VS Code extension for .clarity files. See editors/vscode/CHANGELOG.md."
+            gh release create "$GITHUB_REF_NAME" "clarity-designer-$version.vsix" --title "Clarity for VS Code $version" --notes "The VS Code extension for .clarity files. See editors/vscode/CHANGELOG.md."
           fi

@@ -9,8 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Clarity.Avalonia</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- The NuGet package, made by dotnet pack (which builds first); its shared settings are in ../Directory.Build.props. -->
+    <!-- The NuGet package, made on every build; its shared settings are in ../Directory.Build.props. -->
     <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>bin/$(Configuration)</PackageOutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Not every public member has its own doc comment yet. -->

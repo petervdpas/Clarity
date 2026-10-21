@@ -1,0 +1,107 @@
+name: Release VS Code extension
+
+# Push an editors/vscode/v* tag (e.g. `git tag editors/vscode/v0.1.0 && git
+# push origin editors/vscode/v0.1.0`) to publish the extension in
+# editors/vscode: to the Visual Studio Marketplace, to Open VSX, and as a
+# .vsix on a GitHub release of the tag. The tag must name the version in
+# editors/vscode/package.json: bump that (and CHANGELOG.md) first, commit,
+# then tag.
+#
+# Publishes with the repository secrets VSCE_PAT (an Azure DevOps token with
+# Marketplace "Manage" scope, for the publisher petervdpas) and OVSX_PAT (an
+# Open VSX token). A store whose secret is missing is left out. A version a
+# store has already is left as it is: neither takes a version twice.
+
+on:
+  push:
+    tags:
+      - "editors/vscode/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish the extension
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: The tag names the extension's version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#editors/vscode/v}"
+          version="$(jq -r .version package.json)"
+          echo "tag $tag, extension $version"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::the tag says $tag but editors/vscode/package.json says $version"
+            exit 1
+          fi
+
+      # The grammar is the designer's highlighter's, and every snippet is Clarity.
+      - name: Test the grammar and the snippets
+        working-directory: .
+        run: cargo test -p clarity-spec --test highlight --test editor_snippets
+
+      - name: Package
+        run: npx --yes @vscode/vsce@3.6.0 package --out clarity-language.vsix
+
+      - name: Publish to the Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::notice::no VSCE_PAT: the Marketplace is left out"
+            exit 0
+          fi
+          version="$(jq -r .version package.json)"
+          if npx --yes @vscode/vsce@3.6.0 show petervdpas.clarity-language --json 2>/dev/null | jq -e --arg v "$version" '.versions[] | select(.version == $v)' >/dev/null; then
+            echo "::notice::clarity-language $version is on the Marketplace already"
+            exit 0
+          fi
+          npx --yes @vscode/vsce@3.6.0 publish --packagePath clarity-language.vsix
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::notice::no OVSX_PAT: Open VSX is left out"
+            exit 0
+          fi
+          version="$(jq -r .version package.json)"
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/petervdpas/clarity-language/$version")"
+          if [ "$status" = "200" ]; then
+            echo "::notice::clarity-language $version is on Open VSX already"
+            exit 0
+          fi
+          npx --yes ovsx@0.10.1 publish clarity-language.vsix -p "$OVSX_PAT"
+
+      - name: Attach the package to a release of the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version package.json)"
+          cp clarity-language.vsix "clarity-language-$version.vsix"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "clarity-language-$version.vsix" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "clarity-language-$version.vsix" --title "Clarity for VS Code $version" --notes "The VS Code extension for .clarity files. See editors/vscode/CHANGELOG.md."
+          fi

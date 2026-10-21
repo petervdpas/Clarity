@@ -1,0 +1,26 @@
+{
+  "comments": {
+    "lineComment": "//"
+  },
+  "brackets": [
+    ["(", ")"],
+    ["[", "]"],
+    ["<", ">"]
+  ],
+  "autoClosingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "[", "close": "]" },
+    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
+    { "open": "{", "close": "}", "notIn": ["comment"] }
+  ],
+  "surroundingPairs": [
+    ["(", ")"],
+    ["[", "]"],
+    ["\"", "\""]
+  ],
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(module|use|enum|entity|page|app|theme|code|function|action|engine|handler|translation|migration|project|datasource|if|else|for|before|after|form|panel|tabs|tab|splitter|pane|menu|toolbar|ribbon|group|sidebar|footer|item)\\b",
+    "decreaseIndentPattern": "^\\s*else\\b"
+  },
+  "wordPattern": "@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(\\.\\d+)?"
+}

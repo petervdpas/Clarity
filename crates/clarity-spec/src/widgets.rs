@@ -82,6 +82,23 @@ pub enum Event {
 }
 
 /// The events a window has, in the order the designer lists them.
+/// Every event, in the order the language lists them.
+pub const ALL_EVENTS: [Event; 13] = [
+    Event::Click,
+    Event::Change,
+    Event::Enter,
+    Event::Leave,
+    Event::Select,
+    Event::Open,
+    Event::Pointer,
+    Event::Key,
+    Event::Close,
+    Event::Return,
+    Event::Start,
+    Event::Submit,
+    Event::Draw,
+];
+
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
 
 /// The events the app has.

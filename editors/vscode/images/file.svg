@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Clarity's icon, the source of every size the installers use (npx tauri icon src-tauri/icons/icon.svg):
+       a clear "C" with sparkles in its opening, on no background. -->
+  <path d="M 341.7 144.3 A 158 158 0 1 0 341.7 367.7" fill="none" stroke="#f5c400" stroke-width="68" stroke-linecap="round"/>
+  <path d="M 412 168 Q 412 256 500 256 Q 412 256 412 344 Q 412 256 324 256 Q 412 256 412 168 Z" fill="#f5c400"/>
+  <path d="M 452 64 Q 452 104 492 104 Q 452 104 452 144 Q 452 104 412 104 Q 452 104 452 64 Z" fill="#ffd84d"/>
+  <path d="M 470 390 Q 470 414 494 414 Q 470 414 470 438 Q 470 414 446 414 Q 470 414 470 390 Z" fill="#ffd84d"/>
+</svg>

@@ -1,0 +1,5 @@
+# Only what the extension needs goes into the package.
+*.vsix
+.vscode/**
+node_modules/**
+.gitignore

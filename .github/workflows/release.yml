@@ -3,7 +3,8 @@ name: Release Clarity
 # Push a v* tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) to fire the
 # full pipeline: gate on the tests, build the Windows installers and the Linux
 # packages, install each Linux package on the distributions it is for, then
-# publish one GitHub Release with every artifact attached. The tag minus its
+# publish one GitHub Release with every artifact attached, the VS Code
+# extension (editors/vscode) among them. The tag minus its
 # leading "v" becomes the app version (stamped into tauri.conf.json and
 # package.json, so the installers carry it). Artifact filenames are
 # version-free; the release tag is the only version disambiguator.
@@ -144,6 +145,40 @@ jobs:
           path: out/*
 
   # ───────────────────────────────────────────────────────────────
+  # The VS Code extension for .clarity files (editors/vscode), as a
+  # .vsix beside the installers. Its grammar and snippets are tested
+  # in the check job (cargo test --workspace). It keeps its own
+  # version; the Marketplace and Open VSX take it from its own tag
+  # (release-vscode.yml).
+  # ───────────────────────────────────────────────────────────────
+  vscode:
+    name: VS Code extension
+    needs: [check]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p ../../out
+          npx --yes @vscode/vsce@3.6.0 package --out ../../out/clarity-language.vsix
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-vscode
+          path: out/*
+
+  # ───────────────────────────────────────────────────────────────
   # Linux: each package built inside its distribution's container.
   # ubuntu-24.04-arm is a real arm64 runner, so the Raspberry Pi
   # package is built natively, in an arm64 debian:bookworm.
@@ -245,7 +280,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   release:
     name: Publish GitHub Release
-    needs: [windows, install]
+    needs: [windows, install, vscode]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:

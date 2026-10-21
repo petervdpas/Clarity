@@ -61,7 +61,7 @@ const KEYWORDS: &[&str] = &[
     // Parts and the frame.
     "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "renderer", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
-    "large", "group", "tab", "pane", "left", "right", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
+    "large", "group", "tab", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
     "folded", "heading", "status",
 ];
 
@@ -73,7 +73,7 @@ const LITERALS: &[&str] = &["true", "false", "none"];
 
 /// Words after which the next word is a name the project gives.
 const NAMING: &[&str] =
-    &["name", "handler", "function", "action", "let", "for", "data", "keep", "module", "use", "source", "store", "datasource", "filestore"];
+    &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "module", "use", "source", "store", "datasource", "filestore"];
 
 /// The pieces of every line of `source`, in order.
 pub fn highlight(source: &str) -> Vec<Piece> {
@@ -191,4 +191,103 @@ fn text_pieces(written: &str, from: usize, column: &dyn Fn(usize) -> u32, line: 
     if start < bytes.len() {
         pieces.push(Piece { line, from: column(from + start), to: column(from + bytes.len()), kind: PieceKind::Text });
     }
+}
+
+/// Every word the highlighter colors as a keyword somewhere: the language's
+/// own, the parts of the catalog and their events, sorted, each once.
+pub fn keywords() -> Vec<String> {
+    let mut words: Vec<String> = KEYWORDS.iter().map(|w| w.to_string()).collect();
+    words.extend(crate::widgets::catalog().into_iter().map(|w| w.keyword));
+    words.extend(crate::widgets::ALL_EVENTS.iter().map(|e| e.keyword().to_string()));
+    words.sort();
+    words.dedup();
+    words
+}
+
+/// The scope name of `.clarity` files in editors that read TextMate grammars.
+pub const SCOPE: &str = "source.clarity";
+
+/// A TextMate grammar for `.clarity` files (VS Code, JetBrains, GitHub), with
+/// the words this highlighter knows, so other editors color Clarity alike. A
+/// TextMate grammar sees one line at a time and no tokens, so it keeps the
+/// main rules: a word set, called or reached into is a name, a capital
+/// starts a type, and the first word of a line in a language file is a key.
+pub fn textmate_grammar() -> serde_json::Value {
+    let alternatives = |words: &[String]| words.iter().map(|w| regex_escape(w)).collect::<Vec<_>>().join("|");
+    let types: Vec<String> = TYPES.iter().map(|w| w.to_string()).collect();
+    let literals: Vec<String> = LITERALS.iter().map(|w| w.to_string()).collect();
+    let naming: Vec<String> = NAMING.iter().map(|w| w.to_string()).collect();
+    serde_json::json!({
+        "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+        "name": "Clarity",
+        "scopeName": SCOPE,
+        "fileTypes": ["clarity"],
+        "patterns": [
+            { "include": "#translation" },
+            { "include": "#code" }
+        ],
+        "repository": {
+            "translation": {
+                "comment": "A language file: each line a key and its text.",
+                "begin": "^(translation)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+                "beginCaptures": { "1": { "name": "keyword.other.clarity" }, "2": { "name": "constant.language.clarity" } },
+                "end": "(?!)",
+                "patterns": [
+                    { "include": "#comment" },
+                    { "match": "^\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "variable.other.constant.key.clarity" } } },
+                    { "include": "#text" }
+                ]
+            },
+            "code": {
+                "patterns": [
+                    { "include": "#comment" },
+                    { "include": "#text" },
+                    { "include": "#key" },
+                    { "include": "#number" },
+                    { "include": "#name" },
+                    { "include": "#literal" },
+                    { "include": "#type" },
+                    { "include": "#keyword" }
+                ]
+            },
+            "comment": { "match": "//.*$", "name": "comment.line.double-slash.clarity" },
+            "text": {
+                "begin": "\"",
+                "end": "\"",
+                "name": "string.quoted.double.clarity",
+                "patterns": [
+                    { "match": "\\\\.", "name": "constant.character.escape.clarity" },
+                    { "match": "\\{\\{|\\}\\}", "name": "constant.character.escape.clarity" },
+                    { "match": "\\{[^{}\"]*\\}", "name": "variable.other.slot.clarity" }
+                ]
+            },
+            "key": { "match": "@[A-Za-z_][A-Za-z0-9_]*", "name": "variable.other.constant.key.clarity" },
+            "number": { "match": "(?<![A-Za-z0-9_])-?[0-9]+(\\.[0-9]+)?\\b", "name": "constant.numeric.clarity" },
+            "name": {
+                "comment": "A word set, called or reached into is a name, whatever it is elsewhere.",
+                "patterns": [
+                    {
+                        "match": format!("\\b({})\\s+([a-z_][A-Za-z0-9_]*)\\b", alternatives(&naming)),
+                        "captures": { "1": { "name": "keyword.other.clarity" }, "2": { "name": "variable.other.clarity" } }
+                    },
+                    { "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*", "name": "variable.other.property.clarity" },
+                    { "match": "\\b([a-z_][A-Za-z0-9_]*)(?=\\s*\\()", "name": "entity.name.function.clarity" },
+                    { "match": "(?<!\\bon\\s)\\b([a-z_][A-Za-z0-9_]*)(?=\\s*(=(?!=)|\\[|:))", "name": "variable.other.clarity" }
+                ]
+            },
+            "literal": { "match": format!("\\b({})\\b", alternatives(&literals)), "name": "constant.language.clarity" },
+            "type": {
+                "patterns": [
+                    { "match": format!("\\b({})\\b", alternatives(&types)), "name": "storage.type.clarity" },
+                    { "match": "\\b[A-Z][A-Za-z0-9_]*\\b", "name": "entity.name.type.clarity" }
+                ]
+            },
+            "keyword": { "match": format!("\\b({})\\b", alternatives(&keywords())), "name": "keyword.other.clarity" }
+        }
+    })
+}
+
+/// A word as it stands in a regular expression.
+fn regex_escape(word: &str) -> String {
+    word.chars().flat_map(|c| if c.is_ascii_alphanumeric() || c == '_' { vec![c] } else { vec!['\\', c] }).collect()
 }

@@ -21,6 +21,7 @@ runtimes/go/             the runtime of generated Go applications, with Wails
 runtimes/c/              the runtime of generated C applications, with webview and cJSON
 runtimes/cpp/            the runtime of generated C++ applications, with webview
 conformance/             cases every runtime and renderer must pass alike
+editors/vscode/          colors for .clarity files in VS Code (and JetBrains, through TextMate bundles)
 app/                     Clarity: Tauri 2 + Svelte 5
   src-tauri/             Rust side: loads, watches and edits projects; Run and Build
   src/lib/generated/     TypeScript types generated from the Rust model (do not edit)
@@ -30,7 +31,7 @@ examples/                example projects, each a project file with a folder of 
   todo                   tasks with a done flag, edited in their table
   calculator             a calculator: values in clicks, plain window data, a seven-segment display
   dial                   a speed dial drawn on a canvas by code, its needle placed by an engine
-  noughts                noughts and crosses against an engine that keeps each window's game
+  noughts                noughts and crosses against an engine written in Clarity that keeps each window's game
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

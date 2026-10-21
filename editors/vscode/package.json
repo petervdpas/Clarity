@@ -1,0 +1,69 @@
+{
+  "name": "clarity-language",
+  "displayName": "Clarity",
+  "description": "Colors, snippets and a file icon for Clarity files (.clarity): the language of the Clarity designer.",
+  "version": "0.1.0",
+  "publisher": "petervdpas",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "homepage": "https://github.com/petervdpas/Clarity/tree/main/editors/vscode",
+  "bugs": {
+    "url": "https://github.com/petervdpas/Clarity/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/petervdpas/Clarity"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "clarity",
+    "designer",
+    "transpiler",
+    "snippets"
+  ],
+  "galleryBanner": {
+    "color": "#20242c",
+    "theme": "dark"
+  },
+  "scripts": {
+    "package": "npx --yes @vscode/vsce@3.6.0 package"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "clarity",
+        "aliases": [
+          "Clarity",
+          "clarity"
+        ],
+        "extensions": [
+          ".clarity"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/file.svg",
+          "dark": "./images/file.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "clarity",
+        "scopeName": "source.clarity",
+        "path": "./syntaxes/clarity.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "clarity",
+        "path": "./snippets/clarity.json"
+      }
+    ]
+  }
+}

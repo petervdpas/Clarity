@@ -1,0 +1,154 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "fileTypes": [
+    "clarity"
+  ],
+  "name": "Clarity",
+  "patterns": [
+    {
+      "include": "#translation"
+    },
+    {
+      "include": "#code"
+    }
+  ],
+  "repository": {
+    "code": {
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "include": "#text"
+        },
+        {
+          "include": "#key"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#name"
+        },
+        {
+          "include": "#literal"
+        },
+        {
+          "include": "#type"
+        },
+        {
+          "include": "#keyword"
+        }
+      ]
+    },
+    "comment": {
+      "match": "//.*$",
+      "name": "comment.line.double-slash.clarity"
+    },
+    "key": {
+      "match": "@[A-Za-z_][A-Za-z0-9_]*",
+      "name": "variable.other.constant.key.clarity"
+    },
+    "keyword": {
+      "match": "\\b(MB|action|add|after|align|and|app|as|at|auth|background|baseline|before|bind|border|button|by|cancel|canvas|change|checkbox|click|close|code|collapsed|collapsible|color|column|columns|computed|contains|currency|dark|data|datasource|date|default|delete|desc|display|draw|dropdown|edit|effects|else|engine|ensure|enter|entity|enum|error|external|field|files|filestore|find|foldable|folded|font|footer|for|form|format|from|function|grid|group|handler|heading|help|horizontal|icon|if|image|in|info|item|keep|key|label|language|large|leave|let|light|limit|list|main|map|max|maximizable|memo|menu|message|migration|min|mode|module|name|new|not|number|of|on|open|or|order|output|owned|padding|page|pane|panel|part|password|pattern|per|placeholder|pointer|project|quit|radio|radius|read|readonly|refuse|reload|remove|rename|renderer|require|required|resizable|return|ribbon|rows|save|says|seconds|select|separator|shadow|show|sidebar|size|source|span|splitter|stack|start|state|status|store|style|submit|surface|switch|system|tab|table|taborder|tabs|text|textbox|theme|title|to|toolbar|tooltip|translation|unique|units|use|uses|vertical|warning|weight|where|width|window|with|write|x)\\b",
+      "name": "keyword.other.clarity"
+    },
+    "literal": {
+      "match": "\\b(true|false|none)\\b",
+      "name": "constant.language.clarity"
+    },
+    "name": {
+      "comment": "A word set, called or reached into is a name, whatever it is elsewhere.",
+      "patterns": [
+        {
+          "captures": {
+            "1": {
+              "name": "keyword.other.clarity"
+            },
+            "2": {
+              "name": "variable.other.clarity"
+            }
+          },
+          "match": "\\b(name|bind|handler|function|action|let|for|data|keep|module|use|source|store|datasource|filestore)\\s+([a-z_][A-Za-z0-9_]*)\\b"
+        },
+        {
+          "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*",
+          "name": "variable.other.property.clarity"
+        },
+        {
+          "match": "\\b([a-z_][A-Za-z0-9_]*)(?=\\s*\\()",
+          "name": "entity.name.function.clarity"
+        },
+        {
+          "match": "(?<!\\bon\\s)\\b([a-z_][A-Za-z0-9_]*)(?=\\s*(=(?!=)|\\[|:))",
+          "name": "variable.other.clarity"
+        }
+      ]
+    },
+    "number": {
+      "match": "(?<![A-Za-z0-9_])-?[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.clarity"
+    },
+    "text": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.clarity",
+      "patterns": [
+        {
+          "match": "\\\\.",
+          "name": "constant.character.escape.clarity"
+        },
+        {
+          "match": "\\{\\{|\\}\\}",
+          "name": "constant.character.escape.clarity"
+        },
+        {
+          "match": "\\{[^{}\"]*\\}",
+          "name": "variable.other.slot.clarity"
+        }
+      ]
+    },
+    "translation": {
+      "begin": "^(translation)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.clarity"
+        },
+        "2": {
+          "name": "constant.language.clarity"
+        }
+      },
+      "comment": "A language file: each line a key and its text.",
+      "end": "(?!)",
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "captures": {
+            "1": {
+              "name": "variable.other.constant.key.clarity"
+            }
+          },
+          "match": "^\\s+([A-Za-z_][A-Za-z0-9_]*)"
+        },
+        {
+          "include": "#text"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "match": "\\b(text|integer|decimal|money|bool|date|datetime|duration|file|bytes|list|email|url|id|ref|image)\\b",
+          "name": "storage.type.clarity"
+        },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+          "name": "entity.name.type.clarity"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.clarity"
+}

@@ -1,0 +1,94 @@
+{
+  "Window": {
+    "prefix": "page",
+    "description": "A window with its title, as a key",
+    "body": [
+      "page ${1:CustomerCard}: window",
+      "    title @${2:customerCardTitle}",
+      "    $0"
+    ]
+  },
+  "Entity": {
+    "prefix": "entity",
+    "description": "An entity with its first field",
+    "body": [
+      "entity ${1:Customer}",
+      "    ${2:name}: ${3:text}, required",
+      "    $0"
+    ]
+  },
+  "Enum": {
+    "prefix": "enum",
+    "description": "An enum with its first value and its label, as a key",
+    "body": [
+      "enum ${1:Status}",
+      "    ${2:Open} label @${3:statusOpenLabel}",
+      "    $0"
+    ]
+  },
+  "Code behind": {
+    "prefix": "code",
+    "description": "The code behind a window, with a handler",
+    "body": [
+      "code ${1:CustomerCard}",
+      "    handler ${2:saveClicked}",
+      "        $0"
+    ]
+  },
+  "Handler": {
+    "prefix": "handler",
+    "description": "A handler in the code behind a window",
+    "body": [
+      "handler ${1:saveClicked}",
+      "    $0"
+    ]
+  },
+  "Function": {
+    "prefix": "function",
+    "description": "A function with a value and a result",
+    "body": [
+      "function ${1:doubled}(${2:value}: ${3:integer}) -> ${4:integer}",
+      "    return ${5:value * 2}"
+    ]
+  },
+  "If": {
+    "prefix": "if",
+    "description": "An if with an else",
+    "body": [
+      "if ${1:condition}",
+      "    $2",
+      "else",
+      "    $0"
+    ]
+  },
+  "For": {
+    "prefix": "for",
+    "description": "A loop over a list",
+    "body": [
+      "for ${1:item} in ${2:items}",
+      "    $0"
+    ]
+  },
+  "Engine": {
+    "prefix": "engine",
+    "description": "An engine written in Clarity: what it keeps and a function",
+    "body": [
+      "engine ${1:Dice}",
+      "    uses random",
+      "    state per ${2|app,window|}",
+      "    keep ${3:rolled}: integer = 0",
+      "",
+      "    function ${4:roll}(sides: integer) -> integer",
+      "        $3 = $3 + 1",
+      "        return random(sides)"
+    ]
+  },
+  "Language file": {
+    "prefix": "translation",
+    "description": "A language file: keys and their texts",
+    "body": [
+      "translation ${1:nl}",
+      "    ${2:saveCaption} \"${3:Opslaan}\""
+    ]
+  }
+}

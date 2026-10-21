@@ -42,6 +42,8 @@ fn parts_their_properties_keys_and_texts() {
     has(source, "on", PieceKind::Keyword);
     has(source, "click", PieceKind::Keyword);
     has(source, "restartClicked", PieceKind::Name);
+    // A part's data is a name, whatever word it is.
+    has("    text name statusText at 1,9 bind status\n", "status", PieceKind::Name);
 }
 
 #[test]
@@ -133,4 +135,23 @@ fn every_line_of_every_example_starts_with_a_word_the_highlighter_knows() {
         }
     }
     assert!(unknown.is_empty(), "lines starting with a word the highlighter does not know:\n{}", unknown.join("\n"));
+}
+
+/// The grammar other editors color `.clarity` files with is written from
+/// the highlighter's own words, so it cannot fall behind the language.
+/// `CLARITY_WRITE_GRAMMAR=1 cargo test -p clarity-spec --test highlight` writes it again.
+#[test]
+fn the_editor_grammar_is_the_highlighters() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../editors/vscode/syntaxes/clarity.tmLanguage.json");
+    let grammar = serde_json::to_string_pretty(&clarity_spec::highlight::textmate_grammar()).unwrap() + "\n";
+    if std::env::var("CLARITY_WRITE_GRAMMAR").is_ok() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &grammar).unwrap();
+    }
+    let written = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(written == grammar, "{} is not the highlighter's grammar; write it with CLARITY_WRITE_GRAMMAR=1", path.display());
+    // Every keyword of the language is in it.
+    for word in clarity_spec::highlight::keywords() {
+        assert!(grammar.contains(&format!("|{word}|")) || grammar.contains(&format!("({word}|")) || grammar.contains(&format!("|{word})")), "{word}");
+    }
 }

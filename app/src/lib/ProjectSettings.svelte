@@ -3,6 +3,7 @@
   // Every change is saved at once; the Rust backend checks it and refuses
   // settings with problems, with the reason.
 
+  import { resizableColumns } from "./columnWidths";
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import ImportPanel from "./ImportPanel.svelte";
@@ -304,7 +305,7 @@
         <p class="intro">Where the data lives; entities use the first one unless they name another. Secrets stay out of the file: write <code>env:NAME</code> or <code>keychain:NAME</code>.</p>
         {#if settings.datasources.length > 0}
           <div class="table-wrap">
-            <table>
+            <table use:resizableColumns={"clarity.columns.dataSources"}>
               <thead>
                 <tr>
                   <th>Name</th>
@@ -423,7 +424,7 @@
         </p>
         {#if settings.filestores.length > 0}
           <div class="table-wrap">
-            <table>
+            <table use:resizableColumns={"clarity.columns.fileStores"}>
               <thead>
                 <tr>
                   <th>Name</th>

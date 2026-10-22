@@ -844,12 +844,12 @@ Clarity draws and designs the model as diagrams in Mermaid: ERDs and class diagr
 #### Views and written diagrams
 
 - **Views generated from the project** are always true and are not files. DG1 brings two: **Data model** (an ERD of every entity, its fields, refs and lists) and **Classes** (entities, enums, engines with their functions, and a class per module with its functions and actions). Later rows add a state diagram per enum, a sequence diagram per handler, an activity diagram per handler or function, and the architecture (modules, engines, data sources, the stack). Editing a view on its canvas edits the dictionary directly, as the entity editor does: ordinary edits through `clarity_spec::edit`, with undo.
-- **Written diagrams** are `.mmd` files in the project's `diagrams` folder, beside `resources`, `engines` and `translations`, written by the person or by the agent. Unlike resources they are not carried into the application. A written diagram shows how it differs from the project and proposes edits through **Apply**; it changes nothing by itself.
+- **Written diagrams** are `.mermaid` files in the project's `diagrams` folder, beside `resources`, `engines` and `translations`, written by the person or by the agent. Unlike resources they are not carried into the application. A written diagram shows how it differs from the project and proposes edits through **Apply**; it changes nothing by itself.
 
 #### The project part
 
 - **Project tree.** A Diagrams section lists the views first, then the written files, with the same Open, Rename and Delete menu as other parts.
-- **New diagram.** A dialog built like New resource asks for a name, a kind (ERD or Class in DG1) and optionally a `.mmd` file to copy in, and writes a starter of that kind.
+- **New diagram.** A dialog built like New resource asks for a name, a kind (ERD or Class in DG1) and optionally a `.mermaid` file to copy in, and writes a starter of that kind.
 - **Kinds in one place.** `clarity_spec::diagrams::kinds()` lists the kinds with their Mermaid header (`erDiagram`, `classDiagram`, `stateDiagram-v2`, `sequenceDiagram`, `flowchart`, `architecture-beta`), so the tree, the dialog and the agent read the same list. Other Mermaid kinds (gantt, mindmap, pie) may be written and are drawn, but map to nothing.
 
 #### What a diagram means
@@ -895,11 +895,12 @@ Methods on an entity's class are a problem with a fix: functions belong to a mod
 A diagram opens like a window does, with **Design** and **Text** tabs:
 
 - **Toolbox** on the left: Entity, Enum, Engine and Relationship in DG1; State, Step, Lifeline and Message come with their kinds.
-- **Canvas** in the middle, Clarity's own for the kinds it designs (decided 2026-10-22, the ERD first): boxes stand where the person puts them, and each place is kept in the `.mmd` file as a `%% clarity: Customer at 120,80` line, a comment Mermaid ignores, so the file stays plain Mermaid and opens anywhere Mermaid does. Relations show how many at each end (a bar for one, a ring for zero, a crow's foot for many), solid when owned. Ctrl+wheel zooms, dragging the background pans. Kinds Clarity does not design yet are drawn by mermaid.js, bundled into the app so it works offline and loaded only when such a diagram opens, in an isolated frame with Ctrl+wheel zoom and drag-to-pan in the IDE theme's colors.
+- **Canvas** in the middle, Clarity's own for the kinds it designs (decided 2026-10-22, the ERD first): boxes stand where the person puts them, and each place is kept in the `.mermaid` file as a `%% clarity: Customer at 120,80` line, a comment Mermaid ignores, so the file stays plain Mermaid and opens anywhere Mermaid does. Relations show how many at each end (a bar for one, a ring for zero, a crow's foot for many), solid when owned. Ctrl+wheel zooms, dragging the background pans. Kinds Clarity does not design yet are drawn by mermaid.js, bundled into the app so it works offline and loaded only when such a diagram opens, in an isolated frame with Ctrl+wheel zoom and drag-to-pan in the IDE theme's colors.
 - **Properties** on the right: for an entity, its fields as rows (name, type, required, unique, label key); for a relationship, its two ends, how many on each side, owned or not.
 - **On the canvas:** drop an entity from the toolbox; drag from one box to another to draw a relationship; double-click a name to rename it; right-click for Add field and Delete; a click opens what a box stands for (the entity, the field, the enum, the engine, the function), as the Problems list jumps to a line.
 - **Places.** A box without a place gets the next cell of a grid beside the placed ones; the first edit on the canvas pins every box where it is shown, so nothing moves by itself.
-- **Edits.** On a view, every action is an edit of the dictionary. On a written diagram, it is an edit of the `.mmd` text through `clarity_spec::diagrams::edit`, which, like `edit.rs`, rewrites only the lines it is about. Either way it is one undo step, and the Text tab follows.
+- **The Data model's places** (decided 2026-10-22). Its boxes move like any other. Once one is moved, Clarity writes the view to `diagrams/data-model.mermaid`, plain Mermaid with the `%% clarity:` places, and writes it again on every change of the dictionary, keeping the places. The tree shows it once, as the Data model row; it is no written diagram and proposes nothing. A right click on a box's header opens the entity.
+- **Edits.** On a view, every action is an edit of the dictionary. On a written diagram, it is an edit of the `.mermaid` text through `clarity_spec::diagrams::edit`, which, like `edit.rs`, rewrites only the lines it is about. Either way it is one undo step, and the Text tab follows.
 - **Text.** The Text tab is the SourceEditor with `language="mermaid"`: colors and positioned problems from the same parser, as Clarity text has them.
 
 #### Differences and Apply
@@ -917,7 +918,7 @@ Names in a diagram are names, not texts people read. What Apply or the designer 
 
 #### The agent
 
-- **Tools:** `diagram_view` (a generated view: the data model, the classes, and later an enum's states or a handler's sequence), `write_diagram` (a `.mmd` file in `diagrams`), `diagram_proposals` (what a written diagram would change) and `apply_diagram` (apply the proposals it names).
+- **Tools:** `diagram_view` (a generated view: the data model, the classes, and later an enum's states or a handler's sequence), `write_diagram` (a `.mermaid` file in `diagrams`), `diagram_proposals` (what a written diagram would change) and `apply_diagram` (apply the proposals it names).
 - **Prompt:** diagrams propose and the dictionary decides. Asked for "an order system with customers and invoices", the agent sketches the ERD as a written diagram first; the person adjusts it in the designer; Apply makes the entities, and the migration step and windows follow.
 
 #### Steps between enum values (DG2, decided 2026-10-22)
@@ -1548,7 +1549,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | N4 | State and hooks: `state per window` and `state per app`, hooks such as `on open` and `on close`; `bytes` for document processing | done (2026-10-20): state, `on open` and `bytes`, see "Built (N4)" in section 5.11; no `on close` (the engine has nothing it could do then) |
 | N5 | Engines beside the screen (section 5.12): N5a brought along, in a Web Worker and in Avalonia, the frame loop, input, tells and hears; N5b written in Clarity (`on tick`, `on draw`, `on pointer`, `on key`, `tell`) | |
 | P | Progress of a long engine call on the backend (section 5.12): `uses progress`, a bar and Stop on the window while the handler runs, through each shell's way to the screen | |
-| DG1 | Diagrams, first slice (section 5.13): a Diagrams part with a `diagrams` folder (not carried into applications), the Data model and Classes views generated from the project, written `.mmd` ERD and class diagrams checked by `clarity_spec::diagrams`, the diagram designer (mermaid.js with Clarity's layer over it: toolbox, properties, click through, relationships drawn by dragging, Design and Text tabs), differences marked before Apply, Apply as one undo step with label keys and the migration step, and the agent's diagram tools | |
+| DG1 | Diagrams, first slice (section 5.13): a Diagrams part with a `diagrams` folder (not carried into applications), the Data model and Classes views generated from the project, written `.mermaid` ERD and class diagrams checked by `clarity_spec::diagrams`, the diagram designer (mermaid.js with Clarity's layer over it: toolbox, properties, click through, relationships drawn by dragging, Design and Text tabs), differences marked before Apply, Apply as one undo step with label keys and the migration step, and the agent's diagram tools | |
 | DG2 | State and sequence diagrams (section 5.13): `steps` between enum values as a language construct, checked and enforced on every stack, designed as a state diagram; a sequence diagram per handler as a view | |
 | DG3 | Activity diagrams per handler or function and the architecture of the project, as views (section 5.13) | |
 | W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |

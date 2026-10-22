@@ -7,12 +7,14 @@
   // An ERD drawn by Clarity itself, for designing: drag an Entity from the
   // palette onto the canvas, move boxes where you want them, and with the
   // Relation tool drag from one box to another to relate them. Ctrl+wheel
-  // zooms, dragging the background pans. Proposals color the boxes they
-  // are about: green for added, amber for changed, faded for removed.
+  // zooms, dragging the background pans. A right click on a box's header
+  // opens what it draws. Proposals color the boxes they are about: green
+  // for added, amber for changed, faded for removed.
 
+  import ContextMenu from "./ContextMenu.svelte";
   import type { Erd } from "./generated/Erd";
   import type { Mark } from "./diagramCanvas";
-  import { addEntity, boxes, columns, connect, endMark, meeting, moveEntity, pinned, ROW, TITLE, type Box, type Point } from "./erdDesign";
+  import { addEntity, boxes, columns, connect, endMark, ends, moveEntity, pinned, ROW, TITLE, type Box, type Point } from "./erdDesign";
 
   let {
     erd,
@@ -21,16 +23,19 @@
     picked = $bindable(null),
     onchange: change = () => {},
     onopen = () => {},
+    canopen = () => true,
   }: {
     erd: Erd;
     marks?: Record<string, Mark>;
-    /** Drawn to look at: a click opens what a box draws. */
+    /** Drawn to look at: boxes move, nothing else changes. */
     readonly?: boolean;
     picked?: ErdPick;
     /** A change made on the canvas, written at once. */
     onchange?: (erd: Erd) => void;
-    /** Opens what the box of `name` draws (a click when read only, a double click otherwise). */
+    /** Opens what the box of `name` draws, from the menu of its header. */
     onopen?: (name: string) => void;
+    /** Whether the box of `name` draws something that opens. */
+    canopen?: (name: string) => boolean;
   } = $props();
 
   /** Hands a change on, with every box pinned where it is shown. */
@@ -60,10 +65,13 @@
   let drawing = $state<{ from: string; to: Point } | null>(null);
   /** An entity being dragged from the palette, at the pointer on the screen. */
   let placing = $state<{ x: number; y: number } | null>(null);
+  /** The menu of a box's header, at the pointer on the screen. */
+  let menu = $state<{ name: string; x: number; y: number } | null>(null);
 
   // Boxes stand where the diagram has them; only the one being moved follows the pointer.
   const laid = $derived(boxes(erd, measure).map((b) => (moving && b.name === moving.name ? { ...b, x: moving.x, y: moving.y } : b)));
   const byName = $derived(new Map(laid.map((b) => [b.name, b])));
+  const meetings = $derived(ends(laid, erd.relations));
 
   /** The point of the drawing under a point of the screen. */
   function toDrawing(clientX: number, clientY: number): Point {
@@ -117,11 +125,8 @@
   function pressBox(e: PointerEvent, box: Box) {
     if (e.button !== 0) return;
     e.stopPropagation();
-    if (readonly) {
-      follow(e, () => {}, (moved) => !moved && onopen(box.name));
-      return;
-    }
-    if (tool === "relation") {
+    menu = null;
+    if (tool === "relation" && !readonly) {
       drawing = { from: box.name, to: toDrawing(e.clientX, e.clientY) };
       follow(
         e,
@@ -160,7 +165,16 @@
     picked = { kind: "relation", index };
   }
 
+  /** The menu of a box's header; a right click below the header shows none. */
+  function boxMenu(e: MouseEvent, box: Box) {
+    e.preventDefault();
+    const p = toDrawing(e.clientX, e.clientY);
+    menu = p.y <= box.y + TITLE && canopen(box.name) ? { name: box.name, x: e.clientX, y: e.clientY } : null;
+    picked = { kind: "entity", name: box.name };
+  }
+
   function pressBackground(e: PointerEvent) {
+    menu = null;
     if (e.button !== 0) return;
     const origin = { ...pan };
     follow(
@@ -194,9 +208,8 @@
     );
   }
 
-  /** The line of a relation, with the marks at its ends. */
-  function line(from: Box, to: Box) {
-    const [a, b] = meeting(from, to);
+  /** The line of a relation between its ends, with the direction along it and its middle. */
+  function line([a, b]: [Point, Point]) {
     const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
     return { a, b, u, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
@@ -230,10 +243,9 @@
     <rect class="ground" width="100%" height="100%" fill="url(#erd-grid)" />
     <g transform="translate({pan.x} {pan.y}) scale({zoom})">
       {#each erd.relations as r, i (i)}
-        {@const from = byName.get(r.left)}
-        {@const to = byName.get(r.right)}
-        {#if from && to && from !== to}
-          {@const l = line(from, to)}
+        {@const at = meetings[i]}
+        {#if at}
+          {@const l = line(at)}
           {@const start = endMark(l.a, l.u, r.leftCount)}
           {@const end = endMark(l.b, { x: -l.u.x, y: -l.u.y }, r.rightCount)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -255,7 +267,7 @@
           class="box mark-{marks[box.name] ?? 'none'}"
           class:picked={picked?.kind === "entity" && picked.name === box.name}
           onpointerdown={(e) => pressBox(e, box)}
-          ondblclick={() => !readonly && onopen(box.name)}
+          oncontextmenu={(e) => boxMenu(e, box)}
         >
           <rect class="body" x={box.x} y={box.y} width={box.w} height={box.h} rx="5" />
           <path class="title" d="M{box.x},{box.y + TITLE}V{box.y + 5}a5,5 0 0 1 5,-5H{box.x + box.w - 5}a5,5 0 0 1 5,5V{box.y + TITLE}Z" />
@@ -279,6 +291,10 @@
     </g>
   </svg>
 
+  {#if menu}
+    {@const name = menu.name}
+    <ContextMenu x={menu.x} y={menu.y} items={[{ label: "Open entity", run: () => onopen(name) }]} onclose={() => (menu = null)} />
+  {/if}
   {#if placing}
     <div class="ghost" style:left="{placing.x}px" style:top="{placing.y}px">Entity</div>
   {/if}
@@ -321,10 +337,6 @@
 
   .box {
     cursor: move;
-  }
-
-  .readonly .box {
-    cursor: pointer;
   }
 
   .body {

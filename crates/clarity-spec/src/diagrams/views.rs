@@ -44,6 +44,18 @@ impl Writer {
     }
 }
 
+/// The Data model with the places of its boxes, as its file keeps it: a
+/// `%% clarity:` line for each entity it draws that has a place.
+pub fn data_model_placed(project: &Project, places: &[(String, i32, i32)]) -> View {
+    let mut view = data_model(project);
+    for entity in project.files.iter().flat_map(|f| &f.entities) {
+        if let Some((_, x, y)) = places.iter().find(|(name, _, _)| *name == entity.name.name) {
+            view.text.push_str(&format!("    {}{} at {x},{y}\n", super::erd_model::PLACE, entity.name.name));
+        }
+    }
+    view
+}
+
 /// The Data model: every entity with its fields, and a relationship for
 /// every list and for every ref no list stands for.
 pub fn data_model(project: &Project) -> View {

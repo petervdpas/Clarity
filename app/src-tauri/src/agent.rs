@@ -230,7 +230,7 @@ impl ProjectTools {
             }
             return Err(format!("'{path}' is not a Markdown file of the resources: write one like resources/rules-en.md; pictures are added in Clarity"));
         }
-        // A written diagram: `diagrams/orders.mmd`.
+        // A written diagram: `diagrams/orders.mermaid`.
         if let Some(name) = path.strip_prefix("diagrams/") {
             return super::diagrams::diagram_file(dir, name);
         }
@@ -319,7 +319,7 @@ impl ProjectTools {
         Ok(clarity_spec::diagrams::views::data_model(&project).text)
     }
 
-    /// A written diagram's text, by its name (`billing` or `billing.mmd`).
+    /// A written diagram's text, by its name (`billing` or `billing.mermaid`).
     fn diagram_text(&self, name: &str) -> Result<(PathBuf, String), String> {
         let (_, dir) = self.open()?;
         let file = super::diagrams::diagram_file(dir, name)?;
@@ -581,7 +581,7 @@ impl Tools for ProjectTools {
             ),
             tool(
                 "write_diagram",
-                "Writes a Mermaid ERD or class diagram into the project's diagrams folder (diagrams/<name>.mmd), new or replacing it. It changes nothing else: it gives the diagram's problems and the numbered changes it proposes for the project.",
+                "Writes a Mermaid ERD or class diagram into the project's diagrams folder (diagrams/<name>.mermaid), new or replacing it. It changes nothing else: it gives the diagram's problems and the numbered changes it proposes for the project.",
                 schema(
                     json!({ "name": { "type": "string", "description": "The diagram's name, like billing." }, "text": { "type": "string", "description": "The whole Mermaid text." } }),
                     &["name", "text"],
@@ -956,12 +956,12 @@ mod tests {
         let sketch = "erDiagram\n    Customer {\n        text(80) name \"required\"\n    }\n    Invoice {\n        date issued_on \"required\"\n    }\n    Invoice }o..|| Customer : customer\n";
         let written = tools.call("write_diagram", &json!({"name": "billing", "text": sketch}));
         assert!(!written.is_error, "{}", written.text);
-        assert!(written.text.contains("diagrams/billing.mmd"), "{}", written.text);
+        assert!(written.text.contains("diagrams/billing.mermaid"), "{}", written.text);
         assert!(written.text.contains("1. add Customer: entity Customer"), "{}", written.text);
         assert!(written.text.contains("2. add Invoice: entity Invoice"), "{}", written.text);
-        assert_eq!(std::fs::read_to_string(dir.join("diagrams/billing.mmd")).unwrap(), sketch);
+        assert_eq!(std::fs::read_to_string(dir.join("diagrams/billing.mermaid")).unwrap(), sketch);
         // The person may change it; the agent reads it back.
-        assert_eq!(tools.call("read_file", &json!({"path": "diagrams/billing.mmd"})).text, sketch);
+        assert_eq!(tools.call("read_file", &json!({"path": "diagrams/billing.mermaid"})).text, sketch);
         assert!(tools.call("diagram_proposals", &json!({"name": "billing"})).text.contains("2. add Invoice"));
 
         let applied = tools.call("apply_diagram", &json!({"name": "billing", "proposals": [1, 2]}));
@@ -975,12 +975,12 @@ mod tests {
 
         // The diagram, the module and the language file are one change for Undo.
         let one = merged(&tools.written);
-        assert!(one.iter().any(|c| c.file.ends_with("diagrams/billing.mmd")));
+        assert!(one.iter().any(|c| c.file.ends_with("diagrams/billing.mermaid")));
         assert!(one.iter().any(|c| c.file.ends_with("todo.clarity")));
         assert!(one.iter().any(|c| c.file.ends_with("translations/en.clarity")));
 
         tools.call("show_diagram", &json!({"name": "billing"}));
-        assert_eq!(tools.shown_diagram.as_deref(), Some("billing.mmd"));
+        assert_eq!(tools.shown_diagram.as_deref(), Some("billing.mermaid"));
         for name in ["../escape", "a/b", ""] {
             assert!(tools.call("write_diagram", &json!({"name": name, "text": sketch})).is_error, "{name}");
         }

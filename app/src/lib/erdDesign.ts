@@ -76,6 +76,62 @@ export function meeting(a: Rect, b: Rect): [Point, Point] {
   return [edge(a, center(b)), edge(b, center(a))];
 }
 
+type Side = "left" | "right" | "top" | "bottom";
+
+/** The side of `r` the line from its center toward `toward` leaves by. */
+function sideOf(r: Rect, toward: Point): Side {
+  const c = center(r);
+  const dx = toward.x - c.x;
+  const dy = toward.y - c.y;
+  if (Math.abs(dx) * r.h >= Math.abs(dy) * r.w) return dx >= 0 ? "right" : "left";
+  return dy >= 0 ? "bottom" : "top";
+}
+
+/**
+ * Where each relation meets its two boxes, [left end, right end], or null
+ * for a relation to itself or to a box not shown. Ends on the same side of
+ * a box are spread along it, in the order of the boxes at their other ends,
+ * so lines that meet one box do not lie on each other.
+ */
+export function ends(shown: Box[], relations: Erd["relations"]): ([Point, Point] | null)[] {
+  const byName = new Map(shown.map((b) => [b.name, b]));
+  type End = { relation: number; at: 0 | 1; box: Box; other: Box; side: Side };
+  const all: End[] = [];
+  relations.forEach((r, relation) => {
+    const left = byName.get(r.left);
+    const right = byName.get(r.right);
+    if (!left || !right || left === right) return;
+    all.push({ relation, at: 0, box: left, other: right, side: sideOf(left, center(right)) });
+    all.push({ relation, at: 1, box: right, other: left, side: sideOf(right, center(left)) });
+  });
+  const result: ([Point, Point] | null)[] = relations.map(() => null);
+  const points = new Map<End, Point>();
+  const groups = new Map<string, End[]>();
+  for (const end of all) {
+    const key = `${end.box.name}\u0000${end.side}`;
+    groups.set(key, [...(groups.get(key) ?? []), end]);
+  }
+  for (const group of groups.values()) {
+    const across = (e: End) => (e.side === "left" || e.side === "right" ? center(e.other).y : center(e.other).x);
+    group.sort((a, b) => across(a) - across(b) || a.relation - b.relation);
+    group.forEach((end, i) => {
+      const share = (i + 1) / (group.length + 1);
+      const { x, y, w, h } = end.box;
+      const point =
+        end.side === "left" ? { x, y: y + h * share }
+        : end.side === "right" ? { x: x + w, y: y + h * share }
+        : end.side === "top" ? { x: x + w * share, y }
+        : { x: x + w * share, y: y + h };
+      points.set(end, point);
+    });
+  }
+  for (const end of all) {
+    const pair = (result[end.relation] ??= [center(end.box), center(end.other)]);
+    pair[end.at] = points.get(end)!;
+  }
+  return result;
+}
+
 /**
  * The marks at one end of a relation, at `at` on the box's edge, with `along`
  * the unit direction from the box out along the line: bars for one, a ring

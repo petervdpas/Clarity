@@ -6,6 +6,7 @@
   // the default's text next to its own. The backend collects the keys and
   // writes the language files.
 
+  import { resizableColumns } from "./columnWidths";
   import { invoke } from "@tauri-apps/api/core";
   import type { Preview } from "./generated/Preview";
   import type { TranslationTable } from "./generated/TranslationTable";
@@ -144,7 +145,7 @@
     </div>
 
     <div class="table-wrap">
-      <table>
+      <table use:resizableColumns={"clarity.columns.translations"}>
         <thead>
           <tr>
             <th>Key</th>

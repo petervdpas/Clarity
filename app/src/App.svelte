@@ -482,7 +482,7 @@
       const next = await invoke<Preview>("add_diagram", { name, kind });
       applyPreview(next);
       newDiagramOpen = false;
-      select({ kind: "diagram", name: `${name}.mmd` });
+      select({ kind: "diagram", name: `${name}.mermaid` });
       tab = "project";
     } catch (err) {
       newDiagramError = String(err);

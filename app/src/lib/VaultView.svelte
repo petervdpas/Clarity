@@ -2,6 +2,7 @@
   // The main area of the Vault tab: making or unlocking Clarity's vault,
   // its secrets, and a connection's fields. Clarity's vault is Clarity's
   // own; an application keeps its own secrets, only when its design adds them.
+  import { resizableColumns } from "./columnWidths";
   import { CategoryEditor } from "./vault";
   import { vault } from "./vaultStore.svelte";
 
@@ -110,7 +111,7 @@
       <label class="form-label" for="connection-name">Name</label>
       <input id="connection-name" class="mono" bind:value={draft.name} spellcheck="false" />
     </div>
-    <table class="fields">
+    <table class="fields" use:resizableColumns={"clarity.columns.connectionFields"}>
       <thead><tr><th>Field</th><th>From</th><th>Value</th><th></th></tr></thead>
       <tbody>
         {#each draft.fields as field, i (i)}
@@ -230,7 +231,7 @@
     </form>
   {:else}
     <input class="filter" placeholder="Filter secrets..." bind:value={vault.filter} aria-label="Filter secrets" />
-    <table class="secrets">
+    <table class="secrets" use:resizableColumns={"clarity.columns.vaultSecrets"}>
       <thead><tr><th>Category</th><th>Key</th><th>Description</th><th>Updated (UTC)</th></tr></thead>
       <tbody>
         {#each vault.shown as row (row.category + "\u0000" + row.key)}

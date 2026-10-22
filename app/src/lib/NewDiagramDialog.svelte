@@ -29,8 +29,8 @@
   let name = $state("");
   let kind = $state<DiagramKind>("erd");
 
-  const stem = $derived(name.trim().replace(/\.mmd$/i, ""));
-  const file = $derived(stem ? `${stem}.mmd` : "");
+  const stem = $derived(name.trim().replace(/\.mermaid$/i, ""));
+  const file = $derived(stem ? `${stem}.mermaid` : "");
   const already = $derived(taken.includes(file));
   const ready = $derived(file !== "" && !already && !/[\\/]/.test(stem) && !stem.startsWith("."));
 

@@ -29,7 +29,11 @@ use crate::span::Span;
 pub const DIAGRAMS_DIR: &str = "diagrams";
 
 /// The extension of a diagram file.
-pub const DIAGRAM_EXTENSION: &str = "mmd";
+pub const DIAGRAM_EXTENSION: &str = "mermaid";
+
+/// The Data model's own file in the diagrams folder: the view as Clarity
+/// writes it, with the places of its boxes. It is no written diagram.
+pub const DATA_MODEL_FILE: &str = "data-model.mermaid";
 
 /// A kind of diagram Clarity maps onto the project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

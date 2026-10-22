@@ -8,6 +8,7 @@
   // fixes it. An engine written in Clarity is its code: the tab holds the
   // whole engine, and the inspector sets its state and services above it.
 
+  import { resizableColumns } from "./columnWidths";
   import { untrack } from "svelte";
   import { invoke } from "./backend";
   import SourceEditor, { OPENS_BRACED_BLOCK } from "./SourceEditor.svelte";
@@ -295,7 +296,7 @@
         <section>
           <h3>Functions</h3>
           <p class="muted">What code calls as <code>{name}.function(...)</code>. Double-click one to go to its code.</p>
-          <table>
+          <table use:resizableColumns={"clarity.columns.engine"}>
             <thead><tr><th>Name</th><th>Values</th><th>Gives</th><th></th></tr></thead>
             <tbody>
               {#each form.functions as f, i (i + f.name)}

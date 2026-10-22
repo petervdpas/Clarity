@@ -91,6 +91,7 @@ pub struct EditApplied {
 fn load(dir: &Path) -> Result<Preview, String> {
     let project = clarity_project::load_modules(dir)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    diagrams::refresh_data_model(dir, &project)?;
     Ok(Preview::new(project))
 }
 
@@ -833,6 +834,7 @@ pub fn run() {
             diagrams::write_erd,
             diagrams::add_diagram,
             diagrams::save_diagram,
+            diagrams::place_data_model,
             diagrams::diagram_proposals,
             diagrams::apply_diagram
         ])

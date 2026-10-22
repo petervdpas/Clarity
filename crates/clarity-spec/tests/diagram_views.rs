@@ -80,3 +80,22 @@ fn every_examples_data_model_reads_back_as_the_project() {
         assert_eq!(proposals, Vec::<String>::new(), "{name}:\n{}", view.text);
     }
 }
+
+#[test]
+fn the_data_model_keeps_the_places_of_its_boxes_for_the_entities_it_draws() {
+    let project = load_sources([("sales.clarity", SALES)]);
+    let places = vec![("Customer".to_string(), 300, 40), ("Gone".to_string(), 1, 2), ("Order".to_string(), 40, 60)];
+    let view = views::data_model_placed(&project, &places);
+    let plain = views::data_model(&project);
+    assert!(view.text.starts_with(&plain.text), "the places come after the drawing");
+    assert_eq!(&view.text[plain.text.len()..], "    %% clarity: Order at 40,60\n    %% clarity: Customer at 300,40\n");
+    assert_eq!(view.links, plain.links);
+
+    let (erd, problems) = diagrams::erd_model::read(&view.text);
+    assert!(problems.is_empty(), "{problems:?}");
+    let order = erd.entities.iter().find(|e| e.name == "Order").unwrap();
+    assert_eq!((order.x, order.y), (Some(40), Some(60)));
+    assert_eq!(diagrams::erd_model::places(&view.text).len(), 2);
+    let (diagram, _) = diagrams::parse(&view.text);
+    assert!(diagrams::propose(&project, &diagram).is_empty());
+}

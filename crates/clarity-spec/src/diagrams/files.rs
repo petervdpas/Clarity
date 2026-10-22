@@ -1,4 +1,4 @@
-//! The written diagrams of a project: the `.mmd` files of its `diagrams`
+//! The written diagrams of a project: the `.mermaid` files of its `diagrams`
 //! folder, read with the project, and the text a new diagram starts with.
 
 use std::path::Path;
@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::{DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, kind_of};
+use super::{DATA_MODEL_FILE, DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, kind_of};
 
 /// A written diagram: its file name, its text and its kind (None for a
 /// kind Clarity only draws).
@@ -18,7 +18,7 @@ pub struct DiagramFile {
     pub kind: Option<DiagramKind>,
 }
 
-/// The `.mmd` files of the diagrams folder in `dir`, by name; none when
+/// The `.mermaid` files of the diagrams folder in `dir`, by name; none when
 /// there is no folder.
 pub fn diagram_files(dir: &Path) -> std::io::Result<Vec<DiagramFile>> {
     let folder = dir.join(DIAGRAMS_DIR);
@@ -29,7 +29,8 @@ pub fn diagram_files(dir: &Path) -> std::io::Result<Vec<DiagramFile>> {
     for entry in std::fs::read_dir(&folder)? {
         let path = entry?.path();
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        if path.is_file() && !name.starts_with('.') && path.extension().is_some_and(|e| e == DIAGRAM_EXTENSION) {
+        let diagram = path.is_file() && !name.starts_with('.') && path.extension().is_some_and(|e| e == DIAGRAM_EXTENSION);
+        if diagram && name != DATA_MODEL_FILE {
             let text = std::fs::read_to_string(&path)?;
             found.push(DiagramFile { kind: kind_of(&text), name, text });
         }

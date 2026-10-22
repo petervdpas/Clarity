@@ -1,9 +1,9 @@
 <script lang="ts">
   // A diagram, opened from Diagrams in the project tree (DESIGN 5.13). The
-  // Data model is written from the data dictionary and always true: a
-  // click on a box opens the entity. A written ERD opens in the designer:
+  // Data model is written from the data dictionary and always true: its
+  // boxes move, and a right click on a header opens the entity. A written ERD opens in the designer:
   // a palette, a canvas of Clarity's own and the properties of what is
-  // picked; every change is written to its .mmd file at once, as plain
+  // picked; every change is written to its .mermaid file at once, as plain
   // Mermaid. Other diagrams are drawn by Mermaid. A written diagram is a
   // proposal: what it would add or change is marked, and Apply makes the
   // ticked proposals as one undo step.
@@ -92,11 +92,19 @@
     ...erd.entities.flatMap((e) => [`ref ${e.name}`, `list<${e.name}>`]),
   ]);
 
-  /** A change on the canvas: shown at once, then written to the diagram's file as Mermaid, with Undo. */
+  /**
+   * A change on the canvas: shown at once, then written as Mermaid with
+   * Undo. On the Data model only boxes move; their places go to its own
+   * file, diagrams/data-model.mermaid.
+   */
   async function change(next: Erd) {
     erd = next;
     try {
       error = null;
+      if (kind === "view") {
+        onapplied(await invoke<Preview>("place_data_model", { erd: next }));
+        return;
+      }
       const text = await invoke<string>("write_erd", { erd: next });
       draft = text;
       onapplied(await invoke<Preview>("save_diagram", { name, text }));
@@ -154,7 +162,7 @@
   };
   const note = $derived(
     kind === "view"
-      ? "Written from the data dictionary; click a box to open it"
+      ? "Written from the data dictionary; right-click a box's header to open it"
       : file?.kind
         ? `${KIND_NAMES[file.kind] ?? file.kind} in diagrams/`
         : "Drawn only: Clarity maps ERDs and class diagrams",
@@ -174,7 +182,7 @@
 
   <div class="body" hidden={tab !== "design"}>
     {#if designed}
-      <ErdCanvas {erd} {marks} readonly={kind === "view"} bind:picked onchange={change} onopen={open} />
+      <ErdCanvas {erd} {marks} readonly={kind === "view"} bind:picked onchange={change} onopen={open} canopen={(n) => known.includes(n)} />
     {:else}
       <DiagramCanvas text={shown} names={known} {marks} onopen={open} />
     {/if}

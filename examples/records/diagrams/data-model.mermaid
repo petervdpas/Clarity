@@ -1,0 +1,54 @@
+erDiagram
+    Friend {
+        text(80) name UK "required"
+        text(20) phone
+        email email
+    }
+    Loan {
+        Album album FK "required"
+        Friend friend FK "required"
+        date lent_on "required"
+        date returned_on
+    }
+    Genre {
+        text(40) name UK "required"
+        Genre parent FK
+    }
+    Artist {
+        text(80) name UK "required"
+        text(40) country
+        integer formed
+        url website
+        image photo
+    }
+    Album {
+        text(120) title "required"
+        Artist artist FK "required"
+        Genre genre FK
+        integer year
+        Format format
+        text(60) record_label
+        date bought_on
+        money price
+        integer rating
+        image cover
+        text notes
+    }
+    Track {
+        Album album FK "required"
+        integer number
+        text(120) title "required"
+        duration length
+    }
+    Loan }o..|| Album : album
+    Loan }o..|| Friend : friend
+    Genre }o..|| Genre : parent
+    Album }o..|| Artist : artist
+    Album }o..|| Genre : genre
+    Track }o..|| Album : album
+    %% clarity: Friend at -21,-10
+    %% clarity: Loan at -49,216
+    %% clarity: Genre at 664,17
+    %% clarity: Artist at 756,241
+    %% clarity: Album at 283,138
+    %% clarity: Track at 303,535

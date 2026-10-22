@@ -71,7 +71,7 @@ pub struct ErdRead {
 }
 
 /// The comment line that keeps an entity's place.
-const PLACE: &str = "%% clarity: ";
+pub(crate) const PLACE: &str = "%% clarity: ";
 
 /// Reads an ERD for the designer, with the problems of its text.
 pub fn read(text: &str) -> (Erd, Vec<Diagnostic>) {
@@ -109,7 +109,7 @@ pub fn read(text: &str) -> (Erd, Vec<Diagnostic>) {
 }
 
 /// The places the `%% clarity:` lines give: name, x and y.
-fn places(text: &str) -> Vec<(String, i32, i32)> {
+pub fn places(text: &str) -> Vec<(String, i32, i32)> {
     text.lines()
         .filter_map(|line| {
             let rest = line.trim().strip_prefix(PLACE)?;

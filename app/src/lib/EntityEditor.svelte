@@ -2,6 +2,7 @@
   // The data dictionary for one entity: a row per field with its name, type
   // and modifiers. Every change is one edit, checked by the Rust backend.
 
+  import { resizableColumns } from "./columnWidths";
   import { tr } from "./model";
   import TextField from "./TextField.svelte";
   import RenameField from "./RenameField.svelte";
@@ -41,6 +42,10 @@
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),
     ...preview.project.files.flatMap((f) => f.entities.flatMap((e) => [`ref ${e.name.name}`, `list<${e.name.name}>`])),
   ]);
+
+  /** Format and Store are columns only when a field of this entity can have one. */
+  const hasFormat = $derived(entity.fields.some((f) => (preview.formats[f.type.kind] ?? []).length > 0 || f.modifiers.format !== null));
+  const hasStore = $derived(entity.fields.some((f) => f.type.kind === "image"));
 
   function specOf(field: Field): FieldSpec {
     return { name: field.name.name, typeText: field.typeText, modifiers: field.modifiers };
@@ -120,7 +125,7 @@
   </header>
 
   <div class="table-wrap">
-    <table>
+    <table use:resizableColumns={"clarity.columns.entityFields"}>
       <thead>
         <tr>
           <th>Field</th>
@@ -129,9 +134,9 @@
           <th title="No two records have the same value">Unique</th>
           <th>Label</th>
           <th>Default</th>
-          <th title="How values are shown, in every locale">Format</th>
+          {#if hasFormat}<th title="How values are shown, in every locale">Format</th>{/if}
           <th>Help</th>
-          <th title="Pictures kept as files in a file store of the project settings, not in the database">Store</th>
+          {#if hasStore}<th title="Pictures kept as files in a file store of the project settings, not in the database">Store</th>{/if}
           <th></th>
         </tr>
       </thead>
@@ -140,10 +145,10 @@
           {@const m = field.modifiers}
           {@const formats = preview.formats[field.type.kind] ?? []}
           <tr>
-            <td><input class="mono" value={field.name.name} onchange={(e) => update(field, { name: e.currentTarget.value.trim() })} /></td>
+            <td><input class="mono name" value={field.name.name} onchange={(e) => update(field, { name: e.currentTarget.value.trim() })} /></td>
             <td>
               <input
-                class="mono"
+                class="mono type"
                 list="field-types"
                 value={field.typeText}
                 onchange={(e) => update(field, { typeText: e.currentTarget.value.trim() })}
@@ -163,16 +168,16 @@
                 onchange={(e) => update(field, { modifiers: { default: literalOf(e.currentTarget.value) } })}
               />
             </td>
-            <td>
+            {#if hasFormat}<td>
               {#if formats.length > 0}
                 <select value={m.format ?? ""} onchange={(e) => update(field, { modifiers: { format: e.currentTarget.value || null } })}>
                   <option value="">default</option>
                   {#each formats as f (f.name)}<option value={f.name} title={f.shows}>{f.name}</option>{/each}
                 </select>
               {/if}
-            </td>
+            </td>{/if}
             <td><TextField {preview} {onapplied} text={m.help} onwrite={(text) => update(field, { modifiers: { help: text } })} /></td>
-            <td>
+            {#if hasStore}<td>
               {#if field.type.kind === "image"}
                 <select value={m.store ?? ""} onchange={(e) => update(field, { modifiers: { store: e.currentTarget.value || null } })}>
                   <option value="">database</option>
@@ -180,7 +185,7 @@
                   {#if m.store && !stores.includes(m.store)}<option value={m.store}>{m.store} (not in the settings)</option>{/if}
                 </select>
               {/if}
-            </td>
+            </td>{/if}
             <td class="actions">
               <button title="Move up" disabled={i === 0} onclick={() => onedit({ op: "moveSibling", item: field.span.start, delta: -1 })}>&uarr;</button>
               <button
@@ -230,11 +235,9 @@
     margin: 0;
   }
 
+  /* Scrolls sideways only when the pane is narrower than the fields can be. */
   .table-wrap {
-    overflow: auto;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--panel);
+    overflow-x: auto;
   }
 
   table {
@@ -260,6 +263,12 @@
   td input:not([type="checkbox"]) {
     width: 100%;
     min-width: 0;
+  }
+
+  /* Readable while the widths are automatic; a resized column decides for itself. */
+  table:not(:global(.sized)) td input.name,
+  table:not(:global(.sized)) td input.type {
+    min-width: 9rem;
   }
 
   .mono {

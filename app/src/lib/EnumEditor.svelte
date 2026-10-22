@@ -1,6 +1,7 @@
 <script lang="ts">
   // An enum of the data dictionary: its variants and their labels.
 
+  import { resizableColumns } from "./columnWidths";
   import TextField from "./TextField.svelte";
   import type { Preview } from "./generated/Preview";
   import RenameField from "./RenameField.svelte";
@@ -49,7 +50,7 @@
   </header>
 
   <div class="table-wrap">
-    <table>
+    <table use:resizableColumns={"clarity.columns.enumValues"}>
       <thead>
         <tr><th>Variant</th><th>Label</th><th></th></tr>
       </thead>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Erd } from "./generated/Erd.ts";
-import { addEntity, boxes, pinned, connect, endMark, meeting, moveEntity, removeEntity, renameEntity, rowsOf } from "./erdDesign.ts";
+import { addEntity, boxes, pinned, connect, endMark, ends, meeting, moveEntity, removeEntity, renameEntity, rowsOf } from "./erdDesign.ts";
 
 const erd = (): Erd => ({
   entities: [
@@ -72,4 +72,23 @@ test("an edit pins every box where it is shown, so nothing else moves", () => {
   const pinnedErd = pinned(moveEntity(erd(), "Customer", 500, 500), shown);
   assert.deepEqual([pinnedErd.entities[1].x, pinnedErd.entities[1].y], [shown[1].x, shown[1].y]);
   assert.deepEqual([pinnedErd.entities[0].x, pinnedErd.entities[0].y], [500, 500]);
+});
+
+test("relations meeting the same side of a box are spread along it, in the order of their other ends", () => {
+  const album = { name: "Album", rows: [], placed: true, x: 0, y: 0, w: 100, h: 120 };
+  const track = { name: "Track", rows: [], placed: true, x: 300, y: -40, w: 100, h: 40 };
+  const loan = { name: "Loan", rows: [], placed: true, x: 300, y: 140, w: 100, h: 40 };
+  const relation = (left: string, right: string) => ({ left, right, leftCount: "zeroOrMore" as const, rightCount: "exactlyOne" as const, identifying: false, label: null });
+  const [toTrack, toLoan] = ends([album, track, loan], [relation("Track", "Album"), relation("Loan", "Album")]);
+  // Both meet Album's right side: Track's above Loan's, a third and two thirds down.
+  assert.deepEqual(toTrack?.[1], { x: 100, y: 40 });
+  assert.deepEqual(toLoan?.[1], { x: 100, y: 80 });
+  // Alone on its side, a relation meets the middle of it.
+  assert.deepEqual(toTrack?.[0], { x: 300, y: -20 });
+});
+
+test("a relation to itself or to a box not shown has no ends", () => {
+  const a = { name: "A", rows: [], placed: true, x: 0, y: 0, w: 100, h: 40 };
+  const relation = (left: string, right: string) => ({ left, right, leftCount: "zeroOrMore" as const, rightCount: "exactlyOne" as const, identifying: false, label: null });
+  assert.deepEqual(ends([a], [relation("A", "A"), relation("A", "B")]), [null, null]);
 });

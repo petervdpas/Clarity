@@ -28,8 +28,9 @@
       role="menuitem"
       class:danger={item.danger}
       onclick={() => {
-        onclose();
+        // Run before closing: what the item does may read the state the menu was opened with.
         item.run();
+        onclose();
       }}>{item.label}</button
     >
   {/each}

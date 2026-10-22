@@ -26,6 +26,7 @@
     onnewengine = null,
     onnewlanguage = null,
     onnewresource = null,
+    onnewdiagram = null,
     onmenu = null,
   }: {
     preview: Preview;
@@ -47,6 +48,8 @@
     onnewlanguage?: (() => void) | null;
     /** Asks for a new resource: its name, its type and maybe a file to copy in; null where the tree only shows. */
     onnewresource?: (() => void) | null;
+    /** Asks for a new diagram: its name and kind; null where the tree only shows. */
+    onnewdiagram?: (() => void) | null;
     /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
@@ -77,6 +80,10 @@
   /** The language the texts are written in, and those the project translates them to. */
   const written = $derived(preview.project.locale.language ?? "en");
   const languages = $derived(Object.keys(preview.project.translations).filter((l) => l !== written).toSorted());
+  /** The written diagrams of the diagrams folder. */
+  const diagrams = $derived(preview.project.diagrams);
+  const DIAGRAM_KINDS: Record<string, string> = { erd: "ERD", class: "class diagram", state: "state diagram", sequence: "sequence diagram", activity: "activity diagram", architecture: "architecture" };
+
   /** The files of the resources folder, by name. */
   const resources = $derived(preview.project.resources?.files.map((f) => f.name) ?? []);
   /** The name of a resource's type, as the backend lists the types. */
@@ -143,6 +150,24 @@
       {#if onnewdata}
         <button class="row add" onclick={() => onnewdata("entity")}>+ New entity</button>
         <button class="row add" onclick={() => onnewdata("enum")}>+ New enum</button>
+      {/if}
+    </details>
+
+    <!-- Views written from the project, and diagrams written by hand or by the agent, which propose changes. -->
+    <details open>
+      <summary>Diagrams <span class="count">{diagrams.length + 1}</span></summary>
+      <button class="row" class:current={is("view", "dataModel")} title="An ERD written from the data dictionary, always true" onclick={() => onselect({ kind: "view", name: "dataModel" })}>
+        Data model
+        <span class="note">from the project</span>
+      </button>
+      {#each diagrams as d (d.name)}
+        <button class="row" class:current={is("diagram", d.name)} title="diagrams/{d.name}" onclick={() => onselect({ kind: "diagram", name: d.name })}>
+          {d.name}
+          <span class="note">{d.kind ? DIAGRAM_KINDS[d.kind] : "drawn only"}</span>
+        </button>
+      {/each}
+      {#if onnewdiagram}
+        <button class="row add" onclick={onnewdiagram}>+ New diagram</button>
       {/if}
     </details>
 

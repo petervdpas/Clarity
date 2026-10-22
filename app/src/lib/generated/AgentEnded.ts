@@ -13,6 +13,10 @@ opened: string | null,
  */
 shown: string | null, 
 /**
+ * The written diagram to open, by its file name.
+ */
+diagram: string | null, 
+/**
  * Whether files changed, so Undo can take the turn back.
  */
 changed: boolean, };

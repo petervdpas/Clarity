@@ -81,7 +81,7 @@ fn data_name(entity: &str) -> String {
 }
 
 /// `customer` -> `customers`, `category` -> `categories`.
-fn plural(name: &str) -> String {
+pub(crate) fn plural(name: &str) -> String {
     if let Some(stem) = name.strip_suffix('y') {
         format!("{stem}ies")
     } else if name.ends_with('s') || name.ends_with('x') {

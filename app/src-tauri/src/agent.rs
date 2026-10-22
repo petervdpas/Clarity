@@ -122,6 +122,13 @@ language is shown by its source (`markdown source \"license.md\"`). Pictures you
 overview lists (`image source \"logo.png\"`, or a key pointing each language at one).
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
+- Data is designed in a diagram first. When asked for new or changed data (\"an order system with customers and \
+invoices\"), read the Data model with diagram_view, then sketch the change as a Mermaid ERD (or a class diagram for \
+enums) with write_diagram, open it with show_diagram, say in a few lines what it proposes, and stop: the person \
+adjusts it in Clarity. Apply it with apply_diagram only when the person asks, reading diagram_proposals first since \
+they may have changed it. Diagrams propose and the data dictionary decides; never apply a removal unless the person \
+asks for that one. In an ERD write Clarity's types (`text(80)`, `money`, `email`, an enum's name), `UK` for unique, \
+and other modifiers or a decimal's full type in the comment (`\"required\"`, `\"decimal(10, 2), computed\"`).
 - After adding or changing entities, write a migration step with migrate, so the database follows.
 - When a window is done, show it with show_window so the person sees it.
 - When the person mentions a failed build or run, or errors in the output, read them with build_output; never ask \
@@ -134,6 +141,10 @@ document (design tool, its Stacks and Roadmap sections) rather than guess; never
 first; use it only when the task needs it, and when they deny it, do not ask again in this turn. Without a build \
 tool (Clarity's settings turned it off), ask the person to press Run or Build, then read build_output.
 - Say briefly what you did when you finish. Write plain, short sentences.
+- Write in Clarity's house style, in what you say and in what you write into the project (comments, texts, Markdown): \
+no em-dash and no en-dash (use a period, a comma, a colon or parentheses; a plain hyphen for compounds; for a range \
+write \"1 to 9\"). No filler such as \"it is worth noting\", \"moreover\" or \"seamless\", no praise of the question, \
+no recap at the end of a short answer.
 
 Clarity's manual (read a topic with the manual tool):
 {manual}
@@ -183,6 +194,8 @@ pub struct ProjectTools {
     pub made: Option<PathBuf>,
     /// The window to show in Preview, when a tool asked for one.
     pub shown: Option<String>,
+    /// The diagram to open, by its file name, when a tool asked for one.
+    pub shown_diagram: Option<String>,
     /// The folder new projects go in by default.
     projects_folder: PathBuf,
     /// The Output panel as the turn started: the last build's lines and how it ended.
@@ -195,7 +208,7 @@ pub struct ProjectTools {
 
 impl ProjectTools {
     pub fn new(project: Option<(PathBuf, PathBuf)>, projects_folder: PathBuf) -> ProjectTools {
-        ProjectTools { project, written: Vec::new(), made: None, shown: None, projects_folder, output: crate::build::Output::default().text(), execute: None, runs: Runs::Ask }
+        ProjectTools { project, written: Vec::new(), made: None, shown: None, shown_diagram: None, projects_folder, output: crate::build::Output::default().text(), execute: None, runs: Runs::Ask }
     }
 
     fn open(&self) -> Result<&(PathBuf, PathBuf), String> {
@@ -216,6 +229,10 @@ impl ProjectTools {
                 return Ok(dir.join(clarity_spec::resources::RESOURCES_DIR).join(name));
             }
             return Err(format!("'{path}' is not a Markdown file of the resources: write one like resources/rules-en.md; pictures are added in Clarity"));
+        }
+        // A written diagram: `diagrams/orders.mmd`.
+        if let Some(name) = path.strip_prefix("diagrams/") {
+            return super::diagrams::diagram_file(dir, name);
         }
         let relative = Path::new(path);
         let fine = !path.is_empty()
@@ -267,6 +284,13 @@ impl ProjectTools {
                 out.push_str(&format!("- resources/{}\n", r.name));
             }
         }
+        let diagrams = clarity_spec::diagrams::diagram_files(dir).unwrap_or_default();
+        if !diagrams.is_empty() {
+            out.push_str("\nDiagrams (diagrams/, design that proposes changes; read one with read_file):\n");
+            for d in &diagrams {
+                out.push_str(&format!("- diagrams/{}\n", d.name));
+            }
+        }
         out.push_str(&format!("\nProblems:\n{}", self.problems()?));
         Ok(out)
     }
@@ -286,6 +310,75 @@ impl ProjectTools {
         write_atomically(&file, &text)?;
         self.written.push(Written { file, before, after: text });
         Ok(format!("Wrote {path}. {}", self.problems()?))
+    }
+
+    /// The Data model: an ERD Clarity writes from the data dictionary.
+    fn diagram_view(&self) -> Result<String, String> {
+        let (_, dir) = self.open()?;
+        let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
+        Ok(clarity_spec::diagrams::views::data_model(&project).text)
+    }
+
+    /// A written diagram's text, by its name (`billing` or `billing.mmd`).
+    fn diagram_text(&self, name: &str) -> Result<(PathBuf, String), String> {
+        let (_, dir) = self.open()?;
+        let file = super::diagrams::diagram_file(dir, name)?;
+        let text = std::fs::read_to_string(&file).map_err(|_| format!("diagrams/{} does not exist", file.file_name().unwrap_or_default().to_string_lossy()))?;
+        Ok((file, text))
+    }
+
+    /// The diagram's problems and what it proposes, numbered for apply_diagram.
+    fn proposals_text(&self, text: &str) -> Result<String, String> {
+        let (_, dir) = self.open()?;
+        let (_, problems) = clarity_spec::diagrams::parse(text);
+        let mut out = String::new();
+        if !problems.is_empty() {
+            out.push_str("Problems of the diagram:\n");
+            for p in &problems {
+                let severity = if p.severity == Severity::Error { "error" } else { "warning" };
+                out.push_str(&format!("{}:{}: {severity}: {}\n", p.span.line, p.span.col, p.message));
+            }
+        }
+        let proposals = super::diagrams::proposals_of(dir, text)?;
+        if proposals.is_empty() {
+            out.push_str("The diagram matches the project: it proposes nothing.");
+        } else {
+            out.push_str("It proposes:\n");
+            out.push_str(&super::diagrams::proposal_lines(&proposals));
+        }
+        Ok(out)
+    }
+
+    /// Writes a diagram into the diagrams folder, and says what it proposes.
+    fn write_diagram(&mut self, name: &str, text: &str) -> Result<String, String> {
+        let (_, dir) = self.open()?.clone();
+        let file = super::diagrams::diagram_file(&dir, name)?;
+        let before = std::fs::read_to_string(&file).ok();
+        std::fs::create_dir_all(dir.join(clarity_spec::diagrams::DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
+        let text = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
+        write_atomically(&file, &text)?;
+        let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
+        self.written.push(Written { file, before, after: text.clone() });
+        Ok(format!("Wrote diagrams/{shown}. {}", self.proposals_text(&text)?))
+    }
+
+    /// Applies the proposals of a written diagram at `numbers` (from 1), as Apply does.
+    fn apply_diagram(&mut self, name: &str, numbers: &[usize]) -> Result<String, String> {
+        let (_, dir) = self.open()?.clone();
+        let (_, text) = self.diagram_text(name)?;
+        if numbers.is_empty() {
+            return Err("name the proposals to apply by their numbers, as diagram_proposals lists them".into());
+        }
+        let count = super::diagrams::proposals_of(&dir, &text)?.len();
+        if let Some(wrong) = numbers.iter().find(|n| **n == 0 || **n > count) {
+            return Err(format!("there is no proposal {wrong}: the diagram has {count}"));
+        }
+        let ticked: Vec<usize> = numbers.iter().map(|n| n - 1).collect();
+        let changes = super::diagrams::apply_text(&dir, &text, &ticked)?;
+        for change in changes {
+            self.written.push(Written { file: change.file, before: change.before, after: change.after });
+        }
+        Ok(format!("Applied {} proposals. {}", numbers.len(), self.problems()?))
     }
 
     /// Writes what the data dictionary changed since the last migration step
@@ -481,6 +574,36 @@ impl Tools for ProjectTools {
                 schema(json!({}), &[]),
             ),
             tool("show_window", "Shows a window of the project in Clarity's Preview.", schema(json!({ "name": { "type": "string" } }), &["name"])),
+            tool(
+                "diagram_view",
+                "The project's Data model as a Mermaid ERD that Clarity writes from the data dictionary: every entity, its fields and relationships. Read it before you sketch a change to the data.",
+                schema(json!({}), &[]),
+            ),
+            tool(
+                "write_diagram",
+                "Writes a Mermaid ERD or class diagram into the project's diagrams folder (diagrams/<name>.mmd), new or replacing it. It changes nothing else: it gives the diagram's problems and the numbered changes it proposes for the project.",
+                schema(
+                    json!({ "name": { "type": "string", "description": "The diagram's name, like billing." }, "text": { "type": "string", "description": "The whole Mermaid text." } }),
+                    &["name", "text"],
+                ),
+            ),
+            tool(
+                "diagram_proposals",
+                "What a written diagram proposes for the project now, numbered, with its problems. Use it after the person changed the diagram.",
+                schema(json!({ "name": { "type": "string", "description": "The diagram's name, like billing." } }), &["name"]),
+            ),
+            tool(
+                "apply_diagram",
+                "Makes the proposals of a written diagram that you name by their numbers: entities, fields, refs, lists and enums, with label keys in every language file. Only when the person asked for it.",
+                schema(
+                    json!({
+                        "name": { "type": "string", "description": "The diagram's name, like billing." },
+                        "proposals": { "type": "array", "items": { "type": "integer" }, "description": "The numbers of the proposals to apply, as diagram_proposals lists them." }
+                    }),
+                    &["name", "proposals"],
+                ),
+            ),
+            tool("show_diagram", "Opens a written diagram in Clarity, drawn with what it proposes marked.", schema(json!({ "name": { "type": "string" } }), &["name"])),
         ];
         // Clarity's settings can turn running off; then the agent has no such tool.
         if self.runs != Runs::Never {
@@ -513,6 +636,18 @@ impl Tools for ProjectTools {
                 self.shown = Some(text("name"));
                 Ok(format!("Showing {} in Preview.", text("name")))
             }
+            "diagram_view" => self.diagram_view(),
+            "write_diagram" => self.write_diagram(&text("name"), &text("text")),
+            "diagram_proposals" => self.diagram_text(&text("name")).and_then(|(_, t)| self.proposals_text(&t)),
+            "apply_diagram" => {
+                let numbers: Vec<usize> = input["proposals"].as_array().map(|a| a.iter().filter_map(|n| n.as_u64()).map(|n| n as usize).collect()).unwrap_or_default();
+                self.apply_diagram(&text("name"), &numbers)
+            }
+            "show_diagram" => self.diagram_text(&text("name")).map(|(file, _)| {
+                let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
+                self.shown_diagram = Some(shown.clone());
+                format!("Opening diagrams/{shown} in Clarity.")
+            }),
             other => Err(format!("there is no tool {other}")),
         };
         match result {
@@ -627,6 +762,8 @@ pub struct AgentEnded {
     pub opened: Option<String>,
     /// The window to show in Preview.
     pub shown: Option<String>,
+    /// The written diagram to open, by its file name.
+    pub diagram: Option<String>,
     /// Whether files changed, so Undo can take the turn back.
     pub changed: bool,
 }
@@ -727,7 +864,7 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
             let _ = record(&app.state::<HistoryState>(), changes);
         }
         state.running.store(false, Ordering::SeqCst);
-        let ended = AgentEnded { opened: tools.made.map(|f| f.display().to_string()), shown: tools.shown, changed };
+        let ended = AgentEnded { opened: tools.made.map(|f| f.display().to_string()), shown: tools.shown, diagram: tools.shown_diagram, changed };
         let _ = app.emit("agent-ended", &ended);
     });
     Ok(())
@@ -810,6 +947,58 @@ mod tests {
     }
 
     #[test]
+    fn the_agent_sketches_a_diagram_first_and_applies_it_when_asked() {
+        let (root, file, dir) = project("diagrams");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let view = tools.call("diagram_view", &json!({}));
+        assert!(!view.is_error && view.text.starts_with("erDiagram"), "{}", view.text);
+
+        let sketch = "erDiagram\n    Customer {\n        text(80) name \"required\"\n    }\n    Invoice {\n        date issued_on \"required\"\n    }\n    Invoice }o..|| Customer : customer\n";
+        let written = tools.call("write_diagram", &json!({"name": "billing", "text": sketch}));
+        assert!(!written.is_error, "{}", written.text);
+        assert!(written.text.contains("diagrams/billing.mmd"), "{}", written.text);
+        assert!(written.text.contains("1. add Customer: entity Customer"), "{}", written.text);
+        assert!(written.text.contains("2. add Invoice: entity Invoice"), "{}", written.text);
+        assert_eq!(std::fs::read_to_string(dir.join("diagrams/billing.mmd")).unwrap(), sketch);
+        // The person may change it; the agent reads it back.
+        assert_eq!(tools.call("read_file", &json!({"path": "diagrams/billing.mmd"})).text, sketch);
+        assert!(tools.call("diagram_proposals", &json!({"name": "billing"})).text.contains("2. add Invoice"));
+
+        let applied = tools.call("apply_diagram", &json!({"name": "billing", "proposals": [1, 2]}));
+        assert!(!applied.is_error, "{}", applied.text);
+        assert!(applied.text.contains("Applied 2 proposals"), "{}", applied.text);
+        let module = std::fs::read_to_string(dir.join("todo.clarity")).unwrap();
+        assert!(module.contains("entity Invoice\n    issued_on: date, required, label @invoiceIssuedOnLabel\n    customer: ref Customer"), "{module}");
+        let en = std::fs::read_to_string(dir.join("translations/en.clarity")).unwrap();
+        assert!(en.contains("invoiceIssuedOnLabel \"Issued on\""), "{en}");
+        assert!(tools.call("diagram_proposals", &json!({"name": "billing"})).text.contains("matches the project"));
+
+        // The diagram, the module and the language file are one change for Undo.
+        let one = merged(&tools.written);
+        assert!(one.iter().any(|c| c.file.ends_with("diagrams/billing.mmd")));
+        assert!(one.iter().any(|c| c.file.ends_with("todo.clarity")));
+        assert!(one.iter().any(|c| c.file.ends_with("translations/en.clarity")));
+
+        tools.call("show_diagram", &json!({"name": "billing"}));
+        assert_eq!(tools.shown_diagram.as_deref(), Some("billing.mmd"));
+        for name in ["../escape", "a/b", ""] {
+            assert!(tools.call("write_diagram", &json!({"name": name, "text": sketch})).is_error, "{name}");
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// What the agent says follows Clarity's house style: no dashes for
+    /// asides, plain sentences. Its instructions say so, and are written so.
+    #[test]
+    fn the_instructions_follow_the_house_style() {
+        let text = instructions();
+        for dash in ['\u{2014}', '\u{2013}'] {
+            assert!(!text.contains(dash), "the instructions hold {dash:?}");
+        }
+        assert!(text.contains("em-dash") && text.contains("en-dash"), "the instructions name the rule");
+    }
+
+    #[test]
     fn a_new_project_becomes_the_open_one() {
         let root = std::env::temp_dir().join(format!("clarity-agent-new-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -837,11 +1026,12 @@ mod tests {
         names.sort();
         let allowed = [
             // Reading.
-            "build_output", "check", "design", "manual", "parts", "project_overview", "read_file", "read_generated", "reference",
+            "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file",
+            "read_generated", "reference",
             // Writing project files, checked at once and undone with one Undo.
-            "migrate", "new_project", "write_file",
-            // Showing a window in Preview, which draws it without running it.
-            "show_window",
+            "apply_diagram", "migrate", "new_project", "write_diagram", "write_file",
+            // Showing a window in Preview or a diagram, which draw without running anything.
+            "show_diagram", "show_window",
             // Running or building, only after the person allows it.
             "build",
         ];

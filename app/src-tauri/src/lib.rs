@@ -3,6 +3,7 @@
 
 mod build;
 mod links;
+mod diagrams;
 mod resources;
 mod engines;
 mod external;
@@ -110,12 +111,15 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         let folder = p.parent();
         let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
         let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
+        let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
         p == file
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
             || *p == resources
             || folder == Some(&resources)
             || *p == engines
             || folder == Some(&engines)
+            || *p == diagrams
+            || folder == Some(&diagrams)
     })
 }
 
@@ -132,12 +136,13 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         }
     })
     .map_err(|err| format!("cannot watch {}: {err}", dir.display()))?;
-    // The migration steps, the resources and the engines too, once the project has them.
+    // The migration steps, the resources, the engines and the diagrams too, once the project has them.
     let steps = dir.join(clarity_spec::MIGRATIONS_DIR);
     let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
     let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
+    let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
     let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    for extra in [&steps, &resources, &engines] {
+    for extra in [&steps, &resources, &engines, &diagrams] {
         if extra.is_dir() {
             folders.push(extra);
         }
@@ -820,7 +825,14 @@ pub fn run() {
             resources::resource_kinds,
             resources::add_resource,
             resources::replace_resource_file,
-            resources::save_markdown
+            resources::save_markdown,
+            diagrams::diagram_kinds,
+            diagrams::data_model_view,
+            diagrams::check_diagram,
+            diagrams::add_diagram,
+            diagrams::save_diagram,
+            diagrams::diagram_proposals,
+            diagrams::apply_diagram
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

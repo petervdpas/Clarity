@@ -834,6 +834,117 @@ page Play: window
 3. **N5a**: engines beside the screen, brought along: the frame loop, input, tells and hears, in a Web Worker and in Avalonia.
 4. **N5b**: Clarity engines beside the screen: `on tick`, `on draw`, `on pointer`, `on key`, `tell`.
 
+### 5.13 Diagrams (2026-10-22, a design)
+
+Clarity draws and designs the model as diagrams in Mermaid: ERDs and class diagrams first, then state and sequence diagrams, then activity and architecture. They are a way of designing the application, as the window designer is, for the person and for the agent alike. Agreed with the user on 2026-10-22; nothing is built yet. The decisions still open are marked **Open**.
+
+- **The data dictionary stays the one source of truth.** A diagram is a view of the project or a proposal to change it, never a second model that drifts from it.
+- **In the IDE only.** Diagrams are design: generated applications get no diagram part and carry no diagram files, so this needs no work per stack. Showing a diagram inside an application (a mermaid block in a Markdown resource, drawn when the application is generated, since Avalonia runs no JavaScript) would be a separate row.
+
+#### Views and written diagrams
+
+- **Views generated from the project** are always true and are not files. DG1 brings two: **Data model** (an ERD of every entity, its fields, refs and lists) and **Classes** (entities, enums, engines with their functions, and a class per module with its functions and actions). Later rows add a state diagram per enum, a sequence diagram per handler, an activity diagram per handler or function, and the architecture (modules, engines, data sources, the stack). Editing a view on its canvas edits the dictionary directly, as the entity editor does: ordinary edits through `clarity_spec::edit`, with undo.
+- **Written diagrams** are `.mmd` files in the project's `diagrams` folder, beside `resources`, `engines` and `translations`, written by the person or by the agent. Unlike resources they are not carried into the application. A written diagram shows how it differs from the project and proposes edits through **Apply**; it changes nothing by itself.
+
+#### The project part
+
+- **Project tree.** A Diagrams section lists the views first, then the written files, with the same Open, Rename and Delete menu as other parts.
+- **New diagram.** A dialog built like New resource asks for a name, a kind (ERD or Class in DG1) and optionally a `.mmd` file to copy in, and writes a starter of that kind.
+- **Kinds in one place.** `clarity_spec::diagrams::kinds()` lists the kinds with their Mermaid header (`erDiagram`, `classDiagram`, `stateDiagram-v2`, `sequenceDiagram`, `flowchart`, `architecture-beta`), so the tree, the dialog and the agent read the same list. Other Mermaid kinds (gantt, mindmap, pie) may be written and are drawn, but map to nothing.
+
+#### What a diagram means
+
+Types are written in Clarity's own words (`text(80)`, `money`, `email`, an enum's name); common foreign words are read as Clarity's:
+
+| Written | Read as |
+|---|---|
+| `string`, `varchar`, `varchar(n)` | `text`, `text(n)` |
+| `int`, `long`, `integer` | `integer` |
+| `float`, `double`, `number` | `decimal` |
+| `bool`, `boolean` | `bool` |
+| `timestamp` | `datetime` |
+
+ERD (`erDiagram`):
+
+| Mermaid | Clarity |
+|---|---|
+| an entity block | an entity |
+| an attribute `type name` | a field; Clarity adds `id` itself, so a `PK` attribute named `id` is left out and another `PK` is a warning |
+| `UK` | `unique` |
+| the attribute's comment, `"required, computed"` | modifiers; also the full type where Mermaid's type word cannot hold it (`"decimal(10, 2)"`) |
+| `Order }o--\|\| Customer : places` | `customer: ref Customer` on the many side |
+| an identifying line (`--`) from the one side to the many side | also `lines: list<OrderLine>, owned` on the one side |
+| a non-identifying line (`..`) | also a plain `list<...>` on the one side, when the one side lists them |
+
+Class diagram (`classDiagram`):
+
+| Mermaid | Clarity |
+|---|---|
+| a class with attributes `+name: text` | an entity |
+| `<<enumeration>>` with its values | an enum |
+| `<<engine>>` with methods `play(square: integer) text` | an engine written in Clarity, with stubs of its functions |
+| `<<module>>` with methods | the module's functions and actions |
+| `A "*" --> "1" B` | `b: ref B` on A |
+| composition `*--` | an owned list |
+| aggregation `o--` | a plain list |
+
+Methods on an entity's class are a problem with a fix: functions belong to a module, so they go on its `<<module>>` class.
+
+#### The diagram designer
+
+A diagram opens like a window does, with **Design** and **Text** tabs:
+
+- **Toolbox** on the left: Entity, Enum, Engine and Relationship in DG1; State, Step, Lifeline and Message come with their kinds.
+- **Canvas** in the middle: mermaid.js, bundled into the app so it works offline and loaded only when a diagram opens, draws the SVG into an isolated frame with Ctrl+wheel zoom and drag-to-pan, in the IDE theme's colors. Over the drawing lies Clarity's own layer, which knows each box and line by Mermaid's element ids and maps it to the span it came from.
+- **Properties** on the right: for an entity, its fields as rows (name, type, required, unique, label key); for a relationship, its two ends, how many on each side, owned or not.
+- **On the canvas:** drop an entity from the toolbox; drag from one box to another to draw a relationship; double-click a name to rename it; right-click for Add field and Delete; a click opens what a box stands for (the entity, the field, the enum, the engine, the function), as the Problems list jumps to a line.
+- **Layout is Mermaid's.** Boxes are placed automatically; a diagram has a direction (left to right, top down) and nothing is dragged into place by hand. **Open:** a renderer of Clarity's own can take over later, for placed boxes, without changing the rest.
+- **Edits.** On a view, every action is an edit of the dictionary. On a written diagram, it is an edit of the `.mmd` text through `clarity_spec::diagrams::edit`, which, like `edit.rs`, rewrites only the lines it is about. Either way it is one undo step, and the Text tab follows.
+- **Text.** The Text tab is the SourceEditor with `language="mermaid"`: colors and positioned problems from the same parser, as Clarity text has them.
+
+#### Differences and Apply
+
+- **In sight before anything changes.** A written diagram is drawn with what it would add (green), change (amber), and what the project has but the diagram leaves out (grey), through `classDef` and `style` lines Clarity adds to a copy of the text before drawing.
+- **Apply** lists the proposed edits, each ticked: new entities, fields, refs and lists, enums, engines and changed types or modifiers. What the diagram leaves out is offered as a removal that starts unticked; Clarity never removes anything unasked. Only what the diagram draws is compared: a field the project has on an entity the diagram draws with fields, or a value of an enum it draws with values; an entity drawn without fields, or one the diagram does not name, is left alone. Each new entity names the module it goes to, by default the module of an entity it relates to. The ticked edits apply as one undo step; every label they need gets a key in every language file (as `apply_in` does today), and the migration step is offered as after any change of entities.
+
+#### Checking
+
+A parser in `clarity_spec::diagrams` reads the subset Clarity maps, `erDiagram` and `classDiagram` in DG1 and the other kinds with their rows, and gives positioned problems in the checker's words: an unknown type, a relationship to an entity that is not there, a name that is not snake_case or PascalCase. A diagram's problems show in the Problems list with the project's.
+
+#### Names and texts
+
+Names in a diagram are names, not texts people read. What Apply or the designer creates gets keys for its labels, proposed as the entity editor proposes them (`customerNameLabel`), with a default value from the name, in every language file.
+
+#### The agent
+
+- **Tools:** `diagram_view` (a generated view: the data model, the classes, and later an enum's states or a handler's sequence), `write_diagram` (a `.mmd` file in `diagrams`), `diagram_proposals` (what a written diagram would change) and `apply_diagram` (apply the proposals it names).
+- **Prompt:** diagrams propose and the dictionary decides. Asked for "an order system with customers and invoices", the agent sketches the ERD as a written diagram first; the person adjusts it in the designer; Apply makes the entities, and the migration step and windows follow.
+
+#### Steps between enum values (DG2, decided 2026-10-22)
+
+A state diagram on an enum says which values may follow which, and that becomes part of the language:
+
+```clarity
+enum OrderStatus
+    Pending label @orderStatusPending
+    Approved label @orderStatusApproved
+    Shipped label @orderStatusShipped
+    Cancelled label @orderStatusCancelled
+    steps
+        Pending -> Approved, Cancelled
+        Approved -> Shipped, Cancelled
+```
+
+- **Meaning.** A stored field of the enum may only change along a step; a new record may start at any value unless `starts` says which. Saving a change that is not a step is refused with a keyed message, on every stack and both renderers, with conformance cases.
+- **The checker** knows the steps too: a step names values of the enum, and a value no step reaches is a warning.
+- **Open:** the exact syntax (`steps` block, `starts`), and whether a step can carry a condition or the name of the handler that takes it.
+
+#### In order
+
+1. **DG1**: the `diagrams` part, the parser and colors for ERD and class diagrams, the Data model and Classes views, the designer with toolbox, overlay and properties, written diagrams with differences and Apply, and the agent's tools.
+2. **DG2**: state diagrams with `steps` on enums, and sequence diagrams per handler (a view first; handler stubs from a written one later).
+3. **DG3**: activity diagrams per handler or function and the architecture, as views.
+
 ## 6. Generation
 
 ### 6.1 Shape and behavior
@@ -1437,6 +1548,9 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | N4 | State and hooks: `state per window` and `state per app`, hooks such as `on open` and `on close`; `bytes` for document processing | done (2026-10-20): state, `on open` and `bytes`, see "Built (N4)" in section 5.11; no `on close` (the engine has nothing it could do then) |
 | N5 | Engines beside the screen (section 5.12): N5a brought along, in a Web Worker and in Avalonia, the frame loop, input, tells and hears; N5b written in Clarity (`on tick`, `on draw`, `on pointer`, `on key`, `tell`) | |
 | P | Progress of a long engine call on the backend (section 5.12): `uses progress`, a bar and Stop on the window while the handler runs, through each shell's way to the screen | |
+| DG1 | Diagrams, first slice (section 5.13): a Diagrams part with a `diagrams` folder (not carried into applications), the Data model and Classes views generated from the project, written `.mmd` ERD and class diagrams checked by `clarity_spec::diagrams`, the diagram designer (mermaid.js with Clarity's layer over it: toolbox, properties, click through, relationships drawn by dragging, Design and Text tabs), differences marked before Apply, Apply as one undo step with label keys and the migration step, and the agent's diagram tools | |
+| DG2 | State and sequence diagrams (section 5.13): `steps` between enum values as a language construct, checked and enforced on every stack, designed as a state diagram; a sequence diagram per handler as a view | |
+| DG3 | Activity diagrams per handler or function and the architecture of the project, as views (section 5.13) | |
 | W1 | The web target: each backend serves the web renderer over HTTP; Avalonia in the browser through WebAssembly | |
 | A1 | AI through the MCP server: the whole project and its output readable, changes only as designer edits, proposals inside a project and for Clarity itself (section 1.2) | |
 | S4 | Graphics canvas (section 5.7): `bitmap` and `vector` field types, the standard canvas widget with view and edit modes, the `canvas` screen pattern, backend and frontend renderers | |

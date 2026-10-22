@@ -652,6 +652,9 @@ pub struct Project {
     /// The files of the project's `resources` folder. None when the project
     /// was loaded without its folder.
     pub resources: Option<crate::resources::Resources>,
+    /// The written diagrams of the project's `diagrams` folder (DESIGN
+    /// 5.13), by name; empty when there are none or the folder was not read.
+    pub diagrams: Vec<crate::diagrams::DiagramFile>,
     /// The files of the project's `engines` folder, by name. None when the
     /// project was loaded without its folder.
     #[serde(skip)]

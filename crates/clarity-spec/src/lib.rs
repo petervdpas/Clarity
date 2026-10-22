@@ -3,6 +3,7 @@
 pub mod check;
 pub mod code;
 pub mod diagnostic;
+pub mod diagrams;
 pub mod dictionary;
 pub mod edit;
 pub mod formats;
@@ -68,6 +69,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         locale: model::Locale::default(),
         themes: Vec::new(),
         resources: None,
+        diagrams: Vec::new(),
         resource_keys: Default::default(),
         engines: None,
         stores: None,
@@ -274,6 +276,7 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
     resources::attach(&mut project, resources::resource_files(dir)?.unwrap_or_default());
     // A declared engine needs its file, so the folder is read even when it is missing.
     engines::attach(&mut project, engines::engine_files(dir)?.unwrap_or_default());
+    project.diagrams = diagrams::diagram_files(dir)?;
     Ok(project)
 }
 

@@ -28,6 +28,7 @@
     language = "clarity",
     readonly = false,
     ondirty = () => {},
+    ontext = () => {},
     onclose = () => {},
   }: {
     load: () => Promise<{ text: string; problems: Diagnostic[] }>;
@@ -49,6 +50,8 @@
     /** Shown to read, not to change: no Save, Revert or problems. */
     readonly?: boolean;
     ondirty?: (dirty: boolean) => void;
+    /** The text as it is typed, saved or not, for a view that follows it. */
+    ontext?: (text: string) => void;
     onclose?: () => void;
   } = $props();
 
@@ -84,6 +87,7 @@
   );
 
   $effect(() => ondirty(dirty));
+  $effect(() => ontext(text));
 
   async function reload() {
     try {

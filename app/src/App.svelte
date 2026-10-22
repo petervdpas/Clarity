@@ -14,6 +14,10 @@
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
   import NewResourceDialog from "./lib/NewResourceDialog.svelte";
+  import DiagramView from "./lib/DiagramView.svelte";
+  import NewDiagramDialog from "./lib/NewDiagramDialog.svelte";
+  import type { DiagramKind } from "./lib/generated/DiagramKind";
+  import type { DiagramKindInfo } from "./lib/generated/DiagramKindInfo";
   import { resourceKinds } from "./lib/resourceKinds.svelte";
   import type { ResourceKind } from "./lib/generated/ResourceKind";
   import RibbonButton from "./lib/RibbonButton.svelte";
@@ -276,6 +280,10 @@
         return o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
       case "resource":
         return p.project.resources?.files.some((f) => f.name === o.name) ?? false;
+      case "view":
+        return o.name === "dataModel";
+      case "diagram":
+        return p.project.diagrams.some((d) => d.name === o.name);
       case "settings":
         return true;
     }
@@ -449,6 +457,41 @@
     } catch (err) {
       newResourceError = String(err);
     }
+  }
+
+  /** The kinds of diagram, and whether the dialog for a new one is open and what went wrong adding it. */
+  let diagramKinds = $state<DiagramKindInfo[]>([]);
+  let newDiagramOpen = $state(false);
+  let newDiagramError = $state<string | null>(null);
+
+  async function startNewDiagram() {
+    newDiagramError = null;
+    try {
+      diagramKinds = await invoke<DiagramKindInfo[]>("diagram_kinds");
+      newDiagramOpen = true;
+    } catch (err) {
+      actionError = String(err);
+    }
+  }
+
+  /** Makes diagram `name` of `kind` with its starter text, and opens it. */
+  async function addDiagram(name: string, kind: DiagramKind) {
+    try {
+      const next = await invoke<Preview>("add_diagram", { name, kind });
+      applyPreview(next);
+      newDiagramOpen = false;
+      select({ kind: "diagram", name: `${name}.mmd` });
+      tab = "project";
+    } catch (err) {
+      newDiagramError = String(err);
+    }
+  }
+
+  /** Opens the entity or enum a diagram's box draws. */
+  function openDrawn(name: string) {
+    const all = preview?.project.files ?? [];
+    if (all.some((f) => f.entities.some((e) => e.name.name === name))) select({ kind: "entity", name });
+    else if (all.some((f) => f.enums.some((e) => e.name.name === name))) select({ kind: "enum", name });
   }
 
   /** The file a new entity or enum goes into, while its dialog is open. */
@@ -814,6 +857,10 @@
         stack = [{ kind: "window", name: ended.shown }];
         tab = "preview";
       }
+      if (ended.diagram) {
+        select({ kind: "diagram", name: ended.diagram });
+        tab = "project";
+      }
     };
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
     const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
@@ -891,6 +938,7 @@
       onnewengine={full ? startNewEngine : null}
       onnewlanguage={full ? startNewLanguage : null}
       onnewresource={full ? startNewResource : null}
+      onnewdiagram={full ? startNewDiagram : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -1176,6 +1224,8 @@
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+        {:else if current?.kind === "view" || current?.kind === "diagram"}
+          <DiagramView {preview} kind={current.kind} name={current.name} onapplied={applyPreview} onopen={openDrawn} />
         {:else if current?.kind === "resource"}
           <ResourceView {preview} name={current.name} onapplied={applyPreview} />
         {:else if current?.kind === "language"}
@@ -1376,6 +1426,16 @@
     error={newResourceError}
     onsubmit={addResource}
     oncancel={() => (newResourceOpen = false)}
+  />
+{/if}
+
+{#if newDiagramOpen && preview}
+  <NewDiagramDialog
+    kinds={diagramKinds}
+    taken={preview.project.diagrams.map((d) => d.name)}
+    error={newDiagramError}
+    onsubmit={addDiagram}
+    oncancel={() => (newDiagramOpen = false)}
   />
 {/if}
 

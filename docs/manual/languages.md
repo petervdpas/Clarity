@@ -98,7 +98,13 @@ The project tree lists the languages under i18n by name: first the default, then
 
 A markdown part or an image can show a file of the resources by a key, a file per language: `markdown @gameRules`. In each language the key's value is the file, written `gameRules resource "rules-nl.md"` in the language file. In a language's list, such a key has a choice of the resources of its kind (Markdown files for a markdown, pictures for an image) in place of a text. A new language starts it at the default language's file.
 
-Resources sits under i18n in the project tree: every file of the `resources` folder. Click one to open it: a Markdown file to write, with how it reads beside it (**Save**, or Ctrl+S), or a picture. Each says which keys point at it. **+ New Markdown file** asks for a name and writes `resources/<name>.md`; **+ Add picture** copies a picture you pick into the folder. A markdown or image part names its file in the properties: **Source** for one file in every language, **Key** for a file per language.
+Resources sits under i18n in the project tree: every file of the `resources` folder, with its type. A resource is Markdown (`.md`), a picture (`.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.webp`), a PDF, a drawing (`.svg`, `.dxf`) or another file; the application carries each as it is.
+
+- **+ New resource** asks for its name and type, and the file it starts from: Clarity copies the file into `resources/` under the name, with the file's extension. Markdown may start without a file, as a heading to write under; every other type starts from one.
+- Click a resource to open it: Markdown to write here, with how it reads beside it (**Save**, or Ctrl+S), a picture to look at, or what the file is. Each says which keys point at it.
+- **Replace file...** puts a file you pick in the resource's place, of the same extension; the name, and what points at it, stay.
+
+A markdown or image part names its file in the properties: **Source** for one file in every language, **Key** for a file per language. An image does not show a drawing yet.
 
 ## Which language shows
 

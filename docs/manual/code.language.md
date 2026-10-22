@@ -12,7 +12,7 @@ Comments start with `//` and run to the end of the line, on a line of their own 
 
 A name starts with a letter or `_`, followed by letters, digits and `_`. Names are case sensitive. Entities, enums and windows are `PascalCase` by convention (`OrderLine`), and fields, data and functions `snake_case` (`vat_number`). The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `saveClicked`).
 
-Every part has a name, which its events and code go by. The designer names a part when it is placed (`button1`), and you can rename it in its properties. A part without a name is an error; **Name them** under Problems names every such part in the file. For a project written before names were required, `clarity spec names shop.clarity` names its parts and makes its part and handler names camelCase, in its modules and translations.
+Every part has a name, which its events and code go by. The designer names a part after its purpose when it is placed or once it knows it (`vatNumberLabel`, `addLine`; `button1` until then), and you can rename it in its properties. A part without a name is an error; **Name them** under Problems names every such part in the file. For a project written before names were required, `clarity spec names shop.clarity` names its parts and makes its part and handler names camelCase, in its modules and translations.
 
 Words like `page` or `data` are keywords only where the grammar expects them, so a field may be called `data`. In expressions, `and`, `or`, `not` and `in` are reserved.
 

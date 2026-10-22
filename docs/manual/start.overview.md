@@ -4,7 +4,7 @@ What Clarity is, the few ideas the rest of the manual builds on, and where to fi
 
 ## One language, real programs
 
-Clarity is a development environment for desktop applications. You write the whole application in one language, Clarity: the settings, the data, the windows and the code behind them. Clarity then transpiles it into a real project for a stack you choose and builds it with that stack's own tools.
+Clarity is a development environment for desktop applications; the program is called Clarity IDE. You write the whole application in one language, Clarity: the settings, the data, the windows and the code behind them. Clarity then transpiles it into a real project for a stack you choose and builds it with that stack's own tools.
 
 Five stacks are generated today: Rust with Tauri, C# with Avalonia, Go with Wails, C and C++ with a webview. You design a window once; the stack decides how it is drawn. See [Rust](stacks.rust.md), [C#](stacks.csharp.md), [Go](stacks.go.md), [C](stacks.c.md) and [C++](stacks.cpp.md).
 

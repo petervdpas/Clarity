@@ -59,7 +59,7 @@ fn places_a_widget_in_reading_order() {
         },
     );
     assert!(text.contains(
-        "    textbox at 3,1 span 6 bind c.name // the name\n    checkbox \"Check box\" name checkbox1 at 9,1 span 3 bind c.active\n    panel"
+        "    textbox at 3,1 span 6 bind c.name // the name\n    checkbox \"Check box\" name active at 9,1 span 3 bind c.active\n    panel"
     ), "{text}");
     assert!(text[focus.unwrap() as usize..].starts_with("checkbox"));
 }
@@ -433,7 +433,7 @@ fn creates_widgets_with_catalog_defaults() {
     );
     assert!(
         text.contains(
-            "        label \"Inside\" at 1,1\n        textbox name textbox1 at 1,2 span 5 bind c.email\n"
+            "        label \"Inside\" at 1,1\n        textbox name email at 1,2 span 5 bind c.email\n"
         ),
         "{text}"
     );
@@ -469,11 +469,11 @@ fn applies_a_batch_as_one_edit() {
     );
     assert!(
         text.contains(
-            "    label \"E-mail\" name label1 at 1,2 span 2\n    textbox name textbox1 at 3,2 span 4 bind c.email\n    panel"
+            "    label \"E-mail\" name eMailLabel at 1,2 span 2\n    textbox name email at 3,2 span 4 bind c.email\n    panel"
         ),
         "{text}"
     );
-    assert!(text[focus.unwrap() as usize..].starts_with("textbox name textbox1 at 3,2"));
+    assert!(text[focus.unwrap() as usize..].starts_with("textbox name email at 3,2"));
 
     // One failing edit refuses the whole batch.
     let failing = Edit::Batch {
@@ -598,14 +598,15 @@ fn a_part_without_a_name_gets_one_when_it_is_changed() {
 }
 
 /// Name them: every part of every window and the app that has no name gets
-/// the first free one of its kind; the rest of each line stays as written.
+/// one after its purpose, or the first free one of its kind when its line
+/// says none; the rest of each line stays as written.
 #[test]
 fn names_every_part_that_has_none() {
     let (text, _) = edit(PAGE, Edit::NameParts);
-    assert!(text.contains("    label \"Name\" name label1 at 1,1 span 2\n"), "{text}");
-    assert!(text.contains("    textbox name textbox1 at 3,1 span 6 bind c.name // the name\n"), "{text}");
-    assert!(text.contains("    panel \"Box\" name panel1 at 1,3 span 6 rows 3\n        label \"Inside\" name label2 at 1,1\n"), "{text}");
-    assert!(text.contains("            label \"First\" name label3 at 1,1\n"), "{text}");
+    assert!(text.contains("    label \"Name\" name nameLabel at 1,1 span 2\n"), "{text}");
+    assert!(text.contains("    textbox name name at 3,1 span 6 bind c.name // the name\n"), "{text}");
+    assert!(text.contains("    panel \"Box\" name boxPanel at 1,3 span 6 rows 3\n        label \"Inside\" name insideLabel at 1,1\n"), "{text}");
+    assert!(text.contains("            label \"First\" name firstLabel at 1,1\n"), "{text}");
     // Named already: nothing changes.
     assert_eq!(edit(&text, Edit::NameParts).0, text);
 }

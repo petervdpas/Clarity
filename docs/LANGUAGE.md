@@ -27,7 +27,7 @@ Clarity is line based. Each declaration, setting, part or statement is one line,
 - **Comments** start with `//` and run to the end of the line. They can stand on their own line or follow code. The designer keeps them when it rewrites a file.
 - **Blank lines** are free and are kept too.
 - **Names** start with a letter or `_`, followed by letters, digits and `_`: `customer`, `vat_number`, `OrderLine`. Names are case sensitive. Entities, enums, windows and the app are written in `PascalCase` by convention. The parts of a window and their handlers must be `camelCase`: letters and digits only, starting with a small letter (`newGame`, `square1`, `saveClicked`); the checker reports any other. Fields, data and functions are `snake_case` by convention.
-- **Every part has a name** (`button @saveCaption name save at 1,3`), which its events and code go by. The designer names a part when it is placed (`button1`); a part written without one is an error, and **Name them** under Problems names every such part in the file.
+- **Every part has a name** (`button @saveCaption name save at 1,3`), which its events and code go by. The designer names a part after what it shows or is for when it is placed (`ordersTable`, `email`), or `button1` when it does not know yet, and renames a numbered part after its purpose once it knows it (a label given `for vatNumber` becomes `vatNumberLabel`), unless code goes by the number. A part written without a name is an error, and **Name them** under Problems names every such part in the file the same way.
 - **Keys** name the texts people read: `@saveCaption`, `@customerCardTitle`. A key's text is in the language files, one per language (see [Translations](#translations)); a title, a caption, a label, a message are keys. Only a text without letters, such as a calculator's `"7"`, is written as it is.
 - **Strings** are written in double quotes: `"logo.png"`. Inside them, `\"` is a quote, `\\` a backslash and `\n` a new line. Other backslashes are kept as written, so `"^[0-9]\d+$"` is a valid pattern.
   In code, a string is also read for slots: `{customer.name}` is a value, and `{{` and `}}` are braces (see [Text with slots](#text-with-slots) and [Texts by key](#texts-by-key)). Strings in settings, such as patterns and file names, have no slots.
@@ -119,7 +119,7 @@ translation nl
 
 ### Resources
 
-The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, and its Markdown files, such as the rules of a game. Each is a file with a name of its own; how they are named is up to the project (`rules-en.md`, `rules-nl.md`). A part shows one in two ways:
+The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, its Markdown files, such as the rules of a game, and any other file it needs, such as a PDF manual or a drawing (`.svg`, `.dxf`). Each is a file with a name of its own; how they are named is up to the project (`rules-en.md`, `rules-nl.md`). A part shows one in two ways:
 
 - By its `source`, the same file in every language: `image source "logo.png"`, `markdown source "license.md"`.
 - By a key, a file per language: the part names the key (`markdown @gameRules`), and each language file points the key at the file that language shows (`gameRules resource "rules-nl.md"`).
@@ -133,7 +133,7 @@ An image part shows a picture by its file name, or the picture its key points ea
 ```clarity
 // records/resources/logo.png
 page AlbumBrowse: window
-    image name image1 at 12,1 span 1 rows 1 source "logo.png"
+    image name collectionLogo at 12,1 span 1 rows 1 source "logo.png"
 ```
 
 - The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are.
@@ -442,7 +442,7 @@ page CustomerForm: window
     grid 12 columns
     on return: windowReturned
 
-    label @nameLabel name label1 at 1,1 span 3 for name
+    label @nameLabel name nameLabel at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
     button @saveButtonCaption name saveButton at 11,10 span 2 default on click: saveClicked
@@ -506,7 +506,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | Property | Meaning |
 |---|---|
 | `"caption"` | The text it shows, right after the kind, for the kinds that have one. |
-| `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts `button1`, `textbox2` and so on; templates name inputs after their field. |
+| `name n` | The part's name, unique in its window (sidebars, footer, menu, toolbar and ribbon included). Handlers refer to the part by it. The designer names new parts after their purpose (`vatNumberLabel`, `ordersTable`, `addLine`), or `button1` until it knows it; templates name inputs after their field. |
 | `at col,row`, `span n`, `rows n` | Place and size on the grid; see [the grid](#the-grid). |
 | `tooltip "text"` | Shown when the pointer rests on the part. |
 | `style name` | A style of the project's theme: its colors, and the size, font and alignment of its text. See [Themes](#themes). |
@@ -687,10 +687,10 @@ app Shop
                 button @newButtonCaption name newButton icon "add" large on click -> CustomerForm
                 button @browseButtonCaption name browseButton icon "list" on click -> CustomerBrowse
     sidebar left name leftSidebar width 192
-        list name list1 at 1,1 span 3 rows 10 bind recent show name
+        list name recentList at 1,1 span 3 rows 10 bind recent show name
     footer
         status @shopStatus
-        text name text1 at 10,1 span 3 bind session.user
+        text name userText at 10,1 span 3 bind session.user
 ```
 
 ### App settings
@@ -866,7 +866,7 @@ A canvas is drawn by its draw handler, wired with `on draw`. The handler draws s
 page Main: window
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button @button1Caption name button1 at 7,8 span 6 key "+" on click: change(10)
+    button @fasterCaption name faster at 7,8 span 6 key "+" on click: change(10)
 
 code Main
     handler drawDial
@@ -1249,10 +1249,10 @@ page CustomerBrowse: window
     data customers: list<Customer>
     on return: windowReturned
 
-    label @nameFilterLabel name label1 at 1,1 span 2 for nameFilter
+    label @nameFilterLabel name nameFilterLabel at 1,1 span 2 for nameFilter
     textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
     table name grid at 1,2 span 12 rows 8 bind customers columns name, kind on open: openClicked
-    button @button1Caption name button1 at 9,10 span 2 on click -> CustomerForm
+    button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
     button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
 
 page CustomerForm: window
@@ -1260,15 +1260,15 @@ page CustomerForm: window
     data customer: Customer
 
     form name customerForm at 1,1 span 12 rows 4 bind customer
-        label @nameLabel name label1 at 1,1 span 3 for name
+        label @nameLabel name nameLabel at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind customer.name
-        help name help1 at 10,1 span 3 for name
-        label @kindLabel name label2 at 1,2 span 3 for kind
+        help name nameHelp at 10,1 span 3 for name
+        label @kindLabel name kindLabel at 1,2 span 3 for kind
         radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
-        label @vatNumberLabel name label3 at 1,3 span 3 for vatNumber
+        label @vatNumberLabel name vatNumberLabel at 1,3 span 3 for vatNumber
         textbox name vatNumber at 4,3 span 4 bind customer.vat_number
-        help name help2 at 8,3 span 5 for vatNumber
-        label @notesLabel name label4 at 1,4 span 3 for notes
+        help name vatNumberHelp at 8,3 span 5 for vatNumber
+        label @notesLabel name notesLabel at 1,4 span 3 for notes
         textbox name notes at 4,4 span 9 bind customer.notes
     button @saveButtonCaption name saveButton at 9,6 span 2 key "Ctrl+S" default on click: saveClicked
     button @closeFormCaption name closeForm at 11,6 span 2 cancel on click: closeClicked

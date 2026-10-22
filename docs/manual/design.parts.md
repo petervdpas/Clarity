@@ -4,7 +4,7 @@ The parts you place on a window, grouped as the Parts palette shows them, with w
 
 ## The Parts palette
 
-While you design a window, the sidebar's **Parts** tab lists the parts in groups. Drag a tile onto the window to place it; it lands on the grid cell under the pointer, inside the innermost container there. A new part gets a name such as `button1` or `textbox2`.
+While you design a window, the sidebar's **Parts** tab lists the parts in groups. Drag a tile onto the window to place it; it lands on the grid cell under the pointer, inside the innermost container there. A new part gets a name after what it shows, such as `ordersTable` or `email`, or `button1` while it says nothing of its purpose yet. A part with such a numbered name takes a name after its purpose once you give it one: a label for `vatNumber` becomes `vatNumberLabel`, a button with the caption "Add line" `addLine`. A name code already goes by stays.
 
 Below the groups, the palette lists the window's data. A field of a single record is a tile that places a label and a bound input (and the help text when the field has one and there is room). A list is a tile, Table of name, that places a table bound to it.
 

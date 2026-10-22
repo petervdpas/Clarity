@@ -71,6 +71,12 @@ const TYPES: &[&str] =
 
 const LITERALS: &[&str] = &["true", "false", "none"];
 
+/// Whether `word` is a word of the language: a keyword, a type, a literal
+/// or a part. A name the project gives should not be one.
+pub fn is_word_of_the_language(word: &str) -> bool {
+    KEYWORDS.contains(&word) || TYPES.contains(&word) || LITERALS.contains(&word) || crate::widgets::catalog().iter().any(|w| w.keyword == word)
+}
+
 /// Words after which the next word is a name the project gives.
 const NAMING: &[&str] =
     &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "module", "use", "source", "store", "datasource", "filestore"];

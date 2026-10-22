@@ -186,3 +186,108 @@ fn a_menu_item_is_not_named_like_a_windows_data() {
     let clash = MENU.replace("page Main: window\n", "page Main: window\n    data quitItem: text\n");
     assert_has(&errors(&clash), "item or button 'quitItem' has the name of data of Main; give one of them another name");
 }
+
+/// A new part is named after what it already knows of its purpose: what it
+/// is for, what it shows, its source or its caption. Only a part that knows
+/// none of these gets a numbered name, `button3`.
+#[test]
+fn a_part_is_named_after_its_purpose() {
+    use clarity_spec::names::suggested_name;
+    use clarity_spec::widgets::{WidgetKind, new_props};
+    let part = |kind: WidgetKind, set: &dyn Fn(&mut clarity_spec::model::WidgetProps)| {
+        let mut props = new_props(kind, 1, 1);
+        props.caption = None;
+        set(&mut props);
+        suggested_name(&props)
+    };
+    assert_eq!(part(WidgetKind::Label, &|p| p.for_part = Some("vatNumber".into())), Some("vatNumberLabel".into()));
+    assert_eq!(part(WidgetKind::Help, &|p| p.for_part = Some("vatNumber".into())), Some("vatNumberHelp".into()));
+    assert_eq!(part(WidgetKind::Textbox, &|p| p.bind = Some("customer.vat_number".into())), Some("vatNumber".into()));
+    assert_eq!(part(WidgetKind::Text, &|p| p.bind = Some("customer.notes".into())), Some("notesText".into()));
+    assert_eq!(part(WidgetKind::Number, &|p| p.bind = Some("count".into())), Some("count".into()));
+    assert_eq!(part(WidgetKind::Table, &|p| p.bind = Some("orders".into())), Some("ordersTable".into()));
+    assert_eq!(part(WidgetKind::List, &|p| p.bind = Some("recent".into())), Some("recentList".into()));
+    assert_eq!(part(WidgetKind::Form, &|p| p.bind = Some("customer".into())), Some("customerForm".into()));
+    assert_eq!(part(WidgetKind::Image, &|p| p.bind = Some("album.cover".into())), Some("cover".into()));
+    assert_eq!(part(WidgetKind::Image, &|p| p.source = Some("logo.png".into())), Some("logoImage".into()));
+    assert_eq!(part(WidgetKind::Markdown, &|p| p.source = Some("rules-en.md".into())), Some("rulesEnText".into()));
+    assert_eq!(part(WidgetKind::Markdown, &|p| p.caption = Some("@gameRules".into())), Some("gameRules".into()));
+    // A caption names it, as a key or as written; a word code uses gets the part's kind.
+    assert_eq!(part(WidgetKind::Button, &|p| p.caption = Some("@addLineCaption".into())), Some("addLine".into()));
+    assert_eq!(part(WidgetKind::Button, &|p| p.caption = Some("Add line".into())), Some("addLine".into()));
+    assert_eq!(part(WidgetKind::Button, &|p| p.caption = Some("@saveCaption".into())), Some("saveButton".into()));
+    assert_eq!(part(WidgetKind::Heading, &|p| p.caption = Some("@collectionHeadingCaption".into())), Some("collectionHeading".into()));
+    // A label, help text or heading named after its text says what it is, so it never takes an input's name.
+    assert_eq!(part(WidgetKind::Label, &|p| p.caption = Some("E-mail".into())), Some("eMailLabel".into()));
+    assert_eq!(part(WidgetKind::Label, &|p| p.caption = Some("@customerNameLabel".into())), Some("customerNameLabel".into()));
+    assert_eq!(part(WidgetKind::Heading, &|p| p.caption = Some("Albums".into())), Some("albumsHeading".into()));
+    assert_eq!(part(WidgetKind::Panel, &|p| p.caption = Some("@identityPanelCaption".into())), Some("identityPanel".into()));
+    assert_eq!(part(WidgetKind::Panel, &|p| p.caption = Some("Credit".into())), Some("creditPanel".into()));
+    // Nothing known yet: the default caption a new part gets says nothing.
+    assert_eq!(part(WidgetKind::Button, &|p| p.caption = Some("Button".into())), None);
+    assert_eq!(part(WidgetKind::Button, &|_| {}), None);
+}
+
+const FORM: &str = "module m
+
+page Card: window
+    data customer: Customer
+    data orders: list<Customer>
+    textbox name vatNumber at 4,1 span 4 bind customer.vat_number
+    label \"VAT number\" name label1 at 1,1 span 3
+    label \"Used\" name label2 at 1,2 span 3
+    button \"Add line\" at 1,3 span 2
+
+code Card
+    handler cardOpened
+        label2.caption = \"x\"
+
+entity Customer
+    vat_number: text(20)
+";
+
+fn part_line(text: &str, start: &str) -> String {
+    text.lines().find(|l| l.trim_start().starts_with(start)).unwrap_or_else(|| panic!("no {start} in {text}")).trim().to_string()
+}
+
+/// Placing a part names it after what it shows; one with nothing to go by is numbered.
+#[test]
+fn a_placed_part_is_named_after_what_it_shows() {
+    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::widgets::WidgetKind;
+    let page = FORM.find("page Card").unwrap() as u32;
+    let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from) };
+    let text = apply(FORM, &create(WidgetKind::Table, Some("orders"))).unwrap().text;
+    assert!(part_line(&text, "table").contains("name ordersTable "), "{text}");
+    let text = apply(FORM, &create(WidgetKind::Button, None)).unwrap().text;
+    assert!(text.contains("button \"Button\" name button1 at 1,5"), "{text}");
+}
+
+/// A part that still has its numbered name takes a better one once it knows
+/// its purpose, unless code goes by the number.
+#[test]
+fn a_numbered_part_takes_its_name_when_it_knows_its_purpose() {
+    use clarity_spec::edit::{Edit, apply};
+    use clarity_spec::parser::parse;
+    let (file, _) = parse(FORM, "m.clarity");
+    let widgets = &file.pages[0].widgets;
+    let update = |name: &str| {
+        let widget = widgets.iter().find(|w| w.props.name.as_deref() == Some(name)).unwrap();
+        let mut props = widget.props.clone();
+        props.for_part = Some("vatNumber".into());
+        Edit::UpdateWidget { item: widget.span.start, container: None, props }
+    };
+    let text = apply(FORM, &update("label1")).unwrap().text;
+    assert_eq!(part_line(&text, "label \"VAT"), "label \"VAT number\" name vatNumberLabel at 1,1 span 3 for vatNumber");
+    // `label2` is what the code changes, so it keeps its name.
+    let text = apply(FORM, &update("label2")).unwrap().text;
+    assert_eq!(part_line(&text, "label \"Used"), "label \"Used\" name label2 at 1,1 span 3 for vatNumber".replace("1,1", "1,2"));
+}
+
+/// Name them names an unnamed part after its purpose too.
+#[test]
+fn name_them_names_a_part_after_its_purpose() {
+    use clarity_spec::edit::{Edit, apply};
+    let text = apply(FORM, &Edit::NameParts).unwrap().text;
+    assert!(text.contains("button \"Add line\" name addLine at 1,3 span 2"), "{text}");
+}

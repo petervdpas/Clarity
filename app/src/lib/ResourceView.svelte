@@ -1,18 +1,25 @@
 <script lang="ts">
   // A resource of the project, opened from Resources under i18n in the
-  // project tree: a Markdown file to write, with how it reads beside it, or
-  // a picture to look at. It says which keys point a language at it.
+  // project tree: a Markdown file to write, with how it reads beside it, a
+  // picture to look at, or a PDF, drawing or other file the application
+  // carries. Replace file puts a picked file of its type in its place. It
+  // says which keys point a language at it.
 
   import { invoke } from "@tauri-apps/api/core";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import type { Preview } from "./generated/Preview";
   import MarkdownView from "./ui/MarkdownView.svelte";
   import { openLink } from "./backend";
-  import { pictureUrl } from "./pictures.svelte";
+  import { loadPicturesWith, pictureUrl } from "./pictures.svelte";
   import { resourceKind, resourceUses } from "./resources";
+  import { resourceKinds } from "./resourceKinds.svelte";
 
   let { preview, name, onapplied }: { preview: Preview; name: string; onapplied: (preview: Preview) => void } = $props();
 
-  const kind = $derived(resourceKind(name));
+  const kind = $derived(resourceKind(name, resourceKinds.list));
+  const typeName = $derived(resourceKinds.list.find((k) => k.kind === kind)?.name ?? "File");
+  /** The extension a replacing file must have: the resource's own. */
+  const extension = $derived(name.includes(".") ? (name.split(".").at(-1) ?? "") : "");
   const saved = $derived(preview.project.resources?.markdown[name] ?? "");
   const uses = $derived(resourceUses(preview.project.resource_keys, name));
 
@@ -37,6 +44,22 @@
     }
   }
 
+  /** Puts a picked file of the resource's type in its place; the name stays. */
+  async function replace() {
+    const picked = await openDialog({ multiple: false, filters: extension ? [{ name: typeName, extensions: [extension] }] : [] });
+    if (typeof picked !== "string") return;
+    try {
+      error = null;
+      const next = await invoke<Preview>("replace_resource_file", { name, from: picked });
+      if (kind === "markdown") text = next.project.resources?.markdown[name] ?? "";
+      // The picture shows anew, not as it was loaded.
+      if (kind === "picture") loadPicturesWith((picture) => invoke<string>("project_picture", { name: picture }));
+      onapplied(next);
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
   function keydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
@@ -48,7 +71,8 @@
 <section class="resource">
   <header>
     <h2>{name}</h2>
-    <span class="kind">{kind === "markdown" ? "Markdown" : kind === "picture" ? "Picture" : "File"} in resources/</span>
+    <span class="kind">{typeName} in resources/</span>
+    <button onclick={replace} title="Put a picked .{extension || "file"} in its place; its name stays">Replace file...</button>
     {#if kind === "markdown"}
       <button class="primary" onclick={save} disabled={!changed} title="Save the file (Ctrl+S)">Save</button>
     {/if}
@@ -73,7 +97,7 @@
       {#if url}<img src={url} alt={name} />{:else}<p class="uses">Loading the picture...</p>{/if}
     </div>
   {:else}
-    <p class="uses">The application carries this file as it is.</p>
+    <p class="uses">The application carries this {typeName === "Other file" ? "file" : typeName} as it is{kind === "drawing" ? "; an image does not show a drawing yet" : ""}.</p>
   {/if}
 </section>
 

@@ -104,13 +104,22 @@ project's folder, written as paths like `todo.clarity`.
 - Write whole files with write_file. Every write is checked at once: fix every error it reports before you go on, \
 and finish only when check reports no errors.
 - Give every part a name, and name parts and handlers in camelCase: letters and digits only, starting with a small \
-letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, not its kind. Fields, \
-data and functions stay snake_case.
-- Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name save ...`, \
+letter, such as `newGame`, `statusText` and `newGameClicked`. Name a part after what it is for, never `button1` or \
+`label2`: an input after its field (`name`, `vatNumber`), its label and help after the input (`nameLabel`, \
+`nameHelp`), a button after what it does in its window (`saveOrder`, `openAlbum`, `newCustomer`), a container after \
+what it holds (`identityPanel`, `albumTabs`). A part's name is not a word code uses, such as `save` or `close`. \
+Fields, data and functions stay snake_case.
+- Every text people read is a key: `title @customerCardTitle`, `button @saveCaption name saveOrder ...`, \
 `message @savedName(name = customer.name)`, `label @customerNameLabel` on every field. Give each key its text in the \
 default language's file, `translations/en.clarity` (read it first; lines like `saveCaption \"Save\"`), and the same \
 key in every other language file, empty (`saveCaption \"\"`) when you do not translate it. Name a key in camelCase \
-after where it is: the part and what the text is to it.
+after where it is: the part and what the text is to it (`identityPanelCaption`, `nameLabel`). Parts that say the same \
+thing share one key, such as `saveCaption` for every Save button.
+- Long texts, such as rules or help, are Markdown files of the resources, written with write_file as \
+`resources/rules-en.md`, one per language. A markdown part shows one by a key (`markdown @gameRules`), and each \
+language file points the key at its file: `gameRules resource \"rules-nl.md\"`. A file that is the same in every \
+language is shown by its source (`markdown source \"license.md\"`). Pictures you cannot write; use those the \
+overview lists (`image source \"logo.png\"`, or a key pointing each language at one).
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - After adding or changing entities, write a migration step with migrate, so the database follows.
@@ -200,6 +209,14 @@ impl ProjectTools {
         if path == "project" {
             return Ok(file.clone());
         }
+        // A Markdown file of the resources: `resources/rules-en.md`, a plain name.
+        if let Some(name) = path.strip_prefix("resources/") {
+            let plain = !name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']);
+            if plain && clarity_spec::resources::is_markdown(name) {
+                return Ok(dir.join(clarity_spec::resources::RESOURCES_DIR).join(name));
+            }
+            return Err(format!("'{path}' is not a Markdown file of the resources: write one like resources/rules-en.md; pictures are added in Clarity"));
+        }
         let relative = Path::new(path);
         let fine = !path.is_empty()
             && relative.is_relative()
@@ -242,6 +259,13 @@ impl ProjectTools {
         modules.sort();
         for m in &modules {
             out.push_str(&format!("- {}\n", m.display()));
+        }
+        let resources = clarity_spec::resources::resource_files(dir).ok().flatten().unwrap_or_default();
+        if !resources.is_empty() {
+            out.push_str("\nResources (resources/, the files the application carries):\n");
+            for r in &resources {
+                out.push_str(&format!("- resources/{}\n", r.name));
+            }
         }
         out.push_str(&format!("\nProblems:\n{}", self.problems()?));
         Ok(out)
@@ -404,12 +428,12 @@ impl Tools for ProjectTools {
             tool("project_overview", "The open project: its project file, its modules and its problems.", schema(json!({}), &[])),
             tool(
                 "read_file",
-                "Reads a module (a path like todo.clarity, relative to the project's folder) or the project file (`project`).",
+                "Reads a module (a path like todo.clarity, relative to the project's folder), the project file (`project`) or a Markdown file of the resources (resources/rules-en.md).",
                 schema(json!({ "path": { "type": "string" } }), &["path"]),
             ),
             tool(
                 "write_file",
-                "Writes a whole module (a path like todo.clarity) or the project file (`project`), new or replacing it. Gives the project's problems after the write.",
+                "Writes a whole module (a path like todo.clarity), the project file (`project`) or a Markdown file of the resources (resources/rules-en.md), new or replacing it. Gives the project's problems after the write.",
                 schema(json!({ "path": { "type": "string" }, "text": { "type": "string", "description": "The whole file." } }), &["path", "text"]),
             ),
             tool("check", "Checks the whole project and gives its problems.", schema(json!({}), &[])),
@@ -891,6 +915,25 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    /// The agent writes Markdown files of the resources too, and a key points
+    /// each language at one; it cannot write pictures.
+    #[test]
+    fn the_agent_writes_markdown_resources() {
+        let (root, file, dir) = project("resources");
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let wrote = tools.call("write_file", &json!({"path": "resources/rules-en.md", "text": "# Rules"}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+        assert_eq!(std::fs::read_to_string(dir.join("resources/rules-en.md")).unwrap(), "# Rules\n");
+        assert_eq!(tools.call("read_file", &json!({"path": "resources/rules-en.md"})).text, "# Rules\n");
+        assert!(tools.call("project_overview", &json!({})).text.contains("- resources/rules-en.md"));
+        for path in ["resources/logo.png", "resources/../escape.md", "resources/a/b.md", "notes.md"] {
+            assert!(tools.call("write_file", &json!({"path": path, "text": "x"})).is_error, "{path}");
+        }
+        let told = instructions();
+        assert!(told.contains("resources/") && told.contains("resource \"rules-nl.md\""), "the instructions say nothing of resources");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn the_agent_reads_the_generated_project() {
         let (root, file, dir) = project("generated");
@@ -965,6 +1008,11 @@ mod tests {
         // The reference's sections by title, not the reference itself.
         assert!(told.contains("Queries") && !told.contains("## 12. Grammar summary\n"));
         assert!(told.contains("manual tool") && told.contains("reference tool") && told.contains("write_file"));
+        // How parts and keys are named, as the examples are: never a number, never a statement word.
+        for rule in ["never `button1` or `label2`", "`nameLabel`", "`nameHelp`", "`saveOrder`", "not a word code uses, such as `save` or `close`", "`saveCaption`"] {
+            assert!(told.contains(rule), "the instructions lack {rule}");
+        }
+        assert!(!told.contains("name save "), "the example names a part `save`");
         // Small enough for every message: the whole reference was some 18,000 tokens.
         assert!(told.len() < 16_000, "the instructions are {} bytes", told.len());
     }

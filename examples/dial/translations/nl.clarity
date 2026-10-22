@@ -2,7 +2,7 @@
 translation nl
     dialTitle "Meter"
     mainTitle "Meter"
-    button1Caption "Langzamer"
-    button2Caption "Sneller"
+    slowerCaption "Langzamer"
+    fasterCaption "Sneller"
     yes "Ja"
     no "Nee"

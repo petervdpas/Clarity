@@ -15,8 +15,8 @@ page Main: window
     size 360 x 360
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
-    button @button1Caption name button1 at 1,8 span 6 key "-" on click: change(-10)
-    button @button2Caption name button2 at 7,8 span 6 key "+" on click: change(10)
+    button @slowerCaption name slower at 1,8 span 6 key "-" on click: change(-10)
+    button @fasterCaption name faster at 7,8 span 6 key "+" on click: change(10)
 
 code Main
     // The needle turns from 210 degrees at 0 km/h to -30 at 200, and

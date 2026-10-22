@@ -19,12 +19,12 @@ page CustomerBrowse: window
     data customers: list<Customer>
     on return: windowReturned
 
-    label @nameFilterLabel name label1 at 1,1 span 2 for nameFilter
+    label @nameFilterLabel name nameFilterLabel at 1,1 span 2 for nameFilter
     textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
-    label @emailFilterLabel name label2 at 7,1 span 2 for emailFilter
+    label @emailFilterLabel name emailFilterLabel at 7,1 span 2 for emailFilter
     textbox name emailFilter at 9,1 span 4 on change: filterChanged
     table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active on open: openClicked
-    button @button1Caption name button1 at 9,10 span 2 on click -> CustomerForm
+    button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
     button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
 
 page CustomerForm: window
@@ -32,31 +32,31 @@ page CustomerForm: window
     data customer: Customer
 
     form name customerForm at 1,1 span 12 rows 7 bind customer
-        tabs name tabs1 at 1,1 span 12 rows 7
+        tabs name customerTabs at 1,1 span 12 rows 7
             tab @customerFormGeneralTab
-                panel @panel1Caption name panel1 at 1,1 span 12 rows 6
-                    label @nameLabel name label1 at 1,1 span 3 for name
+                panel @identityPanelCaption name identityPanel at 1,1 span 12 rows 6
+                    label @nameLabel name nameLabel at 1,1 span 3 for name
                     textbox name name at 4,1 span 6 bind customer.name placeholder @namePlaceholder
-                    help name help1 at 10,1 span 3 for name
-                    label @kindLabel name label2 at 1,2 span 3 for kind
+                    help name nameHelp at 10,1 span 3 for name
+                    label @kindLabel name kindLabel at 1,2 span 3 for kind
                     radio name kind at 4,2 span 6 bind customer.kind on change: kindChanged
-                    label @emailLabel name label3 at 1,3 span 3 for email
+                    label @emailLabel name emailLabel at 1,3 span 3 for email
                     textbox name email at 4,3 span 6 bind customer.email placeholder @emailPlaceholder
-                    label @sinceLabel name label4 at 1,4 span 3 for since
+                    label @sinceLabel name sinceLabel at 1,4 span 3 for since
                     date name since at 4,4 span 3 bind customer.since
-                    label @activeLabel name label5 at 1,5 span 3 for active
+                    label @activeLabel name activeLabel at 1,5 span 3 for active
                     switch name active at 4,5 span 3 bind customer.active
             tab @customerFormFinanceTab
-                panel @panel2Caption name panel2 at 1,1 span 12 rows 3 foldable
-                    label @creditLimitLabel name label6 at 1,1 span 3 for creditLimit
+                panel @creditPanelCaption name creditPanel at 1,1 span 12 rows 3 foldable
+                    label @creditLimitLabel name creditLimitLabel at 1,1 span 3 for creditLimit
                     number name creditLimit at 4,1 span 3 bind customer.credit_limit
-                    label @vatNumberLabel name label7 at 1,2 span 3 for vatNumber
+                    label @vatNumberLabel name vatNumberLabel at 1,2 span 3 for vatNumber
                     textbox name vatNumber at 4,2 span 4 bind customer.vat_number
-                    help name help2 at 8,2 span 5 for vatNumber
+                    help name vatNumberHelp at 8,2 span 5 for vatNumber
             tab @customerFormNotesTab
-                label @notesLabel name label8 at 1,1 span 3 for notes
+                label @notesLabel name notesLabel at 1,1 span 3 for notes
                 memo name notes at 4,1 span 9 rows 4 bind customer.notes
-                help name help3 at 4,5 span 9 for notes
+                help name notesHelp at 4,5 span 9 for notes
     button @saveCaption name save at 9,9 span 2 tooltip @saveTooltip style primary key "Ctrl+S" default on click: saveClicked
     button @closeFormCaption name closeForm at 11,9 span 2 cancel on click: closeClicked
 

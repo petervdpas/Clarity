@@ -13,7 +13,9 @@
   import PageView from "./lib/PageView.svelte";
   import ProjectTree from "./lib/ProjectTree.svelte";
   import ResourceView from "./lib/ResourceView.svelte";
-  import NewMarkdownDialog from "./lib/NewMarkdownDialog.svelte";
+  import NewResourceDialog from "./lib/NewResourceDialog.svelte";
+  import { resourceKinds } from "./lib/resourceKinds.svelte";
+  import type { ResourceKind } from "./lib/generated/ResourceKind";
   import RibbonButton from "./lib/RibbonButton.svelte";
   import Splitter from "./lib/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
@@ -425,37 +427,27 @@
     }
   }
 
-  /** Whether the dialog for a new Markdown file is open, and what went wrong adding it. */
-  let newMarkdownOpen = $state(false);
-  let newMarkdownError = $state<string | null>(null);
+  /** Whether the dialog for a new resource is open, and what went wrong adding it. */
+  let newResourceOpen = $state(false);
+  let newResourceError = $state<string | null>(null);
 
-  function startNewMarkdown() {
-    newMarkdownError = null;
-    newMarkdownOpen = true;
+  function startNewResource() {
+    newResourceError = null;
+    newResourceOpen = true;
   }
 
-  /** Writes Markdown file `name` of the resources and opens it. */
-  async function addMarkdown(name: string) {
+  /** Makes resource `name` of type `kind`, from the picked file when there is one, and opens it. */
+  async function addResource(name: string, kind: ResourceKind, from: string | null) {
     try {
-      applyPreview(await invoke<Preview>("new_markdown", { name }));
-      newMarkdownOpen = false;
-      select({ kind: "resource", name });
+      const next = await invoke<Preview>("add_resource", { name, kind, from });
+      const before = new Set(preview?.project.resources?.files.map((f) => f.name) ?? []);
+      applyPreview(next);
+      newResourceOpen = false;
+      const made = next.project.resources?.files.find((f) => !before.has(f.name))?.name;
+      if (made) select({ kind: "resource", name: made });
       tab = "project";
     } catch (err) {
-      newMarkdownError = String(err);
-    }
-  }
-
-  /** Copies a picked picture into the resources and opens it. */
-  async function addPicture() {
-    const picked = await openDialog({ multiple: false, filters: [{ name: "Pictures", extensions: ["png", "jpg", "jpeg", "gif", "bmp", "webp"] }] });
-    if (typeof picked !== "string") return;
-    try {
-      applyPreview(await invoke<Preview>("add_picture", { path: picked }));
-      select({ kind: "resource", name: picked.split(/[\\/]/).at(-1) ?? picked });
-      tab = "project";
-    } catch (err) {
-      actionError = String(err);
+      newResourceError = String(err);
     }
   }
 
@@ -898,8 +890,7 @@
       onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
       onnewengine={full ? startNewEngine : null}
       onnewlanguage={full ? startNewLanguage : null}
-      onnewmarkdown={full ? startNewMarkdown : null}
-      onaddpicture={full ? addPicture : null}
+      onnewresource={full ? startNewResource : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -909,7 +900,7 @@
 <div class="app">
   <header class="ribbon">
     <div class="ribbon-tabs" role="tablist">
-      <div class="brand"><img class="logo" src={logo} alt="" /> Clarity</div>
+      <div class="brand"><img class="logo" src={logo} alt="" /> Clarity IDE</div>
       {#each TABS as t (t.key)}
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), (appSettingsOpen = false))}>{t.name}</button>
       {/each}
@@ -1378,8 +1369,14 @@
 {/if}
 
 
-{#if newMarkdownOpen && preview}
-  <NewMarkdownDialog taken={preview.project.resources?.files.map((f) => f.name) ?? []} error={newMarkdownError} onsubmit={addMarkdown} oncancel={() => (newMarkdownOpen = false)} />
+{#if newResourceOpen && preview}
+  <NewResourceDialog
+    kinds={resourceKinds.list}
+    taken={preview.project.resources?.files.map((f) => f.name) ?? []}
+    error={newResourceError}
+    onsubmit={addResource}
+    oncancel={() => (newResourceOpen = false)}
+  />
 {/if}
 
 {#if newLanguageOpen && preview}

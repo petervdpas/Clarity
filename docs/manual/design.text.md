@@ -27,7 +27,7 @@ page CustomerForm: dialog
     title @customerFormTitle
     data customer: Customer
 
-    label @nameLabel name label1 at 1,1 span 3 for name
+    label @nameLabel name nameLabel at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     button @saveButtonCaption name saveButton at 11,3 span 2 default on click: saveClicked
 ```

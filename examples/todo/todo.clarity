@@ -32,7 +32,7 @@ page Main: window
     on open: windowOpened
     on return: windowReturned
 
-    label @newTitleLabel name label1 at 1,1 span 2 for newTitle
+    label @newTitleLabel name newTitleLabel at 1,1 span 2 for newTitle
     textbox name newTitle at 3,1 span 8 placeholder @newTitlePlaceholder
     button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
     table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
@@ -47,9 +47,9 @@ page Users: window
 
     table name peopleGrid at 1,1 span 12 rows 6 bind people columns name on select: personSelected
     form name personForm at 1,7 span 12 rows 1 bind person
-        label @nameLabel name label1 at 1,1 span 2 for name
+        label @nameLabel name nameLabel at 1,1 span 2 for name
         textbox name name at 3,1 span 8 bind person.name placeholder @namePlaceholder
-        help name help1 at 11,1 span 2 for name
+        help name nameHelp at 11,1 span 2 for name
     button @newButtonCaption name newButton at 5,9 span 2 on click: newClicked
     button @saveButtonCaption name saveButton at 7,9 span 2 key "Ctrl+S" default on click: saveClicked
     button @deletePersonButtonCaption name deletePersonButton at 9,9 span 2 on click: deletePersonClicked

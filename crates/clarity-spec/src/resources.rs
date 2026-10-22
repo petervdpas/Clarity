@@ -53,6 +53,50 @@ impl Resources {
     }
 }
 
+/// The type of a resource, by its extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ResourceKind {
+    /// Text in Markdown, which a markdown part shows and Clarity edits.
+    Markdown,
+    /// A picture every stack shows, which an image shows.
+    Picture,
+    Pdf,
+    /// A vector drawing, in SVG or DXF; an image does not show one yet.
+    Drawing,
+    /// Any other file, carried as it is.
+    File,
+}
+
+/// A type a resource can have: its name, and its extensions, the first the
+/// one a new file of the type gets. Other files take any extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ResourceKindInfo {
+    pub kind: ResourceKind,
+    pub name: String,
+    pub extensions: Vec<String>,
+}
+
+/// The types of resource, in the order they are offered.
+pub fn kinds() -> Vec<ResourceKindInfo> {
+    let kind = |kind, name: &str, extensions: &[&str]| ResourceKindInfo { kind, name: name.into(), extensions: extensions.iter().map(|e| e.to_string()).collect() };
+    vec![
+        kind(ResourceKind::Markdown, "Markdown", &[MARKDOWN_EXTENSION]),
+        kind(ResourceKind::Picture, "Picture", &PICTURE_EXTENSIONS),
+        kind(ResourceKind::Pdf, "PDF", &["pdf"]),
+        kind(ResourceKind::Drawing, "Drawing", &["svg", "dxf"]),
+        kind(ResourceKind::File, "Other file", &[]),
+    ]
+}
+
+/// The type of a resource by its file name.
+pub fn kind_of(name: &str) -> ResourceKind {
+    let extension = Path::new(name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    kinds().into_iter().find(|k| k.extensions.contains(&extension)).map_or(ResourceKind::File, |k| k.kind)
+}
+
 fn has_extension(name: &str, wanted: &[&str]) -> bool {
     Path::new(name).extension().is_some_and(|e| wanted.contains(&e.to_string_lossy().to_lowercase().as_str()))
 }

@@ -168,6 +168,20 @@ fn a_key_points_each_language_at_a_resource() {
     assert_eq!(errors(&in_languages(BY_KEY, files(), &label)), ["@saveCaption points at rules-nl.md in nl; a label shows text"]);
 }
 
+/// A project folder without a resources folder has no resources: a
+/// picture a window shows is missing, not unchecked.
+#[test]
+fn a_project_folder_without_resources_still_checks_its_pictures() {
+    let dir = std::env::temp_dir().join(format!("clarity-no-resources-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("shop.clarity"), HOME).unwrap();
+    let project = clarity_spec::load_dir(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(errors(&project), ["image 'logo.png' is not in the resources folder, which has no pictures yet"]);
+    assert_eq!(project.resources.map(|r| r.files.len()), Some(0));
+}
+
 #[test]
 fn a_project_folder_brings_its_resources() {
     let dir = std::env::temp_dir().join(format!("clarity-resources-{}", std::process::id()));
@@ -184,4 +198,25 @@ fn a_project_folder_brings_its_resources() {
     assert_eq!(resources.files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["logo.png", "notes.md"]);
     assert_eq!(resources.files[0], ResourceFile { name: "logo.png".into(), bytes: vec![1, 2, 3] });
     assert_eq!(resources.markdown["notes.md"], "Notes");
+}
+
+/// Every resource has a type, by its extension: Markdown, a picture, a PDF,
+/// a drawing (SVG or DXF), or another file the application carries as it is.
+#[test]
+fn a_resource_has_a_type_by_its_extension() {
+    use clarity_spec::resources::{ResourceKind, kind_of, kinds};
+    assert_eq!(kind_of("rules-nl.md"), ResourceKind::Markdown);
+    assert_eq!(kind_of("Logo.PNG"), ResourceKind::Picture);
+    assert_eq!(kind_of("manual.pdf"), ResourceKind::Pdf);
+    assert_eq!(kind_of("floor-plan.dxf"), ResourceKind::Drawing);
+    assert_eq!(kind_of("icon.svg"), ResourceKind::Drawing);
+    assert_eq!(kind_of("data.csv"), ResourceKind::File);
+    // The types a new resource can have, each with its name and extensions; the first extension is the one a file gets.
+    let listed: Vec<(ResourceKind, String, Vec<String>)> = kinds().into_iter().map(|k| (k.kind, k.name, k.extensions)).collect();
+    assert_eq!(listed[0], (ResourceKind::Markdown, "Markdown".to_string(), vec!["md".to_string()]));
+    assert_eq!(listed[1].0, ResourceKind::Picture);
+    assert_eq!(listed[1].2, ["png", "jpg", "jpeg", "gif", "bmp", "webp"]);
+    assert_eq!(listed[2], (ResourceKind::Pdf, "PDF".to_string(), vec!["pdf".to_string()]));
+    assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["svg".to_string(), "dxf".to_string()]));
+    assert_eq!(listed[4], (ResourceKind::File, "Other file".to_string(), vec![]));
 }

@@ -11,6 +11,7 @@
   import type { TranslationTable } from "./generated/TranslationTable";
   import { languageName } from "./translate";
   import { resourceChoices } from "./resources";
+  import { resourceKinds } from "./resourceKinds.svelte";
   import type { TranslationRow } from "./generated/TranslationRow";
 
   let {
@@ -164,7 +165,7 @@
               <td class="value">
                 {#if row.takes !== "text"}
                   <!-- A markdown's or an image's key points this language at a file of the resources. -->
-                  {@const choices = resourceChoices(preview.project.resources?.files, row.takes)}
+                  {@const choices = resourceChoices(preview.project.resources?.files, row.takes, resourceKinds.list)}
                   {@const file = row.resources[column]}
                   <select class:missing={file === null} value={file ?? ""} aria-label={`${row.key} in ${named(language)}`} onchange={(e) => setResource(row.key, e.currentTarget.value)}>
                     <option value="" disabled>{row.takes === "markdown" ? "Pick a Markdown file" : "Pick a picture"}</option>

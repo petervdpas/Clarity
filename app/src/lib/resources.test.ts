@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { keyResource, resourceChoices, resourceKind, resourceUses } from "./resources.ts";
+import type { ResourceKindInfo } from "./generated/ResourceKindInfo";
 
 test("a key gives the resource of the language shown, else the default's", () => {
   const keys = { en: { gameRules: "rules-en.md" }, nl: { gameRules: "rules-nl.md" }, de: {} };
@@ -15,17 +16,29 @@ test("a key gives the resource of the language shown, else the default's", () =>
   assert.equal(keyResource(undefined, "@gameRules", "nl", "en"), undefined);
 });
 
-test("a resource is Markdown, a picture or another file, by its name", () => {
-  assert.equal(resourceKind("rules-nl.md"), "markdown");
-  assert.equal(resourceKind("Logo.PNG"), "picture");
-  assert.equal(resourceKind("data.csv"), "file");
+/** The types as the backend gives them (clarity_spec::resources::kinds). */
+const KINDS: ResourceKindInfo[] = [
+  { kind: "markdown", name: "Markdown", extensions: ["md"] },
+  { kind: "picture", name: "Picture", extensions: ["png", "jpg", "jpeg", "gif", "bmp", "webp"] },
+  { kind: "pdf", name: "PDF", extensions: ["pdf"] },
+  { kind: "drawing", name: "Drawing", extensions: ["svg", "dxf"] },
+  { kind: "file", name: "Other file", extensions: [] },
+];
+
+test("a resource's type is by its extension, as the backend lists the types", () => {
+  assert.equal(resourceKind("rules-nl.md", KINDS), "markdown");
+  assert.equal(resourceKind("Logo.PNG", KINDS), "picture");
+  assert.equal(resourceKind("plan.svg", KINDS), "drawing");
+  assert.equal(resourceKind("manual.pdf", KINDS), "pdf");
+  assert.equal(resourceKind("data.csv", KINDS), "file");
+  assert.equal(resourceKind("rules.md", []), "file");
 });
 
-test("a part or a key is offered the files of the kind it shows", () => {
+test("a part or a key is offered the files of the type it shows", () => {
   const files = [{ name: "banner.png" }, { name: "rules-en.md" }, { name: "data.csv" }, { name: "logo.jpg" }];
-  assert.deepEqual(resourceChoices(files, "picture"), ["banner.png", "logo.jpg"]);
-  assert.deepEqual(resourceChoices(files, "markdown"), ["rules-en.md"]);
-  assert.deepEqual(resourceChoices(undefined, "markdown"), []);
+  assert.deepEqual(resourceChoices(files, "picture", KINDS), ["banner.png", "logo.jpg"]);
+  assert.deepEqual(resourceChoices(files, "markdown", KINDS), ["rules-en.md"]);
+  assert.deepEqual(resourceChoices(undefined, "markdown", KINDS), []);
 });
 
 test("a resource says which keys point at it, in which languages", () => {

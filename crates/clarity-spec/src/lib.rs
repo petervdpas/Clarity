@@ -270,9 +270,8 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
     );
     let translations = translation_sources(dir, replaced)?;
     translations::attach(&mut project, translations.iter().map(|(p, t)| (p.as_str(), t.as_str())));
-    if let Some(found) = resources::resource_files(dir)? {
-        resources::attach(&mut project, found);
-    }
+    // A folder without resources has none: what a window shows of them is checked all the same.
+    resources::attach(&mut project, resources::resource_files(dir)?.unwrap_or_default());
     // A declared engine needs its file, so the folder is read even when it is missing.
     engines::attach(&mut project, engines::engine_files(dir)?.unwrap_or_default());
     Ok(project)

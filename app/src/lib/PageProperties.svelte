@@ -18,6 +18,7 @@
   import { DEFAULT_DIGITS } from "./display";
   import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
   import { resourceChoices } from "./resources";
+  import { resourceKinds } from "./resourceKinds.svelte";
 
   let {
     preview,
@@ -464,7 +465,7 @@
     {/if}
     {#if info.properties.includes("source")}
       <!-- A file of the resources, of the kind the part shows; a key points each language at one instead. -->
-      {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : "picture")}
+      {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : "picture", resourceKinds.list)}
       <label class="prop">
         <span>Source</span>
         <select value={p.source ?? ""} onchange={(e) => update({ source: textOf(e) })}>

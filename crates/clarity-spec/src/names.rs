@@ -168,3 +168,44 @@ pub fn command_name(caption: Option<&str>, keyword: &str) -> String {
         None => keyword.to_string(),
     }
 }
+
+/// What a part could be named after what it already knows of its purpose:
+/// the input it is for (`vatNumberLabel`), what it shows (`vatNumber`,
+/// `ordersTable`, `customerForm`), its file (`logoImage`) or its caption
+/// (`addLine`). None when it knows none of these, as a part just placed with
+/// its default caption. A name that would be a word of the language gets the
+/// part's kind: `saveButton`.
+pub fn suggested_name(props: &crate::model::WidgetProps) -> Option<String> {
+    use crate::widgets::WidgetKind as K;
+    let kind = crate::widgets::keyword(props.kind);
+    let suffix = |base: &str, word: &str| format!("{base}{}{}", word[..1].to_uppercase(), &word[1..]);
+    let base = if let Some(target) = props.for_part.as_deref().filter(|_| matches!(props.kind, K::Label | K::Help)) {
+        suffix(target, kind)
+    } else if let Some(bind) = props.bind.as_deref() {
+        let last = camel_case(bind.rsplit('.').next().unwrap_or(bind));
+        match props.kind {
+            K::Table | K::List | K::Form | K::Display => suffix(&last, kind),
+            K::Text | K::Markdown => suffix(&last, "text"),
+            _ => last,
+        }
+    } else if let Some(source) = props.source.as_deref() {
+        let stem = source.rsplit_once('.').map_or(source, |(stem, _)| stem);
+        suffix(&camel_case(stem), if props.kind == K::Markdown { "text" } else { kind })
+    } else if let Some(caption) = props.caption.as_deref() {
+        let named = match caption.strip_prefix('@') {
+            Some(key) => ["Caption", "Label", "Title", "Tooltip", "Placeholder"]
+                .iter()
+                .find_map(|end| key.strip_suffix(end).filter(|k| !k.is_empty()))
+                .unwrap_or(key)
+                .to_string(),
+            None if crate::widgets::info(props.kind).caption.as_deref() == Some(caption) => return None,
+            None => camel_case(caption),
+        };
+        let says_its_kind = matches!(props.kind, K::Label | K::Help | K::Heading | K::Panel);
+        let ends = named.to_lowercase().ends_with(kind);
+        if (says_its_kind && !ends) || crate::highlight::is_word_of_the_language(&named) { suffix(&named, kind) } else { named }
+    } else {
+        return None;
+    };
+    Some(base).filter(|name| is_camel_case(name))
+}

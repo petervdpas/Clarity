@@ -304,8 +304,8 @@ mod tests {
         let text = std::fs::read_to_string(examples.join("shop.clarity")).unwrap();
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("shop.clarity"), text.replace("stack rust web desktop", stack)).unwrap();
-        // The modules, the migration steps, the translations and the engines.
-        for folder in ["shop", "shop/migrations/main", "shop/translations", "shop/engines"] {
+        // The modules, the migration steps, the translations, the engines and the resources.
+        for folder in ["shop", "shop/migrations/main", "shop/translations", "shop/engines", "shop/resources"] {
             std::fs::create_dir_all(dir.join(folder)).unwrap();
             for entry in std::fs::read_dir(examples.join(folder)).unwrap() {
                 let path = entry.unwrap().path();

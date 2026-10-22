@@ -9,6 +9,6 @@ translation nl
     operationDivide "Delen"
     cannotDivideByZero "Delen door nul kan niet"
     mainTitle "Rekenmachine"
-    button1Caption "C"
+    clearKeyCaption "C"
     yes "Ja"
     no "Nee"

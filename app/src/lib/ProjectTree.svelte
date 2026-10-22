@@ -8,6 +8,7 @@
   import { findApp } from "./frame";
   import { languageName } from "./translate";
   import { resourceKind, resourceUses } from "./resources";
+  import { resourceKinds } from "./resourceKinds.svelte";
   import { tr } from "./model";
   import type { Selected } from "./selection";
 
@@ -24,8 +25,7 @@
     onnewtheme = null,
     onnewengine = null,
     onnewlanguage = null,
-    onnewmarkdown = null,
-    onaddpicture = null,
+    onnewresource = null,
     onmenu = null,
   }: {
     preview: Preview;
@@ -45,10 +45,8 @@
     onnewengine?: (() => void) | null;
     /** Asks for a new language and writes its translation file; null where the tree only shows. */
     onnewlanguage?: (() => void) | null;
-    /** Asks for a new Markdown file of the resources; null where the tree only shows. */
-    onnewmarkdown?: (() => void) | null;
-    /** Picks a picture to copy into the resources; null where the tree only shows. */
-    onaddpicture?: (() => void) | null;
+    /** Asks for a new resource: its name, its type and maybe a file to copy in; null where the tree only shows. */
+    onnewresource?: (() => void) | null;
     /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
@@ -81,7 +79,11 @@
   const languages = $derived(Object.keys(preview.project.translations).filter((l) => l !== written).toSorted());
   /** The files of the resources folder, by name. */
   const resources = $derived(preview.project.resources?.files.map((f) => f.name) ?? []);
-  const KIND_NOTE = { markdown: "Markdown", picture: "picture", file: "file" } as const;
+  /** The name of a resource's type, as the backend lists the types. */
+  function typeOf(name: string): string {
+    const kind = resourceKind(name, resourceKinds.list);
+    return resourceKinds.list.find((k) => k.kind === kind)?.name ?? "";
+  }
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -195,16 +197,13 @@
         {@const uses = resourceUses(preview.project.resource_keys, name)}
         <button class="row" class:current={is("resource", name)} title={uses.length > 0 ? uses.join("\n") : `resources/${name}`} onclick={() => onselect({ kind: "resource", name })}>
           {name}
-          <span class="note">{KIND_NOTE[resourceKind(name)]}</span>
+          <span class="note">{typeOf(name)}</span>
         </button>
       {:else}
-        <p class="empty">No resources yet: Markdown files and pictures the application carries.</p>
+        <p class="empty">No resources yet: the Markdown, pictures, PDFs, drawings and other files the application carries.</p>
       {/each}
-      {#if onnewmarkdown}
-        <button class="row add" onclick={onnewmarkdown}>+ New Markdown file</button>
-      {/if}
-      {#if onaddpicture}
-        <button class="row add" onclick={onaddpicture}>+ Add picture</button>
+      {#if onnewresource}
+        <button class="row add" onclick={onnewresource}>+ New resource</button>
       {/if}
     </details>
 

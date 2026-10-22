@@ -1028,7 +1028,12 @@ impl Doc {
                         .find(|w| w[0].kind == TokenKind::Ident && w[0].text == "at" && w[1].kind == TokenKind::Number)
                         .map(|w| w[0].span.start as usize);
                     if let (Some(at), Some(keyword)) = (at, child.tokens.first().map(|t| t.text.clone())) {
-                        let name = (1..).map(|n| format!("{keyword}{n}")).find(|n| !used.contains(n)).expect("an unused name exists");
+                        // After its purpose when the line says it, else numbered.
+                        let name = match props_of_line(&child.tokens).as_ref().and_then(crate::names::suggested_name) {
+                            Some(base) if !used.contains(&base) => base,
+                            Some(base) => (2..).map(|n| format!("{base}{n}")).find(|n| !used.contains(n)).expect("an unused name exists"),
+                            None => (1..).map(|n| format!("{keyword}{n}")).find(|n| !used.contains(n)).expect("an unused name exists"),
+                        };
                         let text = format!("{}name {name} {}", &child.text[..at], &child.text[at..]);
                         used.push(name);
                         child.set_text(text);
@@ -1106,6 +1111,35 @@ impl Doc {
         used
     }
 
+    /// A name after its purpose for a part that still has its numbered name
+    /// (`label1`), when it knows its purpose and nothing else in its window
+    /// or its code goes by the number.
+    fn better_name(&self, top: usize, props: &WidgetProps) -> Option<String> {
+        let name = props.name.as_deref()?;
+        let kind = widgets::keyword(props.kind);
+        let numbered = name.strip_prefix(kind).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+        if !numbered || self.mentions(top, name) {
+            return None;
+        }
+        crate::names::suggested_name(props).map(|base| self.free(top, &base))
+    }
+
+    /// Whether anything in the block `top`, or in the code block of the same
+    /// name, mentions `name` other than where a part is named it.
+    fn mentions(&self, top: usize, name: &str) -> bool {
+        fn walk(node: &LNode, name: &str) -> bool {
+            let said = node.tokens.iter().enumerate().any(|(i, t)| {
+                t.kind == TokenKind::Ident && t.text == name && !(i > 0 && node.tokens[i - 1].text == "name")
+            });
+            said || node.children.iter().any(|c| walk(c, name))
+        }
+        let owner = self.nodes[top].tokens.get(1).map(|t| t.text.clone()).unwrap_or_default();
+        self.nodes.iter().enumerate().any(|(i, node)| {
+            let code = node.tokens.first().is_some_and(|t| t.text == "code") && node.tokens.get(1).is_some_and(|t| t.text == owner);
+            (i == top || code) && walk(node, name)
+        })
+    }
+
     /// The first `{base}{n}` not yet used as a part name in the top-level
     /// block `top`.
     fn free_name(&self, top: usize, base: &str) -> String {
@@ -1151,10 +1185,13 @@ impl Doc {
     fn place_widget(&mut self, container: u32, props: &WidgetProps) -> EditResult<Option<u32>> {
         validate_props(props).map_err(EditError)?;
         let path = self.widget_container(container)?;
-        // A new part gets a name, like `button3`, so events can be wired.
+        // A new part gets a name, after what it shows when it says, else like `button3`, so events can be wired.
         let mut props = props.clone();
         if props.name.is_none() {
-            props.name = Some(self.free_name(path[0], widgets::keyword(props.kind)));
+            props.name = Some(match crate::names::suggested_name(&props) {
+                Some(base) => self.free(path[0], &base),
+                None => self.free_name(path[0], widgets::keyword(props.kind)),
+            });
         }
         let node = self.widget_node(&props);
         let id = node.id;
@@ -1175,6 +1212,12 @@ impl Doc {
         let props = if props.name.is_none() {
             let mut with = props.clone();
             with.name = Some(self.free_name(path[0], widgets::keyword(props.kind)));
+            named = with;
+            &named
+        } else if let Some(better) = self.better_name(path[0], props) {
+            // A numbered part takes a name after its purpose once it knows it.
+            let mut with = props.clone();
+            with.name = Some(better);
             named = with;
             &named
         } else {
@@ -2043,4 +2086,23 @@ fn set_line_keeping_comment(node: &mut LNode, line: String) {
     let rest_start = node.tokens.last().map(|t| t.span.end as usize).unwrap_or(0);
     let rest = node.text[rest_start..].to_string();
     node.set_text(line + &rest);
+}
+
+/// What a part's line says of its purpose, enough to name it: its kind,
+/// caption, `for`, `bind` and `source`.
+fn props_of_line(tokens: &[Token]) -> Option<WidgetProps> {
+    let kind = widgets::by_keyword(&tokens.first()?.text)?;
+    let mut props = widgets::new_props(kind, 1, 1);
+    props.caption = match tokens.get(1) {
+        Some(t) if t.kind == TokenKind::Str => Some(t.text.clone()),
+        Some(t) if t.kind == TokenKind::Key => Some(format!("@{}", t.text.trim_start_matches('@'))),
+        _ => None,
+    };
+    let after = |word: &str| tokens.iter().position(|t| t.kind == TokenKind::Ident && t.text == word).map(|i| i + 1);
+    props.for_part = after("for").and_then(|i| tokens.get(i)).filter(|t| t.kind == TokenKind::Ident).map(|t| t.text.clone());
+    props.source = after("source").and_then(|i| tokens.get(i)).filter(|t| t.kind == TokenKind::Str).map(|t| t.text.clone());
+    props.bind = after("bind").map(|i| {
+        tokens[i..].iter().take_while(|t| t.kind == TokenKind::Ident || t.kind == TokenKind::Dot).map(|t| t.text.as_str()).collect::<String>()
+    }).filter(|b| !b.is_empty());
+    Some(props)
 }

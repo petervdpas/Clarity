@@ -12,6 +12,7 @@ The agent is a model that knows Clarity and works on the open project through to
 
 - Look at the project: its project file, its modules and its problems.
 - Read and write the project file and the `.clarity` modules in the project's folder. Every write is checked at once, and the agent sees the errors it made.
+- Read and write the Markdown files of the resources (`resources/rules-en.md`), and point a key at one per language in the language files, for a markdown part. It cannot add pictures; it uses the ones the resources have.
 - Check the whole project.
 - Look up the parts a window can hold, with their properties.
 - Write a migration step for the changes in your entities, as **Create step** does; see [Migrations](data.migrations.md).
@@ -23,7 +24,7 @@ The agent is a model that knows Clarity and works on the open project through to
 - Read the application Clarity generated, in the folder the project's output setting names, to see what an error points at. It only reads there; it fixes the project instead.
 - Run or build the application, only as **Clarity settings** allow; see below.
 
-The agent cannot reach files outside the project's folder, and it writes only Clarity files. The designer follows its changes as they are written.
+The agent cannot reach files outside the project's folder, and it writes only Clarity files and Markdown files of the resources. The designer follows its changes as they are written.
 
 Hover over an answer for **Copy**, which puts the answer on the clipboard as Markdown.
 

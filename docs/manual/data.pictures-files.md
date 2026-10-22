@@ -9,7 +9,7 @@ The `resources` folder of the module folder holds the application's fixed pictur
 ```clarity
 // records/resources/logo.png
 page AlbumBrowse: window
-    image name image1 at 12,1 span 1 rows 1 source "logo.png"
+    image name collectionLogo at 12,1 span 1 rows 1 source "logo.png"
 ```
 
 The picture must be in the `resources` folder; a name that is not there is an error that lists the pictures that are. A picture is a `.png`, `.jpg`, `.gif`, `.bmp` or `.webp` file. Every generated application carries the folder, and the designer shows the pictures again when the folder changes. A picture keeps its proportions inside its part.

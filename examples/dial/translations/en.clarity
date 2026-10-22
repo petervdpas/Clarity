@@ -1,7 +1,7 @@
 translation en
     dialTitle "Dial"
     mainTitle "Dial"
-    button1Caption "Slower"
-    button2Caption "Faster"
+    slowerCaption "Slower"
+    fasterCaption "Faster"
     yes "Yes"
     no "No"

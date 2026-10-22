@@ -817,9 +817,10 @@ pub fn run() {
             agent::agent_answer,
             agent::agent_forget,
             links::open_link,
-            resources::new_markdown,
-            resources::save_markdown,
-            resources::add_picture
+            resources::resource_kinds,
+            resources::add_resource,
+            resources::replace_resource_file,
+            resources::save_markdown
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Clarity");

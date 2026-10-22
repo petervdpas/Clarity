@@ -15,7 +15,7 @@ page CustomerForm: window
     on open: windowOpened
     on return: windowReturned
 
-    label @nameLabel name label1 at 1,1 span 3 for name
+    label @nameLabel name nameLabel at 1,1 span 3 for name
     textbox name name at 4,1 span 6 bind customer.name
     table name orderTable at 1,3 span 12 rows 6 bind orders columns number, total
     button @saveButtonCaption name saveButton at 11,10 span 2 default on click: saveClicked

@@ -233,9 +233,11 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         message,
         binary: None,
     };
-    let mut command = Command::new(toolchain.tool);
+    let mut command = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, toolchain.tool).unwrap_or_else(|| toolchain.tool.into()));
     command
         .args(&toolchain.args)
+        // The tool starts others (go runs gcc and pkg-config): they look where Clarity looks.
+        .env("PATH", clarity_gen::tools::tool_path())
         .envs(toolchain.env.iter().copied())
         .current_dir(out)
         .stdin(Stdio::null())

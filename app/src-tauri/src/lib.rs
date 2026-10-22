@@ -829,6 +829,8 @@ pub fn run() {
             diagrams::diagram_kinds,
             diagrams::data_model_view,
             diagrams::check_diagram,
+            diagrams::read_erd,
+            diagrams::write_erd,
             diagrams::add_diagram,
             diagrams::save_diagram,
             diagrams::diagram_proposals,

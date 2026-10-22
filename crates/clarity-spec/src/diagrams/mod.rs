@@ -8,6 +8,7 @@
 mod class;
 mod compare;
 mod erd;
+pub mod erd_model;
 mod fields;
 mod files;
 pub mod views;
@@ -182,7 +183,7 @@ pub struct DiagramParam {
 }
 
 /// How many records stand at one end of a relationship.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum Cardinality {

@@ -48,6 +48,20 @@ pub fn check_diagram(text: String) -> Vec<Diagnostic> {
     diagrams::parse(&text).1
 }
 
+/// An ERD as the designer edits it: entities with their places, fields
+/// and relations, with the problems of its text.
+#[tauri::command]
+pub fn read_erd(text: String) -> diagrams::erd_model::ErdRead {
+    let (erd, problems) = diagrams::erd_model::read(&text);
+    diagrams::erd_model::ErdRead { erd, problems }
+}
+
+/// The designer's ERD written as Mermaid, its places as `%% clarity:` lines.
+#[tauri::command]
+pub fn write_erd(erd: diagrams::erd_model::Erd) -> String {
+    diagrams::erd_model::write(&erd)
+}
+
 /// Makes diagram `name` of `kind`, with the kind's starter text.
 #[tauri::command]
 pub fn add_diagram(name: String, kind: DiagramKind, state: State<WatchState>) -> Result<Preview, String> {

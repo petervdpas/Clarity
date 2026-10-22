@@ -151,8 +151,9 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
     }
     let command = engines::build_command(source, library().as_deref());
     send_line(app, format!("{} {} (in {})", command.tool, command.args.join(" "), command.dir.display()));
-    let mut child = Command::new(command.tool)
+    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, command.tool).unwrap_or_else(|| command.tool.into()))
         .args(&command.args)
+        .env("PATH", clarity_gen::tools::tool_path())
         .current_dir(&command.dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

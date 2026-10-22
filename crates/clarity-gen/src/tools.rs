@@ -4,8 +4,8 @@
 //! designing, previewing and generating work without them, and only Build
 //! and Run need them, so the generated source can be built elsewhere.
 
-use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use clarity_project::{Backend, Ui};
@@ -22,7 +22,7 @@ pub struct System;
 
 impl Probe for System {
     fn find(&self, program: &str) -> Option<PathBuf> {
-        find_on_path(program, &std::env::var_os("PATH")?)
+        find_on_path(program, &tool_path())
     }
 
     fn run(&self, program: &str, args: &[&str]) -> Option<String> {
@@ -30,6 +30,54 @@ impl Probe for System {
         let out = Command::new(path).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
         out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
     }
+}
+
+/// Where Clarity looks for build tools on this machine: its PATH, then the
+/// folders the official installers use. Build commands run with it as
+/// their PATH, so the tools they start themselves are found too.
+pub fn tool_path() -> OsString {
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    search_path(std::env::var_os("PATH").as_deref(), home.as_deref())
+}
+
+/// `path` (a PATH value), followed by the installers' folders it lacks. A
+/// program started from the desktop menu gets a shorter PATH than a
+/// terminal, without what a shell profile adds: rustup's ~/.cargo/bin,
+/// Go's /usr/local/go/bin, the .NET script's ~/.dotnet.
+pub fn search_path(path: Option<&OsStr>, home: Option<&Path>) -> OsString {
+    let mut folders: Vec<PathBuf> = path.map(|p| std::env::split_paths(p).collect()).unwrap_or_default();
+    let mut extra = Vec::new();
+    for (variable, sub) in [("CARGO_HOME", "bin"), ("GOROOT", "bin"), ("GOBIN", ""), ("DOTNET_ROOT", "")] {
+        if let Some(dir) = std::env::var_os(variable) {
+            extra.push(PathBuf::from(dir).join(sub));
+        }
+    }
+    if let Some(home) = home {
+        extra.extend([home.join(".cargo").join("bin"), home.join(".dotnet"), home.join("go").join("bin")]);
+        if !cfg!(windows) {
+            extra.push(home.join(".local/bin"));
+        }
+    }
+    if cfg!(windows) {
+        for variable in ["ProgramFiles", "ProgramFiles(x86)"] {
+            if let Some(dir) = std::env::var_os(variable) {
+                let dir = PathBuf::from(dir);
+                extra.extend([dir.join("Go").join("bin"), dir.join("dotnet"), dir.join("CMake").join("bin")]);
+            }
+        }
+    } else {
+        extra.extend(
+            ["/usr/local/go/bin", "/usr/local/bin", "/usr/local/share/dotnet", "/usr/share/dotnet", "/opt/homebrew/bin", "/snap/bin"]
+                .map(PathBuf::from),
+        );
+    }
+    for dir in extra {
+        let dir = PathBuf::from(dir.to_string_lossy().trim_end_matches(['/', '\\']));
+        if !dir.as_os_str().is_empty() && !folders.contains(&dir) {
+            folders.push(dir);
+        }
+    }
+    std::env::join_paths(folders).unwrap_or_default()
 }
 
 /// The file of `program` in the folders of `path` (a PATH value), with

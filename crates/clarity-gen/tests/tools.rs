@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use clarity_gen::tools::{Probe, check, engine_tools, find_on_path};
+use clarity_gen::tools::{Probe, check, engine_tools, find_on_path, search_path};
 use clarity_project::{Backend, Ui};
 
 /// A machine with these programs, each answering one command line.
@@ -137,6 +137,38 @@ fn a_program_is_found_on_the_path() {
     assert_eq!(find_on_path("cargo", &path), Some(bin.join(name)));
     assert_eq!(find_on_path("dotnet", &path), None);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A program started from the desktop menu gets a shorter PATH than a
+/// terminal: no ~/.cargo/bin, no /usr/local/go/bin. Clarity also looks in
+/// the folders the official installers use.
+#[test]
+fn the_installers_folders_are_searched_after_the_path() {
+    let home = std::path::Path::new("/home/someone");
+    let path = std::env::join_paths(["/usr/bin", "/bin"]).unwrap();
+    let searched: Vec<PathBuf> = std::env::split_paths(&search_path(Some(&path), Some(home))).collect();
+    assert_eq!(searched[..2], [PathBuf::from("/usr/bin"), PathBuf::from("/bin")]);
+    let installers: Vec<PathBuf> = if cfg!(windows) {
+        vec![home.join(".cargo").join("bin"), home.join(".dotnet")]
+    } else {
+        vec![home.join(".cargo/bin"), home.join(".dotnet"), home.join("go/bin"), PathBuf::from("/usr/local/go/bin"), PathBuf::from("/usr/local/bin")]
+    };
+    for folder in installers {
+        assert!(searched.contains(&folder), "{} not in {searched:?}", folder.display());
+    }
+    let mut unique = searched.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), searched.len(), "searched twice: {searched:?}");
+}
+
+#[test]
+fn a_folder_already_on_the_path_is_not_searched_twice() {
+    let home = std::path::Path::new("/home/someone");
+    let path = std::env::join_paths([home.join(".cargo/bin"), PathBuf::from("/usr/bin")]).unwrap();
+    let searched: Vec<PathBuf> = std::env::split_paths(&search_path(Some(&path), Some(home))).collect();
+    assert_eq!(searched.iter().filter(|f| **f == home.join(".cargo/bin")).count(), 1);
+    assert_eq!(searched[0], home.join(".cargo/bin"));
 }
 
 #[test]

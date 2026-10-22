@@ -1,15 +1,22 @@
 <script lang="ts">
   // A diagram, opened from Diagrams in the project tree (DESIGN 5.13). The
   // Data model is written from the data dictionary and always true: a
-  // click on a box opens the entity. A written diagram is a proposal: its
-  // drawing follows the text as it is typed, marked with what it would
-  // add or change, and Apply makes the ticked proposals as one undo step.
+  // click on a box opens the entity. A written ERD opens in the designer:
+  // a palette, a canvas of Clarity's own and the properties of what is
+  // picked; every change is written to its .mmd file at once, as plain
+  // Mermaid. Other diagrams are drawn by Mermaid. A written diagram is a
+  // proposal: what it would add or change is marked, and Apply makes the
+  // ticked proposals as one undo step.
 
   import { invoke } from "./backend";
   import DiagramCanvas from "./DiagramCanvas.svelte";
+  import ErdCanvas, { type ErdPick } from "./ErdCanvas.svelte";
+  import ErdProperties from "./ErdProperties.svelte";
   import SourceEditor from "./SourceEditor.svelte";
   import { marksOf } from "./diagramCanvas";
   import type { Diagnostic } from "./generated/Diagnostic";
+  import type { Erd } from "./generated/Erd";
+  import type { ErdRead } from "./generated/ErdRead";
   import type { Preview } from "./generated/Preview";
   import type { Proposal } from "./generated/Proposal";
   import type { View } from "./generated/View";
@@ -31,6 +38,9 @@
     onopen: (name: string) => void;
   } = $props();
 
+  /** Clarity's field types, offered when a field's type is typed. */
+  const CLARITY_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url"];
+
   let tab = $state<"design" | "text">("design");
   let error = $state<string | null>(null);
 
@@ -38,6 +48,7 @@
   const known = $derived(
     preview.project.files.flatMap((f) => [...f.entities.map((e) => e.name.name), ...f.enums.map((e) => e.name.name)]),
   );
+  const enums = $derived(preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)));
 
   // The Data model, written again whenever the project changes.
   let view = $state<View | null>(null);
@@ -61,6 +72,38 @@
   });
 
   const shown = $derived(kind === "view" ? (view?.text ?? "") : draft);
+  /** Whether the designer of Clarity's own draws it: the Data model and every ERD. */
+  const designed = $derived(kind === "view" || file?.kind === "erd");
+
+  // The ERD the canvas shows, read from the text as it stands.
+  let erd = $state<Erd>({ entities: [], relations: [] });
+  let picked = $state<ErdPick>(null);
+  $effect(() => {
+    const text = shown;
+    if (!designed) return;
+    invoke<ErdRead>("read_erd", { text })
+      .then((read) => (erd = read.erd))
+      .catch((err) => (error = String(err)));
+  });
+
+  const types = $derived([
+    ...CLARITY_TYPES,
+    ...enums,
+    ...erd.entities.flatMap((e) => [`ref ${e.name}`, `list<${e.name}>`]),
+  ]);
+
+  /** A change on the canvas: shown at once, then written to the diagram's file as Mermaid, with Undo. */
+  async function change(next: Erd) {
+    erd = next;
+    try {
+      error = null;
+      const text = await invoke<string>("write_erd", { erd: next });
+      draft = text;
+      onapplied(await invoke<Preview>("save_diagram", { name, text }));
+    } catch (err) {
+      error = String(err);
+    }
+  }
 
   // What the written diagram proposes, asked again after typing rests or the project changes.
   let proposals = $state<Proposal[]>([]);
@@ -130,29 +173,38 @@
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   <div class="body" hidden={tab !== "design"}>
-    <DiagramCanvas text={shown} names={known} {marks} onopen={open} />
+    {#if designed}
+      <ErdCanvas {erd} {marks} readonly={kind === "view"} bind:picked onchange={change} onopen={open} />
+    {:else}
+      <DiagramCanvas text={shown} names={known} {marks} onopen={open} />
+    {/if}
     {#if kind === "diagram"}
-      <aside class="proposals">
-        <h3>Proposals <span class="count">{proposals.length}</span></h3>
-        {#if proposals.length === 0}
-          <p class="empty">{file?.kind === "erd" || file?.kind === "class" ? "The diagram matches the project." : "Nothing to propose."}</p>
-        {:else}
-          <ul>
-            {#each proposals as p, i (p.subject + p.change)}
-              <li class={p.change}>
-                <label>
-                  <input type="checkbox" bind:checked={ticked[i]} />
-                  <span class="change">{p.change}</span>
-                  <span class="what"><code>{p.subject}</code> {p.description}</span>
-                </label>
-              </li>
-            {/each}
-          </ul>
-          <button class="primary" disabled={tickedCount === 0 || applying} onclick={apply} title="Make the ticked changes in the project; one Undo takes them back">
-            {applying ? "Applying..." : `Apply ${tickedCount}`}
-          </button>
+      <div class="side">
+        {#if designed}
+          <ErdProperties {erd} bind:picked {types} onchange={change} />
         {/if}
-      </aside>
+        <section class="proposals">
+          <h3>Proposals <span class="count">{proposals.length}</span></h3>
+          {#if proposals.length === 0}
+            <p class="empty">{file?.kind === "erd" || file?.kind === "class" ? "The diagram matches the project." : "Nothing to propose."}</p>
+          {:else}
+            <ul>
+              {#each proposals as p, i (p.subject + p.change)}
+                <li class={p.change}>
+                  <label>
+                    <input type="checkbox" bind:checked={ticked[i]} />
+                    <span class="change">{p.change}</span>
+                    <span class="what"><code>{p.subject}</code> {p.description}</span>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+            <button class="primary" disabled={tickedCount === 0 || applying} onclick={apply} title="Make the ticked changes in the project; one Undo takes them back">
+              {applying ? "Applying..." : `Apply ${tickedCount}`}
+            </button>
+          {/if}
+        </section>
+      </div>
     {/if}
   </div>
 
@@ -167,15 +219,17 @@
         readonly
       />
     {:else}
-      <SourceEditor
-        load={async () => ({ text: file?.text ?? "", problems: await invoke<Diagnostic[]>("check_diagram", { text: file?.text ?? "" }) })}
-        check={(text) => invoke<Diagnostic[]>("check_diagram", { text })}
-        save={async (text) => onapplied(await invoke<Preview>("save_diagram", { name, text }))}
-        reloadKey={`${name}:${file?.text ?? ""}`}
-        language="plain"
-        errorsBlockSave={false}
-        ontext={(text) => (draft = text)}
-      />
+      {#key file?.text}
+        <SourceEditor
+          load={async () => ({ text: file?.text ?? "", problems: await invoke<Diagnostic[]>("check_diagram", { text: file?.text ?? "" }) })}
+          check={(text) => invoke<Diagnostic[]>("check_diagram", { text })}
+          save={async (text) => onapplied(await invoke<Preview>("save_diagram", { name, text }))}
+          reloadKey={`${name}:${file?.text ?? ""}`}
+          language="plain"
+          errorsBlockSave={false}
+          ontext={(text) => (draft = text)}
+        />
+      {/key}
     {/if}
   </div>
 </section>
@@ -229,16 +283,22 @@
     display: none;
   }
 
-  .proposals {
+  .side {
     width: 320px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
     border-left: 1px solid var(--border);
     background: var(--panel);
     overflow: auto;
+  }
+
+  .proposals {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
   }
 
   h3 {

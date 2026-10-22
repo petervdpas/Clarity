@@ -175,3 +175,18 @@ void a_question_travels_in_the_reply_as_from_the_other_runtimes(void) {
                "{\"question\":{\"key\":\"lendTo\"},\"form\":{\"kind\":\"value\",\"type\":\"record\",\"of\":\"Friend\",\"only\":[3,5],\"default\":null},"
                "\"handler\":\"lend\",\"values\":[{\"id\":7,\"title\":\"Blue\"}]}]");
 }
+
+void a_dialog_is_asked_for_and_closes_with_its_value(void) {
+    ClarityWindowState state = {.window = "Albums", .data = cJSON_CreateObject()};
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_ask(ui, clarity_plain_text(""), clarity_ask_window("PickFriend", clarity_json_object(1, "friends", cJSON_CreateArray())), "lend", cJSON_CreateArray());
+    cJSON* reply = clarity_reply_json(clarity_ui_reply(ui, "Albums", cJSON_CreateObject()));
+    CHECK_JSON(cJSON_GetObjectItem(cJSON_GetArrayItem(cJSON_GetObjectItem(reply, "asks"), 0), "form"), "{\"kind\":\"window\",\"window\":\"PickFriend\",\"with\":{\"friends\":[]}}");
+    CHECK(!cJSON_HasObjectItem(reply, "result"));
+    ClarityWindowState picking = {.window = "PickFriend", .data = cJSON_CreateObject()};
+    ClarityUi* dialog = clarity_ui(&picking);
+    clarity_ui_close_with(dialog, cJSON_Parse("{\"id\":3,\"name\":\"Ada\"}"));
+    cJSON* closed = clarity_reply_json(clarity_ui_reply(dialog, "PickFriend", cJSON_CreateObject()));
+    CHECK(cJSON_IsTrue(cJSON_GetObjectItem(closed, "close")));
+    CHECK_JSON(cJSON_GetObjectItem(closed, "result"), "{\"id\":3,\"name\":\"Ada\"}");
+}

@@ -348,6 +348,11 @@ impl<'a> Checker<'a> {
                 page.name.span,
             );
         }
+        if let Some(gives) = &page.gives
+            && page.kind != PageKind::Dialog
+        {
+            self.error(file, format!("only a dialog gives a value; make {} a dialog, or take 'gives' away", page.name.name), gives.span);
+        }
         self.check_frame(file, &context, &page.frame);
         self.check_names(file, &page.widgets, &page.frame);
         self.check_commands_and_data(file, page);

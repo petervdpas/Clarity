@@ -197,3 +197,22 @@ func TestTheChoicesFromAListAreItsRecordsIDs(t *testing.T) {
 	got := IDs([]album{{ID: 3}, {ID: 5}})
 	equal(t, fmt.Sprint(got), "[3 5]")
 }
+
+func TestADialogIsAskedForAndClosesWithItsValue(t *testing.T) {
+	ui := NewUi(NewWindowState("Albums", nil))
+	ui.Ask(PlainText(""), WindowForm("PickFriend", map[string]any{"friends": []any{}}), "lend", map[string]any{"id": 7})
+	reply, err := ui.Reply("Albums", nil)
+	must(t, err)
+	form, _ := json.Marshal(reply.Asks[0].Form)
+	equal(t, string(form), `{"kind":"window","window":"PickFriend","with":{"friends":[]}}`)
+	plain, _ := json.Marshal(reply)
+	if strings.Contains(string(plain), `"result"`) {
+		t.Fatal("no value, no field")
+	}
+	dialog := NewUi(NewWindowState("PickFriend", nil))
+	dialog.CloseWith(map[string]any{"id": 3, "name": "Ada"})
+	closed, err := dialog.Reply("PickFriend", nil)
+	must(t, err)
+	equal(t, closed.Close, true)
+	equal(t, string(closed.Result), `{"id":3,"name":"Ada"}`)
+}

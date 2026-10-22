@@ -29,6 +29,10 @@ type AskForm struct {
 	Only []any
 	// Default is where a typed value starts.
 	Default any
+	// Window is the dialog a question of kind window opens, With its data
+	// by name; the answer is what it closes with.
+	Window string
+	With   map[string]any
 }
 
 // Confirm is a question with yes and no; the handler runs on yes.
@@ -39,7 +43,22 @@ func ValueForm(kind string, of *string, only []any, def any) AskForm {
 	return AskForm{Kind: "value", Type: kind, Of: of, Only: only, Default: def}
 }
 
+// WindowForm asks for what dialog window gives when it closes with a value.
+func WindowForm(window string, with map[string]any) AskForm {
+	if with == nil {
+		with = map[string]any{}
+	}
+	return AskForm{Kind: "window", Window: window, With: with}
+}
+
 func (f AskForm) MarshalJSON() ([]byte, error) {
+	if f.Kind == "window" {
+		return json.Marshal(struct {
+			Kind   string         `json:"kind"`
+			Window string         `json:"window"`
+			With   map[string]any `json:"with"`
+		}{f.Kind, f.Window, f.With})
+	}
 	if f.Kind == "confirm" {
 		return json.Marshal(struct {
 			Kind string `json:"kind"`
@@ -68,6 +87,16 @@ func (u *Ui) Ask(question Text, form AskForm, handler string, values ...any) {
 		raw = append(raw, text)
 	}
 	u.asks = append(u.asks, Ask{question, form, handler, raw})
+}
+
+// CloseWith closes the dialog with value, which the handler that asked for it gets.
+func (u *Ui) CloseWith(value any) {
+	text, err := json.Marshal(value)
+	if err != nil && u.err == nil {
+		u.err = &InvalidError{err.Error()}
+	}
+	u.close = true
+	u.result = text
 }
 
 // Answer is an answer as the value a handler takes: text, a number, a date,

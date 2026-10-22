@@ -101,6 +101,10 @@ cJSON* clarity_ask_confirm(const ClarityText* yes, const ClarityText* no);
 /// NULL). Takes `only` and `start`.
 cJSON* clarity_ask_value(const char* type, const char* of, cJSON* only, cJSON* start);
 
+/// A dialog window to open with `with` (its data by name, which it takes);
+/// the answer is what it closes with.
+cJSON* clarity_ask_window(const char* window, cJSON* with);
+
 /// What the screen does after a handler ran.
 typedef struct {
     ClarityWindowState state;
@@ -114,6 +118,8 @@ typedef struct {
     /// The questions to ask when the handler has finished, in order.
     ClarityAsk* asks;
     size_t ask_count;
+    /// What a dialog closes with (`close with value`), or NULL.
+    cJSON* result;
 } ClarityReply;
 
 /// What a handler can do to the screen.
@@ -188,6 +194,8 @@ void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* te
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with);
 /// Asks the screen to close the window.
 void clarity_ui_close(ClarityUi* ui);
+/// Closes the dialog with `value` (which it takes), for the handler that asked for it.
+void clarity_ui_close_with(ClarityUi* ui, cJSON* value);
 /// Asks `question` when the handler has finished; the answer runs `handler`
 /// with `values` (an array, which it takes) and, for a value, the answer.
 void clarity_ui_ask(ClarityUi* ui, const ClarityText* question, cJSON* form, const char* handler, cJSON* values);

@@ -71,6 +71,19 @@ TEST(a_question_travels_in_the_reply_as_from_the_other_runtimes) {
         {"question":{"key":"lendTo"},"form":{"kind":"value","type":"record","of":"Friend","only":[3,5],"default":null},"handler":"lend","values":[{"id":7,"title":"Blue"}]}])"));
 }
 
+TEST(a_dialog_is_asked_for_and_closes_with_its_value) {
+    Ui ui(WindowState{"Albums", json::object(), {}, {}, 0});
+    ui.ask(Text::plain(""), ask_window("PickFriend", {{"friends", json::array()}}), "lend", json::array());
+    json reply = ui.reply("Albums", json::object());
+    CHECK_EQ(reply["asks"][0]["form"], json::parse(R"({"kind":"window","window":"PickFriend","with":{"friends":[]}})"));
+    CHECK_EQ(reply.contains("result"), false);
+    Ui dialog(WindowState{"PickFriend", json::object(), {}, {}, 0});
+    dialog.close_with(json::parse(R"({"id":3,"name":"Ada"})"));
+    json closed = dialog.reply("PickFriend", json::object());
+    CHECK_EQ(closed["close"], json(true));
+    CHECK_EQ(closed["result"], json::parse(R"({"id":3,"name":"Ada"})"));
+}
+
 TEST(rows_read_again_have_no_selected_row) {
     WindowState state = json::parse(R"({"window":"Orders","data":{},"parts":{},"selected":{"grid":1,"other":0}})").get<WindowState>();
     Ui ui(state);

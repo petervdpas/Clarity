@@ -42,6 +42,11 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>Windows a running handler asked to open, and whether it asked to close this one.</summary>
     readonly List<(WindowViewModel Window, bool NewWindow)> opening = [];
     readonly List<Question> asking = [];
+
+    /// <summary>For a dialog asked for: runs the handler of the window that asked, with what it closes with.</summary>
+    Action<object?>? whenClosedWith;
+    object? closedWith;
+    bool closingWith;
     bool closing;
     int running;
 
@@ -81,7 +86,7 @@ public abstract class WindowViewModel(Db db) : ObservableObject
         opening.Clear();
         asking.Clear();
         if (close)
-            CloseRequested?.Invoke();
+            Closed();
         foreach (var (other, newWindow) in open)
             OpenRequested?.Invoke(other, newWindow);
         // The questions it asked, after what changed is on screen.
@@ -127,7 +132,36 @@ public abstract class WindowViewModel(Db db) : ObservableObject
         if (running > 0)
             closing = true;
         else
-            CloseRequested?.Invoke();
+            Closed();
+    }
+
+    /// <summary>Closes this dialog with <paramref name="value"/> (<c>close with value</c>), which the handler that asked for it gets.</summary>
+    protected void CloseWith(object? value)
+    {
+        closedWith = value;
+        closingWith = true;
+        Close();
+    }
+
+    /// <summary>The window closes; a dialog that closed with a value then gives it to the window that asked for it.</summary>
+    void Closed()
+    {
+        CloseRequested?.Invoke();
+        if (!closingWith)
+            return;
+        closingWith = false;
+        whenClosedWith?.Invoke(closedWith);
+    }
+
+    /// <summary>
+    /// Opens the dialog <paramref name="dialog"/> (<c>ask PickFriend then lend(album)</c>);
+    /// what it closes with runs <paramref name="answered"/> on this window, as any
+    /// handler runs. Closed any other way, it runs nothing.
+    /// </summary>
+    protected void Ask(WindowViewModel dialog, Action<object?> answered)
+    {
+        dialog.whenClosedWith = value => Handle(() => answered(value));
+        Open(dialog);
     }
 
     /// <summary>Ends the application: the built-in <c>quit</c>.</summary>

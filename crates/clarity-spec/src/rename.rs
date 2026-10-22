@@ -192,7 +192,9 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => expr(text, name, found),
             StmtKind::Ask { question, form, args, .. } => {
-                expr(question, name, found);
+                if let Some(question) = question {
+                    expr(question, name, found);
+                }
                 for e in crate::code::ask_exprs(form) {
                     expr(e, name, found);
                 }
@@ -205,7 +207,7 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                     expr(&arg.value, name, found);
                 }
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } => expr(value, name, found),
+            StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } => expr(value, name, found),
             StmtKind::Write { text, path, .. } => {
                 expr(text, name, found);
                 expr(path, name, found);

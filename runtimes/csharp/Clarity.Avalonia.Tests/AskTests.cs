@@ -29,8 +29,50 @@ sealed class AlbumsViewModel(Db db) : WindowViewModel(db)
         }));
 }
 
+sealed class PickFriendViewModel(Db db) : WindowViewModel(db)
+{
+    public override bool IsDialog => true;
+
+    public void Picked(string friend) => Handle(() => CloseWith(friend));
+
+    public void Cancelled() => Handle(Close);
+}
+
+sealed class LenderViewModel(Db db) : WindowViewModel(db)
+{
+    public List<string> Log { get; } = [];
+    public PickFriendViewModel? Opened { get; private set; }
+
+    public void LendClicked() => Handle(() =>
+    {
+        Opened = new PickFriendViewModel(Db);
+        Ask(Opened, answer => Log.Add($"lent to {(string)answer!}"));
+    });
+}
+
 public class AskTests
 {
+    [AvaloniaFact]
+    public void A_dialog_asked_for_gives_what_it_closes_with_to_the_window_that_asked()
+    {
+        using var db = Db.Memory();
+        var lender = new LenderViewModel(db);
+        var opened = new List<WindowViewModel>();
+        lender.OpenRequested += (other, _) => opened.Add(other);
+        lender.LendClicked();
+        Assert.Same(lender.Opened, Assert.Single(opened));
+        var closed = 0;
+        lender.Opened!.CloseRequested += () => closed++;
+        lender.Opened.Picked("Ada");
+        Assert.Equal(1, closed);
+        Assert.Equal(["lent to Ada"], lender.Log);
+
+        // Closed without a value, it runs nothing.
+        lender.LendClicked();
+        lender.Opened!.Cancelled();
+        Assert.Equal(["lent to Ada"], lender.Log);
+    }
+
     [AvaloniaFact]
     public void A_question_is_asked_when_the_handler_has_finished_and_its_answer_runs_as_a_handler()
     {

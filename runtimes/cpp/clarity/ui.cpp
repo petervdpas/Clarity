@@ -55,7 +55,7 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_};
 }
 
 namespace {
@@ -151,6 +151,7 @@ void to_json(nlohmann::json& out, const Reply& r) {
         for (const auto& [data, text] : r.shown) shown[data] = text;
         out["shown"] = shown;
     }
+    if (r.result) out["result"] = *r.result;
     if (!r.asks.empty()) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});
@@ -160,6 +161,10 @@ void to_json(nlohmann::json& out, const Reply& r) {
 
 nlohmann::json ask_confirm(std::optional<Text> yes, std::optional<Text> no) {
     return {{"kind", "confirm"}, {"yes", yes ? nlohmann::json(*yes) : nlohmann::json(nullptr)}, {"no", no ? nlohmann::json(*no) : nlohmann::json(nullptr)}};
+}
+
+nlohmann::json ask_window(const std::string& window, nlohmann::json with) {
+    return {{"kind", "window"}, {"window", window}, {"with", with.is_object() ? std::move(with) : nlohmann::json::object()}};
 }
 
 nlohmann::json ask_value(const std::string& type, std::optional<std::string> of, nlohmann::json only, nlohmann::json start) {

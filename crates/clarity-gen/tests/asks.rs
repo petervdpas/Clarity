@@ -38,6 +38,8 @@ fn rust_asks_in_the_reply_and_answers_through_its_own_command() {
     has(&code, "            answer_event,");
     has(&code, "clarity_runtime::ui::answer_record(db, value(0)?)?, clarity_runtime::ui::answer_record(db, value(1)?)?");
     has(&code, "clarity_runtime::ui::answer(value(0)?)?");
+    has(&code, "clarity_runtime::ui::AskForm::Window { window: \"PickFriend\".to_string(), with: [].into_iter().collect() }");
+    has(&code, "ui.close_with(to_value(&");
 }
 
 #[test]
@@ -49,6 +51,8 @@ fn go_asks_in_the_reply_and_answers_through_its_windows() {
     has(&code, "func (windows) Answer(db *clarity.Db, state clarity.WindowState, handler string, values []json.RawMessage)");
     has(&code, "clarity.AnswerRecord[Friend](db, values[1])");
     has(&code, "clarity.Answer[int64](values[0])");
+    has(&code, "clarity.WindowForm(\"PickFriend\", map[string]any{})");
+    has(&code, "ui.CloseWith(");
 }
 
 #[test]
@@ -60,6 +64,8 @@ fn c_asks_in_the_reply_and_answers_through_its_windows() {
     has(&code, "static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out)");
     has(&code, "picture, redraw, answer}");
     has(&code, "friend_get(db, (int64_t)a1->valuedouble, &v1)");
+    has(&code, "clarity_ask_window(\"PickFriend\", cJSON_CreateObject())");
+    has(&code, "clarity_ui_close_with(ui, ");
 }
 
 #[test]
@@ -71,6 +77,8 @@ fn cpp_asks_in_the_reply_and_answers_through_its_windows() {
     has(&code, "clarity::Reply answer(");
     has(&code, "db.get<Friend>(values.at(1).get<int64_t>())");
     has(&code, "values.at(0).get<int64_t>()");
+    has(&code, "clarity::ask_window(\"PickFriend\", nlohmann::json::object({}))");
+    has(&code, "ui.close_with(nlohmann::json(");
 }
 
 #[test]
@@ -84,4 +92,7 @@ fn avalonia_asks_its_window_and_the_answer_calls_the_handler() {
     has(&code, "Db.Get<Friend>((long)answer!))");
     has(&code, "new ValueForm(new FieldFormat(FormatKind.Integer), null, (object?)(");
     has(&code, "answer => OnSetFormat((Format)answer!)");
+    has(&code, "Ask(new PickFriendViewModel(Db), answer => OnLend(");
+    has(&code, ", (Friend)answer!));");
+    has(&code, "CloseWith(");
 }

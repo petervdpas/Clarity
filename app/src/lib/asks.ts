@@ -14,7 +14,9 @@ export type AskType = "text" | "integer" | "decimal" | "money" | "date" | "datet
 /** What a question asks for: yes or no, or a value of a type (of an enum or entity), narrowed to `only`, starting at `default`. */
 export type AskForm =
   | { kind: "confirm"; yes: ShownText | null; no: ShownText | null }
-  | { kind: "value"; type: AskType; of: string | null; only: JsonValue[] | null; default: JsonValue | null };
+  | { kind: "value"; type: AskType; of: string | null; only: JsonValue[] | null; default: JsonValue | null }
+  /** A dialog window of the application, opened with `with`; the answer is what it closes with. */
+  | { kind: "window"; window: string; with: Record<string, JsonValue> };
 
 export type Ask = { question: ShownText; form: AskForm; handler: string; values: JsonValue[] };
 
@@ -34,7 +36,7 @@ export function numberFormat(type: AskType): FieldFormat | null {
 /** Whether `value` answers the question: a choice or a number needs one; text may be empty; a yes needs nothing. */
 export function answerable(form: AskForm, value: JsonValue | null): boolean {
   if (form.kind === "confirm") return true;
-  if (form.type === "text") return true;
+  if (form.kind === "window" || form.type === "text") return true;
   return value !== null && value !== "";
 }
 

@@ -80,7 +80,7 @@ fn ask_reads_a_question_its_form_and_the_handler_the_answer_runs() {
     assert_eq!(asks.len(), 4);
     let StmtKind::Ask { question, form, then, args } = asks[0] else { unreachable!() };
     // Texts people read are keys, the question's slot filled by name.
-    assert!(matches!(&question.kind, ExprKind::Key { args, .. } if args.len() == 1), "{question:?}");
+    assert!(matches!(question.as_ref().map(|q| &q.kind), Some(ExprKind::Key { args, .. }) if args.len() == 1), "{question:?}");
     let AskForm::Confirm { yes: Some(yes), no: Some(_) } = form.as_ref() else { panic!("{form:?}") };
     assert!(matches!(yes.kind, ExprKind::Key { .. }), "{yes:?}");
     assert_eq!((then.name.as_str(), args.len()), ("deleteConfirmed", 0));
@@ -171,4 +171,65 @@ fn a_question_written_as_text_asks_for_a_key_as_a_message_does() {
     let about = |p: &Project| p.diagnostics.iter().filter(|d| d.message.contains("key")).map(|d| d.message.clone()).collect::<Vec<_>>();
     assert!(!about(&message).is_empty(), "a message written as text asks for a key");
     assert_eq!(about(&p).len(), about(&message).len(), "{:#?}", about(&p));
+}
+
+/// A dialog window that gives a record: its handler closes it with one.
+const PICK: &str = "
+page PickFriend: dialog gives Friend
+    data friends: list<Friend>
+    table name grid at 1,1 span 12 rows 6 bind friends columns name
+    button \"OK\" name okButton at 1,7 span 2 on click: picked
+";
+
+fn dialog_project(albums: &str, pick: &str) -> Project {
+    let text = format!("{MUSIC}{pick}\ncode Albums\n{albums}\ncode PickFriend\n    handler picked\n        close with grid.selected\n");
+    load_keyed([("music.clarity", text.as_str())], &[], "en")
+}
+
+fn dialog_errors(albums: &str, pick: &str) -> Vec<String> {
+    dialog_project(albums, pick).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect()
+}
+
+const LEND: &str = "    handler lendClicked
+        ask PickFriend then lend(album)
+
+    handler lend(what: Album, friend: Friend)
+        save what
+";
+
+#[test]
+fn a_dialog_gives_what_it_closes_with_to_the_handler_after_then() {
+    let p = dialog_project(LEND, PICK);
+    let errors: Vec<&str> = p.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let page = p.files[0].pages.iter().find(|pg| pg.name.name == "PickFriend").unwrap();
+    assert_eq!(page.gives.as_ref().map(|t| t.kind.clone()), Some(TypeRefKind::Named { name: "Friend".into() }));
+    let albums = p.files[0].code.iter().find(|c| c.name.name == "Albums").unwrap();
+    let StmtKind::Ask { question, form, then, args } = &albums.handlers[0].body[0].kind else { panic!() };
+    assert!(question.is_none(), "a dialog says what it asks itself");
+    let AskForm::Window { window, with } = form.as_ref() else { panic!("{form:?}") };
+    assert_eq!((window.name.as_str(), with.len(), then.name.as_str(), args.len()), ("PickFriend", 0, "lend", 1));
+    let pick = p.files[0].code.iter().find(|c| c.name.name == "PickFriend").unwrap();
+    assert!(matches!(pick.handlers[0].body[0].kind, StmtKind::CloseWith { .. }));
+}
+
+#[test]
+fn only_a_dialog_gives_a_value_and_it_gives_what_it_says() {
+    let window = dialog_errors(LEND, &PICK.replace("dialog gives Friend", "window gives Friend"));
+    assert!(window.iter().any(|m| m.contains("only a dialog gives a value")), "{window:#?}");
+    let nothing = dialog_errors(LEND, &PICK.replace(" gives Friend", ""));
+    assert!(nothing.iter().any(|m| m.contains("PickFriend gives nothing")), "{nothing:#?}");
+    let text = format!("{MUSIC}{PICK}\ncode Albums\n{LEND}\ncode PickFriend\n    handler picked\n        close with \"Ada\"\n");
+    let p = load_keyed([("music.clarity", text.as_str())], &[], "en");
+    assert!(p.diagnostics.iter().any(|d| d.message.contains("PickFriend gives Friend, not text")), "{:#?}", p.diagnostics);
+}
+
+#[test]
+fn asking_a_dialog_wants_one_that_gives_what_the_handler_takes() {
+    let not_dialog = dialog_errors("    handler lendClicked\n        ask Albums then lend(album)\n    handler lend(what: Album, friend: Friend)\n        save what\n", PICK);
+    assert!(not_dialog.iter().any(|m| m.contains("Albums is no dialog")), "{not_dialog:#?}");
+    let takes_text = dialog_errors("    handler lendClicked\n        ask PickFriend then named\n    handler named(name: text)\n        album.title = name\n", PICK);
+    assert!(takes_text.iter().any(|m| m.contains("the answer is Friend")), "{takes_text:#?}");
+    let unknown = dialog_errors("    handler lendClicked\n        ask PickFriend with nobody = album then lend(album)\n    handler lend(what: Album, friend: Friend)\n        save what\n", PICK);
+    assert!(unknown.iter().any(|m| m.contains("PickFriend has no data 'nobody'")), "{unknown:#?}");
 }

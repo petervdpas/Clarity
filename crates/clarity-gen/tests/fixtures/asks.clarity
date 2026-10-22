@@ -19,6 +19,12 @@ page Albums: window
     button "Lend" name lendButton at 3,1 span 2 on click: lendClicked
     button "Copies" name copiesButton at 5,1 span 2 on click: copiesClicked
     button "Format" name formatButton at 7,1 span 2 on click: formatClicked
+    button "Pick" name pickButton at 9,1 span 2 on click: pickClicked
+
+page PickFriend: dialog gives Friend
+    data friends: list<Friend>
+    table name grid at 1,1 span 12 rows 6 bind friends columns name
+    button "OK" name okButton at 1,7 span 2 on click: picked
 
 code Albums
     handler deleteClicked
@@ -45,3 +51,10 @@ code Albums
 
     handler setFormat(format: Format)
         album.format = format
+
+    handler pickClicked
+        ask PickFriend then lend(album)
+
+code PickFriend
+    handler picked
+        close with grid.selected

@@ -531,3 +531,25 @@ fn an_engine_written_in_clarity_runs() {
     assert!(output.status.success(), "{report}\nthe project is in {}", out.display());
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// A window that asks each kind of question (DESIGN 5.14) builds with
+/// cargo, on the runtime in this repository.
+#[test]
+#[ignore]
+fn questions_and_their_answers_build_in_rust() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.backend = clarity_project::Backend::Rust;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-build-asks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+    patch(&out);
+    let target = root.join("target/generated");
+    let status = Command::new("cargo").args(["build", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", &target).status().unwrap();
+    assert!(status.success(), "the generated project does not build; it is in {}", out.display());
+    std::fs::remove_dir_all(&out).unwrap();
+}

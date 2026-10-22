@@ -118,7 +118,7 @@ fn no_resources_no_folder() {
 fn the_rust_shell_opens_links() {
     let files = files(Backend::Rust, Ui::Web);
     let main = text(&files, "src/main.rs");
-    assert!(main.contains("fn open_link(address: String) -> Result<(), String> {"), "{main}");
+    assert!(main.contains("fn open_link(address: String) -> std::result::Result<(), String> {"), "{main}");
     assert!(main.contains("[\"http://\", \"https://\", \"mailto:\"]"), "{main}");
     assert!(main.contains("            open_link,\n"), "{main}");
 }

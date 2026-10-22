@@ -102,6 +102,9 @@ nlohmann::json ask_confirm(std::optional<Text> yes, std::optional<Text> no);
 /// typed value starts (or null).
 nlohmann::json ask_value(const std::string& type, std::optional<std::string> of, nlohmann::json only, nlohmann::json start);
 
+/// A dialog window to open with `with` (its data by name); the answer is what it closes with.
+nlohmann::json ask_window(const std::string& window, nlohmann::json with);
+
 /// What the screen does after a handler ran.
 struct Reply {
     WindowState state;
@@ -113,6 +116,8 @@ struct Reply {
     bool close = false;
     /// The questions to ask when the handler has finished, in order.
     std::vector<Ask> asks;
+    /// What a dialog closes with (`close with value`), for the handler that asked for it.
+    std::optional<nlohmann::json> result;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -192,6 +197,11 @@ public:
     void open(const std::string& window, nlohmann::json with) { open_.push_back({window, std::move(with)}); }
     /// Asks the screen to close the window.
     void close() { close_ = true; }
+    /// Closes the dialog with `value`, which the handler that asked for it gets.
+    void close_with(nlohmann::json value) {
+        close_ = true;
+        result_ = std::move(value);
+    }
     /// Asks `question` when the handler has finished; the answer runs
     /// `handler` with `values` and, for a value, the answer.
     void ask(Text question, nlohmann::json form, std::string handler, nlohmann::json values) {
@@ -203,6 +213,7 @@ public:
 
 private:
     int64_t pointer(const std::string& part, const char* key) const;
+    std::optional<nlohmann::json> result_;
     std::vector<Ask> asks_;
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;

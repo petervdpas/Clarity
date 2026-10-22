@@ -661,7 +661,7 @@ impl<'a> Emitter<'a> {
                 let (path, text) = (self.value(path), self.value(text));
                 let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
             }
-            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
@@ -693,7 +693,11 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "ui.message(clarity::Level::{level}, {text});");
             }
             StmtKind::Ask { question, form, then, args } => {
-                let question = self.shown(question);
+                // A dialog window says what it asks itself.
+                let question = match question {
+                    Some(question) => self.shown(question),
+                    None => "clarity::Text::plain(\"\")".to_string(),
+                };
                 let form = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("std::nullopt".to_string(), |t| self.shown(t));
@@ -710,6 +714,10 @@ impl<'a> Emitter<'a> {
                         });
                         format!("clarity::ask_value({}, {of}, {only}, {start})", string(word))
                     }
+                    AskForm::Window { window, with } => {
+                        let with: Vec<String> = with.iter().map(|a| format!("{{{}, {}}}", string(&a.name.name), self.value(&a.value))).collect();
+                        format!("clarity::ask_window({}, nlohmann::json::object({{{}}}))", string(&window.name), with.join(", "))
+                    }
                 };
                 let values: Vec<String> = args.iter().map(|a| format!("nlohmann::json({})", self.value(a))).collect();
                 let values = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
@@ -720,6 +728,9 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "ui.open({}, nlohmann::json::object({{{}}}));", string(&window.name), args.join(", "));
             }
             StmtKind::Close => out.push_str("ui.close();\n"),
+            StmtKind::CloseWith { value } => {
+                let _ = writeln!(out, "ui.close_with(nlohmann::json({}));", self.value(value));
+            }
             StmtKind::Reload { data } => {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {

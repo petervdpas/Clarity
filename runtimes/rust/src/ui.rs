@@ -377,6 +377,9 @@ pub enum AskForm {
         only: Option<Vec<Value>>,
         default: Option<Value>,
     },
+    /// A dialog window of the application, opened with `with`; the answer
+    /// is what it closes with (`close with value`).
+    Window { window: String, with: Map<String, Value> },
 }
 
 /// An answer as the value a handler takes: text, a number, a date, an enum's value.
@@ -412,6 +415,9 @@ pub struct Reply {
     /// The questions to ask when the handler has finished, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub asks: Vec<Ask>,
+    /// What a dialog closes with (`close with value`), for the handler that asked for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
 }
 
 /// What a handler can do to the screen.
@@ -424,6 +430,7 @@ pub struct Ui {
     shown: BTreeMap<String, Text>,
     open: Vec<OpenRequest>,
     asks: Vec<Ask>,
+    result: Option<Value>,
     pub close: bool,
 }
 
@@ -598,6 +605,12 @@ impl Ui {
         });
     }
 
+    /// Closes the dialog with `value`, which the handler that asked for it gets.
+    pub fn close_with(&mut self, value: Value) {
+        self.close = true;
+        self.result = Some(value);
+    }
+
     /// Asks `question` when the handler has finished; the answer runs `handler` with `values`.
     pub fn ask(&mut self, question: Text, form: AskForm, handler: &str, values: Vec<Value>) {
         self.asks.push(Ask { question, form, handler: handler.to_string(), values });
@@ -618,6 +631,7 @@ impl Ui {
             open: self.open,
             close: self.close,
             asks: self.asks,
+            result: self.result,
         }
     }
 }
@@ -764,6 +778,25 @@ mod tests {
                 }
             ])
         );
+    }
+
+    /// A dialog asked for (`ask PickFriend then lend(album)`) opens; the
+    /// reply of the handler that closes it with a value carries the value.
+    #[test]
+    fn a_dialog_is_asked_for_and_closes_with_its_value() {
+        let mut ui = Ui::default();
+        let mut with = Map::new();
+        with.insert("friends".into(), serde_json::json!([]));
+        ui.ask(Text::plain(""), AskForm::Window { window: "PickFriend".into(), with }, "lend", vec![serde_json::json!({ "id": 7 })]);
+        let wire = serde_json::to_value(ui.reply("Albums", Map::new())).unwrap();
+        assert_eq!(wire["asks"][0]["form"], serde_json::json!({ "kind": "window", "window": "PickFriend", "with": { "friends": [] } }));
+        assert!(wire.get("result").is_none(), "no value, no field");
+
+        let mut dialog = Ui::default();
+        dialog.close_with(serde_json::json!({ "id": 3, "name": "Ada" }));
+        let wire = serde_json::to_value(dialog.reply("PickFriend", Map::new())).unwrap();
+        assert_eq!(wire["close"], true);
+        assert_eq!(wire["result"], serde_json::json!({ "id": 3, "name": "Ada" }));
     }
 
     #[test]

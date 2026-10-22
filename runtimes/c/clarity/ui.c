@@ -15,6 +15,7 @@ struct ClarityUi {
     size_t open_count, open_room;
     ClarityAsk* asks;
     size_t ask_count, ask_room;
+    cJSON* result;
     bool close;
 };
 
@@ -246,6 +247,19 @@ void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with) {
 
 void clarity_ui_close(ClarityUi* ui) { ui->close = true; }
 
+void clarity_ui_close_with(ClarityUi* ui, cJSON* value) {
+    ui->close = true;
+    ui->result = value ? value : cJSON_CreateNull();
+}
+
+cJSON* clarity_ask_window(const char* window, cJSON* with) {
+    cJSON* form = cJSON_CreateObject();
+    cJSON_AddStringToObject(form, "kind", "window");
+    cJSON_AddStringToObject(form, "window", window);
+    cJSON_AddItemToObject(form, "with", with ? with : cJSON_CreateObject());
+    return form;
+}
+
 static cJSON* text_or_null(const ClarityText* text) { return text ? clarity_text_json(text) : cJSON_CreateNull(); }
 
 cJSON* clarity_ask_confirm(const ClarityText* yes, const ClarityText* no) {
@@ -285,6 +299,7 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->close = ui->close;
     r->asks = ui->asks;
     r->ask_count = ui->ask_count;
+    r->result = ui->result;
     return r;
 }
 
@@ -418,6 +433,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
         cJSON_AddItemToArray(open, o);
     }
     cJSON_AddBoolToObject(out, "close", r->close);
+    if (r->result) cJSON_AddItemToObject(out, "result", cJSON_Duplicate(r->result, true));
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

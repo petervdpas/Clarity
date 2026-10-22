@@ -987,7 +987,11 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "clarity_ui_message(ui, {level}, {text});");
             }
             StmtKind::Ask { question, form, then, args } => {
-                let question = self.shown(question, &mut pre);
+                // A dialog window says what it asks itself.
+                let question = match question {
+                    Some(question) => self.shown(question, &mut pre),
+                    None => "clarity_plain_text(\"\")".to_string(),
+                };
                 let form = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("NULL".to_string(), |t| self.shown(t, &mut pre));
@@ -1015,6 +1019,15 @@ impl<'a> Emitter<'a> {
                         });
                         format!("clarity_ask_value({}, {of}, {only}, {start})", string(word))
                     }
+                    AskForm::Window { window, with } => {
+                        let mut fields = Vec::new();
+                        for arg in with {
+                            let json = self.json(&arg.value, &mut pre);
+                            fields.push(format!("{}, {json}", string(&arg.name.name)));
+                        }
+                        let with = if fields.is_empty() { "cJSON_CreateObject()".to_string() } else { format!("clarity_json_object({}, {})", fields.len(), fields.join(", ")) };
+                        format!("clarity_ask_window({}, {with})", string(&window.name))
+                    }
                 };
                 let values = self.temp();
                 let _ = writeln!(pre, "cJSON* {values} = cJSON_CreateArray();");
@@ -1036,6 +1049,11 @@ impl<'a> Emitter<'a> {
                 let _ = writeln!(out, "clarity_ui_open(ui, {}, {with});", string(&window.name));
             }
             StmtKind::Close => out.push_str("clarity_ui_close(ui);\n"),
+            StmtKind::CloseWith { value } => {
+                let json = self.json(value, &mut pre);
+                out.push_str(&pre);
+                let _ = writeln!(out, "clarity_ui_close_with(ui, {json});");
+            }
             StmtKind::Reload { data } => {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {

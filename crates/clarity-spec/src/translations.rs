@@ -183,7 +183,9 @@ impl Shown {
             match &stmt.kind {
                 StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.written(text),
                 StmtKind::Ask { question, form, .. } => {
-                    self.written(question);
+                    if let Some(question) = question {
+                        self.written(question);
+                    }
                     if let crate::code::AskForm::Confirm { yes, no } = form.as_ref() {
                         for text in yes.iter().chain(no) {
                             self.written(text);

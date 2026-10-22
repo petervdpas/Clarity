@@ -598,7 +598,7 @@ fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<Str
 /// Opens a link of a markdown part in the person's browser: only a web or a
 /// mail address, as on every stack.
 #[tauri::command]
-fn open_link(address: String) -> Result<(), String> {{
+fn open_link(address: String) -> std::result::Result<(), String> {{
     if !["http://", "https://", "mailto:"].iter().any(|scheme| address.starts_with(scheme)) {{
         return Err(format!("a link opens only an http, https or mailto address, not {{address}}"));
     }}

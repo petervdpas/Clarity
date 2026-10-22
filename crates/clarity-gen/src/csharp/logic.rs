@@ -420,7 +420,7 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}throw new RefusedException({text});\n"));
             }
-            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::CloseWith { .. } | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
@@ -466,8 +466,27 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}var {local} = {};\n", self.value(arg)));
                     passed.push(local);
                 }
-                let question = self.shown(question);
                 let method = format!("On{}", pascal(&then.name));
+                // A dialog window opens as `open` opens it; what it closes with is the answer, of the type it gives.
+                if let AskForm::Window { window, with } = form.as_ref() {
+                    let init: Vec<String> = with.iter().map(|a| format!("{} = {}", pascal(&a.name.name), self.value(&a.value))).collect();
+                    let init = if init.is_empty() { String::new() } else { format!(" {{ {} }}", init.join(", ")) };
+                    let gives = self.project.files.iter().flat_map(|f| &f.pages).find(|p| p.name.name == window.name).and_then(|p| p.gives.as_ref());
+                    let (word, of) = gives.map_or(("text", None), |g| crate::ask_type(self.project, g));
+                    let answer = match word {
+                        "record" | "enum" => format!("({})answer!", of.unwrap_or_default()),
+                        "integer" | "duration" => "(long)answer!".to_string(),
+                        "decimal" | "money" => "(decimal)answer!".to_string(),
+                        "date" => "(DateOnly?)answer".to_string(),
+                        "datetime" => "(DateTime?)answer".to_string(),
+                        _ => "(string)answer!".to_string(),
+                    };
+                    let mut values = passed.clone();
+                    values.push(answer);
+                    out.push_str(&format!("{pad}Ask(new {}ViewModel({db}){init}, answer => {method}({}));\n", window.name, values.join(", ")));
+                    return;
+                }
+                let question = question.as_ref().map_or("Text.Plain(\"\")".to_string(), |q| self.shown(q));
                 let (form, answered) = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("null".to_string(), |t| self.shown(t));
@@ -510,6 +529,7 @@ impl<'a> Emitter<'a> {
                         values.push(answer);
                         (format!("new ValueForm({format}, {choices}, {start})"), format!("answer => {method}({})", values.join(", ")))
                     }
+                    AskForm::Window { .. } => unreachable!("a dialog window is asked above"),
                 };
                 out.push_str(&format!("{pad}Ask({question}, {form}, {answered});\n"));
             }
@@ -519,6 +539,7 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}Open(new {}ViewModel({db}){init});\n", window.name));
             }
             StmtKind::Close => out.push_str(&format!("{pad}Close();\n")),
+            StmtKind::CloseWith { value } => out.push_str(&format!("{pad}CloseWith({});\n", self.value(value))),
             StmtKind::Reload { data } => {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {

@@ -418,7 +418,11 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}ui.message(Level::{level}, {text});\n"));
             }
             StmtKind::Ask { question, form, then, args } => {
-                let question = self.shown(question);
+                // A dialog window says what it asks itself.
+                let question = match question {
+                    Some(question) => self.shown(question),
+                    None => "Text::plain(\"\")".to_string(),
+                };
                 let form = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
@@ -435,6 +439,10 @@ impl<'a> Emitter<'a> {
                         });
                         format!("clarity_runtime::ui::AskForm::Value {{ ty: {word:?}.to_string(), of: {of}, only: {only}, default: {default} }}")
                     }
+                    AskForm::Window { window, with } => {
+                        let with: Vec<String> = with.iter().map(|a| format!("({:?}.to_string(), to_value(&{})?)", a.name.name, self.value(&a.value))).collect();
+                        format!("clarity_runtime::ui::AskForm::Window {{ window: {:?}.to_string(), with: [{}].into_iter().collect() }}", window.name, with.join(", "))
+                    }
                 };
                 let values: Vec<String> = args.iter().map(|a| format!("to_value(&{})?", self.value(a))).collect();
                 out.push_str(&format!("{pad}ui.ask({question}, {form}, {:?}, vec![{}]);\n", then.name, values.join(", ")));
@@ -447,6 +455,7 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}ui.open({:?}, vec![{}]);\n", window.name, args.join(", ")));
             }
             StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
+            StmtKind::CloseWith { value } => out.push_str(&format!("{pad}ui.close_with(to_value(&{})?);\n", self.value(value))),
             StmtKind::Reload { data } => {
                 let found = self.window.as_ref().and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name).cloned());
                 match found {
@@ -1379,7 +1388,12 @@ impl {struct_name} {{
             let values: String = handler
                 .params
                 .iter()
-                .map(|p| format!(", {}: {}", ident(&p.name.name), value_type(&type_ref_info(project, &p.ty))))
+                // A record `mut`, as code may change and save a record it was given.
+                .map(|p| {
+                    let ty = type_ref_info(project, &p.ty);
+                    let binding = if matches!(ty, TypeInfo::Record(_)) { "mut " } else { "" };
+                    format!(", {binding}{}: {}", ident(&p.name.name), value_type(&ty))
+                })
                 .collect();
             let mut emitter = Emitter {
                 project,

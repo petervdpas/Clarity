@@ -224,6 +224,9 @@ pub struct Page {
     pub frame: Frame,
     /// Handlers of the window's own events: open, close, return.
     pub handlers: Vec<Handler>,
+    /// What a dialog gives when it closes with a value (`page X: dialog
+    /// gives Friend`), for the handler that asked for it (DESIGN 5.14).
+    pub gives: Option<crate::code::TypeRef>,
     pub span: Span,
 }
 

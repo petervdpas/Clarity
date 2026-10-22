@@ -48,7 +48,8 @@
     X(an_engine_uses_the_services_it_declares)                    \
     X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
     X(an_engine_with_state_per_window_keeps_an_instance_for_each_window) \
-    X(a_question_travels_in_the_reply_as_from_the_other_runtimes)
+    X(a_question_travels_in_the_reply_as_from_the_other_runtimes) \
+    X(a_dialog_is_asked_for_and_closes_with_its_value)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

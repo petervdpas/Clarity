@@ -455,7 +455,7 @@ page CustomerForm: window
 | Kind | Is |
 |---|---|
 | `window` | a window of its own, which can have a menu, toolbar, ribbon, sidebars and a footer |
-| `dialog` | a modal window |
+| `dialog` | a modal window; `dialog gives Type` closes with a value of that type (see [Asking the person](#asking-the-person)) |
 | `view` | content shown inside the app's frame |
 
 Only a `window` has frame regions of its own.
@@ -889,7 +889,19 @@ A handler can ask the person something: a yes or no, a text, a number, a day, a 
 
 - **What is asked decides the dialog.** `yes @word no @word` asks yes or no; the handler runs on yes and takes no answer (without `yes` and `no` the buttons say OK and Cancel). `for text`, `for integer`, `decimal`, `money`, `date`, `datetime` or `duration` asks for a typed value; `default value` fills it first. `for` an enum offers its values with their labels. `for` an entity offers its records to choose from; `from list` offers the records of a list instead.
 - **The answer** is the last value of the handler after `then`. Values written in the call come first (`then lend(album)`), which is how what the asking handler knew reaches the answering one, as it was when it asked. The answer's type must be the type of the handler's last parameter.
-- **Cancelling** (no, Escape, a click beside the dialog) runs nothing.
+- **A dialog window of your own** answers too. A dialog that gives a value says its type, and its handlers close it with one:
+
+      page PickFriend: dialog gives Friend
+          data friends: list<Friend>
+          table name grid at 1,1 span 12 rows 6 bind friends columns name
+          button @ok name okButton at 1,7 span 2 on click: picked
+
+      code PickFriend
+          handler picked
+              close with grid.selected
+
+  `ask PickFriend then lend(album)` opens it, as `open` does, and what it closes with is the answer; `ask PickFriend with friends = mine then lend(album)` fills its data first. Only a dialog gives a value, every `close with` in it gives the type it says, and the answer's type is that type. A dialog closed without a value runs nothing.
+- **Cancelling** (no, Escape, a click beside the dialog, or a dialog closed without a value) runs nothing.
 - **When.** The statements after `ask` still run; the dialog shows when the handler has finished, with whatever else it changed. A handler that asks twice asks one question after the other. A handler that asks and closes its window is an error: the answer would have nowhere to go.
 - **Where.** Only handlers ask. A function has no effects, and an action may run where nobody is at the screen.
 - The question and the words of its buttons are keys, as every text people read.
@@ -1102,6 +1114,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `open Window` | Opens a window. | handlers |
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
 | `close` | Closes this window. | handlers |
+| `close with expr` | Closes this dialog with a value of the type it gives, for the handler that asked for it. | handlers of a dialog that gives one |
 | `save expr` | Stores a record in its data source. A new record gets its id. | handlers, actions, data events |
 | `delete expr` | Removes a record from its data source. | handlers, actions, data events |
 | `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
@@ -1377,7 +1390,7 @@ type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "mo
 modifier      = "required" | "unique" | "owned" | "computed"
               | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "column") String | "format" name
 
-page          = "page" Name ":" ("window" | "dialog" | "view")
+page          = "page" Name ":" ("window" | "dialog" ["gives" type] | "view")
                     (page-setting | region | part)*
 page-setting  = "title" String | "size" n "x" n
               | "data" name ":" (Entity | "list" "<" Entity ">" | type-ref ["," "default" value])

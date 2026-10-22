@@ -477,7 +477,7 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
         }
         Some("close") => {
             cursor.next();
-            StmtKind::Close
+            if cursor.eat_keyword("with") { StmtKind::CloseWith { value: parse_expr(&mut cursor)? } } else { StmtKind::Close }
         }
         Some("message") => {
             cursor.next();
@@ -497,7 +497,36 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
         }
         Some("ask") => {
             cursor.next();
-            let question = parse_expr(&mut cursor)?;
+            // `ask PickFriend [with ...] then ...`: a dialog window, named as windows are.
+            let names_window = cursor.peek().is_some_and(|t| t.kind == TokenKind::Ident && t.text.starts_with(char::is_uppercase))
+                && tokens.get(2).is_some_and(|t| t.kind == TokenKind::Ident && matches!(t.text.as_str(), "with" | "then"));
+            if names_window {
+                let window = cursor.expect_ident("a dialog")?;
+                let mut with = Vec::new();
+                if cursor.eat_keyword("with") {
+                    loop {
+                        let name = cursor.expect_ident("the name of the dialog's data")?;
+                        cursor.expect(TokenKind::Assign, "'='")?;
+                        let value = parse_expr(&mut cursor)?;
+                        with.push(Arg { name, value });
+                        if !cursor.eat(TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+                if !cursor.eat_keyword("then") {
+                    return Err(cursor.error_here("expected 'then' and the handler the answer runs, as in 'then lend(album)'"));
+                }
+                let call = parse_expr(&mut cursor)?;
+                let (then, args) = match call.kind {
+                    ExprKind::Call { function, args } => (function, args),
+                    ExprKind::Name { name } => (Ident { name, span: call.span }, Vec::new()),
+                    _ => return Err(Diagnostic::error("after 'then' comes the handler the answer runs, as in 'then lend(album)'", call.span)),
+                };
+                cursor.expect_end()?;
+                return Ok(Stmt { kind: StmtKind::Ask { question: None, form: Box::new(AskForm::Window { window, with }), then, args }, span });
+            }
+            let question = Some(parse_expr(&mut cursor)?);
             let form = if cursor.eat_keyword("for") {
                 let ty = parse_type_ref(&mut cursor)?;
                 let (mut default, mut from) = (None, None);

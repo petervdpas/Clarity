@@ -5,6 +5,7 @@ import type { Handler } from "./Handler";
 import type { Ident } from "./Ident";
 import type { PageKind } from "./PageKind";
 import type { Span } from "./Span";
+import type { TypeRef } from "./TypeRef";
 import type { Widget } from "./Widget";
 import type { WindowSize } from "./WindowSize";
 
@@ -29,4 +30,9 @@ frame: Frame,
 /**
  * Handlers of the window's own events: open, close, return.
  */
-handlers: Array<Handler>, span: Span, };
+handlers: Array<Handler>, 
+/**
+ * What a dialog gives when it closes with a value (`page X: dialog
+ * gives Friend`), for the handler that asked for it (DESIGN 5.14).
+ */
+gives: TypeRef | null, span: Span, };

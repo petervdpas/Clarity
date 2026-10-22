@@ -110,3 +110,34 @@ test("a reply's questions are asked after its messages and the windows it opens,
   await nav.apply(0, { state: "Main", messages: ["saved"], open: [{ window: "Card", with: {} }], close: false, asks: ["Sure?"] });
   assert.deepEqual(said.slice(2), ["saved", "Card opened", "ask Sure? of window 0"]);
 });
+
+test("a window that closes with a value gives it, after it has closed, with its state", async () => {
+  type Reply = NavReply<string, string, string>;
+  const said: string[] = [];
+  let stack: string[] = [];
+  const nav = new Navigator<string, string, string>(
+    { get: () => stack, set: (next) => (stack = next) },
+    {
+      open: async (window): Promise<Reply> => ({ state: window, messages: [], open: [], close: false }),
+      close: async (state): Promise<Reply> => {
+        said.push(`${state} closes`);
+        return { state, messages: [], open: [], close: false };
+      },
+      returnTo: async (state): Promise<Reply> => {
+        said.push(`${state} returns`);
+        return { state, messages: [], open: [], close: false };
+      },
+      openApart: async () => {},
+      quit: async () => {},
+    },
+    () => {},
+    (err) => assert.fail(String(err)),
+    () => {},
+    (state, result) => said.push(`${state} gave ${JSON.stringify(result)}`),
+  );
+  await nav.open("Albums");
+  await nav.open("PickFriend");
+  await nav.apply(1, { state: "PickFriend", messages: [], open: [], close: true, result: { id: 3 } });
+  assert.deepEqual(said, ["PickFriend closes", "Albums returns", 'PickFriend gave {"id":3}']);
+  assert.deepEqual(stack, ["Albums"]);
+});

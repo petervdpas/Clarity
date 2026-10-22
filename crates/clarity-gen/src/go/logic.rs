@@ -821,7 +821,11 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("ui.Message(clarity.{level}, {text})\n"));
             }
             StmtKind::Ask { question, form, then, args } => {
-                let question = self.shown(question, &mut pre);
+                // A dialog window says what it asks itself.
+                let question = match question {
+                    Some(question) => self.shown(question, &mut pre),
+                    None => "clarity.PlainText(\"\")".to_string(),
+                };
                 let form = match form.as_ref() {
                     AskForm::Confirm { yes, no } => {
                         let yes = yes.as_ref().map_or("nil".to_string(), |t| format!("clarity.Button({})", self.shown(t, &mut pre)));
@@ -836,6 +840,10 @@ impl<'a> Emitter<'a> {
                         let only = from.as_ref().map_or("nil".to_string(), |list| format!("clarity.IDs({})", bare(self.value(list, &mut pre))));
                         format!("clarity.ValueForm({}, {of}, {only}, {default})", string(word))
                     }
+                    AskForm::Window { window, with } => {
+                        let with: Vec<String> = with.iter().map(|a| format!("{}: {}", string(&a.name.name), bare(self.value(&a.value, &mut pre)))).collect();
+                        format!("clarity.WindowForm({}, map[string]any{{{}}})", string(&window.name), with.join(", "))
+                    }
                 };
                 let values: String = args.iter().map(|a| format!(", {}", bare(self.value(a, &mut pre)))).collect();
                 out.push_str(&pre);
@@ -847,6 +855,11 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("ui.Open({}, map[string]any{{{}}})\n", string(&window.name), args.join(", ")));
             }
             StmtKind::Close => out.push_str("ui.Close()\n"),
+            StmtKind::CloseWith { value } => {
+                let value = bare(self.value(value, &mut pre));
+                out.push_str(&pre);
+                out.push_str(&format!("ui.CloseWith({value})\n"));
+            }
             StmtKind::Reload { data } => {
                 let found = self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == data.name)).cloned();
                 match found {

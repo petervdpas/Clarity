@@ -691,6 +691,8 @@ fn parse_page(
             ));
         }
     };
+    // `dialog gives Friend`: what it closes with.
+    let gives = if cursor.eat_keyword("gives") { Some(crate::code::parse::parse_type_ref(&mut cursor)?) } else { None };
     cursor.expect_end()?;
 
     let mut page = Page {
@@ -703,6 +705,7 @@ fn parse_page(
         widgets: Vec::new(),
         frame: Frame::default(),
         handlers: Vec::new(),
+        gives,
         span: node.span(),
     };
     let mut grid_seen = false;

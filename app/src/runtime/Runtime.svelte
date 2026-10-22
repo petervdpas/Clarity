@@ -28,6 +28,8 @@
   /** One open window, as the backend sends it. */
   type WindowState = {
     window: string;
+    /** The number of this open window, its own. */
+    instance?: number;
     data: Record<string, unknown>;
     parts: Record<string, PartState>;
     selected: Record<string, number>;
@@ -116,7 +118,6 @@
 
   /** The answer to a question: runs the handler it goes to on the window that asked, if that is still open. */
   async function answer(item: Extract<Waiting, { kind: "ask" }>, value: JsonValue | null) {
-    shown();
     const state = stack[item.window];
     if (!state) return;
     busy = true;
@@ -188,10 +189,29 @@
     say,
     (err) => say({ level: "error", text: errorText(err) }),
     // A question waits its turn; one the app's own start asks has no window to answer it.
+    // A dialog window asked for opens at once, as `open` opens one.
     (ask, window) => {
-      if (window >= 0) waiting = [...waiting, { kind: "ask", ask, window }];
+      if (window < 0) return;
+      if (ask.form.kind === "window") void openAsked(ask, ask.form.window, ask.form.with, window);
+      else waiting = [...waiting, { kind: "ask", ask, window }];
+    },
+    // What a dialog asked for closed with runs the handler of the window that asked.
+    (state, result) => {
+      const asked = state.instance === undefined ? undefined : dialogsAsked.get(state.instance);
+      if (!asked) return;
+      dialogsAsked.delete(state.instance!);
+      void answer({ kind: "ask", ask: asked.ask, window: asked.window }, result as JsonValue);
     },
   );
+
+  /** The dialogs a question opened, by the number of their open window: the question, and the place of the window that asked. */
+  const dialogsAsked = new Map<number, { ask: Ask; window: number }>();
+
+  async function openAsked(ask: Ask, dialog: string, withData: Record<string, JsonValue>, window: number) {
+    await nav.open(dialog, withData);
+    const opened = stack.at(-1);
+    if (opened?.window === dialog && opened.instance !== undefined) dialogsAsked.set(opened.instance, { ask, window });
+  }
 
   /** Runs a handler on the current window and applies the reply. */
   async function run(handler: string) {
@@ -425,7 +445,16 @@
     {@const first = waiting[0]}
     {#if first.kind === "ask"}
       {#key first}
-        <AskDialog {model} ask={first.ask} options={(entity) => invoke("ref_options", { entity })} onanswer={(value) => answer(first, value)} oncancel={shown} />
+        <AskDialog
+          {model}
+          ask={first.ask}
+          options={(entity) => invoke("ref_options", { entity })}
+          onanswer={(value) => {
+            shown();
+            void answer(first, value);
+          }}
+          oncancel={shown}
+        />
       {/key}
     {:else}
       <Dialog label={first.text} onclose={shown}>

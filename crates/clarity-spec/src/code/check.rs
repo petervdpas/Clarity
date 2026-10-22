@@ -703,7 +703,7 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
         let (mut asks, mut closes) = (false, false);
         each_stmt(&handler.body, &mut |s| {
             asks |= matches!(s.kind, StmtKind::Ask { .. });
-            closes |= matches!(s.kind, StmtKind::Close);
+            closes |= matches!(s.kind, StmtKind::Close | StmtKind::CloseWith { .. });
         });
         if asks && closes {
             out.push(Diagnostic::error(format!("handler '{name}' asks and closes its window: the answer would have nowhere to go"), handler.name.span));
@@ -1304,6 +1304,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.call(call, true);
             }
             StmtKind::Close => self.ui_only("close", stmt.span),
+            StmtKind::CloseWith { value } => self.check_close_with(stmt.span, value),
             StmtKind::Reload { data } => {
                 self.ui_only("reload", stmt.span);
                 match self.data(&data.name) {
@@ -1324,7 +1325,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
                 }
             }
-            StmtKind::Ask { question, form, then, args } => self.check_ask(stmt.span, question, form, then, args),
+            StmtKind::Ask { question, form, then, args } => self.check_ask(stmt.span, question.as_ref(), form, then, args),
             StmtKind::Open { window, with } => {
                 self.ui_only("open", stmt.span);
                 let Some(page) = self.env.page(&window.name) else {
@@ -1378,13 +1379,16 @@ impl<'a> BodyChecker<'_, 'a> {
     /// `ask ... then handler(values)`: a question that is text, a form that
     /// can be asked, and a handler of the window that takes the values
     /// written and, for a value, the answer last.
-    fn check_ask(&mut self, span: Span, question: &Expr, form: &AskForm, then: &Ident, args: &[Expr]) {
+    fn check_ask(&mut self, span: Span, question: Option<&Expr>, form: &AskForm, then: &Ident, args: &[Expr]) {
         self.ui_only("ask", span);
-        let ty = self.shown_text(question);
-        if !ty.is_value() {
-            self.error(format!("a question is text or a value, not {}", ty.name()), question.span);
+        if let Some(question) = question {
+            let ty = self.shown_text(question);
+            if !ty.is_value() {
+                self.error(format!("a question is text or a value, not {}", ty.name()), question.span);
+            }
         }
         let answer = match form {
+            AskForm::Window { window, with } => Some(self.asked_dialog(window, with)),
             AskForm::Confirm { yes, no } => {
                 for text in yes.iter().chain(no) {
                     let ty = self.shown_text(text);
@@ -1460,6 +1464,54 @@ impl<'a> BodyChecker<'_, 'a> {
                     then.span,
                 );
             }
+        }
+    }
+
+    /// The dialog `ask` names, with its data filled as `open` fills it: the
+    /// type of what it gives, which is the answer.
+    fn asked_dialog(&mut self, window: &Ident, with: &[crate::code::Arg]) -> Ty<'a> {
+        for arg in with {
+            self.expr(&arg.value, None);
+        }
+        let Some(page) = self.env.page(&window.name) else {
+            self.error(format!("unknown window '{}'", window.name), window.span);
+            return Ty::Unknown;
+        };
+        for arg in with {
+            if !page.data.iter().any(|d| d.name.name == arg.name.name) {
+                self.error(format!("{} has no data '{}'", page.name.name, arg.name.name), arg.name.span);
+            }
+        }
+        if page.kind != crate::model::PageKind::Dialog {
+            self.error(format!("{} is no dialog; ask a dialog that gives a value, or open {} instead", page.name.name, page.name.name), window.span);
+            return Ty::Unknown;
+        }
+        match &page.gives {
+            Some(gives) => self.env.type_ref(gives).unwrap_or(Ty::Unknown),
+            None => {
+                self.error(format!("{} gives nothing; write 'page {}: dialog gives Type', or open it instead", page.name.name, page.name.name), window.span);
+                Ty::Unknown
+            }
+        }
+    }
+
+    /// `close with value`: only in a dialog, and of the type it gives.
+    fn check_close_with(&mut self, span: Span, value: &Expr) {
+        self.ui_only("close", span);
+        let given = self.expr(value, None);
+        let Some(owner) = self.owner else { return };
+        let Some(page) = self.env.page(owner.name) else { return };
+        if page.kind != crate::model::PageKind::Dialog {
+            self.error(format!("only a dialog closes with a value; {} is a window", page.name.name), span);
+            return;
+        }
+        let Some(gives) = &page.gives else {
+            self.error(format!("{} gives nothing; write 'page {}: dialog gives Type' to close with a value", page.name.name, page.name.name), span);
+            return;
+        };
+        let wanted = self.env.type_ref(gives).unwrap_or(Ty::Unknown);
+        if !wanted.is_unknown() && !given.is_unknown() && !wanted.accepts(&given) {
+            self.error(format!("{} gives {}, not {}", page.name.name, wanted.name(), given.name()), value.span);
         }
     }
 
@@ -2787,7 +2839,9 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Ask { question, form, args, .. } => {
-                each_expr(question, found);
+                if let Some(question) = question {
+                    each_expr(question, found);
+                }
                 for e in super::ask_exprs(form) {
                     each_expr(e, found);
                 }
@@ -2804,6 +2858,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr(text, found);
                 each_expr(path, found);
             }
+            StmtKind::CloseWith { value } => each_expr(value, found),
             StmtKind::Close | StmtKind::Reload { .. } => {}
         }
     }

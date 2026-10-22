@@ -62,7 +62,7 @@ const KEYWORDS: &[&str] = &[
     "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "renderer", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
     "large", "group", "tab", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
-    "folded", "heading", "status", "sortable", "ask", "yes", "no", "then",
+    "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives",
 ];
 
 /// Clarity's own types.

@@ -174,7 +174,8 @@ pub enum StmtKind {
     /// dialog, shown when the handler has finished. The answer runs `then`
     /// with `args` and, for a value, the answer last; cancelling runs nothing.
     Ask {
-        question: Expr,
+        /// None when a dialog window asks: its own title and parts say what.
+        question: Option<Expr>,
         form: Box<AskForm>,
         then: Ident,
         args: Vec<Expr>,
@@ -184,6 +185,10 @@ pub enum StmtKind {
         with: Vec<Arg>,
     },
     Close,
+    /// `close with value`: a dialog closes and gives `value` to the handler that asked for it.
+    CloseWith {
+        value: Expr,
+    },
     Save {
         value: Expr,
     },
@@ -220,6 +225,9 @@ pub enum AskForm {
     /// or chosen: text, a number, a date, a duration, an enum's value or a
     /// record (of the entity, or of the list of records after `from`).
     Value { ty: TypeRef, default: Option<Expr>, from: Option<Expr> },
+    /// `ask PickFriend with name = value, ...`: a dialog window of the
+    /// application; the answer is what it closes with (`close with value`).
+    Window { window: Ident, with: Vec<Arg> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -616,7 +624,7 @@ pub fn path_text(expr: &Expr) -> String {
 pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
     for stmt in body {
         match &stmt.kind {
-            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } => each_expr(value, found),
+            StmtKind::Let { value, .. } | StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } => each_expr(value, found),
             StmtKind::Assign { target, value } => {
                 each_expr(target, found);
                 each_expr(value, found);
@@ -644,7 +652,9 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
-                each_expr(question, found);
+                if let Some(question) = question {
+                    each_expr(question, found);
+                }
                 for e in ask_exprs(form) {
                     each_expr(e, found);
                 }
@@ -664,6 +674,7 @@ pub fn ask_exprs(form: &AskForm) -> Vec<&Expr> {
     match form {
         AskForm::Confirm { yes, no } => yes.iter().chain(no).collect(),
         AskForm::Value { default, from, .. } => default.iter().chain(from).collect(),
+        AskForm::Window { with, .. } => with.iter().map(|a| &a.value).collect(),
     }
 }
 

@@ -133,6 +133,8 @@ type Reply struct {
 	Close bool            `json:"close"`
 	// Asks are the questions to ask when the handler has finished, in order.
 	Asks []Ask `json:"asks,omitempty"`
+	// Result is what a dialog closes with, for the handler that asked for it.
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -150,6 +152,7 @@ type Ui struct {
 	shown    map[string]Text
 	open     []OpenRequest
 	asks     []Ask
+	result   json.RawMessage
 	close    bool
 	err      error
 }
@@ -392,6 +395,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		Open:     u.open,
 		Close:    u.close,
 		Asks:     u.asks,
+		Result:   u.result,
 	}, nil
 }
 

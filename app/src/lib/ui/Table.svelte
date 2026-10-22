@@ -20,6 +20,8 @@
     shown?: (value: JsonValue | undefined) => string;
     /** How a number cell shows its value and reads what is typed (null: no number). */
     number?: { text: (value: JsonValue | undefined) => string; read: (text: string) => JsonValue | null };
+    /** The designed width in pixels (`columns title 240`); none shares what is left. */
+    width?: number;
   };
 
   export type Row = Record<string, JsonValue>;
@@ -30,13 +32,20 @@
   // on Avalonia (conformance/tables.json): which input a cell holds, when a
   // row counts as chosen and when it counts as edited, and how text that is
   // no value is marked. The designer and running windows only describe the
-  // columns.
+  // columns. Rows show in the table's order (`order by`, a click on a
+  // `sortable` header) but keep their place in the data, which every event
+  // names (conformance/table-order.json). With `resizable` the header edges
+  // are dragged and the widths remembered under `remember`; a double-click
+  // on an edge gives the designed widths back. In the designer the edges set
+  // the designed widths.
   import CheckInput from "./CheckInput.svelte";
   import ChoiceInput from "./ChoiceInput.svelte";
   import DateInput from "./DateInput.svelte";
   import DateTimeInput from "./DateTimeInput.svelte";
   import NumberInput from "./NumberInput.svelte";
   import TextInput from "./TextInput.svelte";
+  import { readWidths, resized } from "../columnWidths";
+  import { nextOrder, shownOrder, type Order } from "./tableView";
 
   let {
     columns,
@@ -45,6 +54,11 @@
     disabled = false,
     readonly = false,
     design = false,
+    resizable = false,
+    sortable = false,
+    order = null,
+    remember = null,
+    ondesignwidth,
     onselect,
     onopen,
     onedit,
@@ -57,6 +71,16 @@
     readonly?: boolean;
     /** In the designer: shown, but nothing can be done. */
     design?: boolean;
+    /** The person drags the header edges (`resizable`). */
+    resizable?: boolean;
+    /** A click on a header sorts by its column (`sortable`). */
+    sortable?: boolean;
+    /** The order the rows show in first (`order by`). */
+    order?: Order;
+    /** Where the person's widths are kept, per window and table; none keeps them for the run. */
+    remember?: string | null;
+    /** In the designer: a header edge was dragged; 0 takes the designed width away. */
+    ondesignwidth?: (field: string, width: number) => void;
     /** Another row was chosen: Clarity's `select`. */
     onselect: (row: number) => void;
     /** A row was opened (double-click): Clarity's `open`. */
@@ -66,6 +90,101 @@
   } = $props();
 
   const inert = $derived(design || disabled);
+
+  // The order the rows show in: the table's first order, then the person's clicks.
+  let sorting = $state<Order>(null);
+  let sortingFrom = $state("");
+  $effect.pre(() => {
+    const written = JSON.stringify(order);
+    if (written !== sortingFrom) {
+      sortingFrom = written;
+      sorting = order;
+    }
+  });
+  const shownRows = $derived(shownOrder(rows, columns, sorting));
+
+  function sortBy(field: string) {
+    if (!sortable || design) return;
+    sorting = nextOrder(sorting, field);
+  }
+
+  // Widths: the person's (remembered), else the designed ones; while an edge is dragged, those being dragged.
+  const MAX_WIDTH = 2000;
+  const DEFAULT_WIDTH = 120;
+  function load(key: string | null): Record<string, number> | null {
+    if (!key) return null;
+    try {
+      const widths = readWidths(localStorage.getItem(key));
+      return Object.keys(widths).length > 0 ? widths : null;
+    } catch {
+      return null;
+    }
+  }
+  function keep(key: string | null, widths: Record<string, number> | null) {
+    if (!key) return;
+    try {
+      if (widths) localStorage.setItem(key, JSON.stringify(widths));
+      else localStorage.removeItem(key);
+    } catch {
+      // Without storage the widths last for the run.
+    }
+  }
+  let remembered = $state<Record<string, number> | null>(null);
+  let rememberedFrom = $state<string | null | undefined>(undefined);
+  $effect.pre(() => {
+    if (remember !== rememberedFrom) {
+      rememberedFrom = remember;
+      remembered = design ? null : load(remember);
+    }
+  });
+  let dragging = $state<Record<string, number> | null>(null);
+  const sized = $derived(dragging ?? remembered);
+  const widthOf = (column: TableColumn): number | undefined => (sized ? (sized[column.field] ?? column.width ?? DEFAULT_WIDTH) : column.width);
+  const fixed = $derived(sized !== null || columns.some((c) => c.width));
+  const tableWidth = $derived(sized ? `${columns.reduce((sum, c) => sum + (widthOf(c) ?? 0), 0)}px` : undefined);
+  const grips = $derived(design ? ondesignwidth !== undefined : resizable && !disabled);
+
+  let head: HTMLTableRowElement | undefined = $state();
+
+  /** Drags the right edge of `field`'s header; let go, the widths are kept (or, in the designer, written). */
+  function pressEdge(e: PointerEvent, field: string) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cells = [...(head?.cells ?? [])];
+    const measured = Object.fromEntries(columns.map((c, i) => [c.field, Math.round(cells[i]?.offsetWidth ?? widthOf(c) ?? DEFAULT_WIDTH)]));
+    const start = { x: e.clientX, width: measured[field] };
+    dragging = measured;
+    const move = (ev: PointerEvent) => {
+      if (dragging) dragging = { ...dragging, [field]: Math.min(MAX_WIDTH, resized(start.width, ev.clientX - start.x)) };
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const done = dragging;
+      dragging = null;
+      if (!done) return;
+      if (design) {
+        if (done[field] !== start.width) ondesignwidth?.(field, done[field]);
+      } else {
+        remembered = done;
+        keep(remember, done);
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  /** A double-click on an edge: the designed widths again (in the designer, this column's width taken away). */
+  function resetEdge(e: MouseEvent, field: string) {
+    e.stopPropagation();
+    if (design) {
+      ondesignwidth?.(field, 0);
+      return;
+    }
+    remembered = null;
+    keep(remember, null);
+  }
 
   function choose(row: number) {
     if (design || selected === row) return;
@@ -85,15 +204,40 @@
 </script>
 
 <div class="table-wrap">
-  <table>
+  <table class:fixed style:width={tableWidth}>
     <thead>
-      <tr>
-        {#each columns as column (column.field)}<th>{column.label}</th>{/each}
+      <tr bind:this={head}>
+        {#each columns as column (column.field)}
+          {@const sortedHere = sorting?.field === column.field}
+          <th
+            data-field={column.field}
+            class:sortable={sortable && !design}
+            style:width={widthOf(column) ? `${widthOf(column)}px` : undefined}
+            aria-sort={sortedHere ? (sorting?.desc ? "descending" : "ascending") : undefined}
+            tabindex={sortable && !design ? 0 : undefined}
+            onclick={() => sortBy(column.field)}
+            onkeydown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), sortBy(column.field))}
+          >
+            <span class="label">{column.label}</span>
+            {#if sortedHere}<span class="arrow" aria-hidden="true">{sorting?.desc ? "▼" : "▲"}</span>{/if}
+            {#if grips}
+              <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+              <span
+                class="grip"
+                title={design ? "Drag to set the width; double-click to take it away" : "Drag to resize; double-click for the designed widths"}
+                onpointerdown={(e) => pressEdge(e, column.field)}
+                onclick={(e) => e.stopPropagation()}
+                ondblclick={(e) => resetEdge(e, column.field)}
+              ></span>
+            {/if}
+          </th>
+        {/each}
       </tr>
     </thead>
     <tbody>
-      {#each rows as row, i (i)}
-        <tr class:chosen={selected === i} onclick={() => choose(i)} ondblclick={() => !design && onopen(i)}>
+      {#each shownRows as i (i)}
+        {@const row = rows[i]}
+        <tr data-row={i} class:chosen={selected === i} onclick={() => choose(i)} ondblclick={() => !design && onopen(i)}>
           {#each columns as column (column.field)}
             {@const cell = row[column.field]}
             {#if !column.edit}
@@ -163,6 +307,46 @@
     padding: calc(var(--padding) - 1px) calc(var(--padding) * 2);
     border-bottom: var(--border-width) solid var(--border);
     white-space: nowrap;
+  }
+
+  /* With widths, columns keep them and what does not fit is cut off. */
+  table.fixed {
+    table-layout: fixed;
+  }
+
+  table.fixed th,
+  table.fixed td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  th.sortable {
+    cursor: pointer;
+  }
+
+  th.sortable:hover .label {
+    text-decoration: underline;
+  }
+
+  .arrow {
+    margin-left: 4px;
+    font-size: 0.75em;
+  }
+
+  /* The edge of a header, dragged to resize; it answers even where the rest is inert, as in the designer. */
+  .grip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    pointer-events: auto;
+  }
+
+  .grip:hover {
+    background: var(--accent);
+    opacity: 0.5;
   }
 
   tr.chosen td {

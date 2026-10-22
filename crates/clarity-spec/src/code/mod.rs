@@ -170,6 +170,15 @@ pub enum StmtKind {
         level: MessageLevel,
         text: Expr,
     },
+    /// `ask @question ... then handler(values)` (DESIGN 5.14): Clarity's
+    /// dialog, shown when the handler has finished. The answer runs `then`
+    /// with `args` and, for a value, the answer last; cancelling runs nothing.
+    Ask {
+        question: Expr,
+        form: Box<AskForm>,
+        then: Ident,
+        args: Vec<Expr>,
+    },
     Open {
         window: Ident,
         with: Vec<Arg>,
@@ -197,6 +206,20 @@ pub enum StmtKind {
         store: Ident,
         path: Expr,
     },
+}
+
+/// What `ask` asks for, which decides its dialog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum AskForm {
+    /// `yes @delete no @keep`: a question with two buttons (Clarity's OK
+    /// and Cancel when left out); `then` runs on yes and takes no answer.
+    Confirm { yes: Option<Expr>, no: Option<Expr> },
+    /// `for type [default value] [from list]`: a value of a type, typed in
+    /// or chosen: text, a number, a date, a duration, an enum's value or a
+    /// record (of the entity, or of the list of records after `from`).
+    Value { ty: TypeRef, default: Option<Expr>, from: Option<Expr> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -620,12 +643,27 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
             StmtKind::Draw { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
+            StmtKind::Ask { question, form, args, .. } => {
+                each_expr(question, found);
+                for e in ask_exprs(form) {
+                    each_expr(e, found);
+                }
+                args.iter().for_each(|a| each_expr(a, found));
+            }
             StmtKind::Write { text, path, .. } => {
                 each_expr(text, found);
                 each_expr(path, found);
             }
             _ => {}
         }
+    }
+}
+
+/// The expressions of what `ask` asks for: the button texts, or the default and the list.
+pub fn ask_exprs(form: &AskForm) -> Vec<&Expr> {
+    match form {
+        AskForm::Confirm { yes, no } => yes.iter().chain(no).collect(),
+        AskForm::Value { default, from, .. } => default.iter().chain(from).collect(),
     }
 }
 

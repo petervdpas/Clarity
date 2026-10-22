@@ -3,6 +3,7 @@ import type { CanvasUnits } from "./CanvasUnits";
 import type { Handler } from "./Handler";
 import type { Orientation } from "./Orientation";
 import type { Surface } from "./Surface";
+import type { TableOrder } from "./TableOrder";
 import type { WidgetKind } from "./WidgetKind";
 
 /**
@@ -48,7 +49,24 @@ edit: Array<string>,
  * The edited bool columns shown as a switch instead of a checkbox:
  * `edit done as switch`.
  */
-switches: Array<string>, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+switches: Array<string>, 
+/**
+ * The width in pixels of a table's columns that have one:
+ * `columns title 240, artist`. A column without one shares what is left.
+ */
+widths: { [key in string]: number }, 
+/**
+ * `resizable`: the person drags a table's header edges, and the widths are remembered.
+ */
+resizable: boolean, 
+/**
+ * `sortable`: a click on a table's header sorts its rows by that column.
+ */
+sortable: boolean, 
+/**
+ * `order by field [desc]`: the order a table's rows show in first.
+ */
+order: TableOrder | null, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
 /**
  * The input a label or help text belongs to, by part name.
  */

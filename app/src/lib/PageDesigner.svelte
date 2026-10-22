@@ -363,7 +363,7 @@
 
   onMount(() => {
     if (!canvas) return;
-    return pageDesigner.attach(canvas, drop, dock);
+    return pageDesigner.attach(canvas, drop, dock, (edit) => void apply(edit));
   });
 </script>
 

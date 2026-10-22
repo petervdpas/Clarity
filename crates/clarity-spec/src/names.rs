@@ -126,10 +126,16 @@ pub fn camel_names_with(source: &str) -> (String, Vec<(String, String)>) {
             }
             if in_fields {
                 let listed = t.kind == TokenKind::Ident && previous.is_some_and(|p| p.kind == TokenKind::Comma || matches!(p.text.as_str(), "columns" | "show" | "edit"));
-                if listed || t.kind == TokenKind::Comma {
+                // `columns title 240, artist`: a width may follow a field.
+                if listed || t.kind == TokenKind::Comma || t.kind == TokenKind::Number {
                     continue;
                 }
                 in_fields = false;
+            }
+            // `order by title`: a field of a table, not a part.
+            let ordered = previous.is_some_and(|p| p.text == "by") && i >= 2 && line.tokens[i - 2].text == "order";
+            if t.kind == TokenKind::Ident && ordered {
+                continue;
             }
             let after_dot = previous.is_some_and(|p| p.kind == TokenKind::Dot);
             if t.kind != TokenKind::Ident || after_dot {

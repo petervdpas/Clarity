@@ -115,7 +115,7 @@ fn grows(widget: &Widget) -> bool {
 }
 
 /// The field a first text field shows for a record in a dropdown.
-fn display(entity: &Entity) -> String {
+pub(super) fn display(entity: &Entity) -> String {
     entity
         .fields
         .iter()
@@ -277,7 +277,7 @@ impl<'a> Window<'a> {
 
     /// A column of a table part: the field, what kind of cell holds it, and
     /// whether and how it is edited.
-    fn table_column(&self, entity: &Entity, field: &Field, edit: bool, switch: bool) -> String {
+    fn table_column(&self, entity: &Entity, field: &Field, edit: bool, switch: bool, width: Option<u32>) -> String {
         let kind = match &field.ty {
             FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money => "Number",
             FieldType::Bool => "Bool",
@@ -291,6 +291,9 @@ impl<'a> Window<'a> {
             property(&entity.name.name, &field.name.name),
             self.text(&field.label)
         );
+        if let Some(width) = width {
+            let _ = write!(attributes, " Width=\"{width}\"");
+        }
         if !edit {
             let _ = write!(attributes, " Shown=\"{{x:Static {}}}\"", self.shown_converter(entity, &field.name.name));
             return format!("<c:TableColumn {attributes} />");
@@ -869,12 +872,30 @@ impl<'a> Window<'a> {
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let selected = named.map(|n| format!(" SelectedItem=\"{{Binding {}.SelectedItem}}\"", member(n))).unwrap_or_default();
                 let items = bound.as_deref().map(|b| format!(" ItemsSource=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{plain_state}{extra}>");
+                // Resizing, sorting and the first order: the table's own, kept per window and table.
+                let mut options = String::new();
+                if p.resizable {
+                    options.push_str(" Resizable=\"True\"");
+                }
+                if p.sortable {
+                    options.push_str(" Sortable=\"True\"");
+                }
+                if let (Some(order), Some(entity)) = (&p.order, entity) {
+                    let _ = write!(options, " OrderBy=\"{}\"", property(&entity.name.name, &order.field));
+                    if order.desc {
+                        options.push_str(" OrderDescending=\"True\"");
+                    }
+                }
+                if p.resizable && let Some(name) = named {
+                    let _ = write!(options, " Remember=\"{}.{name}\"", self.page.name.name);
+                }
+                let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{options}{plain_state}{extra}>");
                 let _ = writeln!(out, "{pad}  <c:ClarityTable.Columns>");
                 if let Some(entity) = entity {
                     for column in &p.columns {
                         let Some(field) = entity.field(column) else { continue };
-                        let _ = writeln!(out, "{pad}    {}", self.table_column(entity, field, p.edit.contains(column), p.switches.contains(column)));
+                        let width = p.widths.get(column).copied();
+                        let _ = writeln!(out, "{pad}    {}", self.table_column(entity, field, p.edit.contains(column), p.switches.contains(column), width));
                     }
                 }
                 let _ = writeln!(out, "{pad}  </c:ClarityTable.Columns>\n{pad}</c:ClarityTable>");

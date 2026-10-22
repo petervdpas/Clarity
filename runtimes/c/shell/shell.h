@@ -25,6 +25,9 @@ typedef struct {
     /// handler (conformance/drawing.json). The shell redraws after a window
     /// opens and after every handler.
     bool (*redraw)(ClarityDb* db, ClarityReply* reply);
+    /// Runs the handler the answer to a question goes to (DESIGN 5.14),
+    /// with the values written for it and the answer last.
+    bool (*answer)(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out);
 } ClarityWindows;
 
 typedef struct {

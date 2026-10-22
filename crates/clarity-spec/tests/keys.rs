@@ -41,6 +41,9 @@ const EN: &str = "translation en
     checkedBy \"Checked by {name}\"
     yes \"Yes\"
     no \"No\"
+    ok \"OK\"
+    cancel \"Cancel\"
+    dismiss \"Dismiss\"
 ";
 
 const NL: &str = "translation nl
@@ -55,6 +58,9 @@ const NL: &str = "translation nl
     checkedBy \"\"
     yes \"Ja\"
     no \"Nee\"
+    ok \"OK\"
+    cancel \"Annuleren\"
+    dismiss \"Sluiten\"
 ";
 
 fn project(source: &str, files: &[(&str, &str)]) -> Project {
@@ -145,4 +151,13 @@ fn a_key_nobody_uses_is_a_warning() {
     let en = format!("{EN}    oldText \"Gone\"\n");
     let warnings = messages(&project(SHOP, &[("translations/en.clarity", &en)]), Severity::Warning);
     assert_has(&warnings, "key 'oldText' is not used anywhere; it can go");
+}
+
+#[test]
+fn clarity_s_own_word_missing_from_a_language_file_shows_in_english_with_a_warning() {
+    let en = EN.replace("    ok \"OK\"\n", "");
+    let nl = NL.replace("    ok \"OK\"\n", "");
+    let p = project(SHOP, &[("translations/en.clarity", en.as_str()), ("translations/nl.clarity", nl.as_str())]);
+    assert!(p.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", p.diagnostics);
+    assert!(p.diagnostics.iter().any(|d| d.message == "Clarity's word 'ok' is not in en yet; it shows \"OK\" until it is"), "{:#?}", p.diagnostics);
 }

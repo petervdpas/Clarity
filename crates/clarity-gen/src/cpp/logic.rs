@@ -12,8 +12,8 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp,
-    path_text, template,
+    AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
+    UnaryOp, path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
@@ -336,6 +336,9 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their member functions.
     pub draws: Vec<(String, String)>,
+    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// member function, and each value's type.
+    pub answers: Vec<(String, String, Vec<TypeInfo>)>,
 }
 
 /// The struct of every window and the app in `file`, for the header, and
@@ -439,7 +442,12 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             "{struct_name} {struct_name}::load([[maybe_unused]] clarity::Db& db) {{\n    {struct_name} w;\n{load}    return w;\n}}\n\nvoid to_json(nlohmann::json& out, [[maybe_unused]] const {struct_name}& w) {{\n    out = nlohmann::json::object();\n{to}}}\n\nvoid from_json([[maybe_unused]] const nlohmann::json& in, [[maybe_unused]] {struct_name}& w) {{\n{from}}}\n\n"
         );
         let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, method(&handler))).collect();
-        owners.push(Owner { name: name.clone(), struct_name, handlers, calls, is_app: app.is_some(), events, draws });
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        let answers = crate::answering_handlers(&written)
+            .into_iter()
+            .map(|h| (h.name.name.clone(), method(&h.name.name), h.params.iter().map(|p| type_ref_info(project, &p.ty)).collect()))
+            .collect();
+        owners.push(Owner { name: name.clone(), struct_name, handlers, calls, is_app: app.is_some(), events, draws, answers });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
 }
@@ -653,7 +661,7 @@ impl<'a> Emitter<'a> {
                 let (path, text) = (self.value(path), self.value(text));
                 let _ = writeln!(out, "db.{write}({}, {path}, {text});", string(&store.name));
             }
-            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
@@ -683,6 +691,29 @@ impl<'a> Emitter<'a> {
                 };
                 let text = self.shown(text);
                 let _ = writeln!(out, "ui.message(clarity::Level::{level}, {text});");
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                let question = self.shown(question);
+                let form = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("std::nullopt".to_string(), |t| self.shown(t));
+                        let no = no.as_ref().map_or("std::nullopt".to_string(), |t| self.shown(t));
+                        format!("clarity::ask_confirm({yes}, {no})")
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = crate::ask_type(self.project, ty);
+                        let of = of.map_or("std::nullopt".to_string(), |n| format!("std::string({})", string(&n)));
+                        let start = default.as_ref().map_or("nullptr".to_string(), |d| format!("nlohmann::json({})", self.value(d)));
+                        // The records `from` offers, by their ids.
+                        let only = from.as_ref().map_or("nullptr".to_string(), |list| {
+                            format!("[&] {{ auto only = nlohmann::json::array(); for (const auto& r : {}) only.push_back(r.id); return only; }}()", self.value(list))
+                        });
+                        format!("clarity::ask_value({}, {of}, {only}, {start})", string(word))
+                    }
+                };
+                let values: Vec<String> = args.iter().map(|a| format!("nlohmann::json({})", self.value(a))).collect();
+                let values = if values.is_empty() { "nlohmann::json::array()".to_string() } else { format!("nlohmann::json::array({{{}}})", values.join(", ")) };
+                let _ = writeln!(out, "ui.ask({question}, {form}, {}, {values});", string(&then.name));
             }
             StmtKind::Open { window, with } => {
                 let args: Vec<String> = with.iter().map(|arg| format!("{{{}, {}}}", string(&arg.name.name), self.value(&arg.value))).collect();

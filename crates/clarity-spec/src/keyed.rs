@@ -274,10 +274,25 @@ impl Maker {
         }
     }
 
-    /// A line of code: a message, a refusal, a caption or an error, a text
-    /// put in a value, and the text a function returns.
+    /// A line of code: a message, a question and its buttons, a refusal, a
+    /// caption or an error, a text put in a value, and the text a function
+    /// returns.
     fn code_line(&mut self, line: &Line, edits: &mut Vec<(usize, usize, String)>) {
         let tokens = &line.tokens;
+        // `ask "Delete it?" yes "Delete" no "Keep" then ...`: the question and
+        // its buttons; a default after `for` is a value, not a text people read.
+        if tokens.first().is_some_and(|t| t.text == "ask") {
+            let asked: Vec<&Token> = tokens
+                .iter()
+                .skip(1)
+                .take_while(|t| !(t.kind == TokenKind::Ident && matches!(t.text.as_str(), "for" | "then")))
+                .filter(|t| t.kind == TokenKind::Str)
+                .collect();
+            for token in asked {
+                self.code_text(token, edits);
+            }
+            return;
+        }
         let text = match tokens.first().map(|t| t.text.as_str()) {
             // A local's text is code's own.
             Some("let") => None,
@@ -291,7 +306,16 @@ impl Maker {
                 _ => None,
             },
         };
-        let Some(token) = text.filter(|t| t.kind == TokenKind::Str && has_letters(&t.text)) else { return };
+        if let Some(token) = text {
+            self.code_text(token, edits);
+        }
+    }
+
+    /// A text of code people read, made a key with its slots filled by name.
+    fn code_text(&mut self, token: &Token, edits: &mut Vec<(usize, usize, String)>) {
+        if token.kind != TokenKind::Str || !has_letters(&token.text) {
+            return;
+        }
         let slots = slot_names(&token.text);
         let value = rename_slots(&token.text, &slots);
         let names: Vec<String> = slots.iter().map(|(_, n)| n.clone()).collect();

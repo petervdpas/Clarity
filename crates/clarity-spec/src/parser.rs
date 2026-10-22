@@ -1386,6 +1386,10 @@ fn parse_widget_props(
         columns: Vec::new(),
         edit: Vec::new(),
         switches: Vec::new(),
+        widths: Default::default(),
+        resizable: false,
+        sortable: false,
+        order: None,
         show: Vec::new(),
         orientation: None,
         surface: None,
@@ -1521,11 +1525,39 @@ fn parse_widget_props(
             }
             "columns" => {
                 applies(WidgetProperty::Columns)?;
-                props.columns = cursor
-                    .ident_list("a field name")?
-                    .into_iter()
-                    .map(|i| i.name)
-                    .collect();
+                // `columns title 240, artist`: a width in pixels may follow a field.
+                loop {
+                    let field = cursor.expect_ident("a field name")?.name;
+                    if cursor.peek().is_some_and(|t| t.kind == TokenKind::Number) {
+                        let at = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
+                        let width = cursor.expect_number("a width")?;
+                        if !(widgets::MIN_COLUMN_WIDTH..=widgets::MAX_COLUMN_WIDTH).contains(&width) {
+                            return Err(Diagnostic::error(widgets::COLUMN_WIDTH_PROBLEM.to_string(), at));
+                        }
+                        props.widths.insert(field.clone(), width);
+                    }
+                    props.columns.push(field);
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            "resizable" => {
+                applies(WidgetProperty::Resizable)?;
+                props.resizable = true;
+            }
+            "sortable" => {
+                applies(WidgetProperty::Sortable)?;
+                props.sortable = true;
+            }
+            "order" => {
+                applies(WidgetProperty::OrderBy)?;
+                if !cursor.eat_keyword("by") {
+                    return Err(cursor.error_here("expected 'by', as in 'order by title'".to_string()));
+                }
+                let field = cursor.expect_ident("a column to order by")?.name;
+                let desc = cursor.eat_keyword("desc");
+                props.order = Some(crate::model::TableOrder { field, desc });
             }
             "edit" => {
                 applies(WidgetProperty::Edit)?;

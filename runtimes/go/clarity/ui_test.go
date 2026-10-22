@@ -7,6 +7,7 @@ package clarity
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -158,4 +159,41 @@ func TestAReplyCarriesTheTextsShownInTextValues(t *testing.T) {
 	if json.Unmarshal(text, &none); none["shown"] != nil {
 		t.Fatalf("a reply without shown texts carries none: %s", text)
 	}
+}
+
+func TestAQuestionTravelsInTheReplyAsFromTheRustRuntime(t *testing.T) {
+	ui := NewUi(NewWindowState("Albums", nil))
+	plain, err := ui.Reply("Albums", nil)
+	must(t, err)
+	text, _ := json.Marshal(plain)
+	if strings.Contains(string(text), `"asks"`) {
+		t.Fatal("no asks, no field")
+	}
+	yes := KeyText("delete")
+	ui.Ask(KeyText("deleteAlbum").With("title", SlotText("Blue")), Confirm(&yes, nil), "deleteConfirmed")
+	friend := "Friend"
+	ui.Ask(KeyText("lendTo"), ValueForm("record", &friend, []any{3, 5}, nil), "lend", map[string]any{"id": 7, "title": "Blue"})
+	reply, err := ui.Reply("Albums", nil)
+	must(t, err)
+	got, _ := json.Marshal(reply.Asks)
+	want := `[{"question":{"key":"deleteAlbum","values":{"title":{"kind":"text","value":"Blue"}}},"form":{"kind":"confirm","yes":{"key":"delete"},"no":null},"handler":"deleteConfirmed","values":[]},` +
+		`{"question":{"key":"lendTo"},"form":{"kind":"value","type":"record","of":"Friend","only":[3,5],"default":null},"handler":"lend","values":[{"id":7,"title":"Blue"}]}]`
+	equal(t, string(got), want)
+}
+
+func TestAnAnswerBecomesTheValueItsHandlerTakes(t *testing.T) {
+	n, err := Answer[int64](json.RawMessage(`3`))
+	must(t, err)
+	equal(t, n, int64(3))
+	name, err := Answer[string](json.RawMessage(`"Ada"`))
+	must(t, err)
+	equal(t, name, "Ada")
+	if _, err := Answer[int64](json.RawMessage(`"three"`)); err == nil {
+		t.Fatal("text was taken as a number")
+	}
+}
+
+func TestTheChoicesFromAListAreItsRecordsIDs(t *testing.T) {
+	got := IDs([]album{{ID: 3}, {ID: 5}})
+	equal(t, fmt.Sprint(got), "[3 5]")
 }

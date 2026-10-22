@@ -191,6 +191,15 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                 }
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => expr(text, name, found),
+            StmtKind::Ask { question, form, args, .. } => {
+                expr(question, name, found);
+                for e in crate::code::ask_exprs(form) {
+                    expr(e, name, found);
+                }
+                for arg in args {
+                    expr(arg, name, found);
+                }
+            }
             StmtKind::Open { with, .. } => {
                 for arg in with {
                     expr(&arg.value, name, found);

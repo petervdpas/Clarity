@@ -93,3 +93,6 @@ translation nl
     dayTheme "Dag"
     yes "Ja"
     no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

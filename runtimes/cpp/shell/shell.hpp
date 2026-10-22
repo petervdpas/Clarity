@@ -30,6 +30,9 @@ public:
     virtual std::optional<std::string> handler(const std::string& window, const std::string& event) = 0;
     /// Runs a handler on a window's state.
     virtual Reply dispatch(Db& db, const WindowState& state, const std::string& handler) = 0;
+    /// Runs the handler the answer to a question goes to (DESIGN 5.14),
+    /// with the values written for it and the answer last.
+    virtual Reply answer(Db& db, const WindowState& state, const std::string& handler, const nlohmann::json& values) = 0;
     /// Draws the canvases of the window `reply` shows anew, each by its draw
     /// handler (conformance/drawing.json). The shell redraws after a window
     /// opens and after every handler.

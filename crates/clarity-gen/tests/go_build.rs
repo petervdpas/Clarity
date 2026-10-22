@@ -451,3 +451,20 @@ fn an_engine_written_in_clarity_runs_in_go() {
     run(&out, "go", &["test", "./..."]);
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// A window that asks each kind of question (DESIGN 5.14) builds, and gofmt
+/// and go vet are content with what answers them.
+#[test]
+#[ignore = "builds Go"]
+fn questions_and_their_answers_build_in_go() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.backend = Backend::Go;
+    settings.stack.ui = Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-go-asks-{}", std::process::id()));
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    run(&out, "go", &["build", "-o", "music", "."]);
+    std::fs::remove_dir_all(&out).unwrap();
+}

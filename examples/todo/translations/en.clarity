@@ -31,3 +31,6 @@ translation en
     nameHasFinishedTasksAnd "{name} has finished tasks and cannot be deleted"
     yes "Yes"
     no "No"
+    ok "OK"
+    cancel "Cancel"
+    dismiss "Dismiss"

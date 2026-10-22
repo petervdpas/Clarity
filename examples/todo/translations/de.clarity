@@ -31,3 +31,6 @@ translation de
     nameHasFinishedTasksAnd "{name} hat Aufgaben erledigt und kann nicht gelöscht werden"
     yes "Ja"
     no "Nein"
+    ok "OK"
+    cancel "Abbrechen"
+    dismiss "Schließen"

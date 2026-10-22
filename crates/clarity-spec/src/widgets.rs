@@ -195,7 +195,18 @@ pub enum WidgetProperty {
     Units,
     /// `foldable` and `folded`: a panel or form folds by its header.
     Foldable,
+    /// `resizable`: a table's header edges are dragged to resize its columns.
+    Resizable,
+    /// `sortable`: a click on a table's header sorts by that column.
+    Sortable,
+    /// `order by field [desc]`: the order a table's rows show in first.
+    OrderBy,
 }
+
+/// The narrowest and widest a table column can be written, in pixels.
+pub const MIN_COLUMN_WIDTH: u32 = 20;
+pub const MAX_COLUMN_WIDTH: u32 = 2000;
+pub const COLUMN_WIDTH_PROBLEM: &str = "a column is 20 to 2000 pixels wide";
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -432,7 +443,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy],
     },
     Entry {
         kind: WidgetKind::List,
@@ -642,6 +653,10 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         columns: Vec::new(),
         edit: Vec::new(),
         switches: Vec::new(),
+        widths: Default::default(),
+        resizable: false,
+        sortable: false,
+        order: None,
         show: Vec::new(),
         orientation: has_property(kind, WidgetProperty::Orientation)
             .then_some(Orientation::Horizontal),
@@ -712,7 +727,15 @@ pub fn widget_line(props: &WidgetProps) -> String {
         parts.push(format!("units {} x {}", units.width, units.height));
     }
     if !props.columns.is_empty() {
-        parts.push(format!("columns {}", props.columns.join(", ")));
+        let columns: Vec<String> = props
+            .columns
+            .iter()
+            .map(|f| match props.widths.get(f) {
+                Some(width) => format!("{f} {width}"),
+                None => f.clone(),
+            })
+            .collect();
+        parts.push(format!("columns {}", columns.join(", ")));
     }
     if !props.edit.is_empty() {
         let edited: Vec<String> = props
@@ -721,6 +744,15 @@ pub fn widget_line(props: &WidgetProps) -> String {
             .map(|f| if props.switches.contains(f) { format!("{f} as switch") } else { f.clone() })
             .collect();
         parts.push(format!("edit {}", edited.join(", ")));
+    }
+    if props.resizable {
+        parts.push("resizable".to_string());
+    }
+    if props.sortable {
+        parts.push("sortable".to_string());
+    }
+    if let Some(order) = &props.order {
+        parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
     }
     if !props.show.is_empty() {
         parts.push(format!("show {}", props.show.join(", ")));
@@ -871,6 +903,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Cancel, props.cancel, "cancel"),
         (WidgetProperty::Digits, props.digits.is_some(), "digits"),
         (WidgetProperty::Units, props.units.is_some(), "units"),
+        (WidgetProperty::Resizable, props.resizable, "resizable"),
+        (WidgetProperty::Sortable, props.sortable, "sortable"),
+        (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -891,6 +926,12 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     }
     for field in props.columns.iter().chain(&props.edit).chain(&props.show) {
         identifier("field name", field)?;
+    }
+    if props.widths.values().any(|w| !(MIN_COLUMN_WIDTH..=MAX_COLUMN_WIDTH).contains(w)) {
+        return Err(COLUMN_WIDTH_PROBLEM.to_string());
+    }
+    if let Some(order) = &props.order {
+        identifier("field name", &order.field)?;
     }
     if let Some(renderer) = &props.renderer {
         identifier("renderer name", renderer)?;

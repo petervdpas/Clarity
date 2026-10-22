@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
+    AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
@@ -416,6 +416,28 @@ impl<'a> Emitter<'a> {
                 };
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}ui.message(Level::{level}, {text});\n"));
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                let question = self.shown(question);
+                let form = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                        let no = no.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                        format!("clarity_runtime::ui::AskForm::Confirm {{ yes: {yes}, no: {no} }}")
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = crate::ask_type(self.project, ty);
+                        let of = of.map_or("None".to_string(), |n| format!("Some({n:?}.to_string())"));
+                        let default = default.as_ref().map_or("None".to_string(), |d| format!("Some(to_value(&{})?)", self.value(d)));
+                        // The records `from` offers, by their ids.
+                        let only = from.as_ref().map_or("None".to_string(), |list| {
+                            format!("Some({}.iter().map(|r| serde_json::Value::from(r.id)).collect())", self.value(list))
+                        });
+                        format!("clarity_runtime::ui::AskForm::Value {{ ty: {word:?}.to_string(), of: {of}, only: {only}, default: {default} }}")
+                    }
+                };
+                let values: Vec<String> = args.iter().map(|a| format!("to_value(&{})?", self.value(a))).collect();
+                out.push_str(&format!("{pad}ui.ask({question}, {form}, {:?}, vec![{}]);\n", then.name, values.join(", ")));
             }
             StmtKind::Open { window, with } => {
                 let args: Vec<String> = with
@@ -1261,6 +1283,9 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their Rust functions.
     pub draws: Vec<(String, String)>,
+    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// Rust function, and for each value whether it is a record.
+    pub answers: Vec<(String, String, Vec<bool>)>,
 }
 
 /// The struct and handlers of every window and the app in `file`.
@@ -1387,6 +1412,13 @@ impl {struct_name} {{
             .into_iter()
             .map(|(canvas, handler)| (canvas, format!("{}__{}", super::names::snake(name), super::names::snake(&handler))))
             .collect();
+        let answers = crate::answering_handlers(&written)
+            .into_iter()
+            .map(|h| {
+                let records = h.params.iter().map(|p| matches!(type_ref_info(project, &p.ty), TypeInfo::Record(_))).collect();
+                (h.name.name.clone(), format!("{}__{}", super::names::snake(name), super::names::snake(&h.name.name)), records)
+            })
+            .collect();
         owners.push(Owner {
             name: name.clone(),
             struct_name,
@@ -1396,6 +1428,7 @@ impl {struct_name} {{
             is_app: app.is_some(),
             events,
             draws,
+            answers,
         });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }

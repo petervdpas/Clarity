@@ -34,10 +34,14 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>The window asks to be closed.</summary>
     public event Action? CloseRequested;
 
+    /// <summary>The window asks a question, when the handler that asks has finished (DESIGN 5.14).</summary>
+    public event Action<Question>? AskRequested;
+
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
     /// <summary>Windows a running handler asked to open, and whether it asked to close this one.</summary>
     readonly List<(WindowViewModel Window, bool NewWindow)> opening = [];
+    readonly List<Question> asking = [];
     bool closing;
     int running;
 
@@ -72,13 +76,35 @@ public abstract class WindowViewModel(Db db) : ObservableObject
             return;
         var close = closing;
         var open = opening.ToList();
+        var asks = asking.ToList();
         closing = false;
         opening.Clear();
+        asking.Clear();
         if (close)
             CloseRequested?.Invoke();
         foreach (var (other, newWindow) in open)
             OpenRequested?.Invoke(other, newWindow);
+        // The questions it asked, after what changed is on screen.
+        foreach (var question in asks)
+            AskRequested?.Invoke(question);
     }
+
+    /// <summary>
+    /// Asks <paramref name="question"/> in Clarity's own dialog when the
+    /// handler has finished; <paramref name="answered"/> runs the handler the
+    /// answer goes to. Cancelling runs nothing.
+    /// </summary>
+    protected void Ask(Text question, AskForm form, Action<object?> answered)
+    {
+        var asked = new Question(question, form, answered);
+        if (running > 0)
+            asking.Add(asked);
+        else
+            AskRequested?.Invoke(asked);
+    }
+
+    /// <summary>The person answered: the handler the answer goes to runs, as any handler does.</summary>
+    public void Answer(Question question, object? answer) => Handle(() => question.Answered(answer));
 
     /// <summary>The row selected in a table or list.</summary>
     protected static R Selected<R>(PartState part) where R : class =>

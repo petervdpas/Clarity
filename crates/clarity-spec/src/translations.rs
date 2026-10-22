@@ -30,8 +30,9 @@ use crate::span::Span;
 pub const TRANSLATIONS_DIR: &str = "translations";
 
 /// The renderer's own words, by key, with their value in English: a bool as
-/// it shows in a table or a list.
-pub const RENDERER_KEYS: [(&str, &str); 2] = [("yes", "Yes"), ("no", "No")];
+/// it shows in a table or a list, the buttons of Clarity's dialogs, and
+/// closing a message.
+pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok", "OK"), ("cancel", "Cancel"), ("dismiss", "Dismiss")];
 
 /// What an image part bound to a picture shows of its own, by key: in its
 /// empty state, and on its buttons to load a picture and to remove it.
@@ -181,6 +182,14 @@ impl Shown {
         for stmt in body {
             match &stmt.kind {
                 StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.written(text),
+                StmtKind::Ask { question, form, .. } => {
+                    self.written(question);
+                    if let crate::code::AskForm::Confirm { yes, no } = form.as_ref() {
+                        for text in yes.iter().chain(no) {
+                            self.written(text);
+                        }
+                    }
+                }
                 StmtKind::Assign { target, value } if is_shown_property(target) => self.written(value),
                 StmtKind::If { branches, otherwise } => {
                     for branch in branches {
@@ -475,6 +484,14 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
                 continue;
             }
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
+                // Clarity knows its own words: until the language file has one, it shows Clarity's English.
+                None if u.place == "Clarity" => {
+                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    found.push(place(Diagnostic::warning(
+                        format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
+                        u.span,
+                    )));
+                }
                 None => found.push(place(Diagnostic::error(format!("key '{}' has no value in {default}, the default language", u.key), u.span))),
                 Some(value) => {
                     let wanted = slots(value);

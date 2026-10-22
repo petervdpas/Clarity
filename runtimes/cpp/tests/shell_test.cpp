@@ -37,6 +37,13 @@ public:
         if (handler == "fail") throw StorageError("locked");
         return ui.reply(state.window, state.data);
     }
+    /// Renames the card to the answer, after the values written for it.
+    Reply answer(Db&, const WindowState& state, const std::string& handler, const json& values) override {
+        if (handler != "rename") throw InvalidError("Card has no handler " + handler + " to answer");
+        json data = state.data;
+        data["name"] = values.back();
+        return Ui(state).reply(state.window, data);
+    }
     std::vector<RefOption> options(Db&, const std::string&) override { return {{1, "Ada"}}; }
     std::optional<Bytes> picture(Db&, const std::string& entity, int64_t id, const std::string& field) override {
         if (entity != "Card" || field != "photo") throw InvalidError(entity + " has no picture " + field);
@@ -71,6 +78,9 @@ TEST(the_shell_answers_the_renderers_commands) {
     CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}, {"data", json::object()}}}, {"handler", "save"}}),
              json::parse(R"({"error":{"text":"{name} is taken","values":{"name":{"kind":"text","value":"Ada"}}}})"));
     CHECK_EQ(service.invoke("dispatch_event", {{"state", {{"window", "Card"}}}, {"handler", "fail"}}), json::parse(R"({"error":"storage: locked"})"));
+    // The answer to a question runs the handler it goes to.
+    json answered = service.invoke("answer_event", {{"state", {{"window", "Card"}, {"data", {{"name", "Ada"}}}}}, {"handler", "rename"}, {"values", {7, "Grace"}}});
+    CHECK_EQ(answered["value"]["state"]["data"]["name"], json("Grace"));
     CHECK_EQ(service.invoke("ref_options", {{"entity", "Customer"}}), json::parse(R"({"value":[{"id":1,"text":"Ada"}]})"));
     CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 1}, {"field", "photo"}}), json::parse(R"({"value":"data:image/png;base64,iVBORw0KGgo="})"));
     CHECK_EQ(service.invoke("picture", {{"entity", "Card"}, {"id", 2}, {"field", "photo"}}), json::parse(R"({"value":null})"));

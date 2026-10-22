@@ -1052,6 +1052,9 @@ impl<'a> Checker<'a> {
                         Some(_) => {}
                     }
                 }
+                if let Some(order) = p.order.as_ref().filter(|o| !p.columns.contains(&o.field)) {
+                    self.error(file, format!("{at}: '{}' is not a column of the table; order by one it shows", order.field), widget.span);
+                }
                 self.check_edits(file, &at, entity, widget);
             }
         }

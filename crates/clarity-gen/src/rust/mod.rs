@@ -335,6 +335,35 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             ));
         }
     }
+    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    let mut answers = String::new();
+    for o in owners.iter().filter(|o| !o.is_app) {
+        for (handler, function, records) in &o.answers {
+            let values: String = records
+                .iter()
+                .enumerate()
+                .map(|(i, record)| {
+                    if *record {
+                        format!(", clarity_runtime::ui::answer_record(db, value({i})?)?")
+                    } else {
+                        format!(", clarity_runtime::ui::answer(value({i})?)?")
+                    }
+                })
+                .collect();
+            answers.push_str(&format!(
+                "        ({:?}, {:?}) => {{
+            let mut w: {m}::{s} = from_data(state.data.clone())?;
+            {m}::{function}(db, &mut w, &mut ui{values})?;
+            Ok(ui.reply(&state.window, to_data(&w)?))
+        }}
+",
+                o.name,
+                handler,
+                m = o.module,
+                s = o.struct_name
+            ));
+        }
+    }
     // The app's handlers run from any window, on the app's own data.
     for o in owners.iter().filter(|o| o.is_app) {
         for (handler, function) in &o.handlers {
@@ -467,6 +496,18 @@ fn run(db: &Db, state: WindowState, handler: &str) -> Result<Reply> {{
     }}
 }}
 
+/// Runs the handler the answer to a question goes to (DESIGN 5.14), with
+/// the values written for it and the answer last.
+#[allow(unused_variables, unused_mut)]
+fn answer_to(db: &Db, state: WindowState, handler: &str, values: Vec<Value>) -> Result<Reply> {{
+    let mut ui = Ui::from_state(&state);
+    let value = |i: usize| values.get(i).ok_or_else(|| Error::Invalid(format!("{{handler}} takes more values than the answer gave")));
+    let reply = match (state.window.as_str(), handler) {{
+{answers}        _ => Err(Error::Invalid(format!("{{}} has no handler {{handler}} to answer", state.window))),
+    }}?;
+    redraw(db, reply)
+}}
+
 /// The records a reference field of `entity` can point at.
 fn options(db: &Db, entity: &str) -> Result<Vec<RefOption>> {{
     Ok(match entity {{
@@ -528,6 +569,12 @@ fn start_app(app: tauri::State<App>) -> Answer<Reply> {{
 #[tauri::command]
 fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {{
     locked(&app, |db| dispatch(db, state, &handler))
+}}
+
+/// The answer to a question a handler asked: runs the handler it goes to.
+#[tauri::command]
+fn answer_event(app: tauri::State<App>, state: WindowState, handler: String, values: Vec<Value>) -> Answer<Reply> {{
+    locked(&app, |db| answer_to(db, state, &handler, values))
 }}
 
 #[tauri::command]
@@ -600,6 +647,7 @@ fn main() {{
             close_window,
             return_to,
             dispatch_event,
+            answer_event,
             ref_options,
             picture,
             store_file,{apart_commands}

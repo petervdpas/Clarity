@@ -348,6 +348,56 @@ pub struct OpenRequest {
     pub with: Map<String, Value>,
 }
 
+/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen
+/// asks in Clarity's own dialog when the handler has finished. Its answer
+/// runs `handler` with `values` and, for a value, the answer last;
+/// cancelling runs nothing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Ask {
+    pub question: Text,
+    pub form: AskForm,
+    pub handler: String,
+    pub values: Vec<Value>,
+}
+
+/// What a question asks for, which decides its dialog.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AskForm {
+    /// Yes or no; the handler runs on yes. Without texts the screen says OK and Cancel.
+    Confirm { yes: Option<Text>, no: Option<Text> },
+    /// A value of `type`: text, integer, decimal, money, date, datetime,
+    /// duration, enum (`of` names it) or record (of entity `of`), typed or
+    /// chosen, starting at `default`. `only` narrows the choices: the
+    /// records' ids or the enum's values.
+    Value {
+        #[serde(rename = "type")]
+        ty: String,
+        of: Option<String>,
+        only: Option<Vec<Value>>,
+        default: Option<Value>,
+    },
+}
+
+/// An answer as the value a handler takes: text, a number, a date, an enum's value.
+pub fn answer<T: DeserializeOwned>(value: &Value) -> Result<T> {
+    serde_json::from_value(value.clone()).map_err(|err| Error::Invalid(format!("an answer that is no value of its type: {err}")))
+}
+
+/// A record answered: written whole for the handler, as it was (unsaved
+/// changes too), or chosen by its id and read from the database.
+pub fn answer_record<R: crate::Record + DeserializeOwned>(db: &crate::Db, value: &Value) -> Result<R> {
+    if value.is_object() { answer(value) } else { db.get(answer_id(value)?) }
+}
+
+/// The id of a record answered: chosen by its id, or written whole for the handler.
+pub fn answer_id(value: &Value) -> Result<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.get("id").and_then(Value::as_i64))
+        .ok_or_else(|| Error::Invalid(format!("an answer that is no record: {value}")))
+}
+
 /// What the screen does after a handler ran.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Reply {
@@ -359,6 +409,9 @@ pub struct Reply {
     pub shown: BTreeMap<String, Text>,
     pub open: Vec<OpenRequest>,
     pub close: bool,
+    /// The questions to ask when the handler has finished, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub asks: Vec<Ask>,
 }
 
 /// What a handler can do to the screen.
@@ -370,6 +423,7 @@ pub struct Ui {
     messages: Vec<Message>,
     shown: BTreeMap<String, Text>,
     open: Vec<OpenRequest>,
+    asks: Vec<Ask>,
     pub close: bool,
 }
 
@@ -544,6 +598,11 @@ impl Ui {
         });
     }
 
+    /// Asks `question` when the handler has finished; the answer runs `handler` with `values`.
+    pub fn ask(&mut self, question: Text, form: AskForm, handler: &str, values: Vec<Value>) {
+        self.asks.push(Ask { question, form, handler: handler.to_string(), values });
+    }
+
     /// The reply for the window `window`, with its data after the handler.
     pub fn reply(self, window: &str, data: Map<String, Value>) -> Reply {
         Reply {
@@ -558,6 +617,7 @@ impl Ui {
             shown: self.shown,
             open: self.open,
             close: self.close,
+            asks: self.asks,
         }
     }
 }
@@ -665,6 +725,58 @@ mod tests {
         let reply = ui.reply("Card", Map::new());
         let json = serde_json::to_value(&reply.state.parts["name"]).unwrap();
         assert_eq!(json, serde_json::json!({ "error": "Name is required", "readonly": false }));
+    }
+
+    /// `ask ... then handler(values)`: the question travels in the reply,
+    /// asked when the handler has finished; the answer comes back with the
+    /// values written for the handler, and runs it.
+    #[test]
+    fn a_question_travels_in_the_reply_with_the_handler_its_answer_runs() {
+        let mut ui = Ui::default();
+        assert!(serde_json::to_value(Ui::default().reply("Albums", Map::new())).unwrap().get("asks").is_none(), "no asks, no field");
+        ui.ask(
+            Text::key("deleteAlbum").with("title", Slot::text("Blue")),
+            AskForm::Confirm { yes: Some(Text::key("delete")), no: None },
+            "deleteConfirmed",
+            vec![],
+        );
+        ui.ask(
+            Text::key("lendTo"),
+            AskForm::Value { ty: "record".into(), of: Some("Friend".into()), only: Some(vec![3.into(), 5.into()]), default: None },
+            "lend",
+            vec![serde_json::json!({ "id": 7, "title": "Blue" })],
+        );
+        let wire = serde_json::to_value(ui.reply("Albums", Map::new())).unwrap();
+        assert_eq!(
+            wire["asks"],
+            serde_json::json!([
+                {
+                    "question": { "key": "deleteAlbum", "values": { "title": { "kind": "text", "value": "Blue" } } },
+                    "form": { "kind": "confirm", "yes": { "key": "delete" }, "no": null },
+                    "handler": "deleteConfirmed",
+                    "values": []
+                },
+                {
+                    "question": { "key": "lendTo" },
+                    "form": { "kind": "value", "type": "record", "of": "Friend", "only": [3, 5], "default": null },
+                    "handler": "lend",
+                    "values": [{ "id": 7, "title": "Blue" }]
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn an_answer_becomes_the_value_its_handler_takes() {
+        assert_eq!(answer::<i64>(&serde_json::json!(3)).unwrap(), 3);
+        assert_eq!(answer::<String>(&serde_json::json!("Ada")).unwrap(), "Ada");
+        assert_eq!(answer::<Decimal>(&serde_json::json!("12.50")).unwrap(), Decimal::new(1250, 2));
+        assert_eq!(answer::<Option<NaiveDate>>(&serde_json::json!("2026-10-22")).unwrap(), NaiveDate::from_ymd_opt(2026, 10, 22));
+        assert!(answer::<i64>(&serde_json::json!("three")).is_err());
+        // A record: by its id, as chosen, or as it was written for the handler.
+        assert_eq!(answer_id(&serde_json::json!(5)).unwrap(), 5);
+        assert_eq!(answer_id(&serde_json::json!({ "id": 7, "title": "Blue" })).unwrap(), 7);
+        assert!(answer_id(&serde_json::json!("seven")).is_err());
     }
 
     #[test]

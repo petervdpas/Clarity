@@ -87,3 +87,26 @@ test("every case opens and closes its windows the same way", async () => {
     assert.equal(app.ended(), c.expect.ended, `${c.name}: ended`);
   }
 });
+
+test("a reply's questions are asked after its messages and the windows it opens, by the window that asked", async () => {
+  type Reply = NavReply<string, string, string>;
+  const said: string[] = [];
+  let stack: string[] = [];
+  const nav = new Navigator<string, string, string>(
+    { get: () => stack, set: (next) => (stack = next) },
+    {
+      open: async (window): Promise<Reply> => ({ state: window, messages: [`${window} opened`], open: [], close: false, asks: window === "Main" ? ["Name it?"] : [] }),
+      close: async (state): Promise<Reply> => ({ state, messages: [], open: [], close: false }),
+      returnTo: async (state): Promise<Reply> => ({ state, messages: [], open: [], close: false }),
+      openApart: async () => {},
+      quit: async () => {},
+    },
+    (message) => said.push(message),
+    (err) => assert.fail(String(err)),
+    (question, window) => said.push(`ask ${question} of window ${window}`),
+  );
+  await nav.open("Main");
+  assert.deepEqual(said, ["Main opened", "ask Name it? of window 0"]);
+  await nav.apply(0, { state: "Main", messages: ["saved"], open: [{ window: "Card", with: {} }], close: false, asks: ["Sure?"] });
+  assert.deepEqual(said.slice(2), ["saved", "Card opened", "ask Sure? of window 0"]);
+});

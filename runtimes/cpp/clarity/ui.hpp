@@ -82,6 +82,26 @@ struct OpenRequest {
     nlohmann::json with = nlohmann::json::object();
 };
 
+/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
+/// in Clarity's own dialog when the handler has finished. Its answer runs
+/// `handler` with `values` and, for a value, the answer last.
+struct Ask {
+    Text question;
+    /// What it asks for, as the screen reads it: ask_confirm or ask_value.
+    nlohmann::json form;
+    std::string handler;
+    nlohmann::json values = nlohmann::json::array();
+};
+
+/// A question with yes and no (none: OK and Cancel); the handler runs on yes.
+nlohmann::json ask_confirm(std::optional<Text> yes, std::optional<Text> no);
+
+/// A question for a value of `type` (text, integer, decimal, money, date,
+/// datetime, duration, enum or record), of the enum or entity `of`. `only`
+/// narrows the choices to the records' ids (or null); `start` is where a
+/// typed value starts (or null).
+nlohmann::json ask_value(const std::string& type, std::optional<std::string> of, nlohmann::json only, nlohmann::json start);
+
 /// What the screen does after a handler ran.
 struct Reply {
     WindowState state;
@@ -91,6 +111,8 @@ struct Reply {
     std::map<std::string, Text> shown;
     std::vector<OpenRequest> open;
     bool close = false;
+    /// The questions to ask when the handler has finished, in order.
+    std::vector<Ask> asks;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -170,12 +192,18 @@ public:
     void open(const std::string& window, nlohmann::json with) { open_.push_back({window, std::move(with)}); }
     /// Asks the screen to close the window.
     void close() { close_ = true; }
+    /// Asks `question` when the handler has finished; the answer runs
+    /// `handler` with `values` and, for a value, the answer.
+    void ask(Text question, nlohmann::json form, std::string handler, nlohmann::json values) {
+        asks_.push_back({std::move(question), std::move(form), std::move(handler), std::move(values)});
+    }
 
     /// The reply for `window`, with its data after the handler.
     Reply reply(const std::string& window, nlohmann::json data) const;
 
 private:
     int64_t pointer(const std::string& part, const char* key) const;
+    std::vector<Ask> asks_;
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;

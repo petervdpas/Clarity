@@ -496,6 +496,55 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
             );
         }
     }
+    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    let mut answers = String::new();
+    for w in windows.iter().filter(|w| !w.answers.is_empty()) {
+        let _ = write!(
+            answers,
+            "    if (strcmp(state->window, {}) == 0) {{\n        {} w = {{0}};\n        if (!{}_from_json(state->data, &w)) return false;\n",
+            string(&w.name),
+            w.struct_name,
+            w.prefix
+        );
+        for (handler, function, values) in &w.answers {
+            let mut decode = String::new();
+            let mut passed = String::new();
+            for (i, ty) in values.iter().enumerate() {
+                let _ = writeln!(decode, "            const cJSON* a{i} = cJSON_GetArrayItem(values, {i});");
+                if let check::TypeInfo::Record(entity) = ty {
+                    let p = prefix(entity);
+                    let _ = write!(
+                        decode,
+                        "            {entity} v{i} = {{0}};\n            // A record chosen by its id is read; one written for the handler comes as it was.\n            if (cJSON_IsNumber(a{i}) ? !{p}_get(db, (int64_t)a{i}->valuedouble, &v{i}) : !{p}_from_json(a{i}, &v{i})) return false;\n"
+                    );
+                } else {
+                    let _ = writeln!(decode, "            cJSON* box{i} = cJSON_CreateObject();\n            cJSON_AddItemReferenceToObject(box{i}, \"value\", (cJSON*)a{i});");
+                    let read = |getter: &str, ty: &str, empty: &str| format!("            {ty} v{i} = {empty};\n            if (!clarity_json_get_{getter}(box{i}, \"value\", &v{i})) return false;\n");
+                    decode.push_str(&match ty {
+                        check::TypeInfo::Integer | check::TypeInfo::Duration => read("integer", "int64_t", "0"),
+                        check::TypeInfo::Decimal | check::TypeInfo::Money => read("decimal", "ClarityDecimal", "{0}"),
+                        check::TypeInfo::Bool => read("bool", "bool", "false"),
+                        check::TypeInfo::Date => read("date", "ClarityDate", "{0}"),
+                        check::TypeInfo::DateTime => read("date_time", "ClarityDateTime", "{0}"),
+                        check::TypeInfo::Enum(e) => format!(
+                            "            const char* name{i} = NULL;\n            if (!clarity_json_get_text(box{i}, \"value\", &name{i})) return false;\n            {e} v{i} = {}_from(name{i});\n",
+                            prefix(e)
+                        ),
+                        _ => read("text", "const char*", "\"\""),
+                    });
+                }
+                let _ = write!(passed, "{}", if matches!(ty, check::TypeInfo::Record(_)) { format!(", &v{i}") } else { format!(", v{i}") });
+            }
+            let _ = write!(
+                answers,
+                "        if (strcmp(handler, {}) == 0) {{\n            if (cJSON_GetArraySize(values) < {}) return clarity_fail(CLARITY_INVALID, \"%s takes more values than the answer gave\", handler);\n{decode}            if (!{function}(db, ui, &w{passed})) return false;\n            *out = clarity_ui_reply(ui, state->window, {}_json(&w));\n            return true;\n        }}\n",
+                string(handler),
+                values.len(),
+                w.prefix
+            );
+        }
+        answers.push_str("    }\n");
+    }
     let mut options = String::new();
     for entity in project.entities() {
         let name = &entity.name.name;
@@ -567,6 +616,17 @@ static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char*
 {dispatch}    return clarity_fail(CLARITY_INVALID, "%s has no handler %s", state->window, handler);
 }}
 
+/// Runs the handler the answer to a question goes to (DESIGN 5.14), with
+/// the values written for it and the answer last.
+static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {{
+    ClarityUi* ui = clarity_ui(state);
+    (void)db;
+    (void)ui;
+    (void)values;
+    (void)out;
+{answers}    return clarity_fail(CLARITY_INVALID, "%s has no handler %s to answer", state->window, handler);
+}}
+
 /// The records a reference field of `entity` can point at.
 static bool options(ClarityDb* db, const char* entity, cJSON** out) {{
     (void)db;
@@ -592,7 +652,7 @@ static bool redraw(ClarityDb* db, ClarityReply* reply) {{
 }}
 
 /// What the shell asks of the application's windows.
-static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw}};
+static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw, answer}};
 
 /// Says what went wrong, and ends the program.
 static int failed(ClarityDb* db) {{

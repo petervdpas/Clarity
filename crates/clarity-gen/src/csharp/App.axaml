@@ -153,19 +153,23 @@
       <Setter Property="Foreground" Value="{DynamicResource ClarityMuted}" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.message">
-      <Setter Property="HorizontalContentAlignment" Value="Left" />
-      <Setter Property="Padding" Value="14,10" />
+    <!-- A note at the top right, with a small x that closes it. -->
+    <Style Selector="Border.message">
+      <Setter Property="Padding" Value="14,10,8,10" />
       <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />
       <Setter Property="BorderBrush" Value="{DynamicResource ClarityBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
     </Style>
-    <Style Selector="Button.message.warning">
-      <Setter Property="Background" Value="{DynamicResource ClarityWarningSoft}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource ClarityWarning}" />
+    <Style Selector="Border.message Button.close">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="Margin" Value="8,0,0,0" />
+      <Setter Property="Foreground" Value="{DynamicResource ClarityMuted}" />
     </Style>
-    <Style Selector="Button.message.error">
-      <Setter Property="Background" Value="{DynamicResource ClarityErrorSoft}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource ClarityError}" />
+    <!-- A warning or an error, said in Clarity's dialog. -->
+    <Style Selector="TextBlock.said.error">
       <Setter Property="Foreground" Value="{DynamicResource ClarityError}" />
     </Style>
 

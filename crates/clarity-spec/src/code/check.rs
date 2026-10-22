@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{EngineBody, EngineState, 
+use super::{AskForm, EngineBody, EngineState,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -696,6 +696,17 @@ fn check_block(env: &Env, owner: &Owner, block: &CodeBlock, out: &mut Output) {
         let mut called = false;
         for other in block.handlers.iter().filter(|h| h.name.name != name) {
             each_stmt_expr(&other.body, &mut |e| called |= matches!(&e.kind, ExprKind::Call { function, .. } if function.name == name));
+            // Or the answer to a question it asks.
+            each_stmt(&other.body, &mut |s| called |= matches!(&s.kind, StmtKind::Ask { then, .. } if then.name == name));
+        }
+        // A question needs its window open for the answer.
+        let (mut asks, mut closes) = (false, false);
+        each_stmt(&handler.body, &mut |s| {
+            asks |= matches!(s.kind, StmtKind::Ask { .. });
+            closes |= matches!(s.kind, StmtKind::Close);
+        });
+        if asks && closes {
+            out.push(Diagnostic::error(format!("handler '{name}' asks and closes its window: the answer would have nowhere to go"), handler.name.span));
         }
         if !called && !owner.wired.iter().any(|w| w.handler == name) {
             out.push(Diagnostic::warning(
@@ -1313,6 +1324,7 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
                 }
             }
+            StmtKind::Ask { question, form, then, args } => self.check_ask(stmt.span, question, form, then, args),
             StmtKind::Open { window, with } => {
                 self.ui_only("open", stmt.span);
                 let Some(page) = self.env.page(&window.name) else {
@@ -1359,6 +1371,94 @@ impl<'a> BodyChecker<'_, 'a> {
                 if !ty.is_value() {
                     self.error(format!("'refuse' needs text or a value, not {}", ty.name()), text.span);
                 }
+            }
+        }
+    }
+
+    /// `ask ... then handler(values)`: a question that is text, a form that
+    /// can be asked, and a handler of the window that takes the values
+    /// written and, for a value, the answer last.
+    fn check_ask(&mut self, span: Span, question: &Expr, form: &AskForm, then: &Ident, args: &[Expr]) {
+        self.ui_only("ask", span);
+        let ty = self.shown_text(question);
+        if !ty.is_value() {
+            self.error(format!("a question is text or a value, not {}", ty.name()), question.span);
+        }
+        let answer = match form {
+            AskForm::Confirm { yes, no } => {
+                for text in yes.iter().chain(no) {
+                    let ty = self.shown_text(text);
+                    if !ty.is_value() {
+                        self.error(format!("a button says text or a value, not {}", ty.name()), text.span);
+                    }
+                }
+                None
+            }
+            AskForm::Value { ty, default, from } => {
+                let asked = self.env.type_ref(ty).unwrap_or_else(|message| {
+                    self.error(message, ty.span);
+                    Ty::Unknown
+                });
+                let fits = matches!(
+                    asked,
+                    Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Enum(_) | Ty::Record(_) | Ty::Unknown
+                );
+                if !fits {
+                    self.error(format!("ask for text, a number, a date, a duration, an enum or an entity, not {}", asked.name()), ty.span);
+                }
+                if let Some(default) = default {
+                    let given = self.expr(default, Some(asked));
+                    if fits && !asked.accepts(&given) {
+                        self.error(format!("the default is {}, but the answer is {}", given.name(), asked.name()), default.span);
+                    }
+                }
+                if let Some(from) = from {
+                    let given = self.expr(from, None);
+                    let wanted = format!("list<{}>", asked.name());
+                    if !matches!(asked, Ty::Record(_) | Ty::Unknown) {
+                        self.error(format!("'from' gives the records to choose from; {} is no entity", asked.name()), from.span);
+                    } else if !asked.is_unknown() && !given.is_unknown() && given.name() != wanted {
+                        self.error(format!("'from' gives the choices: a {wanted}, not {}", given.name()), from.span);
+                    }
+                }
+                Some(asked)
+            }
+        };
+        let owner = self.owner.map(|o| o.name).unwrap_or("");
+        let Some(handler) = self.handlers.iter().find(|h| h.name.name == then.name) else {
+            if self.decl.is_none() {
+                self.error(format!("{owner} has no handler '{}' to run with the answer", then.name), then.span);
+            }
+            for arg in args {
+                self.expr(arg, None);
+            }
+            return;
+        };
+        let name = &then.name;
+        let wanted = args.len() + usize::from(answer.is_some());
+        if answer.is_none() && handler.params.len() == args.len() + 1 {
+            self.error(format!("handler '{name}' runs on yes and takes no answer: only the values written after 'then'"), then.span);
+        } else if handler.params.len() != wanted {
+            let n = handler.params.len();
+            let more = if answer.is_some() { format!("{} written and the answer", args.len()) } else { format!("{} written", args.len()) };
+            self.error(format!("handler '{name}' takes {n} parameters, not {wanted}: {more}"), then.span);
+        }
+        for (arg, param) in args.iter().zip(&handler.params) {
+            let expected = self.env.type_ref(&param.ty).unwrap_or(Ty::Unknown);
+            let ty = self.expr(arg, Some(expected));
+            if !expected.accepts(&ty) {
+                self.error(format!("value '{}' of handler {name} is {}, not {}", param.name.name, described(&expected), ty.name()), arg.span);
+            }
+        }
+        if let (Some(answer), Some(last)) = (answer, handler.params.get(args.len()))
+            && handler.params.len() == wanted
+        {
+            let expected = self.env.type_ref(&last.ty).unwrap_or(Ty::Unknown);
+            if !answer.is_unknown() && !expected.accepts(&answer) {
+                self.error(
+                    format!("the answer is {}, but '{}', the last parameter of handler {name}, is {}", answer.name(), last.name.name, expected.name()),
+                    then.span,
+                );
             }
         }
     }
@@ -2686,6 +2786,15 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 }
             }
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
+            StmtKind::Ask { question, form, args, .. } => {
+                each_expr(question, found);
+                for e in super::ask_exprs(form) {
+                    each_expr(e, found);
+                }
+                for arg in args {
+                    each_expr(arg, found);
+                }
+            }
             StmtKind::Open { with, .. } => {
                 for arg in with {
                     each_expr(&arg.value, found);
@@ -2696,6 +2805,25 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr(path, found);
             }
             StmtKind::Close | StmtKind::Reload { .. } => {}
+        }
+    }
+}
+
+/// Calls `found` for every statement in `body`, nested blocks included.
+fn each_stmt(body: &[Stmt], found: &mut impl FnMut(&Stmt)) {
+    for stmt in body {
+        found(stmt);
+        match &stmt.kind {
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    each_stmt(&branch.body, found);
+                }
+                if let Some(otherwise) = otherwise {
+                    each_stmt(otherwise, found);
+                }
+            }
+            StmtKind::For { body, .. } => each_stmt(body, found),
+            _ => {}
         }
     }
 }

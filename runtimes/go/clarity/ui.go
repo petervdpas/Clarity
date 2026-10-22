@@ -131,6 +131,8 @@ type Reply struct {
 	Shown map[string]Text `json:"shown,omitempty"`
 	Open  []OpenRequest   `json:"open"`
 	Close bool            `json:"close"`
+	// Asks are the questions to ask when the handler has finished, in order.
+	Asks []Ask `json:"asks,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -147,6 +149,7 @@ type Ui struct {
 	messages []Message
 	shown    map[string]Text
 	open     []OpenRequest
+	asks     []Ask
 	close    bool
 	err      error
 }
@@ -388,6 +391,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		Shown:    u.shown,
 		Open:     u.open,
 		Close:    u.close,
+		Asks:     u.asks,
 	}, nil
 }
 

@@ -177,6 +177,15 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!dispatched(s, &state, text_of(args, "handler"), &reply)) return failed();
         return value(clarity_reply_json(reply));
     }
+    if (strcmp(command, "answer_event") == 0) {
+        // The answer to a question a handler asked runs the handler it goes to.
+        const cJSON* values = cJSON_GetObjectItemCaseSensitive(args, "values");
+        ClarityReply* reply;
+        if (!windows->answer) return error_text("this program asks nothing");
+        if (!windows->answer(db, &state, text_of(args, "handler"), cJSON_IsArray(values) ? values : cJSON_CreateArray(), &reply)) return failed();
+        if (!windows->redraw(db, reply)) return failed();
+        return value(clarity_reply_json(reply));
+    }
     if (strcmp(command, "ref_options") == 0) {
         cJSON* options;
         if (!windows->options(db, text_of(args, "entity"), &options)) return failed();

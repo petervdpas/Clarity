@@ -1,0 +1,47 @@
+module music
+
+enum Format
+    Vinyl
+    Cd
+
+entity Friend
+    name: text(80), required
+
+entity Album
+    title: text(120), required
+    copies: integer
+    format: Format
+
+page Albums: window
+    data album: Album
+    data friends: list<Friend>
+    button "Delete" name deleteButton at 1,1 span 2 on click: deleteClicked
+    button "Lend" name lendButton at 3,1 span 2 on click: lendClicked
+    button "Copies" name copiesButton at 5,1 span 2 on click: copiesClicked
+    button "Format" name formatButton at 7,1 span 2 on click: formatClicked
+
+code Albums
+    handler deleteClicked
+        ask "Delete {album.title}?" yes "Delete" no "Keep" then deleteConfirmed
+
+    handler deleteConfirmed
+        delete album
+
+    handler lendClicked
+        ask "Lend it to" for Friend from friends then lend(album)
+
+    handler lend(what: Album, friend: Friend)
+        what.copies = what.copies - 1
+        save what
+
+    handler copiesClicked
+        ask "How many copies?" for integer default album.copies then setCopies
+
+    handler setCopies(copies: integer)
+        album.copies = copies
+
+    handler formatClicked
+        ask "Which format?" for Format then setFormat
+
+    handler setFormat(format: Format)
+        album.format = format

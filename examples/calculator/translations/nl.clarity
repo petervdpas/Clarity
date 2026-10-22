@@ -12,3 +12,6 @@ translation nl
     clearKeyCaption "C"
     yes "Ja"
     no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

@@ -52,6 +52,15 @@ public sealed class Shell : Window
         Width = 1100;
         Height = 760;
         messages = new MessageList { Messages = Messages, InfoDuration = infoDuration };
+        // A warning or an error is said in Clarity's dialog, one at a time.
+        Messages.CollectionChanged += (_, e) =>
+        {
+            foreach (var message in e.NewItems?.OfType<Message>() ?? [])
+            {
+                if (message.Level != Level.Info)
+                    Said(message);
+            }
+        };
         Content = new Panel { Children = { content, messages } };
         Locale.Changed += Refresh;
         Closing += (_, _) =>
@@ -121,6 +130,7 @@ public sealed class Shell : Window
                 Open(other, model);
         };
         model.CloseRequested += () => Close(model);
+        model.AskRequested += question => Ask(model, question);
     }
 
     void ShowTop()
@@ -192,6 +202,47 @@ public sealed class Shell : Window
         dialogWindows[other] = dialog;
         _ = dialog.ShowDialog(this);
         other.Opened();
+    }
+
+    /// <summary>A warning or an error, in a dialog of Clarity's own on top of the window; OK takes it away.</summary>
+    void Said(Message message)
+    {
+        if (!IsVisible)
+            return;
+        var said = new SaidDialog(message);
+        var dialog = new Window
+        {
+            Title = Title,
+            Content = said,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        said.Done += () => dialog.Close();
+        dialog.Closed += (_, _) => Messages.Remove(message);
+        _ = dialog.ShowDialog(this);
+    }
+
+    /// <summary>A question a window asks, in a dialog of Clarity's own on top of the window; the answer runs its handler.</summary>
+    void Ask(WindowViewModel model, Question question)
+    {
+        var ask = new AskDialog(question);
+        var dialog = new Window
+        {
+            Title = Title,
+            Content = ask,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        // Closing the dialog any other way is a cancel: nothing runs.
+        ask.Answered += answer =>
+        {
+            dialog.Close();
+            model.Answer(question, answer);
+        };
+        ask.Cancelled += () => dialog.Close();
+        _ = dialog.ShowDialog(this);
     }
 
     void Close(WindowViewModel model)

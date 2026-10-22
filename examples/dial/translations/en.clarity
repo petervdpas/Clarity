@@ -5,3 +5,6 @@ translation en
     fasterCaption "Faster"
     yes "Yes"
     no "No"
+    ok "OK"
+    cancel "Cancel"
+    dismiss "Dismiss"

@@ -3,6 +3,7 @@
 // list, a widget being moved, or a widget being resized. While dragging, the
 // pointer is translated into a cell of the innermost grid under it.
 
+import type { Edit } from "./generated/Edit";
 import type { Dock } from "./generated/Dock";
 import type { Preview } from "./generated/Preview";
 import type { RegionKind } from "./generated/RegionKind";
@@ -51,15 +52,18 @@ class PageDesigner {
   #canvas: HTMLElement | null = null;
   #ondrop: ((source: PageDragSource, placement: Placement) => void) | null = null;
   #ondock: ((region: RegionKind, dock: Dock) => void) | null = null;
+  #onedit: ((edit: Edit) => void) | null = null;
 
   attach(
     canvas: HTMLElement,
     ondrop: (source: PageDragSource, placement: Placement) => void,
     ondock: (region: RegionKind, dock: Dock) => void,
+    onedit: (edit: Edit) => void = () => {},
   ): () => void {
     this.#canvas = canvas;
     this.#ondrop = ondrop;
     this.#ondock = ondock;
+    this.#onedit = onedit;
     const move = (e: PointerEvent) => this.#move(e);
     const up = (e: PointerEvent) => this.#up(e);
     const key = (e: KeyboardEvent) => {
@@ -75,7 +79,13 @@ class PageDesigner {
       this.#canvas = null;
       this.#ondrop = null;
       this.#ondock = null;
+      this.#onedit = null;
     };
+  }
+
+  /** An edit a part makes on the canvas itself, such as a table column's width dragged in its header. */
+  edit(edit: Edit) {
+    this.#onedit?.(edit);
   }
 
   press(e: PointerEvent, source: PageDragSource, onclick: () => void = () => {}) {

@@ -173,6 +173,19 @@
     onedit({ op: "addData", page: page.span.start, name, entity: dataOf, list: dataList && listable });
     dataName = "";
   }
+
+  function withoutKey(widths: Record<string, number>, field: string): Record<string, number> {
+    const next = { ...widths };
+    delete next[field];
+    return next;
+  }
+
+  /** A column's width as typed: a number from 20 to 2000, or empty for none. */
+  function withWidth(widths: Record<string, number>, field: string, typed: string): Record<string, number> {
+    const width = Math.round(Number(typed));
+    if (typed.trim() === "" || !Number.isFinite(width)) return withoutKey(widths, field);
+    return { ...widths, [field]: Math.min(2000, Math.max(20, width)) };
+  }
 </script>
 
 <section>
@@ -240,7 +253,7 @@
     {:else if info.bind === "collection"}
       <label class="prop">
         <span>Bound to</span>
-        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], switches: [], show: [] })}>
+        <select value={p.bind ?? ""} onchange={(e) => update({ bind: textOf(e), columns: [], edit: [], switches: [], show: [], widths: {}, order: null })}>
           <option value="">(not bound)</option>
           {#each listOptions as name (name)}
             <option value={name}>{name}</option>
@@ -261,11 +274,30 @@
               onchange={(e) =>
                 update(
                   key === "columns" && !e.currentTarget.checked
-                    ? { columns: toggle(p.columns, field.name.name, false), edit: toggle(p.edit, field.name.name, false), switches: toggle(p.switches, field.name.name, false) }
+                    ? {
+                        columns: toggle(p.columns, field.name.name, false),
+                        edit: toggle(p.edit, field.name.name, false),
+                        switches: toggle(p.switches, field.name.name, false),
+                        widths: withoutKey(p.widths, field.name.name),
+                        order: p.order?.field === field.name.name ? null : p.order,
+                      }
                     : { [key]: toggle(p[key], field.name.name, e.currentTarget.checked) },
                 )}
             />
             {field.label}
+            {#if key === "columns" && p.columns.includes(field.name.name)}
+              <input
+                class="width"
+                type="number"
+                min="20"
+                max="2000"
+                placeholder="auto"
+                aria-label="Width of {field.label} in pixels"
+                title="Width in pixels; empty shares what is left. The header edges on the canvas set it too."
+                value={p.widths[field.name.name] ?? ""}
+                onchange={(e) => update({ widths: withWidth(p.widths, field.name.name, e.currentTarget.value) })}
+              />
+            {/if}
           </label>
         {:else}
           <p class="hint">Bind to a list first.</p>
@@ -305,6 +337,29 @@
         {:else}
           <p class="hint">None of the columns can be edited in a cell.</p>
         {/each}
+      </fieldset>
+    {/if}
+
+    {#if info.properties.includes("sortable") && p.columns.length > 0}
+      <fieldset class="checks">
+        <legend>Table</legend>
+        <label title="The person drags the header edges; the widths are remembered for them">
+          <input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> Resizable columns
+        </label>
+        <label title="A click on a header sorts by that column; another click the other way">
+          <input type="checkbox" checked={p.sortable} onchange={(e) => update({ sortable: e.currentTarget.checked })} /> Sortable by a header click
+        </label>
+        <label class="order">
+          <span>First order</span>
+          <select value={p.order?.field ?? ""} onchange={(e) => update({ order: e.currentTarget.value ? { field: e.currentTarget.value, desc: p.order?.desc ?? false } : null })}>
+            <option value="">as the data has them</option>
+            {#each p.columns as column (column)}<option value={column}>{column}</option>{/each}
+          </select>
+        </label>
+        {#if p.order}
+          {@const order = p.order}
+          <label><input type="checkbox" checked={order.desc} onchange={(e) => update({ order: { ...order, desc: e.currentTarget.checked } })} /> Descending</label>
+        {/if}
       </fieldset>
     {/if}
 
@@ -595,6 +650,17 @@
 </section>
 
 <style>
+  .checks .width {
+    width: 6em;
+    margin-left: auto;
+  }
+
+  .checks .order {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
   section {
     background: var(--panel);
     border: 1px solid var(--border);

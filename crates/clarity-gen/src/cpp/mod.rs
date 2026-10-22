@@ -355,6 +355,32 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
             w.struct_name
         );
     }
+    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    let mut answers = String::new();
+    for w in windows.iter().filter(|w| !w.answers.is_empty()) {
+        let _ = writeln!(answers, "        if (state.window == {}) {{\n            auto w = state.data.get<{}>();", string(&w.name), w.struct_name);
+        for (handler, method, values) in &w.answers {
+            let passed: Vec<String> = values
+                .iter()
+                .enumerate()
+                .map(|(i, ty)| match ty {
+                    // A record chosen by its id is read; one written for the handler comes as it was.
+                    check::TypeInfo::Record(entity) => {
+                        format!("values.at({i}).is_number_integer() ? db.get<{entity}>(values.at({i}).get<int64_t>()) : values.at({i}).get<{entity}>()")
+                    }
+                    other => format!("values.at({i}).get<{}>()", names::value_type(other)),
+                })
+                .collect();
+            let _ = writeln!(
+                answers,
+                "            if (handler == {}) {{\n                if (values.size() < {}) throw clarity::InvalidError(handler + \" takes more values than the answer gave\");\n                w.{method}(db, ui{});\n                return ui.reply(state.window, w);\n            }}",
+                string(handler),
+                values.len(),
+                passed.iter().map(|p| format!(", {p}")).collect::<String>()
+            );
+        }
+        answers.push_str("        }\n");
+    }
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = writeln!(dispatch, "        if (state.window == {}) {{\n            auto w = state.data.get<{}>();", string(&w.name), w.struct_name);
@@ -439,6 +465,13 @@ public:
     clarity::Reply dispatch([[maybe_unused]] clarity::Db& db, const clarity::WindowState& state, const std::string& handler) override {{
         clarity::Ui ui(state);
 {dispatch}        throw clarity::InvalidError(state.window + " has no handler " + handler);
+    }}
+
+    // Runs the handler the answer to a question goes to (DESIGN 5.14), with
+    // the values written for it and the answer last.
+    clarity::Reply answer([[maybe_unused]] clarity::Db& db, const clarity::WindowState& state, const std::string& handler, [[maybe_unused]] const nlohmann::json& values) override {{
+        clarity::Ui ui(state);
+{answers}        throw clarity::InvalidError(state.window + " has no handler " + handler + " to answer");
     }}
 
     // Draws the canvases of the window `reply` shows anew, each by its draw

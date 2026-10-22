@@ -1,5 +1,6 @@
-// Messages a handler shows: at the top right of the window, an info message
-// going away by itself, warnings and errors staying until they are clicked.
+// Messages a handler shows. An info message is a note at the top right of
+// the window that goes away by itself, or by its small x; a warning or an
+// error is said in Clarity's dialog (the shell's), read and closed with OK.
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -24,7 +25,7 @@ public sealed record Message(Level Level, Text Text)
     public string Shown => Locale.Show(Text);
 }
 
-/// <summary>The messages of a window, as buttons that dismiss them.</summary>
+/// <summary>The info messages of a window, as notes with a small x that dismisses them.</summary>
 public sealed class MessageList : StackPanel
 {
     public static readonly StyledProperty<ObservableCollection<Message>?> MessagesProperty =
@@ -77,14 +78,22 @@ public sealed class MessageList : StackPanel
     public void Rebuild()
     {
         Children.Clear();
-        foreach (var message in Messages ?? [])
+        // Warnings and errors are said in the shell's dialog, not here.
+        foreach (var message in (Messages ?? []).Where(m => m.Level == Level.Info))
         {
-            var button = new Button { Content = message.Shown, HorizontalAlignment = HorizontalAlignment.Stretch };
-            button.Classes.Add("message");
-            button.Classes.Add(message.Level.ToString().ToLowerInvariant());
-            ToolTip.SetTip(button, Locale.Translate("dismiss", "Dismiss"));
-            button.Click += (_, _) => Dismiss(message);
-            Children.Add(button);
+            var close = new Button { Content = "×", VerticalAlignment = VerticalAlignment.Top };
+            close.Classes.Add("close");
+            ToolTip.SetTip(close, Locale.Translate("dismiss", "Dismiss"));
+            global::Avalonia.Automation.AutomationProperties.SetName(close, Locale.Translate("dismiss", "Dismiss"));
+            close.Click += (_, _) => Dismiss(message);
+            var row = new DockPanel();
+            DockPanel.SetDock(close, Dock.Right);
+            row.Children.Add(close);
+            row.Children.Add(new TextBlock { Text = message.Shown, TextWrapping = global::Avalonia.Media.TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center });
+            var note = new Border { Child = row };
+            note.Classes.Add("message");
+            note.Classes.Add(message.Level.ToString().ToLowerInvariant());
+            Children.Add(note);
         }
     }
 }

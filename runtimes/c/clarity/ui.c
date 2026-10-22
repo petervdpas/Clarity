@@ -13,6 +13,8 @@ struct ClarityUi {
     size_t shown_count, shown_room;
     ClarityOpen* open;
     size_t open_count, open_room;
+    ClarityAsk* asks;
+    size_t ask_count, ask_room;
     bool close;
 };
 
@@ -244,6 +246,31 @@ void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with) {
 
 void clarity_ui_close(ClarityUi* ui) { ui->close = true; }
 
+static cJSON* text_or_null(const ClarityText* text) { return text ? clarity_text_json(text) : cJSON_CreateNull(); }
+
+cJSON* clarity_ask_confirm(const ClarityText* yes, const ClarityText* no) {
+    cJSON* form = cJSON_CreateObject();
+    cJSON_AddStringToObject(form, "kind", "confirm");
+    cJSON_AddItemToObject(form, "yes", text_or_null(yes));
+    cJSON_AddItemToObject(form, "no", text_or_null(no));
+    return form;
+}
+
+cJSON* clarity_ask_value(const char* type, const char* of, cJSON* only, cJSON* start) {
+    cJSON* form = cJSON_CreateObject();
+    cJSON_AddStringToObject(form, "kind", "value");
+    cJSON_AddStringToObject(form, "type", type);
+    cJSON_AddItemToObject(form, "of", of ? cJSON_CreateString(of) : cJSON_CreateNull());
+    cJSON_AddItemToObject(form, "only", only ? only : cJSON_CreateNull());
+    cJSON_AddItemToObject(form, "default", start ? start : cJSON_CreateNull());
+    return form;
+}
+
+void clarity_ui_ask(ClarityUi* ui, const ClarityText* question, cJSON* form, const char* handler, cJSON* values) {
+    clarity_grow((void**)&ui->asks, &ui->ask_room, ui->ask_count, sizeof *ui->asks);
+    ui->asks[ui->ask_count++] = (ClarityAsk){question, form, clarity_copy(handler), values ? values : cJSON_CreateArray()};
+}
+
 ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* data) {
     ClarityReply* r = CLARITY_NEW(ClarityReply, 1);
     r->state = ui->state;
@@ -256,6 +283,8 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->open = ui->open;
     r->open_count = ui->open_count;
     r->close = ui->close;
+    r->asks = ui->asks;
+    r->ask_count = ui->ask_count;
     return r;
 }
 
@@ -389,6 +418,17 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
         cJSON_AddItemToArray(open, o);
     }
     cJSON_AddBoolToObject(out, "close", r->close);
+    if (r->ask_count > 0) {
+        cJSON* asks = cJSON_AddArrayToObject(out, "asks");
+        for (size_t i = 0; i < r->ask_count; ++i) {
+            cJSON* a = cJSON_CreateObject();
+            cJSON_AddItemToObject(a, "question", clarity_text_json(r->asks[i].question));
+            cJSON_AddItemToObject(a, "form", cJSON_Duplicate(r->asks[i].form, true));
+            cJSON_AddStringToObject(a, "handler", r->asks[i].handler);
+            cJSON_AddItemToObject(a, "values", cJSON_Duplicate(r->asks[i].values, true));
+            cJSON_AddItemToArray(asks, a);
+        }
+    }
     return out;
 }
 

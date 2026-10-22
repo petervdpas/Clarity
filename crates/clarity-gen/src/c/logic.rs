@@ -19,7 +19,7 @@ use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::check::ValueItem;
 use clarity_spec::code::{
-    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp, path_text,
+    AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp, path_text,
     template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
@@ -404,6 +404,9 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their functions.
     pub draws: Vec<(String, String)>,
+    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// function, and each value's type.
+    pub answers: Vec<(String, String, Vec<TypeInfo>)>,
 }
 
 /// The struct of every window and the app in `file`, for the header, and
@@ -513,11 +516,12 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             if !code.trim_end().ends_with("return true;") {
                 code.push_str("return true;\n");
             }
-            // The values a click gives it, typed.
+            // The values a click gives it, typed; a record (the answer to a
+            // question, or a value written for it) by pointer, as code keeps records.
             let values: String = handler
                 .params
                 .iter()
-                .map(|p| format!(", {} {}", value_type(&type_ref_info(project, &p.ty)), ident(&p.name.name)))
+                .map(|p| format!(", {} {}", super::names::param_type(&type_ref_info(project, &p.ty)), ident(&p.name.name)))
                 .collect();
             let mut names = vec!["db".to_string(), "ui".into(), "w".into()];
             names.extend(handler.params.iter().map(|p| ident(&p.name.name)));
@@ -551,7 +555,12 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             indent(&from, 1)
         );
         let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, format!("{p}_{}", snake(&handler)))).collect();
-        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, calls, is_app: app.is_some(), events, draws });
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        let answers = crate::answering_handlers(&written)
+            .into_iter()
+            .map(|h| (h.name.name.clone(), format!("{p}_{}", snake(&h.name.name)), h.params.iter().map(|p| type_ref_info(project, &p.ty)).collect()))
+            .collect();
+        owners.push(Owner { name: name.clone(), struct_name, prefix: p, handlers, calls, is_app: app.is_some(), events, draws, answers });
     }
     if errors.is_empty() { Ok((header, source, owners)) } else { Err(errors) }
 }
@@ -976,6 +985,45 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text, &mut pre);
                 out.push_str(&pre);
                 let _ = writeln!(out, "clarity_ui_message(ui, {level}, {text});");
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                let question = self.shown(question, &mut pre);
+                let form = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("NULL".to_string(), |t| self.shown(t, &mut pre));
+                        let no = no.as_ref().map_or("NULL".to_string(), |t| self.shown(t, &mut pre));
+                        format!("clarity_ask_confirm({yes}, {no})")
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = crate::ask_type(self.project, ty);
+                        let of = of.map_or("NULL".to_string(), |n| string(&n));
+                        let start = default.as_ref().map_or("NULL".to_string(), |d| self.json(d, &mut pre));
+                        // The records `from` offers, by their ids.
+                        let only = from.as_ref().map_or("NULL".to_string(), |list| {
+                            let entity = match self.types.type_of(list) {
+                                TypeInfo::List(entity) => entity,
+                                _ => String::new(),
+                            };
+                            let list = bare(self.value(list, &mut pre));
+                            let (held, only) = (self.temp(), self.temp());
+                            let _ = write!(
+                                pre,
+                                "{} {held} = {list};\ncJSON* {only} = cJSON_CreateArray();\nfor (size_t i = 0; i < {held}.count; i++) cJSON_AddItemToArray({only}, clarity_json_integer({held}.items[i].id));\n",
+                                list_type(&entity)
+                            );
+                            only
+                        });
+                        format!("clarity_ask_value({}, {of}, {only}, {start})", string(word))
+                    }
+                };
+                let values = self.temp();
+                let _ = writeln!(pre, "cJSON* {values} = cJSON_CreateArray();");
+                for arg in args {
+                    let json = self.json(arg, &mut pre);
+                    let _ = writeln!(pre, "cJSON_AddItemToArray({values}, {json});");
+                }
+                out.push_str(&pre);
+                let _ = writeln!(out, "clarity_ui_ask(ui, {question}, {form}, {}, {values});", string(&then.name));
             }
             StmtKind::Open { window, with } => {
                 let mut args = Vec::new();

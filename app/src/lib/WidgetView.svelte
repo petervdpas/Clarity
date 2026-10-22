@@ -24,7 +24,7 @@
   import { styleClass } from "./theme";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
-  import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, type PageData } from "./pages";
+  import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, withProps, type PageData } from "./pages";
   import type { Event as PartEvent } from "./generated/Event";
   import { useLive } from "./live";
   import { provideForm, useForm } from "./form";
@@ -206,6 +206,14 @@
     if (other) fire("select");
   }
 
+  /** A column's width dragged in the designer: written into the part, 0 taking it away. */
+  function designWidth(field: string, width: number) {
+    const widths = { ...p.widths };
+    if (width > 0) widths[field] = width;
+    else delete widths[field];
+    pageDesigner.edit({ op: "updateWidget", item: widget.span.start, container: null, props: withProps(p, { widths }) });
+  }
+
   /** The table's columns for the library part: how each field shows and is edited. */
   const tableColumns = $derived.by((): TableColumn[] => {
     if (p.kind !== "table" || !collection) return [];
@@ -222,6 +230,7 @@
         kind,
         edit: p.edit.includes(name),
         switch: p.switches.includes(name),
+        width: p.widths[name],
         shown: (value) => displayValue(preview, field, value),
         choices: kind === "choice" ? choicesOf(field) : undefined,
         number: kind === "number" && format ? numberEditing(format, formatsOf(preview)) : undefined,
@@ -512,6 +521,11 @@
         {design}
         {disabled}
         {readonly}
+        resizable={p.resizable}
+        sortable={p.sortable}
+        order={p.order}
+        remember={p.name ? `clarity-columns.${page.name.name}.${p.name}` : null}
+        ondesignwidth={design ? designWidth : undefined}
         onselect={(row) => selectRow(row)}
         onopen={() => fire("open")}
         onedit={() => fire("change")}

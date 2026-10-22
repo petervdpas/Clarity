@@ -80,6 +80,11 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         if (command == "return_to") return value(on_event(state, "return"));
         if (command == "start_app") return value(on_event(WindowState{}, "start"));
         if (command == "dispatch_event") return value(dispatch(state, text_of(args, "handler")));
+        if (command == "answer_event") {
+            // The answer to a question a handler asked runs the handler it goes to.
+            json values = args.contains("values") && args["values"].is_array() ? args["values"] : json::array();
+            return value(options_.windows->redraw(db, options_.windows->answer(db, state, text_of(args, "handler"), values)));
+        }
         if (command == "ref_options") return value(options_.windows->options(db, text_of(args, "entity")));
         if (command == "picture") {
             // A picture of a record, fetched on its own, as the page shows it.

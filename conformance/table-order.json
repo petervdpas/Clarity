@@ -1,0 +1,26 @@
+{
+  "about": "The order a table's rows show in (LANGUAGE.md, Tables: order by and sortable), the same on every renderer: the web's Svelte part and the Avalonia control are both run through these cases. A table has its rows in the order of the data; `order` is the table's first order (order by field [desc]), `sortable` lets a click on a header sort by that column, and a second click on it sorts the other way. Sorting changes only how the rows show: a row keeps its place in the data, so events and the chosen row name the row by that place. Text sorts ignoring case, numbers as numbers, a choice (an enum or a reference) by the label it shows; an empty value comes last either way, and rows that are equal keep the order of the data. Steps: click a shown row (counted from the top as shown), sort by a column (a click on its header). Expected: the rows as shown, top to bottom, by their place in the data; the events ('select 2' when the row at place 2 of the data is chosen); the chosen row by its place in the data.",
+  "columns": [
+    { "field": "title", "label": "Task", "kind": "text" },
+    { "field": "hours", "label": "Hours", "kind": "number" },
+    { "field": "owner", "label": "Owner", "kind": "choice", "choices": [[null, ""], [1, "Grace"], [2, "Ada"]] }
+  ],
+  "rows": [
+    { "title": "Milk", "hours": "9", "owner": 1 },
+    { "title": "bread", "hours": "10", "owner": 2 },
+    { "title": "Apples", "hours": null, "owner": null }
+  ],
+  "cases": [
+    { "name": "without an order the rows show as the data has them", "sortable": false, "order": null, "steps": [], "expect": { "shown": [0, 1, 2], "events": [] } },
+    { "name": "text sorts ignoring case", "sortable": false, "order": { "field": "title", "desc": false }, "steps": [], "expect": { "shown": [2, 1, 0], "events": [] } },
+    { "name": "numbers sort as numbers, with an empty value last", "sortable": false, "order": { "field": "hours", "desc": false }, "steps": [], "expect": { "shown": [0, 1, 2], "events": [] } },
+    { "name": "an empty value comes last the other way too", "sortable": false, "order": { "field": "hours", "desc": true }, "steps": [], "expect": { "shown": [1, 0, 2], "events": [] } },
+    { "name": "a choice sorts by the label it shows", "sortable": false, "order": { "field": "owner", "desc": false }, "steps": [], "expect": { "shown": [1, 0, 2], "events": [] } },
+    { "name": "a click on a sortable header sorts by that column", "sortable": true, "order": null, "steps": [["sort", "title"]], "expect": { "shown": [2, 1, 0], "events": [] } },
+    { "name": "a second click on the header sorts the other way", "sortable": true, "order": null, "steps": [["sort", "title"], ["sort", "title"]], "expect": { "shown": [0, 1, 2], "events": [] } },
+    { "name": "a click on another header sorts by that one, first ascending", "sortable": true, "order": { "field": "title", "desc": true }, "steps": [["sort", "hours"]], "expect": { "shown": [0, 1, 2], "events": [] } },
+    { "name": "without sortable a click on a header changes nothing", "sortable": false, "order": null, "steps": [["sort", "title"]], "expect": { "shown": [0, 1, 2], "events": [] } },
+    { "name": "a row clicked in sorted order is chosen by its place in the data", "sortable": false, "order": { "field": "title", "desc": false }, "steps": [["click", 0]], "expect": { "shown": [2, 1, 0], "events": ["select 2"], "chosen": 2 } },
+    { "name": "sorting is no select and the chosen row stays chosen", "sortable": true, "order": null, "steps": [["click", 0], ["sort", "title"]], "expect": { "shown": [2, 1, 0], "events": ["select 0"], "chosen": 0 } }
+  ]
+}

@@ -14,8 +14,8 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp,
-    path_text, template,
+    AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
+    UnaryOp, path_text, template,
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
@@ -313,6 +313,16 @@ pub struct Owner {
     pub events: Vec<(&'static str, String)>,
     /// The canvases its draw handlers draw, with their methods.
     pub draws: Vec<(String, String)>,
+    /// The handlers an answer runs (DESIGN 5.14): the Clarity name, the
+    /// method, and each value's Go type, a record's by its struct.
+    pub answers: Vec<(String, String, Vec<AnswerValue>)>,
+}
+
+/// A value an answering handler takes: a record (by its struct) or another value (by its Go type).
+#[derive(Debug, Clone)]
+pub enum AnswerValue {
+    Record(String),
+    Value(String),
 }
 
 /// The struct, its loading and the handlers of every window and the app in `file`.
@@ -418,8 +428,23 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
             }
         }
         let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, local(&handler))).collect();
+        let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
+        let answers = crate::answering_handlers(&written)
+            .into_iter()
+            .map(|h| {
+                let values = h
+                    .params
+                    .iter()
+                    .map(|p| match type_ref_info(project, &p.ty) {
+                        TypeInfo::Record(entity) => AnswerValue::Record(entity),
+                        other => AnswerValue::Value(super::names::value_type(&other)),
+                    })
+                    .collect();
+                (h.name.name.clone(), local(&h.name.name), values)
+            })
+            .collect();
         owners.push(Owner {
-            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events, draws });
+            calls, name: name.clone(), struct_name, handlers, is_app: app.is_some(), events, draws, answers });
     }
     if errors.is_empty() { Ok((out, owners)) } else { Err(errors) }
 }
@@ -794,6 +819,27 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text, &mut pre);
                 out.push_str(&pre);
                 out.push_str(&format!("ui.Message(clarity.{level}, {text})\n"));
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                let question = self.shown(question, &mut pre);
+                let form = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("nil".to_string(), |t| format!("clarity.Button({})", self.shown(t, &mut pre)));
+                        let no = no.as_ref().map_or("nil".to_string(), |t| format!("clarity.Button({})", self.shown(t, &mut pre)));
+                        format!("clarity.Confirm({yes}, {no})")
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = crate::ask_type(self.project, ty);
+                        let of = of.map_or("nil".to_string(), |n| format!("clarity.Named({})", string(&n)));
+                        let default = default.as_ref().map_or("nil".to_string(), |d| bare(self.value(d, &mut pre)));
+                        // The records `from` offers, by their ids.
+                        let only = from.as_ref().map_or("nil".to_string(), |list| format!("clarity.IDs({})", bare(self.value(list, &mut pre))));
+                        format!("clarity.ValueForm({}, {of}, {only}, {default})", string(word))
+                    }
+                };
+                let values: String = args.iter().map(|a| format!(", {}", bare(self.value(a, &mut pre)))).collect();
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Ask({question}, {form}, {}{values})\n", string(&then.name)));
             }
             StmtKind::Open { window, with } => {
                 let args: Vec<String> = with.iter().map(|arg| format!("{}: {}", string(&arg.name.name), bare(self.value(&arg.value, &mut pre)))).collect();

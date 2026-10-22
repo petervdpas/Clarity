@@ -313,6 +313,14 @@ pub struct WidgetPage {
     pub span: Span,
 }
 
+/// The order a table's rows show in first: `order by title`, `order by year desc`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TableOrder {
+    pub field: String,
+    pub desc: bool,
+}
+
 /// Everything on a widget's own line. The designer sends these back in
 /// edits, and the edit engine writes them as one canonical line.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -348,6 +356,19 @@ pub struct WidgetProps {
     /// `edit done as switch`.
     #[serde(default)]
     pub switches: Vec<String>,
+    /// The width in pixels of a table's columns that have one:
+    /// `columns title 240, artist`. A column without one shares what is left.
+    #[serde(default)]
+    pub widths: std::collections::BTreeMap<String, u32>,
+    /// `resizable`: the person drags a table's header edges, and the widths are remembered.
+    #[serde(default)]
+    pub resizable: bool,
+    /// `sortable`: a click on a table's header sorts its rows by that column.
+    #[serde(default)]
+    pub sortable: bool,
+    /// `order by field [desc]`: the order a table's rows show in first.
+    #[serde(default)]
+    pub order: Option<TableOrder>,
     pub show: Vec<String>,
     pub orientation: Option<Orientation>,
     pub surface: Option<Surface>,

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::{
-    BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, HandlerDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
+    AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, HandlerDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
 use clarity_spec::model::FieldType;
@@ -420,7 +420,7 @@ impl<'a> Emitter<'a> {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}throw new RefusedException({text});\n"));
             }
-            StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
+            StmtKind::Message { .. } | StmtKind::Ask { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
@@ -457,6 +457,61 @@ impl<'a> Emitter<'a> {
                 };
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}Say(Level.{level}, {text});\n"));
+            }
+            StmtKind::Ask { question, form, then, args } => {
+                // The values written for the handler, as they are when it asks.
+                let mut passed = Vec::new();
+                for (i, arg) in args.iter().enumerate() {
+                    let local = format!("asked{}_{i}", stmt.span.start);
+                    out.push_str(&format!("{pad}var {local} = {};\n", self.value(arg)));
+                    passed.push(local);
+                }
+                let question = self.shown(question);
+                let method = format!("On{}", pascal(&then.name));
+                let (form, answered) = match form.as_ref() {
+                    AskForm::Confirm { yes, no } => {
+                        let yes = yes.as_ref().map_or("null".to_string(), |t| self.shown(t));
+                        let no = no.as_ref().map_or("null".to_string(), |t| self.shown(t));
+                        (format!("new ConfirmForm({yes}, {no})"), format!("_ => {method}({})", passed.join(", ")))
+                    }
+                    AskForm::Value { ty, default, from } => {
+                        let (word, of) = crate::ask_type(self.project, ty);
+                        let format = match word {
+                            "integer" => "new FieldFormat(FormatKind.Integer)",
+                            "decimal" => "new FieldFormat(FormatKind.Decimal)",
+                            "money" => "new FieldFormat(FormatKind.Money)",
+                            "date" => "new FieldFormat(FormatKind.Date)",
+                            "datetime" => "new FieldFormat(FormatKind.DateTime)",
+                            "duration" => "new FieldFormat(FormatKind.Duration)",
+                            _ => "null",
+                        };
+                        let of = of.unwrap_or_default();
+                        // An enum's values, or the records to choose from by their ids.
+                        let choices = match word {
+                            "enum" => format!("Choices.{of}"),
+                            "record" => {
+                                let records = from.as_ref().map_or(format!("{db}.All<{of}>()"), |list| self.value(list));
+                                let label = self.project.entity(&of).map_or("r.Id.ToString()".to_string(), super::windows::display);
+                                format!("{records}.Select(r => new Choice(r.Id, {label})).ToList()")
+                            }
+                            _ => "null".to_string(),
+                        };
+                        let start = default.as_ref().map_or("null".to_string(), |d| format!("(object?)({})", self.value(d)));
+                        let answer = match word {
+                            "record" => format!("{db}.Get<{of}>((long)answer!)"),
+                            "enum" => format!("({of})answer!"),
+                            "integer" | "duration" => "(long)answer!".to_string(),
+                            "decimal" | "money" => "(decimal)answer!".to_string(),
+                            "date" => "(DateOnly?)answer".to_string(),
+                            "datetime" => "(DateTime?)answer".to_string(),
+                            _ => "(string)answer!".to_string(),
+                        };
+                        let mut values = passed.clone();
+                        values.push(answer);
+                        (format!("new ValueForm({format}, {choices}, {start})"), format!("answer => {method}({})", values.join(", ")))
+                    }
+                };
+                out.push_str(&format!("{pad}Ask({question}, {form}, {answered});\n"));
             }
             StmtKind::Open { window, with } => {
                 let args: Vec<String> = with.iter().map(|arg| format!("{} = {}", pascal(&arg.name.name), self.value(&arg.value))).collect();

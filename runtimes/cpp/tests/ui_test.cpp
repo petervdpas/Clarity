@@ -61,6 +61,16 @@ TEST(a_reply_carries_the_texts_shown_in_text_values) {
     CHECK_EQ(json(ui.reply("Game", json::object()))["shown"], json::parse(R"({"rules":{"text":"Your move, {name}","values":{"name":{"kind":"text","value":"Ada"}}},"hint":"Pick a square"})"));
 }
 
+TEST(a_question_travels_in_the_reply_as_from_the_other_runtimes) {
+    Ui ui(WindowState{"Albums", json::object(), {}, {}, 0});
+    CHECK_EQ(json(ui.reply("Albums", json::object())).contains("asks"), false);
+    ui.ask(Text::key("deleteAlbum").with("title", slot_text("Blue")), ask_confirm(Text::key("delete"), std::nullopt), "deleteConfirmed", json::array());
+    ui.ask(Text::key("lendTo"), ask_value("record", "Friend", json::array({3, 5}), nullptr), "lend", json::array({json::parse(R"({"id":7,"title":"Blue"})")}));
+    CHECK_EQ(json(ui.reply("Albums", json::object()))["asks"], json::parse(R"([
+        {"question":{"key":"deleteAlbum","values":{"title":{"kind":"text","value":"Blue"}}},"form":{"kind":"confirm","yes":{"key":"delete"},"no":null},"handler":"deleteConfirmed","values":[]},
+        {"question":{"key":"lendTo"},"form":{"kind":"value","type":"record","of":"Friend","only":[3,5],"default":null},"handler":"lend","values":[{"id":7,"title":"Blue"}]}])"));
+}
+
 TEST(rows_read_again_have_no_selected_row) {
     WindowState state = json::parse(R"({"window":"Orders","data":{},"parts":{},"selected":{"grid":1,"other":0}})").get<WindowState>();
     Ui ui(state);

@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{EngineBody, EngineState, Keep, 
+use super::{AskForm, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -415,7 +415,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 12] = ["let", "if", "for", "return", "message", "open", "close", "save", "delete", "reload", "refuse", "write"];
+const STATEMENT_WORDS: [&str; 13] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -494,6 +494,38 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 level: level.unwrap_or(MessageLevel::Info),
                 text,
             }
+        }
+        Some("ask") => {
+            cursor.next();
+            let question = parse_expr(&mut cursor)?;
+            let form = if cursor.eat_keyword("for") {
+                let ty = parse_type_ref(&mut cursor)?;
+                let (mut default, mut from) = (None, None);
+                loop {
+                    if default.is_none() && cursor.eat_keyword("default") {
+                        default = Some(parse_expr(&mut cursor)?);
+                    } else if from.is_none() && cursor.eat_keyword("from") {
+                        from = Some(parse_expr(&mut cursor)?);
+                    } else {
+                        break;
+                    }
+                }
+                AskForm::Value { ty, default, from }
+            } else {
+                let yes = if cursor.eat_keyword("yes") { Some(parse_expr(&mut cursor)?) } else { None };
+                let no = if cursor.eat_keyword("no") { Some(parse_expr(&mut cursor)?) } else { None };
+                AskForm::Confirm { yes, no }
+            };
+            if !cursor.eat_keyword("then") {
+                return Err(cursor.error_here("expected 'then' and the handler the answer runs, as in 'then deleteConfirmed'"));
+            }
+            let call = parse_expr(&mut cursor)?;
+            let (then, args) = match call.kind {
+                ExprKind::Call { function, args } => (function, args),
+                ExprKind::Name { name } => (Ident { name, span: call.span }, Vec::new()),
+                _ => return Err(Diagnostic::error("after 'then' comes the handler the answer runs, as in 'then lend(album)'", call.span)),
+            };
+            StmtKind::Ask { question, form: Box::new(form), then, args }
         }
         Some("open") => {
             cursor.next();

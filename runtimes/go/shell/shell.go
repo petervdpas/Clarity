@@ -34,6 +34,9 @@ type Windows interface {
 	Handler(window, event string) (string, bool)
 	// Dispatch runs a handler on a window's state.
 	Dispatch(db *clarity.Db, state clarity.WindowState, handler string) (clarity.Reply, error)
+	// Answer runs the handler the answer to a question goes to (DESIGN
+	// 5.14), with the values written for it and the answer last.
+	Answer(db *clarity.Db, state clarity.WindowState, handler string, values []json.RawMessage) (clarity.Reply, error)
 	// Redraw draws the canvases of the window a reply shows anew, each by
 	// its draw handler (conformance/drawing.json). The shell redraws after
 	// a window opens and after every handler.
@@ -170,6 +173,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Height   int                 `json:"height"`
 		State    clarity.WindowState `json:"state"`
 		Handler  string              `json:"handler"`
+		Values   []json.RawMessage   `json:"values"`
 		Entity   string              `json:"entity"`
 		Title    string              `json:"title"`
 		ID       int64               `json:"id"`
@@ -215,6 +219,13 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		return answer(c.onEvent(clarity.NewWindowState("", nil), "start"))
 	case "dispatch_event":
 		return answer(c.dispatch(a.State, a.Handler))
+	case "answer_event":
+		// The answer to a question a handler asked runs the handler it goes to.
+		reply, err := c.options.Windows.Answer(db, a.State, a.Handler, a.Values)
+		if err != nil {
+			return failed(err)
+		}
+		return answer(c.options.Windows.Redraw(db, reply))
 	case "ref_options":
 		return answer(c.options.Windows.Options(db, a.Entity))
 	case "picture":

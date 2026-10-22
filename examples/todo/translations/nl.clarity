@@ -31,3 +31,6 @@ translation nl
     nameHasFinishedTasksAnd "{name} heeft taken afgerond en kan niet worden verwijderd"
     yes "Ja"
     no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

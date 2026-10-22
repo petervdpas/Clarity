@@ -145,6 +145,52 @@ pub(crate) fn engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
         .collect()
 }
 
+/// How the type an `ask` asks for travels to the screen (DESIGN 5.14):
+/// its word (text, integer, decimal, money, date, datetime, duration, enum,
+/// record) and the enum or entity it names.
+pub(crate) fn ask_type(project: &Project, ty: &clarity_spec::code::TypeRef) -> (&'static str, Option<String>) {
+    use clarity_spec::code::check::TypeInfo;
+    match type_ref_info(project, ty) {
+        TypeInfo::Integer => ("integer", None),
+        TypeInfo::Decimal => ("decimal", None),
+        TypeInfo::Money => ("money", None),
+        TypeInfo::Date => ("date", None),
+        TypeInfo::DateTime => ("datetime", None),
+        TypeInfo::Duration => ("duration", None),
+        TypeInfo::Enum(name) => ("enum", Some(name)),
+        TypeInfo::Record(name) => ("record", Some(name)),
+        _ => ("text", None),
+    }
+}
+
+/// The handlers of a window the answer to one of its questions runs: the
+/// handlers after `then`, each once.
+pub(crate) fn answering_handlers<'a>(handlers: &[&'a clarity_spec::code::HandlerDecl]) -> Vec<&'a clarity_spec::code::HandlerDecl> {
+    use clarity_spec::code::{Stmt, StmtKind};
+    fn targets(body: &[Stmt], found: &mut Vec<String>) {
+        for stmt in body {
+            match &stmt.kind {
+                StmtKind::Ask { then, .. } if !found.contains(&then.name) => found.push(then.name.clone()),
+                StmtKind::If { branches, otherwise } => {
+                    for branch in branches {
+                        targets(&branch.body, found);
+                    }
+                    if let Some(body) = otherwise {
+                        targets(body, found);
+                    }
+                }
+                StmtKind::For { body, .. } => targets(body, found),
+                _ => {}
+            }
+        }
+    }
+    let mut names = Vec::new();
+    for handler in handlers {
+        targets(&handler.body, &mut names);
+    }
+    names.iter().filter_map(|n| handlers.iter().find(|h| h.name.name == *n).copied()).collect()
+}
+
 /// The canvases of a window that a draw handler draws, by name, with the
 /// handler: `("dial", "draw_dial")`. Each draw starts an empty drawing; the
 /// backend runs them when the window opens and after every other handler.

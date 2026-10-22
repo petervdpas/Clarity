@@ -701,3 +701,20 @@ page Rules: window
     let app = file(&files, "App.axaml");
     has(app, "<Style Selector=\"TextBlock.value.lines\">\n      <Setter Property=\"VerticalAlignment\" Value=\"Top\" />\n      <Setter Property=\"TextWrapping\" Value=\"Wrap\" />\n    </Style>");
 }
+
+#[test]
+fn a_table_has_its_widths_options_and_first_order() {
+    let text = TODO
+        .replace("columns title, done,", "columns title 240, done,")
+        .replace("urgent as switch on change:", "urgent as switch resizable sortable order by due desc on change:");
+    let project = load_keyed([("todo.clarity", text.as_str())], &[], "en");
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = settings();
+    settings.name = "Todo".into();
+    let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    let window = file(&files, "Windows/MainView.axaml");
+    // The person's widths are kept per window and table.
+    has(window, "SelectedItem=\"{Binding Grid.SelectedItem}\" Resizable=\"True\" Sortable=\"True\" OrderBy=\"Due\" OrderDescending=\"True\" Remember=\"Main.grid\"");
+    has(window, "<c:TableColumn Field=\"Title\" Header=\"{x:Static local:Texts.TaskTitleLabel}\" Kind=\"Text\" Width=\"240\" Edit=\"True\" />");
+    has(window, "<c:TableColumn Field=\"Done\" Header=\"{x:Static local:Texts.TaskDoneLabel}\" Kind=\"Bool\" Edit=\"True\" />");
+}

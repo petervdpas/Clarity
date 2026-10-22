@@ -555,7 +555,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field, field, ...`; `edit field [as switch], ...` | `select`, `open`, `change` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]` | `select`, `open`, `change` |
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 
 **Graphics**
@@ -589,6 +589,18 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 - An edited column must be one of the `columns`, of one of these types: text, `email`, `url`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an enum or a `ref`. Pictures and durations are not edited in a cell.
 - Only a value that differs is an edit: a checkbox or dropdown when it changes, a text or number cell when it is left or Enter is pressed. An edit changes the row on screen. Then the row is selected and `on change` runs, so `grid.selected` is the changed record. Saving it is up to the handler, as with a form: `save grid.selected`. When the record breaks a rule, `save` refuses it as anywhere else.
 - A table that edits but has no `on change` is a warning: its edits are lost when the data is read again.
+
+### Columns of a table
+
+A column may have a width, and a table may let the person resize and sort it:
+
+    table name albums at 1,2 span 12 rows 8 bind albums columns title 240, artist, year 60 resizable sortable order by year desc
+
+- A width in pixels follows a field: `title 240`. A column without one shares the width that is left. Widths are 20 to 2000 pixels. On the design canvas, dragging the right edge of a header sets the width, and a double-click there takes it away.
+- `resizable`: the person drags the header edges to resize the columns. The widths are remembered for them, per window and table, and a double-click on an edge gives the designed widths back.
+- `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes last either way.
+- `order by field [desc]`: the order the rows show in when the window opens, as in queries. The field must be one of the `columns`.
+- Sorting changes only how the rows show. A row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
 
 ### Binding
 
@@ -824,7 +836,7 @@ code CustomerForm
 ```
 
 - `handler name` declares a handler. It runs when an event wired to it happens.
-- `handler name(param: type, ...)` declares a handler that takes values, which a part gives it: `button "7" on click: digit(7)` runs `handler digit(d: integer)` with `d` 7. Each parameter is `text`, `integer`, `decimal`, `money`, `bool` or an enum. The values must fit: as many as it has parameters, each of its type. Events of the window itself (`on open`) give no values, so their handlers take none.
+- `handler name(param: type, ...)` declares a handler that takes values, which a part gives it: `button "7" on click: digit(7)` runs `handler digit(d: integer)` with `d` 7. Each parameter a part gives is `text`, `integer`, `decimal`, `money`, `bool` or an enum; a handler that the answer to a question runs may also take dates, durations and records. The values must fit: as many as it has parameters, each of its type. Events of the window itself (`on open`) give no values, so their handlers take none.
 - A handler that is wired but not written is an error. A handler that is written but not wired anywhere is a warning.
 - Handlers run in the backend. The window sends its data with the event, the handler runs, and the window shows what changed: data, part properties, messages, and windows to open or close.
 
@@ -857,6 +869,30 @@ A name that is both data and a part in the same window is an error.
 | `collapsed` | collapsible ribbons | bool: whether it is folded to its tabs | yes |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.
+
+### Asking the person
+
+A handler can ask the person something: a yes or no, a text, a number, a day, a value of an enum or a record. The question shows in Clarity's own dialog when the handler has finished, never one of the system or the browser, and the answer runs another handler:
+
+    handler deleteClicked
+        ask @deleteAlbum(title = album.title) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        delete album
+
+    handler lendClicked
+        ask @lendTo for Friend from friends then lend(album)
+
+    handler lend(what: Album, friend: Friend)
+        what.copies = what.copies - 1
+        save what
+
+- **What is asked decides the dialog.** `yes @word no @word` asks yes or no; the handler runs on yes and takes no answer (without `yes` and `no` the buttons say OK and Cancel). `for text`, `for integer`, `decimal`, `money`, `date`, `datetime` or `duration` asks for a typed value; `default value` fills it first. `for` an enum offers its values with their labels. `for` an entity offers its records to choose from; `from list` offers the records of a list instead.
+- **The answer** is the last value of the handler after `then`. Values written in the call come first (`then lend(album)`), which is how what the asking handler knew reaches the answering one, as it was when it asked. The answer's type must be the type of the handler's last parameter.
+- **Cancelling** (no, Escape, a click beside the dialog) runs nothing.
+- **When.** The statements after `ask` still run; the dialog shows when the handler has finished, with whatever else it changed. A handler that asks twice asks one question after the other. A handler that asks and closes its window is an error: the answer would have nowhere to go.
+- **Where.** Only handlers ask. A function has no effects, and an action may run where nobody is at the screen.
+- The question and the words of its buttons are keys, as every text people read.
 
 ### Drawing on a canvas
 
@@ -1061,7 +1097,8 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `canvas.shape(values)` | Draws a shape on a canvas; see [Drawing on a canvas](#drawing-on-a-canvas). | its draw handler |
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
-| `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. | handlers |
+| `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. An info message is a note that goes away by itself (or by its small x); a warning or an error shows in Clarity's dialog and is closed with OK. | handlers |
+| `ask question ... then handler(values)` | Asks the person in Clarity's dialog when the handler has finished; the answer runs the handler after `then`. See [Asking the person](#asking-the-person). | handlers |
 | `open Window` | Opens a window. | handlers |
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
 | `close` | Closes this window. | handlers |
@@ -1350,7 +1387,7 @@ part          = kind [String] property*
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" names | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word | "renderer" Name
+              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word | "renderer" Name
               | "on" event ":" handler ["(" [value ("," value)*] ")"] | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name

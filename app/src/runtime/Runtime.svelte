@@ -10,7 +10,7 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState, type Pointer } from "../lib/live";
-  import { errorText, languageOf, offeredThemes, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import { errorText, languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import { themeChoice } from "../lib/scheme.svelte";
   import { languageChoice } from "../lib/i18n.svelte";
@@ -20,6 +20,10 @@
   import { dataEntity, isList, translatedDefaults } from "../lib/windowData";
   import { findApp } from "../lib/frame";
   import { Navigator } from "../lib/navigator";
+  import AskDialog from "../lib/ui/AskDialog.svelte";
+  import Dialog from "../lib/ui/Dialog.svelte";
+  import { answerValues, type Ask } from "../lib/asks";
+  import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
 
   /** One open window, as the backend sends it. */
   type WindowState = {
@@ -36,7 +40,16 @@
     shown?: Record<string, ShownText>;
     open: { window: string; with: Record<string, unknown> }[];
     close: boolean;
+    /** The questions its handler asked, asked when it has finished (DESIGN 5.14). */
+    asks?: Ask[];
   };
+
+  /**
+   * What waits to be shown in Clarity's dialog, one at a time: a question,
+   * with the place of the window that asked; or a warning or an error,
+   * read and closed with OK.
+   */
+  type Waiting = { kind: "ask"; ask: Ask; window: number } | { kind: "message"; level: Message["level"]; text: string };
 
   /** How long an information message stays. */
   const MESSAGE_MS = 5000;
@@ -45,6 +58,8 @@
   let stack = $state<WindowState[]>([]);
   /** The messages on screen, their text filled. */
   let messages = $state<{ level: Message["level"]; text: string; id: number }[]>([]);
+  /** The dialogs waiting, the first one shown. */
+  let waiting = $state<Waiting[]>([]);
   let busy = $state(false);
   let options = $state<Record<string, { id: number; text: string }[]>>({});
   let nextMessage = 0;
@@ -81,12 +96,39 @@
     invoke("set_title", { title }).catch(() => {});
   });
 
+  /** Shows a message: information as a note that goes away by itself, a warning or an error in Clarity's dialog. */
   function say(message: Message) {
-    const id = nextMessage++;
     const raw = message.text;
     const text = model ? shownText(model, raw) : typeof raw === "string" ? raw : "key" in raw ? raw.key : raw.text;
+    if (message.level !== "info") {
+      waiting = [...waiting, { kind: "message", level: message.level, text }];
+      return;
+    }
+    const id = nextMessage++;
     messages = [...messages, { level: message.level, text, id }];
-    if (message.level === "info") setTimeout(() => dismiss(id), MESSAGE_MS);
+    setTimeout(() => dismiss(id), MESSAGE_MS);
+  }
+
+  /** The dialog on screen is done with. */
+  function shown() {
+    waiting = waiting.slice(1);
+  }
+
+  /** The answer to a question: runs the handler it goes to on the window that asked, if that is still open. */
+  async function answer(item: Extract<Waiting, { kind: "ask" }>, value: JsonValue | null) {
+    shown();
+    const state = stack[item.window];
+    if (!state) return;
+    busy = true;
+    try {
+      const values = answerValues(item.ask, value);
+      const reply = received(await invoke<Reply>("answer_event", { state: $state.snapshot(state), handler: item.ask.handler, values }));
+      await nav.apply(item.window, reply);
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+    } finally {
+      busy = false;
+    }
   }
 
   function dismiss(id: number) {
@@ -121,7 +163,7 @@
 
   // Opening and closing windows, as on every stack (lib/navigator.ts). The
   // backend gets snapshots, so what the user types is in the state it sees.
-  const nav = new Navigator<WindowState, Message>(
+  const nav = new Navigator<WindowState, Message, Ask>(
     {
       get: () => stack,
       set: (next) => {
@@ -145,6 +187,10 @@
     },
     say,
     (err) => say({ level: "error", text: errorText(err) }),
+    // A question waits its turn; one the app's own start asks has no window to answer it.
+    (ask, window) => {
+      if (window >= 0) waiting = [...waiting, { kind: "ask", ask, window }];
+    },
   );
 
   /** Runs a handler on the current window and applies the reply. */
@@ -318,7 +364,7 @@
       }
       const started = received(await invoke<Reply>("start_app"));
       await nav.open(start.main);
-      await nav.follow(started);
+      await nav.follow(started, -1);
     } catch (err) {
       say({ level: "error", text: errorText(err) });
     }
@@ -367,9 +413,30 @@
 
   <div class="messages" aria-live="polite">
     {#each messages as m (m.id)}
-      <button class="message {m.level}" onclick={() => dismiss(m.id)} title="Dismiss">{m.text}</button>
+      {@const close = model ? ownWord(model, "Dismiss") : "Dismiss"}
+      <div class="message {m.level}">
+        <span>{m.text}</span>
+        <button class="close" onclick={() => dismiss(m.id)} title={close} aria-label={close}>×</button>
+      </div>
     {/each}
   </div>
+
+  {#if model && waiting.length > 0}
+    {@const first = waiting[0]}
+    {#if first.kind === "ask"}
+      {#key first}
+        <AskDialog {model} ask={first.ask} options={(entity) => invoke("ref_options", { entity })} onanswer={(value) => answer(first, value)} oncancel={shown} />
+      {/key}
+    {:else}
+      <Dialog label={first.text} onclose={shown}>
+        <p class="said {first.level}">{first.text}</p>
+        <div class="buttons">
+          <!-- svelte-ignore a11y_autofocus -->
+          <button class="ok" autofocus onclick={shown}>{ownWord(model, "OK")}</button>
+        </div>
+      </Dialog>
+    {/if}
+  {/if}
 </div>
 
 <style>
@@ -422,8 +489,11 @@
   }
 
   .message {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     text-align: left;
-    padding: 10px 14px;
+    padding: 10px 10px 10px 14px;
     border-radius: var(--radius-panel);
     border: var(--border-width) solid var(--border-strong);
     background: var(--panel);
@@ -438,5 +508,39 @@
   .message.error {
     border-color: var(--error);
     color: var(--error);
+  }
+
+  .message span {
+    flex: 1;
+  }
+
+  /* The small x that closes a note before it goes by itself. */
+  .message .close {
+    flex: none;
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .message .close:hover {
+    color: var(--text);
+  }
+
+  .said {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .said.error {
+    color: var(--error);
+  }
+
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
   }
 </style>

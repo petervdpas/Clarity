@@ -36,7 +36,7 @@ For every part, its own properties, events and binding rules are in [the languag
 
 ## Data
 
-- `table`: binds to a list (`bind orders`) and shows `columns`. Columns named in `edit` are inputs in the cells. Events: `select` (another row is chosen), `open` (double-click or Enter), `change` (a cell was edited).
+- `table`: binds to a list (`bind orders`) and shows `columns`. Columns named in `edit` are inputs in the cells. A column can have a width, set by dragging its header edge on the canvas or in the properties; `resizable` lets the person resize the columns (remembered for them), `sortable` sorts by a click on a header, and `order by` gives the order the rows show in first. Events: `select` (another row is chosen), `open` (double-click or Enter), `change` (a cell was edited).
 - `list`: binds to a list and shows the fields in `show`. Events: `select`, `open`.
 
 ## Graphics
@@ -54,7 +54,7 @@ The inspector on the right has the tabs Properties, Code and Text ([Design as te
 What is picked shows the fields that part has:
 
 - Name, Caption, and Column, Row, Width and Height.
-- Bound to: only the data and fields that part accepts. Columns or Shown fields, and Edited in the table, for tables and lists.
+- Bound to: only the data and fields that part accepts. Columns (each with its width) or Shown fields, Edited in the table, and Table (resizable, sortable, the first order), for tables and lists.
 - On click, open (and In a new window) for buttons and images; For input for labels and help texts; Placeholder, Tooltip, Style, Tab order, Shortcut; Read-only and the default and cancel boxes.
 - Events: a row per event. **Wire** names the handler after the part and the event, writes it and opens the Code panel; **Code** shows it; the cross unwires it. See [Handlers](code.handlers.md).
 - Remove.

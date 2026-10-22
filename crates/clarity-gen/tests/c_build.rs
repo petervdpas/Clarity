@@ -263,3 +263,23 @@ fn an_engine_written_in_clarity_runs_in_c() {
     assert!(said.contains("the board played"), "{said}");
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// A window that asks each kind of question (DESIGN 5.14) builds without a
+/// warning in its own code.
+#[test]
+#[ignore]
+fn questions_and_their_answers_build_in_c() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.backend = Backend::C;
+    settings.stack.ui = Ui::Web;
+    let out = scratch().join(format!("clarity-gen-c-asks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
+    let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    std::fs::remove_dir_all(&out).unwrap();
+}

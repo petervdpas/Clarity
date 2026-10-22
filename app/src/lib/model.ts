@@ -72,12 +72,15 @@ export function tr(preview: Preview, text: string): string {
 const OWN_WORDS: Record<string, { key: string; written: string }> = {
   Yes: { key: "yes", written: "Yes" },
   No: { key: "no", written: "No" },
+  OK: { key: "ok", written: "OK" },
+  Cancel: { key: "cancel", written: "Cancel" },
+  Dismiss: { key: "dismiss", written: "Dismiss" },
   "No picture": { key: "noPicture", written: "No picture" },
   "Load a picture": { key: "loadPicture", written: "Load a picture" },
   "Remove the picture": { key: "removePicture", written: "Remove the picture" },
 };
 
-/** One of Clarity's own words (`Yes`, `No`, a picture's) in the language texts show in. */
+/** One of Clarity's own words (`Yes`, `No`, a dialog's buttons, a picture's) in the language texts show in. */
 export function ownWord(preview: Preview, word: string): string {
   const own = OWN_WORDS[word];
   return own ? (keyValue(own.key, textsOf(preview)) ?? own.written) : word;

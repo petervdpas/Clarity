@@ -6,3 +6,6 @@ translation nl
     fasterCaption "Sneller"
     yes "Ja"
     no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

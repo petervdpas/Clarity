@@ -50,6 +50,17 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 	return ui.Reply(state.Window, state.Data)
 }
 
+// Answer renames the card to the answer, after the values written for it.
+func (c *cards) Answer(db *clarity.Db, state clarity.WindowState, handler string, values []json.RawMessage) (clarity.Reply, error) {
+	c.log = append(c.log, state.Window+":"+handler+" "+string(values[len(values)-1]))
+	name, err := clarity.Answer[string](values[len(values)-1])
+	if err != nil {
+		return clarity.Reply{}, err
+	}
+	state.Data["name"] = name
+	return clarity.NewUi(state).Reply(state.Window, state.Data)
+}
+
 // Redraw draws the card's canvas: a dot per letter of the name.
 func (c *cards) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error) {
 	if reply.State.Window != "Card" {
@@ -256,5 +267,16 @@ func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
 	}
 	if strings.Join(opened, " ") != "https://example.com/rules mailto:help@example.com" {
 		t.Fatal(opened)
+	}
+}
+
+func TestAnAnswerRunsTheHandlerItGoesToWithItsValues(t *testing.T) {
+	c, windows := service(t)
+	got := wire(t, call(t, c, "answer_event", `{"state":{"window":"Card","data":{"name":"Ada"}},"handler":"rename","values":[7,"Grace"]}`))
+	if !strings.Contains(got, `"name":"Grace"`) || !strings.Contains(got, `"badge"`) {
+		t.Fatal("the answer did not run the handler, or the card was not drawn again: " + got)
+	}
+	if strings.Join(windows.log, ",") != `Card:rename "Grace"` {
+		t.Fatal(windows.log)
 	}
 }

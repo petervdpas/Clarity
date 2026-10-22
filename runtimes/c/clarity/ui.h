@@ -80,6 +80,27 @@ typedef struct {
     cJSON* with;
 } ClarityOpen;
 
+/// `ask ... then handler(values)` (DESIGN 5.14): a question the screen asks
+/// in Clarity's own dialog when the handler has finished. Its answer runs
+/// `handler` with `values` and, for a value, the answer last.
+typedef struct {
+    const ClarityText* question;
+    /// What it asks for, as the screen reads it: clarity_ask_confirm or clarity_ask_value.
+    cJSON* form;
+    const char* handler;
+    cJSON* values;
+} ClarityAsk;
+
+/// A question with yes and no (NULL: OK and Cancel); the handler runs on yes.
+cJSON* clarity_ask_confirm(const ClarityText* yes, const ClarityText* no);
+
+/// A question for a value of `type` (text, integer, decimal, money, date,
+/// datetime, duration, enum or record), of the enum or entity `of` (or
+/// NULL). `only` narrows the choices to the records' ids or the enum's
+/// values (an array, or NULL); `start` is where a typed value starts (or
+/// NULL). Takes `only` and `start`.
+cJSON* clarity_ask_value(const char* type, const char* of, cJSON* only, cJSON* start);
+
 /// What the screen does after a handler ran.
 typedef struct {
     ClarityWindowState state;
@@ -90,6 +111,9 @@ typedef struct {
     ClarityOpen* open;
     size_t open_count;
     bool close;
+    /// The questions to ask when the handler has finished, in order.
+    ClarityAsk* asks;
+    size_t ask_count;
 } ClarityReply;
 
 /// What a handler can do to the screen.
@@ -164,6 +188,9 @@ void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* te
 void clarity_ui_open(ClarityUi* ui, const char* window, cJSON* with);
 /// Asks the screen to close the window.
 void clarity_ui_close(ClarityUi* ui);
+/// Asks `question` when the handler has finished; the answer runs `handler`
+/// with `values` (an array, which it takes) and, for a value, the answer.
+void clarity_ui_ask(ClarityUi* ui, const ClarityText* question, cJSON* form, const char* handler, cJSON* values);
 
 /// The reply for `window`, with its data after the handler.
 ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* data);

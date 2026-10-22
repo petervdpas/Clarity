@@ -58,7 +58,18 @@ static bool redraw(ClarityDb* db, ClarityReply* reply) {
     return true;
 }
 
-static const ClarityWindows cards = {open_card, handler_of, dispatch, options, picture, redraw};
+/// Renames the card to the answer, after the values written for it.
+static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {
+    (void)db;
+    if (strcmp(handler, "rename") != 0) return clarity_fail(CLARITY_INVALID, "Card has no handler %s to answer", handler);
+    const cJSON* name = cJSON_GetArrayItem(values, cJSON_GetArraySize(values) - 1);
+    cJSON* data = cJSON_Duplicate(state->data, true);
+    cJSON_ReplaceItemInObject(data, "name", cJSON_CreateString(name->valuestring));
+    *out = clarity_ui_reply(clarity_ui(state), state->window, data);
+    return true;
+}
+
+static const ClarityWindows cards = {open_card, handler_of, dispatch, options, picture, redraw, answer};
 
 typedef struct {
     ClarityDesktop desktop;
@@ -113,6 +124,9 @@ void the_shell_answers_the_renderers_commands(void) {
     CHECK_JSON(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{}},\"handler\":\"save\"}", NULL),
                "{\"error\":{\"text\":\"{name} is taken\",\"values\":{\"name\":{\"kind\":\"text\",\"value\":\"Ada\"}}}}");
     CHECK_JSON(invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\"},\"handler\":\"fail\"}", NULL), "{\"error\":\"storage: locked\"}");
+    // The answer to a question runs the handler it goes to, and the canvas is drawn again.
+    cJSON* answered = invoked(s, "answer_event", "{\"state\":{\"window\":\"Card\",\"data\":{\"name\":\"Ada\"}},\"handler\":\"rename\",\"values\":[7,\"Grace\"]}", NULL);
+    CHECK_TEXT(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(answered, "value"), "state"), "data"), "name")->valuestring, "Grace");
     CHECK_JSON(invoked(s, "ref_options", "{\"entity\":\"Customer\"}", NULL), "{\"value\":[{\"id\":1,\"text\":\"Ada\"}]}");
     CHECK_JSON(invoked(s, "picture", "{\"entity\":\"Card\",\"id\":1,\"field\":\"photo\"}", NULL), "{\"value\":\"data:image/png;base64,iVBORw0KGgo=\"}");
     CHECK_JSON(invoked(s, "picture", "{\"entity\":\"Card\",\"id\":2,\"field\":\"photo\"}", NULL), "{\"value\":null}");

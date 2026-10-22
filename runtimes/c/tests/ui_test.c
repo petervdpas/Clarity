@@ -155,3 +155,23 @@ void code_texts_are_translated_as_every_runtime_does(void) {
     }
     clarity_set_language(NULL);
 }
+
+void a_question_travels_in_the_reply_as_from_the_other_runtimes(void) {
+    ClarityWindowState state = {.window = "Albums", .data = cJSON_CreateObject()};
+    ClarityUi* ui = clarity_ui(&state);
+    CHECK(!cJSON_HasObjectItem(clarity_reply_json(clarity_ui_reply(ui, "Albums", cJSON_CreateObject())), "asks"));
+    ClarityText* question = clarity_text_with(clarity_key_text("deleteAlbum"), "title", clarity_slot_text("Blue"));
+    clarity_ui_ask(ui, question, clarity_ask_confirm(clarity_key_text("delete"), NULL), "deleteConfirmed", cJSON_CreateArray());
+    cJSON* only = cJSON_CreateArray();
+    cJSON_AddItemToArray(only, clarity_json_integer(3));
+    cJSON_AddItemToArray(only, clarity_json_integer(5));
+    cJSON* values = cJSON_CreateArray();
+    cJSON_AddItemToArray(values, cJSON_Parse("{\"id\":7,\"title\":\"Blue\"}"));
+    clarity_ui_ask(ui, clarity_key_text("lendTo"), clarity_ask_value("record", "Friend", only, NULL), "lend", values);
+    cJSON* reply = clarity_reply_json(clarity_ui_reply(ui, "Albums", cJSON_CreateObject()));
+    CHECK_JSON(cJSON_GetObjectItem(reply, "asks"),
+               "[{\"question\":{\"key\":\"deleteAlbum\",\"values\":{\"title\":{\"kind\":\"text\",\"value\":\"Blue\"}}},"
+               "\"form\":{\"kind\":\"confirm\",\"yes\":{\"key\":\"delete\"},\"no\":null},\"handler\":\"deleteConfirmed\",\"values\":[]},"
+               "{\"question\":{\"key\":\"lendTo\"},\"form\":{\"kind\":\"value\",\"type\":\"record\",\"of\":\"Friend\",\"only\":[3,5],\"default\":null},"
+               "\"handler\":\"lend\",\"values\":[{\"id\":7,\"title\":\"Blue\"}]}]");
+}

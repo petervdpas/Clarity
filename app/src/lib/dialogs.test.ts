@@ -88,9 +88,8 @@ test("Clarity shows no dialog of the system or the browser: only the file picker
 test("every dialog of the IDE is framed by Modal.svelte: no other draws a backdrop of its own", async () => {
   const { readdirSync, readFileSync } = await import("node:fs");
   const dir = new URL(".", import.meta.url).pathname;
-  // The applications' own (ChoicePicker, used by runtime/) move to Clarity's dialogs with U1f.
   const ownFrames = readdirSync(dir)
-    .filter((name) => name.endsWith(".svelte") && name !== "Modal.svelte" && name !== "ChoicePicker.svelte")
+    .filter((name) => name.endsWith(".svelte") && name !== "Modal.svelte")
     .filter((name) => readFileSync(dir + name, "utf8").includes('class="backdrop"'));
   assert.deepEqual(ownFrames, []);
 });

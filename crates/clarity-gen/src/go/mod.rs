@@ -437,6 +437,30 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         }
         dispatch.push_str("\t\t}\n");
     }
+    // The handlers an answer runs, with the values written for them and the answer (DESIGN 5.14).
+    let mut answers = String::new();
+    for w in windows.iter().filter(|w| !w.answers.is_empty()) {
+        answers.push_str(&format!("\tcase {}:\n\t\tswitch handler {{\n", string(&w.name)));
+        for (handler, method, values) in &w.answers {
+            let mut decode = String::new();
+            let mut passed = String::new();
+            for (i, value) in values.iter().enumerate() {
+                let (call, pass) = match value {
+                    logic::AnswerValue::Record(entity) => (format!("clarity.AnswerRecord[{entity}](db, values[{i}])"), format!("&v{i}")),
+                    logic::AnswerValue::Value(ty) => (format!("clarity.Answer[{ty}](values[{i}])"), format!("v{i}")),
+                };
+                decode.push_str(&format!("\t\t\tv{i}, err := {call}\n\t\t\tif err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n"));
+                passed.push_str(&format!(", {pass}"));
+            }
+            answers.push_str(&format!(
+                "\t\tcase {}:\n\t\t\tif len(values) < {} {{\n\t\t\t\treturn clarity.Reply{{}}, &clarity.InvalidError{{What: handler + \" takes more values than the answer gave\"}}\n\t\t\t}}\n\t\t\tw := &{}{{}}\n\t\t\tif err := state.Decode(w); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n{decode}\t\t\tif err := w.{method}(db, ui{passed}); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\treturn ui.Reply(state.Window, w)\n",
+                string(handler),
+                values.len(),
+                w.struct_name
+            ));
+        }
+        answers.push_str("\t\t}\n");
+    }
     let mut app_dispatch = String::new();
     for a in &apps {
         for (handler, method) in &a.handlers {
@@ -473,6 +497,7 @@ package main
 
 import (
 \t\"embed\"
+\t\"encoding/json\"
 \t\"fmt\"
 \t\"io/fs\"
 \t\"os\"
@@ -556,6 +581,16 @@ func (windows) Dispatch(db *clarity.Db, state clarity.WindowState, handler strin
 \tswitch handler {{
 {app_dispatch}\t}}
 \treturn clarity.Reply{{}}, &clarity.InvalidError{{What: state.Window + \" has no handler \" + handler}}
+}}
+
+// Answer runs the handler the answer to a question goes to (DESIGN 5.14),
+// with the values written for it and the answer last.
+func (windows) Answer(db *clarity.Db, state clarity.WindowState, handler string, values []json.RawMessage) (clarity.Reply, error) {{
+\tui := clarity.NewUi(state)
+\t_ = ui
+\tswitch state.Window {{
+{answers}\t}}
+\treturn clarity.Reply{{}}, &clarity.InvalidError{{What: state.Window + \" has no handler \" + handler + \" to answer\"}}
 }}
 
 // Redraw draws the canvases of the window a reply shows anew, each by its

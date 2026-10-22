@@ -34,6 +34,9 @@ translation en
     savedOrder \"Saved order {number}\"
     yes \"Yes\"
     no \"No\"
+    ok \"OK\"
+    cancel \"Cancel\"
+    dismiss \"Dismiss\"
 ";
 
 const NL: &str = "// Dutch.
@@ -46,6 +49,9 @@ translation nl
     savedOrder \"Bestelling {number} opgeslagen\"
     yes \"Ja\"
     no \"Nee\"
+    ok \"OK\"
+    cancel \"Annuleren\"
+    dismiss \"Sluiten\"
 ";
 
 fn project_with(files: &[(&str, &str)]) -> Project {
@@ -191,7 +197,7 @@ fn a_text_without_letters_needs_no_key() {
     assert!(!translations::has_letters("{name}"));
     let calc = "module calc\n\npage Calc: window\n    button \"7\" name seven at 1,1\n";
     let mut project = load_sources([("calc.clarity", calc)]);
-    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n")]);
+    translations::attach(&mut project, [("translations/en.clarity", "translation en\n    yes \"Yes\"\n    no \"No\"\n    ok \"OK\"\n    cancel \"Cancel\"\n    dismiss \"Dismiss\"\n")]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
 }
 

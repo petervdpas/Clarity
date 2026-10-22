@@ -10,7 +10,7 @@ use crate::span::Span;
 use super::fields::{field_type, read_field, split_type, value_type};
 use super::{
     Cardinality, Diagram, DiagramEngine, DiagramEntity, DiagramEnum, DiagramField, DiagramFunction, DiagramKind, DiagramModule,
-    DiagramParam, DiagramValue, Line, Relation,
+    DiagramParam, DiagramUse, DiagramValue, Line, Relation,
 };
 
 const UNREADABLE: &str = "Clarity cannot read this line of a class diagram: write a class `class Name {`, a member `+name: text`, or a relation `A \"1\" --> \"*\" B : label`";
@@ -48,6 +48,7 @@ enum Block {
 pub(super) fn parse<'a>(body: impl Iterator<Item = Line<'a>>) -> (Diagram, Vec<Diagnostic>) {
     let mut drafts: Vec<Draft> = Vec::new();
     let mut relations = Vec::new();
+    let mut uses = Vec::new();
     let mut problems = Vec::new();
     let mut blocks: Vec<Block> = Vec::new();
     for line in body {
@@ -83,7 +84,7 @@ pub(super) fn parse<'a>(body: impl Iterator<Item = Line<'a>>) -> (Diagram, Vec<D
         } else if let Some((word, name)) = stereotype_of(text) {
             let index = draft_index(&mut drafts, class_name(name), namespace, line.span_of(name.trim()));
             set_stereotype(&mut drafts[index], word, &line, &mut problems);
-        } else if let Some(found) = relation(&line, &mut problems) {
+        } else if let Some(found) = relation(&line, &mut uses, &mut problems) {
             if let Some(relation) = found {
                 draft_index(&mut drafts, &relation.left, namespace.clone(), relation.span);
                 draft_index(&mut drafts, &relation.right, namespace, relation.span);
@@ -100,7 +101,7 @@ pub(super) fn parse<'a>(body: impl Iterator<Item = Line<'a>>) -> (Diagram, Vec<D
             problems.push(Diagnostic::error(UNREADABLE, line.span));
         }
     }
-    (finish(drafts, relations, &mut problems), problems)
+    (finish(drafts, relations, uses, &mut problems), problems)
 }
 
 /// The name of a class, without generics, label, style or brace.
@@ -157,7 +158,7 @@ fn member(draft: &mut Draft, text: &str, line: &Line, problems: &mut Vec<Diagnos
     let bracket = text.find('(');
     let is_function = bracket.is_some_and(|b| text.find(':').is_none_or(|colon| b < colon));
     if let (true, Some((name, rest))) = (is_function, text.split_once('(')) {
-        let (params, result) = rest.rsplit_once(')').unwrap_or((rest, ""));
+        let (params, result) = closing(rest).map_or((rest, ""), |end| (&rest[..end], &rest[end + 1..]));
         let result = result.trim().trim_start_matches(':').trim();
         draft.functions.push(DiagramFunction {
             name: name.trim().to_string(),
@@ -187,6 +188,21 @@ fn member(draft: &mut Draft, text: &str, line: &Line, problems: &mut Vec<Diagnos
     if let Some(field) = field {
         draft.fields.push(field);
     }
+}
+
+/// Where the bracket that closes a parameter list stands in `rest`, the
+/// text after its `(`; brackets inside it, as in `decimal(5, 2)`, are skipped.
+fn closing(rest: &str) -> Option<usize> {
+    let mut depth = 0;
+    for (i, c) in rest.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return Some(i),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 /// A field from its name, its type as written and its modifiers.
@@ -244,8 +260,9 @@ fn ends(text: &str) -> Vec<&str> {
 }
 
 /// A relation line: None when the line is no relation, Some(None) when it
-/// is one Clarity only draws, with the warning noted.
-fn relation(line: &Line, problems: &mut Vec<Diagnostic>) -> Option<Option<Relation>> {
+/// is one Clarity only draws (a uses arrow is noted in `uses`, any other
+/// with a warning).
+fn relation(line: &Line, uses: &mut Vec<DiagramUse>, problems: &mut Vec<Diagnostic>) -> Option<Option<Relation>> {
     let (ends, label) = match line.text.split_once(':') {
         Some((ends, label)) => (ends, Some(label.trim().trim_matches('"').to_string()).filter(|l| !l.is_empty())),
         None => (line.text, None),
@@ -270,6 +287,15 @@ fn relation(line: &Line, problems: &mut Vec<Diagnostic>) -> Option<Option<Relati
     let whole_at_a = matches!(head_a, "*" | "o");
     let whole_at_b = matches!(head_b, "*" | "o");
     if line_kind == ".." && !whole_at_a && !whole_at_b {
+        let used = match (head_a, head_b) {
+            ("", ">") => Some((a, b)),
+            ("<", "") => Some((b, a)),
+            _ => None,
+        };
+        if let Some((from, to)) = used {
+            uses.push(DiagramUse { from: class_name(from).to_string(), to: class_name(to).to_string(), span: line.span });
+            return Some(None);
+        }
         problems.push(Diagnostic::warning(
             "a dependency is drawn only; Clarity reads associations (-->), compositions (*--) and aggregations (o--)",
             line.span,
@@ -322,8 +348,18 @@ fn multiplicity(written: &str) -> Option<Cardinality> {
 }
 
 /// Each class becomes what its stereotype says.
-fn finish(drafts: Vec<Draft>, relations: Vec<Relation>, problems: &mut Vec<Diagnostic>) -> Diagram {
-    let mut diagram = Diagram { kind: Some(DiagramKind::Class), relations, ..Diagram::default() };
+fn finish(drafts: Vec<Draft>, relations: Vec<Relation>, uses: Vec<DiagramUse>, problems: &mut Vec<Diagnostic>) -> Diagram {
+    // Only code uses: a uses arrow starts at a module or an engine.
+    for u in &uses {
+        let coded = drafts.iter().any(|d| d.name == u.from && matches!(d.stereotype, Some(Stereotype::Module | Stereotype::Engine)));
+        if !coded {
+            problems.push(Diagnostic::warning(
+                format!("a uses arrow says a module's or engine's code uses the other; {} has no code, so this line is drawn only", u.from),
+                u.span,
+            ));
+        }
+    }
+    let mut diagram = Diagram { kind: Some(DiagramKind::Class), relations, uses, ..Diagram::default() };
     for draft in drafts {
         match draft.stereotype {
             Some(Stereotype::Enumeration) => {

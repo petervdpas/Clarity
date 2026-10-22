@@ -42,9 +42,9 @@ erDiagram
     }
     Loan }o..|| Album : album
     Loan }o..|| Friend : friend
-    Genre }o..|| Genre : parent
+    Genre }o..o| Genre : parent
     Album }o..|| Artist : artist
-    Album }o..|| Genre : genre
+    Album }o..o| Genre : genre
     Track }o..|| Album : album
     %% clarity: Friend at -21,-10
     %% clarity: Loan at -49,216

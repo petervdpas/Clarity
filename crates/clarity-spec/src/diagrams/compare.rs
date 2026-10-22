@@ -18,7 +18,7 @@ use crate::model::{Entity, EnumDecl, Modifiers, Project, SpecFile, default_label
 use crate::span::Span;
 use crate::templates::plural;
 
-use super::{Diagram, DiagramField, Relation};
+use super::{Cardinality, Diagram, DiagramField, Relation};
 
 /// What a proposal does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -216,16 +216,16 @@ fn relation_fields<'r>(
     is_enum: &dyn Fn(&str) -> bool,
     is_entity: &dyn Fn(&str) -> bool,
 ) -> Vec<(&'r str, DiagramField)> {
-    let field = |name: String, type_text: String, owned: bool| DiagramField {
+    let field = |name: String, type_text: String, owned: bool, required: bool| DiagramField {
         name,
         type_text,
-        modifiers: Modifiers { owned, ..Modifiers::default() },
+        modifiers: Modifiers { owned, required, ..Modifiers::default() },
         span: relation.span,
     };
     let (left, right) = (relation.left.as_str(), relation.right.as_str());
     match (is_enum(left), is_enum(right)) {
-        (false, true) if is_entity(left) => return vec![(left, field(snake_case(right), right.to_string(), false))],
-        (true, false) if is_entity(right) => return vec![(right, field(snake_case(left), left.to_string(), false))],
+        (false, true) if is_entity(left) => return vec![(left, field(snake_case(right), right.to_string(), false, false))],
+        (true, false) if is_entity(right) => return vec![(right, field(snake_case(left), left.to_string(), false, false))],
         (false, false) => {}
         _ => return Vec::new(),
     }
@@ -236,9 +236,12 @@ fn relation_fields<'r>(
         // Many on both sides needs an entity between them.
         (true, true) => return Vec::new(),
     };
-    let mut out = vec![(many, field(snake_case(one), format!("ref {one}"), false))];
+    // Exactly one at the end referred to: every record refers to one, so the ref is required.
+    let one_count = if one == left { relation.left_count } else { relation.right_count };
+    let required = one_count == Cardinality::ExactlyOne;
+    let mut out = vec![(many, field(snake_case(one), format!("ref {one}"), false, required))];
     if relation.lists && (relation.left_count.is_many() || relation.right_count.is_many()) {
-        out.push((one, field(plural(&snake_case(many)), format!("list<{many}>"), relation.identifying)));
+        out.push((one, field(plural(&snake_case(many)), format!("list<{many}>"), relation.identifying, false)));
     }
     out
 }

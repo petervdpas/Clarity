@@ -97,7 +97,7 @@ pub fn create_migration(
     let had_folder = dir.join(clarity_spec::MIGRATIONS_DIR).join(&source).is_dir();
     let path = clarity_spec::write_step(&dir, &source, title, &ops).map_err(|err| format!("cannot write the step: {err}"))?;
     let text = std::fs::read_to_string(&path).map_err(|err| format!("cannot read {}: {err}", path.display()))?;
-    record(&history, vec![FileChange { file: path, before: None, after: text }])?;
+    record(&history, vec![FileChange { file: path, before: None, after: Some(text) }])?;
     // The folder is new: watch it from now on, like the modules.
     if !had_folder {
         let watcher = watch(&file, &dir, app)?;

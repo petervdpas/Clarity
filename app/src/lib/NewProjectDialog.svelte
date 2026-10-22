@@ -3,6 +3,7 @@
   // project starts with one SQLite data source; more are added in the
   // project settings.
 
+  import Modal from "./Modal.svelte";
   import StackFields from "./StackFields.svelte";
   import type { Catalog } from "./generated/Catalog";
   import type { Stack } from "./generated/Stack";
@@ -32,11 +33,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && oncancel()} />
-
-<div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && oncancel()}>
+<Modal title={"New project"} width={400} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
-    <h2>New project</h2>
     <p class="folder" title={folder}>{folder}</p>
     <div class="form-grid compact">
       <StackFields {catalog} {stack} onchange={(next) => (stack = next)} />
@@ -48,38 +46,20 @@
       <button type="submit" class="primary" disabled={stack.targets.length === 0}>Create project</button>
     </div>
   </form>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.45);
-    display: grid;
-    place-items: center;
-    z-index: 50;
-  }
 
   .compact {
     grid-template-columns: 80px minmax(0, 1fr);
   }
 
   .dialog {
-    width: min(400px, calc(100vw - 32px));
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 16px 18px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+    gap: 10px;
   }
 
-  h2 {
-    margin: 0;
-    font-size: 15px;
-  }
 
   p {
     margin: 0;

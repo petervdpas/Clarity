@@ -2,6 +2,7 @@
   // Asks for a new language of the project: its tag, with the name it goes
   // by. Adding it writes its translation file, translations/<tag>.clarity.
 
+  import Modal from "./Modal.svelte";
   import { languageName } from "./translate";
 
   let {
@@ -31,11 +32,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && oncancel()} />
-
-<div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && oncancel()}>
+<Modal title={"New language"} width={380} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
-    <h2>New language</h2>
     <label>
       <span>Language</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -59,34 +57,16 @@
       <button type="submit" class="primary" disabled={!trimmed || already}>Add language</button>
     </div>
   </form>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.45);
-    display: grid;
-    place-items: center;
-    z-index: 50;
-  }
 
   .dialog {
-    width: min(380px, calc(100vw - 32px));
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   }
 
-  h2 {
-    margin: 0;
-    font-size: 15px;
-  }
 
   label {
     display: flex;

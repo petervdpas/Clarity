@@ -19,6 +19,16 @@
 
   const changed = $derived(draft.trim() !== "" && draft.trim() !== name);
 
+  let input: HTMLInputElement | undefined = $state();
+
+  /** Puts the cursor in the name, with the name picked up to its extension, ready to type over. */
+  export function focus() {
+    if (!input) return;
+    input.focus();
+    const dot = draft.lastIndexOf(".");
+    input.setSelectionRange(0, dot > 0 ? dot : draft.length);
+  }
+
   function submit(e: SubmitEvent) {
     e.preventDefault();
     if (changed) onrename(draft.trim());
@@ -27,6 +37,7 @@
 
 <form class="rename" onsubmit={submit}>
   <input
+    bind:this={input}
     bind:value={draft}
     {title}
     spellcheck="false"

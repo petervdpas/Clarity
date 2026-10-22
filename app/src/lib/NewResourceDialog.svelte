@@ -4,6 +4,7 @@
   // extension. Markdown may start without a file, as a heading to write
   // under in Clarity IDE; every other type starts from a file.
 
+  import Modal from "./Modal.svelte";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import type { ResourceKind } from "./generated/ResourceKind";
   import type { ResourceKindInfo } from "./generated/ResourceKindInfo";
@@ -55,11 +56,8 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && oncancel()} />
-
-<div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && oncancel()}>
+<Modal title={"New resource"} width={380} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
-    <h2>New resource</h2>
     <label>
       <span>Name</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -97,34 +95,16 @@
       <button type="submit" class="primary" disabled={!ready}>Add resource</button>
     </div>
   </form>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.45);
-    display: grid;
-    place-items: center;
-    z-index: 50;
-  }
 
   .dialog {
-    width: min(380px, calc(100vw - 32px));
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   }
 
-  h2 {
-    margin: 0;
-    font-size: 15px;
-  }
 
   label {
     display: flex;

@@ -44,7 +44,7 @@ pub fn import_tables(
 ) -> Result<Imported, String> {
     let (_, dir) = open_project_of(&state)?;
     let done = clarity_project::import_tables(&dir, &source, module.trim(), &tables)?;
-    record(&history, vec![FileChange { file: done.path.clone(), before: None, after: done.text }])?;
+    record(&history, vec![FileChange { file: done.path.clone(), before: None, after: Some(done.text) }])?;
     Ok(Imported {
         preview: load(&dir)?,
         file: done.path.display().to_string(),
@@ -61,8 +61,8 @@ pub fn take_ownership(source: String, state: State<WatchState>, history: State<H
     record(
         &history,
         vec![
-            FileChange { file: owned.step, before: None, after: owned.step_text },
-            FileChange { file: owned.project_file, before: Some(owned.before), after: owned.after },
+            FileChange { file: owned.step, before: None, after: Some(owned.step_text) },
+            FileChange { file: owned.project_file, before: Some(owned.before), after: Some(owned.after) },
         ],
     )?;
     load(&dir)

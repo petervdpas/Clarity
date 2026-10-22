@@ -41,6 +41,13 @@ fn known(word: &str) -> Option<&'static str> {
 /// A field's type in Clarity's words; an entity's name is a ref when the
 /// attribute is a foreign key.
 pub(super) fn field_type(written: &str, foreign_key: bool) -> Result<String, String> {
+    if let Some(entity) = written.strip_prefix("ref ") {
+        let entity = entity.trim();
+        if entity.starts_with(|c: char| c.is_uppercase()) && !entity.contains(char::is_whitespace) {
+            return Ok(format!("ref {entity}"));
+        }
+        return Err(format!("'{written}' refers to an entity by its name, as ref Customer"));
+    }
     if let Some(item) = list_item(written) {
         return match field_type(item, false)? {
             entity if entity.starts_with(|c: char| c.is_uppercase()) => Ok(format!("list<{entity}>")),

@@ -1,47 +1,46 @@
-<script lang="ts" module>
-  /** What is picked on the canvas: an entity by name, or a relation by its place in the list. */
-  export type ErdPick = { kind: "entity"; name: string } | { kind: "relation"; index: number } | null;
-</script>
-
 <script lang="ts">
-  // An ERD drawn by Clarity itself, for designing: drag an Entity from the
-  // palette onto the canvas, move boxes where you want them, and with the
-  // Relation tool drag from one box to another to relate them. Ctrl+wheel
-  // zooms, dragging the background pans. A right click on a box's header
-  // opens what it draws. Proposals color the boxes they are about: green
-  // for added, amber for changed, faded for removed.
+  // The diagram designer's canvas, Clarity's own, for every kind it
+  // designs: drag a box from the palette onto the canvas, move boxes where
+  // you want them, and with a line tool drag from one box to another.
+  // Ctrl+wheel zooms, dragging the background pans, and a right click on a
+  // box's header opens what it draws. Proposals color the boxes they are
+  // about: green for added, amber for changed, faded for removed. What the
+  // boxes and lines are, and what an edit makes, is the kind's own
+  // (erdDesign.ts, classDesign.ts); the drawing is designCanvas.ts.
 
   import ContextMenu from "./ContextMenu.svelte";
-  import type { Erd } from "./generated/Erd";
   import type { Mark } from "./diagramCanvas";
-  import { addEntity, boxes, columns, connect, endMark, ends, moveEntity, pinned, ROW, TITLE, type Box, type Point } from "./erdDesign";
+  import { boxes, columns, endMark, ends, FRAME_LABEL, frames, ROW, umlMark, type Box, type Frame, type CanvasEdit, type CanvasPick, type EndStyle, type Link, type PaletteItem, type Point, type Shape } from "./designCanvas";
 
   let {
-    erd,
+    shapes,
+    links,
+    palette = [],
     marks = {},
     readonly = false,
     picked = $bindable(null),
-    onchange: change = () => {},
+    onedit = () => undefined,
     onopen = () => {},
     canopen = () => true,
+    openLabel = () => "Open",
   }: {
-    erd: Erd;
+    shapes: Shape[];
+    links: Link[];
+    /** What can be dragged onto the canvas or drawn with; none when read only. */
+    palette?: PaletteItem[];
     marks?: Record<string, Mark>;
     /** Drawn to look at: boxes move, nothing else changes. */
     readonly?: boolean;
-    picked?: ErdPick;
-    /** A change made on the canvas, written at once. */
-    onchange?: (erd: Erd) => void;
+    picked?: CanvasPick;
+    /** An edit made on the canvas, with the boxes as shown; gives what to pick after it. */
+    onedit?: (edit: CanvasEdit, shown: Box[]) => CanvasPick | undefined;
     /** Opens what the box of `name` draws, from the menu of its header. */
     onopen?: (name: string) => void;
     /** Whether the box of `name` draws something that opens. */
     canopen?: (name: string) => boolean;
+    /** The menu item that opens the box of `name`: "Open entity". */
+    openLabel?: (name: string) => string;
   } = $props();
-
-  /** Hands a change on, with every box pinned where it is shown. */
-  function onchange(next: Erd) {
-    change(pinned(next, laid));
-  }
 
   const FONT_SIZE = 12;
   const ZOOM_MIN = 0.25;
@@ -57,21 +56,36 @@
   let svg: SVGSVGElement | undefined = $state();
   let zoom = $state(1);
   let pan = $state<Point>({ x: 0, y: 0 });
-  let tool = $state<"select" | "relation">("select");
+  /** The line tool in use, or null to pick and move. */
+  let tool = $state<string | null>(null);
 
   /** A box being moved, shown where the pointer has it until it is let go. */
   let moving = $state<{ name: string; x: number; y: number } | null>(null);
-  /** A relation being drawn, from a box to the pointer. */
+  /** A frame being dragged: its boxes follow the pointer by (dx, dy) until it is let go. */
+  let shifting = $state<{ group: string; dx: number; dy: number } | null>(null);
+  /** A line being drawn, from a box to the pointer. */
   let drawing = $state<{ from: string; to: Point } | null>(null);
-  /** An entity being dragged from the palette, at the pointer on the screen. */
-  let placing = $state<{ x: number; y: number } | null>(null);
+  /** An item being dragged from the palette, at the pointer on the screen. */
+  let placing = $state<{ item: PaletteItem; x: number; y: number } | null>(null);
   /** The menu of a box's header, at the pointer on the screen. */
   let menu = $state<{ name: string; x: number; y: number } | null>(null);
 
   // Boxes stand where the diagram has them; only the one being moved follows the pointer.
-  const laid = $derived(boxes(erd, measure).map((b) => (moving && b.name === moving.name ? { ...b, x: moving.x, y: moving.y } : b)));
+  const laid = $derived(
+    boxes(shapes, measure).map((b) => {
+      if (moving && b.name === moving.name) return { ...b, x: moving.x, y: moving.y };
+      if (shifting && b.group === shifting.group) return { ...b, x: b.x + shifting.dx, y: b.y + shifting.dy };
+      return b;
+    }),
+  );
+  const framed = $derived(frames(laid));
   const byName = $derived(new Map(laid.map((b) => [b.name, b])));
-  const meetings = $derived(ends(laid, erd.relations));
+  const meetings = $derived(ends(laid, links));
+
+  function edit(change: CanvasEdit) {
+    const pick = onedit(change, laid);
+    if (pick) picked = pick;
+  }
 
   /** The point of the drawing under a point of the screen. */
   function toDrawing(clientX: number, clientY: number): Point {
@@ -92,12 +106,11 @@
   }
 
   function wheel(e: WheelEvent) {
+    e.preventDefault();
     if (!(e.ctrlKey || e.metaKey)) {
       pan = { x: pan.x - e.deltaX, y: pan.y - e.deltaY };
-      e.preventDefault();
       return;
     }
-    e.preventDefault();
     const r = svg!.getBoundingClientRect();
     setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), { x: e.clientX - r.left, y: e.clientY - r.top });
   }
@@ -126,7 +139,8 @@
     if (e.button !== 0) return;
     e.stopPropagation();
     menu = null;
-    if (tool === "relation" && !readonly) {
+    if (tool && !readonly) {
+      const using = tool;
       drawing = { from: box.name, to: toDrawing(e.clientX, e.clientY) };
       follow(
         e,
@@ -135,18 +149,12 @@
           const target = boxAt(toDrawing(ev.clientX, ev.clientY));
           const from = drawing?.from;
           drawing = null;
-          if (from && target) {
-            const next = connect(erd, from, target.name);
-            if (next !== erd) {
-              onchange(next);
-              picked = { kind: "relation", index: next.relations.length - 1 };
-            }
-          }
+          if (from && target && target.name !== from) edit({ op: "connect", tool: using, from, to: target.name });
         },
       );
       return;
     }
-    picked = { kind: "entity", name: box.name };
+    picked = { kind: "box", name: box.name };
     const origin = { x: box.x, y: box.y };
     follow(
       e,
@@ -154,23 +162,39 @@
       (moved) => {
         const last = moving;
         moving = null;
-        if (moved && last) onchange(moveEntity(erd, last.name, last.x, last.y));
+        if (moved && last) edit({ op: "move", name: last.name, x: last.x, y: last.y });
       },
     );
   }
 
-  function pressRelation(e: PointerEvent, index: number) {
-    if (e.button !== 0 || readonly) return;
+  /** Drags a frame by its name: every box in it moves along, as one edit. */
+  function pressFrame(e: PointerEvent, frame: Frame) {
+    if (e.button !== 0) return;
     e.stopPropagation();
-    picked = { kind: "relation", index };
+    menu = null;
+    follow(
+      e,
+      (dx, dy) => (shifting = { group: frame.name, dx: dx / zoom, dy: dy / zoom }),
+      (moved) => {
+        const moves = moved ? laid.filter((b) => b.group === frame.name).map((b) => ({ name: b.name, x: b.x, y: b.y })) : [];
+        shifting = null;
+        if (moves.length > 0) edit({ op: "moveAll", moves });
+      },
+    );
   }
 
   /** The menu of a box's header; a right click below the header shows none. */
   function boxMenu(e: MouseEvent, box: Box) {
     e.preventDefault();
     const p = toDrawing(e.clientX, e.clientY);
-    menu = p.y <= box.y + TITLE && canopen(box.name) ? { name: box.name, x: e.clientX, y: e.clientY } : null;
-    picked = { kind: "entity", name: box.name };
+    menu = p.y <= box.y + box.title && canopen(box.name) ? { name: box.name, x: e.clientX, y: e.clientY } : null;
+    picked = { kind: "box", name: box.name };
+  }
+
+  function pressLink(e: PointerEvent, index: number) {
+    if (e.button !== 0 || readonly) return;
+    e.stopPropagation();
+    picked = { kind: "link", index };
   }
 
   function pressBackground(e: PointerEvent) {
@@ -186,45 +210,53 @@
     );
   }
 
-  /** Drags a new entity from the palette; let go over the canvas, it lands there. A click puts it in the middle. */
-  function pressPalette(e: PointerEvent) {
+  /** Drags a box from the palette; let go over the canvas, it lands there. A click puts it in the middle. */
+  function pressPalette(e: PointerEvent, item: PaletteItem) {
     if (e.button !== 0) return;
     e.preventDefault();
-    placing = { x: e.clientX, y: e.clientY };
+    placing = { item, x: e.clientX, y: e.clientY };
     follow(
       e,
-      (_dx, _dy, ev) => (placing = { x: ev.clientX, y: ev.clientY }),
+      (_dx, _dy, ev) => (placing = { item, x: ev.clientX, y: ev.clientY }),
       (moved, ev) => {
         placing = null;
         const r = svg?.getBoundingClientRect();
         if (!r) return;
         const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
         const at = moved ? (inside ? toDrawing(ev.clientX, ev.clientY) : null) : toDrawing(r.left + r.width / 2 - 60, r.top + r.height / 2 - 20);
-        if (!at) return;
-        const next = addEntity(erd, at.x, at.y);
-        onchange(next);
-        picked = { kind: "entity", name: next.entities[next.entities.length - 1].name };
+        if (at) edit({ op: "add", item: item.id, x: at.x, y: at.y });
       },
     );
   }
 
-  /** The line of a relation between its ends, with the direction along it and its middle. */
+  /** The line between two ends, with the direction along it and its middle. */
   function line([a, b]: [Point, Point]) {
     const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
     return { a, b, u, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
   }
+
+  /** What is drawn at one end: an ERD's count, or a UML head with its multiplicity. */
+  function endOf(at: Point, along: Point, style: EndStyle) {
+    if (style.kind === "count") return { count: endMark(at, along, style.count), uml: null, text: "" };
+    return { count: null, uml: umlMark(at, along, style.head), text: style.text };
+  }
 </script>
 
-<div class="erd" class:readonly>
-  {#if !readonly}
+<div class="canvas" class:readonly>
+  {#if !readonly && palette.length > 0}
     <div class="palette" role="toolbar" aria-label="Palette">
-      <button class="item" onpointerdown={pressPalette} title="Drag onto the canvas to add an entity; a click puts it in the middle">
-        <span class="glyph entity"></span> Entity
-      </button>
-      <button class="item" class:active={tool === "relation"} onclick={() => (tool = tool === "relation" ? "select" : "relation")} title="Drag from one entity to another to relate them: many of the first refer to one of the second">
-        <span class="glyph relation"></span> Relation
-      </button>
+      {#each palette as item (item.id)}
+        {#if item.tool}
+          <button class="item" class:active={tool === item.id} onclick={() => (tool = tool === item.id ? null : item.id)} title={item.title}>
+            <span class="glyph {item.glyph}"></span> {item.label}
+          </button>
+        {:else}
+          <button class="item" onpointerdown={(e) => pressPalette(e, item)} title={item.title}>
+            <span class="glyph {item.glyph}"></span> {item.label}
+          </button>
+        {/if}
+      {/each}
     </div>
   {/if}
   <div class="zoom">
@@ -234,28 +266,43 @@
   </div>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <svg bind:this={svg} class:connecting={tool === "relation"} onpointerdown={pressBackground} onwheel={wheel} style:font>
+  <svg bind:this={svg} class:connecting={tool !== null} onpointerdown={pressBackground} onwheel={wheel} style:font>
     <defs>
-      <pattern id="erd-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="translate({pan.x} {pan.y}) scale({zoom})">
+      <pattern id="design-grid" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="translate({pan.x} {pan.y}) scale({zoom})">
         <circle cx="1" cy="1" r="1" class="dot" />
       </pattern>
     </defs>
-    <rect class="ground" width="100%" height="100%" fill="url(#erd-grid)" />
+    <rect class="ground" width="100%" height="100%" fill="url(#design-grid)" />
     <g transform="translate({pan.x} {pan.y}) scale({zoom})">
-      {#each erd.relations as r, i (i)}
+      {#each framed as frame (frame.name)}
+        <rect class="frame" x={frame.x} y={frame.y} width={frame.w} height={frame.h} rx="8" />
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <g class="frame-name" onpointerdown={(e) => pressFrame(e, frame)}>
+          <rect x={frame.x} y={frame.y} width={frame.w} height={FRAME_LABEL} rx="8" />
+          <text x={frame.x + 10} y={frame.y + 14}>{frame.name}</text>
+        </g>
+      {/each}
+
+      {#each links as link, i (i)}
         {@const at = meetings[i]}
         {#if at}
           {@const l = line(at)}
-          {@const start = endMark(l.a, l.u, r.leftCount)}
-          {@const end = endMark(l.b, { x: -l.u.x, y: -l.u.y }, r.rightCount)}
+          {@const start = endOf(l.a, l.u, link.leftEnd)}
+          {@const end = endOf(l.b, { x: -l.u.x, y: -l.u.y }, link.rightEnd)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <g class="relation" class:picked={picked?.kind === "relation" && picked.index === i} onpointerdown={(e) => pressRelation(e, i)}>
+          <g class="link" class:picked={picked?.kind === "link" && picked.index === i} onpointerdown={(e) => pressLink(e, i)}>
             <line class="hit" x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} />
-            <line class="wire" class:dashed={!r.identifying} x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} />
-            <path class="wire" d={start.path + end.path} />
-            {#if start.ring}<circle class="ring" cx={start.ringAt.x} cy={start.ringAt.y} r="4" />{/if}
-            {#if end.ring}<circle class="ring" cx={end.ringAt.x} cy={end.ringAt.y} r="4" />{/if}
-            {#if r.label}<text class="label" x={l.mid.x} y={l.mid.y - 6} text-anchor="middle">{r.label}</text>{/if}
+            <line class="wire" class:dashed={link.dashed} x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} />
+            {#each [start, end] as mark, m (m)}
+              {#if mark.count}
+                <path class="wire" d={mark.count.path} />
+                {#if mark.count.ring}<circle class="ring" cx={mark.count.ringAt.x} cy={mark.count.ringAt.y} r="4" />{/if}
+              {:else if mark.uml}
+                {#if mark.uml.path}<path class="head" class:closed={mark.uml.closed} class:filled={mark.uml.filled} d={mark.uml.path} />{/if}
+                {#if mark.text}<text class="count" x={mark.uml.textAt.x} y={mark.uml.textAt.y + 4} text-anchor="middle">{mark.text}</text>{/if}
+              {/if}
+            {/each}
+            {#if link.label}<text class="label" x={l.mid.x} y={l.mid.y - 6} text-anchor="middle">{link.label}</text>{/if}
           </g>
         {/if}
       {/each}
@@ -264,20 +311,23 @@
         {@const cols = columns(box, measure)}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <g
-          class="box mark-{marks[box.name] ?? 'none'}"
-          class:picked={picked?.kind === "entity" && picked.name === box.name}
+          class="box tone-{box.tone} mark-{marks[box.name] ?? 'none'}"
+          class:picked={picked?.kind === "box" && picked.name === box.name}
           onpointerdown={(e) => pressBox(e, box)}
           oncontextmenu={(e) => boxMenu(e, box)}
         >
           <rect class="body" x={box.x} y={box.y} width={box.w} height={box.h} rx="5" />
-          <path class="title" d="M{box.x},{box.y + TITLE}V{box.y + 5}a5,5 0 0 1 5,-5H{box.x + box.w - 5}a5,5 0 0 1 5,5V{box.y + TITLE}Z" />
-          <text class="name" x={box.x + box.w / 2} y={box.y + TITLE / 2 + 4} text-anchor="middle">{box.name}</text>
-          {#each box.rows as row, i (i)}
-            {@const y = box.y + TITLE + ROW * i + ROW / 2 + 4}
-            {#if i % 2 === 1}<rect class="stripe" x={box.x + 1} y={box.y + TITLE + ROW * i} width={box.w - 2} height={ROW} />{/if}
-            <text class="type" x={cols.type} {y}>{row.type}</text>
-            <text class="field" x={cols.name} {y}>{row.name}</text>
-            <text class="keys" x={cols.keys} {y}>{row.keys}</text>
+          <path class="title" d="M{box.x},{box.y + box.title}V{box.y + 5}a5,5 0 0 1 5,-5H{box.x + box.w - 5}a5,5 0 0 1 5,5V{box.y + box.title}Z" />
+          {#if box.stereotype}
+            <text class="stereotype" x={box.x + box.w / 2} y={box.y + 14} text-anchor="middle">«{box.stereotype}»</text>
+          {/if}
+          <text class="name" x={box.x + box.w / 2} y={box.y + box.title / 2 + 4 + (box.stereotype ? 5 : 0)} text-anchor="middle">{box.name}</text>
+          {#each box.rows as row, r (r)}
+            {@const y = box.y + box.title + ROW * r + ROW / 2 + 4}
+            {#if r % 2 === 1}<rect class="stripe" x={box.x + 1} y={box.y + box.title + ROW * r} width={box.w - 2} height={ROW} />{/if}
+            {#each row as cell, c (c)}
+              <text class="cell {box.cells?.[c] ?? ''}" x={cols[c]} {y}>{cell}</text>
+            {/each}
           {/each}
         </g>
       {/each}
@@ -293,18 +343,18 @@
 
   {#if menu}
     {@const name = menu.name}
-    <ContextMenu x={menu.x} y={menu.y} items={[{ label: "Open entity", run: () => onopen(name) }]} onclose={() => (menu = null)} />
+    <ContextMenu x={menu.x} y={menu.y} items={[{ label: openLabel(name), run: () => onopen(name) }]} onclose={() => (menu = null)} />
   {/if}
   {#if placing}
-    <div class="ghost" style:left="{placing.x}px" style:top="{placing.y}px">Entity</div>
+    <div class="ghost" style:left="{placing.x}px" style:top="{placing.y}px">{placing.item.label}</div>
   {/if}
-  {#if erd.entities.length === 0}
-    <p class="hint">{readonly ? "No entities yet." : "Drag an Entity from the palette onto the canvas to start."}</p>
+  {#if shapes.length === 0}
+    <p class="hint">{readonly ? "Nothing to draw yet." : "Drag a box from the palette onto the canvas to start."}</p>
   {/if}
 </div>
 
 <style>
-  .erd {
+  .canvas {
     position: relative;
     flex: 1;
     min-width: 0;
@@ -351,6 +401,42 @@
     stroke-width: 1;
   }
 
+  .tone-enum .title {
+    fill: color-mix(in srgb, #2f8f4e 18%, var(--panel));
+  }
+
+  .tone-engine .title {
+    fill: color-mix(in srgb, #c08a12 18%, var(--panel));
+  }
+
+  .tone-module .title {
+    fill: color-mix(in srgb, #7a5cc0 18%, var(--panel));
+  }
+
+  .frame {
+    fill: color-mix(in srgb, var(--accent) 4%, transparent);
+    stroke: var(--border-strong);
+    stroke-dasharray: 5 4;
+    pointer-events: none;
+  }
+
+  .frame-name {
+    cursor: move;
+  }
+
+  .frame-name rect {
+    fill: transparent;
+  }
+
+  .frame-name text {
+    font-weight: 700;
+    fill: var(--text-muted);
+  }
+
+  .frame-name:hover text {
+    fill: var(--accent);
+  }
+
   .stripe {
     fill: var(--panel-alt);
   }
@@ -387,11 +473,17 @@
     font-weight: 700;
   }
 
-  .type {
+  .stereotype {
+    font-size: 10px;
+    fill: var(--text-muted);
+  }
+
+  .cell.type {
     fill: var(--code-type);
   }
 
-  .keys {
+  .cell.keys,
+  .count {
     fill: var(--text-muted);
   }
 
@@ -411,6 +503,20 @@
     pointer-events: none;
   }
 
+  .head {
+    stroke: var(--text-muted);
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .head.closed {
+    fill: var(--bg);
+  }
+
+  .head.filled {
+    fill: var(--text-muted);
+  }
+
   .ring {
     fill: var(--bg);
     stroke: var(--text-muted);
@@ -423,9 +529,16 @@
     cursor: pointer;
   }
 
-  .relation.picked .wire,
-  .relation:hover .wire {
+  .link.picked .wire,
+  .link:hover .wire,
+  .link.picked .head,
+  .link:hover .head {
     stroke: var(--accent);
+  }
+
+  .link.picked .head.filled,
+  .link:hover .head.filled {
+    fill: var(--accent);
   }
 
   .label {
@@ -462,20 +575,69 @@
   }
 
   .glyph {
+    position: relative;
     display: inline-block;
     width: 18px;
     height: 12px;
   }
 
-  .glyph.entity {
+  .glyph.entity,
+  .glyph.enum,
+  .glyph.engine,
+  .glyph.module {
     border: 1.5px solid var(--text-muted);
     border-top-width: 4px;
     border-radius: 2px;
   }
 
-  .glyph.relation {
+  .glyph.enum {
+    border-top-color: #2f8f4e;
+  }
+
+  .glyph.engine {
+    border-top-color: #c08a12;
+  }
+
+  .glyph.module {
+    border-top-color: #7a5cc0;
+  }
+
+  .glyph.relation,
+  .glyph.association,
+  .glyph.composition,
+  .glyph.aggregation {
     border-bottom: 1.5px solid var(--text-muted);
     height: 7px;
+  }
+
+  /* The head of each kind of line, drawn small at the glyph's end. */
+  .glyph.association::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -4px;
+    width: 6px;
+    height: 6px;
+    border-top: 1.5px solid var(--text-muted);
+    border-right: 1.5px solid var(--text-muted);
+    transform: rotate(45deg);
+  }
+
+  .glyph.composition::before,
+  .glyph.aggregation::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    width: 6px;
+    height: 6px;
+    border: 1.5px solid var(--text-muted);
+    background: var(--panel);
+    transform: rotate(45deg);
+  }
+
+  .glyph.composition::before {
+    background: var(--text-muted);
   }
 
   .zoom {

@@ -114,7 +114,7 @@ fn write(files: Vec<FileChange>, history: &State<HistoryState>) -> Result<(), St
         if let Some(folder) = change.file.parent() {
             std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
         }
-        std::fs::write(&change.file, &change.after).map_err(|err| format!("cannot write {}: {err}", change.file.display()))?;
+        change.make()?;
     }
     record(history, files)
 }
@@ -129,7 +129,7 @@ pub fn save_markdown(name: String, text: String, state: State<WatchState>, histo
     }
     let before = std::fs::read_to_string(&file).ok();
     if before.as_deref() != Some(text.as_str()) {
-        write(vec![FileChange { file, before, after: text }], &history)?;
+        write(vec![FileChange { file, before, after: Some(text) }], &history)?;
     }
     load(&dir)
 }

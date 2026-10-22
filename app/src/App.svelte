@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { onMount, tick, untrack } from "svelte";
   // The installers' icon, from the same drawing.
   import logo from "../src-tauri/icons/icon.svg";
@@ -62,6 +62,8 @@
   import { vault } from "./lib/vaultStore.svelte";
   import AgentPanel from "./lib/AgentPanel.svelte";
   import UnlockDialog from "./lib/UnlockDialog.svelte";
+  import DialogHost from "./lib/DialogHost.svelte";
+  import { dialogs } from "./lib/dialogStore.svelte";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -282,8 +284,6 @@
         return o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
       case "resource":
         return p.project.resources?.files.some((f) => f.name === o.name) ?? false;
-      case "view":
-        return o.name === "dataModel";
       case "diagram":
         return p.project.diagrams.some((d) => d.name === o.name);
       case "settings":
@@ -352,7 +352,7 @@
   }
 
   async function deleteEngine(target: SpecFile, name: string, item: number) {
-    if (!(await ask(`Delete engine ${name}? Its file and its code stay in the engines folder.`, { title: "Clarity", kind: "warning" }))) return;
+    if (!(await dialogs.confirm({ text: `Delete engine ${name}? Its file and its code stay in the engines folder.`, action: "Delete", danger: true }))) return;
     actionError = null;
     try {
       applyPreview((await applyEdit(target, { op: "remove", item })).preview);
@@ -477,9 +477,9 @@
   }
 
   /** Makes diagram `name` of `kind` with its starter text, and opens it. */
-  async function addDiagram(name: string, kind: DiagramKind) {
+  async function addDiagram(name: string, kind: DiagramKind, fromProject: boolean) {
     try {
-      const next = await invoke<Preview>("add_diagram", { name, kind });
+      const next = await invoke<Preview>("add_diagram", { name, kind, fromProject });
       applyPreview(next);
       newDiagramOpen = false;
       select({ kind: "diagram", name: `${name}.mermaid` });
@@ -557,7 +557,7 @@
   async function deleteTheme(target: SpecFile, name: string, item: number) {
     const offered = projectFile?.settings?.themes.includes(name);
     const note = offered ? " The application stops offering it." : "";
-    if (!(await ask(`Delete theme ${name}?${note}`, { title: "Clarity", kind: "warning" }))) return;
+    if (!(await dialogs.confirm({ text: `Delete theme ${name}?${note}`, action: "Delete", danger: true }))) return;
     actionError = null;
     try {
       await changeOffered(name, (themes) => themes.filter((t) => t !== name));
@@ -578,7 +578,25 @@
   }
 
   /** Deletes a window, entity, enum, theme or engine the tree shows, after asking. */
+  /** Rename was asked for from the tree: the opened diagram readies its name, then clears this. */
+  let renamingDiagram = $state(false);
+
+  function renameDiagram(name: string) {
+    select({ kind: "diagram", name });
+    renamingDiagram = true;
+  }
+
   async function deleteItem(item: Selected) {
+    if (item.kind === "diagram") {
+      if (!(await dialogs.confirm({ text: `Delete diagram ${item.name}? Undo brings it back.`, action: "Delete", danger: true }))) return;
+      actionError = null;
+      try {
+        applyPreview(await invoke<Preview>("delete_diagram", { name: item.name }));
+      } catch (err) {
+        actionError = String(err);
+      }
+      return;
+    }
     for (const f of files) {
       const theme = item.kind === "theme" ? f.themes.find((t) => t.name.name === item.name) : undefined;
       if (theme) return deleteTheme(f, item.name, theme.span.start);
@@ -594,7 +612,7 @@
               : undefined;
       if (!decl) continue;
       const noun = item.kind === "window" ? "window" : item.kind;
-      if (!(await ask(`Delete ${noun} ${item.name}?`, { title: "Clarity", kind: "warning" }))) return;
+      if (!(await dialogs.confirm({ text: `Delete ${noun} ${item.name}?`, action: "Delete", danger: true }))) return;
       actionError = null;
       try {
         applyPreview((await applyEdit(f, { op: "remove", item: decl.span.start })).preview);
@@ -781,7 +799,7 @@
       const target = openApp ?? page ?? entity ?? enumDecl;
       if (!target) return;
       const noun = openApp ? "the app" : page ? "the window" : entity ? "the entity" : "the enum";
-      if (!(await ask(`Delete ${noun} ${target.name.name}?`, { title: "Clarity", kind: "warning" }))) return;
+      if (!(await dialogs.confirm({ text: `Delete ${noun} ${target.name.name}?`, action: "Delete", danger: true }))) return;
       item = target.span.start;
       if (item === null) return;
     }
@@ -1226,8 +1244,19 @@
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
-        {:else if current?.kind === "view" || current?.kind === "diagram"}
-          <DiagramView {preview} kind={current.kind} name={current.name} onapplied={applyPreview} onopen={openDrawn} />
+        {:else if current?.kind === "diagram"}
+          <DiagramView
+            {preview}
+            name={current.name}
+            onapplied={applyPreview}
+            onopen={openDrawn}
+            renaming={renamingDiagram}
+            onrenaming={() => (renamingDiagram = false)}
+            onrenamed={(file, next) => {
+              applyPreview(next);
+              select({ kind: "diagram", name: file });
+            }}
+          />
         {:else if current?.kind === "resource"}
           <ResourceView {preview} name={current.name} onapplied={applyPreview} />
         {:else if current?.kind === "language"}
@@ -1353,6 +1382,7 @@
 </div>
 
 <UnlockDialog />
+<DialogHost />
 
 {#if newData && preview}
   <NameDialog
@@ -1395,6 +1425,7 @@
     y={treeMenu.y}
     items={[
       { label: "Open", run: () => openItem(item) },
+      ...(item.kind === "diagram" ? [{ label: "Rename", run: () => renameDiagram(item.name) }] : []),
       { label: `Delete ${item.kind}`, danger: true, run: () => deleteItem(item) },
     ]}
     onclose={() => (treeMenu = null)}

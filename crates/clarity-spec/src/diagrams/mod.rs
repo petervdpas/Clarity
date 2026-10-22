@@ -6,6 +6,7 @@
 //! relationships. Other Mermaid kinds are only drawn.
 
 mod class;
+pub mod class_model;
 mod compare;
 mod erd;
 pub mod erd_model;
@@ -30,10 +31,6 @@ pub const DIAGRAMS_DIR: &str = "diagrams";
 
 /// The extension of a diagram file.
 pub const DIAGRAM_EXTENSION: &str = "mermaid";
-
-/// The Data model's own file in the diagrams folder: the view as Clarity
-/// writes it, with the places of its boxes. It is no written diagram.
-pub const DATA_MODEL_FILE: &str = "data-model.mermaid";
 
 /// A kind of diagram Clarity maps onto the project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -92,6 +89,18 @@ pub struct Diagram {
     /// Modules drawn as a `<<module>>` class, with their functions.
     pub modules: Vec<DiagramModule>,
     pub relations: Vec<Relation>,
+    /// `music ..> Images`: a module's or engine's code uses the other.
+    /// Drawn only: the code makes these, not the diagram.
+    pub uses: Vec<DiagramUse>,
+}
+
+/// A dependency of a class diagram: `from` uses `to`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct DiagramUse {
+    pub from: String,
+    pub to: String,
+    pub span: Span,
 }
 
 /// An entity of a diagram, in the order it is first named.

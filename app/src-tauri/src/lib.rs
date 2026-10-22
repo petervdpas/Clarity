@@ -58,8 +58,20 @@ struct WatchState {
 #[derive(Debug)]
 struct FileChange {
     file: PathBuf,
+    /// The text before; None when the change made the file.
     before: Option<String>,
-    after: String,
+    /// The text after; None when the change took the file away.
+    after: Option<String>,
+}
+
+impl FileChange {
+    /// Makes the change: writes the text after, or takes the file away.
+    fn make(&self) -> Result<(), String> {
+        match &self.after {
+            Some(text) => write_atomically(&self.file, text),
+            None => std::fs::remove_file(&self.file).map_err(|err| format!("cannot remove {}: {err}", self.file.display())),
+        }
+    }
 }
 
 /// One applied change: an edit of one file, or a rename across several.
@@ -91,7 +103,6 @@ pub struct EditApplied {
 fn load(dir: &Path) -> Result<Preview, String> {
     let project = clarity_project::load_modules(dir)
         .map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    diagrams::refresh_data_model(dir, &project)?;
     Ok(Preview::new(project))
 }
 
@@ -262,14 +273,14 @@ fn apply_edit(
         let mut changes = vec![FileChange {
             file: file.clone(),
             before: Some(source),
-            after: outcome.text,
+            after: Some(outcome.text),
         }];
         for (path, before_text, after_text) in languages {
             if let Some(folder) = path.parent() {
                 std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
             }
             write_atomically(&path, &after_text)?;
-            changes.push(FileChange { file: path, before: before_text, after: after_text });
+            changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
         }
         record(&history, changes)?;
     }
@@ -433,7 +444,7 @@ fn rename(
         changes.push(FileChange {
             file,
             before: Some(old),
-            after: r.text,
+            after: Some(r.text),
         });
     }
     record(&history, changes)?;
@@ -478,8 +489,8 @@ fn replay(state: &WatchState, history: &HistoryState, way: Replay) -> Result<Pre
     };
     let change = from.pop().ok_or("nothing to undo or redo")?;
     let pick = |c: &FileChange| match way {
-        Replay::Undo => (Some(c.after.clone()), c.before.clone()),
-        Replay::Redo => (c.before.clone(), Some(c.after.clone())),
+        Replay::Undo => (c.after.clone(), c.before.clone()),
+        Replay::Redo => (c.before.clone(), c.after.clone()),
     };
     // Check every file first, so a change is replayed whole or not at all.
     for c in &change.0 {
@@ -575,7 +586,7 @@ fn save_settings(
     let file = project_file_of(&state)?;
     let change = settings_change(&file, &version, &settings)?;
     if let Some(change) = change {
-        write_atomically(&change.file, &change.after)?;
+        change.make()?;
         record(&history, vec![change])?;
     }
     Ok(clarity_project::load(&file))
@@ -599,7 +610,7 @@ fn settings_change(file: &Path, version: &str, settings: &Settings) -> Result<Op
     Ok(Some(FileChange {
         file: file.to_path_buf(),
         before: Some(before),
-        after,
+        after: Some(after),
     }))
 }
 
@@ -828,13 +839,16 @@ pub fn run() {
             resources::replace_resource_file,
             resources::save_markdown,
             diagrams::diagram_kinds,
-            diagrams::data_model_view,
             diagrams::check_diagram,
             diagrams::read_erd,
             diagrams::write_erd,
             diagrams::add_diagram,
             diagrams::save_diagram,
-            diagrams::place_data_model,
+            diagrams::generate_diagram,
+            diagrams::rename_diagram,
+            diagrams::delete_diagram,
+            diagrams::read_classes,
+            diagrams::write_classes,
             diagrams::diagram_proposals,
             diagrams::apply_diagram
         ])
@@ -942,7 +956,8 @@ mod tests {
 
         settings.stack = csharp();
         let change = settings_change(&file, &version, &settings).unwrap().unwrap();
-        assert!(change.after.contains("    stack csharp avalonia desktop\n"), "{}", change.after);
+        let after = change.after.as_deref().unwrap_or_default();
+        assert!(after.contains("    stack csharp avalonia desktop\n"), "{after}");
         assert!(change.before.is_some());
         std::fs::remove_dir_all(&base).unwrap();
     }

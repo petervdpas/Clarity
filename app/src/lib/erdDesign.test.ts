@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Erd } from "./generated/Erd.ts";
-import { addEntity, boxes, pinned, connect, endMark, ends, meeting, moveEntity, removeEntity, renameEntity, rowsOf } from "./erdDesign.ts";
+import { addEntity, connect, erdEdit, erdLinks, erdShapes, moveEntity, removeEntity, renameEntity, rowsOf } from "./erdDesign.ts";
 
 const erd = (): Erd => ({
   entities: [
@@ -11,42 +11,18 @@ const erd = (): Erd => ({
   relations: [{ left: "Order", right: "Customer", leftCount: "zeroOrMore", rightCount: "exactlyOne", identifying: false, label: "customer" }],
 });
 
-/** Every character is 7 wide, as a monospace font at 12px nearly is. */
-const measure = (text: string) => text.length * 7;
-
 test("a box shows its fields as rows: type, name and keys", () => {
-  assert.deepEqual(rowsOf(erd().entities[0]), [{ type: "text(80)", name: "name", keys: "*" }]);
+  assert.deepEqual(rowsOf(erd().entities[0]), [["text(80)", "name", "*"]]);
   const keyed = rowsOf({ name: "A", x: null, y: null, fields: [{ name: "c", typeText: "ref Customer", required: false, unique: true, extra: "" }] });
-  assert.deepEqual(keyed, [{ type: "ref Customer", name: "c", keys: "FK UK" }]);
+  assert.deepEqual(keyed, [["ref Customer", "c", "FK UK"]]);
 });
 
-test("a box is as wide as its widest line and as high as its rows; a box without a place gets one in the grid", () => {
-  const [customer, order] = boxes(erd(), measure);
-  assert.equal(customer.x, 40);
-  assert.equal(customer.y, 60);
-  assert.ok(customer.w >= measure("text(80)  name  *"));
-  assert.equal(customer.h, 32 + 22 * 1 + 6);
-  assert.ok(order.x > customer.x + customer.w, "beside the placed box, not on it");
-  assert.equal(order.h, 32 + 6);
-});
-
-test("a relation meets each box at its edge, on the line between their centers", () => {
-  const a = { x: 0, y: 0, w: 100, h: 50 };
-  const b = { x: 300, y: 0, w: 100, h: 50 };
-  const [from, to] = meeting(a, b);
-  assert.deepEqual(from, { x: 100, y: 25 });
-  assert.deepEqual(to, { x: 300, y: 25 });
-});
-
-test("each end shows how many: a bar for one, a ring for zero, a crow's foot for many", () => {
-  const one = endMark({ x: 100, y: 25 }, { x: 1, y: 0 }, "exactlyOne");
-  assert.equal(one.bars, 2);
-  assert.equal(one.ring, false);
-  assert.equal(one.foot, false);
-  const many = endMark({ x: 100, y: 25 }, { x: 1, y: 0 }, "zeroOrMore");
-  assert.equal(many.foot, true);
-  assert.equal(many.ring, true);
-  assert.match(many.path, /^M/);
+test("an ERD is drawn as boxes and lines that show how many at each end, dashed when not owned", () => {
+  const shapes = erdShapes(erd());
+  assert.deepEqual(shapes.map((s) => [s.name, s.x, s.y]), [["Customer", 40, 60], ["Order", null, null]]);
+  assert.deepEqual(erdLinks(erd()), [
+    { left: "Order", right: "Customer", leftEnd: { kind: "count", count: "zeroOrMore" }, rightEnd: { kind: "count", count: "exactlyOne" }, dashed: true, label: "customer" },
+  ]);
 });
 
 test("the canvas edits: a new entity takes a free name, moving and renaming keep the relations", () => {
@@ -67,28 +43,20 @@ test("the canvas edits: a new entity takes a free name, moving and renaming keep
   assert.deepEqual(e.relations, [], "its relations go with it");
 });
 
-test("an edit pins every box where it is shown, so nothing else moves", () => {
-  const shown = boxes(erd(), measure);
-  const pinnedErd = pinned(moveEntity(erd(), "Customer", 500, 500), shown);
-  assert.deepEqual([pinnedErd.entities[1].x, pinnedErd.entities[1].y], [shown[1].x, shown[1].y]);
-  assert.deepEqual([pinnedErd.entities[0].x, pinnedErd.entities[0].y], [500, 500]);
+test("an edit on the canvas changes the ERD, pins the other boxes and says what to pick", () => {
+  const shown = [{ name: "Customer", rows: [], stereotype: null, tone: "entity", placed: true, title: 32, x: 40, y: 60, w: 100, h: 40 },
+    { name: "Order", rows: [], stereotype: null, tone: "entity", placed: false, title: 32, x: 300, y: 40, w: 100, h: 40 }];
+  const added = erdEdit(erd(), { op: "add", item: "entity", x: 10, y: 20 }, shown);
+  assert.deepEqual(added.pick, { kind: "box", name: "Entity1" });
+  assert.deepEqual([added.next.entities[1].x, added.next.entities[1].y], [300, 40], "Order is pinned where it is shown");
+  const moved = erdEdit(erd(), { op: "move", name: "Customer", x: 5, y: 6 }, shown);
+  assert.deepEqual([moved.next.entities[0].x, moved.next.entities[0].y], [5, 6]);
+  assert.equal(moved.pick, undefined);
+  const connected = erdEdit(erd(), { op: "connect", tool: "relation", from: "Customer", to: "Order" }, shown);
+  assert.deepEqual(connected.pick, undefined, "a relation between these two is there already");
 });
 
-test("relations meeting the same side of a box are spread along it, in the order of their other ends", () => {
-  const album = { name: "Album", rows: [], placed: true, x: 0, y: 0, w: 100, h: 120 };
-  const track = { name: "Track", rows: [], placed: true, x: 300, y: -40, w: 100, h: 40 };
-  const loan = { name: "Loan", rows: [], placed: true, x: 300, y: 140, w: 100, h: 40 };
-  const relation = (left: string, right: string) => ({ left, right, leftCount: "zeroOrMore" as const, rightCount: "exactlyOne" as const, identifying: false, label: null });
-  const [toTrack, toLoan] = ends([album, track, loan], [relation("Track", "Album"), relation("Loan", "Album")]);
-  // Both meet Album's right side: Track's above Loan's, a third and two thirds down.
-  assert.deepEqual(toTrack?.[1], { x: 100, y: 40 });
-  assert.deepEqual(toLoan?.[1], { x: 100, y: 80 });
-  // Alone on its side, a relation meets the middle of it.
-  assert.deepEqual(toTrack?.[0], { x: 300, y: -20 });
-});
-
-test("a relation to itself or to a box not shown has no ends", () => {
-  const a = { name: "A", rows: [], placed: true, x: 0, y: 0, w: 100, h: 40 };
-  const relation = (left: string, right: string) => ({ left, right, leftCount: "zeroOrMore" as const, rightCount: "exactlyOne" as const, identifying: false, label: null });
-  assert.deepEqual(ends([a], [relation("A", "A"), relation("A", "B")]), [null, null]);
+test("several boxes move in one edit", () => {
+  const { next } = erdEdit(erd(), { op: "moveAll", moves: [{ name: "Customer", x: 1, y: 2 }, { name: "Order", x: 3, y: 4 }] }, []);
+  assert.deepEqual(next.entities.map((e) => [e.x, e.y]), [[1, 2], [3, 4]]);
 });

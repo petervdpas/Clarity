@@ -1,9 +1,10 @@
 <script lang="ts">
-  // Asks for a new diagram: its name and its kind. Clarity writes it into
-  // diagrams/ with a small example of the kind to change. ERDs and class
+  // Asks for a new diagram: its name, its kind, and whether it starts from
+  // the project or with a small example of the kind to change. ERDs and class
   // diagrams are offered now; the other kinds come with their rows of the
   // roadmap (DESIGN 5.13).
 
+  import Modal from "./Modal.svelte";
   import type { DiagramKind } from "./generated/DiagramKind";
   import type { DiagramKindInfo } from "./generated/DiagramKindInfo";
 
@@ -19,7 +20,7 @@
     /** The file names the diagrams have already. */
     taken: string[];
     error: string | null;
-    onsubmit: (name: string, kind: DiagramKind) => void;
+    onsubmit: (name: string, kind: DiagramKind, fromProject: boolean) => void;
     oncancel: () => void;
   } = $props();
 
@@ -28,6 +29,7 @@
 
   let name = $state("");
   let kind = $state<DiagramKind>("erd");
+  let starts = $state<"project" | "example">("project");
 
   const stem = $derived(name.trim().replace(/\.mermaid$/i, ""));
   const file = $derived(stem ? `${stem}.mermaid` : "");
@@ -36,15 +38,12 @@
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
-    if (ready) onsubmit(stem, kind);
+    if (ready) onsubmit(stem, kind, starts === "project");
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && oncancel()} />
-
-<div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && oncancel()}>
+<Modal title={"New diagram"} width={380} onclose={oncancel}>
   <form class="dialog" onsubmit={submit}>
-    <h2>New diagram</h2>
     <label>
       <span>Name</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -58,11 +57,20 @@
         {/each}
       </select>
     </label>
+    <label>
+      <span>Starts</span>
+      <select bind:value={starts}>
+        <option value="project">From the project</option>
+        <option value="example">With a small example</option>
+      </select>
+    </label>
     <p class="hint">
       {#if already}
         The diagrams have {file} already.
       {:else if file}
-        Clarity writes <code>diagrams/{file}</code> with a small example to change. A diagram proposes; Apply makes the changes in the project.
+        Clarity writes <code>diagrams/{file}</code>
+        {starts === "project" ? (kind === "class" ? "with everything in the project" : "with all entities") : "with a small example to change"}. A
+        diagram proposes; Apply makes the changes in the project, and From project writes it again.
       {:else}
         A name of its own, such as <code>orders</code>.
       {/if}
@@ -73,34 +81,16 @@
       <button type="submit" class="primary" disabled={!ready}>Add diagram</button>
     </div>
   </form>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.45);
-    display: grid;
-    place-items: center;
-    z-index: 50;
-  }
 
   .dialog {
-    width: min(380px, calc(100vw - 32px));
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   }
 
-  h2 {
-    margin: 0;
-    font-size: 15px;
-  }
 
   label {
     display: flex;

@@ -26,7 +26,7 @@ fn write(path: PathBuf, before: Option<String>, after: String, history: &State<H
         std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
     }
     std::fs::write(&path, &after).map_err(|err| format!("cannot write {}: {err}", path.display()))?;
-    record(history, vec![FileChange { file: path, before, after }])
+    record(history, vec![FileChange { file: path, before, after: Some(after) }])
 }
 
 #[tauri::command]
@@ -121,7 +121,7 @@ pub fn rename_key(from: String, to: String, state: State<WatchState>, history: S
         let before = read(&path)?;
         let after = clarity_spec::keyed::rename_key_in_module(&before, &from, &to);
         if after != before {
-            changes.push(FileChange { file: path, before: Some(before), after });
+            changes.push(FileChange { file: path, before: Some(before), after: Some(after) });
         }
     }
     let folder = dir.join(TRANSLATIONS_DIR);
@@ -130,11 +130,11 @@ pub fn rename_key(from: String, to: String, state: State<WatchState>, history: S
         let before = read(&path)?;
         let after = clarity_spec::keyed::rename_key_in_language(&before, &from, &to);
         if after != before {
-            changes.push(FileChange { file: path, before: Some(before), after });
+            changes.push(FileChange { file: path, before: Some(before), after: Some(after) });
         }
     }
     for change in &changes {
-        std::fs::write(&change.file, &change.after).map_err(|err| format!("cannot write {}: {err}", change.file.display()))?;
+        change.make()?;
     }
     record(&history, changes)?;
     load(&dir)
@@ -172,7 +172,7 @@ pub fn make_texts_keys(state: State<WatchState>, history: State<HistoryState>) -
     let mut changes = Vec::new();
     for ((path, before), (_, after)) in modules.iter().zip(&made.modules) {
         if before != after {
-            changes.push(FileChange { file: path.clone(), before: Some(before.clone()), after: after.clone() });
+            changes.push(FileChange { file: path.clone(), before: Some(before.clone()), after: Some(after.clone()) });
         }
     }
     for language in made.languages.keys() {
@@ -180,12 +180,12 @@ pub fn make_texts_keys(state: State<WatchState>, history: State<HistoryState>) -
         let before = languages.iter().find(|(p, _)| *p == path).map(|(_, t)| t.clone());
         let after = made.language_file(language);
         if before.as_deref() != Some(after.as_str()) {
-            changes.push(FileChange { file: path, before, after });
+            changes.push(FileChange { file: path, before, after: Some(after) });
         }
     }
     std::fs::create_dir_all(&folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
     for change in &changes {
-        std::fs::write(&change.file, &change.after).map_err(|err| format!("cannot write {}: {err}", change.file.display()))?;
+        change.make()?;
     }
     record(&history, changes)?;
     load(&dir)

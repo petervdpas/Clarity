@@ -153,15 +153,17 @@
       {/if}
     </details>
 
-    <!-- Views written from the project, and diagrams written by hand or by the agent, which propose changes. -->
+    <!-- Diagrams of the diagrams folder: written by hand, by the agent or from the project; they propose changes. -->
     <details open>
-      <summary>Diagrams <span class="count">{diagrams.length + 1}</span></summary>
-      <button class="row" class:current={is("view", "dataModel")} title="An ERD written from the data dictionary, always true" onclick={() => onselect({ kind: "view", name: "dataModel" })}>
-        Data model
-        <span class="note">from the project</span>
-      </button>
+      <summary>Diagrams <span class="count">{diagrams.length}</span></summary>
       {#each diagrams as d (d.name)}
-        <button class="row" class:current={is("diagram", d.name)} title="diagrams/{d.name}" onclick={() => onselect({ kind: "diagram", name: d.name })}>
+        <button
+          class="row"
+          class:current={is("diagram", d.name)}
+          title="diagrams/{d.name}"
+          onclick={() => onselect({ kind: "diagram", name: d.name })}
+          oncontextmenu={(e) => menu(e, { kind: "diagram", name: d.name })}
+        >
           {d.name}
           <span class="note">{d.kind ? DIAGRAM_KINDS[d.kind] : "drawn only"}</span>
         </button>

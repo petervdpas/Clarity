@@ -843,7 +843,7 @@ Clarity draws and designs the model as diagrams in Mermaid: ERDs and class diagr
 
 #### Views and written diagrams
 
-- **Views generated from the project** are always true and are not files. DG1 brings two: **Data model** (an ERD of every entity, its fields, refs and lists) and **Classes** (entities, enums, engines with their functions, and a class per module with its functions and actions). Later rows add a state diagram per enum, a sequence diagram per handler, an activity diagram per handler or function, and the architecture (modules, engines, data sources, the stack). Editing a view on its canvas edits the dictionary directly, as the entity editor does: ordinary edits through `clarity_spec::edit`, with undo.
+- **Written from the project** (decided 2026-10-22, replacing views that were not files). An ERD or class diagram is written from the project when it is made (New diagram: starts from the project, or with a small example) and again with **From project** in its header: of everything (an ERD: every entity, its fields, refs and lists; a class diagram: entities, enums, engines with their functions, and a `<<module>>` class per module with its functions and actions, each in its module's namespace), or of only the boxes it draws, for a partial diagram. Where the boxes stand is kept, and it is one undo step. So every diagram is a file, edited the same way; From project brings the project into the diagram, Apply the diagram into the project. Later rows add a state diagram per enum, a sequence diagram per handler, an activity diagram per handler or function, and the architecture (modules, engines, data sources, the stack), written the same way.
 - **Written diagrams** are `.mermaid` files in the project's `diagrams` folder, beside `resources`, `engines` and `translations`, written by the person or by the agent. Unlike resources they are not carried into the application. A written diagram shows how it differs from the project and proposes edits through **Apply**; it changes nothing by itself.
 
 #### The project part
@@ -887,6 +887,9 @@ Class diagram (`classDiagram`):
 | `A "*" --> "1" B` | `b: ref B` on A |
 | composition `*--` | an owned list |
 | aggregation `o--` | a plain list |
+| uses `music ..> Images`, from a `<<module>>` or `<<engine>>` | nothing: what its code uses (engines called, entities taken, found or made), drawn only; From project draws it from the code |
+
+In both kinds the count at the end referred to says whether the ref is required: exactly one (`||`, `"1"`) makes it required, zero or one (`o|`, `"0..1"`) leaves it optional.
 
 Methods on an entity's class are a problem with a fix: functions belong to a module, so they go on its `<<module>>` class.
 
@@ -898,8 +901,10 @@ A diagram opens like a window does, with **Design** and **Text** tabs:
 - **Canvas** in the middle, Clarity's own for the kinds it designs (decided 2026-10-22, the ERD first): boxes stand where the person puts them, and each place is kept in the `.mermaid` file as a `%% clarity: Customer at 120,80` line, a comment Mermaid ignores, so the file stays plain Mermaid and opens anywhere Mermaid does. Relations show how many at each end (a bar for one, a ring for zero, a crow's foot for many), solid when owned. Ctrl+wheel zooms, dragging the background pans. Kinds Clarity does not design yet are drawn by mermaid.js, bundled into the app so it works offline and loaded only when such a diagram opens, in an isolated frame with Ctrl+wheel zoom and drag-to-pan in the IDE theme's colors.
 - **Properties** on the right: for an entity, its fields as rows (name, type, required, unique, label key); for a relationship, its two ends, how many on each side, owned or not.
 - **On the canvas:** drop an entity from the toolbox; drag from one box to another to draw a relationship; double-click a name to rename it; right-click for Add field and Delete; a click opens what a box stands for (the entity, the field, the enum, the engine, the function), as the Problems list jumps to a line.
+- **Rename and Delete.** A written diagram is renamed in its header (the name, or the Rename button) or from the tree's menu, and deleted from the tree's menu; each is one undo step.
 - **Places.** A box without a place gets the next cell of a grid beside the placed ones; the first edit on the canvas pins every box where it is shown, so nothing moves by itself.
-- **The Data model's places** (decided 2026-10-22). Its boxes move like any other. Once one is moved, Clarity writes the view to `diagrams/data-model.mermaid`, plain Mermaid with the `%% clarity:` places, and writes it again on every change of the dictionary, keeping the places. The tree shows it once, as the Data model row; it is no written diagram and proposes nothing. A right click on a box's header opens the entity.
+- **Class diagrams** (built 2026-10-22) use the same canvas: Entity, Enum, Engine and Module boxes (the stereotype above the name, the title tinted by kind), and Association, Composition and Aggregation lines (an open arrow at what is referred to, a filled or hollow diamond at the whole, the multiplicity beside each end). Properties edit a box's name, its module (written as its namespace) and its members: fields, values, or functions as signatures (`play(square: integer) -> text`). Each kind turns its model into boxes and lines for the one canvas, so later kinds add an adapter, not a canvas.
+- **Modules as frames** (2026-10-22). On a class diagram each module is a frame around its boxes, its name above the top left; the `<<module>>` box of that name stands inside it. Dragging the name moves the frame with everything in it. Boxes without a place are laid out a module at a time, each starting a row of its own, so frames do not overlap.
 - **Edits.** On a view, every action is an edit of the dictionary. On a written diagram, it is an edit of the `.mermaid` text through `clarity_spec::diagrams::edit`, which, like `edit.rs`, rewrites only the lines it is about. Either way it is one undo step, and the Text tab follows.
 - **Text.** The Text tab is the SourceEditor with `language="mermaid"`: colors and positioned problems from the same parser, as Clarity text has them.
 
@@ -945,6 +950,49 @@ enum OrderStatus
 1. **DG1**: the `diagrams` part, the parser and colors for ERD and class diagrams, the Data model and Classes views, the designer with toolbox, overlay and properties, written diagrams with differences and Apply, and the agent's tools.
 2. **DG2**: state diagrams with `steps` on enums, and sequence diagrams per handler (a view first; handler stubs from a written one later).
 3. **DG3**: activity diagrams per handler or function and the architecture, as views.
+
+### 5.14 Asking the person: dialogs (2026-10-22, a design)
+
+Decided with the user on 2026-10-22. A handler can ask the person something: a yes or no, a text, a number, a value of an enum, a record, or the result of a dialog window of the application. Every stack shows it in Clarity's own dialog, never one of the system or the browser (the IDE's are `app/src/lib/dialogs.ts`, `DialogHost.svelte` and `Modal.svelte`).
+
+**When.** A dialog shows after the handler that asks has finished; the handler never waits for the answer. The answer runs another handler, as an engine's tell does (5.12). So handlers keep running and replying as they do (5.9): the dialog is one more thing in the reply, as a message or a window to open is, and nothing on the backend stays blocked while the person thinks. Asking in the middle of a handler and going on with the answer was weighed and left out: every stack would have to hold a running handler and resume it, which a closed window or an answer that never comes makes fragile. Should the split into two handlers become a burden, the compiler can later write such code as two handlers underneath; the language stays as below.
+
+**The statement.** `ask` is a statement of handlers, ending in `then` and the handler that takes the answer:
+
+```clarity
+handler deleteClicked
+    ask @deleteAlbum(title = album.title) yes @delete no @keep then deleteConfirmed
+
+handler deleteConfirmed
+    delete album
+    close
+
+handler lendClicked
+    ask @lendTo for Friend then lend(album)
+
+handler lend(album: Album, friend: Friend)
+    let loan = new Loan
+    loan.album = album
+    loan.friend = friend
+    save loan
+```
+
+- **What is asked decides the dialog**, as the dictionary decides a form:
+  - `ask @question yes @yes no @no then h`: a question with two buttons; `h` runs on yes and takes no answer. `yes` and `no` may be left out (Clarity's OK and Cancel, translated).
+  - `ask @question for text then h`, and for `integer`, `decimal`, `money`, `date`, `datetime` or `duration`: a typed input; `default expr` fills it first. The checks of the type hold, as in a form.
+  - `ask @question for Enum then h`: the enum's values, each with its label.
+  - `ask @question for Entity then h`: a searchable list of the entity's records; `from expr` offers the records (or values) of a list instead, as `from find f in Friend where f.active`.
+  - `ask Window with name = expr, ... then h`: a window of the application declared as a dialog (U1d) gives what it closes with: `close with expr`. Its type is the type of the answer.
+- **The answer** is the last parameter of the handler after `then`; values written in the call come first (`then lend(album)`), which is how what the asking handler knew reaches the answering one. An answering handler may take any type an answer has, records and dates included. The checker holds the types: the answer's type must be the last parameter's.
+- **Cancel** (the no button, Escape, a click beside the dialog, or the window closing) runs nothing.
+- **Texts are keys**, with slots filled by name, as everywhere (`@deleteAlbum(title = album.title)`).
+- **Order.** The statements after `ask` still run; the dialog shows when the handler has finished, with whatever else it changed. A handler that asks twice shows the questions one after the other, each with its own answering handler. A handler that asks and closes its window is an error: the answer would have nowhere to go.
+- **Where.** Only handlers ask. Actions and functions cannot: a function has no effects, and an action may run where nobody is at the screen (a data event, another action).
+- **`message`** stays a statement as it is, shown in the same kind of dialog.
+
+**Every stack.** The reply of a handler gets the questions to ask, each with its answering handler and the values written for it; the renderer (and Avalonia's views) show them with Clarity's dialog, and an answer comes back as an ordinary event that runs that handler. The web renderer's dialog lives in `lib/ui` (copied into each application by `clarity-gen`); Avalonia's in Clarity.Avalonia, so a new package version and its NuGet upload. Conformance tests ask on every stack and answer, cancel, and check that the right handler ran with the right values.
+
+**Progress is apart.** A dialog with a progress bar and Stop (5.12, row P) is not a question: the handler sends progress one way while it runs, and Stop is a flag it reads between steps. It needs the way to the screen of 5.12, not this design, and does not wait for anything either.
 
 ## 6. Generation
 
@@ -1517,6 +1565,8 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator; containers that share the column lines of the grid around them (as CSS subgrid does), so a label and an input in a panel line up with those outside it, and a label column for forms | |
 | U1c | Data parts: tree, tree table, pager, search bar, lookup (a reference picked from a searchable list), chart; combo box, slider, spin box, color, file and tags inputs | |
 | U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | |
+| U1e | Table column widths (2026-10-22, after the class diagram designer). Designed: the `table` part gets a width per column, set by dragging the header edges on the design canvas or in Properties, written in the language (for example `columns number 120, total, notes 300`; a column without a width shares what is left; syntax to be decided). Running: the person using the app resizes columns as in the IDE's tables, the widths are remembered per window and table for that person, and a double-click on an edge goes back to the designed widths. Web renderer: `lib/ui/Table.svelte`, which `clarity-gen` copies into each application's `ui/` (rebuild with `build:runtime`). Avalonia: the table control of Clarity.Avalonia, so a new package version and its NuGet upload; where the widths are kept for that user is to be decided | |
+| U1f | Clarity's own dialogs in the applications people design, as the IDE has them: `ask` in handlers with the answer running another handler (section 5.14, decided 2026-10-22), dialog windows closing `with` a value (with U1d), and `message` in the same dialog. Every stack in its idiom: the web renderer (`lib/ui`, copied by `clarity-gen`) and Avalonia (Clarity.Avalonia, so a new package version and its NuGet upload). With U1e, after the class diagram designer | |
 | I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | done for the web renderer (LANGUAGE.md section 4, Formats): `language "tag"` and `currency CODE` checked and on the Project tab, `format` a name checked per type (catalog in `clarity_spec::formats`, a Format column in the entity editor), the renderer formats and reads values with `Intl` (`app/src/lib/format.ts`), the shared cases in `conformance/formats.json` (`npm test`); Avalonia meets the same cases with G2; open: date inputs follow the system's locale through the browser's own date picker |
 | I1b | Text with slots (section 1.5): `"Saved {customer.name}"` in messages, refusals and captions, slots checked as expressions and shown in the locale's format | done for the web renderer (LANGUAGE.md section 10, Text with slots): slots are paths checked like expressions, `{{` and `}}` braces, text with slots allowed in `message`, `refuse`, `caption` and `error` and a warning for shown text joined with `+`; the runtime's `Text` and `Slot` carry the text as written and typed values with the field's format and scale (plain text stays a string on the wire), refusals reach the screen with their slots, and the renderer fills them (`fillText`, cases in `conformance/formats.json` under `fills`); Avalonia meets the same cases with G2 |
 | I1c | Translations (section 1.5): text collected from the whole project, translation files per language and module, slots kept, missing translations listed, a Translations table on the Project tab, a language choice for the canvas and Preview, switching language in the running application | done for the web renderer (LANGUAGE.md section 2, Translations): one file per language for the project (`translations/nl.clarity`), texts collected by `clarity_spec::translations::texts` (labels, help, titles, captions, placeholders, tooltips, tabs, enum labels, frame items, status, messages, refusals, captions and errors set in code, Yes and No), checked for slots, duplicates, stale lines and the file's language; the Translations table and the designer's language choice on the Project tab; the application picks the translation for the person's locale (cases in `conformance/translations.json`), and `on click -> language` switches it while the application runs (remembered for the next start); open: `context` for one text with two meanings, the generated literal key maps of section 6.7 for the other stacks (G2) |

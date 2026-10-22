@@ -1,41 +1,54 @@
 <script lang="ts">
-  // A diagram, opened from Diagrams in the project tree (DESIGN 5.13). The
-  // Data model is written from the data dictionary and always true: its
-  // boxes move, and a right click on a header opens the entity. A written ERD opens in the designer:
-  // a palette, a canvas of Clarity's own and the properties of what is
-  // picked; every change is written to its .mermaid file at once, as plain
-  // Mermaid. Other diagrams are drawn by Mermaid. A written diagram is a
-  // proposal: what it would add or change is marked, and Apply makes the
-  // ticked proposals as one undo step.
+  // A diagram of the diagrams folder, opened from the project tree (DESIGN
+  // 5.13). An ERD or class diagram opens in the designer: a palette, a
+  // canvas of Clarity's own and the properties of what is picked; every
+  // change is written to its .mermaid file at once, as plain Mermaid. Other
+  // kinds are drawn by Mermaid. The diagram and the project meet both
+  // ways: what the diagram would add or change is marked and Apply makes
+  // the ticked proposals, and From project writes the diagram again from
+  // the project, keeping where its boxes stand. Each is one undo step.
 
+  import { dialogs } from "./dialogStore.svelte";
   import { invoke } from "./backend";
+  import ContextMenu from "./ContextMenu.svelte";
+  import ClassProperties from "./ClassProperties.svelte";
+  import DesignCanvas from "./DesignCanvas.svelte";
   import DiagramCanvas from "./DiagramCanvas.svelte";
-  import ErdCanvas, { type ErdPick } from "./ErdCanvas.svelte";
   import ErdProperties from "./ErdProperties.svelte";
+  import { CLASS_PALETTE, classEdit, classLinks, classShapes } from "./classDesign";
+  import type { Box, CanvasEdit, CanvasPick } from "./designCanvas";
+  import { ERD_PALETTE, erdEdit, erdLinks, erdShapes } from "./erdDesign";
+  import RenameField from "./RenameField.svelte";
   import SourceEditor from "./SourceEditor.svelte";
-  import { marksOf } from "./diagramCanvas";
+  import { DIAGRAM_EXTENSION, marksOf } from "./diagramCanvas";
+  import type { ClassDesign } from "./generated/ClassDesign";
+  import type { ClassRead } from "./generated/ClassRead";
   import type { Diagnostic } from "./generated/Diagnostic";
   import type { Erd } from "./generated/Erd";
   import type { ErdRead } from "./generated/ErdRead";
   import type { Preview } from "./generated/Preview";
   import type { Proposal } from "./generated/Proposal";
-  import type { View } from "./generated/View";
 
   let {
     preview,
-    kind,
     name,
     onapplied,
     onopen,
+    onrenamed = () => {},
+    renaming = false,
+    onrenaming = () => {},
   }: {
     preview: Preview;
-    /** A view written from the project, or a written diagram of the diagrams folder. */
-    kind: "view" | "diagram";
-    /** The view's name, or the diagram's file name. */
+    /** The diagram's file name. */
     name: string;
     onapplied: (preview: Preview) => void;
     /** Opens the entity or enum of `name`. */
     onopen: (name: string) => void;
+    /** The diagram's file was renamed to `file`. */
+    onrenamed?: (file: string, preview: Preview) => void;
+    /** Rename was asked for from outside, as from the tree's menu: the name is readied, then `onrenaming` says so. */
+    renaming?: boolean;
+    onrenaming?: () => void;
   } = $props();
 
   /** Clarity's field types, offered when a field's type is typed. */
@@ -50,62 +63,88 @@
   );
   const enums = $derived(preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)));
 
-  // The Data model, written again whenever the project changes.
-  let view = $state<View | null>(null);
-  $effect(() => {
-    void preview;
-    if (kind !== "view") return;
-    invoke<View>("data_model_view")
-      .then((v) => (view = v))
-      .catch((err) => (error = String(err)));
-  });
-
-  // A written diagram: its saved text, and the text as it is typed.
-  const file = $derived(kind === "diagram" ? preview.project.diagrams.find((d) => d.name === name) : undefined);
+  // The diagram: its saved text, and the text as it is typed. The draft
+  // follows the file whenever the file changes (an Undo, the agent, From
+  // project), and keeps what is typed in between.
+  const file = $derived(preview.project.diagrams.find((d) => d.name === name));
   let draft = $state("");
-  let draftOf = $state("");
+  let draftFrom = $state<string | null>(null);
   $effect.pre(() => {
-    if (kind === "diagram" && name !== draftOf) {
-      draftOf = name;
+    const saved = `${name}\u0000${file?.text ?? ""}`;
+    if (saved !== draftFrom) {
+      draftFrom = saved;
       draft = file?.text ?? "";
     }
   });
 
-  const shown = $derived(kind === "view" ? (view?.text ?? "") : draft);
-  /** Whether the designer of Clarity's own draws it: the Data model and every ERD. */
-  const designed = $derived(kind === "view" || file?.kind === "erd");
+  const shown = $derived(draft);
+  /** Which of Clarity's own designers draws it: ERDs, class diagrams; none for other kinds. */
+  const designer = $derived(file?.kind === "erd" ? "erd" : file?.kind === "class" ? "class" : null);
 
-  // The ERD the canvas shows, read from the text as it stands.
+  // What the canvas shows, read from the text as it stands.
   let erd = $state<Erd>({ entities: [], relations: [] });
-  let picked = $state<ErdPick>(null);
+  let classes = $state<ClassDesign>({ boxes: [], relations: [] });
+  let picked = $state<CanvasPick>(null);
   $effect(() => {
     const text = shown;
-    if (!designed) return;
-    invoke<ErdRead>("read_erd", { text })
-      .then((read) => (erd = read.erd))
-      .catch((err) => (error = String(err)));
+    if (designer === "erd") {
+      invoke<ErdRead>("read_erd", { text })
+        .then((read) => (erd = read.erd))
+        .catch((err) => (error = String(err)));
+    } else if (designer === "class") {
+      invoke<ClassRead>("read_classes", { text })
+        .then((read) => (classes = read.design))
+        .catch((err) => (error = String(err)));
+    }
   });
+
+  const shapes = $derived(designer === "class" ? classShapes(classes) : erdShapes(erd));
+  const links = $derived(designer === "class" ? classLinks(classes) : erdLinks(erd));
+  const entityNames = $derived(designer === "class" ? classes.boxes.filter((b) => b.kind === "entity").map((b) => b.name) : erd.entities.map((e) => e.name));
+  const drawnEnums = $derived(designer === "class" ? classes.boxes.filter((b) => b.kind === "enum").map((b) => b.name) : []);
 
   const types = $derived([
     ...CLARITY_TYPES,
-    ...enums,
-    ...erd.entities.flatMap((e) => [`ref ${e.name}`, `list<${e.name}>`]),
+    ...new Set([...enums, ...drawnEnums]),
+    ...entityNames.flatMap((e) => [`ref ${e}`, `list<${e}>`]),
   ]);
 
-  /**
-   * A change on the canvas: shown at once, then written as Mermaid with
-   * Undo. On the Data model only boxes move; their places go to its own
-   * file, diagrams/data-model.mermaid.
-   */
-  async function change(next: Erd) {
+  /** An edit on the canvas, made in the diagram's model; gives what to pick after it. */
+  function edit(change: CanvasEdit, laid: Box[]): CanvasPick | undefined {
+    if (designer === "class") {
+      const { next, pick } = classEdit(classes, change, laid);
+      void changeClasses(next);
+      return pick;
+    }
+    const { next, pick } = erdEdit(erd, change, laid);
+    void changeErd(next);
+    return pick;
+  }
+
+  /** The menu item that opens a box. */
+  function openLabel(box: string): string {
+    return enums.includes(box) ? "Open enum" : "Open entity";
+  }
+
+  /** A change of the ERD: shown at once, then written to its file as Mermaid, with Undo. */
+  async function changeErd(next: Erd) {
     erd = next;
     try {
       error = null;
-      if (kind === "view") {
-        onapplied(await invoke<Preview>("place_data_model", { erd: next }));
-        return;
-      }
       const text = await invoke<string>("write_erd", { erd: next });
+      draft = text;
+      onapplied(await invoke<Preview>("save_diagram", { name, text }));
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
+  /** A change of the class diagram: shown at once, then written to its file as Mermaid, with Undo. */
+  async function changeClasses(next: ClassDesign) {
+    classes = next;
+    try {
+      error = null;
+      const text = await invoke<string>("write_classes", { design: next });
       draft = text;
       onapplied(await invoke<Preview>("save_diagram", { name, text }));
     } catch (err) {
@@ -119,7 +158,6 @@
   $effect(() => {
     const text = draft;
     void preview;
-    if (kind !== "diagram") return;
     const timer = setTimeout(async () => {
       try {
         const found = await invoke<Proposal[]>("diagram_proposals", { text });
@@ -148,6 +186,42 @@
     }
   }
 
+  /** The From project menu, under its button. */
+  let fromMenu = $state<{ x: number; y: number } | null>(null);
+
+  /** Writes the diagram again from the project, after asking, keeping where its boxes stand. */
+  async function generate(onlyDrawn: boolean) {
+    const what = onlyDrawn ? "the boxes it draws" : designer === "class" ? "everything in the project" : "all entities";
+    const question = `Write ${name} again from the project, with ${what}? Where the boxes stand is kept; Undo takes it back.`;
+    if (!(await dialogs.confirm({ text: question, action: "Write again" }))) return;
+    try {
+      error = null;
+      onapplied(await invoke<Preview>("generate_diagram", { name, onlyDrawn }));
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
+  let renameField: RenameField | undefined = $state();
+
+  // Rename asked for from the tree's menu: the name is ready to type over once the diagram is shown.
+  $effect(() => {
+    if (!renaming || !renameField) return;
+    renameField.focus();
+    onrenaming();
+  });
+
+  /** Renames the diagram's file; `.mermaid` is added when it is not typed. */
+  async function rename(to: string) {
+    try {
+      error = null;
+      const next = await invoke<Preview>("rename_diagram", { from: name, to });
+      onrenamed(to.endsWith(`.${DIAGRAM_EXTENSION}`) ? to : `${to}.${DIAGRAM_EXTENSION}`, next);
+    } catch (err) {
+      error = String(err);
+    }
+  }
+
   function open(box: string) {
     if (known.includes(box)) onopen(box);
   }
@@ -160,19 +234,23 @@
     activity: "Activity diagram",
     architecture: "Architecture",
   };
-  const note = $derived(
-    kind === "view"
-      ? "Written from the data dictionary; right-click a box's header to open it"
-      : file?.kind
-        ? `${KIND_NAMES[file.kind] ?? file.kind} in diagrams/`
-        : "Drawn only: Clarity maps ERDs and class diagrams",
-  );
+  const note = $derived(file?.kind ? `${KIND_NAMES[file.kind] ?? file.kind} in diagrams/` : "Drawn only: Clarity maps ERDs and class diagrams");
 </script>
 
 <section class="diagram">
   <header>
-    <h2>{kind === "view" ? "Data model" : name}</h2>
+    <RenameField bind:this={renameField} {name} title="Rename the diagram's file" onrename={rename} />
     <span class="note">{note}</span>
+    {#if designer}
+      <button
+        onclick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          fromMenu = { x: r.left, y: r.bottom + 2 };
+        }}
+        title="Write the diagram again from the project, keeping where its boxes stand">From project</button
+      >
+    {/if}
+    <button onclick={() => renameField?.focus()} title="Rename the diagram's file">Rename</button>
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "design"} class:active={tab === "design"} onclick={() => (tab = "design")}>Design</button>
       <button role="tab" aria-selected={tab === "text"} class:active={tab === "text"} onclick={() => (tab = "text")}>Text</button>
@@ -181,66 +259,77 @@
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   <div class="body" hidden={tab !== "design"}>
-    {#if designed}
-      <ErdCanvas {erd} {marks} readonly={kind === "view"} bind:picked onchange={change} onopen={open} canopen={(n) => known.includes(n)} />
+    {#if designer}
+      <DesignCanvas
+        {shapes}
+        {links}
+        palette={designer === "class" ? CLASS_PALETTE : ERD_PALETTE}
+        {marks}
+        bind:picked
+        onedit={edit}
+        onopen={open}
+        canopen={(n) => known.includes(n)}
+        {openLabel}
+      />
     {:else}
       <DiagramCanvas text={shown} names={known} {marks} onopen={open} />
     {/if}
-    {#if kind === "diagram"}
-      <div class="side">
-        {#if designed}
-          <ErdProperties {erd} bind:picked {types} onchange={change} />
+    <div class="side">
+      {#if designer === "erd"}
+        <ErdProperties {erd} bind:picked {types} onchange={changeErd} />
+      {:else if designer === "class"}
+        <ClassProperties design={classes} bind:picked {types} onchange={changeClasses} />
+      {/if}
+      <section class="proposals">
+        <h3>Proposals <span class="count">{proposals.length}</span></h3>
+        {#if proposals.length === 0}
+          <p class="empty">{file?.kind === "erd" || file?.kind === "class" ? "The diagram matches the project." : "Nothing to propose."}</p>
+        {:else}
+          <ul>
+            {#each proposals as p, i (p.subject + p.change)}
+              <li class={p.change}>
+                <label>
+                  <input type="checkbox" bind:checked={ticked[i]} />
+                  <span class="change">{p.change}</span>
+                  <span class="what"><code>{p.subject}</code> {p.description}</span>
+                </label>
+              </li>
+            {/each}
+          </ul>
+          <button class="primary" disabled={tickedCount === 0 || applying} onclick={apply} title="Make the ticked changes in the project; one Undo takes them back">
+            {applying ? "Applying..." : `Apply ${tickedCount}`}
+          </button>
         {/if}
-        <section class="proposals">
-          <h3>Proposals <span class="count">{proposals.length}</span></h3>
-          {#if proposals.length === 0}
-            <p class="empty">{file?.kind === "erd" || file?.kind === "class" ? "The diagram matches the project." : "Nothing to propose."}</p>
-          {:else}
-            <ul>
-              {#each proposals as p, i (p.subject + p.change)}
-                <li class={p.change}>
-                  <label>
-                    <input type="checkbox" bind:checked={ticked[i]} />
-                    <span class="change">{p.change}</span>
-                    <span class="what"><code>{p.subject}</code> {p.description}</span>
-                  </label>
-                </li>
-              {/each}
-            </ul>
-            <button class="primary" disabled={tickedCount === 0 || applying} onclick={apply} title="Make the ticked changes in the project; one Undo takes them back">
-              {applying ? "Applying..." : `Apply ${tickedCount}`}
-            </button>
-          {/if}
-        </section>
-      </div>
-    {/if}
+      </section>
+    </div>
   </div>
 
   <div class="body" hidden={tab !== "text"}>
-    {#if kind === "view"}
+    {#key file?.text}
       <SourceEditor
-        load={async () => ({ text: view?.text ?? "", problems: [] })}
-        check={async () => []}
-        save={async () => {}}
-        reloadKey={view?.text ?? ""}
+        load={async () => ({ text: file?.text ?? "", problems: await invoke<Diagnostic[]>("check_diagram", { text: file?.text ?? "" }) })}
+        check={(text) => invoke<Diagnostic[]>("check_diagram", { text })}
+        save={async (text) => onapplied(await invoke<Preview>("save_diagram", { name, text }))}
+        reloadKey={`${name}:${file?.text ?? ""}`}
         language="plain"
-        readonly
+        errorsBlockSave={false}
+        ontext={(text) => (draft = text)}
       />
-    {:else}
-      {#key file?.text}
-        <SourceEditor
-          load={async () => ({ text: file?.text ?? "", problems: await invoke<Diagnostic[]>("check_diagram", { text: file?.text ?? "" }) })}
-          check={(text) => invoke<Diagnostic[]>("check_diagram", { text })}
-          save={async (text) => onapplied(await invoke<Preview>("save_diagram", { name, text }))}
-          reloadKey={`${name}:${file?.text ?? ""}`}
-          language="plain"
-          errorsBlockSave={false}
-          ontext={(text) => (draft = text)}
-        />
-      {/key}
-    {/if}
+    {/key}
   </div>
 </section>
+
+{#if fromMenu}
+  <ContextMenu
+    x={fromMenu.x}
+    y={fromMenu.y}
+    items={[
+      { label: designer === "class" ? "Everything in the project" : "All entities", run: () => generate(false) },
+      { label: "Only the boxes drawn", run: () => generate(true) },
+    ]}
+    onclose={() => (fromMenu = null)}
+  />
+{/if}
 
 <style>
   .diagram {
@@ -258,11 +347,6 @@
     padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
-  }
-
-  h2 {
-    margin: 0;
-    font-size: 15px;
   }
 
   .note {

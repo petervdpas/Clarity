@@ -69,7 +69,7 @@ fn an_erd_proposes_what_it_adds_changes_and_leaves_out() {
     assert_eq!(proposals[1].description, "email: email, unique");
     assert_eq!(proposals[2].description, "orders: list<Order>, owned");
     assert_eq!(proposals[4].description, "entity Order in module sales: ordered_on, customer");
-    assert_eq!(proposals[5].description, "order: ref Order");
+    assert_eq!(proposals[5].description, "order: ref Order, required", "exactly one at the end referred to: required");
     assert_eq!(proposals[1].span.line, 4, "a proposal points at its line of the diagram");
 }
 
@@ -89,9 +89,9 @@ fn applying_the_ticked_proposals_writes_each_module_once_with_keys() {
     assert!(sales.contains("    orders: list<Order>, owned, label @"), "{sales}");
     assert!(sales.contains("    notes: text"), "the removal was not ticked: {sales}");
     assert!(sales.contains("entity Order\n    ordered_on: date, required, label @"), "{sales}");
-    assert!(sales.contains("    customer: ref Customer, label @"), "{sales}");
+    assert!(sales.contains("    customer: ref Customer, required, label @"), "{sales}");
     assert!(!written[0].keys.is_empty(), "the new labels became keys");
-    assert!(written[1].text.contains("    order: ref Order, label @"), "{}", written[1].text);
+    assert!(written[1].text.contains("    order: ref Order, required, label @"), "{}", written[1].text);
 
     let after = load_sources([("sales.clarity", sales.as_str()), ("billing.clarity", written[1].text.as_str())]);
     let errors: Vec<&str> = after.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();

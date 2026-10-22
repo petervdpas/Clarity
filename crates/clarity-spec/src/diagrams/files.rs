@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::{DATA_MODEL_FILE, DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, kind_of};
+use super::{DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, kind_of};
 
 /// A written diagram: its file name, its text and its kind (None for a
 /// kind Clarity only draws).
@@ -30,7 +30,7 @@ pub fn diagram_files(dir: &Path) -> std::io::Result<Vec<DiagramFile>> {
         let path = entry?.path();
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let diagram = path.is_file() && !name.starts_with('.') && path.extension().is_some_and(|e| e == DIAGRAM_EXTENSION);
-        if diagram && name != DATA_MODEL_FILE {
+        if diagram {
             let text = std::fs::read_to_string(&path)?;
             found.push(DiagramFile { kind: kind_of(&text), name, text });
         }

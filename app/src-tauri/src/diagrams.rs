@@ -6,15 +6,14 @@
 
 use std::path::{Path, PathBuf};
 
-use clarity_spec::diagrams::{self, DATA_MODEL_FILE, DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, DiagramKindInfo, Proposal, views};
+use clarity_spec::diagrams::{self, DIAGRAM_EXTENSION, DIAGRAMS_DIR, DiagramKind, DiagramKindInfo, Proposal, views};
 use clarity_spec::{Diagnostic, Preview};
 use tauri::State;
 
 use super::{FileChange, HistoryState, WatchState, load, open_project_of, record, write_atomically};
 
 /// The file of diagram `name` in the module folder `dir`; only a plain
-/// file name, given the `.mermaid` extension when it has none. The Data
-/// model's own file is no written diagram and is refused.
+/// file name, given the `.mermaid` extension when it has none.
 pub(crate) fn diagram_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
     let name = name.trim();
     if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) {
@@ -22,33 +21,7 @@ pub(crate) fn diagram_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
     }
     let suffix = format!(".{DIAGRAM_EXTENSION}");
     let file = if name.ends_with(&suffix) { name.to_string() } else { format!("{name}{suffix}") };
-    if file == DATA_MODEL_FILE {
-        return Err(format!("{DATA_MODEL_FILE} is the Data model's own file, written by Clarity from the dictionary"));
-    }
     Ok(dir.join(DIAGRAMS_DIR).join(file))
-}
-
-/// The Data model's file in the module folder `dir`.
-fn data_model_file(dir: &Path) -> PathBuf {
-    dir.join(DIAGRAMS_DIR).join(DATA_MODEL_FILE)
-}
-
-/// The places the Data model's file keeps for its boxes; none without the file.
-fn data_model_places(dir: &Path) -> Vec<(String, i32, i32)> {
-    std::fs::read_to_string(data_model_file(dir)).map(|text| diagrams::erd_model::places(&text)).unwrap_or_default()
-}
-
-/// Writes the Data model's file again from `project` when the file is
-/// there and no longer shows it, keeping the places of its boxes. Run on
-/// every load, so the file follows the dictionary.
-pub(crate) fn refresh_data_model(dir: &Path, project: &clarity_spec::Project) -> Result<(), String> {
-    let file = data_model_file(dir);
-    let Ok(before) = std::fs::read_to_string(&file) else { return Ok(()) };
-    let text = views::data_model_placed(project, &diagrams::erd_model::places(&before)).text;
-    if text != before {
-        write_atomically(&file, &text)?;
-    }
-    Ok(())
 }
 
 fn read_project(dir: &Path) -> Result<clarity_spec::Project, String> {
@@ -59,32 +32,6 @@ fn read_project(dir: &Path) -> Result<clarity_spec::Project, String> {
 #[tauri::command]
 pub fn diagram_kinds() -> Vec<DiagramKindInfo> {
     diagrams::kinds()
-}
-
-/// The Data model of the open project: an ERD written from its dictionary,
-/// each line linked to the entity or field it shows.
-#[tauri::command]
-pub fn data_model_view(state: State<WatchState>) -> Result<views::View, String> {
-    let (_, dir) = open_project_of(&state)?;
-    Ok(views::data_model_placed(&read_project(&dir)?, &data_model_places(&dir)))
-}
-
-/// Keeps where the Data model's boxes stand: writes its file with the
-/// places of `erd`, as one undo step.
-#[tauri::command]
-pub fn place_data_model(erd: diagrams::erd_model::Erd, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
-    let (_, dir) = open_project_of(&state)?;
-    let places: Vec<(String, i32, i32)> =
-        erd.entities.iter().filter_map(|e| Some((e.name.clone(), e.x?, e.y?))).collect();
-    let text = views::data_model_placed(&read_project(&dir)?, &places).text;
-    let file = data_model_file(&dir);
-    let before = std::fs::read_to_string(&file).ok();
-    if before.as_deref() != Some(text.as_str()) {
-        std::fs::create_dir_all(dir.join(DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
-        write_atomically(&file, &text)?;
-        record(&history, vec![FileChange { file, before, after: text }])?;
-    }
-    load(&dir)
 }
 
 /// The problems of a diagram's text, placed on their lines.
@@ -107,16 +54,49 @@ pub fn write_erd(erd: diagrams::erd_model::Erd) -> String {
     diagrams::erd_model::write(&erd)
 }
 
+/// A class diagram as the designer edits it: boxes with their places,
+/// members and modules, and relations, with the problems of its text.
+#[tauri::command]
+pub fn read_classes(text: String) -> diagrams::class_model::ClassRead {
+    let (design, problems) = diagrams::class_model::read(&text);
+    diagrams::class_model::ClassRead { design, problems }
+}
+
+/// The designer's class diagram written as Mermaid, its places as `%% clarity:` lines.
+#[tauri::command]
+pub fn write_classes(design: diagrams::class_model::ClassDesign) -> String {
+    diagrams::class_model::write(&design)
+}
+
 /// Makes diagram `name` of `kind`, with the kind's starter text.
 #[tauri::command]
-pub fn add_diagram(name: String, kind: DiagramKind, state: State<WatchState>) -> Result<Preview, String> {
+pub fn add_diagram(name: String, kind: DiagramKind, from_project: bool, state: State<WatchState>) -> Result<Preview, String> {
     let (_, dir) = open_project_of(&state)?;
     let file = diagram_file(&dir, &name)?;
     if file.exists() {
         return Err(format!("the diagrams have {} already", file.file_name().unwrap_or_default().to_string_lossy()));
     }
+    let starter = diagrams::starter(kind);
+    let text = if from_project { views::generate(&read_project(&dir)?, &starter, false).unwrap_or(starter) } else { starter };
     std::fs::create_dir_all(dir.join(DIAGRAMS_DIR)).map_err(|err| format!("cannot make the diagrams folder: {err}"))?;
-    write_atomically(&file, &diagrams::starter(kind))?;
+    write_atomically(&file, &text)?;
+    load(&dir)
+}
+
+/// Writes diagram `name` again from the project, keeping the places of its
+/// boxes: every entity, enum, engine and module, or with `only_drawn` those
+/// it draws. One undo step takes it back.
+#[tauri::command]
+pub fn generate_diagram(name: String, only_drawn: bool, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let file = diagram_file(&dir, &name)?;
+    let before = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
+    let text = views::generate(&read_project(&dir)?, &before, only_drawn)
+        .ok_or("Clarity writes ERDs and class diagrams from the project; this kind is drawn only")?;
+    if text != before {
+        write_atomically(&file, &text)?;
+        record(&history, vec![FileChange { file, before: Some(before), after: Some(text) }])?;
+    }
     load(&dir)
 }
 
@@ -128,8 +108,54 @@ pub fn save_diagram(name: String, text: String, state: State<WatchState>, histor
     let before = std::fs::read_to_string(&file).ok();
     if before.as_deref() != Some(text.as_str()) {
         write_atomically(&file, &text)?;
-        record(&history, vec![FileChange { file, before, after: text }])?;
+        record(&history, vec![FileChange { file, before, after: Some(text) }])?;
     }
+    load(&dir)
+}
+
+/// Renames diagram `from` to `to` in the module folder `dir`: the text
+/// moves to the new file and the old one goes. Gives both changes, for one
+/// Undo.
+pub(crate) fn rename_file(dir: &Path, from: &str, to: &str) -> Result<Vec<FileChange>, String> {
+    let old = diagram_file(dir, from)?;
+    let new = diagram_file(dir, to)?;
+    if old == new {
+        return Ok(Vec::new());
+    }
+    if new.exists() {
+        return Err(format!("the diagrams have {} already", new.file_name().unwrap_or_default().to_string_lossy()));
+    }
+    let text = std::fs::read_to_string(&old).map_err(|err| format!("cannot read {}: {err}", old.display()))?;
+    let changes = vec![
+        FileChange { file: new, before: None, after: Some(text.clone()) },
+        FileChange { file: old, before: Some(text), after: None },
+    ];
+    for change in &changes {
+        change.make()?;
+    }
+    Ok(changes)
+}
+
+/// Renames diagram `from` to `to`, as one undo step.
+#[tauri::command]
+pub fn rename_diagram(from: String, to: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let changes = rename_file(&dir, &from, &to)?;
+    if !changes.is_empty() {
+        record(&history, changes)?;
+    }
+    load(&dir)
+}
+
+/// Takes diagram `name` away, as one undo step.
+#[tauri::command]
+pub fn delete_diagram(name: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let file = diagram_file(&dir, &name)?;
+    let text = std::fs::read_to_string(&file).map_err(|err| format!("cannot read {}: {err}", file.display()))?;
+    let change = FileChange { file, before: Some(text), after: None };
+    change.make()?;
+    record(&history, vec![change])?;
     load(&dir)
 }
 
@@ -177,14 +203,14 @@ pub(crate) fn apply_text(dir: &Path, text: &str, ticked: &[usize]) -> Result<Vec
         let file = PathBuf::from(&module.path);
         let old = sources.iter().find(|(p, _)| *p == module.path).map(|(_, t)| t.clone());
         write_atomically(&file, &module.text)?;
-        changes.push(FileChange { file, before: old, after: module.text.clone() });
+        changes.push(FileChange { file, before: old, after: Some(module.text.clone()) });
     }
     for (path, before_text, after_text) in languages {
         if let Some(folder) = path.parent() {
             std::fs::create_dir_all(folder).map_err(|err| format!("cannot make {}: {err}", folder.display()))?;
         }
         write_atomically(&path, &after_text)?;
-        changes.push(FileChange { file: path, before: before_text, after: after_text });
+        changes.push(FileChange { file: path, before: before_text, after: Some(after_text) });
     }
     Ok(changes)
 }
@@ -231,29 +257,28 @@ mod tests {
         let dir = Path::new("/project");
         assert_eq!(diagram_file(dir, "orders").unwrap(), dir.join("diagrams/orders.mermaid"));
         assert_eq!(diagram_file(dir, " orders.mermaid ").unwrap(), dir.join("diagrams/orders.mermaid"));
-        for bad in ["", ".hidden", "../escape", "a/b", "a\\b", "data-model", "data-model.mermaid"] {
+        for bad in ["", ".hidden", "../escape", "a/b", "a\\b"] {
             assert!(diagram_file(dir, bad).is_err(), "{bad}");
         }
     }
 
     #[test]
-    fn the_data_model_file_follows_the_dictionary_and_keeps_its_places() {
-        let dir = std::env::temp_dir().join(format!("clarity-data-model-{}", std::process::id()));
+    fn a_diagram_is_renamed_by_moving_its_text_to_the_new_file() {
+        let dir = std::env::temp_dir().join(format!("clarity-rename-diagram-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(DIAGRAMS_DIR)).unwrap();
-        std::fs::write(dir.join("shop.clarity"), "module shop\n\nentity Customer\n    name: text, label @customerNameLabel\n").unwrap();
-        let project = clarity_project::load_modules(&dir).unwrap();
+        std::fs::write(dir.join("diagrams/orders.mermaid"), "erDiagram\n").unwrap();
+        std::fs::write(dir.join("diagrams/taken.mermaid"), "classDiagram\n").unwrap();
 
-        // Without the file nothing is written.
-        refresh_data_model(&dir, &project).unwrap();
-        assert!(!data_model_file(&dir).exists());
+        assert!(rename_file(&dir, "orders", "taken").is_err(), "a name in use is refused");
+        assert!(rename_file(&dir, "orders.mermaid", "orders").unwrap().is_empty(), "the same name changes nothing");
 
-        std::fs::write(data_model_file(&dir), "erDiagram\n    Old {\n    }\n    %% clarity: Customer at 40,60\n    %% clarity: Old at 1,2\n").unwrap();
-        refresh_data_model(&dir, &project).unwrap();
-        let text = std::fs::read_to_string(data_model_file(&dir)).unwrap();
-        assert_eq!(text, views::data_model_placed(&project, &[("Customer".into(), 40, 60)]).text);
-        assert!(!text.contains("Old"));
-        assert!(clarity_spec::diagrams::diagram_files(&dir).unwrap().is_empty(), "the Data model is no written diagram");
+        let changes = rename_file(&dir, "orders.mermaid", "sales").unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("diagrams/sales.mermaid")).unwrap(), "erDiagram\n");
+        assert!(!dir.join("diagrams/orders.mermaid").exists());
+        // Undo makes the new file go and the old one come back.
+        let undo: Vec<(bool, bool)> = changes.iter().map(|c| (c.before.is_some(), c.after.is_some())).collect();
+        assert_eq!(undo, vec![(false, true), (true, false)]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

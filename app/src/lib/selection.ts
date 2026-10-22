@@ -3,6 +3,6 @@
 // written one of the diagrams folder) or the module structure, or the project settings.
 
 export type Selected = {
-  kind: "window" | "app" | "entity" | "enum" | "engine" | "theme" | "language" | "resource" | "view" | "diagram" | "module" | "settings";
+  kind: "window" | "app" | "entity" | "enum" | "engine" | "theme" | "language" | "resource" | "diagram" | "module" | "settings";
   name: string;
 };

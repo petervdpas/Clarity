@@ -7,8 +7,9 @@
   import type { Cardinality } from "./generated/Cardinality";
   import type { Erd } from "./generated/Erd";
   import type { ErdField } from "./generated/ErdField";
-  import type { ErdPick } from "./ErdCanvas.svelte";
+  import type { CanvasPick } from "./designCanvas";
   import { removeEntity, renameEntity } from "./erdDesign";
+  import FieldList from "./FieldList.svelte";
 
   let {
     erd,
@@ -17,7 +18,7 @@
     onchange,
   }: {
     erd: Erd;
-    picked?: ErdPick;
+    picked?: CanvasPick;
     /** The types a field may have: Clarity's, the project's enums, refs and lists of the entities. */
     types: string[];
     onchange: (erd: Erd) => void;
@@ -30,9 +31,9 @@
     { value: "oneOrMore", name: "one or more" },
   ];
 
-  const pickedName = $derived(picked?.kind === "entity" ? picked.name : null);
+  const pickedName = $derived(picked?.kind === "box" ? picked.name : null);
   const entity = $derived(pickedName === null ? undefined : erd.entities.find((e) => e.name === pickedName));
-  const relationIndex = $derived(picked?.kind === "relation" ? picked.index : -1);
+  const relationIndex = $derived(picked?.kind === "link" ? picked.index : -1);
   const relation = $derived(relationIndex >= 0 ? erd.relations[relationIndex] : undefined);
 
   function rename(to: string) {
@@ -40,25 +41,13 @@
     const next = renameEntity(erd, entity.name, to);
     if (next === erd) return;
     onchange(next);
-    picked = { kind: "entity", name: to.trim() };
+    picked = { kind: "box", name: to.trim() };
   }
 
   function setFields(fields: ErdField[]) {
     if (!entity) return;
     const name = entity.name;
     onchange({ ...erd, entities: erd.entities.map((e) => (e.name === name ? { ...e, fields } : e)) });
-  }
-
-  function setField(index: number, change: Partial<ErdField>) {
-    if (!entity) return;
-    setFields(entity.fields.map((f, i) => (i === index ? { ...f, ...change } : f)));
-  }
-
-  function addField() {
-    if (!entity) return;
-    let n = 1;
-    while (entity.fields.some((f) => f.name === `field${n}`)) n++;
-    setFields([...entity.fields, { name: `field${n}`, typeText: "text", required: false, unique: false, extra: "" }]);
   }
 
   function setRelation(change: Partial<(typeof erd.relations)[number]>) {
@@ -90,21 +79,7 @@
       <span>Name</span>
       <input value={entity.name} spellcheck="false" onchange={(e) => rename(e.currentTarget.value)} onkeydown={enter} />
     </label>
-    <h4>Fields <span class="count">{entity.fields.length}</span></h4>
-    <datalist id="erd-types">
-      {#each types as t (t)}<option value={t}></option>{/each}
-    </datalist>
-    {#each entity.fields as f, i (i)}
-      <div class="field">
-        <input class="fname" value={f.name} spellcheck="false" title="Name, in snake_case" onchange={(e) => setField(i, { name: e.currentTarget.value.trim() })} onkeydown={enter} />
-        <input class="ftype" value={f.typeText} list="erd-types" spellcheck="false" title="Type: text(80), money, an enum, ref Customer, list<OrderLine>" onchange={(e) => setField(i, { typeText: e.currentTarget.value.trim() })} onkeydown={enter} />
-        <button class="remove" onclick={() => setFields(entity.fields.filter((_, j) => j !== i))} title="Take this field away" aria-label="Take {f.name} away">x</button>
-        <label class="flag"><input type="checkbox" checked={f.required} onchange={(e) => setField(i, { required: e.currentTarget.checked })} /> required</label>
-        <label class="flag"><input type="checkbox" checked={f.unique} onchange={(e) => setField(i, { unique: e.currentTarget.checked })} /> unique</label>
-        <input class="extra" value={f.extra} placeholder="min 1, default 0, owned..." spellcheck="false" title="Other modifiers, as Clarity writes them" onchange={(e) => setField(i, { extra: e.currentTarget.value.trim() })} onkeydown={enter} />
-      </div>
-    {/each}
-    <button onclick={addField}>+ Field</button>
+    <FieldList fields={entity.fields} {types} onchange={setFields} />
     <button class="danger" onclick={remove}>Delete entity</button>
   {:else if relation}
     <h3>Relation</h3>
@@ -149,19 +124,9 @@
     font-size: 12px;
   }
 
-  h3,
-  h4 {
+  h3 {
     margin: 0;
     font-size: 13px;
-  }
-
-  h4 {
-    margin-top: 4px;
-  }
-
-  .count {
-    color: var(--text-muted);
-    font-weight: normal;
   }
 
   .line {
@@ -177,26 +142,6 @@
     text-overflow: ellipsis;
   }
 
-  .field {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 4px;
-    padding: 6px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--panel-alt);
-  }
-
-  .field input {
-    min-width: 0;
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-
-  .field .extra {
-    grid-column: 1 / -1;
-  }
-
   .flag {
     display: flex;
     align-items: center;
@@ -206,10 +151,6 @@
 
   .flag.wide {
     align-items: flex-start;
-  }
-
-  .remove {
-    padding: 0 7px;
   }
 
   .ends {

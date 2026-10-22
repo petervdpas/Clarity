@@ -4,6 +4,7 @@ import type { DiagramEntity } from "./DiagramEntity";
 import type { DiagramEnum } from "./DiagramEnum";
 import type { DiagramKind } from "./DiagramKind";
 import type { DiagramModule } from "./DiagramModule";
+import type { DiagramUse } from "./DiagramUse";
 import type { Relation } from "./Relation";
 
 /**
@@ -17,4 +18,9 @@ kind: DiagramKind | null, entities: Array<DiagramEntity>, enums: Array<DiagramEn
 /**
  * Modules drawn as a `<<module>>` class, with their functions.
  */
-modules: Array<DiagramModule>, relations: Array<Relation>, };
+modules: Array<DiagramModule>, relations: Array<Relation>, 
+/**
+ * `music ..> Images`: a module's or engine's code uses the other.
+ * Drawn only: the code makes these, not the diagram.
+ */
+uses: Array<DiagramUse>, };

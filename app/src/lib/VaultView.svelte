@@ -2,6 +2,7 @@
   // The main area of the Vault tab: making or unlocking Clarity's vault,
   // its secrets, and a connection's fields. Clarity's vault is Clarity's
   // own; an application keeps its own secrets, only when its design adds them.
+  import Modal from "./Modal.svelte";
   import { resizableColumns } from "./columnWidths";
   import { CategoryEditor } from "./vault";
   import { vault } from "./vaultStore.svelte";
@@ -255,9 +256,7 @@
   {/if}
 
   {#if vault.dialog === "categories" && editor}
-    <div class="backdrop">
-    <div class="dialog" role="dialog" aria-label="Categories">
-      <h3>Categories</h3>
+    <Modal title="Categories" width={640} onclose={() => (vault.dialog = null)}>
       {#if vault.error}<p class="refusal" role="alert">{vault.error}</p>{/if}
       <div class="category-editor">
         <ul class="category-list" role="listbox" aria-label="Categories">
@@ -293,12 +292,9 @@
         <button onclick={() => (vault.dialog = null)}>Cancel</button>
         <button class="primary" onclick={saveCategories}>Save</button>
       </div>
-    </div>
-    </div>
+    </Modal>
   {:else if vault.dialog === "password"}
-    <div class="backdrop">
-    <div class="dialog" role="dialog" aria-label="Change the master password">
-      <h3>Change the master password</h3>
+    <Modal title="Change the master password" width={440} onclose={() => (vault.dialog = null)}>
       {#if vault.error}<p class="refusal" role="alert">{vault.error}</p>{/if}
       <div class="form-grid">
         <label class="form-label" for="current-password">Current</label>
@@ -314,12 +310,9 @@
           {vault.busy ? "Changing..." : "Change"}
         </button>
       </div>
-    </div>
-    </div>
+    </Modal>
   {:else if vault.dialog === "destroy"}
-    <div class="backdrop">
-    <div class="dialog danger" role="dialog" aria-label="Destroy the vault">
-      <h3>Destroy the vault</h3>
+    <Modal title="Destroy the vault" width={440} tone="danger" onclose={() => (vault.dialog = null)}>
       {#if vault.error}<p class="refusal" role="alert">{vault.error}</p>{/if}
       <p>Every secret in it is gone for good, for Clarity and for any tool that shares this vault. Connections stay, but their vault fields find nothing.</p>
       <div class="form-grid">
@@ -330,8 +323,7 @@
         <button onclick={() => (vault.dialog = null)}>Cancel</button>
         <button class="destroy" disabled={!current || vault.busy} onclick={() => vault.destroy(current)}>Destroy the vault</button>
       </div>
-    </div>
-    </div>
+    </Modal>
   {/if}
 </section>
 
@@ -348,11 +340,6 @@
   h2 {
     margin: 0;
     font-size: 18px;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 15px;
   }
 
   .intro,
@@ -483,28 +470,7 @@
   }
 
   /* A dialog sits over the screen, as a window of its own would. */
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-  }
 
-  .dialog {
-    width: min(640px, calc(100vw - 32px));
-    box-shadow: 0 12px 40px rgb(0 0 0 / 0.4);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    background: var(--panel);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    max-width: 640px;
-  }
 
   .category-editor {
     display: flex;
@@ -563,10 +529,6 @@
     margin: 0;
     color: var(--error);
     font-size: 13px;
-  }
-
-  .dialog.danger {
-    border-color: var(--error);
   }
 
   .destroy {

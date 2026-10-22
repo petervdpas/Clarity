@@ -128,7 +128,11 @@ enums) with write_diagram, open it with show_diagram, say in a few lines what it
 adjusts it in Clarity. Apply it with apply_diagram only when the person asks, reading diagram_proposals first since \
 they may have changed it. Diagrams propose and the data dictionary decides; never apply a removal unless the person \
 asks for that one. In an ERD write Clarity's types (`text(80)`, `money`, `email`, an enum's name), `UK` for unique, \
-and other modifiers or a decimal's full type in the comment (`\"required\"`, `\"decimal(10, 2), computed\"`).
+and other modifiers or a decimal's full type in the comment (`\"required\"`, `\"decimal(10, 2), computed\"`). \
+In a class diagram put each class in the namespace of its module (`namespace music {{`), the module's functions on a \
+`<<module>>` class of the module's name outside the namespaces; the designer draws each module as a frame around its \
+classes. Draw what a module's functions use (the engines they call, the entities they take, find or make) as a uses \
+arrow from the module's class (`music ..> Images`); it is drawn only and Apply ignores it.
 - After adding or changing entities, write a migration step with migrate, so the database follows.
 - When a window is done, show it with show_window so the person sees it.
 - When the person mentions a failed build or run, or errors in the output, read them with build_output; never ask \
@@ -375,8 +379,11 @@ impl ProjectTools {
         }
         let ticked: Vec<usize> = numbers.iter().map(|n| n - 1).collect();
         let changes = super::diagrams::apply_text(&dir, &text, &ticked)?;
+        // Apply writes files; it takes none away.
         for change in changes {
-            self.written.push(Written { file: change.file, before: change.before, after: change.after });
+            if let Some(after) = change.after {
+                self.written.push(Written { file: change.file, before: change.before, after });
+            }
         }
         Ok(format!("Applied {} proposals. {}", numbers.len(), self.problems()?))
     }
@@ -857,7 +864,7 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
             *kept = conversation;
         }
         let changes: Vec<FileChange> =
-            merged(&tools.written).into_iter().map(|w| FileChange { file: w.file, before: w.before, after: w.after }).collect();
+            merged(&tools.written).into_iter().map(|w| FileChange { file: w.file, before: w.before, after: Some(w.after) }).collect();
         let changed = !changes.is_empty();
         // A project made during the turn opens with a history of its own.
         if tools.made.is_none() && changed {

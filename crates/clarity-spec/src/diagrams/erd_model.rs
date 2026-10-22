@@ -120,7 +120,8 @@ pub fn places(text: &str) -> Vec<(String, i32, i32)> {
         .collect()
 }
 
-fn field(f: &DiagramField) -> ErdField {
+/// A field of a diagram as the designers show it.
+pub(super) fn field(f: &DiagramField) -> ErdField {
     let mut rest = f.modifiers.clone();
     rest.required = false;
     rest.unique = false;

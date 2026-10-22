@@ -53,3 +53,6 @@ export function marksOf(proposals: { change: Mark; subject: string }[]): Record<
   }
   return marks;
 }
+
+/** The extension of a diagram file, as clarity_spec::diagrams::DIAGRAM_EXTENSION names it. */
+export const DIAGRAM_EXTENSION = "mermaid";

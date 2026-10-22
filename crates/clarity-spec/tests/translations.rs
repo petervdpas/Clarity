@@ -75,7 +75,7 @@ fn language_files_are_checked() {
     let twice = NL.to_string() + "    cardTitle \"Kaart\"\n";
     assert_eq!(errors(&twice), ["key 'cardTitle' is in this file twice"]);
     let wrong = NL.replace("    cardTitle \"Klantkaart\"", "    \"Customer card\" \"Klantkaart\"");
-    assert!(errors(&wrong).contains(&"write a key and its text in quotes: saveCaption \"Save\"".to_string()), "{:#?}", errors(&wrong));
+    assert!(errors(&wrong).contains(&"write a key and its text in quotes, saveCaption \"Save\", or the resource it points at, gameRules resource \"rules.md\"".to_string()), "{:#?}", errors(&wrong));
     assert_eq!(messages(&project_with(&[("translations/en.clarity", EN), ("translations/de.clarity", NL)]), Severity::Error), [
         "this file is for language 'de' (its name), but it says 'nl'"
     ]);
@@ -99,6 +99,34 @@ fn a_value_is_set_changed_and_emptied_in_the_file() {
     let emptied = translations::set(Some(&changed), "nl", "newKey", "");
     assert!(emptied.contains("    newKey \"\"\n"), "{emptied}");
     assert_eq!(translations::set(None, "de", "saveCaption", "Speichern"), "translation de\n    saveCaption \"Speichern\"\n");
+}
+
+/// A key's value is text, or a reference to a file of the resources
+/// folder: `gameRules resource "rules-nl.md"`. Which file each language
+/// shows is up to its language file.
+#[test]
+fn a_value_is_text_or_a_resource() {
+    let (parsed, problems) = translations::parse("translation nl\n    gameTitle \"Boter, kaas en eieren\"\n    gameRules resource \"rules-nl.md\"\n");
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert_eq!(parsed.entries[0].value, translations::Value::Text("Boter, kaas en eieren".into()));
+    assert_eq!(parsed.entries[1].value, translations::Value::Resource("rules-nl.md".into()));
+    let (_, problems) = translations::parse("translation nl\n    gameRules resource\n");
+    assert!(!problems.is_empty());
+
+    // Written back as it was given: a resource replaces a text, and the other way round.
+    let file = "translation nl\n    gameRules \"x\"\n";
+    let pointed = translations::set_value(Some(file), "nl", "gameRules", &translations::Value::Resource("rules-nl.md".into()));
+    assert_eq!(pointed, "translation nl\n    gameRules resource \"rules-nl.md\"\n");
+    assert_eq!(translations::set(Some(&pointed), "nl", "gameRules", "Spelregels"), "translation nl\n    gameRules \"Spelregels\"\n");
+
+    // The project keeps the resource each language points at, apart from its texts.
+    let mut project = load_sources([("shop.clarity", SHOP)]);
+    project.locale = Locale { language: Some("en".into()), currency: None };
+    let en = format!("{EN}    gameRules resource \"rules-en.md\"\n");
+    let nl = format!("{NL}    gameRules resource \"rules-nl.md\"\n");
+    translations::attach(&mut project, [("translations/en.clarity", en.as_str()), ("translations/nl.clarity", nl.as_str())]);
+    assert_eq!(project.resource_keys["nl"]["gameRules"], "rules-nl.md");
+    assert!(!project.translations["nl"].contains_key("gameRules"));
 }
 
 #[test]
@@ -127,6 +155,29 @@ fn the_languages_table_has_a_column_per_language_the_default_first() {
     assert_eq!(card.values, [Some("Customer card".to_string()), Some("Kundenkarte".to_string()), Some("Klantkaart".to_string())]);
     // What each language leaves empty.
     assert_eq!(table.missing, [0, 0, 1]);
+}
+
+/// A key a markdown or an image shows points each language at a file of
+/// the resources: the table says which kind of value a key takes, and the
+/// file each language points it at.
+#[test]
+fn the_languages_table_knows_the_keys_that_point_at_resources() {
+    let source = format!("{SHOP}\npage Rules: window\n    title @cardTitle\n    markdown @gameRules name rulesText at 1,1 span 6 rows 6\n    image @bannerPicture name banner at 1,7 span 6 rows 2\n");
+    let mut project = load_sources([("shop.clarity", source.as_str())]);
+    project.locale = Locale { language: Some("en".into()), currency: None };
+    let en = format!("{EN}    gameRules resource \"rules-en.md\"\n    bannerPicture resource \"banner.png\"\n");
+    let nl = format!("{NL}    gameRules resource \"rules-nl.md\"\n    bannerPicture \"\"\n");
+    translations::attach(&mut project, [("translations/en.clarity", en.as_str()), ("translations/nl.clarity", nl.as_str())]);
+    let table = translations::table(&project);
+    let row = |key: &str| table.rows.iter().find(|r| r.key == key).unwrap().clone();
+    assert_eq!(row("cardTitle").takes, translations::Takes::Text);
+    assert_eq!(row("gameRules").takes, translations::Takes::Markdown);
+    assert_eq!(row("bannerPicture").takes, translations::Takes::Picture);
+    assert_eq!(row("gameRules").resources, [Some("rules-en.md".to_string()), Some("rules-nl.md".to_string())]);
+    assert_eq!(row("gameRules").values, [None, None]);
+    assert_eq!(row("cardTitle").resources, [None, None]);
+    // A key that points at a file has its value; one left empty is missing.
+    assert_eq!(table.missing, [0, 2]);
 }
 
 /// A text without letters, such as a calculator's `7` or `+`, reads the same

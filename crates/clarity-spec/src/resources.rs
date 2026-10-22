@@ -1,8 +1,8 @@
 //! The resources of a project: the files of its `resources` folder, which
-//! every generated application carries. Pictures, which
-//! `image source "logo.png"` shows, and Markdown files, which
-//! `markdown source "rules.md"` shows: `rules.md` in the default language
-//! and one file per other language beside it, `rules.nl.md`.
+//! every generated application carries, each by its own name. A part shows
+//! one by its `source` (`image source "logo.png"`, `markdown source
+//! "rules.md"`), or by a key whose value in each language points at a
+//! resource (`gameRules resource "rules-nl.md"`), as `markdown @gameRules`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -40,11 +40,10 @@ pub struct ResourceFile {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, TS)]
 #[ts(export)]
 pub struct Resources {
-    /// The files the application carries as they are, such as pictures, by name.
+    /// Every file, by name, as the application carries it.
     pub files: Vec<ResourceFile>,
-    /// The Markdown files, by name (`rules.md`), each by language: the
-    /// default language's from `rules.md`, Dutch from `rules.nl.md`.
-    pub markdown: BTreeMap<String, BTreeMap<String, String>>,
+    /// The text of each Markdown file, by name, for the renderers.
+    pub markdown: BTreeMap<String, String>,
 }
 
 impl Resources {
@@ -87,74 +86,81 @@ pub fn resource_files(dir: &Path) -> std::io::Result<Option<Vec<ResourceFile>>> 
     Ok(Some(found))
 }
 
-/// The document a Markdown file is a version of, and its language:
-/// `rules.nl.md` is `rules.md` in `nl` when the project has that language,
-/// and any other file is its own document in the default language.
-fn document_of<'a>(name: &'a str, languages: &[&str], default: &'a str) -> (String, &'a str) {
-    let stem = &name[..name.len() - MARKDOWN_EXTENSION.len() - 1];
-    if let Some((base, language)) = stem.rsplit_once('.')
-        && language != default
-        && languages.contains(&language)
-    {
-        return (format!("{base}.{MARKDOWN_EXTENSION}"), language);
-    }
-    (name.to_string(), default)
-}
-
-/// Gives the project its resources: its Markdown files by name and language,
-/// and the files it carries. Checks that every picture and document a
-/// window shows is there, each document in every language.
-pub fn attach(project: &mut Project, files: Vec<ResourceFile>) {
-    let default = crate::translations::default_language(project);
-    let languages: Vec<String> = project.translations.keys().cloned().collect();
-    let language_refs: Vec<&str> = languages.iter().map(String::as_str).collect();
-    let mut markdown: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-    let mut carried = Vec::new();
-    for file in files {
-        if is_markdown(&file.name) {
-            let (document, language) = document_of(&file.name, &language_refs, &default);
-            markdown.entry(document).or_default().insert(language.to_string(), String::from_utf8_lossy(&file.bytes).into_owned());
-        } else {
-            carried.push(file);
-        }
-    }
-    let pictures: Vec<&str> = carried.iter().map(|f| f.name.as_str()).filter(|n| is_picture(n)).collect();
-    let markdown_names: Vec<&str> = markdown.keys().map(String::as_str).collect();
+/// Gives the project its resources: every file, and the text of its
+/// Markdown files by name. Checks that every picture and Markdown file a
+/// window shows is there, by its `source` or by a key that points each
+/// language at a resource.
+pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    let markdown: BTreeMap<String, String> =
+        files.iter().filter(|f| is_markdown(&f.name)).map(|f| (f.name.clone(), String::from_utf8_lossy(&f.bytes).into_owned())).collect();
+    let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+    let pictures: Vec<&str> = names.iter().copied().filter(|n| is_picture(n)).collect();
+    let documents: Vec<&str> = markdown.keys().map(String::as_str).collect();
     let mut found = Vec::new();
     for file in &project.files {
         for page in &file.pages {
             each_widget(&page.widgets, &mut |widget| {
-                let Some(source) = widget.props.source.as_deref() else { return };
-                let message = match widget.props.kind {
-                    WidgetKind::Image if !is_picture(source) => {
-                        format!("'{source}' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp or .webp file")
-                    }
-                    WidgetKind::Image if pictures.contains(&source) => return,
-                    WidgetKind::Image if pictures.is_empty() => format!("image '{source}' is not in the resources folder, which has no pictures yet"),
-                    WidgetKind::Image => format!("image '{source}' is not in the resources folder; it has {}", pictures.join(", ")),
-                    WidgetKind::Markdown if !is_markdown(source) => format!("'{source}' is not a Markdown file; use a .md file"),
-                    WidgetKind::Markdown if markdown_names.is_empty() => {
-                        format!("markdown '{source}' is not in the resources folder, which has no Markdown files yet")
-                    }
-                    WidgetKind::Markdown if !markdown_names.contains(&source) => {
-                        format!("markdown '{source}' is not in the resources folder; it has {}", markdown_names.join(", "))
-                    }
-                    WidgetKind::Markdown => {
-                        let have = &markdown[source];
-                        let Some(language) = languages.iter().find(|l| !have.contains_key(*l)) else { return };
-                        let stem = &source[..source.len() - MARKDOWN_EXTENSION.len() - 1];
-                        format!(
-                            "markdown '{source}' has no {language} file; add {RESOURCES_DIR}/{stem}.{language}.{MARKDOWN_EXTENSION}, as every language has each Markdown file"
-                        )
-                    }
-                    _ => return,
-                };
-                found.push(Diagnostic::error(message, widget.span).in_file(&file.path));
+                let kind = widget.props.kind;
+                let mut problems = Vec::new();
+                if let Some(source) = widget.props.source.as_deref() {
+                    problems.extend(source_problem(kind, source, &pictures, &documents));
+                }
+                if let Some(key) = widget.props.caption.as_deref().and_then(crate::translations::key_of) {
+                    problems.extend(key_problems(project, kind, key, &names));
+                }
+                for message in problems {
+                    found.push(Diagnostic::error(message, widget.span).in_file(&file.path));
+                }
             });
         }
     }
     project.diagnostics.extend(found);
-    project.resources = Some(Resources { files: carried, markdown });
+    project.resources = Some(Resources { files, markdown });
+}
+
+/// What is wrong with the file a part names as its `source`.
+fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str]) -> Option<String> {
+    Some(match kind {
+        WidgetKind::Image if !is_picture(source) => format!("'{source}' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp or .webp file"),
+        WidgetKind::Image if pictures.contains(&source) => return None,
+        WidgetKind::Image if pictures.is_empty() => format!("image '{source}' is not in the resources folder, which has no pictures yet"),
+        WidgetKind::Image => format!("image '{source}' is not in the resources folder; it has {}", pictures.join(", ")),
+        WidgetKind::Markdown if !is_markdown(source) => format!("'{source}' is not a Markdown file; use a .md file"),
+        WidgetKind::Markdown if documents.contains(&source) => return None,
+        WidgetKind::Markdown if documents.is_empty() => format!("markdown '{source}' is not in the resources folder, which has no Markdown files yet"),
+        WidgetKind::Markdown => format!("markdown '{source}' is not in the resources folder; it has {}", documents.join(", ")),
+        _ => return None,
+    })
+}
+
+/// What is wrong with what a part's key gives in each language: a markdown
+/// shows a Markdown file, an image a picture, and every other part text.
+fn key_problems(project: &Project, kind: WidgetKind, key: &str, names: &[&str]) -> Vec<String> {
+    let mut problems = Vec::new();
+    for language in project.translations.keys() {
+        let resource = project.resource_keys.get(language).and_then(|r| r.get(key));
+        let has_text = project.translations[language].contains_key(key);
+        match (kind, resource) {
+            (WidgetKind::Image, None) if has_text => problems.push(format!(
+                "@{key} is a text in {language}; an image shows a picture: point the key at one, as {key} resource \"logo.png\""
+            )),
+            (WidgetKind::Markdown, None) if has_text => problems.push(format!(
+                "@{key} is a text in {language}; a markdown shows a Markdown file: point the key at one, as {key} resource \"rules.md\""
+            )),
+            (_, None) => {}
+            (_, Some(file)) if !names.contains(&file.as_str()) => {
+                problems.push(format!("@{key} points at {file} in {language}, which is not in the resources folder"))
+            }
+            (WidgetKind::Markdown, Some(file)) if !is_markdown(file) => {
+                problems.push(format!("@{key} points at {file} in {language}; a markdown shows a Markdown file"))
+            }
+            (WidgetKind::Image, Some(file)) if !is_picture(file) => problems.push(format!("@{key} points at {file} in {language}; an image shows a picture")),
+            (WidgetKind::Markdown | WidgetKind::Image, Some(_)) => {}
+            (_, Some(file)) => problems.push(format!("@{key} points at {file} in {language}; a {} shows text", crate::widgets::keyword(kind))),
+        }
+    }
+    problems
 }
 
 fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {

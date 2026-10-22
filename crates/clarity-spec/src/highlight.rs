@@ -104,6 +104,8 @@ pub fn highlight(source: &str) -> Vec<Piece> {
             last = to;
             let kind = match token.kind {
                 TokenKind::Ident if translations && i == 0 && token.text != "translation" => PieceKind::Key,
+                // `gameRules resource "rules-nl.md"`: a key that points at a file of the resources.
+                TokenKind::Ident if translations && i == 1 && token.text == "resource" => PieceKind::Keyword,
                 TokenKind::Ident => word_kind(tokens, i),
                 TokenKind::Number => PieceKind::Number,
                 TokenKind::Key => PieceKind::Key,
@@ -234,6 +236,7 @@ pub fn textmate_grammar() -> serde_json::Value {
                 "end": "(?!)",
                 "patterns": [
                     { "include": "#comment" },
+                    { "match": "^\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(resource)\\b", "captures": { "1": { "name": "variable.other.constant.key.clarity" }, "2": { "name": "keyword.other.clarity" } } },
                     { "match": "^\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "variable.other.constant.key.clarity" } } },
                     { "include": "#text" }
                 ]

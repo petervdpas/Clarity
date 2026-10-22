@@ -903,7 +903,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            if p.kind == WidgetKind::Image && p.source.is_none() && p.bind.is_none() {
+            if p.kind == WidgetKind::Image && p.source.is_none() && p.bind.is_none() && p.caption.is_none() {
                 self.warning(
                     file,
                     format!("image at {},{} has no source yet", p.col, p.row),
@@ -919,18 +919,15 @@ impl<'a> Checker<'a> {
         let info = widgets::info(p.kind);
         let at = format!("{name} at {},{}", p.col, p.row);
 
-        // A markdown's text is a file of the resources folder or a text it binds, never a key.
-        if p.kind == WidgetKind::Markdown {
-            if p.caption.is_some() {
-                self.error(
-                    file,
-                    "a markdown shows a Markdown file of the resources folder (source \"rules.md\") or a text it binds, not a key".to_string(),
-                    widget.span,
-                );
-            }
-            if p.source.is_some() && p.bind.is_some() {
-                self.error(file, "a markdown shows a Markdown file (source) or a text it binds, not both".to_string(), widget.span);
-            }
+        // A markdown or an image shows one thing: a key, a file of the resources (source), or what it binds.
+        if matches!(p.kind, WidgetKind::Markdown | WidgetKind::Image)
+            && [p.caption.is_some(), p.source.is_some(), p.bind.is_some()].iter().filter(|given| **given).count() > 1
+        {
+            self.error(
+                file,
+                format!("a {name} shows a key, a file of the resources (source) or what it binds: one of them"),
+                widget.span,
+            );
         }
 
         let Some(bind) = &p.bind else {

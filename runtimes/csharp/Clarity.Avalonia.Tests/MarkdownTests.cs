@@ -1,6 +1,6 @@
 // The markdown part: Markdown read into blocks and spans against the cases
-// every renderer shares (conformance/markdown.json), the file of the
-// language shown, and the view that shows the blocks and opens links.
+// every renderer shares (conformance/markdown.json), the resource a source
+// names, and the view that shows the blocks and opens links.
 
 using System.Text.Json;
 using Avalonia.Controls;
@@ -49,12 +49,11 @@ public class MarkdownTests
     }
 
     [Fact]
-    public void AFileShowsInTheLanguageShownElseTheDefaultOnes()
+    public void ASourceIsTheResourceItNamesWhateverTheLanguage()
     {
-        var have = new HashSet<string> { "rules.md", "rules.nl.md" };
-        Assert.Equal("rules.nl.md", MarkdownView.FileFor("rules.md", "nl", have.Contains));
-        Assert.Equal("rules.md", MarkdownView.FileFor("rules.md", "de", have.Contains));
-        Assert.Equal("rules.md", MarkdownView.FileFor("rules.md", "en", have.Contains));
+        // Which file a language shows is up to its key, not the file's name.
+        Assert.Equal("avares://Shop/resources/rules.md", MarkdownView.ResourceUri("Shop", "rules.md").ToString());
+        Assert.Equal("avares://Shop/resources/rules.nl.md", MarkdownView.ResourceUri("Shop", "rules.nl.md").ToString());
     }
 
     [AvaloniaFact]

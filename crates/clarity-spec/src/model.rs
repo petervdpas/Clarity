@@ -643,6 +643,9 @@ pub struct Project {
     /// The project's translations per language: each text a person sees,
     /// as written, with its translation (design section 1.5, I1c).
     pub translations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    /// The keys whose value in a language is a file of the resources folder
+    /// (`gameRules resource "rules-nl.md"`), per language: the file's name.
+    pub resource_keys: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
     /// The themes the application offers, the first being the one it starts
     /// with; empty when the project file names none (design section 1.5, T1).
     pub themes: Vec<String>,

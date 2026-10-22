@@ -1,8 +1,9 @@
 // The markdown part: Markdown read into blocks the same way on every stack
 // (MarkdownBlocks), shown as headings, paragraphs, list items and code,
 // wrapped, scrolling when longer than the part. Its text is a Markdown file
-// of the application's resources (`Source`, the file of the language shown)
-// or a text it binds (`Markdown`). A link opens in the person's browser.
+// of the application's resources (`Source`, by its name), or Markdown it is
+// given (`Markdown`): a text it binds, or the file a key points at in the
+// language shown. A link opens in the person's browser.
 
 using Avalonia;
 using Avalonia.Controls;
@@ -60,45 +61,21 @@ public class MarkdownView : UserControl
             Show();
     }
 
-    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnAttachedToVisualTree(e);
-        Locale.Changed += Show;
-    }
-
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        Locale.Changed -= Show;
-        base.OnDetachedFromVisualTree(e);
-    }
-
-    /// The file of `name` in `language` when there is one (`rules.nl.md`), else `name` itself.
-    public static string FileFor(string name, string language, Func<string, bool> exists)
-    {
-        var stem = name.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? name[..^3] : name;
-        var translated = $"{stem}.{language}.md";
-        return exists(translated) ? translated : name;
-    }
+    /// Where the application's resource `name` is: its resources folder.
+    public static Uri ResourceUri(string? assembly, string name) => new($"avares://{assembly}/resources/{name}");
 
     /// The text of a resource file of the application, or nothing.
-    static string ReadResource(string file)
+    static string ReadResource(string name)
     {
-        var assembly = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
-        var uri = new Uri($"avares://{assembly}/resources/{file}");
+        var uri = ResourceUri(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name, name);
         if (!AssetLoader.Exists(uri)) return "";
         using var reader = new StreamReader(AssetLoader.Open(uri));
         return reader.ReadToEnd();
     }
 
-    static bool HasResource(string file)
-    {
-        var assembly = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
-        return AssetLoader.Exists(new Uri($"avares://{assembly}/resources/{file}"));
-    }
-
     void Show()
     {
-        var text = Source is { Length: > 0 } source ? ReadResource(FileFor(source, Locale.Current, HasResource)) : Markdown ?? "";
+        var text = Source is { Length: > 0 } source ? ReadResource(source) : Markdown ?? "";
         Blocks.Children.Clear();
         foreach (var block in MarkdownBlocks.Read(text))
             Blocks.Children.Add(Control(block));

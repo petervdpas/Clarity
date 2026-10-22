@@ -54,6 +54,18 @@ pub fn set_translation(language: String, key: String, value: String, state: Stat
     load(&dir)
 }
 
+/// Points `key` in `language` at `file` of the resources: what a markdown
+/// or an image shows by its key in that language.
+#[tauri::command]
+pub fn set_translation_resource(language: String, key: String, file: String, state: State<WatchState>, history: State<HistoryState>) -> Result<Preview, String> {
+    let (_, dir) = open_project_of(&state)?;
+    let path = file_of(&dir, &language)?;
+    let before = std::fs::read_to_string(&path).ok();
+    let after = translations::set_value(before.as_deref(), &language, &key, &translations::Value::Resource(file.trim().to_string()));
+    write(path, before, after, &history)?;
+    load(&dir)
+}
+
 /// Starts the file of `language` with every key the project has, each
 /// empty until it is translated.
 #[tauri::command]
@@ -70,12 +82,23 @@ pub fn add_language(language: String, state: State<WatchState>, history: State<H
         Some(values) => values.keys().cloned().collect(),
         None => translations::keys(&project).into_iter().map(|k| k.key).collect(),
     };
+    let text = new_language_file(&language, &keys, project.resource_keys.get(&default));
+    write(path, None, text, &history)?;
+    load(&dir)
+}
+
+/// The file of a new language: every text key empty until it is translated,
+/// and every key that points at a resource pointing at the default
+/// language's file until it is pointed at its own.
+fn new_language_file(language: &str, keys: &[String], resources: Option<&std::collections::BTreeMap<String, String>>) -> String {
     let mut text = format!("translation {language}\n");
     for key in keys {
         text.push_str(&format!("    {key} \"\"\n"));
     }
-    write(path, None, text, &history)?;
-    load(&dir)
+    for (key, file) in resources.into_iter().flatten() {
+        text = translations::set_value(Some(&text), language, key, &translations::Value::Resource(file.clone()));
+    }
+    text
 }
 
 /// Renames key `from` as `to` wherever the project names it: in every module
@@ -166,4 +189,16 @@ pub fn make_texts_keys(state: State<WatchState>, history: State<HistoryState>) -
     }
     record(&history, changes)?;
     load(&dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_language_has_every_key_its_resources_pointing_at_the_defaults() {
+        let resources = std::collections::BTreeMap::from([("gameRules".to_string(), "rules-en.md".to_string())]);
+        let text = new_language_file("nl", &["saveCaption".into()], Some(&resources));
+        assert_eq!(text, "translation nl\n    saveCaption \"\"\n    gameRules resource \"rules-en.md\"\n");
+    }
 }

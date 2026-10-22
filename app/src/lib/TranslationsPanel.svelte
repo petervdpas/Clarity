@@ -1,6 +1,7 @@
 <script lang="ts">
   // A language of the project, opened from i18n in the project tree: every
-  // key with its value to type in place. The default language gives every
+  // key with its value to type in place, or, for a key a markdown or an
+  // image shows, the file of the resources it points at in this language. The default language gives every
   // key a value, and shows how far each translation is; a translation shows
   // the default's text next to its own. The backend collects the keys and
   // writes the language files.
@@ -9,6 +10,8 @@
   import type { Preview } from "./generated/Preview";
   import type { TranslationTable } from "./generated/TranslationTable";
   import { languageName } from "./translate";
+  import { resourceChoices } from "./resources";
+  import type { TranslationRow } from "./generated/TranslationRow";
 
   let {
     preview,
@@ -50,13 +53,23 @@
   const others = $derived((table?.languages ?? []).map((l, i) => ({ l, i })).filter(({ l }) => l !== table?.default));
   const total = $derived(table?.rows.length ?? 0);
 
+  /** Whether a key has no value in column `i`: no text and no file. */
+  function empty(row: TranslationRow, i: number): boolean {
+    return row.values[i] === null && row.resources[i] === null;
+  }
+
+  /** A key's value in column `i` as it reads: its text, or the file it points at. */
+  function shown(row: TranslationRow, i: number): string {
+    return row.resources[i] ?? row.values[i] ?? "";
+  }
+
   const rows = $derived(
     (table?.rows ?? []).filter((r) => {
       const words = filter.trim().toLocaleLowerCase();
-      const said = [r.key, r.values[0] ?? "", column >= 0 ? (r.values[column] ?? "") : ""].join(" ").toLocaleLowerCase();
+      const said = [r.key, shown(r, 0), column >= 0 ? shown(r, column) : ""].join(" ").toLocaleLowerCase();
       if (words && !said.includes(words)) return false;
       if (!onlyMissing) return true;
-      return isDefault ? r.values.some((v) => v === null) : r.values[column] === null;
+      return isDefault ? r.values.some((_, i) => empty(r, i)) : empty(r, column);
     }),
   );
 
@@ -64,6 +77,15 @@
   function named(tag: string): string {
     const name = languageName(tag);
     return name === tag ? tag : `${name} (${tag})`;
+  }
+
+  async function setResource(key: string, file: string) {
+    try {
+      onapplied(await invoke<Preview>("set_translation_resource", { language, key, file }));
+      error = null;
+    } catch (err) {
+      error = String(err);
+    }
   }
 
   async function setValue(key: string, value: string) {
@@ -138,8 +160,18 @@
             <tr>
               <td class="key">{row.key}</td>
               <td class="where">{row.places.join(", ")}</td>
-              {#if !isDefault}<td class="text">{row.values[0] ?? ""}</td>{/if}
+              {#if !isDefault}<td class="text">{shown(row, 0)}</td>{/if}
               <td class="value">
+                {#if row.takes !== "text"}
+                  <!-- A markdown's or an image's key points this language at a file of the resources. -->
+                  {@const choices = resourceChoices(preview.project.resources?.files, row.takes)}
+                  {@const file = row.resources[column]}
+                  <select class:missing={file === null} value={file ?? ""} aria-label={`${row.key} in ${named(language)}`} onchange={(e) => setResource(row.key, e.currentTarget.value)}>
+                    <option value="" disabled>{row.takes === "markdown" ? "Pick a Markdown file" : "Pick a picture"}</option>
+                    {#each choices as name (name)}<option value={name}>{name}</option>{/each}
+                    {#if file && !choices.includes(file)}<option value={file}>{file} (not in the resources)</option>{/if}
+                  </select>
+                {:else}
                 <textarea
                   rows="1"
                   use:grow
@@ -149,11 +181,12 @@
                   aria-label={`${row.key} in ${named(language)}`}
                   onchange={(e) => setValue(row.key, e.currentTarget.value)}
                 ></textarea>
+                {/if}
               </td>
               {#if isDefault}
                 {#each others as { l: tag, i } (tag)}
-                  <td class="status" class:missing={row.values[i] === null} title={row.values[i] ?? "Not translated yet"}>
-                    {row.values[i] === null ? "missing" : "\u2713"}
+                  <td class="status" class:missing={empty(row, i)} title={empty(row, i) ? "Not translated yet" : shown(row, i)}>
+                    {empty(row, i) ? "missing" : "\u2713"}
                   </td>
                 {/each}
               {/if}

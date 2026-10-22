@@ -173,8 +173,3 @@ export function markdownBlocks(markdown: string): Block[] {
   return blocks;
 }
 
-/** The text of Markdown file `name` of the resources in language `picked`, else in the default language. */
-export function markdownIn(markdown: Record<string, Record<string, string>> | undefined, name: string, picked: string, fallback: string): string {
-  const languages = markdown?.[name];
-  return languages?.[picked] ?? languages?.[fallback] ?? "";
-}

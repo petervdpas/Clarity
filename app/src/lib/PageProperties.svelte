@@ -17,6 +17,7 @@
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
   import { DEFAULT_DIGITS } from "./display";
   import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
+  import { resourceChoices } from "./resources";
 
   let {
     preview,
@@ -183,7 +184,22 @@
       <input value={p.name ?? partName} title="The name the code behind uses" onchange={(e) => update({ name: textOf(e) ?? partName })} />
     </label>
 
-    {#if info.caption !== null || p.caption !== null || info.container === "plain" || info.properties.includes("for")}
+    {#if p.kind === "markdown" || p.kind === "image"}
+      <!-- A key whose value in each language is a file of the resources, set under i18n. -->
+      <label class="prop">
+        <span>Key</span>
+        <input
+          value={p.caption?.startsWith("@") ? p.caption.slice(1) : ""}
+          placeholder={p.kind === "markdown" ? "gameRules" : "bannerPicture"}
+          title="A key whose value in each language is a file of the resources; point it per language under i18n"
+          spellcheck="false"
+          onchange={(e) => {
+            const key = textOf(e);
+            update({ caption: key ? `@${key.replace(/^@/, "")}` : null });
+          }}
+        />
+      </label>
+    {:else if info.caption !== null || p.caption !== null || info.container === "plain" || info.properties.includes("for")}
       <label class="prop">
         <span>Caption</span>
         <TextField {preview} {onapplied} text={p.caption} placeholder={p.kind === "help" ? "the field's help text" : ""} onwrite={(text) => update({ caption: text })} />
@@ -447,9 +463,15 @@
       </label>
     {/if}
     {#if info.properties.includes("source")}
+      <!-- A file of the resources, of the kind the part shows; a key points each language at one instead. -->
+      {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : "picture")}
       <label class="prop">
         <span>Source</span>
-        <input value={p.source ?? ""} placeholder="logo.png" onchange={(e) => update({ source: textOf(e) })} />
+        <select value={p.source ?? ""} onchange={(e) => update({ source: textOf(e) })}>
+          <option value="">(none)</option>
+          {#each choices as name (name)}<option value={name}>{name}</option>{/each}
+          {#if p.source && !choices.includes(p.source)}<option value={p.source}>{p.source} (not in the resources)</option>{/if}
+        </select>
       </label>
     {/if}
 

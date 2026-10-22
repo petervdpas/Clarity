@@ -12,6 +12,8 @@
   import PageDesigner from "./lib/PageDesigner.svelte";
   import PageView from "./lib/PageView.svelte";
   import ProjectTree from "./lib/ProjectTree.svelte";
+  import ResourceView from "./lib/ResourceView.svelte";
+  import NewMarkdownDialog from "./lib/NewMarkdownDialog.svelte";
   import RibbonButton from "./lib/RibbonButton.svelte";
   import Splitter from "./lib/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
@@ -270,6 +272,8 @@
         return all.some((f) => f.engines.some((e) => e.name.name === o.name));
       case "language":
         return o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
+      case "resource":
+        return p.project.resources?.files.some((f) => f.name === o.name) ?? false;
       case "settings":
         return true;
     }
@@ -418,6 +422,40 @@
       tab = "project";
     } catch (err) {
       newLanguageError = String(err);
+    }
+  }
+
+  /** Whether the dialog for a new Markdown file is open, and what went wrong adding it. */
+  let newMarkdownOpen = $state(false);
+  let newMarkdownError = $state<string | null>(null);
+
+  function startNewMarkdown() {
+    newMarkdownError = null;
+    newMarkdownOpen = true;
+  }
+
+  /** Writes Markdown file `name` of the resources and opens it. */
+  async function addMarkdown(name: string) {
+    try {
+      applyPreview(await invoke<Preview>("new_markdown", { name }));
+      newMarkdownOpen = false;
+      select({ kind: "resource", name });
+      tab = "project";
+    } catch (err) {
+      newMarkdownError = String(err);
+    }
+  }
+
+  /** Copies a picked picture into the resources and opens it. */
+  async function addPicture() {
+    const picked = await openDialog({ multiple: false, filters: [{ name: "Pictures", extensions: ["png", "jpg", "jpeg", "gif", "bmp", "webp"] }] });
+    if (typeof picked !== "string") return;
+    try {
+      applyPreview(await invoke<Preview>("add_picture", { path: picked }));
+      select({ kind: "resource", name: picked.split(/[\\/]/).at(-1) ?? picked });
+      tab = "project";
+    } catch (err) {
+      actionError = String(err);
     }
   }
 
@@ -860,6 +898,8 @@
       onmenu={full ? (e, item) => (treeMenu = { x: e.clientX, y: e.clientY, item }) : null}
       onnewengine={full ? startNewEngine : null}
       onnewlanguage={full ? startNewLanguage : null}
+      onnewmarkdown={full ? startNewMarkdown : null}
+      onaddpicture={full ? addPicture : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
     />
@@ -1145,6 +1185,8 @@
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+        {:else if current?.kind === "resource"}
+          <ResourceView {preview} name={current.name} onapplied={applyPreview} />
         {:else if current?.kind === "language"}
           <TranslationsPanel
             {preview}
@@ -1335,6 +1377,10 @@
   />
 {/if}
 
+
+{#if newMarkdownOpen && preview}
+  <NewMarkdownDialog taken={preview.project.resources?.files.map((f) => f.name) ?? []} error={newMarkdownError} onsubmit={addMarkdown} oncancel={() => (newMarkdownOpen = false)} />
+{/if}
 
 {#if newLanguageOpen && preview}
   <NewLanguageDialog

@@ -326,11 +326,20 @@ pub fn keys(project: &Project) -> Vec<KeyUse> {
     keys
 }
 
+/// The value of a key in a language: a text, or a file of the resources
+/// folder it points at (`gameRules resource "rules-nl.md"`), such as a
+/// Markdown file a markdown part shows or a picture an image shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Value {
+    Text(String),
+    Resource(String),
+}
+
 /// One line of a translation file: a key and its value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub key: String,
-    pub value: String,
+    pub value: Value,
     pub span: Span,
 }
 
@@ -367,9 +376,15 @@ pub fn parse(text: &str) -> (Translation, Vec<Diagnostic>) {
     for line in lines {
         match line.tokens.as_slice() {
             [key, value] if key.kind == TokenKind::Ident && value.kind == TokenKind::Str => {
-                translation.entries.push(Entry { key: key.text.clone(), value: value.text.clone(), span: line.span })
+                translation.entries.push(Entry { key: key.text.clone(), value: Value::Text(value.text.clone()), span: line.span })
             }
-            _ => diagnostics.push(Diagnostic::error("write a key and its text in quotes: saveCaption \"Save\"", line.span)),
+            [key, word, file] if key.kind == TokenKind::Ident && word.text == "resource" && file.kind == TokenKind::Str => {
+                translation.entries.push(Entry { key: key.text.clone(), value: Value::Resource(file.text.clone()), span: line.span })
+            }
+            _ => diagnostics.push(Diagnostic::error(
+                "write a key and its text in quotes, saveCaption \"Save\", or the resource it points at, gameRules resource \"rules.md\"",
+                line.span,
+            )),
         }
     }
     (translation, diagnostics)
@@ -416,15 +431,23 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             );
         }
         let mut map = BTreeMap::new();
+        let mut resources = BTreeMap::new();
         for entry in &translation.entries {
             if !crate::names::is_camel_case(&entry.key) {
                 found.push(Diagnostic::error(format!("key '{}' is not camelCase, as names are", entry.key), entry.span).in_file(path));
             }
-            if map.insert(entry.key.clone(), entry.value.clone()).is_some() {
+            let twice = match &entry.value {
+                Value::Text(text) => map.insert(entry.key.clone(), text.clone()).is_some() || resources.contains_key(&entry.key),
+                Value::Resource(file) => resources.insert(entry.key.clone(), file.clone()).is_some() || map.contains_key(&entry.key),
+            };
+            if twice {
                 found.push(Diagnostic::error(format!("key '{}' is in this file twice", entry.key), entry.span).in_file(path));
             }
         }
         project.translations.insert(named.clone(), map);
+        if !resources.is_empty() {
+            project.resource_keys.insert(named.clone(), resources);
+        }
         read.push((named, path.to_string(), translation));
     }
 
@@ -447,6 +470,10 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
         // slots that value has.
         for u in &shown.uses {
             let place = |d: Diagnostic| if u.path.is_empty() { d.in_file(&defaults.map(|(_, p, _)| p.clone()).unwrap_or_default()) } else { d.in_file(&u.path) };
+            // A key that points at a resource has its value: the resources check the file.
+            if project.resource_keys.get(&default).is_some_and(|r| r.contains_key(&u.key)) {
+                continue;
+            }
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 None => found.push(place(Diagnostic::error(format!("key '{}' has no value in {default}, the default language", u.key), u.span))),
                 Some(value) => {
@@ -477,14 +504,16 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
                 }
             }
             for entry in &translation.entries {
-                let Some(value) = values.get(&entry.key) else {
+                if !default_file.entries.iter().any(|e| e.key == entry.key) {
                     found.push(Diagnostic::error(format!("key '{}' is in {language} but not in {default}, the default language", entry.key), entry.span).in_file(path));
                     continue;
-                };
-                if entry.value.is_empty() {
+                }
+                // Slots are for texts, in both languages.
+                let (Some(value), Value::Text(text)) = (values.get(&entry.key), &entry.value) else { continue };
+                if text.is_empty() {
                     continue;
                 }
-                let (from, to) = (slots(value), slots(&entry.value));
+                let (from, to) = (slots(value), slots(text));
                 for slot in from.iter().filter(|s| !to.contains(s)) {
                     found.push(Diagnostic::error(format!("{} in {language} must keep the slot {{{slot}}}", entry.key), entry.span).in_file(path));
                 }
@@ -502,7 +531,15 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
 /// around it, a new key goes at the end. An empty value stays, as "": every
 /// language file has the same keys.
 pub fn set(existing: Option<&str>, language: &str, key: &str, value: &str) -> String {
-    let line = format!("    {key} {}", quote(value));
+    set_value(existing, language, key, &Value::Text(value.to_string()))
+}
+
+/// As `set`, for a text or a resource the key points at.
+pub fn set_value(existing: Option<&str>, language: &str, key: &str, value: &Value) -> String {
+    let line = match value {
+        Value::Text(text) => format!("    {key} {}", quote(text)),
+        Value::Resource(file) => format!("    {key} resource {}", quote(file)),
+    };
     let source = existing.map_or_else(|| format!("translation {language}\n"), str::to_string);
     let (parsed, _) = parse(&source);
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
@@ -521,7 +558,50 @@ pub fn set(existing: Option<&str>, language: &str, key: &str, value: &str) -> St
 pub struct TranslationRow {
     pub key: String,
     pub places: Vec<String>,
+    /// What kind of value the key takes, by the parts that show it.
+    pub takes: Takes,
+    /// Its text per language; none where a language leaves it empty or points it at a file.
     pub values: Vec<Option<String>>,
+    /// The file of the resources each language points it at, if any.
+    pub resources: Vec<Option<String>>,
+}
+
+/// What a key's value is in every language: a text, or a file of the
+/// resources, as the part that shows it needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Takes {
+    Text,
+    /// A Markdown file, for a markdown part.
+    Markdown,
+    /// A picture, for an image.
+    Picture,
+}
+
+/// What each key a markdown or an image shows takes; every other key takes text.
+fn takes(project: &Project) -> BTreeMap<String, Takes> {
+    fn walk(widgets: &[Widget], found: &mut BTreeMap<String, Takes>) {
+        for w in widgets {
+            let kind = match w.props.kind {
+                crate::widgets::WidgetKind::Markdown => Some(Takes::Markdown),
+                crate::widgets::WidgetKind::Image => Some(Takes::Picture),
+                _ => None,
+            };
+            if let (Some(kind), Some(key)) = (kind, w.props.caption.as_deref().and_then(key_of)) {
+                found.insert(key.to_string(), kind);
+            }
+            walk(&w.children, found);
+            for page in &w.pages {
+                walk(&page.children, found);
+            }
+        }
+    }
+    let mut found = BTreeMap::new();
+    for page in project.files.iter().flat_map(|f| &f.pages) {
+        walk(&page.widgets, &mut found);
+    }
+    found
 }
 
 /// Every key the project uses with its value per language, for i18n.
@@ -544,15 +624,18 @@ pub fn table(project: &Project) -> TranslationTable {
     if project.translations.contains_key(&default) {
         languages.insert(0, default.clone());
     }
+    let kinds = takes(project);
     let rows: Vec<TranslationRow> = keys(project)
         .into_iter()
         .map(|used| TranslationRow {
             values: languages.iter().map(|l| project.translations[l].get(&used.key).filter(|v| !v.is_empty()).cloned()).collect(),
+            resources: languages.iter().map(|l| project.resource_keys.get(l).and_then(|r| r.get(&used.key)).cloned()).collect(),
+            takes: kinds.get(&used.key).copied().unwrap_or(Takes::Text),
             key: used.key,
             places: used.places,
         })
         .collect();
-    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.values[i].is_none()).count()).collect();
+    let missing = (0..languages.len()).map(|i| rows.iter().filter(|r| r.values[i].is_none() && r.resources[i].is_none()).count()).collect();
     TranslationTable { default, languages, rows, missing }
 }
 

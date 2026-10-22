@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Colors the `markdown` part, and `resource` in a language file: a key that points at a file of the resources, `gameRules resource "rules-nl.md"`.
+
 ## 0.1.2
 
 - The README says to search for **Clarity Designer**, the extension's own name, in the Extensions view.

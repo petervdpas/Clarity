@@ -6,11 +6,10 @@ import type { ResourceFile } from "./ResourceFile";
  */
 export type Resources = { 
 /**
- * The files the application carries as they are, such as pictures, by name.
+ * Every file, by name, as the application carries it.
  */
 files: Array<ResourceFile>, 
 /**
- * The Markdown files, by name (`rules.md`), each by language: the
- * default language's from `rules.md`, Dutch from `rules.nl.md`.
+ * The text of each Markdown file, by name, for the renderers.
  */
-markdown: { [key in string]: { [key in string]: string } }, };
+markdown: { [key in string]: string }, };

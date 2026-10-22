@@ -1,12 +1,13 @@
 <script lang="ts">
-  // The project as one tree: the app, its windows, its data, its themes, its languages, its engines and
-  // the modules its files form.
+  // The project as one tree: the app, its windows, its data, its themes, its languages and resources,
+  // its engines and the modules its files form.
 
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import { projectEngines, engineNote } from "./engines";
   import { findApp } from "./frame";
   import { languageName } from "./translate";
+  import { resourceKind, resourceUses } from "./resources";
   import { tr } from "./model";
   import type { Selected } from "./selection";
 
@@ -23,6 +24,8 @@
     onnewtheme = null,
     onnewengine = null,
     onnewlanguage = null,
+    onnewmarkdown = null,
+    onaddpicture = null,
     onmenu = null,
   }: {
     preview: Preview;
@@ -42,6 +45,10 @@
     onnewengine?: (() => void) | null;
     /** Asks for a new language and writes its translation file; null where the tree only shows. */
     onnewlanguage?: (() => void) | null;
+    /** Asks for a new Markdown file of the resources; null where the tree only shows. */
+    onnewmarkdown?: (() => void) | null;
+    /** Picks a picture to copy into the resources; null where the tree only shows. */
+    onaddpicture?: (() => void) | null;
     /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
@@ -72,6 +79,9 @@
   /** The language the texts are written in, and those the project translates them to. */
   const written = $derived(preview.project.locale.language ?? "en");
   const languages = $derived(Object.keys(preview.project.translations).filter((l) => l !== written).toSorted());
+  /** The files of the resources folder, by name. */
+  const resources = $derived(preview.project.resources?.files.map((f) => f.name) ?? []);
+  const KIND_NOTE = { markdown: "Markdown", picture: "picture", file: "file" } as const;
 
   function fileName(path: string): string {
     return path.split(/[\\/]/).at(-1) ?? path;
@@ -175,6 +185,26 @@
       {/each}
       {#if onnewlanguage}
         <button class="row add" onclick={onnewlanguage}>+ New language</button>
+      {/if}
+    </details>
+
+    <!-- The files the application carries; keys point each language at one, parts show one by its source. -->
+    <details open={resources.length > 0}>
+      <summary>Resources <span class="count">{resources.length}</span></summary>
+      {#each resources as name (name)}
+        {@const uses = resourceUses(preview.project.resource_keys, name)}
+        <button class="row" class:current={is("resource", name)} title={uses.length > 0 ? uses.join("\n") : `resources/${name}`} onclick={() => onselect({ kind: "resource", name })}>
+          {name}
+          <span class="note">{KIND_NOTE[resourceKind(name)]}</span>
+        </button>
+      {:else}
+        <p class="empty">No resources yet: Markdown files and pictures the application carries.</p>
+      {/each}
+      {#if onnewmarkdown}
+        <button class="row add" onclick={onnewmarkdown}>+ New Markdown file</button>
+      {/if}
+      {#if onaddpicture}
+        <button class="row add" onclick={onaddpicture}>+ Add picture</button>
       {/if}
     </details>
 

@@ -13,7 +13,7 @@ import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
 import { scheme, themeChoice } from "./scheme.svelte";
 import { keepsItsDigits } from "./windowData";
-import { markdownIn } from "./markdownBlocks";
+import { keyResource } from "./resources";
 
 export type Row = { [field: string]: JsonValue };
 
@@ -52,10 +52,15 @@ export function textsOf(preview: Preview): Texts {
   return { values: preview.project.translations, picked: languageOf(preview), fallback: preview.project.locale.language ?? "en" };
 }
 
-/** Markdown file `name` of the project's resources, in the language texts show in. */
+/** The text of Markdown file `name` of the project's resources. */
 export function markdownOf(preview: Preview, name: string): string {
+  return preview.project.resources?.markdown[name] ?? "";
+}
+
+/** The resource file a key (`@gameRules`) points at in the language texts show in, if it points at one. */
+export function keyFile(preview: Preview, caption: string): string | undefined {
   const texts = textsOf(preview);
-  return markdownIn(preview.project.resources?.markdown, name, texts.picked ?? texts.fallback, texts.fallback);
+  return keyResource(preview.project.resource_keys, caption, texts.picked ?? texts.fallback, texts.fallback);
 }
 
 /** A text of the project as the person reads it: a key's value, or as written. */

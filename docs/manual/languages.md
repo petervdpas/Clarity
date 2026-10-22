@@ -94,6 +94,12 @@ The project tree lists the languages under i18n by name: first the default, then
 - **+ New language** asks for the language, such as `nl` or `fr-BE`, in a dialog; Clarity writes its file, `translations/nl.clarity`, with every key, and opens it.
 - **Language** on the Design and Preview ribbons shows the canvas and Preview in one of the project's languages, or the system's.
 
+## Keys that point at resources
+
+A markdown part or an image can show a file of the resources by a key, a file per language: `markdown @gameRules`. In each language the key's value is the file, written `gameRules resource "rules-nl.md"` in the language file. In a language's list, such a key has a choice of the resources of its kind (Markdown files for a markdown, pictures for an image) in place of a text. A new language starts it at the default language's file.
+
+Resources sits under i18n in the project tree: every file of the `resources` folder. Click one to open it: a Markdown file to write, with how it reads beside it (**Save**, or Ctrl+S), or a picture. Each says which keys point at it. **+ New Markdown file** asks for a name and writes `resources/<name>.md`; **+ Add picture** copies a picture you pick into the folder. A markdown or image part names its file in the properties: **Source** for one file in every language, **Key** for a file per language.
+
 ## Which language shows
 
 The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else another region of Dutch, else the default language.

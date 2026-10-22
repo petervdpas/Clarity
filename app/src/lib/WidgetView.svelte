@@ -20,7 +20,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, markdownOf, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, keyFile, markdownOf, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
@@ -331,7 +331,13 @@
     {:else if p.kind === "text"}
       <span class="text-value" class:lines={p.height > 1} {id}>{bound ? displayValue(preview, bound.field, value) : ""}</span>
     {:else if p.kind === "markdown"}
-      <MarkdownView {id} text={p.source ? markdownOf(preview, p.source) : typeof value === "string" ? value : ""} onlink={openLink} />
+      <!-- A file of the resources; a key's file in the language shown (a generated application has it as the key's text); or what it binds. -->
+      {@const keyed = p.caption ? keyFile(preview, p.caption) : undefined}
+      <MarkdownView
+        {id}
+        text={p.source ? markdownOf(preview, p.source) : keyed ? markdownOf(preview, keyed) : p.caption ? tr(preview, p.caption) : typeof value === "string" ? value : ""}
+        onlink={openLink}
+      />
     {:else if p.kind === "display"}
       <SegmentDisplay {id} value={bound ? value : null} digits={p.digits ?? DEFAULT_DIGITS} />
     {:else if p.kind === "textbox" || p.kind === "password" || p.kind === "memo"}
@@ -545,13 +551,14 @@
         {/if}
       </div>
     {:else if p.kind === "image"}
-      {@const picture = p.source ? pictureUrl(p.source) : null}
+      {@const named = p.source ?? (p.caption ? (keyFile(preview, p.caption) ?? tr(preview, p.caption)) : null)}
+      {@const picture = named ? pictureUrl(named) : null}
       {#if picture}
         <img class="picture" src={picture} alt={p.tooltip ? tr(preview, p.tooltip) : ""} />
       {:else}
         <div class="placeholder image">
           <span>Image</span>
-          <code>{p.source ?? "no source"}</code>
+          <code>{named ?? "no source"}</code>
         </div>
       {/if}
     {:else if p.kind === "canvas" && partState?.drawing}

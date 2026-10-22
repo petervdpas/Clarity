@@ -718,10 +718,12 @@ impl<'a> Window<'a> {
             // Markdown, drawn by the runtime: a file of the resources folder in
             // the language shown, or a text it binds.
             WidgetKind::Markdown => {
-                let content = match (p.source.as_deref(), bound.as_deref()) {
-                    (Some(source), _) => format!(" Source=\"{}\"", attr(source)),
-                    (None, Some(path)) => format!(" Markdown=\"{{Binding {path}}}\""),
-                    (None, None) => String::new(),
+                let content = match (p.source.as_deref(), bound.as_deref(), p.caption.as_deref()) {
+                    (Some(source), _, _) => format!(" Source=\"{}\"", attr(source)),
+                    (None, Some(path), _) => format!(" Markdown=\"{{Binding {path}}}\""),
+                    // A key: the Markdown of the file it points at in the language shown, through the texts.
+                    (None, None, Some(key)) => format!(" Markdown=\"{}\"", self.text(key)),
+                    (None, None, None) => String::new(),
                 };
                 let _ = writeln!(out, "{pad}<c:MarkdownView {at}{content}{plain_state}{extra} />");
             }
@@ -917,6 +919,15 @@ impl<'a> Window<'a> {
                     empty = self.text("@noPicture"),
                     load = self.text("@loadPicture"),
                     remove = self.text("@removePicture"),
+                );
+            }
+            // A key: the picture it points at in the language shown, by its name in the texts.
+            WidgetKind::Image if p.source.is_none() && p.bind.is_none() && p.caption.is_some() => {
+                let key = self.text(p.caption.as_deref().unwrap_or_default());
+                let named = key.trim_start_matches('{').trim_end_matches('}');
+                let _ = writeln!(
+                    out,
+                    "{pad}<Image {at} Source=\"{{Binding Source={{{named}}}, Converter={{x:Static local:Shown.Picture}}}}\" Stretch=\"Uniform\"{plain_state}{extra} />"
                 );
             }
             WidgetKind::Image if p.source.is_some() => {

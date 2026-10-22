@@ -1,10 +1,12 @@
 //! The resources of a project: the files of its `resources` folder, which
 //! every generated application carries. Pictures (X2), shown by
 //! `image source "logo.png"`, and Markdown files, shown by
-//! `markdown source "rules.md"`, one file per language: `rules.md` in the
-//! default language, `rules.nl.md` in Dutch.
+//! `markdown source "rules.md"`. A key can point each language at a
+//! resource of its own (`gameRules resource "rules-nl.md"`), which
+//! `markdown @gameRules` and `image @bannerPicture` show.
 
 use clarity_spec::resources::{self, ResourceFile};
+use clarity_spec::translations::Value;
 use clarity_spec::{Project, Severity, load_sources};
 
 const HOME: &str = "module shop
@@ -75,45 +77,95 @@ page Home: window
     markdown name rulesText at 1,1 span 6 rows 8 source \"rules.md\"
 ";
 
-/// The project's languages, as its translation files give them: English by default, and Dutch.
-fn in_languages(source: &str, files: Vec<ResourceFile>) -> Project {
+/// The project's languages: English by default, and Dutch, with the values its language files give.
+fn in_languages(source: &str, files: Vec<ResourceFile>, values: &[(&str, &str, Value)]) -> Project {
     let mut project = load_sources([("shop.clarity", source)]);
     project.translations.insert("en".into(), Default::default());
     project.translations.insert("nl".into(), Default::default());
+    for (language, key, value) in values {
+        match value {
+            Value::Text(text) => {
+                project.translations.get_mut(*language).unwrap().insert(key.to_string(), text.clone());
+            }
+            Value::Resource(file) => {
+                project.resource_keys.entry(language.to_string()).or_default().insert(key.to_string(), file.clone());
+            }
+        }
+    }
     resources::attach(&mut project, files);
     project
 }
 
 #[test]
-fn a_markdown_document_has_a_file_per_language() {
-    let project = in_languages(RULES, vec![text("rules.md", "# Rules\n"), text("rules.nl.md", "# Regels\n"), text("logo.png", "")]);
+fn a_markdown_file_is_a_resource_like_any_other() {
+    let project = in_languages(RULES, vec![text("rules.md", "# Rules\n"), text("logo.png", "")], &[]);
     assert_eq!(errors(&project), Vec::<String>::new());
-    // By name, then by language; the Markdown files are not among the files carried as they are.
-    let rules = &project.resources.as_ref().unwrap().markdown["rules.md"];
-    assert_eq!((rules["en"].as_str(), rules["nl"].as_str()), ("# Rules\n", "# Regels\n"));
-    assert_eq!(project.resources.as_ref().unwrap().files.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["logo.png"]);
+    let resources = project.resources.as_ref().unwrap();
+    assert_eq!(resources.markdown["rules.md"], "# Rules\n");
+    // Every file is carried, the Markdown files too; names are only names.
+    assert_eq!(resources.files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["logo.png", "rules.md"]);
 }
 
 #[test]
-fn a_markdown_document_is_checked_like_a_picture() {
-    let missing = in_languages(RULES, vec![text("help.md", "x"), text("help.nl.md", "x")]);
+fn a_markdown_source_is_checked_like_a_picture() {
+    let missing = in_languages(RULES, vec![text("help.md", "x")], &[]);
     assert_eq!(errors(&missing), ["markdown 'rules.md' is not in the resources folder; it has help.md"]);
-    let none = in_languages(RULES, vec![]);
+    let none = in_languages(RULES, vec![], &[]);
     assert_eq!(errors(&none), ["markdown 'rules.md' is not in the resources folder, which has no Markdown files yet"]);
-    let not_markdown = in_languages(&RULES.replace("rules.md", "rules.txt"), vec![]);
+    let not_markdown = in_languages(&RULES.replace("rules.md", "rules.txt"), vec![], &[]);
     assert_eq!(errors(&not_markdown), ["'rules.txt' is not a Markdown file; use a .md file"]);
-    // Every language has its own file, as every language file has every key.
-    let untranslated = in_languages(RULES, vec![text("rules.md", "# Rules")]);
-    assert_eq!(errors(&untranslated), ["markdown 'rules.md' has no nl file; add resources/rules.nl.md, as every language has each Markdown file"]);
 }
 
+const BY_KEY: &str = "module shop
+
+page Home: window
+    markdown @gameRules name rulesText at 1,1 span 6 rows 8
+    image @bannerPicture name banner at 1,9 span 6 rows 2
+    label @saveCaption name saveLabel at 1,11 span 2
+";
+
+/// A key can point at a resource per language: which file each language
+/// shows is up to its language file.
 #[test]
-fn a_markdown_part_shows_a_file_or_a_text_it_binds_never_a_key() {
-    let key = in_languages(&RULES.replace("markdown name", "markdown @rules name"), vec![text("rules.md", "x"), text("rules.nl.md", "x")]);
-    assert!(errors(&key).iter().any(|e| e == "a markdown shows a Markdown file of the resources folder (source \"rules.md\") or a text it binds, not a key"), "{:#?}", errors(&key));
-    let both = RULES.replace("page Home: window\n", "page Home: window\n    data rules: text\n").replace("source \"rules.md\"", "source \"rules.md\" bind rules");
-    let both = in_languages(&both, vec![text("rules.md", "x"), text("rules.nl.md", "x")]);
-    assert!(errors(&both).iter().any(|e| e == "a markdown shows a Markdown file (source) or a text it binds, not both"), "{:#?}", errors(&both));
+fn a_key_points_each_language_at_a_resource() {
+    let files = || vec![text("rules-en.md", "# Rules"), text("rules-nl.md", "# Regels"), file("banner-en.png"), file("banner-nl.png")];
+    let values = [
+        ("en", "gameRules", Value::Resource("rules-en.md".into())),
+        ("nl", "gameRules", Value::Resource("rules-nl.md".into())),
+        ("en", "bannerPicture", Value::Resource("banner-en.png".into())),
+        ("nl", "bannerPicture", Value::Resource("banner-nl.png".into())),
+        ("en", "saveCaption", Value::Text("Save".into())),
+        ("nl", "saveCaption", Value::Text("Opslaan".into())),
+    ];
+    assert_eq!(errors(&in_languages(BY_KEY, files(), &values)), Vec::<String>::new());
+    // An image shown by its key has what it shows.
+    let warnings: Vec<String> = in_languages(BY_KEY, files(), &values).diagnostics.iter().filter(|d| d.severity == Severity::Warning).map(|d| d.message.clone()).collect();
+    assert_eq!(warnings, Vec::<String>::new());
+
+    // A markdown's key points at a Markdown file in every language, and an image's at a picture: never a text.
+    let mut text_rules = values.clone();
+    text_rules[1] = ("nl", "gameRules", Value::Text("# Regels".into()));
+    assert_eq!(
+        errors(&in_languages(BY_KEY, files(), &text_rules)),
+        ["@gameRules is a text in nl; a markdown shows a Markdown file: point the key at one, as gameRules resource \"rules.md\""]
+    );
+    let mut wrong = values.clone();
+    wrong[1] = ("nl", "gameRules", Value::Resource("banner-nl.png".into()));
+    wrong[3] = ("nl", "bannerPicture", Value::Text("Banner".into()));
+    assert_eq!(
+        errors(&in_languages(BY_KEY, files(), &wrong)),
+        [
+            "@gameRules points at banner-nl.png in nl; a markdown shows a Markdown file",
+            "@bannerPicture is a text in nl; an image shows a picture: point the key at one, as bannerPicture resource \"logo.png\"",
+        ]
+    );
+    let mut gone = values.clone();
+    gone[1] = ("nl", "gameRules", Value::Resource("regels.md".into()));
+    assert_eq!(errors(&in_languages(BY_KEY, files(), &gone)), ["@gameRules points at regels.md in nl, which is not in the resources folder"]);
+    // A part that shows text cannot show a file.
+    let mut label = values.clone();
+    label[5] = ("nl", "saveCaption", Value::Resource("rules-nl.md".into()));
+    assert_eq!(errors(&in_languages(BY_KEY, files(), &label)), ["@saveCaption points at rules-nl.md in nl; a label shows text"]);
 }
 
 #[test]
@@ -129,6 +181,7 @@ fn a_project_folder_brings_its_resources() {
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(errors(&project), Vec::<String>::new());
     let resources = project.resources.unwrap();
-    assert_eq!(resources.files, vec![ResourceFile { name: "logo.png".into(), bytes: vec![1, 2, 3] }]);
-    assert_eq!(resources.markdown["notes.md"].values().collect::<Vec<_>>(), ["Notes"]);
+    assert_eq!(resources.files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["logo.png", "notes.md"]);
+    assert_eq!(resources.files[0], ResourceFile { name: "logo.png".into(), bytes: vec![1, 2, 3] });
+    assert_eq!(resources.markdown["notes.md"], "Notes");
 }

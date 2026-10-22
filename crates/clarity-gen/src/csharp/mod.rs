@@ -131,7 +131,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text(&themes::theme_path(theme), themes::theme_axaml(theme, &styles)));
     }
     files.push(text("AppThemes.cs", themes::app_themes(&offered, &name)));
-    files.extend(crate::web::resource_files(project, "resources", true));
+    files.extend(crate::web::resource_files(project, "resources"));
     files.push(text("App.axaml", APP_AXAML.replace("{namespace}", &name).replace("    <!-- {styles} -->\n", &themes::style_classes(&styles))));
     Ok(files)
 }
@@ -437,6 +437,9 @@ fn shown_cs(project: &Project, name: &str) -> String {
     }
     format!(
         "{HEADER}
+using Avalonia.Data.Converters;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Clarity.Avalonia;
 using Clarity.Runtime;
 
@@ -450,6 +453,10 @@ public static class Shown
     {{
 {arms}        _ => null,
     }});
+
+    /// <summary>A picture of the resources by its name, as a key gives it in the language shown.</summary>
+    public static readonly IValueConverter Picture = new FuncValueConverter<string?, Bitmap?>(name =>
+        string.IsNullOrEmpty(name) ? null : new Bitmap(AssetLoader.Open(new Uri($\"avares://{{typeof(Shown).Assembly.GetName().Name}}/resources/{{name}}\"))));
 {shown}}}
 
 /// <summary>How number inputs show their value and read what is typed: the field's kind and format.</summary>

@@ -20,6 +20,11 @@ locale: Locale,
  */
 translations: { [key in string]: { [key in string]: string } }, 
 /**
+ * The keys whose value in a language is a file of the resources folder
+ * (`gameRules resource "rules-nl.md"`), per language: the file's name.
+ */
+resource_keys: { [key in string]: { [key in string]: string } }, 
+/**
  * The themes the application offers, the first being the one it starts
  * with; empty when the project file names none (design section 1.5, T1).
  */

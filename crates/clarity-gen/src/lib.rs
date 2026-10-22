@@ -271,11 +271,27 @@ pub struct OutFile {
 
 /// The files of the application, sorted by path; or why it cannot be
 /// generated.
+/// The project with each key that points at a resource made a text in every
+/// language: the Markdown of its file, or the name of its picture. Every
+/// stack shows a key's value through its texts, so this one way covers them.
+pub fn with_resource_texts(project: &Project) -> Project {
+    let mut project = project.clone();
+    let markdown = project.resources.as_ref().map(|r| r.markdown.clone()).unwrap_or_default();
+    for (language, keys) in &project.resource_keys {
+        let texts = project.translations.entry(language.clone()).or_default();
+        for (key, file) in keys {
+            texts.insert(key.clone(), markdown.get(file).cloned().unwrap_or_else(|| file.clone()));
+        }
+    }
+    project
+}
+
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
     check_stores(project, settings)?;
+    let project = &with_resource_texts(project);
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,

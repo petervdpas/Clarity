@@ -84,6 +84,15 @@ fn a_language_file_is_keys_and_texts() {
     has(source, "\"Opslaan\"", PieceKind::Text);
 }
 
+/// A key that points at a resource: `resource` is a word of the language.
+#[test]
+fn a_resource_value_in_a_language_file() {
+    let source = "translation nl\n    gameRules resource \"rules-nl.md\"\n";
+    has(source, "gameRules", PieceKind::Key);
+    has(source, "resource", PieceKind::Keyword);
+    has(source, "\"rules-nl.md\"", PieceKind::Text);
+}
+
 #[test]
 fn columns_count_as_the_editor_counts_them() {
     // UTF-16, as JavaScript counts: the é before the key is one unit.

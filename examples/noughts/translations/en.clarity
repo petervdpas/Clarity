@@ -16,3 +16,4 @@ translation en
     newGameCaption "New game"
     yes "Yes"
     no "No"
+    gameRules resource "rules-en.md"

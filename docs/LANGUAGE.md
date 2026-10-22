@@ -115,14 +115,20 @@ translation nl
 - The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, else the default. The designer can show the canvas and Preview in any of the project's languages.
 - A project written before texts had keys gets them with **Make texts keys**, or `clarity spec keys <folder>`: each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value, and old translation files give the same keys their translations.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
+- A key's value can point at a file of the resources instead of being a text: `gameRules resource "rules-nl.md"`. A markdown part (`markdown @gameRules`) or an image (`image @bannerPicture`) shows by its key the file each language points it at; see [Resources](#resources). Such a key points at a file in every language: a markdown's at a Markdown file, an image's at a picture. A part that shows text cannot use a key that points at a file. A new language starts each such key at the default language's file.
 
 ### Resources
 
-The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, and its Markdown files, such as the rules of a game. Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the resources as they are in the folder, and shows them again when the folder changes.
+The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, and its Markdown files, such as the rules of a game. Each is a file with a name of its own; how they are named is up to the project (`rules-en.md`, `rules-nl.md`). A part shows one in two ways:
+
+- By its `source`, the same file in every language: `image source "logo.png"`, `markdown source "license.md"`.
+- By a key, a file per language: the part names the key (`markdown @gameRules`), and each language file points the key at the file that language shows (`gameRules resource "rules-nl.md"`).
+
+Every generated application carries the folder: next to the renderer on the web stacks, as embedded resources on Avalonia. The designer shows the resources as they are in the folder, and shows them again when the folder changes.
 
 #### Pictures
 
-An image part shows a picture by its file name:
+An image part shows a picture by its file name, or the picture its key points each language at (`image @bannerPicture`, with `bannerPicture resource "banner-nl.png"` in the Dutch file):
 
 ```clarity
 // records/resources/logo.png
@@ -136,16 +142,20 @@ page AlbumBrowse: window
 
 #### Markdown
 
-A markdown part shows a Markdown file by its name, in the language the application shows:
+A markdown part shows a Markdown file of the resources, a file per language through a key:
 
 ```clarity
-// noughts/resources/rules.md, and rules.nl.md in Dutch
+// noughts/resources/rules-en.md and rules-nl.md
 sidebar left name help width 320 grid 1 columns
-    markdown name rulesText at 1,1 span 1 rows 12 source "rules.md"
+    markdown @gameRules name rulesText at 1,1 span 1 rows 12
+
+// noughts/translations/nl.clarity
+translation nl
+    gameRules resource "rules-nl.md"
 ```
 
-- `rules.md` is the default language's; each other language of the project has its own file beside it, `rules.nl.md` for Dutch. A language without its file is an error, as every language file has every key.
-- A markdown part can show a text instead, `bind notes`, of a field or a plain value of the window. It never shows a key: long texts belong in the resources, not in the language files.
+- `markdown source "license.md"` shows one file in every language; `markdown @gameRules` the file each language points the key at. The key's value is a Markdown file in every language, never a text: long texts belong in the resources, not in the language files.
+- A markdown part can show a text instead, `bind notes`, of a field or a plain value of the window. It shows one of the three: a key, a source or what it binds.
 - Every stack reads the same Markdown: headings (`#` to `######`), paragraphs, bullet and numbered items (indented two spaces per level), `**bold**`, `*italic*`, `` `code` ``, code blocks between three backticks, and links `[text](https://...)`. HTML is text. `conformance/markdown.json` gives each case.
 - A link opens in the person's browser when it is an `http`, `https` or `mailto` address; with any other address only its text shows.
 - The part wraps its text and scrolls when it is longer than the part.
@@ -513,7 +523,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `help` | nothing | `for input` | none |
 | `heading` | nothing | none | none |
 | `text` | a field of any type: `bind customer.name` | none | none |
-| `markdown` | a Markdown file of the resources folder, `source "rules.md"`, or a text: `bind notes` | `source "file"` | none |
+| `markdown` | a key whose value is a Markdown file per language, `@gameRules`; a file of the resources, `source "license.md"`; or a text, `bind notes` | `source "file"` | none |
 
 **Input**
 

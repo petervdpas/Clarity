@@ -15,7 +15,7 @@ For every part, its own properties, events and binding rules are in [the languag
 - `label`: a caption for an input; `for name` ties it to the input, and clicking it focuses that input. No events.
 - `help`: a help text for an input; without a caption it shows the field's `help`, and it shows the error a handler sets.
 - `heading`: a heading.
-- `markdown`: shows Markdown with its headings, lists, bold, italics, code and links, wrapped, scrolling when it is longer than the part. Its text is a Markdown file of the project's `resources` folder, `source "rules.md"`, with one file per language (`rules.nl.md` for Dutch), or a text it binds, `bind notes`. A link to an `http`, `https` or `mailto` address opens in the browser. No events.
+- `markdown`: shows Markdown with its headings, lists, bold, italics, code and links, wrapped, scrolling when it is longer than the part. Its text is a Markdown file of the project's `resources` folder: one for every language with **Source** (`source "license.md"`), or a file per language with **Key** (`markdown @gameRules`, each language file pointing the key at its file, as `gameRules resource "rules-nl.md"`, under i18n). It can also show a text it binds, `bind notes`. A link to an `http`, `https` or `mailto` address opens in the browser. No events.
 - `text`: shows the value of a field of any type, `bind customer.name`, or a plain value of the window, `bind shown`. On one row it is one line, cut short when it is too long. Over several rows (`rows 6`) it is text to read: it wraps from the top, keeps its paragraphs (`\n\n` in a translation), and scrolls when it is longer than its rows.
 
 ## Basic input
@@ -41,7 +41,7 @@ For every part, its own properties, events and binding rules are in [the languag
 
 ## Graphics
 
-- `image`: binds to an `image` field, or shows a fixed picture of the project's `resources` folder with `source "logo.png"`. Event: `click`. See [Pictures and files](data.pictures-files.md).
+- `image`: binds to an `image` field, shows a fixed picture of the project's `resources` folder with `source "logo.png"`, or a picture per language through its key (`image @bannerPicture`). Event: `click`. See [Pictures and files](data.pictures-files.md).
 - `display`: shows a number in seven-segment digits, as on a calculator, with its dark segments faint: `display name screen at 1,1 span 4 rows 2 bind shown digits 12`. It binds to an integer, decimal or money (a field or a plain value of the window). A value is rounded half away from zero to fit its digits (12 without `digits n`), and shows `E` when its whole part does not fit. Its style gives its colors: `background` behind the digits, `text` for the lit segments.
 - `canvas`: free graphics, drawn by its draw handler (`on draw: drawDial`) in its own units (`units 200 x 100`, 100 x 100 without it): lines, rectangles, circles, rings and text in the theme's colors. The handler runs when the window opens and after every other handler, so the drawing follows the data; see [Handlers](code.handlers.md). With `on click: handler` it can be clicked, and the handler reads where. Without a draw handler it shows as a placeholder.
 

@@ -53,14 +53,17 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// <summary>
     /// Runs a handler; a refusal or another failure is shown as an error message.
     /// What it asks of windows happens when it is done, on every stack alike:
-    /// this window closes first, then the windows it opened open.
+    /// this window closes first, then the windows it opened open. False when
+    /// it refused or failed, so a wizard keeps its step.
     /// </summary>
-    public void Handle(Action handler)
+    public bool Handle(Action handler)
     {
         running++;
+        var ran = false;
         try
         {
             handler();
+            ran = true;
             // The canvases show what the handler left, drawn anew.
             if (running == 1)
                 Redraw();
@@ -78,7 +81,7 @@ public abstract class WindowViewModel(Db db) : ObservableObject
             running--;
         }
         if (running > 0)
-            return;
+            return ran;
         var close = closing;
         var open = opening.ToList();
         var asks = asking.ToList();
@@ -92,6 +95,7 @@ public abstract class WindowViewModel(Db db) : ObservableObject
         // The questions it asked, after what changed is on screen.
         foreach (var question in asks)
             AskRequested?.Invoke(question);
+        return ran;
     }
 
     /// <summary>

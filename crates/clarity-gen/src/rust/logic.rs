@@ -586,6 +586,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => "collapsed",
             "maximized" => "maximized",
             "tab" => "tab",
+            "step" => "step",
             "selected" => "selected",
             "x" => "x",
             "y" => "y",

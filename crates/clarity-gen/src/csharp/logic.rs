@@ -217,6 +217,7 @@ fn part_property(property: &str) -> Option<&'static str> {
         "collapsed" => "IsCollapsed",
         "maximized" => "IsMaximized",
         "tab" => "Tab",
+        "step" => "Step",
         "caption" => "Caption",
         "text" => "Text",
         "checked" => "IsChecked",

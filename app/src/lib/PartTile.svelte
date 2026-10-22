@@ -89,6 +89,14 @@
       <rect x="4" y="3" width="12" height="6" rx="1" class="fill" />
       <rect x="17" y="3" width="12" height="6" rx="1" />
       <rect x="4" y="9" width="40" height="16" rx="1" />
+    {:else if kind === "steps"}
+      <circle cx="10" cy="6" r="3" class="fill" />
+      <line x1="13" y1="6" x2="21" y2="6" />
+      <circle cx="24" cy="6" r="3" />
+      <line x1="27" y1="6" x2="35" y2="6" />
+      <circle cx="38" cy="6" r="3" />
+      <rect x="4" y="11" width="40" height="9" rx="1" />
+      <rect x="32" y="21.5" width="12" height="4" rx="1" class="fill" />
     {:else if kind === "splitter"}
       <rect x="4" y="3" width="40" height="22" rx="2" />
       <line x1="22" y1="3" x2="22" y2="25" />

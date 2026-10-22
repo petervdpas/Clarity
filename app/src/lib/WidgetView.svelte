@@ -1,5 +1,6 @@
 <script lang="ts">
   import { isFolded } from "./folding";
+  import { goBack, goNext, shownStep, stepButtons, type StepButton, type StepPlace } from "./steps";
   import { untrack } from "svelte";
   import DateTimeInput from "./ui/DateTimeInput.svelte";
   import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
@@ -185,11 +186,32 @@
     else if (live && p.name && !design) live.setText(p.name, next);
   }
 
-  /** Runs the handler wired to `event`, in a running application. */
-  function fire(event: PartEvent) {
+  /** Runs the handler wired to `event`, in a running application; false when it refused. */
+  function fire(event: PartEvent): Promise<boolean> {
     // The handler as written, with the values it runs with: `digit(7)`.
     const call = wiredCall(p.handlers, event);
-    if (live && call !== null && !design) live.event(p.name ?? "", event, call);
+    if (live && call !== null && !design) return live.event(p.name ?? "", event, call);
+    return Promise.resolve(true);
+  }
+
+  // A wizard: the step its part's state is on, or in the designer the step picked.
+  let stepHere = $state(1);
+  const stepPlace: StepPlace = {
+    get: () => (live && p.name ? live.parts[p.name]?.step : stepHere),
+    set: (step) => {
+      if (live && p.name) live.setStep(p.name, step);
+      else stepHere = step;
+    },
+  };
+  const shownStepIndex = $derived(design ? activeTab : shownStep(live && p.name ? partState?.step : stepHere, widget.pages.length) - 1);
+  const buttonsOfStep = $derived(stepButtons(shownStepIndex + 1, widget.pages.length));
+
+  function pressStep(button: StepButton) {
+    if (design) return;
+    const count = widget.pages.length;
+    if (button === "back") goBack(stepPlace, count);
+    else if (button === "next") void goNext(stepPlace, count, wiredCall(p.handlers, "next") !== null ? () => fire("next") : undefined);
+    else void fire("finish");
   }
 
   function click() {
@@ -504,6 +526,39 @@
           </div>
         {/if}
       </div>
+    {:else if p.kind === "steps"}
+      <div class="steps">
+        <div class="step-titles">
+          {#each widget.pages as step, index (step.span.start)}
+            {#if design}
+              <button
+                class="step-title"
+                class:current={index === shownStepIndex}
+                class:selected={pageDesigner.selected === step.span.start}
+                data-tab-switch="{offset}:{index}"
+                onpointerdown={(e) => pressTab(e, index, step.span.start)}>{step.title ? tr(preview, step.title) : step.title}</button
+              >
+            {:else}
+              <span class="step-title" class:current={index === shownStepIndex} class:done={index < shownStepIndex} aria-current={index === shownStepIndex ? "step" : undefined}
+                >{step.title ? tr(preview, step.title) : step.title}</span
+              >
+            {/if}
+          {/each}
+        </div>
+        {#if widget.pages[shownStepIndex]}
+          {@const step = widget.pages[shownStepIndex]}
+          <div class="step-page">
+            <GridBox {preview} {page} {data} {design} widgets={step.children} columns={p.width} container={step.span.start} {onnavigate} />
+          </div>
+        {/if}
+        <div class="step-buttons">
+          {#each buttonsOfStep as button (button)}
+            <button type="button" {disabled} onclick={() => pressStep(button)}
+              >{ownWord(preview, button === "back" ? "Back" : button === "next" ? "Next" : "Finish")}</button
+            >
+          {/each}
+        </div>
+      </div>
     {:else if p.kind === "splitter"}
       <div class="splitter {p.orientation ?? 'horizontal'}">
         {#each widget.pages as pane, index (pane.span.start)}
@@ -783,6 +838,7 @@
   .memo > .content,
   .panel > .content,
   .tabs > .content,
+  .steps > .content,
   .splitter > .content,
   .table > .content,
   .list > .content,
@@ -917,6 +973,53 @@
   .tab-strip button.selected {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  .steps {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--padding) * 2);
+    min-width: 0;
+  }
+
+  .step-titles {
+    display: flex;
+    gap: calc(var(--padding) * 3);
+    border-bottom: var(--border-width) solid var(--border-strong);
+    padding-bottom: var(--padding);
+  }
+
+  .step-title {
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .step-title.done {
+    color: var(--text);
+  }
+
+  .step-title.current {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .step-title.selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .step-page {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .step-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--padding);
   }
 
   .tab-page {

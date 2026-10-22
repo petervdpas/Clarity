@@ -37,6 +37,8 @@ struct PartState {
     std::optional<bool> maximized;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     std::optional<int64_t> tab;
+    /// The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json).
+    std::optional<int64_t> step;
     /// What an unbound text input holds; the screen sends it with each event.
     std::optional<std::string> text;
     /// Whether an unbound checkbox or switch is on.
@@ -170,6 +172,9 @@ public:
     /// The open tab of a ribbon, counted from 1.
     int64_t tab(const std::string& part) const;
     void set_tab(const std::string& part, int64_t value) { parts_[part].tab = value; }
+    /// The step a wizard is on, counted from 1.
+    int64_t step(const std::string& part) const;
+    void set_step(const std::string& part, int64_t value) { parts_[part].step = value; }
     /// The text of an unbound text input.
     std::string text(const std::string& part) const;
     void set_text(const std::string& part, std::string value) { parts_[part].text = std::move(value); }

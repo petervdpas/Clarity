@@ -768,7 +768,7 @@ impl<'a> Emitter<'a> {
             StmtKind::Assign { target, value } => {
                 if let Some((part, property)) = self.part_property(target) {
                     let function = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" => format!("clarity_ui_set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" => format!("clarity_ui_set_{property}"),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
                             return;
@@ -1341,6 +1341,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => format!("clarity_ui_collapsed(ui, {quoted}, {})", info.collapsed),
             "maximized" => format!("clarity_ui_maximized(ui, {quoted})"),
             "tab" => format!("clarity_ui_tab(ui, {quoted})"),
+            "step" => format!("clarity_ui_step(ui, {quoted})"),
             "selected" => {
                 let found = info.bind.and_then(|bind| self.window.and_then(|w| w.data.iter().find(|(n, _, _)| *n == bind)).cloned());
                 match found {

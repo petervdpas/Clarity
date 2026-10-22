@@ -280,6 +280,10 @@ pub struct PartState {
     /// (conformance/ribbons.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab: Option<i64>,
+    /// The step a wizard (a `steps` part) is on, counted from 1; none is
+    /// the first (conformance/steps.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<i64>,
     /// What an unbound text input holds; the screen sends it with each
     /// event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -554,6 +558,15 @@ impl Ui {
 
     pub fn set_tab(&mut self, part: &str, value: i64) {
         self.parts.entry(part.to_string()).or_default().tab = Some(value);
+    }
+
+    /// The step a wizard is on, counted from 1.
+    pub fn step(&self, part: &str) -> i64 {
+        self.parts.get(part).and_then(|p| p.step).unwrap_or(1)
+    }
+
+    pub fn set_step(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().step = Some(value);
     }
 
     /// The text of an unbound text input.

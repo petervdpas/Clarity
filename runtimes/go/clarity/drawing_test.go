@@ -196,6 +196,45 @@ func TestASidebarIsCollapsedAndMaximizedAsEveryRuntimeSays(t *testing.T) {
 	}
 }
 
+func TestAWizardsStepIsAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/steps.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Step []struct {
+			Part json.RawMessage `json:"part"`
+			Step int64           `json:"step"`
+		} `json:"step"`
+		Set []struct {
+			Step int64           `json:"step"`
+			Part json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Step) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Step {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"wizard": part}})
+		if got := ui.Step("wizard"); got != c.Step {
+			t.Errorf("%s: %d, want %d", c.Part, got, c.Step)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		ui.SetStep("wizard", c.Step)
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["wizard"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("sends %s, want %s", got, c.Part)
+		}
+	}
+}
+
 func TestARibbonsOpenTabIsAsEveryRuntimeSays(t *testing.T) {
 	text, err := os.ReadFile("../../../conformance/ribbons.json")
 	if err != nil {

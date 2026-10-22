@@ -36,6 +36,8 @@ pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok
 
 /// What an image part bound to a picture shows of its own, by key: in its
 /// empty state, and on its buttons to load a picture and to remove it.
+/// Clarity's words on the buttons of a wizard, the `steps` part.
+pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("finish", "Finish")];
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -316,7 +318,8 @@ fn shown(project: &Project) -> Shown {
     let bound_picture = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
-    let own = RENDERER_KEYS.iter().chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] });
+    let wizard = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
+    let own = RENDERER_KEYS.iter().chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] }).chain(if wizard { STEP_KEYS.as_slice() } else { &[] });
     for (key, _) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: None });
     }
@@ -488,7 +491,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
-                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
                     found.push(place(Diagnostic::warning(
                         format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
                         u.span,

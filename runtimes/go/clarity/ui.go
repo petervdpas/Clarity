@@ -32,6 +32,9 @@ type PartState struct {
 	// Tab is the open tab of a ribbon, counted from 1; nil is the first
 	// (conformance/ribbons.json).
 	Tab *int64 `json:"tab,omitempty"`
+	// Step is the step a wizard (a steps part) is on, counted from 1; nil is
+	// the first (conformance/steps.json).
+	Step *int64 `json:"step,omitempty"`
 	// Text is what an unbound text input holds; the screen sends it with each event.
 	Text *string `json:"text,omitempty"`
 	// Checked is whether an unbound checkbox or switch is on.
@@ -294,6 +297,18 @@ func (u *Ui) Tab(part string) int64 {
 
 func (u *Ui) SetTab(part string, value int64) {
 	u.part(part, func(p *PartState) { p.Tab = &value })
+}
+
+// Step is the step a wizard is on, counted from 1.
+func (u *Ui) Step(part string) int64 {
+	if s := u.parts[part].Step; s != nil {
+		return *s
+	}
+	return 1
+}
+
+func (u *Ui) SetStep(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Step = &value })
 }
 
 // X is where a canvas was last clicked, across: canvas.x; 0 before any click.

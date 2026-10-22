@@ -139,7 +139,7 @@ public class MessageTests
         };
         var list = new MessageList { Messages = messages };
         var note = Assert.Single(list.Children);
-        Assert.True(note.Classes.Contains("message"));
+        Assert.Contains("message", note.Classes);
         var close = note.GetLogicalDescendants().OfType<global::Avalonia.Controls.Button>().Single();
         Assert.Equal("×", close.Content);
         close.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(global::Avalonia.Controls.Button.ClickEvent));

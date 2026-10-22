@@ -850,6 +850,17 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</TabControl>");
             }
+            // A wizard is the runtime's StepsView: its step follows the part's state.
+            WidgetKind::Steps => {
+                let step = named.map(|n| format!(" Step=\"{{Binding {}.Step}}\"", member(n))).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:StepsView {at}{step}{plain_state}{extra}>");
+                for page in &widget.pages {
+                    let _ = writeln!(out, "{pad}  <c:StepItem Header=\"{}\">", self.text(page.title.as_deref().unwrap_or_default()));
+                    self.grid(&page.children, p.width, None, false, depth + 2, out);
+                    let _ = writeln!(out, "{pad}  </c:StepItem>");
+                }
+                let _ = writeln!(out, "{pad}</c:StepsView>");
+            }
             WidgetKind::Splitter => {
                 let vertical = p.orientation == Some(clarity_spec::model::Orientation::Vertical);
                 let definitions = vec!["*"; widget.pages.len().max(1)].join(",Auto,");
@@ -1016,6 +1027,9 @@ impl<'a> Window<'a> {
                     Event::Enter => format!("{control}.GotFocus += (_, _) => {run};"),
                     Event::Leave => format!("{control}.LostFocus += (_, _) => {run};"),
                     Event::Submit => format!("Events.OnEnter({control}, () => {run});"),
+                    // A wizard's Next asks whether the handler refused, so it keeps the step.
+                    Event::Next => format!("{control}.Next = Vm.Next_{};", member(name)),
+                    Event::Finish => format!("{control}.Finished += () => {run};"),
                     _ => continue,
                 };
                 out.push(line);
@@ -1264,6 +1278,14 @@ public partial class {name}View : UserControl
                 pascal(&click.handler),
                 c = member(canvas)
             );
+        }
+
+        // A wizard's Next: its handler, saying whether it refused.
+        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Steps) {
+            let (Some(wizard), Some(next)) = (&widget.props.name, Self::handler(widget, Event::Next)) else { continue };
+            let Some(decl) = own.iter().find(|d| d.name.name == next.handler) else { continue };
+            let values: Vec<String> = next.args.iter().zip(&decl.params).map(|(v, p)| logic::literal(self.project, &p.ty, v)).collect();
+            let _ = write!(events, "    public bool Next_{}() => Handle(() => On{}({}));\n\n", member(wizard), pascal(&next.handler), values.join(", "));
         }
 
         // Windows opened by a click, and the built-in targets.

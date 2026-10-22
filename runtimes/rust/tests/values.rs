@@ -114,6 +114,25 @@ fn a_sidebar_is_collapsed_and_maximized_as_every_runtime_says() {
     }
 }
 
+const STEPS: &str = include_str!("../../../conformance/steps.json");
+
+#[test]
+fn a_wizards_step_is_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(STEPS).unwrap();
+    for case in file["step"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("wizard".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        assert_eq!(Ui::from_state(&state).step("wizard"), case["step"].as_i64().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        ui.set_step("wizard", case["step"].as_i64().unwrap());
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["wizard"]).unwrap(), case["part"], "{case}");
+    }
+}
+
 const RIBBONS: &str = include_str!("../../../conformance/ribbons.json");
 
 #[test]

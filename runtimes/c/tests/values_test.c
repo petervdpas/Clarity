@@ -229,6 +229,30 @@ void a_sidebar_is_collapsed_and_maximized_as_every_runtime_says(void) {
     cJSON_Delete(file);
 }
 
+void a_wizards_step_is_as_every_runtime_says(void) {
+    cJSON* file = conformance("steps.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "step")) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "wizard", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        CHECK(clarity_ui_step(clarity_ui(&state), "wizard") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "step")->valuedouble);
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        clarity_ui_set_step(ui, "wizard", (int64_t)cJSON_GetObjectItemCaseSensitive(c, "step")->valuedouble);
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "wizard"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
 void a_ribbons_open_tab_is_as_every_runtime_says(void) {
     cJSON* file = conformance("ribbons.json");
     const cJSON* c;

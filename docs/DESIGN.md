@@ -994,6 +994,37 @@ handler lend(album: Album, friend: Friend)
 
 **Progress is apart.** A dialog with a progress bar and Stop (5.12, row P) is not a question: the handler sends progress one way while it runs, and Stop is a flag it reads between steps. It needs the way to the screen of 5.12, not this design, and does not wait for anything either.
 
+### 5.15 Wizards: the steps part (2026-10-22, built)
+
+Decided with the user on 2026-10-22 (U1d). A wizard is a container part, `steps`, as `tabs` is one: it can stand in any window or dialog, so a wizard dialog gives its result as any dialog does (5.14).
+
+```clarity
+page NewOrder: dialog gives Order
+    data order: Order
+    steps name wizard at 1,1 span 12 rows 10 on next: checkStep on finish: done
+        step @customerStep
+            dropdown at 1,1 span 6 bind order.customer
+        step @confirmStep
+            text at 1,1 span 12 bind summary
+
+code NewOrder
+    handler checkStep
+        if wizard.step == 1 and order.customer == none
+            refuse @pickACustomer
+
+    handler done
+        save order
+        close with order
+```
+
+- **One step at a time.** The part shows the titles of its steps above, the current one marked, and the parts of the current step below. Its own buttons, in Clarity's words (`back`, `next`, `finish`, translated as `ok` and `cancel` are), go below: Back from the second step on, Next before the last step, Finish on the last.
+- **Next** runs the handler of `on next` with the step the person is on (`wizard.step`), then moves one step on. A `refuse` in it keeps the person on the step and says why, as a refusal anywhere does; a handler that sets `wizard.step` itself decides where the wizard goes. Without `on next`, Next just moves on.
+- **Back** goes one step back and runs nothing: what was entered stays.
+- **Finish** runs the handler of `on finish`, which saves, closes the dialog with its value, or does what the wizard is for.
+- **`wizard.step`**, from 1, is the part's property: code reads it, and sets it to skip or go back to a step.
+- **Rules.** `steps` needs at least two `step` blocks. A step's parts are placed in the step's own grid, as a tab's are.
+- **Every stack.** The web renderer draws it in `lib/ui` (copied into each application) and Avalonia in Clarity.Avalonia, each in its own idiom; the step lives in the part's state, as a ribbon's open tab does. Conformance cases run the same steps on both.
+
 ## 6. Generation
 
 ### 6.1 Shape and behavior

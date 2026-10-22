@@ -20,11 +20,22 @@ page Albums: window
     button "Copies" name copiesButton at 5,1 span 2 on click: copiesClicked
     button "Format" name formatButton at 7,1 span 2 on click: formatClicked
     button "Pick" name pickButton at 9,1 span 2 on click: pickClicked
+    button "New" name newButton at 11,1 span 2 on click: newClicked
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
     table name grid at 1,1 span 12 rows 6 bind friends columns name
     button "OK" name okButton at 1,7 span 2 on click: picked
+
+page NewAlbum: dialog gives Album
+    data album: Album
+    steps name wizard at 1,1 span 12 rows 8 on next: checkStep on finish: done
+        step "Title"
+            textbox name titleBox at 1,1 span 6 bind album.title
+        step "Copies"
+            number name copiesBox at 1,1 span 4 bind album.copies
+        step "Format"
+            dropdown name formatBox at 1,1 span 4 bind album.format
 
 code Albums
     handler deleteClicked
@@ -55,6 +66,23 @@ code Albums
     handler pickClicked
         ask PickFriend then lend(album)
 
+    handler newClicked
+        ask NewAlbum then added
+
+    handler added(made: Album)
+        album = made
+
 code PickFriend
     handler picked
         close with grid.selected
+
+code NewAlbum
+    handler checkStep
+        if wizard.step == 1 and album.title == ""
+            refuse "A title first"
+        if wizard.step == 2 and album.copies > 9
+            wizard.step = 3
+
+    handler done
+        save album
+        close with album

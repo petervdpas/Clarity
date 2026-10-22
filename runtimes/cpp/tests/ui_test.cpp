@@ -156,6 +156,19 @@ TEST(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) {
     }
 }
 
+TEST(a_wizards_step_is_as_every_runtime_says) {
+    auto file = conformance("steps.json");
+    for (const auto& c : file["step"]) {
+        Ui ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"wizard", c["part"]}}}}.get<WindowState>());
+        CHECK_EQ(ui.step("wizard"), c["step"].get<int64_t>());
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        ui.set_step("wizard", c["step"].get<int64_t>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["wizard"], c["part"]);
+    }
+}
+
 TEST(a_ribbons_open_tab_is_as_every_runtime_says) {
     auto file = conformance("ribbons.json");
     for (const auto& c : file["tab"]) {

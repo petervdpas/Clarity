@@ -17,6 +17,7 @@
     X(a_foldable_part_is_folded_as_every_runtime_says)           \
     X(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) \
     X(a_ribbons_open_tab_is_as_every_runtime_says)               \
+    X(a_wizards_step_is_as_every_runtime_says)                   \
     X(dates_and_times_read_and_write_as_text)                     \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \

@@ -181,6 +181,17 @@ void clarity_ui_set_tab(ClarityUi* ui, const char* part, int64_t value) {
     p->tab = value;
 }
 
+int64_t clarity_ui_step(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_step ? p->step : 1;
+}
+
+void clarity_ui_set_step(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_step = true;
+    p->step = value;
+}
+
 void clarity_ui_set_readonly(ClarityUi* ui, const char* part, bool value) {
     ClarityPart* p = part_of(ui, part);
     p->has_readonly = true;
@@ -330,6 +341,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_collapsed) cJSON_AddBoolToObject(out, "collapsed", p->collapsed);
     if (p->has_maximized) cJSON_AddBoolToObject(out, "maximized", p->maximized);
     if (p->has_tab) cJSON_AddNumberToObject(out, "tab", (double)p->tab);
+    if (p->has_step) cJSON_AddNumberToObject(out, "step", (double)p->step);
     if (p->text) cJSON_AddStringToObject(out, "text", p->text);
     if (p->has_checked) cJSON_AddBoolToObject(out, "checked", p->checked);
     if (p->drawing) cJSON_AddItemToObject(out, "drawing", cJSON_Duplicate(p->drawing, true));
@@ -347,6 +359,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "collapsed"))) p->has_collapsed = true, p->collapsed = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "maximized"))) p->has_maximized = true, p->maximized = cJSON_IsTrue(v);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "tab"))) p->has_tab = true, p->tab = (int64_t)v->valuedouble;
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "step"))) p->has_step = true, p->step = (int64_t)v->valuedouble;
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "checked"))) p->has_checked = true, p->checked = cJSON_IsTrue(v);
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "text"))) p->text = clarity_copy(v->valuestring);
     if (cJSON_IsArray(v = cJSON_GetObjectItemCaseSensitive(in, "drawing"))) p->drawing = cJSON_Duplicate(v, true);

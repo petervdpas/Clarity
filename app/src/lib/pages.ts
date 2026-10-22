@@ -37,6 +37,7 @@ export function appAsPage(app: App): Page {
     kind: "window",
     title: app.title,
     size: null,
+    gives: null,
     data: app.data,
     columns: 12,
     widgets: [],

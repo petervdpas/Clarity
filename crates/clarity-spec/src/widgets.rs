@@ -31,6 +31,8 @@ pub enum WidgetKind {
     Form,
     Panel,
     Tabs,
+    /// A wizard: `step "Title"` blocks shown one at a time, with Back, Next and Finish (DESIGN 5.15).
+    Steps,
     Splitter,
     Table,
     List,
@@ -80,11 +82,15 @@ pub enum Event {
     /// A canvas is drawn: when its window opens and after every other
     /// handler of the window.
     Draw,
+    /// Next is pressed in a wizard, before it moves on; a refusal keeps the step.
+    Next,
+    /// Finish is pressed on a wizard's last step.
+    Finish,
 }
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 13] = [
+pub const ALL_EVENTS: [Event; 15] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -98,6 +104,8 @@ pub const ALL_EVENTS: [Event; 13] = [
     Event::Start,
     Event::Submit,
     Event::Draw,
+    Event::Next,
+    Event::Finish,
 ];
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
@@ -121,6 +129,8 @@ impl Event {
             Event::Start => "start",
             Event::Submit => "submit",
             Event::Draw => "draw",
+            Event::Next => "next",
+            Event::Finish => "finish",
         }
     }
 
@@ -139,6 +149,8 @@ impl Event {
             "start" => Some(Event::Start),
             "submit" => Some(Event::Submit),
             "draw" => Some(Event::Draw),
+            "next" => Some(Event::Next),
+            "finish" => Some(Event::Finish),
             _ => None,
         }
     }
@@ -168,6 +180,8 @@ pub enum ContainerKind {
     Plain,
     /// Children inside `tab "Title"` blocks.
     Tabs,
+    /// Children inside `step "Title"` blocks, one shown at a time.
+    Steps,
     /// Children inside exactly two `pane` blocks.
     Splitter,
 }
@@ -413,6 +427,21 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Tabs),
         clickable: false,
         events: &[Event::Change],
+        properties: &[],
+    },
+    Entry {
+        kind: WidgetKind::Steps,
+        keyword: "steps",
+        name: "Steps",
+        category: Category::Containers,
+        size: (12, 8),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Steps),
+        clickable: false,
+        events: &[Event::Next, Event::Finish],
         properties: &[],
     },
     Entry {
@@ -1010,6 +1039,7 @@ fn grows(kind: WidgetKind) -> bool {
         WidgetKind::Form
             | WidgetKind::Panel
             | WidgetKind::Tabs
+            | WidgetKind::Steps
             | WidgetKind::Splitter
             | WidgetKind::Table
             | WidgetKind::List

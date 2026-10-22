@@ -42,6 +42,8 @@ export type PartState = {
   maximized?: boolean | null;
   /** The open tab of a ribbon, counted from 1 (conformance/ribbons.json). */
   tab?: number | null;
+  /** The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json). */
+  step?: number | null;
 };
 
 export interface Live {
@@ -49,8 +51,8 @@ export interface Live {
   parts: Record<string, PartState>;
   /** The selected row of each table or list, by part name. */
   selected: Record<string, number>;
-  /** A part's event, wired to `handler`. */
-  event(part: string, event: PartEvent, handler: string): void;
+  /** A part's event, wired to `handler`; false when the handler refused or failed. */
+  event(part: string, event: PartEvent, handler: string): Promise<boolean>;
   select(part: string, row: number): void;
   /** Keeps what the user typed in an unbound text input, for the next event. */
   setText(part: string, text: string): void;
@@ -64,6 +66,8 @@ export interface Live {
   setSidebar(part: string, change: { collapsed?: boolean; maximized?: boolean }): void;
   /** Keeps the tab the person opened on a ribbon, and whether it is folded, sent with the next event. */
   setRibbon(part: string, change: { tab?: number; collapsed?: boolean }): void;
+  /** Keeps the step a wizard is on, sent with the next event. */
+  setStep(part: string, step: number): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
   /**

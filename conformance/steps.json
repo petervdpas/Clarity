@@ -1,0 +1,23 @@
+{
+  "about": "A wizard (DESIGN 5.15, `steps name wizard on next: checkStep on finish: done` with `step` blocks). It shows one step at a time, counted from 1, and the renderer sends it as the part's `step`; a handler reads and sets it as `wizard.step`. `step` gives the part's state and what `wizard.step` reads: the first step without one. `set` gives what setting it sends back. Each case of `walk` starts a wizard of `steps` steps on step `start` (1 when left out) and presses its buttons in `do`. `handler` is how its `on next` handler behaves: null when the wizard has none, else it refuses on the steps in `refuses` and sets the step to `to` when it runs on step `from` of `jumps`. Next runs the handler, then moves one step on, unless it refused (the step stays) or set the step itself (that step wins); Back goes one step back and runs nothing; Finish runs `on finish`. `expect` gives the step shown (a step out of range shows the nearest one), the buttons shown (Back from the second step on, Next before the last, Finish on the last) and the handlers that ran, each with the step it ran on.",
+  "step": [
+    { "part": {}, "step": 1 },
+    { "part": { "step": 2 }, "step": 2 }
+  ],
+  "set": [
+    { "step": 3, "part": { "step": 3 } }
+  ],
+  "walk": [
+    { "name": "a wizard starts on its first step", "steps": 3, "handler": {}, "do": [], "expect": { "shown": 1, "buttons": ["next"], "ran": [] } },
+    { "name": "next runs the handler and moves on", "steps": 3, "handler": {}, "do": ["next"], "expect": { "shown": 2, "buttons": ["back", "next"], "ran": ["next 1"] } },
+    { "name": "the last step finishes", "steps": 3, "handler": {}, "do": ["next", "next"], "expect": { "shown": 3, "buttons": ["back", "finish"], "ran": ["next 1", "next 2"] } },
+    { "name": "without on next, next just moves on", "steps": 2, "handler": null, "do": ["next"], "expect": { "shown": 2, "buttons": ["back", "finish"], "ran": [] } },
+    { "name": "a refusal keeps the step", "steps": 3, "handler": { "refuses": [1] }, "do": ["next"], "expect": { "shown": 1, "buttons": ["next"], "ran": ["next 1"] } },
+    { "name": "a refusal on one step only", "steps": 3, "handler": { "refuses": [2] }, "do": ["next", "next", "next"], "expect": { "shown": 2, "buttons": ["back", "next"], "ran": ["next 1", "next 2", "next 2"] } },
+    { "name": "back runs nothing", "steps": 3, "handler": {}, "do": ["next", "back"], "expect": { "shown": 1, "buttons": ["next"], "ran": ["next 1"] } },
+    { "name": "a handler that sets the step decides where the wizard goes", "steps": 3, "handler": { "jumps": { "from": 1, "to": 3 } }, "do": ["next"], "expect": { "shown": 3, "buttons": ["back", "finish"], "ran": ["next 1"] } },
+    { "name": "finish runs on finish", "steps": 2, "handler": {}, "do": ["next", "finish"], "expect": { "shown": 2, "buttons": ["back", "finish"], "ran": ["next 1", "finish 2"] } },
+    { "name": "a step past the last shows the last", "steps": 3, "start": 7, "handler": {}, "do": [], "expect": { "shown": 3, "buttons": ["back", "finish"], "ran": [] } },
+    { "name": "a step before the first shows the first", "steps": 3, "start": 0, "handler": {}, "do": [], "expect": { "shown": 1, "buttons": ["next"], "ran": [] } }
+  ]
+}

@@ -1319,9 +1319,10 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
     match widgets::container(kind) {
         None => no_children(node)?,
         Some(ContainerKind::Plain) => widget.children = parse_widgets(&node.children, diagnostics),
-        Some(ContainerKind::Tabs) => {
+        Some(container @ (ContainerKind::Tabs | ContainerKind::Steps)) => {
+            let keyword = if container == ContainerKind::Tabs { "tab" } else { "step" };
             for child in &node.children {
-                match parse_widget_page(child, "tab", diagnostics) {
+                match parse_widget_page(child, keyword, diagnostics) {
                     Ok(page) => widget.pages.push(page),
                     Err(diag) => diagnostics.push(diag),
                 }
@@ -1347,15 +1348,15 @@ fn parse_widget_page(
 ) -> ParseResult<WidgetPage> {
     let mut cursor = Cursor::new(node.line);
     if !cursor.eat_keyword(keyword) {
-        let expected = if keyword == "tab" {
-            "'tab \"Title\"'"
-        } else {
-            "'pane'"
+        let expected = match keyword {
+            "tab" => "'tab \"Title\"'",
+            "step" => "'step \"Title\"'",
+            _ => "'pane'",
         };
         return Err(cursor.error_here(format!("expected {expected}")));
     }
-    let title = if keyword == "tab" {
-        Some(cursor.expect_text("a tab title")?)
+    let title = if keyword == "tab" || keyword == "step" {
+        Some(cursor.expect_text(if keyword == "tab" { "a tab title" } else { "a step title" })?)
     } else {
         None
     };

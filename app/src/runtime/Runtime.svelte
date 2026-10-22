@@ -213,16 +213,18 @@
     if (opened?.window === dialog && opened.instance !== undefined) dialogsAsked.set(opened.instance, { ask, window });
   }
 
-  /** Runs a handler on the current window and applies the reply. */
-  async function run(handler: string) {
-    if (!current || busy) return;
+  /** Runs a handler on the current window and applies the reply; false when it refused or failed. */
+  async function run(handler: string): Promise<boolean> {
+    if (!current || busy) return false;
     busy = true;
     const index = stack.length - 1;
     try {
       const reply = received(await invoke<Reply>("dispatch_event", { state: $state.snapshot(current), handler }));
       await nav.apply(index, reply);
+      return true;
     } catch (err) {
       say({ level: "error", text: errorText(err) });
+      return false;
     } finally {
       busy = false;
     }
@@ -253,7 +255,7 @@
       return current?.selected ?? {};
     },
     event(_part: string, _event: PartEvent, handler: string) {
-      run(handler);
+      return run(handler);
     },
     select(part: string, row: number) {
       if (current) current.selected[part] = row;
@@ -275,6 +277,9 @@
     },
     setRibbon(part: string, change: { tab?: number; collapsed?: boolean }) {
       if (current) current.parts[part] = { ...current.parts[part], ...change };
+    },
+    setStep(part: string, step: number) {
+      if (current) current.parts[part] = { ...current.parts[part], step };
     },
     refOptions(entity: string) {
       const known = options[entity];

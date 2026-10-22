@@ -636,6 +636,7 @@ impl<'a> Emitter<'a> {
                         "collapsed" => "SetCollapsed",
                         "maximized" => "SetMaximized",
                         "tab" => "SetTab",
+                        "step" => "SetStep",
                         "text" => "SetText",
                         "checked" => "SetChecked",
                         other => {
@@ -1116,6 +1117,7 @@ impl<'a> Emitter<'a> {
             "collapsed" => format!("ui.Collapsed({quoted}, {})", info.collapsed),
             "maximized" => format!("ui.Maximized({quoted})"),
             "tab" => format!("ui.Tab({quoted})"),
+            "step" => format!("ui.Step({quoted})"),
             "text" => format!("ui.Text({quoted})"),
             "checked" => format!("ui.Checked({quoted})"),
             "x" => format!("ui.X({quoted})"),

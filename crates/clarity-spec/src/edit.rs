@@ -512,6 +512,12 @@ fn child_kind(parent: Kind, node: &LNode) -> Kind {
         {
             Kind::WidgetTab
         }
+        // A wizard's step is edited as a tab is: its title, its parts.
+        Kind::Widget(Some(ContainerKind::Steps))
+            if starts_with_keyword(&node.tokens, "step", Some(TokenKind::Str)) =>
+        {
+            Kind::WidgetTab
+        }
         Kind::Widget(Some(ContainerKind::Splitter))
             if starts_with_keyword(&node.tokens, "pane", None) =>
         {
@@ -1171,6 +1177,12 @@ impl Doc {
                 let tab = self.fresh_node(INDENT_STEP, format!("tab {}", quote("Tab 1")));
                 node.children.push(tab);
             }
+            Some(ContainerKind::Steps) => {
+                for n in 1..=2 {
+                    let step = self.fresh_node(INDENT_STEP, format!("step {}", quote(&format!("Step {n}"))));
+                    node.children.push(step);
+                }
+            }
             Some(ContainerKind::Splitter) => {
                 for _ in 0..2 {
                     let pane = self.fresh_node(INDENT_STEP, "pane".to_string());
@@ -1247,16 +1259,18 @@ impl Doc {
         Ok(Some(item))
     }
 
+    /// A tab of a tabs part, or a step of a wizard.
     fn add_tab(&mut self, item: u32, title: &str) -> EditResult<Option<u32>> {
-        let (path, _) = self.find(item, "a tabs widget", |k| {
-            k == Kind::Widget(Some(ContainerKind::Tabs))
+        let (path, kind) = self.find(item, "a tabs or steps widget", |k| {
+            matches!(k, Kind::Widget(Some(ContainerKind::Tabs | ContainerKind::Steps)))
         })?;
         let title = title.trim();
         if title.is_empty() {
-            return fail("a tab needs a title");
+            return fail("a tab or step needs a title");
         }
+        let keyword = if kind == Kind::Widget(Some(ContainerKind::Steps)) { "step" } else { "tab" };
         let indent = self.node(&path).child_indent();
-        let tab = self.fresh_node(indent, format!("tab {}", text_token(title)));
+        let tab = self.fresh_node(indent, format!("{keyword} {}", text_token(title)));
         let id = tab.id;
         self.node_mut(&path).children.push(tab);
         Ok(Some(id))

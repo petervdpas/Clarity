@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{PICTURE_KEYS, RENDERER_KEYS, has_letters};
+use crate::translations::{PICTURE_KEYS, RENDERER_KEYS, STEP_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -58,9 +58,11 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     for (path, text) in modules {
         rewritten.push((path.to_string(), maker.module(text)));
     }
-    // Clarity's own words; an image part bound to a picture has its own.
+    // Clarity's own words; an image part bound to a picture has its own, and a wizard.
     let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind ")));
-    for (key, value) in RENDERER_KEYS.iter().chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] }) {
+    let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps ")));
+    let own = RENDERER_KEYS.iter().chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] }).chain(if wizards { STEP_KEYS.as_slice() } else { &[] });
+    for (key, value) in own {
         maker.add_exact(key, value);
     }
     // The keys the project had stay out of the result.
@@ -250,6 +252,11 @@ impl Maker {
             // A ribbon's tab or group is named; a tab of a part is named by its title.
             "tab" | "group" => {
                 let base = name.clone().unwrap_or_else(|| format!("{owner}{}Tab", upper(&words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[]))));
+                self.at(tokens.get(1), &base, edits);
+            }
+            // A step of a wizard is named by its title.
+            "step" => {
+                let base = format!("{owner}{}Step", upper(&words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[])));
                 self.at(tokens.get(1), &base, edits);
             }
             "item" => {

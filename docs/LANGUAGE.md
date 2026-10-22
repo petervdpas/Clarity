@@ -547,6 +547,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded` | `submit` |
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
 | `tabs` | `tab @key` blocks, each with parts | none | `change` |
+| `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
@@ -673,6 +674,20 @@ splitter at 1,1 span 12 rows 10 vertical
 ```
 
 `tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks.
+
+A wizard is a `steps` part: its `step` blocks show one at a time, with the titles of all steps above and Clarity's own Back, Next and Finish below (the words `back`, `next` and `finish` in the language files). It needs at least two steps.
+
+```clarity
+page NewOrder: dialog gives Order
+    data order: Order
+    steps name wizard at 1,1 span 12 rows 10 on next: checkStep on finish: done
+        step @customerStep
+            dropdown at 1,1 span 6 bind order.customer
+        step @noteStep
+            textbox at 1,1 span 12 bind order.note
+```
+
+Next runs the handler of `on next` on the step the person is on, then moves one step on. A `refuse` in it keeps the person on the step and says why; a handler that sets `wizard.step` itself decides where the wizard goes. Without `on next`, Next just moves on. Back goes one step back and runs nothing, so what was entered stays. Finish, on the last step, runs `on finish`, which saves, closes the dialog with its value (`close with order`), or does what the wizard is for.
 
 ## 7. The app and its frame
 
@@ -866,6 +881,7 @@ A name that is both data and a part in the same window is an error.
 | `collapsed` | collapsible sidebars | bool: whether it is folded to its button | yes |
 | `maximized` | maximizable sidebars | bool: whether it fills the window | yes |
 | `tab` | ribbons | integer: the open tab, counted from 1 | yes |
+| `step` | wizards (`steps`) | integer: the step shown, counted from 1 | yes |
 | `collapsed` | collapsible ribbons | bool: whether it is folded to its tabs | yes |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.

@@ -114,6 +114,14 @@
     {:else if kind === "badge"}
       <rect x="12" y="8" width="24" height="12" rx="6" class="fill" />
       <text x="24" y="17" text-anchor="middle" class="ink small">3</text>
+    {:else if kind === "slider"}
+      <line x1="6" y1="14" x2="42" y2="14" />
+      <rect x="6" y="12.5" width="16" height="3" rx="1.5" class="fill" />
+      <circle cx="22" cy="14" r="4" class="fill" />
+    {:else if kind === "spinbox"}
+      <rect x="6" y="7" width="36" height="14" rx="2" />
+      <text x="17" y="18" text-anchor="middle" class="ink small">12</text>
+      <path d="M33 12 l3 -3 l3 3 M33 16 l3 3 l3 -3" />
     {:else if kind === "progress"}
       <rect x="4" y="10" width="40" height="8" rx="4" />
       <rect x="4" y="10" width="24" height="8" rx="4" class="fill" />

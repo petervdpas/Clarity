@@ -47,6 +47,10 @@ pub enum WidgetKind {
     Dropdown,
     Radio,
     Date,
+    /// A number between a lowest and a highest value, dragged along a bar.
+    Slider,
+    /// A number typed, or moved a step at a time with its arrows.
+    Spinbox,
     Button,
     Form,
     Panel,
@@ -243,8 +247,12 @@ pub enum WidgetProperty {
     Icon,
     /// `to "https://..."`: the address a link opens.
     To,
-    /// `max 250`: the number a progress bar is full at.
+    /// `max 250`: the number a progress bar is full at, or the highest value of a slider or a spin box.
     Max,
+    /// `min 0`: the lowest value of a slider or a spin box.
+    Min,
+    /// `step 0.5`: how far a slider or a spin box moves at a time.
+    Step,
     /// `split`: a button whose `menu` opens from an arrow beside it.
     Split,
     /// `labels 3`: a form's label column, its inputs' labels in its first columns.
@@ -436,6 +444,32 @@ const ENTRIES: &[Entry] = &[
         &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::TabOrder],
     ),
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
+    // A number between its lowest and highest value (U1c): the range is written, or the field's own.
+    input(
+        WidgetKind::Slider,
+        "slider",
+        "Slider",
+        (6, 1),
+        &["integer", "decimal", "money"],
+        &[Event::Change],
+        &[WidgetProperty::Min, WidgetProperty::Max, WidgetProperty::Step, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+    ),
+    input(
+        WidgetKind::Spinbox,
+        "spinbox",
+        "Spin box",
+        (3, 1),
+        &["integer", "decimal", "money"],
+        INPUT_EVENTS,
+        &[
+            WidgetProperty::Min,
+            WidgetProperty::Max,
+            WidgetProperty::Step,
+            WidgetProperty::Placeholder,
+            WidgetProperty::Readonly,
+            WidgetProperty::TabOrder,
+        ],
+    ),
     Entry {
         kind: WidgetKind::Button,
         keyword: "button",
@@ -792,6 +826,34 @@ pub fn accepts(kind: WidgetKind, ty: &FieldType) -> bool {
     types.is_empty() || types.contains(&field_type_tag(ty))
 }
 
+/// The range of a slider or a spin box: its lowest and highest value and
+/// its step, as numbers written in Clarity. `None` is no end.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct NumberRange {
+    pub min: Option<String>,
+    pub max: Option<String>,
+    pub step: String,
+}
+
+/// The range a slider or a spin box moves in: `min`, `max` and `step` as
+/// written, else the bound field's own `min` and `max` (`field`), and a
+/// step of 1. A slider without either end runs from 0 to 100.
+pub fn number_range(props: &WidgetProps, field: Option<&crate::model::Modifiers>) -> NumberRange {
+    use crate::model::Literal;
+    let own = |literal: Option<&Literal>| match literal {
+        Some(Literal::Number(n)) => Some(n.clone()),
+        _ => None,
+    };
+    let mut min = props.min.clone().or_else(|| own(field.and_then(|m| m.min.as_ref())));
+    let mut max = props.max.clone().or_else(|| own(field.and_then(|m| m.max.as_ref())));
+    if props.kind == WidgetKind::Slider {
+        min.get_or_insert_with(|| "0".to_string());
+        max.get_or_insert_with(|| "100".to_string());
+    }
+    NumberRange { min, max, step: props.step.clone().unwrap_or_else(|| "1".to_string()) }
+}
+
 /// The `kind` tag a field type has in the neutral model.
 pub fn field_type_tag(ty: &FieldType) -> &'static str {
     match ty {
@@ -885,6 +947,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
         to: None,
         max: None,
+        min: None,
+        step: None,
         split: false,
         labels: None,
         made: false,
@@ -960,8 +1024,14 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(bind) = &props.bind {
         parts.push(format!("bind {bind}"));
     }
+    if let Some(min) = &props.min {
+        parts.push(format!("min {min}"));
+    }
     if let Some(max) = &props.max {
         parts.push(format!("max {max}"));
+    }
+    if let Some(step) = &props.step {
+        parts.push(format!("step {step}"));
     }
     if let Some(labels) = props.labels {
         parts.push(format!("labels {labels}"));
@@ -1155,6 +1225,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
         (WidgetProperty::To, props.to.is_some(), "to"),
         (WidgetProperty::Max, props.max.is_some(), "max"),
+        (WidgetProperty::Min, props.min.is_some(), "min"),
+        (WidgetProperty::Step, props.step.is_some(), "step"),
         (WidgetProperty::Split, props.split, "split"),
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
     ];

@@ -13,6 +13,7 @@ entity Album
     format: Format
     site: url
     favourite: bool
+    rating: decimal(3, 1), min 0, max 5
 
 page Albums: window
     data album: Album
@@ -47,6 +48,8 @@ page Albums: window
     scroll name moreScroll at 7,5 span 6 rows 2
         textbox name titleBox at 1,1 span 6 bind album.title
         number name copiesBox at 1,4 span 3 bind album.copies
+    slider name ratingSlider at 1,11 span 6 bind album.rating step 0.5 on change: favouriteChanged
+    spinbox name copiesSpin at 7,11 span 3 bind album.copies min 0 max 99
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>

@@ -97,8 +97,17 @@ icon: string | null,
 to: string | null, 
 /**
  * The number a progress bar is full at, as written: `max 250`; 100 without it.
+ * For a slider or a spin box, the highest value (see `widgets::number_range`).
  */
 max: string | null, 
+/**
+ * The lowest value of a slider or a spin box, as written: `min 0`.
+ */
+min: string | null, 
+/**
+ * How far a slider or a spin box moves at a time, as written: `step 0.5`; 1 without it.
+ */
+step: string | null, 
 /**
  * A split button: its `menu` block opens from the arrow beside it.
  */

@@ -17,6 +17,7 @@
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { allPages, allParts, locateInnerPage, locateWidget, widgetInfo, withProps } from "./pages";
   import { DEFAULT_DIGITS } from "./display";
+  import { numberRange } from "./ranges";
   import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
   import { resourceChoices } from "./resources";
   import { resourceKinds } from "./resourceKinds.svelte";
@@ -92,6 +93,16 @@
     const decl = page.data.find((d) => d.name.name === p.bind);
     const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
     return (entity?.fields ?? []).filter((f) => f.type.kind !== "list");
+  });
+
+  /** A slider's or a spin box's range when its ends are not written: the bound field's own. */
+  const shownRange = $derived.by(() => {
+    if (!p) return { min: null, max: null, step: "1" };
+    const [data, name] = (p.bind ?? "").split(".");
+    const decl = page.data.find((d) => d.name.name === data);
+    const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
+    const field = entity?.fields.find((f) => f.name.name === name);
+    return numberRange({ ...p, min: null, max: null }, field?.modifiers);
   });
 
   /** Whose code behind the handlers go into. */
@@ -438,10 +449,22 @@
         />
       </label>
     {/if}
+    {#if info.properties.includes("min")}
+      <label class="prop">
+        <span>Lowest</span>
+        <input value={p.min ?? ""} placeholder={shownRange.min ?? "none"} inputmode="decimal" onchange={(e) => update({ min: textOf(e) })} />
+      </label>
+    {/if}
     {#if info.properties.includes("max")}
       <label class="prop">
-        <span>Full at</span>
-        <input value={p.max ?? ""} placeholder="100" inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />
+        <span>{p.kind === "progress" ? "Full at" : "Highest"}</span>
+        <input value={p.max ?? ""} placeholder={p.kind === "progress" ? "100" : (shownRange.max ?? "none")} inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("step")}
+      <label class="prop">
+        <span>Step</span>
+        <input value={p.step ?? ""} placeholder="1" inputmode="decimal" onchange={(e) => update({ step: textOf(e) })} />
       </label>
     {/if}
     {#if p.kind === "icon" || info.properties.includes("icon")}

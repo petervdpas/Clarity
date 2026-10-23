@@ -1437,6 +1437,8 @@ fn parse_widget_props(
         icon: None,
         to: None,
         max: None,
+        min: None,
+        step: None,
         split: false,
         labels: None,
         made: false,
@@ -1706,7 +1708,16 @@ fn parse_widget_props(
             }
             "max" => {
                 applies(WidgetProperty::Max)?;
-                props.max = Some(cursor.expect(TokenKind::Number, "the number it is full at, as in max 250")?.text.clone());
+                let what = if kind == WidgetKind::Progress { "the number it is full at, as in max 250" } else { "the highest value, as in max 100" };
+                props.max = Some(cursor.expect(TokenKind::Number, what)?.text.clone());
+            }
+            "min" => {
+                applies(WidgetProperty::Min)?;
+                props.min = Some(cursor.expect(TokenKind::Number, "the lowest value, as in min 0")?.text.clone());
+            }
+            "step" => {
+                applies(WidgetProperty::Step)?;
+                props.step = Some(cursor.expect(TokenKind::Number, "how far it moves at a time, as in step 5")?.text.clone());
             }
             "icon" => {
                 applies(WidgetProperty::Icon)?;

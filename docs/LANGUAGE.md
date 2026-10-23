@@ -544,8 +544,17 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
+| `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
+| `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |
 | `toggle` | bool, or its own `checked` when unbound | `readonly`, `taborder`, `icon "bold"` | `change` |
+
+A slider and a spin box move a number between its lowest value (`min`) and its highest (`max`), a `step` at a time (1 without it). Without `min` or `max` they take the field's own `min` and `max`; a slider without either runs from 0 to 100, and a spin box without them goes on without end. The arrow keys move a step, Page Up and Page Down ten; on a slider Home and End go to the ends. A slider takes the nearest step where it is let go, and tells its `change` then; a number typed into a spin box is kept within its range. The checker wants `min` below `max`, a `step` above 0, and a whole step for an integer field.
+
+```clarity
+slider name discountSlider at 1,1 span 6 bind line.discount min 0 max 50 step 0.5 on change: discountMoved
+spinbox name quantityBox at 7,1 span 2 bind line.quantity
+```
 
 **Containers**
 

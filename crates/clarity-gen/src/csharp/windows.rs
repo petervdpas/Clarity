@@ -358,6 +358,29 @@ impl<'a> Window<'a> {
     }
 
     /// The field a binding such as `order.number` reads, and its entity.
+    /// A slider's or a spin box's range as attributes: its ends as written,
+    /// else the bound field's own, its step, and whether it holds whole numbers.
+    fn range_attrs(&self, p: &WidgetProps) -> String {
+        let field = p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| f);
+        let range = widgets::number_range(p, field.map(|f| &f.modifiers));
+        let mut attrs = String::new();
+        if let Some(min) = &range.min {
+            let _ = write!(attrs, " Min=\"{min}\"");
+        }
+        if let Some(max) = &range.max {
+            let _ = write!(attrs, " Max=\"{max}\"");
+        }
+        let _ = write!(attrs, " Step=\"{}\"", range.step);
+        if p.kind == WidgetKind::Slider {
+            let whole = match field {
+                Some(f) => f.ty == FieldType::Integer,
+                None => [&range.min, &range.max].into_iter().flatten().chain([&range.step]).all(|n| !n.contains('.')),
+            };
+            let _ = write!(attrs, " Whole=\"{}\"", if whole { "True" } else { "False" });
+        }
+        attrs
+    }
+
     fn bound_field(&self, bind: &str) -> Option<(&'a Entity, &'a Field)> {
         let (data, field) = bind.split_once('.')?;
         let entity = self.entity_of(data)?;
@@ -883,7 +906,17 @@ impl<'a> Window<'a> {
             }
             // Clarity's own inputs (Clarity.Avalonia), which tell when the person
             // changed their value and only then, the same as on the web.
-            WidgetKind::Textbox | WidgetKind::Password | WidgetKind::Memo | WidgetKind::Number => {
+            // A number between its lowest and highest value (U1c), Clarity's SliderInput.
+            WidgetKind::Slider => {
+                let value = match (&bound, named) {
+                    (Some(path), _) => format!(" Value=\"{{Binding {path}}}\""),
+                    (None, Some(n)) => format!(" Value=\"{{Binding {}.Text}}\"", member(n)),
+                    (None, None) => String::new(),
+                };
+                let read_only = if p.readonly { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:SliderInput {at}{}{value}{read_only}{plain_state}{extra} />", self.range_attrs(p));
+            }
+            WidgetKind::Textbox | WidgetKind::Password | WidgetKind::Memo | WidgetKind::Number | WidgetKind::Spinbox => {
                 let number = p
                     .bind
                     .as_deref()
@@ -891,7 +924,7 @@ impl<'a> Window<'a> {
                     .filter(|(_, f)| matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration));
                 let class = match p.kind {
                     WidgetKind::Memo => " Classes=\"memo\" AcceptsReturn=\"True\" TextWrapping=\"Wrap\"",
-                    WidgetKind::Number if number.is_none() => " Classes=\"number\"",
+                    WidgetKind::Number | WidgetKind::Spinbox if number.is_none() => " Classes=\"number\"",
                     WidgetKind::Password => " PasswordChar=\"*\"",
                     _ => "",
                 };
@@ -908,7 +941,9 @@ impl<'a> Window<'a> {
                 };
                 let placeholder = p.placeholder.as_deref().map(|t| format!(" PlaceholderText=\"{}\"", self.text(t))).unwrap_or_default();
                 let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
-                let _ = writeln!(out, "{pad}<{control} {at}{class}{value}{placeholder}{read_only}{text_state}{extra} />");
+                // A spin box is a number input with a range and arrows.
+                let range = if p.kind == WidgetKind::Spinbox { self.range_attrs(p) } else { String::new() };
+                let _ = writeln!(out, "{pad}<{control} {at}{class}{range}{value}{placeholder}{read_only}{text_state}{extra} />");
             }
             WidgetKind::Checkbox | WidgetKind::Switch => {
                 // A switch's Content is a header above it; its caption goes beside it, as on the web.
@@ -1232,6 +1267,8 @@ impl<'a> Window<'a> {
                         | WidgetKind::Password
                         | WidgetKind::Memo
                         | WidgetKind::Number
+                        | WidgetKind::Spinbox
+                        | WidgetKind::Slider
                         | WidgetKind::Checkbox
                         | WidgetKind::Switch
                         | WidgetKind::Dropdown

@@ -1,0 +1,37 @@
+{
+  "about": "The slider and the spin box of U1c, which move a number within a range: its lowest value (`min`), its highest (`max`), either of which may be null for no end, and its `step`. Numbers are written as text so decimals stay exact; `whole` says the field holds whole numbers. `keys` gives the value after a key: up and down move one step, pageUp and pageDown ten, home and end go to the lowest and highest value (and do nothing without one); the value never leaves the range, and no value counts as the lowest value, or 0 without one. `drag` gives the value a slider takes where it is dragged to (`at`): the nearest step counted from the lowest value, never past the highest step within the range. `typed` gives the value a spin box takes for a number typed into it: kept, but within the range.",
+  "keys": [
+    { "value": "5", "min": "0", "max": "10", "step": "1", "whole": true, "key": "up", "after": "6" },
+    { "value": "5", "min": "0", "max": "10", "step": "1", "whole": true, "key": "down", "after": "4" },
+    { "value": "10", "min": "0", "max": "10", "step": "1", "whole": true, "key": "up", "after": "10" },
+    { "value": "0", "min": "0", "max": "10", "step": "1", "whole": true, "key": "down", "after": "0" },
+    { "value": "95", "min": "0", "max": "100", "step": "1", "whole": true, "key": "pageUp", "after": "100" },
+    { "value": "50", "min": "0", "max": "100", "step": "2", "whole": true, "key": "pageDown", "after": "30" },
+    { "value": "7", "min": "1", "max": "99", "step": "1", "whole": true, "key": "home", "after": "1" },
+    { "value": "7", "min": "1", "max": "99", "step": "1", "whole": true, "key": "end", "after": "99" },
+    { "value": "7", "min": null, "max": null, "step": "1", "whole": true, "key": "end", "after": "7" },
+    { "value": "-3", "min": null, "max": null, "step": "5", "whole": true, "key": "down", "after": "-8" },
+    { "value": null, "min": "1", "max": "99", "step": "1", "whole": true, "key": "up", "after": "2" },
+    { "value": null, "min": null, "max": null, "step": "1", "whole": true, "key": "down", "after": "-1" },
+    { "value": "0.2", "min": "0", "max": "1", "step": "0.1", "whole": false, "key": "up", "after": "0.3" },
+    { "value": "19.99", "min": "-10", "max": null, "step": "0.25", "whole": false, "key": "up", "after": "20.24" },
+    { "value": "0.95", "min": "0", "max": "1", "step": "0.1", "whole": false, "key": "up", "after": "1" }
+  ],
+  "drag": [
+    { "at": "12.3", "min": "0", "max": "50", "step": "0.5", "whole": false, "value": "12.5" },
+    { "at": "12.2", "min": "0", "max": "50", "step": "0.5", "whole": false, "value": "12" },
+    { "at": "12.25", "min": "0", "max": "50", "step": "0.5", "whole": false, "value": "12.5" },
+    { "at": "49.9", "min": "0", "max": "50", "step": "3", "whole": true, "value": "48" },
+    { "at": "-4", "min": "0", "max": "50", "step": "3", "whole": true, "value": "0" },
+    { "at": "80", "min": "0", "max": "50", "step": "5", "whole": true, "value": "50" },
+    { "at": "6.4", "min": "1", "max": "11", "step": "2", "whole": true, "value": "7" },
+    { "at": "0.3", "min": "0", "max": "1", "step": "0.1", "whole": false, "value": "0.3" }
+  ],
+  "typed": [
+    { "value": "42", "min": "1", "max": "99", "whole": true, "after": "42" },
+    { "value": "120", "min": "1", "max": "99", "whole": true, "after": "99" },
+    { "value": "0", "min": "1", "max": "99", "whole": true, "after": "1" },
+    { "value": "-250.5", "min": null, "max": null, "whole": false, "after": "-250.5" },
+    { "value": "3.333", "min": "-10", "max": "3", "whole": false, "after": "3" }
+  ]
+}

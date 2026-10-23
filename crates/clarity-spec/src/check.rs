@@ -1035,6 +1035,32 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The rules of a slider's or a spin box's range (U1c): its lowest value
+    /// below its highest, a step above 0, whole for a field of whole numbers.
+    /// `field` is the bound field's name, type and modifiers, when it binds one.
+    fn check_range(&mut self, file: usize, widget: &Widget, field: Option<(&str, &FieldType, &crate::model::Modifiers)>) {
+        let p = &widget.props;
+        if !matches!(p.kind, WidgetKind::Slider | WidgetKind::Spinbox) {
+            return;
+        }
+        let range = widgets::number_range(p, field.map(|(_, _, m)| m));
+        let number = |n: &Option<String>| n.as_deref().and_then(|n| n.parse::<f64>().ok());
+        if let (Some(min), Some(max)) = (number(&range.min), number(&range.max))
+            && min >= max
+        {
+            let (low, high) = (range.min.as_deref().unwrap_or_default(), range.max.as_deref().unwrap_or_default());
+            self.error(file, format!("'min' is below 'max': {low} is not below {high}"), widget.span);
+        }
+        let step = range.step.parse::<f64>().unwrap_or(0.0);
+        if step <= 0.0 {
+            self.error(file, "'step' is a number above 0", widget.span);
+        } else if let Some((name, FieldType::Integer, _)) = field
+            && step.fract() != 0.0
+        {
+            self.error(file, format!("'{name}' holds whole numbers: the step is a whole number"), widget.span);
+        }
+    }
+
     fn check_binding(&mut self, file: usize, page: &PageContext<'a>, widget: &Widget) {
         let p = &widget.props;
         let name = widgets::keyword(p.kind);
@@ -1053,6 +1079,7 @@ impl<'a> Checker<'a> {
         }
 
         let Some(bind) = &p.bind else {
+            self.check_range(file, widget, None);
             if !p.columns.is_empty() || !p.edit.is_empty() || !p.show.is_empty() {
                 self.error(
                     file,
@@ -1093,6 +1120,8 @@ impl<'a> Checker<'a> {
                 };
                 if let Some(problem) = problem {
                     self.error(file, format!("{at}: {problem}"), widget.span);
+                } else {
+                    self.check_range(file, widget, None);
                 }
                 return;
             }
@@ -1142,7 +1171,7 @@ impl<'a> Checker<'a> {
                         ),
                         widget.span,
                     ),
-                    Some(_) => {}
+                    Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
             }
             BindTarget::Collection => {

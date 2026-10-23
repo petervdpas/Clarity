@@ -8,6 +8,8 @@
   import ChoiceInput from "./ui/ChoiceInput.svelte";
   import DateInput from "./ui/DateInput.svelte";
   import NumberInput from "./ui/NumberInput.svelte";
+  import SliderInput from "./ui/SliderInput.svelte";
+  import { numberRange } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
@@ -187,6 +189,10 @@
   const numbers = $derived(
     numberFormat ? numberEditing(numberFormat, formatsOf(preview)) : { text: (v: unknown) => String(v ?? ""), read: (typed: string) => typed },
   );
+
+  // A slider's or a spin box's range: as written, else the bound field's own.
+  const range = $derived(numberRange(p, bound?.field.modifiers));
+  const whole = $derived(bound ? bound.field.type.kind === "integer" : !range.step.includes(".") && !(range.min ?? "").includes("."));
 
   function setText(next: string) {
     if (bound) setValue(next);
@@ -488,6 +494,47 @@
           fire("change");
         }}
         onsubmit={submit}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      />
+    {:else if p.kind === "spinbox"}
+      <NumberInput
+        {id}
+        value={bound ? value : shown}
+        text={numbers.text}
+        read={numbers.read}
+        placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        {range}
+        {whole}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else setText(String(next));
+          fire("change");
+        }}
+        onsubmit={submit}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
+      />
+    {:else if p.kind === "slider"}
+      <SliderInput
+        {id}
+        value={bound ? (value as string | number | null) : shown}
+        {range}
+        {whole}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        {disabled}
+        {readonly}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else setText(String(next));
+          fire("change");
+        }}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
       />

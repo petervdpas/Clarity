@@ -396,7 +396,12 @@ pub struct WidgetProps {
     /// The address a link opens: `to "https://lucide.dev"`.
     pub to: Option<String>,
     /// The number a progress bar is full at, as written: `max 250`; 100 without it.
+    /// For a slider or a spin box, the highest value (see `widgets::number_range`).
     pub max: Option<String>,
+    /// The lowest value of a slider or a spin box, as written: `min 0`.
+    pub min: Option<String>,
+    /// How far a slider or a spin box moves at a time, as written: `step 0.5`; 1 without it.
+    pub step: Option<String>,
     /// A split button: its `menu` block opens from the arrow beside it.
     pub split: bool,
     /// A form's label column: `labels 3` gives each input in it a label in its first 3 columns.

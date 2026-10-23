@@ -145,7 +145,7 @@ fn reports_parse_errors_per_widget() {
     let (_, diags) = parse(
         "module p
 page P: window
-    slider at 1,1
+    gauge at 1,1
     textbox span 3
     button \"x\" name button1 at 1,2 columns a
     textbox name textbox5 at 1,3 bind c.name bind c.kind
@@ -156,7 +156,7 @@ page P: window
     );
     let messages: Vec<_> = diags.into_iter().map(|d| d.message).collect();
     assert_eq!(messages.len(), 6, "{messages:#?}");
-    assert_has(&messages, "unknown widget 'slider'");
+    assert_has(&messages, "unknown widget 'gauge'");
     assert_has(&messages, "needs a position");
     assert_has(&messages, "'columns' does not apply to a button");
     assert_has(&messages, "duplicate 'bind'");

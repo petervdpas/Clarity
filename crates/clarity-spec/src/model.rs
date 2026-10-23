@@ -115,6 +115,51 @@ pub struct Field {
     pub span: Span,
 }
 
+/// What a chart draws: bars, a line through points, or slices of a pie.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ChartKind {
+    Bar,
+    Line,
+    Pie,
+}
+
+impl ChartKind {
+    pub fn word(self) -> &'static str {
+        match self {
+            ChartKind::Bar => "bar",
+            ChartKind::Line => "line",
+            ChartKind::Pie => "pie",
+        }
+    }
+
+    pub fn of_word(word: &str) -> Option<ChartKind> {
+        [ChartKind::Bar, ChartKind::Line, ChartKind::Pie].into_iter().find(|k| k.word() == word)
+    }
+}
+
+/// The number of each group of a chart: its rows counted, or a number field summed or averaged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum ChartMeasure {
+    Count,
+    Sum { field: String },
+    Average { field: String },
+}
+
+impl ChartMeasure {
+    /// As Clarity writes it: `count`, `sum total`.
+    pub fn text(&self) -> String {
+        match self {
+            ChartMeasure::Count => "count".to_string(),
+            ChartMeasure::Sum { field } => format!("sum {field}"),
+            ChartMeasure::Average { field } => format!("average {field}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
@@ -446,6 +491,15 @@ pub struct WidgetProps {
     /// `page 50`: a table shows its rows that many at a time (U1c).
     #[serde(default)]
     pub page: Option<u32>,
+    /// `chart bar`: the kind of a chart (U1c).
+    #[serde(default)]
+    pub chart: Option<ChartKind>,
+    /// `by status`: the field a chart groups its rows by.
+    #[serde(default)]
+    pub by: Option<String>,
+    /// `count`, `sum total`, `average total`: each group's number.
+    #[serde(default)]
+    pub measure: Option<ChartMeasure>,
     /// `children children`: the list field of a tree's rows that lists
     /// records of their own kind, arranged by its reference (U1c).
     #[serde(default)]

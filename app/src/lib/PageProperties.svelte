@@ -288,6 +288,44 @@
       </label>
     {/if}
 
+    {#if p.kind === "chart"}
+      {@const numbers = collectionFields.filter((f) => ["integer", "decimal", "money", "duration"].includes(f.type.kind))}
+      {@const measure = p.measure}
+      <label class="prop">
+        <span>Chart</span>
+        <select value={p.chart ?? "bar"} onchange={(e) => update({ chart: e.currentTarget.value as "bar" | "line" | "pie" })}>
+          <option value="bar">Bars</option>
+          <option value="line">Line</option>
+          <option value="pie">Pie</option>
+        </select>
+      </label>
+      <label class="prop" title="The field whose values become the bars, points or slices">
+        <span>Grouped by</span>
+        <select value={p.by ?? ""} onchange={(e) => update({ by: e.currentTarget.value || null })}>
+          <option value="">(none)</option>
+          {#each collectionFields.filter((f) => !["image", "file", "values"].includes(f.type.kind)) as field (field.name.name)}
+            <option value={field.name.name}>{field.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="prop" title="Each group's number: its rows counted, or a number summed or averaged">
+        <span>Number</span>
+        <select
+          value={measure ? (measure.kind === "count" ? "count" : `${measure.kind}:${measure.field}`) : ""}
+          onchange={(e) => {
+            const [kind, field] = e.currentTarget.value.split(":");
+            update({ measure: kind === "count" ? { kind: "count" } : kind === "sum" || kind === "average" ? { kind, field } : null });
+          }}
+        >
+          <option value="">(none)</option>
+          <option value="count">Count of rows</option>
+          {#each numbers as field (field.name.name)}
+            <option value="sum:{field.name.name}">Sum of {field.label}</option>
+            <option value="average:{field.name.name}">Average of {field.label}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
     {#if info.properties.includes("children")}
       {@const own = (() => {
         const decl = page.data.find((d) => d.name.name === p.bind);

@@ -13,6 +13,8 @@
   import FileInput, { type RecordFileValue } from "./ui/FileInput.svelte";
   import TagsInput from "./ui/TagsInput.svelte";
   import TypeAheadInput from "./ui/TypeAheadInput.svelte";
+  import ChartView from "./ui/ChartView.svelte";
+  import { groupsOf, type ByKind } from "./ui/charts";
   import { searched, suggestions, type RefOption } from "./dropdownOptions";
   import type { Item, ItemKind } from "./listFields";
   import { numberRange } from "./ranges";
@@ -934,6 +936,39 @@
         onopen={() => fire("open")}
         onedit={() => fire("change")}
       />
+    {:else if p.kind === "chart" && p.chart}
+      <!-- A chart (U1c): the list's rows grouped by a field, each group's number drawn. -->
+      {@const own = collection?.entity}
+      {@const byField = own && p.by ? findField(own, p.by) : undefined}
+      {@const measure = p.measure}
+      {@const ofField = own && measure && measure.kind !== "count" ? findField(own, measure.field) : undefined}
+      {@const byType = byField?.type}
+      {@const by: ByKind =
+        byType?.kind === "enum"
+          ? "enum"
+          : byType?.kind === "bool"
+            ? "bool"
+            : byType && ["integer", "decimal", "money", "duration", "id"].includes(byType.kind)
+              ? "number"
+              : byType?.kind === "date" || byType?.kind === "dateTime"
+                ? "date"
+                : "text"}
+      {@const order = byType?.kind === "enum" ? (findEnum(preview, byType.name.name)?.variants ?? []).map((v) => v.name.name) : []}
+      {@const rows = (collection?.rows ?? []).map((r) => {
+        const value = byField ? r[byField.name.name] : null;
+        // A reference groups by the text it shows.
+        return { by: byType?.kind === "ref" && value !== null && value !== undefined ? displayValue(preview, byField!, value) : value, of: ofField ? r[ofField.name.name] : null };
+      })}
+      {@const groups = groupsOf(rows, by, measure?.kind ?? "count", order)}
+      <ChartView
+        kind={p.chart}
+        label={p.name ?? undefined}
+        groups={groups.map((g) => ({
+          label: byField && byType?.kind !== "ref" ? displayValue(preview, byField, g.key as JsonValue) : String(g.key),
+          value: g.value,
+          text: ofField && measure && measure.kind !== "count" ? displayValue(preview, ofField, g.value) : String(g.value),
+        }))}
+      />
     {:else if p.kind === "list"}
       <ul class="list">
         {#each collection?.rows ?? [] as row, i (i)}
@@ -1212,6 +1247,9 @@
   .steps > .content,
   .splitter > .content,
   .table > .content,
+  .tree > .content,
+  .treeTable > .content,
+  .chart > .content,
   .list > .content,
   .image > .content,
   .canvas > .content {

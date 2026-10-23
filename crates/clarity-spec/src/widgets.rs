@@ -72,6 +72,8 @@ pub enum WidgetKind {
     Tree,
     /// A table whose rows are a tree, its first column indented.
     TreeTable,
+    /// Bars, a line or a pie of a list's rows grouped by a field.
+    Chart,
     Image,
     Display,
     Canvas,
@@ -275,6 +277,10 @@ pub enum WidgetProperty {
     Page,
     /// `children children`: the list field a tree's rows are arranged by.
     Children,
+    /// `by status`: the field a chart groups its rows by.
+    By,
+    /// `count`, `sum total`, `average total`: each group's number in a chart.
+    Measure,
 }
 
 /// The fewest and most rows a table's page holds.
@@ -730,6 +736,22 @@ const ENTRIES: &[Entry] = &[
         events: &[Event::Select, Event::Open],
         properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable],
     },
+    // A list the window holds as a chart: `chart bar ... by status count` (U1c).
+    Entry {
+        kind: WidgetKind::Chart,
+        keyword: "chart",
+        name: "Chart",
+        category: Category::Data,
+        size: (6, 6),
+        caption: None,
+        bind: BindTarget::Collection,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::By, WidgetProperty::Measure],
+    },
     Entry {
         kind: WidgetKind::List,
         keyword: "list",
@@ -1028,6 +1050,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         typed: false,
         page: None,
         children: None,
+        chart: (kind == WidgetKind::Chart).then_some(crate::model::ChartKind::Bar),
+        by: None,
+        measure: (kind == WidgetKind::Chart).then_some(crate::model::ChartMeasure::Count),
         search: false,
         labels: None,
         made: false,
@@ -1064,6 +1089,10 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 
 pub fn widget_line(props: &WidgetProps) -> String {
     let mut parts = vec![keyword(props.kind).to_string()];
+    // A chart's first word is its kind.
+    if let Some(chart) = props.chart.filter(|_| props.kind == WidgetKind::Chart) {
+        parts.push(chart.word().to_string());
+    }
     // The icon part's first word is the icon it shows; a button's icon follows its name.
     if let Some(icon) = props.icon.as_ref().filter(|_| props.kind == WidgetKind::Icon) {
         parts.push(quote(icon));
@@ -1105,6 +1134,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(children) = &props.children {
         parts.push(format!("children {children}"));
+    }
+    if let Some(by) = &props.by {
+        parts.push(format!("by {by}"));
+    }
+    if let Some(measure) = &props.measure {
+        parts.push(measure.text());
     }
     if let Some(min) = &props.min {
         parts.push(format!("min {min}"));
@@ -1338,6 +1373,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
         (WidgetProperty::Children, props.children.is_some(), "children"),
+        (WidgetProperty::By, props.by.is_some(), "by"),
+        (WidgetProperty::Measure, props.measure.is_some(), "count"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -1454,6 +1491,7 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::List
             | WidgetKind::Tree
             | WidgetKind::TreeTable
+            | WidgetKind::Chart
             | WidgetKind::Image
             | WidgetKind::Canvas
             | WidgetKind::Markdown

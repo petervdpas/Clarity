@@ -1507,6 +1507,9 @@ fn parse_widget_props(
         typed: false,
         page: None,
         children: None,
+        chart: None,
+        by: None,
+        measure: None,
         search: false,
         labels: None,
         made: false,
@@ -1519,8 +1522,11 @@ fn parse_widget_props(
         default_button: false,
         cancel: false,
     };
-    // An icon part's first word is the icon it shows, no text people read.
-    if kind == WidgetKind::Icon {
+    // A chart's first word is its kind; an icon part's the icon it shows, no text people read.
+    if kind == WidgetKind::Chart {
+        let word = cursor.expect_ident("the kind of chart, as in chart bar")?;
+        props.chart = Some(crate::model::ChartKind::of_word(&word.name).ok_or_else(|| Diagnostic::error("a chart is bar, line or pie, as in 'chart bar'", word.span))?);
+    } else if kind == WidgetKind::Icon {
         props.icon = Some(cursor.expect_string("the icon it shows, as in icon \"triangle-alert\"")?);
     } else if cursor.peek_is_text() {
         props.caption = Some(cursor.expect_text("a caption")?);
@@ -1769,6 +1775,22 @@ fn parse_widget_props(
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
+            }
+            "by" => {
+                applies(WidgetProperty::By)?;
+                props.by = Some(cursor.expect_ident("the field a chart groups its rows by, as in by status")?.name);
+            }
+            "count" => {
+                applies(WidgetProperty::Measure)?;
+                props.measure = Some(crate::model::ChartMeasure::Count);
+            }
+            "sum" => {
+                applies(WidgetProperty::Measure)?;
+                props.measure = Some(crate::model::ChartMeasure::Sum { field: cursor.expect_ident("the number field it sums, as in sum total")?.name });
+            }
+            "average" => {
+                applies(WidgetProperty::Measure)?;
+                props.measure = Some(crate::model::ChartMeasure::Average { field: cursor.expect_ident("the number field it averages, as in average total")?.name });
             }
             "children" => {
                 applies(WidgetProperty::Children)?;

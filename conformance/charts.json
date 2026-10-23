@@ -1,0 +1,61 @@
+{
+  "about": "Charts of U1c, as every renderer draws them. `groups` groups the rows of a list (`rows`, each with the value it is grouped `by` and the number `of` the measure) by that value: rows with no value (null or empty text) are left out. Each group's number is how many rows it has (`count`), the sum of their numbers (`sum`, an empty number counting as 0), or their average over the rows that have one (`average`, 0 when none has). The groups come in the order of their values: numbers and dates from low to high, text ignoring case and then as written, an enum's values in the order the enum declares them (`order`), no before yes. `scale` gives the axis of a bar or line chart for the lowest and highest number shown: it runs from `bottom` to `top` in steps of `step`, a step of 1, 2, 2.5 or 5 times a power of ten that takes about five steps, and always takes in 0; with no numbers above 0 or below it the top is 1. Numbers are worked out to 12 decimals, so 0.04 in steps of 0.01 is four steps. `slices` gives the colors of a pie's slices in order: the fourth row of the color palette (conformance/colors.json) over and over; a slice of 0 or less is not drawn and takes no color.",
+  "groups": [
+    {
+      "name": "counted by text, ignoring case",
+      "by": "text",
+      "measure": "count",
+      "rows": [{ "by": "bravo", "of": null }, { "by": "Alpha", "of": null }, { "by": "bravo", "of": null }, { "by": "", "of": null }, { "by": null, "of": null }],
+      "gives": [{ "key": "Alpha", "value": 1 }, { "key": "bravo", "value": 2 }]
+    },
+    {
+      "name": "summed by date, low to high",
+      "by": "date",
+      "measure": "sum",
+      "rows": [{ "by": "2026-10-23", "of": "10.50" }, { "by": "2026-10-01", "of": 4 }, { "by": "2026-10-23", "of": "2.25" }, { "by": "2026-10-01", "of": null }],
+      "gives": [{ "key": "2026-10-01", "value": 4 }, { "key": "2026-10-23", "value": 12.75 }]
+    },
+    {
+      "name": "averaged by number over the rows that have one",
+      "by": "number",
+      "measure": "average",
+      "rows": [{ "by": 10, "of": 2 }, { "by": 2, "of": 6 }, { "by": 10, "of": 4 }, { "by": 2, "of": null }, { "by": 3, "of": null }],
+      "gives": [{ "key": 2, "value": 6 }, { "key": 3, "value": 0 }, { "key": 10, "value": 3 }]
+    },
+    {
+      "name": "an enum's values in the order it declares them",
+      "by": "enum",
+      "order": ["Open", "Paid", "Sent"],
+      "measure": "count",
+      "rows": [{ "by": "Sent", "of": null }, { "by": "Open", "of": null }, { "by": "Sent", "of": null }],
+      "gives": [{ "key": "Open", "value": 1 }, { "key": "Sent", "value": 2 }]
+    },
+    {
+      "name": "no before yes",
+      "by": "bool",
+      "measure": "count",
+      "rows": [{ "by": true, "of": null }, { "by": false, "of": null }, { "by": true, "of": null }],
+      "gives": [{ "key": false, "value": 1 }, { "key": true, "value": 2 }]
+    },
+    {
+      "name": "no rows",
+      "by": "text",
+      "measure": "sum",
+      "rows": [],
+      "gives": []
+    }
+  ],
+  "scale": [
+    { "low": 0, "high": 87, "bottom": 0, "top": 100, "step": 20 },
+    { "low": 3, "high": 1234, "bottom": 0, "top": 1250, "step": 250 },
+    { "low": 1, "high": 5, "bottom": 0, "top": 5, "step": 1 },
+    { "low": 0, "high": 0, "bottom": 0, "top": 1, "step": 0.2 },
+    { "low": -30, "high": 70, "bottom": -40, "top": 80, "step": 20 },
+    { "low": -12, "high": -3, "bottom": -12.5, "top": 0, "step": 2.5 },
+    { "low": 0, "high": 0.04, "bottom": 0, "top": 0.04, "step": 0.01 }
+  ],
+  "slices": [
+    { "values": [3, 0, 5, -2, 1], "colors": ["#64748b", null, "#ef4444", null, "#f97316"] },
+    { "values": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "colors": ["#64748b", "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6", "#3b82f6", "#6366f1", "#a855f7", "#ec4899", "#64748b"] }
+  ]
+}

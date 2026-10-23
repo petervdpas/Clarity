@@ -644,6 +644,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 | `tree` | a list: `bind folders children children` | `children field`; `show field, ...` | `select`, `open` |
 | `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable` | `select`, `open` |
+| `chart` | a list: `chart bar ... bind orders by status count` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field` | |
 
 **Graphics**
 
@@ -690,6 +691,24 @@ A column may have a width, and a table may let the person resize and sort it:
 - `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes last either way.
 - `order by field [desc]`: the order the rows show in when the window opens, as in queries. The field must be one of the `columns`.
 - `page 50`: the rows show 50 at a time (1 to 1000), with a bar below the table to go to the first, previous, next and last page and the rows it shows, as `51-100 / 230`. The rows are ordered first, then paged. The table keeps its page when its rows come again, goes back to the first page when a header click sorts it, and shows the page of a row that code selects. The bar's buttons say Clarity's words `firstPage`, `previousPage`, `nextPage` and `lastPage`. Every renderer pages alike (`conformance/table-pages.json`).
+
+### Charts
+
+A `chart` draws a list the window holds, its rows grouped by a field and each group given a number:
+
+```clarity
+page Dashboard: window
+    data orders: list<Order>
+    chart bar name byStatus at 1,1 span 6 rows 6 bind orders by status count
+    chart line name perDay at 7,1 span 6 rows 6 bind orders by placed sum total
+    chart pie name share at 1,7 span 4 rows 6 bind orders by customer average total
+```
+
+- The word after `chart` is what it draws: `bar`, `line` or `pie`.
+- `by field` names the field whose values become the bars, points or slices; rows with no value there are left out. `count` gives each group its number of rows, `sum field` the sum of a number field, `average field` its average over the rows that have one.
+- The groups come in the order of their values: numbers and dates low to high, text ignoring case, an enum's values as it declares them, no before yes, a reference by the text of the record it names. Each shows as people read it: an enum by its label, a date in their format.
+- A bar or line chart has an axis in steps of 1, 2, 2.5 or 5 times a power of ten that always takes in 0. A pie's slices take the colors of the palette's fourth row, in order; a group of 0 or less has no slice. Each bar, point and slice tells its group and number when pointed at.
+- The chart draws again when its rows change. Every renderer groups and draws alike (`conformance/charts.json`).
 
 ### Trees
 

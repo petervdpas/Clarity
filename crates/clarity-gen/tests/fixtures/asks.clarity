@@ -87,6 +87,10 @@ page Folders: window
     data folders: list<Folder>
     tree name folderTree at 1,1 span 4 rows 8 bind folders children children on select: folderPicked
     treetable name folderTable at 5,1 span 8 rows 8 bind folders children children columns name 200, size on open: folderPicked
+    data albums: list<Album>
+    chart bar name formatChart at 1,9 span 4 rows 6 bind albums by format count
+    chart line name copiesChart at 5,9 span 4 rows 6 bind albums by copies sum rating
+    chart pie name lentChart at 9,9 span 4 rows 6 bind albums by lentTo average copies
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -195,6 +199,7 @@ code NewAlbum
 code Folders
     handler loadFolders
         folders = find f in Folder order by f.name
+        albums = find a in Album
 
     handler folderPicked
         if folderTree.selected != none and folderTree.selected.size > 0

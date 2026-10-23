@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::diagnostic::Diagnostic;
 use crate::frame;
 use crate::model::{
+    ChartMeasure,
     App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Frame, Ident, Project,
     Literal, MAX_PAGE_COLUMNS, Page, PageKind, SpecFile, Widget,
     WidgetProps,
@@ -1263,6 +1264,9 @@ impl<'a> Checker<'a> {
                 if matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable) {
                     self.check_tree(file, &at, entity, widget);
                 }
+                if p.kind == WidgetKind::Chart {
+                    self.check_chart(file, &at, entity, widget);
+                }
             }
         }
     }
@@ -1295,6 +1299,35 @@ impl<'a> Checker<'a> {
                 }
                 Some(_) => {}
             }
+        }
+    }
+
+    /// A chart groups its rows by a field and gives each group a number:
+    /// its rows counted, or a number field summed or averaged.
+    fn check_chart(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
+        let p = &widget.props;
+        let name = &entity.name.name;
+        match p.by.as_deref() {
+            None => self.error(file, format!("{at}: a chart groups its rows by a field, as in 'by status'"), widget.span),
+            Some(by) => match entity.field(by).map(|f| &f.ty) {
+                None => self.error(file, format!("{at}: {name} has no field '{by}'"), widget.span),
+                Some(FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. }) => {
+                    self.error(file, format!("{at}: a chart cannot group by '{by}'"), widget.span)
+                }
+                Some(_) => {}
+            },
+        }
+        let field = match &p.measure {
+            None => return self.error(file, format!("{at}: a chart counts its rows or sums a number, as in 'count' or 'sum total'"), widget.span),
+            Some(ChartMeasure::Count) => return,
+            Some(ChartMeasure::Sum { field } | ChartMeasure::Average { field }) => field,
+        };
+        match entity.field(field) {
+            None => self.error(file, format!("{at}: {name} has no field '{field}'"), widget.span),
+            Some(f) if !matches!(f.ty, FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) => {
+                self.error(file, format!("{at}: '{field}' is {}; a chart sums or averages a number", widgets::field_type_tag(&f.ty)), widget.span)
+            }
+            Some(_) => {}
         }
     }
 

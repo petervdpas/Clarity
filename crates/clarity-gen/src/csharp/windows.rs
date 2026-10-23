@@ -1242,6 +1242,43 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}  </c:ClarityTable.Columns>\n{pad}</c:ClarityTable>");
             }
+            // A chart (U1c): Clarity's ChartView groups the rows it is given itself, as the web does.
+            WidgetKind::Chart => {
+                let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
+                let items = bound.as_deref().map(|b| format!(" ItemsSource=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let shape = match p.chart {
+                    Some(clarity_spec::model::ChartKind::Line) => "Line",
+                    Some(clarity_spec::model::ChartKind::Pie) => "Pie",
+                    _ => "Bar",
+                };
+                let mut attrs = format!(" Shape=\"{shape}\"");
+                if let (Some(entity), Some(by)) = (entity, p.by.as_deref())
+                    && let Some(field) = entity.field(by)
+                {
+                    let kind = match &field.ty {
+                        FieldType::Enum { .. } => "Enum",
+                        FieldType::Bool => "Bool",
+                        FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration | FieldType::Id => "Number",
+                        FieldType::Date | FieldType::DateTime => "Date",
+                        _ => "Text",
+                    };
+                    let _ = write!(attrs, " By=\"{}\" ByKind=\"{kind}\" ByShown=\"{{x:Static {}}}\"", property(&entity.name.name, by), self.shown_converter(entity, by));
+                    // A reference groups by the text of the record it names.
+                    if let FieldType::Ref { entity: target } = &field.ty {
+                        let _ = write!(attrs, " ByChoices=\"{{Binding {}Choices}}\"", target.name);
+                    }
+                }
+                match (&p.measure, entity) {
+                    (Some(clarity_spec::model::ChartMeasure::Sum { field }), Some(entity)) => {
+                        let _ = write!(attrs, " Number=\"Sum\" Of=\"{}\" OfShown=\"{{x:Static {}}}\"", property(&entity.name.name, field), self.shown_converter(entity, field));
+                    }
+                    (Some(clarity_spec::model::ChartMeasure::Average { field }), Some(entity)) => {
+                        let _ = write!(attrs, " Number=\"Average\" Of=\"{}\" OfShown=\"{{x:Static {}}}\"", property(&entity.name.name, field), self.shown_converter(entity, field));
+                    }
+                    _ => attrs.push_str(" Number=\"Count\""),
+                }
+                let _ = writeln!(out, "{pad}<c:ChartView {at}{items}{attrs}{plain_state}{extra} />");
+            }
             WidgetKind::List => {
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let selected = named.map(|n| format!(" SelectedItem=\"{{Binding {}.SelectedItem}}\"", member(n))).unwrap_or_default();
@@ -1531,6 +1568,11 @@ public partial class {name}View : UserControl
             let p = &widget.props;
             match p.kind {
                 WidgetKind::Dropdown => referenced.extend(p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty)),
+                // A chart by a reference shows the texts of the records it names.
+                WidgetKind::Chart => {
+                    let Some(entity) = p.bind.as_deref().and_then(|b| self.entity_of(b)) else { continue };
+                    referenced.extend(p.by.as_deref().and_then(|by| entity.field(by)).map(|f| &f.ty));
+                }
                 // A reference edited in a table cell picks from the same choices.
                 WidgetKind::Table => {
                     let Some(entity) = p.bind.as_deref().and_then(|b| self.entity_of(b)) else { continue };

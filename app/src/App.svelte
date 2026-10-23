@@ -26,6 +26,7 @@
   import EntityEditor from "./lib/EntityEditor.svelte";
   import EnumEditor from "./lib/EnumEditor.svelte";
   import EngineEditor from "./lib/EngineEditor.svelte";
+  import PartView from "./lib/PartView.svelte";
   import TranslationsPanel from "./lib/TranslationsPanel.svelte";
   import NewLanguageDialog from "./lib/NewLanguageDialog.svelte";
   import { languageChoice } from "./lib/i18n.svelte";
@@ -238,6 +239,13 @@
     const decl = declaring?.engines.find((e) => e.name.name === current.name);
     return declaring && decl ? { decl, file: declaring } : null;
   });
+  /** The open custom part and the module that declares it. */
+  const openPart = $derived.by(() => {
+    if (current?.kind !== "part") return null;
+    const declaring = files.find((f) => f.parts.some((p) => p.name.name === current.name));
+    const decl = declaring?.parts.find((p) => p.name.name === current.name);
+    return declaring && decl ? { decl, file: declaring } : null;
+  });
   /** A line of an engine's code to show, from the Problems list. */
   let engineGoTo = $state<{ line: number; n: number } | null>(null);
   const builtProblems = $derived(engineProblems());
@@ -341,6 +349,8 @@
         return all.some((f) => (f.module?.name ?? "") === o.name);
       case "engine":
         return all.some((f) => f.engines.some((e) => e.name.name === o.name));
+      case "part":
+        return all.some((f) => f.parts.some((p) => p.name.name === o.name));
       case "language":
         return o.name === (p.project.locale.language ?? "en") || o.name in p.project.translations;
       case "resource":
@@ -1371,6 +1381,8 @@
             onapply={async (edit) => applyPreview((await applyEdit(openEngine.file, edit)).preview)}
             ondelete={() => deleteEngine(openEngine.file, openEngine.decl.name.name, openEngine.decl.span.start)}
           />
+        {:else if openPart}
+          <PartView decl={openPart.decl} file={openPart.file} onapply={async (edit) => applyPreview((await applyEdit(openPart.file, edit)).preview)} />
         {:else if moduleFile}
           <ModuleView
             {preview}

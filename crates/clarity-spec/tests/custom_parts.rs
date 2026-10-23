@@ -283,3 +283,12 @@ fn a_dotnet_part_needs_its_adapter_and_a_dll_its_assembly() {
     assert!(has(&checked(vec![file("Plot", "Plot.cs"), file("Plot", "Plot.dll")]), "'parts/Notes/Notes.cs' is not there"));
     assert!(has(&checked(vec![file("Notes", "Notes.cs"), file("Plot", "Plot.cs")]), "its assembly 'libs/Plot.dll' is not there"));
 }
+
+#[test]
+fn sample_text_shows_no_label_key() {
+    let p = load_keyed([("game.clarity", "module game\n\nentity Score\n    player: text(40), label @scorePlayerLabel\n")], &[], "en");
+    let rows = &clarity_spec::sample::sample_data(&p)["Score"];
+    let text = rows[0]["player"].as_str().unwrap();
+    assert!(!text.contains('@'), "{text}");
+    assert!(text.starts_with("Player "), "{text}");
+}

@@ -94,7 +94,9 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
                     i + 1
                 )
             } else {
-                format!("{} {}", field.label, WORDS[i % WORDS.len()])
+                // A label by key is not text to show: the field's name stands in for it.
+                let label = if field.label.starts_with('@') { crate::model::default_label(name) } else { field.label.clone() };
+                format!("{label} {}", WORDS[i % WORDS.len()])
             };
             Value::String(truncate(&text, *max_length))
         }

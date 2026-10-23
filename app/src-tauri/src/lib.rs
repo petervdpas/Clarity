@@ -6,6 +6,7 @@ mod links;
 mod diagrams;
 mod resources;
 mod engines;
+mod parts;
 mod external;
 mod themes;
 mod translations;
@@ -803,6 +804,10 @@ pub fn run() {
             stop_app,
             engines::engine_info,
             engines::engine_source_text,
+            parts::part_files,
+            parts::part_file_text,
+            parts::save_part_file,
+            parts::write_part_folders,
             engines::save_engine_source,
             engines::new_engine_source,
             engines::add_engine_stubs,

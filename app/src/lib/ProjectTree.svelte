@@ -78,6 +78,14 @@
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
+  // The custom parts outside libraries draw (DESIGN 5.19), with their modules.
+  const customParts = $derived(preview.project.files.flatMap((f) => f.parts.map((part) => ({ part, module: f.module?.name ?? "" }))));
+  function libraryNote(part: (typeof customParts)[number]["part"]): string {
+    const l = part.library;
+    if (!l) return "no library";
+    if (l.kind === "native") return "native";
+    return l.kind === "nuget" ? "NuGet" : "DLL";
+  }
   // The commands of the command-line program (DESIGN 5.20), by what is typed, with their module.
   const commands = $derived(
     preview.project.files.flatMap((f) => f.commands.map((c) => ({ line: commandLine(c.group?.name ?? null, c.name.name), module: f.module?.name ?? "" }))),
@@ -262,6 +270,18 @@
       {#if onnewengine}
         <button class="row add" onclick={onnewengine}>+ New engine</button>
       {/if}
+    </details>
+
+    <details open={customParts.length > 0}>
+      <summary>Custom parts <span class="count">{customParts.length}</span></summary>
+      {#each customParts as { part, module } (part.name.name)}
+        <button class="row" class:current={is("part", part.name.name)} title="in module {module}" onclick={() => onselect({ kind: "part", name: part.name.name })}>
+          {part.name.name}
+          <span class="note">{libraryNote(part)}</span>
+        </button>
+      {:else}
+        <p class="empty">No custom parts yet: parts an outside library draws, declared with <code>part Name</code> in a module.</p>
+      {/each}
     </details>
 
     {#if commands.length > 0}

@@ -25,7 +25,7 @@
     /** Applies an edit and throws with the reason when it is refused. */
     onapply: (edit: Edit) => Promise<void>;
     /** Opens a declaration by kind and name. */
-    onopen: (kind: "window" | "app" | "entity" | "enum" | "engine" | "theme", name: string) => void;
+    onopen: (kind: "window" | "app" | "entity" | "enum" | "engine" | "part" | "theme", name: string) => void;
   } = $props();
 
   /** The engines this module declares, with the errors in their declarations. */
@@ -124,6 +124,9 @@
       {/each}
       {#each file.enums as e (e.name.name)}
         <li><button onclick={() => onopen("enum", e.name.name)}><span class="kind">enum</span>{e.name.name}</button></li>
+      {/each}
+      {#each file.parts as p (p.name.name)}
+        <li><button onclick={() => onopen("part", p.name.name)}><span class="kind">part</span>{p.name.name}</button></li>
       {/each}
     </ul>
   </section>

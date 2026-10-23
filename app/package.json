@@ -13,8 +13,17 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.9.0",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/legacy-modes": "^6.5.2",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.6",
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.3",
+    "codemirror": "^6.0.2",
     "mermaid": "11.17.2"
   },
   "devDependencies": {

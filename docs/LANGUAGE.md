@@ -600,11 +600,12 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `number` | integer, decimal, money, id | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `checkbox` | bool | `readonly`, `taborder` | `change` |
 | `switch` | bool | `readonly`, `taborder` | `change` |
-| `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
+| `dropdown` | an enum, `ref Entity`; text with `typed` | `typed`, `search`, `show name, city`, `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
 | `color` | color | `readonly`, `taborder` | `change` |
 | `file` | file | `readonly`, `taborder` | `change` |
+| `tags` | a list of values (`list<text>`, `list<Genre>`) | `readonly`, `taborder` | `change` |
 | `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
 | `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |
@@ -657,6 +658,8 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 - Typed text is taken when the input is left or Enter is pressed; typing alone is no change, and neither is leaving without typing or typing the same text again. In a `memo`, Enter is a new line and the text is taken when it is left.
 - A number reads in the person's format. Text that is no number stays as typed and is marked, and the value stays; a cleared number is zero.
 - A checkbox, switch, dropdown, radio group or date changes when the person ticks or picks another value. An enum offers no empty choice; a `ref` offers one first, for no record.
+- A `typed` dropdown takes any text, and offers the values its field already has as it is typed: `dropdown name cityBox at 1,1 span 4 bind customer.city typed`. A value it offers once, sorted ignoring case; typing filters them. Picking one or leaving the box with new text is the change.
+- A `search` dropdown picks a reference among many records: typing filters them, a record staying when every word typed is in its text or a field it shows. `show` names the fields each record shows beside its text: `dropdown name customerBox at 1,1 span 6 bind order.customer search show name, city`. Emptying the box picks no record. Every stack offers and filters alike (`conformance/dropdown-options.json`).
 - What a handler sets, and a record read again, is never a change.
 - Enter in an input of a `form` takes the input first, then runs the form's `on submit`.
 

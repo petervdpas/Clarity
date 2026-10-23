@@ -391,16 +391,32 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             })
         })
         .collect();
+    let needs = crate::dropdown_needs(project);
     let options: String = project
         .stored_entities()
         .map(|e| {
             let name = &e.name.name;
             let text = display_field(e).map_or("format!(\"#{}\", r.id)".to_string(), |f| format!("r.{f}.clone()"));
-            format!(
-                "        {name:?} => db\n            .all::<{}::{name}>()?\n            .into_iter()\n            .map(|r| RefOption {{ id: r.id, text: {text} }})\n            .collect(),\n",
-                module_of(name)
-            )
+            // The fields a search dropdown shows of each record.
+            let fields = match needs.shown.get(name).filter(|f| !f.is_empty()) {
+                Some(shown) => format!(
+                    ", fields: serde_json::Map::from_iter([{}])",
+                    shown.iter().map(|f| format!("({f:?}.to_string(), clarity_runtime::ui::to_value(&r.{})?)", names::ident(f))).collect::<Vec<_>>().join(", ")
+                ),
+                None => String::new(),
+            };
+            let map = if fields.is_empty() {
+                format!(".map(|r| RefOption {{ id: r.id, text: {text}, ..RefOption::default() }})\n            .collect(),\n")
+            } else {
+                format!(".map(|r| Ok(RefOption {{ id: r.id, text: {text}{fields} }}))\n            .collect::<Result<_>>()?,\n")
+            };
+            format!("        {name:?} => db\n            .all::<{}::{name}>()?\n            .into_iter()\n            {map}", module_of(name))
         })
+        .collect();
+    let values: String = needs
+        .typed
+        .iter()
+        .map(|(entity, field)| format!("        ({entity:?}, {field:?}) => db.all::<{}::{entity}>()?.into_iter().map(|r| r.{}).collect(),\n", module_of(entity), names::ident(field)))
         .collect();
     let stores: String = settings.filestores.iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
     let pictures: String = crate::picture_fields(project)
@@ -518,6 +534,14 @@ fn options(db: &Db, entity: &str) -> Result<Vec<RefOption>> {{
     }})
 }}
 
+/// The values a text field already has, which a typed dropdown offers.
+#[allow(unused_variables)]
+fn values_of(db: &Db, entity: &str, field: &str) -> Result<Vec<String>> {{
+    Ok(match (entity, field) {{
+{values}        _ => Vec::new(),
+    }})
+}}
+
 /// The picture of an image field of a record.
 fn picture_of(db: &Db, entity: &str, id: i64, field: &str) -> Result<Option<Vec<u8>>> {{
     match (entity, field) {{
@@ -583,6 +607,11 @@ fn answer_event(app: tauri::State<App>, state: WindowState, handler: String, val
 #[tauri::command]
 fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>> {{
     locked(&app, |db| options(db, &entity))
+}}
+
+#[tauri::command]
+fn field_values(app: tauri::State<App>, entity: String, field: String) -> Answer<Vec<String>> {{
+    locked(&app, |db| values_of(db, &entity, &field))
 }}
 
 /// A picture of a record, fetched on its own, as the page shows it.
@@ -688,6 +717,7 @@ fn main() {{
             dispatch_event,
             answer_event,
             ref_options,
+            field_values,
             picture,
             file_data,
             open_file,

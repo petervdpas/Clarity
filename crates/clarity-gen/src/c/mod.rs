@@ -551,6 +551,7 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
         }
         answers.push_str("    }\n");
     }
+    let needs = crate::dropdown_needs(project);
     let mut options = String::new();
     for entity in project.stored_entities() {
         let name = &entity.name.name;
@@ -560,11 +561,38 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
             .iter()
             .find(|f| matches!(f.ty, FieldType::Text { .. } | FieldType::Email))
             .map_or_else(|| "clarity_format(\"#%lld\", (long long)all.items[i].id)".to_string(), |f| format!("all.items[i].{}", ident(&f.name.name)));
+        // The fields a search dropdown shows of each record.
+        let add = match needs.shown.get(name).filter(|f| !f.is_empty()) {
+            Some(shown_fields) => {
+                let fields: String = shown_fields
+                    .iter()
+                    .filter_map(|f| entity.field(f))
+                    .map(|f| format!("            cJSON_AddItemToObject(fields, {}, {});\n", string(&f.name.name), model::json_of(f)))
+                    .collect();
+                format!(
+                    "{{\n            const {name}* r = &all.items[i];\n            cJSON* fields = cJSON_AddObjectToObject(clarity_add_option(*out, r->id, {}), \"fields\");\n{fields}        }}",
+                    shown.replace("all.items[i].", "r->")
+                )
+            }
+            None => format!("clarity_add_option(*out, all.items[i].id, {shown});"),
+        };
         let _ = write!(
             options,
-            "    if (strcmp(entity, {}) == 0) {{\n        {} all = {{0}};\n        if (!{p}_all(db, &all)) return false;\n        for (size_t i = 0; i < all.count; i++) clarity_add_option(*out, all.items[i].id, {shown});\n    }}\n",
+            "    if (strcmp(entity, {}) == 0) {{\n        {} all = {{0}};\n        if (!{p}_all(db, &all)) return false;\n        for (size_t i = 0; i < all.count; i++) {add}\n    }}\n",
             string(name),
             names::list_type(name)
+        );
+    }
+    let mut values = String::new();
+    for (entity, field) in &needs.typed {
+        let _ = write!(
+            values,
+            "    if (strcmp(entity, {}) == 0 && strcmp(field, {}) == 0) {{\n        {} all = {{0}};\n        if (!{}_all(db, &all)) return false;\n        for (size_t i = 0; i < all.count; i++) cJSON_AddItemToArray(*out, clarity_json_text(all.items[i].{}));\n    }}\n",
+            string(entity),
+            string(field),
+            names::list_type(entity),
+            prefix(entity),
+            ident(field)
         );
     }
     let mut pictures = String::new();
@@ -641,6 +669,15 @@ static bool options(ClarityDb* db, const char* entity, cJSON** out) {{
 {options}    return true;
 }}
 
+/// The values a text field already has, which a typed dropdown offers.
+static bool values(ClarityDb* db, const char* entity, const char* field, cJSON** out) {{
+    (void)db;
+    (void)entity;
+    (void)field;
+    *out = cJSON_CreateArray();
+{values}    return true;
+}}
+
 /// The picture of an image field of a record.
 static bool picture(ClarityDb* db, const char* entity, int64_t id, const char* field, ClarityBytes* out) {{
     (void)db;
@@ -658,7 +695,7 @@ static bool redraw(ClarityDb* db, ClarityReply* reply) {{
 }}
 
 /// What the shell asks of the application's windows.
-static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw, answer}};
+static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw, answer, values}};
 
 /// Says what went wrong, and ends the program.
 static int failed(ClarityDb* db) {{

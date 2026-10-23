@@ -444,6 +444,14 @@ pub struct WidgetProps {
     #[serde(default)]
     pub order: Option<TableOrder>,
     pub show: Vec<String>,
+    /// `typed`: a dropdown of a text field any text may be typed into, the
+    /// values the field already has offered as it is typed (U1c).
+    #[serde(default)]
+    pub typed: bool,
+    /// `search`: a dropdown of a reference whose records filter as it is
+    /// typed, each showing the fields of `show` (U1c).
+    #[serde(default)]
+    pub search: bool,
     pub orientation: Option<Orientation>,
     pub surface: Option<Surface>,
     pub renderer: Option<String>,

@@ -1,0 +1,25 @@
+{
+  "about": "The dropdown's options of U1c, as every renderer offers them. A `typed` dropdown takes any text; it offers the values its field already has in the database (`values`, as the shell gives them, with repeats and empty ones): each value once, empty text left out, those that contain the typed text (trimmed, ignoring case; all of them when nothing is typed), sorted ignoring case and then as written. A `search` dropdown filters the records a reference can point at (`options`, each with its id, its text and the texts of the fields it shows) as text is typed: a record is offered when every word typed is in its text or in a field it shows, ignoring case; in the order the records came, all of them when nothing is typed.",
+  "suggestions": [
+    { "values": ["Utrecht", "amsterdam", "", "Amstelveen", "Utrecht", "Gent"], "typed": "", "gives": ["Amstelveen", "amsterdam", "Gent", "Utrecht"] },
+    { "values": ["Utrecht", "amsterdam", "", "Amstelveen", "Utrecht", "Gent"], "typed": "AMST", "gives": ["Amstelveen", "amsterdam"] },
+    { "values": ["Utrecht", "amsterdam", "", "Amstelveen", "Utrecht", "Gent"], "typed": "  ent ", "gives": ["Gent"] },
+    { "values": ["Paris", "paris", "Paris"], "typed": "", "gives": ["Paris", "paris"] },
+    { "values": ["Utrecht"], "typed": "Rome", "gives": [] }
+  ],
+  "search": {
+    "options": [
+      { "id": 1, "text": "Jansen", "fields": { "name": "Jansen", "city": "Utrecht" } },
+      { "id": 2, "text": "Janssens", "fields": { "name": "Janssens", "city": "Gent" } },
+      { "id": 3, "text": "de Vries", "fields": { "name": "de Vries", "city": "Utrecht" } }
+    ],
+    "cases": [
+      { "typed": "", "gives": [1, 2, 3] },
+      { "typed": "jan", "gives": [1, 2] },
+      { "typed": "utrecht", "gives": [1, 3] },
+      { "typed": "JAN utr", "gives": [1] },
+      { "typed": "  vries  ", "gives": [3] },
+      { "typed": "rome", "gives": [] }
+    ]
+  }
+}

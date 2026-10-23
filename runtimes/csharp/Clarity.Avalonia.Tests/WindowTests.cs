@@ -197,6 +197,8 @@ public class WindowTests
         Assert.Empty(shell.OwnedWindows);
         Assert.Equal(["open", "return"], card.Said);
         Assert.True(shell.IsVisible);
+        // No desktop window is left for the tests after this one.
+        shell.Close();
     }
 
     [AvaloniaFact]

@@ -43,6 +43,8 @@ type Windows interface {
 	Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, error)
 	// Options are the records a reference field of entity can point at.
 	Options(db *clarity.Db, entity string) ([]clarity.RefOption, error)
+	// Values are the values a text field already has, which a typed dropdown offers.
+	Values(db *clarity.Db, entity, field string) ([]string, error)
 	// Picture is the picture of image field field of record id of entity;
 	// nil when it has none.
 	Picture(db *clarity.Db, entity string, id int64, field string) ([]byte, error)
@@ -240,6 +242,8 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		return answer(c.options.Windows.Redraw(db, reply))
 	case "ref_options":
 		return answer(c.options.Windows.Options(db, a.Entity))
+	case "field_values":
+		return answer(c.options.Windows.Values(db, a.Entity, a.Field))
 	case "picture":
 		// A picture of a record, fetched on its own, as the page shows it.
 		b, err := c.options.Windows.Picture(db, a.Entity, a.ID, a.Field)

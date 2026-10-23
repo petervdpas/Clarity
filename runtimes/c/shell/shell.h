@@ -28,6 +28,9 @@ typedef struct {
     /// Runs the handler the answer to a question goes to (DESIGN 5.14),
     /// with the values written for it and the answer last.
     bool (*answer)(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out);
+    /// The values text field `field` of `entity` already has, which a typed
+    /// dropdown offers (U1c), as an array of text.
+    bool (*values)(ClarityDb* db, const char* entity, const char* field, cJSON** out);
 } ClarityWindows;
 
 typedef struct {

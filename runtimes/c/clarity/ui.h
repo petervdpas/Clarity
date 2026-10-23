@@ -222,6 +222,8 @@ cJSON* clarity_window_state_json(const ClarityWindowState* state);
 bool clarity_window_state_from_json(const cJSON* in, ClarityWindowState* out);
 cJSON* clarity_reply_json(const ClarityReply* reply);
 /// `{"id": id, "text": text}` added to `options`: a record a reference field can point at.
-void clarity_add_option(cJSON* options, int64_t id, const char* text);
+/// Adds a record a reference can point at; a search dropdown's fields go in
+/// its "fields" (U1c).
+cJSON* clarity_add_option(cJSON* options, int64_t id, const char* text);
 /// An object of `count` pairs of name and value, such as the `with` of `open`.
 cJSON* clarity_json_object(int count, ...);

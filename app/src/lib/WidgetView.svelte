@@ -12,6 +12,8 @@
   import ColorInput from "./ui/ColorInput.svelte";
   import FileInput, { type RecordFileValue } from "./ui/FileInput.svelte";
   import TagsInput from "./ui/TagsInput.svelte";
+  import TypeAheadInput from "./ui/TypeAheadInput.svelte";
+  import { searched, suggestions, type RefOption } from "./dropdownOptions";
   import type { Item, ItemKind } from "./listFields";
   import { numberRange } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
@@ -34,7 +36,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, itemText, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEntity, findEnum, findField, formatsOf, isNumeric, itemText, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { languageName, languagesOf } from "./translate";
   import { numberEditing } from "./format";
@@ -678,6 +680,57 @@
         disabled={disabled || readonly}
         onchange={(next) => {
           setValue(next);
+          fire("change");
+        }}
+      />
+    {:else if p.kind === "dropdown" && p.typed}
+      <!-- Any text, the values the field already has offered (U1c). -->
+      {@const owner = p.bind ? data[p.bind.split(".")[0]]?.entity.name.name : undefined}
+      {@const fieldName = bound?.field.name.name}
+      {@const known = owner && fieldName ? (live ? live.fieldValues(owner, fieldName) : (preview.samples[owner] ?? []).map((r) => r[fieldName]).filter((v): v is string => typeof v === "string")) : []}
+      <TypeAheadInput
+        {id}
+        text={typeof value === "string" ? value : ""}
+        free
+        offer={(typed) =>
+          suggestions(known, typed).map((v) => ({ key: v, cells: [v] }))}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        onpick={(next) => {
+          setValue(next);
+          fire("change");
+        }}
+        oncommit={(next) => {
+          setValue(next);
+          fire("change");
+        }}
+      />
+    {:else if p.kind === "dropdown" && p.search && bound?.field.type.kind === "ref"}
+      <!-- A record among many, filtered as it is typed, with the fields it shows (U1c). -->
+      {@const target = bound.field.type.entity.name}
+      {@const records: RefOption[] = live ? live.refOptions(target) : (preview.displays[target] ?? []).map((text, i) => ({ id: i + 1, text }))}
+      {@const targetEntity = findEntity(preview, target)}
+      {@const shownFields = p.show.map((f) => (targetEntity ? findField(targetEntity, f) : undefined))}
+      {@const cellsOf = (o: RefOption) => p.show.map((f, i) => (shownFields[i] ? displayValue(preview, shownFields[i]!, (o.fields?.[f] ?? null) as JsonValue) : ""))}
+      <TypeAheadInput
+        {id}
+        text={records.find((o) => o.id === value || o.text === value)?.text ?? ""}
+        offer={(typed) => searched(records, typed, cellsOf).map((o) => ({ key: String(o.id), cells: [o.text, ...cellsOf(o)] }))}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        onpick={(key) => {
+          const picked = records.find((o) => String(o.id) === key);
+          setValue(live ? (picked?.id ?? null) : (picked?.text ?? null));
+          fire("change");
+        }}
+        onclear={() => {
+          setValue(null);
           fire("change");
         }}
       />

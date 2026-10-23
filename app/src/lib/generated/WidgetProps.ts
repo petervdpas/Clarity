@@ -66,7 +66,17 @@ sortable: boolean,
 /**
  * `order by field [desc]`: the order a table's rows show in first.
  */
-order: TableOrder | null, show: Array<string>, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+order: TableOrder | null, show: Array<string>, 
+/**
+ * `typed`: a dropdown of a text field any text may be typed into, the
+ * values the field already has offered as it is typed (U1c).
+ */
+typed: boolean, 
+/**
+ * `search`: a dropdown of a reference whose records filter as it is
+ * typed, each showing the fields of `show` (U1c).
+ */
+search: boolean, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
 /**
  * The input a label or help text belongs to, by part name.
  */

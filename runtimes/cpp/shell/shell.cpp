@@ -96,6 +96,7 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             return value(options_.windows->redraw(db, options_.windows->answer(db, state, text_of(args, "handler"), values)));
         }
         if (command == "ref_options") return value(options_.windows->options(db, text_of(args, "entity")));
+        if (command == "field_values") return value(options_.windows->values(db, text_of(args, "entity"), text_of(args, "field")));
         if (command == "picture") {
             // A picture of a record, fetched on its own, as the page shows it.
             auto bytes = options_.windows->picture(db, text_of(args, "entity"), args.value("id", int64_t(0)), text_of(args, "field"));

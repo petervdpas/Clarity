@@ -1504,6 +1504,8 @@ fn parse_widget_props(
         min: None,
         step: None,
         split: false,
+        typed: false,
+        search: false,
         labels: None,
         made: false,
         style: None,
@@ -1765,6 +1767,14 @@ fn parse_widget_props(
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
+            }
+            "typed" => {
+                applies(WidgetProperty::Typed)?;
+                props.typed = true;
+            }
+            "search" => {
+                applies(WidgetProperty::Search)?;
+                props.search = true;
             }
             "to" => {
                 applies(WidgetProperty::To)?;

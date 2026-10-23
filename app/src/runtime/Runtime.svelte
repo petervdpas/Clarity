@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { RefOption } from "../lib/dropdownOptions";
   // A running application: the windows the backend opens, drawn by the
   // renderer, with every event sent to the backend. The backend owns the
   // behavior; this page only shows state and reports what the user does.
@@ -64,7 +65,9 @@
   /** The dialogs waiting, the first one shown. */
   let waiting = $state<Waiting[]>([]);
   let busy = $state(false);
-  let options = $state<Record<string, { id: number; text: string }[]>>({});
+  let options = $state<Record<string, RefOption[]>>({});
+  /** The values each typed dropdown's field has, by `Entity.field`. */
+  let fieldValues = $state<Record<string, string[]>>({});
   let nextMessage = 0;
 
   const current = $derived(stack.at(-1) ?? null);
@@ -220,8 +223,9 @@
       get: () => stack,
       set: (next) => {
         stack = next;
-        // Data may have changed: reference lists load again when needed.
+        // Data may have changed: reference lists and values load again when needed.
         options = {};
+        fieldValues = {};
       },
     },
     {
@@ -341,11 +345,23 @@
     keepSettings() {
       if (current) adopt($state.snapshot(current.data[SETTINGS]));
     },
+    fieldValues(entity: string, field: string) {
+      const at = `${entity}.${field}`;
+      const known = fieldValues[at];
+      if (!known && !loading.has(at)) {
+        loading.add(at);
+        invoke<string[]>("field_values", { entity, field })
+          .then((list) => (fieldValues[at] = list))
+          .catch((err) => say({ level: "error", text: errorText(err) }))
+          .finally(() => loading.delete(at));
+      }
+      return known ?? [];
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {
         loading.add(entity);
-        invoke<{ id: number; text: string }[]>("ref_options", { entity })
+        invoke<RefOption[]>("ref_options", { entity })
           .then((list) => (options[entity] = list))
           .catch((err) => say({ level: "error", text: errorText(err) }))
           .finally(() => loading.delete(entity));

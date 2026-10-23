@@ -39,6 +39,9 @@ public:
     virtual Reply redraw(Db& db, Reply reply) = 0;
     /// The records a reference field of `entity` can point at.
     virtual std::vector<RefOption> options(Db& db, const std::string& entity) = 0;
+    /// The values text field `field` of `entity` already has, which a typed
+    /// dropdown offers (U1c).
+    virtual std::vector<std::string> values(Db&, const std::string&, const std::string&) { return {}; }
     /// The picture of image field `field` of record `id` of `entity`; none when it has none.
     virtual std::optional<Bytes> picture(Db& db, const std::string& entity, int64_t id, const std::string& field) = 0;
 };

@@ -177,6 +177,9 @@ nlohmann::json ask_value(const std::string& type, std::optional<std::string> of,
     return {{"kind", "value"}, {"type", type}, {"of", of ? nlohmann::json(*of) : nlohmann::json(nullptr)}, {"only", std::move(only)}, {"default", std::move(start)}};
 }
 
-void to_json(nlohmann::json& out, const RefOption& o) { out = {{"id", o.id}, {"text", o.text}}; }
+void to_json(nlohmann::json& out, const RefOption& o) {
+    out = {{"id", o.id}, {"text", o.text}};
+    if (o.fields.is_object() && !o.fields.empty()) out["fields"] = o.fields;
+}
 
 }  // namespace clarity

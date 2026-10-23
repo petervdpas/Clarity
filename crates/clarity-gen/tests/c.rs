@@ -339,7 +339,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     let main = file(&files, "src/main.c");
     has(main, "static bool redraw(ClarityDb* db, ClarityReply* reply) {");
     has(main, "        clarity_ui_begin_drawing(ui, \"dial\");\n        if (!dial_window_draw_dial(db, ui, &w)) return false;");
-    has(main, "picture, redraw, answer};");
+    has(main, "picture, redraw, answer, values};");
 }
 
 /// An application with an engine gets the host and wasm3; one without, neither.

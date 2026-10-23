@@ -226,6 +226,14 @@
     <Style Selector="StackPanel.busy > TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- What a typed or search dropdown offers below its box (U1c). -->
+    <Style Selector="Border.offered">
+      <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ClarityRadiusPanel}" />
+      <Setter Property="BoxShadow" Value="0 4 16 0 #40000000" />
+    </Style>
     <!-- The items of a tags input (U1c), each a chip with the button that removes it. -->
     <Style Selector="Border.chip">
       <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />

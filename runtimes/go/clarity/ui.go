@@ -147,6 +147,8 @@ type Reply struct {
 type RefOption struct {
 	ID   int64  `json:"id"`
 	Text string `json:"text"`
+	// Fields are the fields a search dropdown shows of the record (U1c), by name.
+	Fields map[string]any `json:"fields,omitempty"`
 }
 
 // Ui is what a handler can do to the screen.

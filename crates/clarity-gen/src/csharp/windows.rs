@@ -137,6 +137,16 @@ pub(super) fn display(entity: &Entity) -> String {
         .map_or_else(|| "r.Id.ToString()".to_string(), |f| format!("r.{}", property(&entity.name.name, &f.name.name)))
 }
 
+/// The view model's list of the values a typed dropdown's field has: `CustomerCityValues`.
+fn typed_values(entity: &Entity, field: &Field) -> String {
+    format!("{}{}Values", entity.name.name, pascal(&field.name.name))
+}
+
+/// The view model's records a search dropdown picks from, with the fields it shows: `CustomerNameCityChoices`.
+fn searched_choices(entity: &Entity, show: &[String]) -> String {
+    format!("{}{}Choices", entity.name.name, show.iter().map(|f| pascal(f)).collect::<String>())
+}
+
 struct Window<'a> {
     project: &'a Project,
     page: &'a Page,
@@ -972,6 +982,23 @@ impl<'a> Window<'a> {
                 let read_only = if p.readonly { " IsEnabled=\"False\"" } else { "" };
                 let _ = writeln!(out, "{pad}<{control} {at} {label}{value}{read_only}{plain_state}{extra} />");
             }
+            // Any text, the values the field has offered (U1c).
+            WidgetKind::Dropdown if p.typed => {
+                let values = p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(e, f)| format!(" Values=\"{{Binding {}}}\"", typed_values(e, f))).unwrap_or_default();
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let read_only = if p.readonly { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:TypedInput {at}{values}{value}{read_only}{plain_state}{extra} />");
+            }
+            // A record among many, filtered as it is typed, with the fields it shows (U1c).
+            WidgetKind::Dropdown if p.search => {
+                let choices = match p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty) {
+                    Some(FieldType::Ref { entity }) => self.project.entity(&entity.name).map(|t| format!(" Choices=\"{{Binding {}}}\"", searched_choices(t, &p.show))).unwrap_or_default(),
+                    _ => String::new(),
+                };
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let read_only = if p.readonly { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:LookupInput {at}{choices}{value}{read_only}{plain_state}{extra} />");
+            }
             WidgetKind::Dropdown | WidgetKind::Radio => {
                 // An enum's values (never an empty one), or the records a reference can point at after an empty one.
                 let choices = match p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty) {
@@ -1490,6 +1517,38 @@ public partial class {name}View : UserControl
         for (entity, shown) in &choices {
             let _ = writeln!(constructor, "        {entity}Choices = Choice.Of(Db.All<{entity}>(), r => {shown});");
             let _ = write!(properties, "    public Choice[] {entity}Choices {{ get; }}\n\n");
+        }
+        // The dropdowns' options (U1c): the values a typed one's field has,
+        // and the records a search picks from with the fields it shows.
+        let mut lists: BTreeMap<String, String> = BTreeMap::new();
+        for p in self.parts.iter().map(|w| &w.props).filter(|p| p.kind == WidgetKind::Dropdown) {
+            let Some((entity, field)) = p.bind.as_deref().and_then(|b| self.bound_field(b)) else { continue };
+            if p.typed {
+                let name = typed_values(entity, field);
+                let read = format!("        {name} = [.. Db.All<{}>().Select(r => r.{})];", entity.name.name, property(&entity.name.name, &field.name.name));
+                if lists.insert(name.clone(), read).is_none() {
+                    let _ = write!(properties, "    public List<string> {name} {{ get; }}\n\n");
+                }
+            }
+            // Without fields to show, a search picks from the reference's own choices.
+            if let (true, FieldType::Ref { entity: target }) = (p.search, &field.ty)
+                && !p.show.is_empty()
+                && let Some(target) = self.project.entity(&target.name)
+            {
+                let name = searched_choices(target, &p.show);
+                let cells: Vec<String> = p
+                    .show
+                    .iter()
+                    .map(|f| format!("{}.TextOf(r.{})", self.shown_converter(target, f).trim_start_matches("local:"), property(&target.name.name, f)))
+                    .collect();
+                let read = format!("        {name} = Choice.Of(Db.All<{}>(), r => {}, r => [{}]);", target.name.name, display(target), cells.join(", "));
+                if lists.insert(name.clone(), read).is_none() {
+                    let _ = write!(properties, "    public Choice[] {name} {{ get; }}\n\n");
+                }
+            }
+        }
+        for read in lists.values() {
+            let _ = writeln!(constructor, "{read}");
         }
 
         // A state per named part.

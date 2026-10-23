@@ -15,8 +15,12 @@ using Clarity.Runtime;
 namespace Clarity.Avalonia;
 
 /// <summary>One choice of a dropdown or radio group: the value stored and the label shown.</summary>
-public sealed record Choice(object? Value, string Label)
+public sealed record Choice(object? Value, string Label, IReadOnlyList<string>? Cells = null)
 {
+    /// <summary>The records as the choices of a search dropdown (U1c), each with the texts of the fields it shows.</summary>
+    public static Choice[] Of<R>(IEnumerable<R> records, Func<R, string> label, Func<R, string[]> cells) where R : IRecord<R> =>
+        [.. records.Select(r => new Choice(r.Id, label(r), cells(r)))];
+
     /// <summary>The records as choices, after an empty one for no reference.</summary>
     public static Choice[] Of<R>(IEnumerable<R> records, Func<R, string> label, Func<R, long> id) =>
         [new(null, ""), .. records.Select(r => new Choice(id(r), label(r)))];
@@ -56,6 +60,13 @@ public sealed class ShownConverter(Func<object?, string?> labels, FieldFormat? f
         };
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => BindingOperations.DoNothing;
+}
+
+public static class ShownText
+{
+    /// <summary>A value as text, as <paramref name="converter"/> shows it: a search dropdown's cells.</summary>
+    public static string TextOf(this IValueConverter converter, object? value) =>
+        converter.Convert(value, typeof(string), null, CultureInfo.CurrentCulture) as string ?? "";
 }
 
 /// <summary>A value of a field with a format, shown in the person's format: a table cell, a text part.</summary>

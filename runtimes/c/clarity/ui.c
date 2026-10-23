@@ -474,11 +474,12 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     return out;
 }
 
-void clarity_add_option(cJSON* options, int64_t id, const char* text) {
+cJSON* clarity_add_option(cJSON* options, int64_t id, const char* text) {
     cJSON* o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", (double)id);
     cJSON_AddStringToObject(o, "text", text ? text : "");
     cJSON_AddItemToArray(options, o);
+    return o;
 }
 
 cJSON* clarity_json_object(int count, ...) {

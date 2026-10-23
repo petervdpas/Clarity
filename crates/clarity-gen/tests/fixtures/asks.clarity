@@ -6,6 +6,7 @@ enum Format
 
 entity Friend
     name: text(80), required
+    city: text(60)
 
 entity Album
     title: text(120), required
@@ -20,6 +21,7 @@ entity Album
     formats: list<Format>
     plays: list<date>
     scores: list<decimal>
+    lentTo: ref Friend
 
 settings
     language
@@ -30,6 +32,7 @@ settings
 page Albums: window
     data album: Album
     data friends: list<Friend>
+    data pal: Friend
     button "Delete" name deleteButton at 1,1 span 2 on click: deleteClicked
     button "Lend" name lendButton at 3,1 span 2 on click: lendClicked
     button "Copies" name copiesButton at 5,1 span 2 on click: copiesClicked
@@ -69,6 +72,9 @@ page Albums: window
     tags name tagsBox at 1,14 span 6 bind album.tags on change: tagsChanged
     tags name formatsBox at 7,14 span 6 bind album.formats
     tags name playsBox at 1,15 span 6 bind album.plays
+    dropdown name lentToBox at 7,15 span 6 bind album.lentTo search show name, city on change: tagsChanged
+    dropdown name cityBox at 1,16 span 4 bind pal.city typed on change: tagsChanged
+    dropdown name palBox at 5,16 span 4 bind album.lentTo search
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>

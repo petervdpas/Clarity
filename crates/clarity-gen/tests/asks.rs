@@ -62,7 +62,7 @@ fn c_asks_in_the_reply_and_answers_through_its_windows() {
     has(&code, "clarity_ask_confirm(");
     has(&code, "clarity_ask_value(\"record\", \"Friend\", ");
     has(&code, "static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out)");
-    has(&code, "picture, redraw, answer}");
+    has(&code, "picture, redraw, answer, values}");
     has(&code, "friend_get(db, (int64_t)a1->valuedouble, &v1)");
     has(&code, "clarity_ask_window(\"PickFriend\", cJSON_CreateObject())");
     has(&code, "clarity_ui_close_with(ui, ");

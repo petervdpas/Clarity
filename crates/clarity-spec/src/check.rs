@@ -1218,6 +1218,7 @@ impl<'a> Checker<'a> {
                         ),
                         widget.span,
                     ),
+                    Some(field) if p.kind == WidgetKind::Dropdown => self.check_dropdown(file, &at, widget, &field.ty),
                     Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
             }
@@ -1259,6 +1260,37 @@ impl<'a> Checker<'a> {
                     self.error(file, format!("{at}: '{}' is not a column of the table; order by one it shows", order.field), widget.span);
                 }
                 self.check_edits(file, &at, entity, widget);
+            }
+        }
+    }
+
+    /// A dropdown's options (U1c): `typed` takes any text, so it binds a
+    /// text field; `search` finds a record, so it binds a reference, and
+    /// shows fields of that record's entity.
+    fn check_dropdown(&mut self, file: usize, at: &str, widget: &Widget, ty: &FieldType) {
+        let p = &widget.props;
+        if let Err(problem) = widgets::dropdown_options(p) {
+            self.error(file, format!("{at}: {problem}"), widget.span);
+        }
+        let text = matches!(ty, FieldType::Text { .. });
+        if p.typed && !text {
+            self.error(file, format!("{at}: 'typed' takes any text, so it binds a text field"), widget.span);
+        } else if text && !p.typed {
+            self.error(file, format!("{at}: a dropdown of text is 'typed': any text may be typed, the values it has are offered"), widget.span);
+        }
+        if p.search && !matches!(ty, FieldType::Ref { .. }) {
+            self.error(file, format!("{at}: 'search' finds a record, so it binds a reference"), widget.span);
+            return;
+        }
+        let FieldType::Ref { entity } = ty else { return };
+        let Some(target) = self.files.iter().flat_map(|f| &f.entities).find(|e| e.name.name == entity.name) else { return };
+        for shown in &p.show {
+            match target.field(shown) {
+                None => self.error(file, format!("{at}: {} has no field '{shown}' to show", target.name.name), widget.span),
+                Some(f) if matches!(f.ty, FieldType::Image | FieldType::File | FieldType::List { .. }) => {
+                    self.error(file, format!("{at}: a search shows text and values, not {shown}"), widget.span)
+                }
+                Some(_) => {}
             }
         }
     }

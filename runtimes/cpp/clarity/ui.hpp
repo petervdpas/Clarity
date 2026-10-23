@@ -128,6 +128,8 @@ struct Reply {
 struct RefOption {
     int64_t id;
     std::string text;
+    /// The fields a search dropdown shows of the record (U1c), by name.
+    nlohmann::json fields = nlohmann::json::object();
 };
 
 /// What a handler can do to the screen.

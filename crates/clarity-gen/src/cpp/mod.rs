@@ -408,6 +408,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
             );
         }
     }
+    let needs = crate::dropdown_needs(project);
     let mut options = String::new();
     for entity in project.stored_entities() {
         let name = &entity.name.name;
@@ -416,7 +417,16 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
             .iter()
             .find(|f| matches!(f.ty, FieldType::Text { .. } | FieldType::Email))
             .map_or_else(|| "\"#\" + std::to_string(r.id)".to_string(), |f| format!("r.{}", ident(&f.name.name)));
-        let _ = writeln!(options, "        if (entity == {}) for (const auto& r : db.all<{name}>()) out.push_back({{r.id, {shown}}});", string(name));
+        // The fields a search dropdown shows of each record.
+        let fields = match needs.shown.get(name).filter(|f| !f.is_empty()) {
+            Some(shown_fields) => format!(", nlohmann::json{{{}}}", shown_fields.iter().map(|f| format!("{{{}, r.{}}}", string(f), ident(f))).collect::<Vec<_>>().join(", ")),
+            None => String::new(),
+        };
+        let _ = writeln!(options, "        if (entity == {}) for (const auto& r : db.all<{name}>()) out.push_back({{r.id, {shown}{fields}}});", string(name));
+    }
+    let mut values = String::new();
+    for (entity, field) in &needs.typed {
+        let _ = writeln!(values, "        if (entity == {} && field == {}) for (const auto& r : db.all<{entity}>()) out.push_back(r.{});", string(entity), string(field), ident(field));
     }
     let mut pictures = String::new();
     for (e, f) in crate::picture_fields(project) {
@@ -487,6 +497,11 @@ public:
     std::vector<clarity::RefOption> options([[maybe_unused]] clarity::Db& db, [[maybe_unused]] const std::string& entity) override {{
         std::vector<clarity::RefOption> out;
 {options}        return out;
+    }}
+
+    std::vector<std::string> values([[maybe_unused]] clarity::Db& db, [[maybe_unused]] const std::string& entity, [[maybe_unused]] const std::string& field) override {{
+        std::vector<std::string> out;
+{values}        return out;
     }}
 
     std::optional<clarity::Bytes> picture([[maybe_unused]] clarity::Db& db, const std::string& entity, [[maybe_unused]] int64_t id, const std::string& field) override {{

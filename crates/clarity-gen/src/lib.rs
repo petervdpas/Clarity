@@ -305,6 +305,56 @@ pub(crate) fn picture_fields(project: &Project) -> Vec<(&clarity_spec::model::En
         .collect()
 }
 
+/// The dropdowns with options of U1c, as the shells serve them: the text
+/// fields a `typed` dropdown offers the values of, and for each entity a
+/// `search` dropdown picks from, the fields its records show.
+#[derive(Debug, Default)]
+pub(crate) struct DropdownNeeds {
+    /// `(entity, field)`, each once.
+    pub typed: Vec<(String, String)>,
+    /// Entity to the fields shown, each once, in the order first written.
+    pub shown: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+pub(crate) fn dropdown_needs(project: &Project) -> DropdownNeeds {
+    use clarity_spec::model::{FieldType, Widget};
+    use clarity_spec::widgets::WidgetKind;
+    fn walk<'a>(widgets: &'a [Widget], found: &mut Vec<&'a Widget>) {
+        for w in widgets {
+            found.push(w);
+            walk(&w.children, found);
+            for page in &w.pages {
+                walk(&page.children, found);
+            }
+        }
+    }
+    let mut needs = DropdownNeeds::default();
+    for page in project.files.iter().flat_map(|f| &f.pages) {
+        let mut parts = Vec::new();
+        walk(&page.widgets, &mut parts);
+        for p in parts.iter().map(|w| &w.props).filter(|p| p.kind == WidgetKind::Dropdown && (p.typed || p.search)) {
+            let Some((data, field)) = p.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
+            let Some(entity) = page.data.iter().find(|d| d.name.name == data).and_then(|d| d.entity()).and_then(|e| project.entity(&e.name)) else { continue };
+            let Some(field) = entity.field(field) else { continue };
+            if p.typed {
+                let pair = (entity.name.name.clone(), field.name.name.clone());
+                if !needs.typed.contains(&pair) {
+                    needs.typed.push(pair);
+                }
+            }
+            if let (true, FieldType::Ref { entity: target }) = (p.search, &field.ty) {
+                let shown = needs.shown.entry(target.name.clone()).or_default();
+                for f in &p.show {
+                    if !shown.contains(f) {
+                        shown.push(f.clone());
+                    }
+                }
+            }
+        }
+    }
+    needs
+}
+
 /// One generated file, by its path inside `out/`. Most are text; a few, like
 /// icons, are bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]

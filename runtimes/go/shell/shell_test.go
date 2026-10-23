@@ -78,6 +78,10 @@ func (c *cards) Redraw(db *clarity.Db, reply clarity.Reply) (clarity.Reply, erro
 	return reply, err
 }
 
+func (c *cards) Values(db *clarity.Db, entity, field string) ([]string, error) {
+	return []string{"Utrecht", "Gent"}, nil
+}
+
 func (c *cards) Options(db *clarity.Db, entity string) ([]clarity.RefOption, error) {
 	return []clarity.RefOption{{ID: 1, Text: "Ada"}}, nil
 }
@@ -180,6 +184,9 @@ func TestARefusalKeepsItsSlotsAndOtherErrorsAreText(t *testing.T) {
 
 func TestReferenceOptionsAndCommandsWithoutAWindow(t *testing.T) {
 	c, _ := service(t)
+	if got := wire(t, call(t, c, "field_values", `{"entity":"Customer","field":"city"}`)); got != `{"value":["Utrecht","Gent"]}` {
+		t.Errorf("field_values: %s", got)
+	}
 	if got := wire(t, call(t, c, "ref_options", `{"entity":"Customer"}`)); got != `{"value":[{"id":1,"text":"Ada"}]}` {
 		t.Fatal(got)
 	}

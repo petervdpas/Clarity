@@ -681,11 +681,14 @@ pub fn to_value<T: Serialize>(value: &T) -> Result<Value> {
     serde_json::to_value(value).map_err(|err| Error::Invalid(err.to_string()))
 }
 
-/// A record a reference field can point at, as a dropdown shows it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// A record a reference field can point at, as a dropdown shows it: with
+/// the fields a `search` dropdown shows of it (U1c), by name.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RefOption {
     pub id: crate::Id,
     pub text: String,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub fields: serde_json::Map<String, Value>,
 }
 
 #[cfg(test)]

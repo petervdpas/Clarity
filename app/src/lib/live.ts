@@ -1,3 +1,4 @@
+import type { RefOption } from "./dropdownOptions";
 // The connection between the renderer and a running application. The
 // generated app sets it; the designer and the preview do not, so there the
 // renderer works as before. Through it, parts report their events and the
@@ -76,8 +77,10 @@ export interface Live {
   setVisible(part: string, visible: boolean): void;
   /** The person changed a setting (DESIGN 5.17) through an input bound to it: the shell keeps it. */
   keepSettings(): void;
-  /** The records a reference field can point at, as id and display text. */
-  refOptions(entity: string): { id: number; text: string }[];
+  /** The records a reference field can point at, as id and display text, with the fields a search dropdown shows. */
+  refOptions(entity: string): RefOption[];
+  /** The values a text field already has, which a typed dropdown offers (U1c). */
+  fieldValues(entity: string, field: string): string[];
   /**
    * A record's stored picture as a URL to show, fetched on its own:
    * undefined while it loads, null when there is none.

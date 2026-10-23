@@ -140,8 +140,8 @@ fn read(i: usize, f: &Field) -> String {
     }
 }
 
-/// A field in the record's JSON.
-fn json_of(f: &Field) -> String {
+/// A field in the record's JSON, of the record `r`.
+pub(crate) fn json_of(f: &Field) -> String {
     let value = format!("r->{}", ident(&f.name.name));
     match &f.ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity_json_text({value})"),

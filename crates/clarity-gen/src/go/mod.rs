@@ -471,6 +471,16 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
             ));
         }
     }
+    let needs = crate::dropdown_needs(project);
+    let mut values = String::new();
+    for (entity, field) in &needs.typed {
+        values.push_str(&format!(
+            "\tcase {} + \".\" + {}:\n\t\trows, err := clarity.All[{entity}](db)\n\t\tif err != nil {{\n\t\t\treturn nil, err\n\t\t}}\n\t\tfor _, r := range rows {{\n\t\t\tvalues = append(values, r.{})\n\t\t}}\n",
+            string(entity),
+            string(field),
+            names::field(field)
+        ));
+    }
     let mut options = String::new();
     for entity in project.stored_entities() {
         let name = &entity.name.name;
@@ -480,8 +490,13 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
             .find(|f| matches!(f.ty, FieldType::Text { .. } | FieldType::Email))
             .map_or_else(|| "fmt.Sprintf(\"#%d\", r.ID)".to_string(), |f| format!("r.{}", names::field(&f.name.name)));
         options.push_str(&format!(
-            "\tcase {}:\n\t\trows, err := clarity.All[{name}](db)\n\t\tif err != nil {{\n\t\t\treturn nil, err\n\t\t}}\n\t\tfor _, r := range rows {{\n\t\t\toptions = append(options, clarity.RefOption{{ID: r.ID, Text: {shown}}})\n\t\t}}\n",
-            string(name)
+            "\tcase {}:\n\t\trows, err := clarity.All[{name}](db)\n\t\tif err != nil {{\n\t\t\treturn nil, err\n\t\t}}\n\t\tfor _, r := range rows {{\n\t\t\toptions = append(options, clarity.RefOption{{ID: r.ID, Text: {shown}{fields}}})\n\t\t}}\n",
+            string(name),
+            // The fields a search dropdown shows of each record.
+            fields = match needs.shown.get(name).filter(|f| !f.is_empty()) {
+                Some(shown) => format!(", Fields: map[string]any{{{}}}", shown.iter().map(|f| format!("{}: r.{}", string(f), names::field(f))).collect::<Vec<_>>().join(", ")),
+                None => String::new(),
+            }
         ));
     }
     let title = string(&clarity_project::title(settings));
@@ -607,6 +622,14 @@ func (windows) Options(db *clarity.Db, entity string) ([]clarity.RefOption, erro
 \tswitch entity {{
 {options}\t}}
 \treturn options, nil
+}}
+
+// Values are the values a text field already has, which a typed dropdown offers.
+func (windows) Values(db *clarity.Db, entity, field string) ([]string, error) {{
+\tvalues := []string{{}}
+\tswitch entity + \".\" + field {{
+{values}\t}}
+\treturn values, nil
 }}
 
 // Picture is the picture of an image field of a record; nil when it has none.

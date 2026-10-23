@@ -204,6 +204,12 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!windows->options(db, text_of(args, "entity"), &options)) return failed();
         return value(options);
     }
+    if (strcmp(command, "field_values") == 0) {
+        cJSON* values;
+        if (!windows->values) return value(cJSON_CreateArray());
+        if (!windows->values(db, text_of(args, "entity"), text_of(args, "field"), &values)) return failed();
+        return value(values);
+    }
     if (strcmp(command, "picture") == 0) {
         // A picture of a record, fetched on its own, as the page shows it.
         const cJSON* id = cJSON_GetObjectItemCaseSensitive(args, "id");

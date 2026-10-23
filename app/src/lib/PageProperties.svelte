@@ -89,7 +89,15 @@
 
   /** Fields of the entity behind a collection binding, for table columns and list items. */
   const collectionFields = $derived.by(() => {
-    if (!p?.bind || p.bind.includes(".")) return [];
+    if (!p?.bind) return [];
+    // A search dropdown shows fields of the records its reference points at.
+    if (p.bind.includes(".")) {
+      const [data, name] = p.bind.split(".");
+      const decl = page.data.find((d) => d.name.name === data);
+      const field = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null))?.fields.find((f) => f.name.name === name);
+      const target = field?.type.kind === "ref" ? field.type.entity.name : null;
+      return (entities.find((e) => e.name.name === target)?.fields ?? []).filter((f) => !["list", "image", "file"].includes(f.type.kind));
+    }
     const decl = page.data.find((d) => d.name.name === p.bind);
     const entity = entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
     return (entity?.fields ?? []).filter((f) => f.type.kind !== "list");
@@ -280,7 +288,19 @@
       </label>
     {/if}
 
-    {#if info.properties.includes("columns") || info.properties.includes("show")}
+    {#if info.properties.includes("typed")}
+      <label class="prop" title="Any text may be typed; the values the field already has are offered">
+        <span>Typed</span>
+        <input type="checkbox" checked={p.typed} onchange={(e) => update({ typed: e.currentTarget.checked, search: false, show: [] })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("search")}
+      <label class="prop" title="The records filter as text is typed, each showing the fields chosen below">
+        <span>Search</span>
+        <input type="checkbox" checked={p.search} onchange={(e) => update({ search: e.currentTarget.checked, typed: false, show: e.currentTarget.checked ? p.show : [] })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("columns") || (info.properties.includes("show") && (p.kind !== "dropdown" || p.search))}
       {@const key = info.properties.includes("columns") ? "columns" : "show"}
       <fieldset class="checks">
         <legend>{key === "columns" ? "Columns" : "Shown fields"}</legend>

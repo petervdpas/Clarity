@@ -263,6 +263,10 @@ pub enum WidgetProperty {
     Split,
     /// `labels 3`: a form's label column, its inputs' labels in its first columns.
     Labels,
+    /// `typed`: a dropdown of text that takes any text, the field's values as suggestions.
+    Typed,
+    /// `search`: a dropdown of a reference whose records filter as it is typed.
+    Search,
 }
 
 /// The narrowest and widest a table column can be written, in pixels.
@@ -440,7 +444,16 @@ const ENTRIES: &[Entry] = &[
         ..input(WidgetKind::Switch, "switch", "Switch", (3, 1), &["bool"], &[Event::Change], PICKED)
     },
     // Also the language and the theme of the settings: the project's languages, the offered themes.
-    input(WidgetKind::Dropdown, "dropdown", "Dropdown", (4, 1), &["enum", "ref", "language", "theme"], &[Event::Change], PICKED),
+    // `typed`, a text with suggestions; `search show name, city`, a reference among many records.
+    input(
+        WidgetKind::Dropdown,
+        "dropdown",
+        "Dropdown",
+        (4, 1),
+        &["enum", "ref", "language", "theme", "text"],
+        &[Event::Change],
+        &[WidgetProperty::Typed, WidgetProperty::Search, WidgetProperty::Show, WidgetProperty::Readonly, WidgetProperty::TabOrder],
+    ),
     input(
         WidgetKind::Radio,
         "radio",
@@ -969,6 +982,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         min: None,
         step: None,
         split: false,
+        typed: false,
+        search: false,
         labels: None,
         made: false,
         style: None,
@@ -1089,6 +1104,12 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(order) = &props.order {
         parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
     }
+    if props.typed {
+        parts.push("typed".to_string());
+    }
+    if props.search {
+        parts.push("search".to_string());
+    }
     if !props.show.is_empty() {
         parts.push(format!("show {}", props.show.join(", ")));
     }
@@ -1161,6 +1182,20 @@ pub fn surface_keyword(surface: Surface) -> &'static str {
 /// Checks properties that come from outside (the designer) before they are
 /// written: names must be identifiers, sizes positive, and properties must
 /// apply to the widget.
+/// A dropdown is `typed` or `search`, and only a search shows fields.
+pub fn dropdown_options(props: &WidgetProps) -> Result<(), String> {
+    if props.kind != WidgetKind::Dropdown {
+        return Ok(());
+    }
+    if props.typed && props.search {
+        return Err("a dropdown is 'typed' or 'search', not both".to_string());
+    }
+    if !props.show.is_empty() && !props.search {
+        return Err("'show' needs 'search': write 'search show name, city'".to_string());
+    }
+    Ok(())
+}
+
 pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     let name = keyword(props.kind);
     if props.col == 0 || props.row == 0 || props.width == 0 || props.height == 0 {
@@ -1248,12 +1283,15 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Step, props.step.is_some(), "step"),
         (WidgetProperty::Split, props.split, "split"),
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
+        (WidgetProperty::Typed, props.typed, "typed"),
+        (WidgetProperty::Search, props.search, "search"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
             return Err(format!("'{what}' does not apply to a {name}"));
         }
     }
+    dropdown_options(props)?;
     if props.folded && !props.foldable {
         return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());
     }

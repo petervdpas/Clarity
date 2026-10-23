@@ -27,3 +27,9 @@ function hyphenated(name: string): string {
 export function commandLine(group: string | null, name: string): string {
   return group ? `${hyphenated(group)} ${hyphenated(name)}` : hyphenated(name);
 }
+
+/** The project's first command, as Run's command line shows it for a hint; empty without commands. */
+export function firstCommand(files: readonly { commands: readonly { group?: { name: string } | null; name: { name: string } }[] }[]): string {
+  const first = files.flatMap((f) => f.commands)[0];
+  return first ? commandLine(first.group?.name ?? null, first.name.name) : "";
+}

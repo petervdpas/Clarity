@@ -64,7 +64,7 @@
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import DialogHost from "./lib/DialogHost.svelte";
   import { dialogs } from "./lib/dialogStore.svelte";
-  import { programs, stackLabel } from "./lib/commandLine";
+  import { firstCommand, programs, stackLabel } from "./lib/commandLine";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -171,7 +171,7 @@
           title: "Run the command line",
           text: "What to type after the program's name, such as a command and its values. Leave it empty for the program's help.",
           value: lastCommandLine(),
-          placeholder: "customer list --active",
+          placeholder: firstCommand(preview?.project.files ?? []),
           action: "Run",
         });
         if (commandLine === null) return;

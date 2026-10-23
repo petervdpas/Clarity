@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commandLine, programs, stackLabel } from "./commandLine.ts";
+import { commandLine, firstCommand, programs, stackLabel } from "./commandLine.ts";
 
 test("Run runs the program a stack makes, and asks when it makes two", () => {
   assert.deepEqual(programs(["desktop"]), ["desktop"]);
@@ -20,4 +20,14 @@ test("a command is named by its command line, camelCase written with hyphens", (
   assert.equal(commandLine(null, "backup"), "backup");
   assert.equal(commandLine("customer", "addAll"), "customer add-all");
   assert.equal(commandLine("stockItem", "list"), "stock-item list");
+});
+
+test("the hint shows the project's first command", () => {
+  const files = [
+    { commands: [] },
+    { commands: [{ group: null, name: { name: "list" } }, { group: null, name: { name: "add" } }] },
+  ];
+  assert.equal(firstCommand(files), "list");
+  assert.equal(firstCommand([{ commands: [{ group: { name: "customer" }, name: { name: "addAll" } }] }]), "customer add-all");
+  assert.equal(firstCommand([]), "");
 });

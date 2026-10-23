@@ -288,6 +288,50 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
     if errors.is_empty() { Ok(out) } else { Err(errors) }
 }
 
+/// The C function of a command: `command_customer_add`.
+pub fn command_function(command: &clarity_spec::code::CommandDecl) -> String {
+    let group = command.group.as_ref().map(|g| format!("{}_", snake(&g.name))).unwrap_or_default();
+    format!("command_{group}{}", snake(&command.name.name))
+}
+
+/// The declaration of a command: whether it worked, with the exit code it
+/// gives through `code`.
+pub fn command_signature(project: &Project, command: &clarity_spec::code::CommandDecl) -> String {
+    let mut params = vec!["ClarityDb* db".to_string(), "CommandData* w".to_string()];
+    for (name, ty) in command.params.iter().map(|p| (&p.name, &p.ty)).chain(command.options.iter().map(|o| (&o.name, &o.ty))) {
+        params.push(format!("{} {}", value_type(&type_ref_info(project, ty)), ident(&name.name)));
+    }
+    params.push("int* code".to_string());
+    format!("bool {}({})", command_function(command), params.join(", "))
+}
+
+/// The commands of a module (DESIGN 5.20): each a function taking the
+/// database, the settings (as `w->settings`, as a window has them) and its
+/// arguments and options, giving its exit code through `code`.
+pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
+    let mut out = String::new();
+    let mut errors = Vec::new();
+    for command in &file.commands {
+        let mut emitter = Emitter::new(project, types, None, None);
+        emitter.command = true;
+        let mut body = String::new();
+        emitter.block(&command.body, &mut body);
+        if !body.trim_end().ends_with("return true;") {
+            body.push_str("return true;\n");
+        }
+        let mut names = vec!["db".to_string(), "w".to_string()];
+        names.extend(command.params.iter().map(|p| ident(&p.name.name)).chain(command.options.iter().map(|o| ident(&o.name.name))));
+        names.push("code".to_string());
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        if emitter.errors.is_empty() {
+            let _ = write!(out, "/// `{}`.\n{} {{\n{}}}\n\n", command.line(), command_signature(project, command), indent(&unused(&body, &names), 1));
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("command '{}': {e}", command.line())));
+        }
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
 /// What a handler may read of a part.
 #[derive(Debug, Clone, Default)]
 pub struct PartInfo {
@@ -591,11 +635,14 @@ struct Emitter<'a> {
     record_values: HashSet<String>,
     /// Shapes drawn so far, for the names of their JSON: `shape1`.
     shapes: usize,
+    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// it prints, asks and says on the terminal, and gives its exit code.
+    command: bool,
 }
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, window: Option<&'a WindowCtx>) -> Self {
-        Emitter { project, types, decl, window, engine: None, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, record_values: HashSet::new(), shapes: 0 }
+        Emitter { project, types, decl, window, engine: None, errors: Vec::new(), temps: 0, loops: 0, ensuring: false, record_values: HashSet::new(), shapes: 0, command: false }
     }
 
     fn returns(&self) -> Option<TypeInfo> {
@@ -942,6 +989,12 @@ impl<'a> Emitter<'a> {
                 out.push_str(&pre);
                 let _ = writeln!(out, "return clarity_refuse({text});");
             }
+            // A command says it on standard error.
+            StmtKind::Message { text, .. } if self.command => {
+                let text = self.shown(text, &mut pre);
+                out.push_str(&pre);
+                let _ = writeln!(out, "clarity_cli_message({text});");
+            }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close | StmtKind::Reload { .. } if self.window.is_none() => {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
@@ -1045,6 +1098,21 @@ impl<'a> Emitter<'a> {
                 out.push_str(&pre);
                 let _ = writeln!(out, "clarity_ui_open(ui, {}, {with});", string(&window.name));
             }
+            StmtKind::Print { value, columns } if columns.is_empty() => {
+                let text = self.shown(value, &mut pre);
+                out.push_str(&pre);
+                let _ = writeln!(out, "clarity_cli_print({text});");
+            }
+            StmtKind::Print { value, columns } => {
+                let code = self.print_table(value, columns, &mut pre);
+                out.push_str(&pre);
+                out.push_str(&code);
+            }
+            StmtKind::Exit { code } => {
+                let code = bare(self.value(code, &mut pre));
+                out.push_str(&pre);
+                let _ = write!(out, "*code = (int)({code});\nreturn true;\n");
+            }
             StmtKind::Close => out.push_str("clarity_ui_close(ui);\n"),
             StmtKind::CloseWith { value } => {
                 let json = self.json(value, &mut pre);
@@ -1132,6 +1200,123 @@ impl<'a> Emitter<'a> {
         let mut chain = String::new();
         self.if_chain(branches, otherwise, &mut chain);
         let _ = write!(out, " else {{\n{}}}", indent(&chain, 1));
+    }
+
+    /// A field's value as the command line writes it, for a table's cell.
+    fn cell(&self, at: &str, ty: Option<&FieldType>) -> String {
+        match ty {
+            Some(FieldType::Integer | FieldType::Duration | FieldType::Id | FieldType::Ref { .. }) | None => format!("clarity_format(\"%lld\", (long long)({at}))"),
+            Some(FieldType::Decimal { .. } | FieldType::Money) => format!("clarity_cli_decimal_text({at})"),
+            Some(FieldType::Bool) => format!("clarity_cli_yes_no({at})"),
+            Some(FieldType::Date) => format!("clarity_date_text({at})"),
+            Some(FieldType::DateTime) => format!("clarity_date_time_text({at})"),
+            Some(FieldType::Enum { name }) => format!("{}_name({at})", prefix(&name.name)),
+            _ => format!("clarity_cli_text({at})"),
+        }
+    }
+
+    /// `print list columns a, b`: a heading per field (its label), then the
+    /// records' values as the command line writes them.
+    fn print_table(&mut self, list: &Expr, columns: &[clarity_spec::model::Ident], pre: &mut String) -> String {
+        let TypeInfo::List(entity) = self.types.type_of(list) else {
+            self.errors.push("'columns' prints a list of records".into());
+            return String::new();
+        };
+        let Some(decl) = self.project.entity(&entity) else { return String::new() };
+        let (mut headings, mut right, mut cells) = (Vec::new(), Vec::new(), Vec::new());
+        for column in columns {
+            let found = decl.field(&column.name);
+            let label = found.and_then(|f| f.modifiers.label.clone()).unwrap_or_else(|| clarity_spec::model::default_label(&column.name));
+            headings.push(match clarity_spec::translations::key_of(&label) {
+                Some(key) => format!("clarity_key_text({})", string(key)),
+                None => format!("clarity_plain_text({})", string(&label)),
+            });
+            let ty = found.map(|f| &f.ty);
+            right.push(matches!(ty, Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) | None).to_string());
+            cells.push(self.cell(&format!("r->{}", ident(&column.name)), ty));
+        }
+        let records = bare(self.value(list, pre));
+        let held = self.temp();
+        let table = self.temp();
+        self.loops += 1;
+        let index = format!("i{}", self.loops);
+        let k = columns.len();
+        let _ = write!(pre, "{} {held} = {records};\nconst char** {table} = CLARITY_NEW(const char*, {held}.count * {k} + 1);\nfor (size_t {index} = 0; {index} < {held}.count; {index}++) {{\n    const {entity}* r = &{held}.items[{index}];\n", list_type(&entity));
+        for (i, cell) in cells.iter().enumerate() {
+            let _ = writeln!(pre, "    {table}[{index} * {k} + {i}] = {cell};");
+        }
+        pre.push_str("}\n");
+        format!(
+            "clarity_cli_print_table({k}, (const ClarityText* const[]){{{}}}, (const bool[]){{{}}}, {held}.count, {table});\n",
+            headings.join(", "),
+            right.join(", ")
+        )
+    }
+
+    /// `ask` in a command: it waits on the terminal and gives the answer.
+    fn ask_value(&mut self, question: &Expr, form: &AskForm, pre: &mut String) -> String {
+        let question = self.shown(question, pre);
+        match form {
+            AskForm::Confirm { yes, no } => {
+                let yes = yes.as_ref().map_or("NULL".to_string(), |t| self.shown(t, pre));
+                let no = no.as_ref().map_or("NULL".to_string(), |t| self.shown(t, pre));
+                format!("clarity_cli_confirm({question}, {yes}, {no})")
+            }
+            AskForm::Value { ty, from: Some(list), .. } => {
+                let entity = match type_ref_info(self.project, ty) {
+                    TypeInfo::Record(e) => e,
+                    _ => String::new(),
+                };
+                let shown = self.project.entity(&entity).and_then(|e| e.fields.iter().find(|f| matches!(f.ty, FieldType::Text { .. }))).map(|f| f.name.name.clone());
+                let records = bare(self.value(list, pre));
+                let held = self.temp();
+                let names = self.temp();
+                self.loops += 1;
+                let index = format!("i{}", self.loops);
+                let label = match &shown {
+                    Some(field) => format!("{held}.items[{index}].{}", ident(field)),
+                    None => format!("clarity_format(\"%lld\", (long long){held}.items[{index}].id)"),
+                };
+                let _ = write!(pre, "{} {held} = {records};\nconst char** {names} = CLARITY_NEW(const char*, {held}.count + 1);\nfor (size_t {index} = 0; {index} < {held}.count; {index}++) {names}[{index}] = {label};\n", list_type(&entity));
+                format!("&{held}.items[clarity_cli_choose({question}, {names}, {held}.count)]")
+            }
+            AskForm::Value { ty, default, from: None } => {
+                let info = type_ref_info(self.project, ty);
+                let fallback = match default {
+                    Some(d) => {
+                        let value = bare(self.value(d, pre));
+                        match &info {
+                            TypeInfo::Integer | TypeInfo::Duration => format!("clarity_format(\"%lld\", (long long)({value}))"),
+                            TypeInfo::Decimal | TypeInfo::Money => format!("clarity_cli_decimal_text({value})"),
+                            TypeInfo::Date => format!("clarity_date_text({value})"),
+                            TypeInfo::DateTime => format!("clarity_date_time_text({value})"),
+                            TypeInfo::Enum(name) => format!("{}_name({value})", prefix(name)),
+                            _ => value,
+                        }
+                    }
+                    None => "NULL".to_string(),
+                };
+                let asked = |kind: &str, values: &str| format!("clarity_cli_ask_value({question}, CLARITY_CLI_{kind}, {values}, {fallback})");
+                match &info {
+                    TypeInfo::Integer => format!("clarity_cli_integer({})", asked("INTEGER", "NULL, 0")),
+                    TypeInfo::Duration => format!("clarity_cli_integer({})", asked("DURATION", "NULL, 0")),
+                    TypeInfo::Decimal => format!("clarity_cli_decimal({})", asked("DECIMAL", "NULL, 0")),
+                    TypeInfo::Money => format!("clarity_cli_decimal({})", asked("MONEY", "NULL, 0")),
+                    TypeInfo::Date => format!("clarity_cli_date({})", asked("DATE", "NULL, 0")),
+                    TypeInfo::DateTime => format!("clarity_cli_date_time({})", asked("DATETIME", "NULL, 0")),
+                    TypeInfo::Enum(name) => {
+                        let values: Vec<String> = self.project.enum_decl(name).map(|e| e.variants.iter().map(|v| string(&v.name.name)).collect()).unwrap_or_default();
+                        let count = values.len();
+                        format!("{}_from({})", prefix(name), asked("ENUM", &format!("(const char* const[]){{{}}}, {count}", values.join(", "))))
+                    }
+                    _ => format!("clarity_cli_text({})", asked("TEXT", "NULL, 0")),
+                }
+            }
+            AskForm::Window { .. } => {
+                self.errors.push("a command asks no window".into());
+                String::new()
+            }
+        }
     }
 
     /// Text the screen shows as the runtime's text: as written, with a typed value per slot.
@@ -1272,6 +1457,8 @@ impl<'a> Emitter<'a> {
                 }
                 Some(NameKind::Kept) => format!("kept->{}", ident(name)),
                 // A record is a pointer to it; a list and a plain value are themselves.
+                // A command has the settings as data of its own, as a window does.
+                Some(NameKind::Data) if self.command => format!("&w->{}", ident(name)),
                 Some(NameKind::Data) if self.window.is_some() => match self.window.and_then(|w| w.data.iter().find(|(n, _, _)| n == name)) {
                     Some((_, _, false)) => format!("&w->{}", ident(name)),
                     _ => format!("w->{}", ident(name)),
@@ -1400,6 +1587,14 @@ impl<'a> Emitter<'a> {
                     format!("{list}({}, ({item_type}[]){{{}}})", values.len(), values.join(", "))
                 }
             }
+            // A record of a list by its position from 1: the record in the list itself.
+            ExprKind::Index { list, index } if matches!(self.types.type_of(list), TypeInfo::List(_)) => {
+                let records = bare(self.value(list, pre));
+                let at = bare(self.value(index, pre));
+                let position = self.temp();
+                let _ = write!(pre, "int64_t {position} = {at};\nif ({position} < 1 || (uint64_t){position} > {records}.count) return clarity_outside({position}, {records}.count);\n");
+                format!("&{records}.items[{position} - 1]")
+            }
             ExprKind::Index { list, index } => {
                 let item = match self.types.type_of(list) {
                     TypeInfo::Values(item) => item,
@@ -1418,6 +1613,7 @@ impl<'a> Emitter<'a> {
                 let list = self.place(expr, pre);
                 format!("{}({list}.count, {list}.items)", values_prefix(&item))
             }
+            ExprKind::Ask { question, form } => self.ask_value(question, form, pre),
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => value.clone(),
             ExprKind::Str { value } => string(value),

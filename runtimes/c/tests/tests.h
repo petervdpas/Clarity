@@ -57,7 +57,11 @@
     X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
     X(an_engine_with_state_per_window_keeps_an_instance_for_each_window) \
     X(a_question_travels_in_the_reply_as_from_the_other_runtimes) \
-    X(a_dialog_is_asked_for_and_closes_with_its_value)
+    X(a_dialog_is_asked_for_and_closes_with_its_value)            \
+    X(the_command_line_words_are_the_shared_ones)                 \
+    X(command_lines_are_read_as_every_runtime_reads_them)         \
+    X(a_printed_table_lines_up_as_every_runtime_does)             \
+    X(a_command_asks_on_a_terminal_as_every_runtime_does)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

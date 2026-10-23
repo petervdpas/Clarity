@@ -5,6 +5,7 @@
 
 pub mod tools;
 mod c;
+mod commands;
 mod csharp;
 mod ddl;
 pub(crate) mod go;
@@ -418,6 +419,92 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     Ok(files)
 }
 
+/// One program of a project: what a target of its stack builds, written
+/// into its own folder of `out/` (DESIGN 5.20).
+#[derive(Debug, Clone)]
+pub struct Program {
+    pub target: clarity_project::Target,
+    pub files: Vec<OutFile>,
+}
+
+/// The programs of the project: the desktop program when a target shows
+/// windows, and the command-line program with the `cli` target.
+pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, Vec<String>> {
+    use clarity_project::Target;
+    let mut programs = Vec::new();
+    if settings.stack.has_ui() {
+        programs.push(Program { target: Target::Desktop, files: generate(project, settings)? });
+    }
+    if settings.stack.has(Target::Cli) {
+        programs.push(Program { target: Target::Cli, files: generate_cli(project, settings)? });
+    }
+    Ok(programs)
+}
+
+/// The files of the command-line program, sorted by path; or why it cannot
+/// be generated.
+pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
+    if project.has_errors() {
+        return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
+    }
+    check_stores(project, settings)?;
+    let project = &with_resource_texts(project);
+    match settings.stack.backend {
+        Backend::Rust => rust::generate_cli(project, settings),
+        Backend::Go => go::generate_cli(project, settings),
+        Backend::Csharp => csharp::generate_cli(project, settings),
+        Backend::C => c::generate_cli(project, settings),
+        Backend::Cpp => cpp::generate_cli(project, settings),
+    }
+}
+
+/// Writes each program into its folder of `out` (`out/desktop`, `out/cli`),
+/// as `write_out` writes one, and removes the folder of a target no longer
+/// generated. Output from before, with the desktop program in `out` itself,
+/// moves into `out/desktop`: its build tools' folders and data are kept
+/// there, its other files go. Returns how many files changed.
+pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Backend) -> std::io::Result<usize> {
+    use clarity_project::{TARGETS, target_dir, target_word};
+    let marked = out.join(OUT_MARKER).exists() || out.join("clarity-runtime/src/ui.rs").exists();
+    let empty = std::fs::read_dir(out).map_or(true, |mut entries| entries.next().is_none());
+    if !marked && !empty {
+        return Err(std::io::Error::other(format!("{} holds files not made by Clarity; choose an empty or new output folder", out.display())));
+    }
+    std::fs::create_dir_all(out)?;
+    let targets: Vec<&str> = TARGETS.iter().map(|t| target_word(*t)).collect();
+    let kept = build_output(backend);
+    for entry in std::fs::read_dir(out)? {
+        let path = entry?.path();
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if targets.contains(&name.as_str()) || name == OUT_MARKER {
+            continue;
+        }
+        // The old place: what the build tools keep moves on, the rest is made again.
+        let desktop = target_dir(out, clarity_project::Target::Desktop);
+        if kept.contains(&name.as_str()) && !desktop.join(&name).exists() {
+            std::fs::create_dir_all(&desktop)?;
+            std::fs::write(desktop.join(OUT_MARKER), OUT_MARKER_TEXT)?;
+            std::fs::rename(&path, desktop.join(&name))?;
+        } else if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    std::fs::write(out.join(OUT_MARKER), OUT_MARKER_TEXT)?;
+    let mut written = 0;
+    for program in programs {
+        written += write_out(&target_dir(out, program.target), &program.files, kept)?;
+    }
+    for target in TARGETS {
+        let dir = target_dir(out, target);
+        if !programs.iter().any(|p| p.target == target) && dir.join(OUT_MARKER).exists() {
+            std::fs::remove_dir_all(&dir)?;
+        }
+    }
+    Ok(written)
+}
+
 /// Writes `files` into `dir`, which then holds exactly these files: files
 /// that changed are rewritten, unchanged ones are left alone (so build
 /// tools see no change), and files no longer generated are removed.
@@ -554,6 +641,66 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         // C# with the web renderer is not generated.
         Backend::Csharp => None,
     }
+}
+
+/// A command line typed in Clarity (Run on a command-line program) as the
+/// words a shell gives the program: apart where there are spaces, together
+/// within "double" or 'single' quotes.
+pub fn command_words(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let mut quote: Option<char> = None;
+    for c in line.chars() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), c) => word.get_or_insert_with(String::new).push(c),
+            (None, '"' | '\'') => {
+                quote = Some(c);
+                word.get_or_insert_with(String::new);
+            }
+            (None, c) if c.is_whitespace() => words.extend(word.take()),
+            (None, c) => word.get_or_insert_with(String::new).push(c),
+        }
+    }
+    words.extend(word);
+    words
+}
+
+/// The build of the command-line program (DESIGN 5.20) in `out/cli`, with
+/// the stack's own tools; the program is named as it is typed.
+pub fn cli_toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
+    let program = commands::program_name(settings);
+    let exe = |path: String| std::path::PathBuf::from(if cfg!(windows) { format!("{path}.exe") } else { path });
+    let mut toolchain = match settings.stack.backend {
+        // C# has no web renderer to need: its console program builds the same way on either UI.
+        Backend::Csharp => {
+            let configuration = if release { "Release" } else { "Debug" };
+            Toolchain {
+                tool: "dotnet",
+                args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
+                env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
+                program: exe(format!("bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
+                missing: "is the .NET SDK installed?",
+            }
+        }
+        _ => toolchain(settings, release)?,
+    };
+    match settings.stack.backend {
+        Backend::Rust => toolchain.program = exe(format!("target/{}/{program}", if release { "release" } else { "debug" })),
+        Backend::Go => {
+            let built = format!("bin/{program}");
+            let mut args = vec!["build".to_string(), "-v".to_string()];
+            if release {
+                args.extend(["-trimpath", "-ldflags=-s -w"].map(String::from));
+            }
+            args.extend(["-o".to_string(), built.clone(), ".".to_string()]);
+            toolchain.args = args;
+            toolchain.program = exe(built);
+        }
+        Backend::C | Backend::Cpp => toolchain.program = exe(format!("build/{}/{program}", if release { "release" } else { "debug" })),
+        Backend::Csharp => {}
+    }
+    Some(toolchain)
 }
 
 /// What the build tools of `backend` put in `out/`, which `write_out`

@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, EngineBody, EngineState, Keep,
+use super::{AskForm, CliDecl, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -415,7 +415,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 13] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write"];
+const STATEMENT_WORDS: [&str; 15] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write", "print", "exit"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -527,24 +527,7 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 return Ok(Stmt { kind: StmtKind::Ask { question: None, form: Box::new(AskForm::Window { window, with }), then, args }, span });
             }
             let question = Some(parse_expr(&mut cursor)?);
-            let form = if cursor.eat_keyword("for") {
-                let ty = parse_type_ref(&mut cursor)?;
-                let (mut default, mut from) = (None, None);
-                loop {
-                    if default.is_none() && cursor.eat_keyword("default") {
-                        default = Some(parse_expr(&mut cursor)?);
-                    } else if from.is_none() && cursor.eat_keyword("from") {
-                        from = Some(parse_expr(&mut cursor)?);
-                    } else {
-                        break;
-                    }
-                }
-                AskForm::Value { ty, default, from }
-            } else {
-                let yes = if cursor.eat_keyword("yes") { Some(parse_expr(&mut cursor)?) } else { None };
-                let no = if cursor.eat_keyword("no") { Some(parse_expr(&mut cursor)?) } else { None };
-                AskForm::Confirm { yes, no }
-            };
+            let form = parse_ask_form(&mut cursor)?;
             if !cursor.eat_keyword("then") {
                 return Err(cursor.error_here("expected 'then' and the handler the answer runs, as in 'then deleteConfirmed'"));
             }
@@ -607,6 +590,24 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 value: parse_expr(&mut cursor)?,
             }
         }
+        Some("print") => {
+            cursor.next();
+            let value = parse_expr(&mut cursor)?;
+            let mut columns = Vec::new();
+            if cursor.eat_keyword("columns") {
+                loop {
+                    columns.push(cursor.expect_ident("a field to show as a column")?);
+                    if !cursor.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+            StmtKind::Print { value, columns }
+        }
+        Some("exit") => {
+            cursor.next();
+            StmtKind::Exit { code: parse_expr(&mut cursor)? }
+        }
         // `dial.line(...)`: a shape on a canvas.
         _ if cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Dot)
             && cursor.peek_at(2).is_some_and(|t| t.kind == TokenKind::Ident)
@@ -653,6 +654,118 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
     cursor.expect_end()?;
     no_children(node)?;
     Ok(Stmt { kind, span })
+}
+
+/// What `ask` asks after its question: `for type [default value] [from
+/// list]`, or `[yes text] [no text]`.
+fn parse_ask_form(cursor: &mut Cursor) -> ParseResult<AskForm> {
+    if cursor.eat_keyword("for") {
+        let ty = parse_type_ref(cursor)?;
+        let (mut default, mut from) = (None, None);
+        loop {
+            if default.is_none() && cursor.eat_keyword("default") {
+                default = Some(parse_expr(cursor)?);
+            } else if from.is_none() && cursor.eat_keyword("from") {
+                from = Some(parse_expr(cursor)?);
+            } else {
+                break;
+            }
+        }
+        return Ok(AskForm::Value { ty, default, from });
+    }
+    let yes = if cursor.eat_keyword("yes") { Some(parse_expr(cursor)?) } else { None };
+    let no = if cursor.eat_keyword("no") { Some(parse_expr(cursor)?) } else { None };
+    Ok(AskForm::Confirm { yes, no })
+}
+
+/// `cli Shop` with its `help` line (DESIGN 5.20).
+pub(crate) fn parse_cli(node: &Node) -> ParseResult<CliDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let name = cursor.expect_ident("the project's name, as in 'cli Shop'")?;
+    cursor.expect_end()?;
+    let mut help = None;
+    for child in &node.children {
+        let mut line = Cursor::new(child.line);
+        if !line.eat_keyword("help") {
+            return Err(line.error_here("a cli block holds its 'help', as in 'help @shopHelp'"));
+        }
+        help = Some(parse_expr(&mut line)?);
+        line.expect_end()?;
+        no_children(child)?;
+    }
+    Ok(CliDecl { name, help, span: node.span() })
+}
+
+/// `command [group] name(arguments)`, its `help` and `option` lines, and
+/// its statements (DESIGN 5.20).
+pub(crate) fn parse_command(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<CommandDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let first = cursor.expect_ident("the command's name, as in 'command backup' or 'command customer add'")?;
+    let (group, name) = match cursor.peek() {
+        Some(t) if t.kind == TokenKind::Ident => (Some(first), cursor.expect_ident("the command's name")?),
+        _ => (None, first),
+    };
+    let params = if cursor.eat(TokenKind::LParen) { parse_params(&mut cursor)? } else { Vec::new() };
+    cursor.expect_end()?;
+    let mut decl = CommandDecl { group, name, params, help: None, options: Vec::new(), body: Vec::new(), span: node.span() };
+    let clauses = node.children.iter().take_while(|c| matches!(first_word(c), Some("help" | "option"))).count();
+    for child in &node.children[..clauses] {
+        let parsed = (|| {
+            let mut line = Cursor::new(child.line);
+            if line.eat_keyword("help") {
+                decl.help = Some(parse_expr(&mut line)?);
+            } else {
+                line.next();
+                decl.options.push(parse_option(&mut line, child.span())?);
+            }
+            line.expect_end()?;
+            no_children(child)
+        })();
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
+        }
+    }
+    for child in &node.children[clauses..] {
+        if let Some(word @ ("help" | "option")) = first_word(child) {
+            diagnostics.push(Diagnostic::error(format!("'{word}' goes before the statements"), child.line.span));
+        }
+    }
+    decl.body = parse_block(&node.children[clauses..], diagnostics);
+    Ok(decl)
+}
+
+/// `limit: money, default 1000, min 0, max 5000, required, help @limitHelp`.
+fn parse_option(cursor: &mut Cursor, span: Span) -> ParseResult<CommandOption> {
+    let name = cursor.expect_ident("the option's name, as in 'option limit: money'")?;
+    cursor.expect(TokenKind::Colon, "':' and a type")?;
+    let ty = parse_type_ref(cursor)?;
+    let mut option = CommandOption { name, ty, default: None, min: None, max: None, required: false, help: None, span };
+    while cursor.eat(TokenKind::Comma) {
+        let word = cursor.expect_ident("'default', 'min', 'max', 'required' or 'help'")?;
+        let slot = match word.name.as_str() {
+            "required" => {
+                option.required = true;
+                continue;
+            }
+            "default" => &mut option.default,
+            "min" => &mut option.min,
+            "max" => &mut option.max,
+            "help" => &mut option.help,
+            other => {
+                return Err(Diagnostic::error(
+                    format!("unknown '{other}'; an option has a default, min, max, required and help"),
+                    word.span,
+                ));
+            }
+        };
+        if slot.is_some() {
+            return Err(Diagnostic::error(format!("'{}' is written twice", word.name), word.span));
+        }
+        *slot = Some(parse_expr(cursor)?);
+    }
+    Ok(option)
 }
 
 /// A name or a member path: what an assignment can set.
@@ -935,6 +1048,19 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
             value: token.text == "true",
         },
         TokenKind::Ident if token.text == NONE => ExprKind::Empty,
+        // `ask @question ...` as a value: a command's question (DESIGN 5.20).
+        TokenKind::Ident
+            if token.text == "ask" && cursor.peek_at(1).is_some_and(|t| !matches!(t.kind, TokenKind::Dot | TokenKind::Assign | TokenKind::LParen | TokenKind::Comma | TokenKind::RParen)) =>
+        {
+            cursor.next();
+            let question = parse_expr(cursor)?;
+            let form = parse_ask_form(cursor)?;
+            let end = match &form {
+                AskForm::Value { ty, .. } => super::ask_exprs(&form).last().map_or(ty.span, |e| e.span),
+                _ => super::ask_exprs(&form).last().map_or(question.span, |e| e.span),
+            };
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::Ask { question: Box::new(question), form: Box::new(form) } });
+        }
         TokenKind::Ident if token.text == "find" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_find(cursor);
         }

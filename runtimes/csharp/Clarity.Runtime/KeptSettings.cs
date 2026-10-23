@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace Clarity.Avalonia;
+namespace Clarity.Runtime;
 
 /// <summary>
 /// A setting as a kept value is checked against it: its type, its lowest

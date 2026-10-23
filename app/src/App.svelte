@@ -64,6 +64,7 @@
   import UnlockDialog from "./lib/UnlockDialog.svelte";
   import DialogHost from "./lib/DialogHost.svelte";
   import { dialogs } from "./lib/dialogStore.svelte";
+  import { programs, stackLabel } from "./lib/commandLine";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
@@ -121,6 +122,9 @@
   const BUILD_LOG_LINES = 400;
   let building = $state(false);
   let running = $state(false);
+  /** A command-line program Run started, which reads what the Output panel types. */
+  let commandRunning = $state(false);
+  let typed = $state("");
   let buildLog = $state<string[]>([]);
   let buildDone = $state<BuildDone | null>(null);
   let showOutput = $state(false);
@@ -131,24 +135,83 @@
     if (buildLog.length > 0 && outputPre) outputPre.scrollTop = outputPre.scrollHeight;
   });
 
-  /** Generates and builds the application; with `run`, starts it. */
+  const COMMAND_LINE_KEY = "clarity-command-line";
+
+  /** The command line Run ran last, to start from. */
+  function lastCommandLine(): string {
+    try {
+      return localStorage.getItem(COMMAND_LINE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Generates and builds the application; with `run`, starts it. A project
+   * with a command-line program (DESIGN 5.20) asks which program to run when
+   * it has two, and the command line to run it with.
+   */
   async function buildApp(release: boolean, run: boolean) {
+    const made = programs(projectFile?.settings?.stack.targets ?? ["desktop"]);
+    let commandLine: string | null = null;
+    if (made.includes("cli") && (run || !made.includes("desktop"))) {
+      const which = made.length > 1 && run
+        ? await dialogs.choose({
+            title: "Run",
+            text: "Which program do you want to run?",
+            choices: [
+              { value: "desktop", label: "The application, with its windows" },
+              { value: "cli", label: "The command-line program" },
+            ],
+          })
+        : "cli";
+      if (which === null) return;
+      if (which === "cli" && run) {
+        commandLine = await dialogs.prompt({
+          title: "Run the command line",
+          text: "What to type after the program's name, such as a command and its values. Leave it empty for the program's help.",
+          value: lastCommandLine(),
+          placeholder: "customer list --active",
+          action: "Run",
+        });
+        if (commandLine === null) return;
+        try {
+          localStorage.setItem(COMMAND_LINE_KEY, commandLine);
+        } catch {
+          // The command line is offered again only when it can be kept.
+        }
+      }
+    }
     actionError = null;
     buildLog = [];
     buildDone = null;
     showOutput = true;
     building = true;
+    commandRunning = commandLine !== null;
     try {
-      await invoke("build_app", { release, run });
+      await invoke("build_app", { release, run, commandLine });
     } catch (err) {
       building = false;
+      commandRunning = false;
       buildDone = { ok: false, message: String(err), binary: null };
+    }
+  }
+
+  /** Types a line to the command-line program, as its input. */
+  async function typeLine() {
+    const line = typed;
+    typed = "";
+    try {
+      await invoke("type_line", { line });
+    } catch (err) {
+      actionError = String(err);
     }
   }
 
   async function stopApp() {
     await invoke("stop_app");
     running = false;
+    commandRunning = false;
   }
 
   const current = $derived(stack.at(-1) ?? null);
@@ -203,7 +266,7 @@
     const backend = catalog.backends.find((b) => b.id === settings.stack.backend)?.label;
     const ui = catalog.uis.find((u) => u.id === settings.stack.ui)?.label;
     const targets = catalog.targets.filter((t) => settings.stack.targets.includes(t.id)).map((t) => t.label);
-    return `${backend}, ${ui}, ${targets.join(" and ")}`;
+    return stackLabel(backend, ui, targets, settings.stack.targets);
   });
   const projectName = $derived(app?.title && preview ? tr(preview, app.title) : (app?.name.name ?? (openFile ? fileName(openFile) : "")));
 
@@ -895,6 +958,7 @@
     const unlistenBuilt = listen<EngineBuilt>("engine-built", (e) => recordBuilt(e.payload));
     const unlistenDone = listen<BuildDone>("build-done", (e) => {
       building = false;
+      commandRunning = false;
       buildDone = e.payload;
       running = e.payload.ok && e.payload.message === "running";
     });
@@ -1095,7 +1159,7 @@
               disabled={!preview || building || errorCount > 0}
               onclick={() => buildApp(true, false)}
             />
-            <RibbonButton icon="stop" label="Stop" title="Close the running application" disabled={!running} onclick={stopApp} />
+            <RibbonButton icon="stop" label="Stop" title="Close the running application" disabled={!running && !commandRunning} onclick={stopApp} />
           </div>
           <div class="group-name">Application</div>
         </div>
@@ -1357,7 +1421,9 @@
         <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
           <header>
             <strong>Output</strong>
-            {#if building}
+            {#if commandRunning}
+              <span class="status">Building, then running the command line</span>
+            {:else if building}
               <span class="status">Building...</span>
             {:else if buildDone}
               <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? "Running" : buildDone.message) : "Failed: " + buildDone.message}</span>
@@ -1366,6 +1432,18 @@
           </header>
           {#if buildLog.length > 0}
             <pre bind:this={outputPre}>{buildLog.join("\n")}</pre>
+          {/if}
+          {#if commandRunning}
+            <!-- What the command-line program reads, as from a terminal: the answer to its questions. -->
+            <form
+              class="typed"
+              onsubmit={(e) => {
+                e.preventDefault();
+                typeLine();
+              }}
+            >
+              <input bind:value={typed} placeholder="Type an answer and press Enter" aria-label="Input for the program" />
+            </form>
           {/if}
         </section>
       {/if}
@@ -1552,6 +1630,18 @@
 
   .output-panel .status.failed {
     color: var(--error);
+  }
+
+  .output-panel .typed {
+    display: flex;
+    padding: 4px 12px 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .output-panel .typed input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12px;
   }
 
   .output-panel pre {

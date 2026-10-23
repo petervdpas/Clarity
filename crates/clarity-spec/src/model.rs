@@ -41,6 +41,10 @@ pub struct SpecFile {
     pub functions: Vec<crate::code::FunctionDecl>,
     /// Its engines (DESIGN 5.11).
     pub engines: Vec<crate::code::EngineDecl>,
+    /// The `cli` block of a command-line program (DESIGN 5.20).
+    pub clis: Vec<crate::code::CliDecl>,
+    /// Its commands, for the command-line program (DESIGN 5.20).
+    pub commands: Vec<crate::code::CommandDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

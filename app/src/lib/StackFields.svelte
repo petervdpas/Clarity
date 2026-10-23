@@ -8,6 +8,7 @@
   import type { Stack } from "./generated/Stack";
   import type { Target } from "./generated/Target";
   import type { Ui } from "./generated/Ui";
+  import { programs } from "./commandLine";
   import { toolsNote } from "./stackTools";
   import { checkTools, stackTools } from "./tools.svelte";
 
@@ -22,6 +23,8 @@
   } = $props();
 
   const uis = $derived(catalog.backends.find((b) => b.id === stack.backend)?.uis ?? []);
+  // A program without windows (only the command line) has no UI to choose.
+  const windowed = $derived(programs(stack.targets).includes("desktop"));
 
   function setBackend(backend: Backend) {
     const offered = catalog.backends.find((b) => b.id === backend)?.uis ?? [];
@@ -49,10 +52,12 @@
 <select value={stack.backend} onchange={(e) => setBackend(e.currentTarget.value as Backend)} aria-label="Backend">
   {#each catalog.backends as b (b.id)}<option value={b.id}>{b.label}</option>{/each}
 </select>
-<span class="form-label">UI</span>
-<select value={stack.ui} onchange={(e) => onchange({ ...stack, ui: e.currentTarget.value as Ui })} aria-label="UI">
-  {#each uis as u (u)}<option value={u}>{uiLabel(u)}</option>{/each}
-</select>
+{#if windowed}
+  <span class="form-label">UI</span>
+  <select value={stack.ui} onchange={(e) => onchange({ ...stack, ui: e.currentTarget.value as Ui })} aria-label="UI">
+    {#each uis as u (u)}<option value={u}>{uiLabel(u)}</option>{/each}
+  </select>
+{/if}
 <span class="form-label">Targets</span>
 <div class="form-checks" role="group" aria-label="Targets">
   {#each catalog.targets as t (t.id)}

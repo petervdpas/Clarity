@@ -12,4 +12,4 @@ export type StmtKind = { "kind": "let", name: Ident, ty: TypeRef | null, value: 
 /**
  * None when a dialog window asks: its own title and parts say what.
  */
-question: Expr | null, form: AskForm, then: Ident, args: Array<Expr>, } | { "kind": "open", window: Ident, with: Array<Arg>, } | { "kind": "close" } | { "kind": "closeWith", value: Expr, } | { "kind": "save", value: Expr, } | { "kind": "reload", data: Ident, } | { "kind": "delete", value: Expr, } | { "kind": "refuse", text: Expr, } | { "kind": "write", text: Expr, store: Ident, path: Expr, };
+question: Expr | null, form: AskForm, then: Ident, args: Array<Expr>, } | { "kind": "open", window: Ident, with: Array<Arg>, } | { "kind": "close" } | { "kind": "closeWith", value: Expr, } | { "kind": "save", value: Expr, } | { "kind": "reload", data: Ident, } | { "kind": "delete", value: Expr, } | { "kind": "refuse", text: Expr, } | { "kind": "write", text: Expr, store: Ident, path: Expr, } | { "kind": "print", value: Expr, columns: Array<Ident>, } | { "kind": "exit", code: Expr, };

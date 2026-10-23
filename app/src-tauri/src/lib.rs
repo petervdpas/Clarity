@@ -370,10 +370,17 @@ fn try_decl(path: String, item: u32, text: String, state: State<WatchState>) -> 
 }
 
 /// Generates the open project into `out/`, builds it and, with `run`,
-/// starts it. Progress arrives as `build-line` and `build-done` events.
+/// starts it; with a `command_line`, the command-line program with those
+/// words. Progress arrives as `build-line` and `build-done` events.
 #[tauri::command]
-fn build_app(release: bool, run: bool, app: AppHandle, state: State<WatchState>) -> Result<(), String> {
-    build::start(app, project_file_of(&state)?, release, run)
+fn build_app(release: bool, run: bool, command_line: Option<String>, app: AppHandle, state: State<WatchState>) -> Result<(), String> {
+    build::start(app, project_file_of(&state)?, release, run, command_line)
+}
+
+/// Types a line to the command-line program Run started, as its input.
+#[tauri::command]
+fn type_line(line: String, app: AppHandle) -> Result<(), String> {
+    build::type_line(&app, &line)
 }
 
 /// Ends the application Run started.
@@ -792,6 +799,7 @@ pub fn run() {
             try_decl,
             highlight,
             build_app,
+            type_line,
             stop_app,
             engines::engine_info,
             engines::engine_source_text,

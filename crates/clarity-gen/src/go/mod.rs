@@ -8,6 +8,7 @@
 //! working on the runtime, a go.work next to the module builds it on the
 //! runtime in Clarity's repository.
 
+mod cli;
 mod logic;
 mod model;
 mod names;
@@ -85,6 +86,8 @@ const RUNTIME_SUM: &str = include_str!("../../../../runtimes/go/go.sum");
 pub fn module_name(settings: &Settings) -> String {
     names::module(&settings.name)
 }
+
+pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let (databases, owned) = crate::databases(project, settings, "Go")?;

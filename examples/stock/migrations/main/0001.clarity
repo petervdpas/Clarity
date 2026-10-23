@@ -1,0 +1,7 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Items"
+    add entity Item
+        name: text(80), unique
+        count: integer
+        low: integer, default 5

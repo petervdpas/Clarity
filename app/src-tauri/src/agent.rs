@@ -439,7 +439,7 @@ impl ProjectTools {
         }
         let relative = Path::new(path);
         if !relative.is_relative() || !relative.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
-            return Err(format!("'{path}' is not inside the generated project: use a path like Modules/Todo.cs, as the list gives it"));
+            return Err(format!("'{path}' is not inside the generated project: use a path like desktop/Modules/Todo.cs, as the list gives it"));
         }
         let bytes = std::fs::read(out.join(relative)).map_err(|_| format!("the generated project has no file {path}"))?;
         let text = String::from_utf8(bytes).map_err(|_| format!("{path} is not a text file"))?;
@@ -493,7 +493,9 @@ fn collect_generated(root: &Path, folder: &Path, skipped: &[&str], out: &mut Vec
     let Ok(entries) = std::fs::read_dir(folder) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
-        if folder == root && skipped.iter().any(|s| entry.file_name() == *s) {
+        // The toolchain's own folders, in each program's folder (`out/desktop`, `out/cli`).
+        let in_program = folder.parent() == Some(root);
+        if (folder == root || in_program) && skipped.iter().any(|s| entry.file_name() == *s) {
             continue;
         }
         if path.is_dir() {
@@ -565,14 +567,14 @@ impl Tools for ProjectTools {
                     json!({
                         "name": { "type": "string", "description": "The project's file name, like todo." },
                         "folder": { "type": "string", "description": "The folder to make it in; the folder of the open project by default." },
-                        "stack": { "type": "object", "description": "Optional: { backend: rust|go|csharp|c|cpp, ui: web|avalonia, targets: [desktop] }." }
+                        "stack": { "type": "object", "description": "Optional: { backend: rust|go|csharp|c|cpp, ui: web|avalonia, targets: [desktop, cli] }." }
                     }),
                     &["name"],
                 ),
             ),
             tool(
                 "read_generated",
-                "Reads the application Clarity generated from the project (in the folder the project's output setting names), read only. Without a path it lists the generated files; with one (like Modules/Todo.cs) it gives that file. Use it with build_output to see why a build failed.",
+                "Reads the application Clarity generated from the project (in the folder the project's output setting names), read only. Each program has its folder there: desktop for the windowed application, cli for the command-line program. Without a path it lists the generated files; with one (like desktop/Modules/Todo.cs) it gives that file. Use it with build_output to see why a build failed.",
                 schema(json!({ "path": { "type": "string", "description": "A path inside the generated project, as the list gives it." } }), &[]),
             ),
             tool(
@@ -736,7 +738,7 @@ impl Execute for AppExecute {
 
     fn build(&mut self, file: &Path, run: bool) -> Result<String, String> {
         // As the toolbar: Run is a debug build that starts, Build a release build.
-        crate::build::start(self.app.clone(), file.to_path_buf(), !run, run)?;
+        crate::build::start(self.app.clone(), file.to_path_buf(), !run, run, None)?;
         let builds = self.app.state::<crate::build::BuildState>();
         while builds.busy.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(200));
@@ -1143,21 +1145,23 @@ mod tests {
         assert!(text.contains("output \"out\""), "{text}");
         std::fs::write(&file, text.replace("output \"out\"", "output \"build/app\"")).unwrap();
         let out = dir.join("build/app");
-        std::fs::create_dir_all(out.join("Modules")).unwrap();
-        std::fs::create_dir_all(out.join("obj")).unwrap();
-        std::fs::write(out.join("Modules/Todo.cs"), "Lists.At(xs, 1)").unwrap();
-        std::fs::write(out.join("App.csproj"), "<Project />").unwrap();
-        std::fs::write(out.join("obj/project.assets.json"), "{}").unwrap();
+        // Each program in its own folder of the output (DESIGN 5.20).
+        std::fs::create_dir_all(out.join("desktop/Modules")).unwrap();
+        std::fs::create_dir_all(out.join("desktop/obj")).unwrap();
+        std::fs::write(out.join("desktop/Modules/Todo.cs"), "Lists.At(xs, 1)").unwrap();
+        std::fs::write(out.join("desktop/App.csproj"), "<Project />").unwrap();
+        std::fs::write(out.join("desktop/obj/project.assets.json"), "{}").unwrap();
 
         // The listing leaves the toolchain's own folders out; the stack here is the starter's.
         let listed = tools.call("read_generated", &json!({}));
         assert!(!listed.is_error, "{}", listed.text);
         assert!(listed.text.contains(&out.display().to_string()), "{}", listed.text);
-        assert!(listed.text.contains("- Modules/Todo.cs") && listed.text.contains("- App.csproj"), "{}", listed.text);
-        let read = tools.call("read_generated", &json!({"path": "Modules/Todo.cs"}));
+        assert!(listed.text.contains("- desktop/Modules/Todo.cs") && listed.text.contains("- desktop/App.csproj"), "{}", listed.text);
+        assert!(!listed.text.contains("obj/"), "{}", listed.text);
+        let read = tools.call("read_generated", &json!({"path": "desktop/Modules/Todo.cs"}));
         assert_eq!(read.text, "Lists.At(xs, 1)");
         // What the toolchain wrote can still be read when asked by name.
-        assert_eq!(tools.call("read_generated", &json!({"path": "obj/project.assets.json"})).text, "{}");
+        assert_eq!(tools.call("read_generated", &json!({"path": "desktop/obj/project.assets.json"})).text, "{}");
         // Only inside out, and only reading.
         for path in ["../todo.clarity", "/etc/passwd", "Modules/../../todo.clarity"] {
             assert!(tools.call("read_generated", &json!({"path": path})).is_error, "{path}");

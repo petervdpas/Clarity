@@ -1,0 +1,304 @@
+{
+  "about": "Command-line programs (DESIGN 5.20). `program` is what a generated program hands its runtime: its name, its help, and its commands in the order they are declared, each with its `line` (the words typed, hyphenated), its help, its arguments and its options. Kinds: text, integer, decimal, money, date, datetime, duration, enum (with its `values`) and, for options, bool. Values given and read are text, so decimals stay exact; null is the empty value of the kind. `words` are Clarity's own words of the command line (translations CLI_KEYS) in English, as a program shows them without a translation; `{name}` is a slot. `parse` gives what a command line becomes: `run` (the command and every argument's and option's value: as read, the option's default when it is left out, false for a bool, null for one without a default), `help` (the text written to standard output, exit code 0), or `wrong` (the message as a key and its slots, and the text written to standard error, exit code 2). The words after the program's name are read one by one: `help` first asks for help on what follows; a word that is no command or group is wrong; a group alone shows its help; `--help` anywhere shows the help of the command or group read so far; `--name value` and `--name=value` give an option, a bool option is a flag (`--vip`, or `--vip=true` and `--vip=false`); `--` ends the options; every other word is the next argument. An option given twice keeps the last. Numbers are written with a dot and no groups, as in scripts; dates as 2026-10-23, moments as 2026-10-23T14:30 or with seconds, durations as formats.json reads them (3:45, 1:02:03, or seconds alone), enum values by their name in any case. A number past its `min` or `max` is wrong. Messages are checked in this order: unknown command, unknown option, an option without its value, a value that is not of its kind, past min or max, a missing argument, too many arguments, a required option left out. Help: a description line (none for a group) and an empty line; the usage line; then sections, each a heading line and lines indented by two spaces with the left column padded to the longest in that section plus two spaces; sections apart by an empty line; trailing spaces never written. An option's line shows `--name <name>` (`--name` alone for a bool), then its help and, in parentheses, its marks joined by `; `: its enum values joined by `, `, `default X`, `required`. A wrong command line writes its message, then the usage line of the command or group read so far (the program's when none). `table` gives what `print list columns a, b` writes: a line of headings, then a line per row, the columns two spaces apart, each as wide as its longest cell, a column of numbers aligned right (its heading too) and the rest left, no trailing spaces. `ask` gives how a command asks on a terminal: the prompt written (no line end), the lines typed (null is the end of input), and the answer given, or the exit code when there is none: a yes or no prompt shows its two words in brackets and takes either word in any case, an empty line or the end of input is a no; a value prompt shows its default in brackets, an empty line takes the default, a line that is not of the kind writes the wrong-answer message and asks again, the end of input ends the program with exit code 1; a choice lists numbered lines and asks for a number. Without a terminal (`terminal` false) a question with a default gives it at once and writes nothing, and one without ends with exit code 2 and the no-terminal message.",
+  "words": {
+    "cliUsage": "Usage",
+    "cliCommands": "Commands",
+    "cliOptions": "Options",
+    "cliCommandWord": "command",
+    "cliOptionsWord": "options",
+    "cliHelpOption": "Shows this help",
+    "cliDefault": "default {value}",
+    "cliRequiredMark": "required",
+    "cliUnknownCommand": "There is no command {command}",
+    "cliUnknownOption": "There is no option {option}",
+    "cliMissingArgument": "{argument} is missing",
+    "cliTooManyArguments": "There are more values than arguments",
+    "cliNeedsValue": "{option} needs a value",
+    "cliWrongValue": "{name} cannot be {value}",
+    "cliTooSmall": "{name} is at least {min}",
+    "cliTooLarge": "{name} is at most {max}",
+    "cliRequired": "{option} is required",
+    "cliWrongAnswer": "{value} does not fit; try again",
+    "cliNoTerminal": "There is nobody to answer: {question}",
+    "cliChooseNumber": "Type a number from 1 to {count}"
+  },
+  "program": {
+    "name": "shop",
+    "help": "The shop from the command line",
+    "commands": [
+      {
+        "line": ["backup"],
+        "help": "Copies the customers",
+        "arguments": [],
+        "options": [{ "name": "copies", "kind": "integer", "default": "1", "min": "1", "max": "9", "help": "How many" }]
+      },
+      {
+        "line": ["customer", "add"],
+        "help": "Adds a customer",
+        "arguments": [{ "name": "name", "kind": "text" }, { "name": "email", "kind": "text" }],
+        "options": [
+          { "name": "vip", "kind": "bool", "help": "A business customer" },
+          { "name": "limit", "kind": "money", "default": "1000", "min": "0", "max": "5000", "help": "The credit limit" },
+          { "name": "since", "kind": "date", "help": "Customer since" },
+          { "name": "kind", "kind": "enum", "values": ["Person", "Business"], "default": "Person", "help": "The kind" },
+          { "name": "call-after", "kind": "duration", "help": "Wait before calling" },
+          { "name": "met", "kind": "datetime" },
+          { "name": "score", "kind": "decimal" }
+        ]
+      },
+      {
+        "line": ["customer", "list"],
+        "help": "Lists the customers",
+        "arguments": [],
+        "options": [
+          { "name": "active", "kind": "bool", "help": "Only the active ones" },
+          { "name": "top", "kind": "integer", "default": "20", "min": "1", "max": "100", "help": "How many to show" }
+        ]
+      },
+      {
+        "line": ["customer", "remove"],
+        "help": "Removes a customer",
+        "arguments": [{ "name": "name", "kind": "text" }],
+        "options": [{ "name": "reason", "kind": "text", "required": true, "help": "Why it goes" }]
+      }
+    ]
+  },
+  "parse": [
+    {
+      "what": "a command with its arguments and the defaults",
+      "args": ["customer", "add", "Ada", "ada@example.org"],
+      "run": { "command": "customer add", "values": { "name": "Ada", "email": "ada@example.org", "vip": "false", "limit": "1000", "since": null, "kind": "Person", "call-after": null, "met": null, "score": null } }
+    },
+    {
+      "what": "options between and after the arguments, both ways of giving a value",
+      "args": ["customer", "add", "--vip", "Ada", "--limit=500", "ada@example.org", "--since", "2026-10-23", "--kind", "business", "--call-after", "1:30", "--met", "2026-10-23T14:30", "--score", "007.50"],
+      "run": { "command": "customer add", "values": { "name": "Ada", "email": "ada@example.org", "vip": "true", "limit": "500", "since": "2026-10-23", "kind": "Business", "call-after": "90", "met": "2026-10-23T14:30:00", "score": "7.5" } }
+    },
+    {
+      "what": "a flag written with its value, an option given twice keeps the last, seconds alone",
+      "args": ["customer", "add", "Ada", "a@b.c", "--vip=false", "--limit", "10", "--limit", "20.50", "--call-after", "45"],
+      "run": { "command": "customer add", "values": { "name": "Ada", "email": "a@b.c", "vip": "false", "limit": "20.5", "since": null, "kind": "Person", "call-after": "45", "met": null, "score": null } }
+    },
+    {
+      "what": "after -- every word is an argument",
+      "args": ["customer", "add", "--", "--vip", "-5"],
+      "run": { "command": "customer add", "values": { "name": "--vip", "email": "-5", "vip": "false", "limit": "1000", "since": null, "kind": "Person", "call-after": null, "met": null, "score": null } }
+    },
+    {
+      "what": "a command of one word, a negative number past its min",
+      "args": ["backup", "--copies", "-1"],
+      "wrong": { "key": "cliTooSmall", "slots": { "name": "--copies", "min": "1" }, "said": "--copies is at least 1\nUsage: shop backup [options]\n" }
+    },
+    {
+      "what": "a whole number with zeros in front",
+      "args": ["backup", "--copies", "03"],
+      "run": { "command": "backup", "values": { "copies": "3" } }
+    },
+    {
+      "what": "a required option given",
+      "args": ["customer", "remove", "Ada", "--reason", "moved away"],
+      "run": { "command": "customer remove", "values": { "name": "Ada", "reason": "moved away" } }
+    },
+    {
+      "what": "a required option left out",
+      "args": ["customer", "remove", "Ada"],
+      "wrong": { "key": "cliRequired", "slots": { "option": "--reason" }, "said": "--reason is required\nUsage: shop customer remove <name> [options]\n" }
+    },
+    {
+      "what": "an unknown command",
+      "args": ["custmer", "add"],
+      "wrong": { "key": "cliUnknownCommand", "slots": { "command": "custmer" }, "said": "There is no command custmer\nUsage: shop <command> [options]\n" }
+    },
+    {
+      "what": "an unknown command in a group",
+      "args": ["customer", "edit"],
+      "wrong": { "key": "cliUnknownCommand", "slots": { "command": "customer edit" }, "said": "There is no command customer edit\nUsage: shop customer <command> [options]\n" }
+    },
+    {
+      "what": "an unknown option",
+      "args": ["customer", "list", "--all"],
+      "wrong": { "key": "cliUnknownOption", "slots": { "option": "--all" }, "said": "There is no option --all\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "an option without its value",
+      "args": ["customer", "list", "--top"],
+      "wrong": { "key": "cliNeedsValue", "slots": { "option": "--top" }, "said": "--top needs a value\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "a value not of its kind",
+      "args": ["customer", "list", "--top", "many"],
+      "wrong": { "key": "cliWrongValue", "slots": { "name": "--top", "value": "many" }, "said": "--top cannot be many\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "a number with a comma",
+      "args": ["customer", "add", "Ada", "a@b.c", "--limit", "1,5"],
+      "wrong": { "key": "cliWrongValue", "slots": { "name": "--limit", "value": "1,5" }, "said": "--limit cannot be 1,5\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "a day that does not exist",
+      "args": ["customer", "add", "Ada", "a@b.c", "--since", "2026-02-30"],
+      "wrong": { "key": "cliWrongValue", "slots": { "name": "--since", "value": "2026-02-30" }, "said": "--since cannot be 2026-02-30\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "an enum value that is not one",
+      "args": ["customer", "add", "Ada", "a@b.c", "--kind", "Shop"],
+      "wrong": { "key": "cliWrongValue", "slots": { "name": "--kind", "value": "Shop" }, "said": "--kind cannot be Shop\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "a flag with a value that is no bool",
+      "args": ["customer", "list", "--active=yes"],
+      "wrong": { "key": "cliWrongValue", "slots": { "name": "--active", "value": "yes" }, "said": "--active cannot be yes\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "a number past its max",
+      "args": ["customer", "list", "--top", "101"],
+      "wrong": { "key": "cliTooLarge", "slots": { "name": "--top", "max": "100" }, "said": "--top is at most 100\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "money past its max, compared exactly",
+      "args": ["customer", "add", "Ada", "a@b.c", "--limit", "5000.01"],
+      "wrong": { "key": "cliTooLarge", "slots": { "name": "--limit", "max": "5000" }, "said": "--limit is at most 5000\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "a missing argument",
+      "args": ["customer", "add", "Ada"],
+      "wrong": { "key": "cliMissingArgument", "slots": { "argument": "email" }, "said": "email is missing\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "too many arguments",
+      "args": ["customer", "list", "everyone"],
+      "wrong": { "key": "cliTooManyArguments", "slots": {}, "said": "There are more values than arguments\nUsage: shop customer list [options]\n" }
+    },
+    {
+      "what": "the unknown option is told before the missing argument",
+      "args": ["customer", "add", "--all"],
+      "wrong": { "key": "cliUnknownOption", "slots": { "option": "--all" }, "said": "There is no option --all\nUsage: shop customer add <name> <email> [options]\n" }
+    },
+    {
+      "what": "nothing typed shows the program's help",
+      "args": [],
+      "help": "The shop from the command line\n\nUsage: shop <command> [options]\n\nCommands:\n  backup           Copies the customers\n  customer add     Adds a customer\n  customer list    Lists the customers\n  customer remove  Removes a customer\n\nOptions:\n  --help  Shows this help\n"
+    },
+    {
+      "what": "--help alone",
+      "args": ["--help"],
+      "help": "The shop from the command line\n\nUsage: shop <command> [options]\n\nCommands:\n  backup           Copies the customers\n  customer add     Adds a customer\n  customer list    Lists the customers\n  customer remove  Removes a customer\n\nOptions:\n  --help  Shows this help\n"
+    },
+    {
+      "what": "a group alone",
+      "args": ["customer"],
+      "help": "Usage: shop customer <command> [options]\n\nCommands:\n  customer add     Adds a customer\n  customer list    Lists the customers\n  customer remove  Removes a customer\n\nOptions:\n  --help  Shows this help\n"
+    },
+    {
+      "what": "help on a command, its options with their marks",
+      "args": ["help", "customer", "add"],
+      "help": "Adds a customer\n\nUsage: shop customer add <name> <email> [options]\n\nOptions:\n  --vip                      A business customer\n  --limit <limit>            The credit limit (default 1000)\n  --since <since>            Customer since\n  --kind <kind>              The kind (Person, Business; default Person)\n  --call-after <call-after>  Wait before calling\n  --met <met>\n  --score <score>\n  --help                     Shows this help\n"
+    },
+    {
+      "what": "--help after a command, even with wrong values before it",
+      "args": ["customer", "remove", "--reason", "--help"],
+      "help": "Removes a customer\n\nUsage: shop customer remove <name> [options]\n\nOptions:\n  --reason <reason>  Why it goes (required)\n  --help             Shows this help\n"
+    },
+    {
+      "what": "help on a group",
+      "args": ["help", "customer"],
+      "help": "Usage: shop customer <command> [options]\n\nCommands:\n  customer add     Adds a customer\n  customer list    Lists the customers\n  customer remove  Removes a customer\n\nOptions:\n  --help  Shows this help\n"
+    },
+    {
+      "what": "help on something that is no command",
+      "args": ["help", "order"],
+      "wrong": { "key": "cliUnknownCommand", "slots": { "command": "order" }, "said": "There is no command order\nUsage: shop <command> [options]\n" }
+    }
+  ],
+  "table": [
+    {
+      "what": "headings and rows, numbers to the right",
+      "headings": ["Name", "Email", "Limit"],
+      "right": [false, false, true],
+      "rows": [["Ada", "ada@example.org", "1,000.00"], ["Bea", "b@x.nl", "50.00"]],
+      "said": "Name  Email               Limit\nAda   ada@example.org  1,000.00\nBea   b@x.nl              50.00\n"
+    },
+    {
+      "what": "the last column left aligned writes no trailing spaces, letters beyond ASCII count once",
+      "headings": ["Name", "City"],
+      "right": [false, false],
+      "rows": [["Zoë", "Århus"], ["Bob", "Rome"]],
+      "said": "Name  City\nZoë   Århus\nBob   Rome\n"
+    },
+    {
+      "what": "no rows writes the headings",
+      "headings": ["Name"],
+      "right": [false],
+      "rows": [],
+      "said": "Name\n"
+    }
+  ],
+  "ask": [
+    {
+      "what": "yes by its word, in any case",
+      "question": "Remove Ada?", "form": { "kind": "confirm", "yes": "Remove", "no": "Keep" },
+      "terminal": true, "typed": ["remove"],
+      "said": "Remove Ada? [Remove/Keep] ", "answer": "true"
+    },
+    {
+      "what": "no by its word",
+      "question": "Remove Ada?", "form": { "kind": "confirm", "yes": "Remove", "no": "Keep" },
+      "terminal": true, "typed": ["Keep"],
+      "said": "Remove Ada? [Remove/Keep] ", "answer": "false"
+    },
+    {
+      "what": "an empty line is a no",
+      "question": "Remove Ada?", "form": { "kind": "confirm", "yes": "Remove", "no": "Keep" },
+      "terminal": true, "typed": [""],
+      "said": "Remove Ada? [Remove/Keep] ", "answer": "false"
+    },
+    {
+      "what": "another word asks again, the end of input is a no",
+      "question": "Remove Ada?", "form": { "kind": "confirm", "yes": "Remove", "no": "Keep" },
+      "terminal": true, "typed": ["maybe", null],
+      "said": "Remove Ada? [Remove/Keep] Remove Ada? [Remove/Keep] ", "answer": "false"
+    },
+    {
+      "what": "a value with its default, taken by an empty line",
+      "question": "How many copies?", "form": { "kind": "value", "type": "integer", "default": "3" },
+      "terminal": true, "typed": [""],
+      "said": "How many copies? [3] ", "answer": "3"
+    },
+    {
+      "what": "a value that is not of its kind asks again",
+      "question": "How many copies?", "form": { "kind": "value", "type": "integer" },
+      "terminal": true, "typed": ["two", "2"],
+      "said": "How many copies? two does not fit; try again\nHow many copies? ", "answer": "2"
+    },
+    {
+      "what": "the end of input before a value ends the program",
+      "question": "How many copies?", "form": { "kind": "value", "type": "integer" },
+      "terminal": true, "typed": [null],
+      "said": "How many copies? \n", "exit": 1
+    },
+    {
+      "what": "an enum value by its name",
+      "question": "Which kind?", "form": { "kind": "value", "type": "enum", "values": ["Person", "Business"] },
+      "terminal": true, "typed": ["business"],
+      "said": "Which kind? [Person/Business] ", "answer": "Business"
+    },
+    {
+      "what": "a choice of records by number",
+      "question": "Which customer?", "form": { "kind": "choice", "choices": ["Ada", "Bea", "Cor"] },
+      "terminal": true, "typed": ["4", "2"],
+      "said": "1. Ada\n2. Bea\n3. Cor\nWhich customer? Type a number from 1 to 3\nWhich customer? ", "answer": "2"
+    },
+    {
+      "what": "no terminal takes the default and writes nothing",
+      "question": "How many copies?", "form": { "kind": "value", "type": "integer", "default": "3" },
+      "terminal": false, "typed": [],
+      "said": "", "answer": "3"
+    },
+    {
+      "what": "no terminal and no default ends the program",
+      "question": "Remove Ada?", "form": { "kind": "confirm", "yes": "Remove", "no": "Keep" },
+      "terminal": false, "typed": [],
+      "said": "There is nobody to answer: Remove Ada?\n", "exit": 2
+    }
+  ]
+}

@@ -5,9 +5,12 @@
 //! databases. While working on the runtime, `.cargo/config.toml` in the
 //! project patches the crate with the runtime in Clarity's repository.
 
+mod cli;
 mod logic;
 mod model;
 mod names;
+
+pub use cli::generate as generate_cli;
 
 use std::fmt::Write as _;
 

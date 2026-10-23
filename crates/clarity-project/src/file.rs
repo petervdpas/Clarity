@@ -23,9 +23,9 @@ use std::collections::HashMap;
 use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 
 use crate::{
-    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, SOURCE_KINDS, Settings, Stack, TARGETS, UIS, auth_word, currency_problem,
+    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, auth_word, currency_problem,
     language_problem,
-    backend_word, source_word, target_word, ui_word,
+    backend_word, source_word, target_word, ui_word, usual_ui,
 };
 
 /// One line of the project file.
@@ -172,25 +172,40 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "stack" => {
                 once(stack.is_some())?;
                 let words: Vec<&str> = a.iter().map(|t| word(t).unwrap_or("")).collect();
-                let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
-                else {
-                    return Err(format!(
-                        "line {line}: write the backend, the UI and at least one target, like: stack rust web desktop"
-                    ));
-                };
-                if targets.is_empty() {
-                    return Err(format!(
-                        "line {line}: the stack needs at least one target, like: stack rust web desktop"
-                    ));
-                }
-                stack = Some(Stack {
-                    backend: pick(line, "backend", "backends", &BACKENDS, backend_word, backend)?,
-                    ui: pick(line, "UI", "UIs", &UIS, ui_word, ui)?,
-                    targets: targets
+                // `stack go cli`: a program without a window names no UI.
+                if words.get(1) == Some(&target_word(Target::Cli)) {
+                    let backend = pick(line, "backend", "backends", &BACKENDS, backend_word, words[0])?;
+                    let targets = words[1..]
                         .iter()
                         .map(|t| pick(line, "target", "targets", &TARGETS, target_word, t))
-                        .collect::<Result<_, _>>()?,
-                });
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if targets.iter().any(|t| *t != Target::Cli) {
+                        return Err(format!(
+                            "line {line}: a program with a window names its UI before the targets, like: stack go web desktop cli"
+                        ));
+                    }
+                    stack = Some(Stack { backend, ui: usual_ui(backend), targets });
+                } else {
+                    let (Some(backend), Some(ui), targets) = (words.first(), words.get(1), words.get(2..).unwrap_or(&[]))
+                    else {
+                        return Err(format!(
+                            "line {line}: write the backend, the UI and at least one target, like: stack rust web desktop"
+                        ));
+                    };
+                    if targets.is_empty() {
+                        return Err(format!(
+                            "line {line}: the stack needs at least one target, like: stack rust web desktop"
+                        ));
+                    }
+                    stack = Some(Stack {
+                        backend: pick(line, "backend", "backends", &BACKENDS, backend_word, backend)?,
+                        ui: pick(line, "UI", "UIs", &UIS, ui_word, ui)?,
+                        targets: targets
+                            .iter()
+                            .map(|t| pick(line, "target", "targets", &TARGETS, target_word, t))
+                            .collect::<Result<_, _>>()?,
+                    });
+                }
             }
             "datasource" => {
                 let name = a.first().and_then(|t| word(t));
@@ -321,7 +336,11 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
 
     // The lines of the new file, in their canonical order.
     let stack = &settings.stack;
-    let mut stack_line = format!("stack {} {}", backend_word(stack.backend), ui_word(stack.ui));
+    let mut stack_line = format!("stack {}", backend_word(stack.backend));
+    if stack.has_ui() {
+        stack_line.push(' ');
+        stack_line.push_str(ui_word(stack.ui));
+    }
     for target in &stack.targets {
         stack_line.push(' ');
         stack_line.push_str(target_word(*target));

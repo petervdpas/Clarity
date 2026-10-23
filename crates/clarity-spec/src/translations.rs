@@ -34,8 +34,6 @@ pub const TRANSLATIONS_DIR: &str = "translations";
 /// closing a message.
 pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok", "OK"), ("cancel", "Cancel"), ("dismiss", "Dismiss")];
 
-/// What an image part bound to a picture shows of its own, by key: in its
-/// empty state, and on its buttons to load a picture and to remove it.
 /// Clarity's words on the buttons of a wizard, the `steps` part.
 pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("finish", "Finish")];
 /// Clarity's words heading the pickers of the click targets `language` and `theme`.
@@ -59,7 +57,50 @@ pub const TAGS_KEYS: [(&str, &str); 2] = [("addTag", "Add"), ("removeTag", "Remo
 pub const PAGE_KEYS: [(&str, &str); 4] = [("firstPage", "First page"), ("previousPage", "Previous page"), ("nextPage", "Next page"), ("lastPage", "Last page")];
 /// Clarity's words of a tree's toggle, which shows or hides the rows under a row.
 pub const TREE_KEYS: [(&str, &str); 2] = [("expandRow", "Expand"), ("collapseRow", "Collapse")];
+/// What an image part bound to a picture shows of its own, by key: in its
+/// empty state, and on its buttons to load a picture and to remove it.
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
+
+/// Clarity's words of a command-line program (DESIGN 5.20): the headings of
+/// its help, and what it says when a command line is wrong or an `ask`
+/// has nobody to answer it. The runtimes fill the slots.
+pub const CLI_KEYS: [(&str, &str); 20] = [
+    ("cliUsage", "Usage"),
+    ("cliCommands", "Commands"),
+    ("cliOptions", "Options"),
+    ("cliCommandWord", "command"),
+    ("cliOptionsWord", "options"),
+    ("cliHelpOption", "Shows this help"),
+    ("cliDefault", "default {value}"),
+    ("cliRequiredMark", "required"),
+    ("cliUnknownCommand", "There is no command {command}"),
+    ("cliUnknownOption", "There is no option {option}"),
+    ("cliMissingArgument", "{argument} is missing"),
+    ("cliTooManyArguments", "There are more values than arguments"),
+    ("cliNeedsValue", "{option} needs a value"),
+    ("cliWrongValue", "{name} cannot be {value}"),
+    ("cliTooSmall", "{name} is at least {min}"),
+    ("cliTooLarge", "{name} is at most {max}"),
+    ("cliRequired", "{option} is required"),
+    ("cliWrongAnswer", "{value} does not fit; try again"),
+    ("cliNoTerminal", "There is nobody to answer: {question}"),
+    ("cliChooseNumber", "Type a number from 1 to {count}"),
+];
+
+/// Every list of Clarity's own words, with their English.
+pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
+    RENDERER_KEYS
+        .iter()
+        .chain(&PICTURE_KEYS)
+        .chain(&STEP_KEYS)
+        .chain(&FILE_KEYS)
+        .chain(&TAGS_KEYS)
+        .chain(&PAGE_KEYS)
+        .chain(&TREE_KEYS)
+        .chain(&LANGUAGE_PICKER_KEYS)
+        .chain(&THEME_PICKER_KEYS)
+        .chain(&CLI_KEYS)
+}
 
 /// The key a text names, without its `@`; none for a text written as it is.
 pub fn key_of(text: &str) -> Option<&str> {
@@ -186,10 +227,33 @@ impl Shown {
         }
     }
 
+    /// A text outside statements that people read: a key, or a text as written.
+    fn expr(&mut self, expr: Option<&Expr>) {
+        let Some(expr) = expr else { return };
+        if let ExprKind::Key { key, args } = &expr.kind {
+            self.uses.push(Use {
+                key: key.name.clone(),
+                place: self.place.clone(),
+                path: self.path.clone(),
+                span: key.span,
+                args: Some(args.iter().map(|a| a.name.name.clone()).collect()),
+            });
+        }
+        self.written(expr);
+    }
+
     /// Every key code names, with the slots it fills, and the texts it
     /// shows as written.
     fn code(&mut self, body: &[Stmt]) {
+        let mut asked = Vec::new();
         each_expr_in(body, &mut |expr| {
+            // A command's `ask` that gives its answer: its question and buttons.
+            if let ExprKind::Ask { question, form } = &expr.kind {
+                asked.push(question.as_ref().clone());
+                if let crate::code::AskForm::Confirm { yes, no } = form.as_ref() {
+                    asked.extend(yes.iter().chain(no).cloned());
+                }
+            }
             if let ExprKind::Key { key, args } = &expr.kind {
                 self.uses.push(Use {
                     key: key.name.clone(),
@@ -200,6 +264,9 @@ impl Shown {
                 });
             }
         });
+        for text in &asked {
+            self.written(text);
+        }
         self.shown_as_written(body);
     }
 
@@ -207,7 +274,7 @@ impl Shown {
     fn shown_as_written(&mut self, body: &[Stmt]) {
         for stmt in body {
             match &stmt.kind {
-                StmtKind::Message { text, .. } | StmtKind::Refuse { text } => self.written(text),
+                StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Print { value: text, .. } => self.written(text),
                 StmtKind::Ask { question, form, .. } => {
                     if let Some(question) = question {
                         self.written(question);
@@ -324,6 +391,18 @@ fn shown(project: &Project) -> Shown {
             shown.place = format!("{} {}", decl.kind.keyword(), decl.name.name);
             shown.code(&decl.body);
         }
+        for cli in &file.clis {
+            shown.place = format!("cli {}", cli.name.name);
+            shown.expr(cli.help.as_ref());
+        }
+        for command in &file.commands {
+            shown.place = format!("command {}", command.line());
+            shown.expr(command.help.as_ref());
+            for option in &command.options {
+                shown.expr(option.help.as_ref());
+            }
+            shown.code(&command.body);
+        }
         for engine in &file.engines {
             shown.place = format!("engine {}", engine.name.name);
             for text in &engine.says {
@@ -355,6 +434,7 @@ fn shown(project: &Project) -> Shown {
     let setting = |ty: FieldType| project.entities().any(|e| e.settings && e.fields.iter().any(|f| f.ty == ty));
     let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language);
     let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
+    let commands = project.files.iter().any(|f| !f.commands.is_empty());
     let own = RENDERER_KEYS
         .iter()
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
@@ -364,9 +444,11 @@ fn shown(project: &Project) -> Shown {
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
         .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
-        .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] });
-    for (key, _) in own {
-        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: None });
+        .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] })
+        .chain(if commands { CLI_KEYS.as_slice() } else { &[] });
+    // The runtimes fill the slots of Clarity's own words, the ones its English has.
+    for (key, english) in own {
+        shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });
     }
     shown
 }
@@ -536,7 +618,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
-                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&FILE_KEYS).chain(&TAGS_KEYS).chain(&PAGE_KEYS).chain(&TREE_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    let english = own_words().find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
                     found.push(place(Diagnostic::warning(
                         format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
                         u.span,

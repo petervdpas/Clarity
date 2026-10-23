@@ -8,15 +8,16 @@ use super::names::{backing, field_type, pascal, property, string, value_type};
 use clarity_spec::code::check::ValueItem;
 use super::texts::Texts;
 
-/// The enums and records of `file`, in the application's `namespace`.
-pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts) -> String {
+/// The enums and records of `file`, in the application's `namespace`; for
+/// the command-line program (`cli`) without what only windows use.
+pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts, cli: bool) -> String {
     let mut out = String::new();
     for decl in &file.enums {
-        out.push_str(&enum_decl(decl, namespace, texts));
+        out.push_str(&enum_decl(decl, namespace, texts, cli));
     }
     for entity in &file.entities {
         if entity.settings {
-            out.push_str(&settings_class(project, entity, namespace));
+            out.push_str(&settings_class(project, entity, namespace, cli));
         } else {
             out.push_str(&record(project, entity));
         }
@@ -26,7 +27,7 @@ pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts) 
 
 /// An enum, and its labels for text: `Labels.Of(status)`, in the language
 /// shown; the choices of a dropdown are made each time, so they follow it.
-fn enum_decl(decl: &EnumDecl, namespace: &str, texts: &Texts) -> String {
+fn enum_decl(decl: &EnumDecl, namespace: &str, texts: &Texts, cli: bool) -> String {
     let name = &decl.name.name;
     let values: String = decl.variants.iter().map(|v| format!("    {},\n", v.name.name)).collect();
     let labels: String = decl
@@ -39,6 +40,12 @@ fn enum_decl(decl: &EnumDecl, namespace: &str, texts: &Texts) -> String {
         .iter()
         .map(|v| format!("        new(global::{namespace}.{name}.{}, {}),\n", v.name.name, texts.code(&v.label)))
         .collect();
+    // A dropdown's choices: only windows have them.
+    let choices = if cli {
+        String::new()
+    } else {
+        format!("public static partial class Choices\n{{\n    public static Choice[] {name} =>\n    [\n{choices}    ];\n}}\n\n")
+    };
     format!(
         "public enum {name}
 {{
@@ -52,14 +59,7 @@ public static partial class Labels
     }};
 }}
 
-public static partial class Choices
-{{
-    public static Choice[] {name} =>
-    [
-{choices}    ];
-}}
-
-"
+{choices}"
     )
 }
 
@@ -86,7 +86,7 @@ fn initial(field: &Field) -> Option<String> {
 /// window's `Settings` is `Settings.Current`. `Start` takes back what was
 /// kept and still fits (Clarity.Avalonia's KeptSettings), shows its language
 /// and theme, keeps every change, and follows the pickers.
-fn settings_class(project: &Project, entity: &Entity, program: &str) -> String {
+fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) -> String {
     let name = &entity.name.name;
     let mut properties = String::new();
     let mut described = String::new();
@@ -110,6 +110,8 @@ fn settings_class(project: &Project, entity: &Entity, program: &str) -> String {
         let (tag, values) = match &f.ty {
             FieldType::Text { .. } => ("text", "null".to_string()),
             FieldType::Enum { name } => ("enum", format!("Enum.GetNames<{}>()", name.name)),
+            // The command-line program shows no themes and takes the language kept as it is.
+            FieldType::Language | FieldType::Theme if cli => ("text", "null".into()),
             FieldType::Language => ("language", "Locale.Offered".into()),
             FieldType::Theme => ("theme", "[.. Themes.Offered.Select(t => t.Name)]".into()),
             FieldType::DateTime => ("datetime", "null".into()),
@@ -168,6 +170,15 @@ fn settings_class(project: &Project, entity: &Entity, program: &str) -> String {
         }
     }
     let _ = project;
+    // The command-line program takes them back when it starts, and keeps
+    // them when a command changed them: it shows no language or theme of
+    // its own and has no windows to follow.
+    let watch = if cli {
+        String::new()
+    } else {
+        format!("{shown}        settings.PropertyChanged += (_, e) =>\n        {{\n            KeptSettings.Keep(ProgramName, settings.ToJson());\n{follow}        }};\n")
+    };
+    let keep = if cli { "\n    /// <summary>Keeps the settings as they are now.</summary>\n    public static void Keep() => KeptSettings.Keep(ProgramName, Current.ToJson());\n" } else { "" };
     format!(
         "/// <summary>The person's settings: one for the whole application, shared by every window, kept on their machine as they change.</summary>
 public sealed partial class {name} : ObservableObject
@@ -184,12 +195,8 @@ public sealed partial class {name} : ObservableObject
         var settings = new {name}();
         var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName));
 {taken}        Current = settings;
-{shown}        settings.PropertyChanged += (_, e) =>
-        {{
-            KeptSettings.Keep(ProgramName, settings.ToJson());
-{follow}        }};
-    }}
-
+{watch}    }}
+{keep}
     /// <summary>The settings as a kept value is checked against them.</summary>
     static Dictionary<string, Setting> Described() => new()
     {{

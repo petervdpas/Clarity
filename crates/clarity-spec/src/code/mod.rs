@@ -211,6 +211,16 @@ pub enum StmtKind {
         store: Ident,
         path: Expr,
     },
+    /// `print value`, or `print list columns a, b` (a table): writes to
+    /// standard output, in a command (DESIGN 5.20).
+    Print {
+        value: Expr,
+        columns: Vec<Ident>,
+    },
+    /// `exit code`: ends a command-line program with that exit code.
+    Exit {
+        code: Expr,
+    },
 }
 
 /// What `ask` asks for, which decides its dialog.
@@ -324,6 +334,13 @@ pub enum ExprKind {
         engine: Ident,
         function: Ident,
         args: Vec<Expr>,
+    },
+    /// `ask @question yes @a no @b` or `ask @question for type ...` in a
+    /// command (DESIGN 5.20): waits for the answer on the terminal and
+    /// gives it, a bool for yes or no.
+    Ask {
+        question: Box<Expr>,
+        form: Box<AskForm>,
     },
     /// `find c in Customer where c.active order by c.name`: the records of
     /// an entity that meet the condition, in order. `var` names the record
@@ -480,6 +497,83 @@ impl FunctionKind {
 pub struct Param {
     pub name: Ident,
     pub ty: TypeRef,
+}
+
+/// The `cli Shop` block (DESIGN 5.20): the command-line program of a
+/// project with the `cli` target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct CliDecl {
+    pub name: Ident,
+    /// `help @key`: the program's description in its help.
+    pub help: Option<Expr>,
+    pub span: Span,
+}
+
+/// `command [group] name(arguments)` with its `option` lines and its
+/// statements (DESIGN 5.20).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct CommandDecl {
+    /// `customer` in `command customer add`.
+    pub group: Option<Ident>,
+    pub name: Ident,
+    /// The arguments, given in this order, all required.
+    pub params: Vec<Param>,
+    pub help: Option<Expr>,
+    pub options: Vec<CommandOption>,
+    pub body: Vec<Stmt>,
+    pub span: Span,
+}
+
+/// `option limit: money, default 1000, min 0, max 5000, required, help @key`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct CommandOption {
+    pub name: Ident,
+    pub ty: TypeRef,
+    pub default: Option<Expr>,
+    pub min: Option<Expr>,
+    pub max: Option<Expr>,
+    pub required: bool,
+    pub help: Option<Expr>,
+    pub span: Span,
+}
+
+/// `addAll` as the command line writes it: `add-all`.
+pub fn hyphenated(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                out.push('-');
+            }
+            out.extend(c.to_lowercase());
+        } else if c == '_' {
+            out.push('-');
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+impl CommandDecl {
+    /// The command as typed after the program's name: `customer add`.
+    pub fn line(&self) -> String {
+        let name = hyphenated(&self.name.name);
+        match &self.group {
+            Some(group) => format!("{} {name}", hyphenated(&group.name)),
+            None => name,
+        }
+    }
+}
+
+impl CommandOption {
+    /// `--dry-run` for `dryRun`.
+    pub fn flag(&self) -> String {
+        format!("--{}", hyphenated(&self.name.name))
+    }
 }
 
 /// A `function` or `action` declared in a module (docs/DESIGN.md 5.10).
@@ -668,6 +762,8 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr(text, found);
                 each_expr(path, found);
             }
+            StmtKind::Print { value, .. } => each_expr(value, found),
+            StmtKind::Exit { code } => each_expr(code, found),
             _ => {}
         }
     }
@@ -703,6 +799,12 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
+        ExprKind::Ask { question, form } => {
+            each_expr(question, found);
+            for e in ask_exprs(form) {
+                each_expr(e, found);
+            }
+        }
         ExprKind::Key { args, .. } => args.iter().for_each(|a| each_expr(&a.value, found)),
         ExprKind::ListOf { items } => items.iter().for_each(|i| each_expr(i, found)),
         ExprKind::Index { list, index } => {

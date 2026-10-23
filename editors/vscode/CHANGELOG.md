@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- Colors the words of command-line programs: `cli`, `command`, `option`, `print` and `exit`.
+
 ## 0.1.5
 
 - Colors `search`, the field modifier for full-text search, and `matches`, which finds the records holding every word typed.

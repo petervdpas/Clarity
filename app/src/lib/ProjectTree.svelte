@@ -5,6 +5,7 @@
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
   import { projectEngines, engineNote } from "./engines";
+  import { commandLine } from "./commandLine";
   import { findApp } from "./frame";
   import { languageName } from "./translate";
   import { resourceKind, resourceUses } from "./resources";
@@ -77,6 +78,10 @@
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
+  // The commands of the command-line program (DESIGN 5.20), by what is typed, with their module.
+  const commands = $derived(
+    preview.project.files.flatMap((f) => f.commands.map((c) => ({ line: commandLine(c.group?.name ?? null, c.name.name), module: f.module?.name ?? "" }))),
+  );
   /** The language the texts are written in, and those the project translates them to. */
   const written = $derived(preview.project.locale.language ?? "en");
   const languages = $derived(Object.keys(preview.project.translations).filter((l) => l !== written).toSorted());
@@ -258,6 +263,17 @@
         <button class="row add" onclick={onnewengine}>+ New engine</button>
       {/if}
     </details>
+
+    {#if commands.length > 0}
+      <details open>
+        <summary>Commands <span class="count">{commands.length}</span></summary>
+        {#each commands as { line, module } (line)}
+          <button class="row" class:current={is("module", module)} title="in module {module}" onclick={() => onselect({ kind: "module", name: module })}>
+            <code>{line}</code>
+          </button>
+        {/each}
+      </details>
+    {/if}
 
     <details>
       <summary>Modules <span class="count">{files.length}</span></summary>

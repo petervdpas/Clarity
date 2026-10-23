@@ -6,6 +6,7 @@
 //! driver of each server database), or on the runtime's own projects while
 //! working on them (the `ClarityRuntime` switch of the project file).
 
+mod cli;
 mod logic;
 mod model;
 mod names;
@@ -71,6 +72,8 @@ pub fn project_name(settings: &Settings) -> String {
     pascal(&settings.name)
 }
 
+pub use cli::generate as generate_cli;
+
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let (databases, owned) = crate::databases(project, settings, "C#")?;
     let Some(main_window) = main_window(project) else {
@@ -89,7 +92,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         // The settings read and keep JSON, numbers and dates written the same everywhere.
         let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\nusing Avalonia.Threading;\n" } else { "" };
         let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Avalonia;\nusing Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
-        code.push_str(&model::emit(project, file, &name, &texts));
+        code.push_str(&model::emit(project, file, &name, &texts, false));
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
             Err(mut problems) => errors.append(&mut problems),

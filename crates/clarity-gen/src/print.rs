@@ -30,6 +30,7 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
         ExprKind::New { entity } => format!("new {}", entity.name),
+        ExprKind::Ask { question, .. } => format!("ask {}", expr(question)),
         ExprKind::Key { key, args } if args.is_empty() => format!("@{}", key.name),
         ExprKind::Key { key, args } => format!(
             "@{}({})",

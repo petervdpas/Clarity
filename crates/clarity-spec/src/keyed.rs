@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{CLI_KEYS, FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -65,6 +65,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     let paged = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("table ") && l.split_whitespace().any(|w| w == "page")));
     let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable ")));
     let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind ")));
+    let commands = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("command ")));
     // The pickers of the click targets `language` and `theme` have a heading.
     // The settings' own `language` and `theme` are labeled with the same words.
     let clicks_to = |target: &str| {
@@ -81,7 +82,8 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("language") { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
-        .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] });
+        .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] })
+        .chain(if commands { CLI_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }
@@ -318,10 +320,11 @@ impl Maker {
         let tokens = &line.tokens;
         // `ask "Delete it?" yes "Delete" no "Keep" then ...`: the question and
         // its buttons; a default after `for` is a value, not a text people read.
-        if tokens.first().is_some_and(|t| t.text == "ask") {
+        // In a command `ask` gives its answer, so it also follows `let n =` or `if`.
+        if let Some(at) = tokens.iter().position(|t| t.kind == TokenKind::Ident && t.text == "ask") {
             let asked: Vec<&Token> = tokens
                 .iter()
-                .skip(1)
+                .skip(at + 1)
                 .take_while(|t| !(t.kind == TokenKind::Ident && matches!(t.text.as_str(), "for" | "then")))
                 .filter(|t| t.kind == TokenKind::Str)
                 .collect();
@@ -335,6 +338,9 @@ impl Maker {
             Some("let") => None,
             Some("message") => tokens.iter().skip(1).find(|t| t.kind == TokenKind::Str),
             Some("refuse") | Some("return") => tokens.get(1),
+            // A command's `print`, and the `help` of a command, an option or the cli block.
+            Some("print" | "help") => tokens.get(1),
+            Some("option") => following(tokens, "help"),
             // `part.caption = "..."`, `part.error = "..."`, `value = "..."`; a
             // record's field holds data, not a text people read.
             _ => match tokens.iter().position(|t| t.kind == TokenKind::Assign) {
@@ -380,7 +386,7 @@ fn top(tokens: &[Token]) -> (Block, String) {
         "page" | "app" => Block::Window,
         "theme" => Block::Theme,
         "engine" => Block::Engine,
-        "code" | "function" | "action" => Block::Code,
+        "code" | "function" | "action" | "command" | "cli" => Block::Code,
         _ => Block::None,
     };
     (block, name)

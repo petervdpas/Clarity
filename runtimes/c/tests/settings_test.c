@@ -1,7 +1,11 @@
 // Where an application keeps its settings, as every runtime finds it
 // (conformance/settings.json, `file`), and keeping them.
 
+#include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "check.h"
 #include "clarity/settings.h"
@@ -41,4 +45,10 @@ void settings_kept_are_read_back(void) {
     CHECK(cJSON_Compare(kept, values, 1));
     cJSON_Delete(kept);
     cJSON_Delete(values);
+#ifndef _WIN32
+    // What the test kept goes, so the next run starts without it.
+    remove(clarity_format("%s/%s/settings.json", folder, program));
+    rmdir(clarity_format("%s/%s", folder, program));
+    rmdir(folder);
+#endif
 }

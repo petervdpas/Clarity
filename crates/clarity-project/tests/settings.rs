@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clarity_project::{
     Auth, AuthKind, Backend, DataSource, FileStore, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir,
-    parse, starter, title, validate, write,
+    parse, starter, target_dir, title, validate, write,
 };
 
 const SHOP: &str = r#"// The shop example.
@@ -448,4 +448,42 @@ fn a_file_store_is_found_from_the_project_folder() {
     let built = clarity_project::build_settings(dir, &settings);
     assert_eq!(built.filestores[0].location, "/projects/shop/data/photos");
     assert_eq!(built.filestores[1].location, "env:SCAN_FOLDER");
+}
+
+#[test]
+fn a_command_line_program_needs_no_ui() {
+    let settings = parse("project Ledger\n    stack go cli\n").unwrap();
+    assert_eq!(settings.stack.backend, Backend::Go);
+    assert_eq!(settings.stack.targets, [Target::Cli]);
+    assert!(!settings.stack.has_ui());
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    let text = write(None, &settings).unwrap();
+    assert!(text.contains("    stack go cli\n"), "{text}");
+    assert_eq!(parse(&text).unwrap(), settings);
+}
+
+#[test]
+fn a_command_line_program_beside_the_desktop_one() {
+    let text = SHOP.replace("stack csharp avalonia desktop", "stack csharp avalonia desktop cli");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.stack.ui, Ui::Avalonia);
+    assert_eq!(settings.stack.targets, [Target::Desktop, Target::Cli]);
+    assert!(settings.stack.has_ui());
+    assert_eq!(write(Some(&text), &settings).unwrap(), text);
+}
+
+#[test]
+fn a_window_needs_its_ui_named() {
+    assert_eq!(
+        parse("project Shop\n    stack go cli desktop\n").unwrap_err(),
+        "line 2: a program with a window names its UI before the targets, like: stack go web desktop cli"
+    );
+    assert!(catalog().targets.iter().any(|t| t.id == Target::Cli && t.label == "Command line"));
+}
+
+#[test]
+fn each_target_has_its_own_output_folder() {
+    let out = Path::new("/work/examples/shop/out");
+    assert_eq!(target_dir(out, Target::Desktop), Path::new("/work/examples/shop/out/desktop"));
+    assert_eq!(target_dir(out, Target::Cli), Path::new("/work/examples/shop/out/cli"));
 }

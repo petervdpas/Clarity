@@ -42,6 +42,8 @@ pub enum Ui {
 pub enum Target {
     Desktop,
     Web,
+    /// A program without a window, run from a terminal (DESIGN 5.20).
+    Cli,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -68,8 +70,21 @@ pub enum AuthKind {
 #[ts(export)]
 pub struct Stack {
     pub backend: Backend,
+    /// The UI of the targets with a window; a project whose only target is
+    /// `cli` names none and keeps its backend's usual one here.
     pub ui: Ui,
     pub targets: Vec<Target>,
+}
+
+impl Stack {
+    /// Whether a target shows windows, so the project has a UI.
+    pub fn has_ui(&self) -> bool {
+        self.targets.iter().any(|t| *t != Target::Cli)
+    }
+
+    pub fn has(&self, target: Target) -> bool {
+        self.targets.contains(&target)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -146,7 +161,7 @@ pub const DEFAULT_OUT: &str = "out";
 
 pub const BACKENDS: [Backend; 5] = [Backend::Rust, Backend::Go, Backend::Csharp, Backend::C, Backend::Cpp];
 pub const UIS: [Ui; 2] = [Ui::Web, Ui::Avalonia];
-pub const TARGETS: [Target; 2] = [Target::Desktop, Target::Web];
+pub const TARGETS: [Target; 3] = [Target::Desktop, Target::Web, Target::Cli];
 pub const SOURCE_KINDS: [SourceKind; 5] =
     [SourceKind::Sqlite, SourceKind::Postgres, SourceKind::Mysql, SourceKind::Mssql, SourceKind::Rest];
 pub const AUTH_KINDS: [AuthKind; 3] = [AuthKind::Bearer, AuthKind::ApiKey, AuthKind::Basic];
@@ -174,6 +189,7 @@ pub fn target_word(target: Target) -> &'static str {
     match target {
         Target::Desktop => "desktop",
         Target::Web => "web",
+        Target::Cli => "cli",
     }
 }
 
@@ -240,6 +256,12 @@ pub fn module_dir(file: &Path) -> PathBuf {
 /// or an absolute path as it is.
 pub fn out_dir(file: &Path, settings: &Settings) -> PathBuf {
     module_dir(file).join(settings.out.trim())
+}
+
+/// The folder of one target's program inside the output folder: each
+/// target is a project of its own, `out/desktop` and `out/cli`.
+pub fn target_dir(out: &Path, target: Target) -> PathBuf {
+    out.join(target_word(target))
 }
 
 /// A path picked in a file dialog, as the project file stores it: relative
@@ -458,6 +480,11 @@ pub struct Catalog {
 }
 
 
+/// The UI a backend usually renders with: the first it offers.
+pub fn usual_ui(backend: Backend) -> Ui {
+    backend_info(backend).uis[0]
+}
+
 fn backend_info(backend: Backend) -> BackendInfo {
     let (label, uis) = match backend {
         Backend::Rust => ("Rust", vec![Ui::Web]),
@@ -499,6 +526,7 @@ pub fn catalog() -> Catalog {
         targets: vec![
             Choice { id: Target::Desktop, label: "Desktop" },
             Choice { id: Target::Web, label: "Web" },
+            Choice { id: Target::Cli, label: "Command line" },
         ],
         sources: vec![
             source(SourceKind::Sqlite, "SQLite", "File", "data/app.db", false),
@@ -583,6 +611,10 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     if let Some(settings) = &settings {
         clarity_spec::attach_stores(project, settings.filestores.iter().map(|s| s.name.clone()).collect());
     }
+    if let Some(settings) = &settings {
+        let found = target_problems(settings, project, &file.display().to_string());
+        project.diagnostics.extend(found);
+    }
     if let Some(settings) = settings {
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
@@ -590,6 +622,54 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
         };
     }
     clarity_spec::themes::use_themes(project, &themes.iter().map(String::as_str).collect::<Vec<_>>());
+}
+
+/// The stack line with the `cli` target added, for messages.
+fn with_cli(stack: &Stack) -> String {
+    let mut targets: Vec<&str> = stack.targets.iter().map(|t| target_word(*t)).collect();
+    if !stack.has(Target::Cli) {
+        targets.push(target_word(Target::Cli));
+    }
+    let ui = if stack.has_ui() { format!(" {}", ui_word(stack.ui)) } else { String::new() };
+    format!("stack {}{ui} {}", backend_word(stack.backend), targets.join(" "))
+}
+
+/// The `cli` target and the modules' `cli` block and commands go together,
+/// and the block is named after the project (DESIGN 5.20). `file` is the
+/// project file, where a missing block is reported.
+pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, file: &str) -> Vec<clarity_spec::Diagnostic> {
+    use clarity_spec::Diagnostic;
+    let mut found = Vec::new();
+    let cli = settings.stack.has(Target::Cli);
+    let block = project.files.iter().find_map(|f| f.clis.first().map(|c| (f, c)));
+    match block {
+        None if cli => found.push(
+            Diagnostic::error(format!("the stack has the cli target, so a module needs the program's block: cli {}", settings.name), clarity_spec::Span::default())
+                .in_file(file),
+        ),
+        Some((f, c)) if !cli => found.push(
+            Diagnostic::error(format!("cli {} is the command-line program, which needs the cli target: {}", c.name.name, with_cli(&settings.stack)), c.name.span)
+                .in_file(&f.path),
+        ),
+        Some((f, c)) if c.name.name != settings.name => found.push(
+            Diagnostic::error(format!("the cli block is named after the project: cli {}", settings.name), c.name.span).in_file(&f.path),
+        ),
+        _ => {}
+    }
+    if !cli {
+        for f in &project.files {
+            for command in &f.commands {
+                found.push(
+                    Diagnostic::error(
+                        format!("command {} is for the command-line program, which needs the cli target: {}", command.line(), with_cli(&settings.stack)),
+                        command.name.span,
+                    )
+                    .in_file(&f.path),
+                );
+            }
+        }
+    }
+    found
 }
 
 /// Compares the entities of each external SQLite source with its tables.

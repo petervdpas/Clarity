@@ -3,4 +3,9 @@ import type { Backend } from "./Backend";
 import type { Target } from "./Target";
 import type { Ui } from "./Ui";
 
-export type Stack = { backend: Backend, ui: Ui, targets: Array<Target>, };
+export type Stack = { backend: Backend, 
+/**
+ * The UI of the targets with a window; a project whose only target is
+ * `cli` names none and keeps its backend's usual one here.
+ */
+ui: Ui, targets: Array<Target>, };

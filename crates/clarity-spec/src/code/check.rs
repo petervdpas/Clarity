@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, EngineBody, EngineState,
+use super::{AskForm, CommandDecl, EngineBody, EngineState,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -40,7 +40,111 @@ fn run(files: &[SpecFile]) -> (Vec<Diagnostic>, HashMap<String, FileTypes>) {
         diagnostics.extend(out.diagnostics.into_iter().map(|d| d.in_file(&file.path)));
         types.insert(file.path.clone(), out.types);
     }
+    diagnostics.extend(check_command_lines(files));
     (diagnostics, types)
+}
+
+/// Every command line names one command, a group is no command of its
+/// own, and a project has one `cli` block (DESIGN 5.20).
+fn check_command_lines(files: &[SpecFile]) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let commands: Vec<(&SpecFile, &CommandDecl)> = files.iter().flat_map(|f| f.commands.iter().map(move |c| (f, c))).collect();
+    for (i, (file, command)) in commands.iter().enumerate() {
+        let line = command.line();
+        if commands[..i].iter().any(|(_, c)| c.line() == line) {
+            out.push(Diagnostic::error(format!("there are two commands '{line}'"), command.name.span).in_file(&file.path));
+        } else if command.group.is_none() && commands.iter().any(|(_, c)| c.group.as_ref().is_some_and(|g| crate::code::hyphenated(&g.name) == line)) {
+            out.push(Diagnostic::error(format!("'{line}' is a group of commands, so it is no command of its own"), command.name.span).in_file(&file.path));
+        }
+    }
+    let clis: Vec<(&SpecFile, &crate::code::CliDecl)> = files.iter().flat_map(|f| f.clis.iter().map(move |c| (f, c))).collect();
+    for (file, cli) in clis.iter().skip(1) {
+        out.push(Diagnostic::error("a project has one 'cli' block", cli.name.span).in_file(&file.path));
+    }
+    out
+}
+
+/// A command's arguments and options (plain values, each name once, with
+/// defaults that fit), its help, and its statements.
+fn check_command(env: &Env, command: &CommandDecl, out: &mut Output) {
+    let line = command.line();
+    let mut names: Vec<String> = Vec::new();
+    let mut typed = |name: &Ident, ty: &TypeRef, option: bool, out: &mut Output| -> Ty {
+        if names.contains(&name.name) {
+            out.push(Diagnostic::error(format!("command {line} has two arguments or options named '{}'", name.name), name.span));
+        }
+        names.push(name.name.clone());
+        let ty = env.type_ref(ty).unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, ty.span));
+            Ty::Unknown
+        });
+        let plain = matches!(ty, Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Enum(_) | Ty::Unknown);
+        if matches!(ty, Ty::Bool) && !option {
+            out.push(Diagnostic::error(format!("a yes or no is an option, not an argument: option {}: bool", name.name), name.span));
+        } else if !plain && !(option && matches!(ty, Ty::Bool)) {
+            let what = if option { "an option is text, a number, a date, a duration, an enum or bool" } else { "an argument is text, a number, a date, a duration or an enum" };
+            out.push(Diagnostic::error(format!("{what}, not {}; a command looks records up with find", ty.name()), name.span));
+        }
+        ty
+    };
+    let params: Vec<(String, Ty)> = command.params.iter().map(|p| (p.name.name.clone(), typed(&p.name, &p.ty, false, out))).collect();
+    let options: Vec<Ty> = command.options.iter().map(|o| typed(&o.name, &o.ty, true, out)).collect();
+    if command.help.is_none() {
+        out.push(Diagnostic::warning(format!("command {line} has no help; write what it does: help @key"), command.name.span));
+    }
+    let mut checker = BodyChecker {
+        env,
+        owner: None,
+        handlers: &[],
+        decl: None,
+        handler: None,
+        event: None,
+        returns: None,
+        scopes: vec![HashMap::new()],
+        saves_reported: false,
+        engine: None,
+        command: Some(command),
+        out,
+    };
+    if let Some(help) = &command.help {
+        checker.shown_text(help);
+    }
+    for (option, ty) in command.options.iter().zip(&options) {
+        let name = &option.name.name;
+        if let Some(help) = &option.help {
+            checker.shown_text(help);
+        } else {
+            checker.out.push(Diagnostic::warning(format!("option {name} of command {line} has no help; write what it does: help @key"), option.name.span));
+        }
+        if let Some(default) = &option.default {
+            let given = checker.expr(default, Some(*ty));
+            if !ty.is_unknown() && !given.is_unknown() && !ty.accepts(&given) {
+                checker.error(format!("the default of {name} is {}, but {name} is {}", given.name(), ty.name()), default.span);
+            }
+            if option.required {
+                checker.error(format!("{name} is required, so it has no default"), default.span);
+            }
+        }
+        let bounds: Vec<&Expr> = option.min.iter().chain(&option.max).collect();
+        if !bounds.is_empty() && !ty.is_numeric() && !ty.is_unknown() {
+            checker.error(format!("'min' and 'max' bound a number; {name} is {}", ty.name()), bounds[0].span);
+        } else {
+            for bound in bounds {
+                let given = checker.expr(bound, Some(*ty));
+                if !given.is_unknown() && !given.is_numeric() {
+                    checker.error(format!("'min' and 'max' of {name} are numbers, not {}", given.name()), bound.span);
+                }
+            }
+        }
+    }
+    let scope_of = &mut checker.scopes[0];
+    for (name, ty) in params {
+        scope_of.insert(name, ty);
+    }
+    for (option, ty) in command.options.iter().zip(options) {
+        scope_of.insert(option.name.name.clone(), ty);
+    }
+    checker.block(&command.body);
 }
 
 /// A type as generators see it.
@@ -635,6 +739,9 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
 
 fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     check_functions(env, file, out);
+    for command in &file.commands {
+        check_command(env, command, out);
+    }
     check_engines(env, file, out);
     let owners = owners(file);
     for owner in &owners {
@@ -847,6 +954,7 @@ fn check_handler(env: &Env, owner: &Owner, handlers: &[HandlerDecl], handler: &H
         scopes: vec![scope],
         saves_reported: false,
         engine: None,
+        command: None,
         out,
     };
     checker.block(&handler.body);
@@ -960,7 +1068,8 @@ fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mu
             scopes: vec![HashMap::new()],
             saves_reported: false,
             engine: Some(engine),
-            out,
+            command: None,
+        out,
         };
         let value = checker.expr(&keep.value, Some(ty));
         if !ty.accepts(&value) {
@@ -1008,6 +1117,7 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
         scopes: vec![kept, scope],
         saves_reported: false,
         engine,
+        command: None,
         out,
     };
     for condition in &decl.requires {
@@ -1062,6 +1172,9 @@ struct BodyChecker<'e, 'a> {
     /// The engine written in Clarity whose function this is: its keep
     /// values are in scope, its functions callable, and it shows nothing.
     engine: Option<&'e EngineDecl>,
+    /// The command being checked (DESIGN 5.20): it has no window, prints,
+    /// asks on the terminal and exits.
+    command: Option<&'e CommandDecl>,
     out: &'e mut Output,
 }
 
@@ -1277,6 +1390,9 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// "a handler", "a function" or "an action", for messages.
     fn context(&self) -> &'static str {
+        if self.command.is_some() {
+            return "a command";
+        }
         match self.decl.map(|d| d.kind) {
             None => "a handler",
             Some(FunctionKind::Function) => "a function",
@@ -1318,7 +1434,9 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// Statements that show or close windows belong in handlers.
     fn ui_only(&mut self, word: &str, span: Span) {
-        if let Some(engine) = self.engine {
+        if self.command.is_some() {
+            self.error(format!("a command has no window: '{word}' belongs in a handler"), span);
+        } else if let Some(engine) = self.engine {
             self.error(format!("an engine shows nothing: '{word}' belongs in a handler, which shows what engine {} gives", engine.name.name), span);
         } else if self.decl.is_some() {
             let context = self.context();
@@ -1398,7 +1516,7 @@ impl<'a> BodyChecker<'_, 'a> {
             StmtKind::Reload { data } => {
                 self.ui_only("reload", stmt.span);
                 match self.data(&data.name) {
-                    None if self.decl.is_none() => {
+                    None if self.decl.is_none() && self.command.is_none() => {
                         let owner = self.owner.map(|o| o.name).unwrap_or("");
                         self.error(format!("{owner} has no data '{}'", data.name), data.span);
                     }
@@ -1409,13 +1527,21 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
             }
             StmtKind::Message { text, .. } => {
-                self.ui_only("message", stmt.span);
+                // A command writes its messages to standard error.
+                if self.command.is_none() {
+                    self.ui_only("message", stmt.span);
+                }
                 let ty = self.shown_text(text);
                 if !ty.is_value() {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
                 }
             }
+            StmtKind::Ask { .. } if self.command.is_some() => {
+                self.error("in a command, ask gives its answer, as in 'let answer = ask ...' or 'if ask ...'", stmt.span);
+            }
             StmtKind::Ask { question, form, then, args } => self.check_ask(stmt.span, question.as_ref(), form, then, args),
+            StmtKind::Print { value, columns } => self.check_print(stmt.span, value, columns),
+            StmtKind::Exit { code } => self.check_exit(stmt.span, code),
             StmtKind::Open { window, with } => {
                 self.ui_only("open", stmt.span);
                 let Some(page) = self.env.page(&window.name) else {
@@ -1480,43 +1606,10 @@ impl<'a> BodyChecker<'_, 'a> {
         let answer = match form {
             AskForm::Window { window, with } => Some(self.asked_dialog(window, with)),
             AskForm::Confirm { yes, no } => {
-                for text in yes.iter().chain(no) {
-                    let ty = self.shown_text(text);
-                    if !ty.is_value() {
-                        self.error(format!("a button says text or a value, not {}", ty.name()), text.span);
-                    }
-                }
+                self.button_texts(yes.as_ref(), no.as_ref());
                 None
             }
-            AskForm::Value { ty, default, from } => {
-                let asked = self.env.type_ref(ty).unwrap_or_else(|message| {
-                    self.error(message, ty.span);
-                    Ty::Unknown
-                });
-                let fits = matches!(
-                    asked,
-                    Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Enum(_) | Ty::Record(_) | Ty::Unknown
-                );
-                if !fits {
-                    self.error(format!("ask for text, a number, a date, a duration, an enum or an entity, not {}", asked.name()), ty.span);
-                }
-                if let Some(default) = default {
-                    let given = self.expr(default, Some(asked));
-                    if fits && !asked.accepts(&given) {
-                        self.error(format!("the default is {}, but the answer is {}", given.name(), asked.name()), default.span);
-                    }
-                }
-                if let Some(from) = from {
-                    let given = self.expr(from, None);
-                    let wanted = format!("list<{}>", asked.name());
-                    if !matches!(asked, Ty::Record(_) | Ty::Unknown) {
-                        self.error(format!("'from' gives the records to choose from; {} is no entity", asked.name()), from.span);
-                    } else if !asked.is_unknown() && !given.is_unknown() && given.name() != wanted {
-                        self.error(format!("'from' gives the choices: a {wanted}, not {}", given.name()), from.span);
-                    }
-                }
-                Some(asked)
-            }
+            AskForm::Value { ty, default, from } => Some(self.asked_value(ty, default.as_ref(), from.as_ref())),
         };
         let owner = self.owner.map(|o| o.name).unwrap_or("");
         let Some(handler) = self.handlers.iter().find(|h| h.name.name == then.name) else {
@@ -1559,6 +1652,122 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// The dialog `ask` names, with its data filled as `open` fills it: the
     /// type of what it gives, which is the answer.
+    /// The words of a yes-or-no question's buttons.
+    fn button_texts(&mut self, yes: Option<&Expr>, no: Option<&Expr>) {
+        for text in yes.into_iter().chain(no) {
+            let ty = self.shown_text(text);
+            if !ty.is_value() {
+                self.error(format!("a button says text or a value, not {}", ty.name()), text.span);
+            }
+        }
+    }
+
+    /// `for type [default value] [from list]`: the type of the answer.
+    fn asked_value(&mut self, ty: &TypeRef, default: Option<&Expr>, from: Option<&Expr>) -> Ty<'a> {
+        let asked = self.env.type_ref(ty).unwrap_or_else(|message| {
+            self.error(message, ty.span);
+            Ty::Unknown
+        });
+        let fits = matches!(
+            asked,
+            Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Enum(_) | Ty::Record(_) | Ty::Unknown
+        );
+        if !fits {
+            self.error(format!("ask for text, a number, a date, a duration, an enum or an entity, not {}", asked.name()), ty.span);
+        }
+        if let Some(default) = default {
+            let given = self.expr(default, Some(asked));
+            if fits && !asked.accepts(&given) {
+                self.error(format!("the default is {}, but the answer is {}", given.name(), asked.name()), default.span);
+            }
+        }
+        if let Some(from) = from {
+            let given = self.expr(from, None);
+            let wanted = format!("list<{}>", asked.name());
+            if !matches!(asked, Ty::Record(_) | Ty::Unknown) {
+                self.error(format!("'from' gives the records to choose from; {} is no entity", asked.name()), from.span);
+            } else if !asked.is_unknown() && !given.is_unknown() && given.name() != wanted {
+                self.error(format!("'from' gives the choices: a {wanted}, not {}", given.name()), from.span);
+            }
+        }
+        asked
+    }
+
+    /// `ask` as a value, in a command: it waits for the answer and gives it.
+    fn ask_value(&mut self, question: &Expr, form: &AskForm) -> Ty<'a> {
+        if self.command.is_none() {
+            let message = if self.decl.is_some() || self.engine.is_some() {
+                format!("'ask' belongs in a handler or a command, not in {}", self.context())
+            } else {
+                "a handler asks with 'then' and the handler the answer runs, as in 'ask ... then answered'".to_string()
+            };
+            self.error(message, question.span);
+        }
+        let ty = self.shown_text(question);
+        if !ty.is_value() {
+            self.error(format!("a question is text or a value, not {}", ty.name()), question.span);
+        }
+        match form {
+            AskForm::Confirm { yes, no } => {
+                self.button_texts(yes.as_ref(), no.as_ref());
+                Ty::Bool
+            }
+            AskForm::Value { ty, default, from } => {
+                let asked = self.asked_value(ty, default.as_ref(), from.as_ref());
+                if let (Ty::Record(entity), None) = (asked, from) {
+                    let list = format!("{}s", crate::model::snake_case(&entity.name.name));
+                    self.error(format!("a command asks for a record from a list: 'ask ... for {} from {list}'", entity.name.name), ty.span);
+                }
+                asked
+            }
+            AskForm::Window { .. } => Ty::Unknown,
+        }
+    }
+
+    /// `print value` or `print list columns a, b`, in a command.
+    fn check_print(&mut self, span: Span, value: &Expr, columns: &[Ident]) {
+        if self.command.is_none() {
+            let context = self.context();
+            self.error(format!("'print' belongs in a command, not in {context}"), span);
+        }
+        if columns.is_empty() {
+            let ty = self.shown_text(value);
+            if matches!(ty, Ty::List(_)) {
+                self.error("print a list of records as a table, with its columns: 'print found columns name'", value.span);
+            } else if !ty.is_value() {
+                self.error(format!("print writes text or a value, not {}", ty.name()), value.span);
+            }
+            return;
+        }
+        match self.expr(value, None) {
+            Ty::List(entity) => {
+                for column in columns {
+                    if column.name != RECORD_ID && !entity.fields.iter().any(|f| f.name.name == column.name) {
+                        self.error(format!("{} has no field '{}'", entity.name.name, column.name), column.span);
+                    }
+                }
+            }
+            Ty::Unknown => {}
+            other => self.error(format!("'columns' prints a list of records as a table, not {}", other.name()), value.span),
+        }
+    }
+
+    /// `exit code`, in a command: an integer from 0 to 255.
+    fn check_exit(&mut self, span: Span, code: &Expr) {
+        if self.command.is_none() {
+            let context = self.context();
+            self.error(format!("'exit' belongs in a command, not in {context}"), span);
+        }
+        let ty = self.expr(code, Some(Ty::Integer));
+        if !Ty::Integer.accepts(&ty) {
+            self.error(format!("the exit code is an integer, not {}", ty.name()), code.span);
+        } else if let ExprKind::Number { value } = &code.kind
+            && value.parse::<u32>().map_or(true, |n| n > 255)
+        {
+            self.error("the exit code is 0 to 255", code.span);
+        }
+    }
+
     fn asked_dialog(&mut self, window: &Ident, with: &[crate::code::Arg]) -> Ty<'a> {
         for arg in with {
             self.expr(&arg.value, None);
@@ -1659,6 +1868,13 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     fn check_return(&mut self, value: Option<&Expr>, span: Span) {
+        if self.command.is_some() {
+            if let Some(value) = value {
+                self.expr(value, None);
+                self.error("a command does not return a value; it ends with 'exit' and a code", value.span);
+            }
+            return;
+        }
         let name = self.decl.map(|d| d.name.name.clone());
         match (self.returns, value, name) {
             (_, Some(value), None) => {
@@ -1803,6 +2019,14 @@ impl<'a> BodyChecker<'_, 'a> {
                     let kept = self.engine.is_some() && self.decl.is_some() && self.scopes.iter().rposition(|s| s.contains_key(name)) == Some(0);
                     self.name_is(expr, if kept { NameKind::Kept } else { NameKind::Local });
                     return Some(Place::Value { ty, writable: Ok(()) });
+                }
+                // A command has the settings as data of its own, as every window does.
+                if self.command.is_some()
+                    && name == crate::parser::SETTINGS_DATA
+                    && let Some(settings) = self.env.settings
+                {
+                    self.name_is(expr, NameKind::Data);
+                    return Some(Place::Value { ty: Ty::Record(settings), writable: Ok(()) });
                 }
                 if let Some(decl) = self.data(name) {
                     self.name_is(expr, NameKind::Data);
@@ -2124,6 +2348,7 @@ impl<'a> BodyChecker<'_, 'a> {
             ExprKind::EngineCall { engine, function, args } => self.engine_call(expr, engine, function, args),
             ExprKind::Find { var, entity, filter, order } => self.find(var, entity, filter.as_deref(), order),
             ExprKind::Files { var, filter, order, .. } => self.files(var, filter.as_deref(), order, expr.span),
+            ExprKind::Ask { question, form } => self.ask_value(question, form),
             ExprKind::ReadText { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -2793,6 +3018,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
+        ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
         ExprKind::Key { args, .. } => args.iter().any(|a| mentions(&a.value, var)),
@@ -3028,7 +3254,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr(text, found);
                 each_expr(path, found);
             }
-            StmtKind::CloseWith { value } => each_expr(value, found),
+            StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => each_expr(value, found),
             StmtKind::Close | StmtKind::Reload { .. } => {}
         }
     }
@@ -3081,6 +3307,12 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
+        ExprKind::Ask { question, form } => {
+            each_expr(question, found);
+            for e in super::ask_exprs(form) {
+                each_expr(e, found);
+            }
+        }
         ExprKind::Key { args, .. } => {
             for arg in args {
                 each_expr(&arg.value, found);

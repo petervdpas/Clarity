@@ -1,0 +1,75 @@
+module shop
+
+enum Kind
+    Person
+    Business
+
+entity Customer
+    name: text(80), required
+    email: email
+    kind: Kind
+    active: bool
+    credit_limit: money
+    since: date
+
+settings
+    pageSize: integer, default 20
+
+action add_customer(name: text) -> Customer
+    effects db.write
+    let c = new Customer
+    c.name = name
+    c.active = true
+    save c
+    return c
+
+cli Shop
+    help "The shop from the command line"
+
+command customer add(name: text, email: text)
+    help "Adds a customer"
+    option vip: bool, help "A business customer"
+    option limit: money, default 1000, min 0, max 5000, help "The credit limit"
+    option since: date, help "Customer since"
+    let c = add_customer(name)
+    c.email = email
+    c.credit_limit = limit
+    c.since = since
+    if vip
+        c.kind = Business
+    save c
+    print "Added {c.name}"
+
+command customer list
+    help "Lists the customers"
+    option all: bool, help "Also the ones that left"
+    let found = find c in Customer where c.active == true order by c.name
+    if all
+        found = find c in Customer order by c.name
+    print found columns name, email, kind, credit_limit
+
+command customer remove(name: text)
+    help "Removes a customer"
+    let found = find c in Customer where c.name == name
+    if count(found) == 0
+        refuse "There is no customer {name}"
+    if ask "Remove {name}?" yes "Remove" no "Keep"
+        delete found[1]
+        message "Removed {name}"
+
+command pick
+    help "Picks a customer"
+    let all = find c in Customer order by c.name
+    let c = ask "Which customer?" for Customer from all
+    let n = ask "How many copies?" for integer default 2
+    let k = ask "Which kind?" for Kind
+    print "{c.name}: {n}"
+
+command page
+    help "Sets the page size"
+    option size: integer, min 5, max 100, help "Rows per page"
+    if size == 0
+        print settings.pageSize
+        return
+    settings.pageSize = size
+    exit 3

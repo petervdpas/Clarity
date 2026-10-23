@@ -76,3 +76,21 @@ fn c_and_cpp_build_with_a_cmake_workflow() {
 fn stacks_without_a_generator_have_no_toolchain() {
     assert!(clarity_gen::toolchain(&shop(Backend::Csharp, Ui::Web), false).is_none());
 }
+
+/// The command-line program (DESIGN 5.20) builds in `out/cli` with the same
+/// tools, into a program named as it is typed.
+#[test]
+fn the_command_line_program_builds_with_the_same_tools() {
+    let rust = clarity_gen::cli_toolchain(&shop(Backend::Rust, Ui::Web), false).unwrap();
+    assert_eq!((rust.tool, rust.program.clone()), ("cargo", exe("target/debug/shop")));
+    let go = clarity_gen::cli_toolchain(&shop(Backend::Go, Ui::Web), true).unwrap();
+    assert_eq!(go.tool, "go");
+    assert_eq!(go.program, exe("bin/shop"));
+    assert!(!go.args.contains(&"production".to_string()), "{:?}", go.args);
+    let csharp = clarity_gen::cli_toolchain(&shop(Backend::Csharp, Ui::Avalonia), false).unwrap();
+    assert_eq!((csharp.tool, csharp.program.clone()), ("dotnet", exe("bin/Debug/net10.0/shop")));
+    for backend in [Backend::C, Backend::Cpp] {
+        let release = clarity_gen::cli_toolchain(&shop(backend, Ui::Web), true).unwrap();
+        assert_eq!((release.tool, release.program.clone()), ("cmake", exe("build/release/shop")));
+    }
+}

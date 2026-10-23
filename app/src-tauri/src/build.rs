@@ -3,9 +3,9 @@
 //! application; Build makes a release program. Engines whose source changed
 //! are built first. The toolchain's output is sent to the frontend line by line.
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -26,6 +26,8 @@ pub struct BuildState {
     pub(crate) busy: AtomicBool,
     /// The application Run started, so Stop and the next Run can end it.
     running: Mutex<Option<Child>>,
+    /// What the Output panel types to a command-line program Run started.
+    input: Mutex<Option<ChildStdin>>,
     /// What the Output panel shows of the last build, for the agent.
     pub(crate) output: Mutex<Output>,
 }
@@ -149,9 +151,10 @@ pub fn stack_tools() -> Vec<StackTools> {
 }
 
 /// Generates the project of the project file `file` into its output folder.
-/// Returns the output folder and how its stack builds it, as a debug or
+/// Returns the folder of the program to build, the desktop one or (with
+/// `cli`) the command-line one, and how its stack builds it, as a debug or
 /// (with `release`) a release program.
-pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
+pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
     let dir = clarity_project::module_dir(file);
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let loaded = clarity_project::load(file);
@@ -162,11 +165,21 @@ pub fn generate_out(file: &Path, release: bool) -> Result<(PathBuf, clarity_gen:
         (None, None) => return Err(format!("{shown} cannot be read")),
     };
     let built = clarity_project::build_settings(&dir, &settings);
-    let files = clarity_gen::generate(&project, &built).map_err(|errors| errors.join("; "))?;
-    let toolchain = clarity_gen::toolchain(&settings, release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
+    let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
-    clarity_gen::write_out(&out, &files, clarity_gen::build_output(settings.stack.backend)).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
-    Ok((out, toolchain, settings.stack))
+    clarity_gen::write_programs(&out, &programs, settings.stack.backend).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
+    // Each program is in its own folder of the output; one without windows has only the command line.
+    let cli = cli || !settings.stack.has_ui();
+    if cli && !settings.stack.has(clarity_project::Target::Cli) {
+        return Err(format!("{shown} has no command-line program; add the cli target to the stack"));
+    }
+    let (target, toolchain) = if cli {
+        (clarity_project::Target::Cli, clarity_gen::cli_toolchain(&settings, release))
+    } else {
+        (clarity_project::Target::Desktop, clarity_gen::toolchain(&settings, release))
+    };
+    let toolchain = toolchain.ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
+    Ok((clarity_project::target_dir(&out, target), toolchain, settings.stack))
 }
 
 /// Why the generated project in `out` cannot be built on this machine: the
@@ -188,16 +201,18 @@ fn send_lines(app: &AppHandle, from: impl std::io::Read) {
     }
 }
 
-/// Generates, builds and (with `run`) starts the open project. Returns at
+/// Generates, builds and (with `run`) starts the open project. With a
+/// `command_line`, the command-line program runs with its words, its output
+/// in the Output panel and what is typed there as its input. Returns at
 /// once; progress arrives as events.
-pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<(), String> {
+pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_line: Option<String>) -> Result<(), String> {
     let state = app.state::<BuildState>();
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
     begin_output(&app);
     // Generating works without the stack's tools; building needs them.
-    let found = generate_out(&file, release).and_then(|(out, toolchain, stack)| {
+    let found = generate_out(&file, release, command_line.is_some()).and_then(|(out, toolchain, stack)| {
         let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
         match cannot_build(&tools, &out) {
             Some(why) => Err(why),
@@ -218,7 +233,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
     std::thread::spawn(move || {
         // The engines whose source changed first, so the application has them as written.
         let done = match crate::engines::build_changed(&app, &dir) {
-            Ok(()) => build(&app, &out, &toolchain, run),
+            Ok(()) => build(&app, &out, &toolchain, run, command_line.as_deref()),
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
@@ -227,7 +242,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool) -> Result<
     Ok(())
 }
 
-fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool) -> BuildDone {
+fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool, command_line: Option<&str>) -> BuildDone {
     let failed = |message: String| BuildDone {
         ok: false,
         message,
@@ -266,6 +281,9 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         Err(err) => return failed(format!("{} stopped: {err}", toolchain.tool)),
     }
     let binary = out.join(&toolchain.program);
+    if run && let Some(line) = command_line {
+        return run_command_line(app, out, &binary, line);
+    }
     if run {
         stop(app);
         match Command::new(&binary).current_dir(out).spawn() {
@@ -282,6 +300,86 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         message: if run { "running".to_string() } else { format!("built {}", binary.display()) },
         binary: Some(binary.display().to_string()),
     }
+}
+
+/// Runs the command-line program with the words of `line`, in its folder:
+/// what it writes goes to the Output panel line by line, and what the panel
+/// sends with `type_line` is its input, as a terminal's (`CLARITY_TERMINAL`).
+/// Returns when it ends, with its exit code.
+fn run_command_line(app: &AppHandle, out: &Path, binary: &Path, line: &str) -> BuildDone {
+    stop(app);
+    let words = clarity_gen::command_words(line);
+    send_line(app, format!("{} {}", binary.file_name().unwrap_or_default().to_string_lossy(), line.trim()));
+    let mut command = Command::new(binary);
+    command.args(&words).current_dir(out).env("CLARITY_TERMINAL", "1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(err) => return BuildDone { ok: false, message: format!("cannot start {}: {err}", binary.display()), binary: None },
+    };
+    if let Ok(mut input) = app.state::<BuildState>().input.lock() {
+        *input = child.stdin.take();
+    }
+    let readers: Vec<_> = [child.stdout.take().map(|o| Box::new(o) as Box<dyn std::io::Read + Send>), child.stderr.take().map(|e| Box::new(e) as Box<dyn std::io::Read + Send>)]
+        .into_iter()
+        .flatten()
+        .map(|from| {
+            let app = app.clone();
+            std::thread::spawn(move || send_words(&app, from))
+        })
+        .collect();
+    if let Ok(mut running) = app.state::<BuildState>().running.lock() {
+        *running = Some(child);
+    }
+    for reader in readers {
+        let _ = reader.join();
+    }
+    let status = app.state::<BuildState>().running.lock().ok().and_then(|mut r| r.take()).and_then(|mut c| c.wait().ok());
+    if let Ok(mut input) = app.state::<BuildState>().input.lock() {
+        *input = None;
+    }
+    let code = status.and_then(|s| s.code());
+    BuildDone {
+        ok: code == Some(0),
+        message: code.map_or("stopped".to_string(), |c| format!("ended with exit code {c}")),
+        binary: Some(binary.display().to_string()),
+    }
+}
+
+/// Sends what a program writes to the Output panel: each line, and a
+/// question that waits on the same line for its answer.
+fn send_words(app: &AppHandle, mut from: impl std::io::Read) {
+    let mut pending = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let read = match from.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        pending.extend_from_slice(&chunk[..read]);
+        while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = pending.drain(..=end).collect();
+            send_line(app, String::from_utf8_lossy(&line[..line.len() - 1]).trim_end_matches('\r').to_string());
+        }
+        // A prompt has no line end: it shows while the program waits.
+        if !pending.is_empty() && read < chunk.len() {
+            send_line(app, String::from_utf8_lossy(&pending).to_string());
+            pending.clear();
+        }
+    }
+    if !pending.is_empty() {
+        send_line(app, String::from_utf8_lossy(&pending).to_string());
+    }
+}
+
+/// Types `line` to the command-line program Run started, as its input.
+pub fn type_line(app: &AppHandle, line: &str) -> Result<(), String> {
+    let state = app.state::<BuildState>();
+    let mut input = state.input.lock().map_err(|_| "the input is poisoned")?;
+    let Some(stdin) = input.as_mut() else { return Err("no command-line program is running".to_string()) };
+    writeln!(stdin, "{line}").and_then(|()| stdin.flush()).map_err(|err| format!("cannot type to the program: {err}"))?;
+    drop(input);
+    send_line(app, format!("> {line}"));
+    Ok(())
 }
 
 /// Ends the application Run started, if it still runs.
@@ -322,8 +420,9 @@ mod tests {
     #[test]
     fn generates_the_example_into_out() {
         let dir = example("rust", "stack rust web desktop");
-        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), true).unwrap();
-        assert_eq!(out, dir.join("shop/out"));
+        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), true, false).unwrap();
+        // The desktop program, in its own folder of the output (DESIGN 5.20).
+        assert_eq!(out, dir.join("shop/out/desktop"));
         assert!(out.join("Cargo.toml").exists());
         assert!(out.join("src/main.rs").exists());
         assert_eq!(toolchain.tool, "cargo");
@@ -381,7 +480,7 @@ mod tests {
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
         let dir = example("csharp", "stack csharp avalonia desktop");
-        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), false).unwrap();
+        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), false, false).unwrap();
         assert!(out.join("Shop.csproj").exists());
         assert!(!out.join("Cargo.toml").exists());
         assert_eq!(toolchain.tool, "dotnet");

@@ -1,0 +1,121 @@
+module stock
+
+// What the shop keeps, how many there are, and when to order more.
+entity Item
+    name: text(80), required, unique, label @itemNameLabel
+    count: integer, min 0, label @itemCountLabel
+    low: integer, default 5, min 0, label @itemLowLabel
+
+/// Whether there are so few that more should be ordered.
+function runs_low(item: Item) -> bool
+    return item.count <= item.low
+
+app Stock
+    title @stockTitle
+    main Items
+
+// The window and the command line work on the same items.
+page Items: window
+    title @itemsTitle
+    data items: list<Item>
+    on open: itemsOpened
+
+    label @newNameLabel name newNameLabel at 1,1 span 2 for newName
+    textbox name newName at 3,1 span 8 placeholder @newNamePlaceholder
+    button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
+    table name grid at 1,2 span 12 rows 8 bind items columns name, count, low resizable sortable edit count, low on select: rowSelected on change: itemChanged
+    button @deleteButtonCaption name deleteButton at 11,10 span 2 on click: deleteClicked
+
+code Items
+    handler itemsOpened
+        items = find i in Item order by i.name
+        deleteButton.enabled = false
+
+    handler rowSelected
+        deleteButton.enabled = true
+
+    handler addClicked
+        if newName.text == ""
+            message warning @typeANameFirst
+            return
+        let item = new Item
+        item.name = newName.text
+        save item
+        newName.text = ""
+        items = find i in Item order by i.name
+
+    handler itemChanged
+        save grid.selected
+
+    handler deleteClicked
+        ask @deleteItem(name = grid.selected.name) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        delete grid.selected
+        items = find i in Item order by i.name
+        deleteButton.enabled = false
+
+cli Stock
+    help @stockHelp
+
+command list
+    help @listHelp
+    option low: bool, help @listLowHelp
+    let all = find i in Item order by i.name
+    if low
+        for item in all
+            if runs_low(item)
+                print @itemLine(name = item.name, count = item.count)
+        return
+    print all columns name, count, low
+
+command add(name: text)
+    help @addHelp
+    option count: integer, min 0, help @addCountHelp
+    option low: integer, default 5, min 0, help @addLowHelp
+    let found = find i in Item where i.name == name
+    if count(found) > 0
+        refuse @itemExists(name = name)
+    let item = new Item
+    item.name = name
+    item.count = count
+    item.low = low
+    save item
+    print @itemAdded(name = name)
+
+// Changes how many there are: `take` and `bring` with a number, both whole.
+command take(name: text, number: integer)
+    help @takeHelp
+    let found = find i in Item where i.name == name
+    if count(found) == 0
+        refuse @noSuchItem(name = name)
+    let item = found[1]
+    if number > item.count
+        refuse @tooFewLeft(name = name, left = item.count)
+    item.count = item.count - number
+    save item
+    print @itemCountIs(name = name, count = item.count)
+    if runs_low(item)
+        message warning @itemRunsLow(name = name)
+
+command bring(name: text, number: integer)
+    help @bringHelp
+    let found = find i in Item where i.name == name
+    if count(found) == 0
+        refuse @noSuchItem(name = name)
+    let item = found[1]
+    item.count = item.count + number
+    save item
+    print @itemCountIs(name = name, count = item.count)
+
+// For scripts: ends with exit code 3 when any item runs low.
+command check
+    help @checkHelp
+    let all = find i in Item order by i.name
+    let short = false
+    for item in all
+        if runs_low(item)
+            print item.name
+            short = true
+    if short
+        exit 3

@@ -33,6 +33,7 @@ pub fn emit(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<Str
             decl: Some(decl),
             window: None,
             engine: None,
+            command: false,
             writing: false,
             refs: vec![HashSet::new()],
             errors: Vec::new(),
@@ -151,6 +152,9 @@ struct Emitter<'a> {
     window: Option<WindowCtx>,
     /// The engine written in Clarity whose function or keep value this is.
     engine: Option<&'a EngineDecl>,
+    /// Whether this is a command of the command-line program (DESIGN 5.20):
+    /// it prints, asks and says through `cli`, and gives its exit code.
+    command: bool,
     /// Whether the place being written is assigned, so a list position in
     /// it is taken to change.
     writing: bool,
@@ -162,7 +166,7 @@ struct Emitter<'a> {
 
 impl<'a> Emitter<'a> {
     fn new(project: &'a Project, types: &'a FileTypes, decl: Option<&'a FunctionDecl>, engine: Option<&'a EngineDecl>) -> Self {
-        Emitter { project, types, decl, window: None, engine, writing: false, refs: vec![HashSet::new()], errors: Vec::new() }
+        Emitter { project, types, decl, window: None, engine, command: false, writing: false, refs: vec![HashSet::new()], errors: Vec::new() }
     }
 
     fn is_ref(&self, name: &str) -> bool {
@@ -366,6 +370,7 @@ impl<'a> Emitter<'a> {
                 let code = coerce(self.value(value), &from, &to);
                 out.push_str(&format!("{pad}return Ok({code});\n"));
             }
+            StmtKind::Return { value: None } if self.command => out.push_str(&format!("{pad}return Ok(0);\n")),
             StmtKind::Return { value: None } => out.push_str(&format!("{pad}return Ok(());\n")),
             StmtKind::Call { call } => {
                 let code = self.value(call);
@@ -386,6 +391,11 @@ impl<'a> Emitter<'a> {
             StmtKind::Refuse { text } => {
                 let text = self.shown(text);
                 out.push_str(&format!("{pad}return Err(Error::Refused({text}));\n"));
+            }
+            // A command says it on standard error.
+            StmtKind::Message { text, .. } if self.command => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}cli.message({text});\n"));
             }
             StmtKind::Message { .. } | StmtKind::Open { .. } | StmtKind::Close if self.window.is_none() => {
                 self.errors.push("messages and windows belong in handlers".into());
@@ -456,6 +466,12 @@ impl<'a> Emitter<'a> {
                     .collect();
                 out.push_str(&format!("{pad}ui.open({:?}, vec![{}]);\n", window.name, args.join(", ")));
             }
+            StmtKind::Print { value, columns } if columns.is_empty() => {
+                let text = self.shown(value);
+                out.push_str(&format!("{pad}cli.print({text});\n"));
+            }
+            StmtKind::Print { value, columns } => out.push_str(&self.print_table(value, columns, &pad)),
+            StmtKind::Exit { code } => out.push_str(&format!("{pad}return Ok(({}) as i32);\n", self.value(code))),
             StmtKind::Close => out.push_str(&format!("{pad}ui.close = true;\n")),
             StmtKind::CloseWith { value } => out.push_str(&format!("{pad}ui.close_with(to_value(&{})?);\n", self.value(value))),
             StmtKind::Reload { data } => {
@@ -722,6 +738,7 @@ impl<'a> Emitter<'a> {
     fn value(&mut self, expr: &Expr) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
+            ExprKind::Ask { question, form } => self.ask_value(question, form),
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => format!("{value}i64"),
             ExprKind::Str { value } => format!("String::from({value:?})"),
@@ -828,6 +845,86 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
             ExprKind::New { entity } => format!("{}::default()", entity.name),
+        }
+    }
+
+    /// `print list columns a, b`: a heading per field (its label), then
+    /// the records' values as the command line writes them.
+    fn print_table(&mut self, list: &Expr, columns: &[clarity_spec::model::Ident], pad: &str) -> String {
+        let TypeInfo::List(entity) = self.types.type_of(list) else {
+            self.errors.push("'columns' prints a list of records".into());
+            return String::new();
+        };
+        let Some(decl) = self.project.entity(&entity) else { return String::new() };
+        let (mut headings, mut right, mut cells) = (Vec::new(), Vec::new(), Vec::new());
+        for column in columns {
+            let field = decl.field(&column.name);
+            let label = field.and_then(|f| f.modifiers.label.clone()).unwrap_or_else(|| clarity_spec::model::default_label(&column.name));
+            headings.push(match clarity_spec::translations::key_of(&label) {
+                Some(key) => format!("Text::key({key:?})"),
+                None => format!("Text::plain({label:?})"),
+            });
+            let ty = field.map(|f| &f.ty);
+            right.push(matches!(ty, Some(FieldType::Integer | FieldType::Decimal { .. } | FieldType::Money | FieldType::Duration) | None).to_string());
+            let at = format!("r.{}", ident(&column.name));
+            cells.push(match ty {
+                Some(FieldType::Bool) => format!("clarity_runtime::cli::Session::yes_no({at})"),
+                _ => format!("clarity_runtime::cli::text_of(&{at})"),
+            });
+        }
+        let rows = match self.held(list) {
+            Some((place, _)) => place,
+            None => format!("({})", self.value(list)),
+        };
+        format!(
+            "{pad}cli.print_table(vec![{}], vec![{}], {rows}.iter().map(|r| vec![{}]).collect());\n",
+            headings.join(", "),
+            right.join(", "),
+            cells.join(", ")
+        )
+    }
+
+    /// `ask` in a command: it waits on the terminal and gives the answer.
+    fn ask_value(&mut self, question: &Expr, form: &AskForm) -> String {
+        let question = self.shown(question);
+        match form {
+            AskForm::Confirm { yes, no } => {
+                let yes = yes.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                let no = no.as_ref().map_or("None".to_string(), |t| format!("Some({})", self.shown(t)));
+                format!("cli.confirm({question}, {yes}, {no})")
+            }
+            AskForm::Value { ty, from: Some(list), .. } => {
+                let entity = match type_ref_info(self.project, ty) {
+                    TypeInfo::Record(e) => e,
+                    _ => String::new(),
+                };
+                let shown = self.project.entity(&entity).and_then(|e| e.fields.iter().find(|f| matches!(f.ty, FieldType::Text { .. }))).map(|f| ident(&f.name.name));
+                let label = shown.map_or("text_of(&r.id)".to_string(), |f| format!("text_of(&r.{f})"));
+                let list = self.value(list);
+                format!("{{ let list = {list}; let at = cli.choose({question}, list.iter().map(|r| clarity_runtime::cli::{label}).collect()); list[at].clone() }}")
+            }
+            AskForm::Value { ty, default, from: None } => {
+                let info = type_ref_info(self.project, ty);
+                let (kind, values) = match &info {
+                    TypeInfo::Integer => ("Integer", String::new()),
+                    TypeInfo::Decimal => ("Decimal", String::new()),
+                    TypeInfo::Money => ("Money", String::new()),
+                    TypeInfo::Date => ("Date", String::new()),
+                    TypeInfo::DateTime => ("Datetime", String::new()),
+                    TypeInfo::Duration => ("Duration", String::new()),
+                    TypeInfo::Enum(name) => {
+                        let names: Vec<String> = self.project.enum_decl(name).map(|e| e.variants.iter().map(|v| format!("{:?}", v.name.name)).collect()).unwrap_or_default();
+                        ("Enum", names.join(", "))
+                    }
+                    _ => ("Text", String::new()),
+                };
+                let default = default.as_ref().map_or("None".to_string(), |d| format!("Some(clarity_runtime::cli::text_of(&{}))", self.value(d)));
+                format!("cli.ask::<{}>({question}, clarity_runtime::cli::Kind::{kind}, &[{values}], {default})", value_type(&info))
+            }
+            AskForm::Window { .. } => {
+                self.errors.push("a command asks no window".into());
+                String::new()
+            }
         }
     }
 
@@ -1435,6 +1532,7 @@ impl {struct_name} {{
                 decl: None,
                 window: Some(std::mem::take(&mut ctx)),
                 engine: None,
+                command: false,
                 writing: false,
                 refs: vec![HashSet::new()],
                 errors: Vec::new(),
@@ -1483,6 +1581,41 @@ impl {struct_name} {{
 }
 
 /// A value written in the design as Rust, of the parameter's type.
+/// The commands of a module (DESIGN 5.20): each a function taking the
+/// database, the session it prints and asks through, the settings (as
+/// `w.settings`, as a window has them) and its arguments and options, and
+/// giving its exit code.
+pub fn emit_commands(project: &Project, file: &SpecFile, types: &FileTypes) -> Result<String, Vec<String>> {
+    let mut out = String::new();
+    let mut errors = Vec::new();
+    for command in &file.commands {
+        let mut emitter = Emitter::new(project, types, None, None);
+        emitter.command = true;
+        let mut params = String::new();
+        for (name, ty) in command.params.iter().map(|p| (&p.name, &p.ty)).chain(command.options.iter().map(|o| (&o.name, &o.ty))) {
+            params.push_str(&format!(", {}: {}", ident(&name.name), value_type(&type_ref_info(project, ty))));
+        }
+        let mut body = String::new();
+        emitter.block(&command.body, 1, &mut body);
+        if emitter.errors.is_empty() {
+            out.push_str(&format!(
+                "/// `{line}`.\n#[allow(unused_variables, unused_mut)]\npub fn {function}(db: &Db, cli: &mut Session, w: &mut crate::CommandData{params}) -> Result<i32> {{\n{body}    Ok(0)\n}}\n\n",
+                line = command.line(),
+                function = command_function(command),
+            ));
+        } else {
+            errors.extend(emitter.errors.into_iter().map(|e| format!("command '{}': {e}", command.line())));
+        }
+    }
+    if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+/// The Rust function of a command: `command_customer_add`.
+pub fn command_function(command: &clarity_spec::code::CommandDecl) -> String {
+    let group = command.group.as_ref().map(|g| format!("{}_", super::names::snake(&g.name))).unwrap_or_default();
+    format!("command_{group}{}", super::names::snake(&command.name.name))
+}
+
 fn literal(project: &Project, ty: &TypeRef, value: &clarity_spec::model::Literal) -> String {
     use clarity_spec::model::Literal;
     match (type_ref_info(project, ty), value) {

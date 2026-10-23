@@ -1,0 +1,6 @@
+project Stock
+    title "Stock"
+    stack go web desktop cli
+    output "out"
+    language "en"
+    datasource main sqlite "data/stock.db"

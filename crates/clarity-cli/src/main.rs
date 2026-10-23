@@ -164,8 +164,8 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
     let out = out.map_or_else(|| clarity_project::out_dir(project_file, &settings), std::path::Path::to_path_buf);
     let out = out.as_path();
     let built = clarity_project::build_settings(&clarity_project::module_dir(project_file), &settings);
-    let files = match clarity_gen::generate(&project, &built) {
-        Ok(files) => files,
+    let programs = match clarity_gen::programs(&project, &built) {
+        Ok(programs) => programs,
         Err(errors) => {
             for diagnostic in project.diagnostics.iter().filter(|d| d.severity == Severity::Error) {
                 eprintln!("{diagnostic}");
@@ -176,9 +176,13 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
             return ExitCode::FAILURE;
         }
     };
-    match clarity_gen::write_out(out, &files, clarity_gen::build_output(settings.stack.backend)) {
+    match clarity_gen::write_programs(out, &programs, settings.stack.backend) {
         Ok(written) => {
-            eprintln!("{} file(s) in {}, {written} changed", files.len(), out.display());
+            for program in &programs {
+                let dir = clarity_project::target_dir(out, program.target);
+                eprintln!("{} file(s) in {}", program.files.len(), dir.display());
+            }
+            eprintln!("{written} changed");
             ExitCode::SUCCESS
         }
         Err(err) => {

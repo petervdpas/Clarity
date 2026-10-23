@@ -71,7 +71,7 @@ project Shop
 | Setting | Required | Meaning |
 |---|---|---|
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
-| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web`, one or both. |
+| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web` for the program with windows, and `cli` for a command-line program beside it (`stack go web desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
 | `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
@@ -1290,6 +1290,49 @@ engine Board
 
 How to build an engine in another language, and what it exports, is in the manual: [Engines](manual/code.engines.md).
 
+### Commands
+
+A project with the `cli` target is also a program without a window: commands typed in a terminal, over the same records, actions and settings as its windows. One `cli` block, named after the project, gives the program's description; each command is declared in any module, its statements below it as a function's are:
+
+```clarity
+cli Shop
+    help @shopHelp
+
+command customer add(name: text, email: text)
+    help @addCustomerHelp
+    option vip: bool, help @vipHelp
+    option limit: money, default 1000, min 0, max 5000, help @limitHelp
+    let c = new Customer
+    c.name = name
+    c.email = email
+    c.credit_limit = limit
+    save c
+    print @customerAdded(name = c.name)
+
+command customer remove(name: text)
+    help @removeCustomerHelp
+    let found = find c in Customer where c.name == name
+    if count(found) == 0
+        refuse @noSuchCustomer(name = name)
+    if ask @removeIt(name = name) yes @remove no @keep
+        delete found[1]
+```
+
+    $ shop customer add Ada ada@example.org --vip --limit 500
+    $ shop customer remove Ada
+    $ shop help customer add
+
+- **The program** is named after the project, in lower case with hyphens (`MyShop` is `my-shop`). Its help comes from the `cli` block, each command's and option's from its `help`; a command or option without one is a warning.
+- **A command's name** is one word or a group and a word: `command customer add` is `shop customer add`. A name in camelCase is typed with hyphens (`addAll` is `add-all`). A group is there when a command names it, and cannot be a command of its own.
+- **Arguments** are the parameters, given in order and all required. **Options** are `option name: type` lines before the statements, with `default`, `min`, `max`, `required` and `help`, given as `--name value` or `--name=value` in any order; a `bool` option is a flag (`--vip`). An option left out has its default, or the empty value of its type. Both are text, a number, money, a date, a moment, a duration or an enum (typed by its value's name); a `bool` is only an option, and a record is no argument: look it up with `find`.
+- **On the command line** numbers are written with a dot and no groups, dates as `2026-10-23`, moments as `2026-10-23T14:30`, durations as `3:45`, `1:02:03` or seconds; `--` ends the options. A wrong command line (an unknown command or option, a missing value, a value of the wrong kind or past `min` or `max`) writes what is wrong and the command's usage, and ends with exit code 2. `--help` anywhere, `help` before a command, or a group alone writes the help.
+- **What a command sees:** its arguments and options by name, `settings` (the ones the windows keep, read and set; a change is kept), and the functions, actions, engines, queries, `save`, `delete` and files a handler has. It has no window: `open`, `close`, `reload` and part properties are errors in it.
+- **`print`** writes a line to standard output: a text, with slots, or a value. `print list columns a, b` writes the records of a list as a table: the fields' labels as headings, the columns lined up, numbers to the right.
+- **`message`** writes a line to standard error.
+- **`ask`** gives its answer in a command: `if ask @sure yes @go no @stop`, `let n = ask @howMany for integer default 3`, `let k = ask @which for CustomerKind`, `let c = ask @who for Customer from found`. It waits on the terminal; an empty answer takes the default, and without a terminal (piped input, a script) a question with a default takes it and one without ends the program with exit code 2.
+- **`exit n`** ends the program with exit code `n`, 0 to 255. A command that finishes ends with 0; a `refuse` writes its text to standard error and ends with 1.
+- Clarity's own words of the command line (the help's headings, what it says of a wrong command line) are keys too, as the screen's are; a project with commands gives them their texts.
+
 ## 10. Statements and expressions
 
 ### Statements
@@ -1308,7 +1351,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `canvas.shape(values)` | Draws a shape on a canvas; see [Drawing on a canvas](#drawing-on-a-canvas). | its draw handler |
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
-| `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. An info message is a note that goes away by itself (or by its small x); a warning or an error shows in Clarity's dialog and is closed with OK. | handlers |
+| `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. An info message is a note that goes away by itself (or by its small x); a warning or an error shows in Clarity's dialog and is closed with OK. In a command it writes a line to standard error. | handlers, commands |
 | `ask question ... then handler(values)` | Asks the person in Clarity's dialog when the handler has finished; the answer runs the handler after `then`. See [Asking the person](#asking-the-person). | handlers |
 | `open Window` | Opens a window. | handlers |
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |
@@ -1319,6 +1362,8 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `refuse expr` | Stops with this text (or value) as the error; a save or delete it is part of does not happen. See [Data events](#data-events). | everywhere |
 | `reload data` | Reads the window's data again: a list loads all its records again, and a record loads again by its id (a new record stays as it is). A table or list showing a list read again has no row selected afterwards, as when the list is given new rows (`orders = find ...`): they are other records. | handlers |
 | `write expr to store "path"` | Writes text as a file of a file store, at a path inside it, making its folders. See [Files](#files). | handlers, actions with `files.write` |
+| `print expr` | Writes a line to standard output; `print list columns a, b` writes the records as a table. See [Commands](#commands). | commands |
+| `exit expr` | Ends the command-line program with this exit code, 0 to 255. | commands |
 
 ### Expressions
 
@@ -1341,6 +1386,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `x in [a, b, c]` | whether `x` equals one of the values |
 | `a contains b` | whether text `a` contains text `b`, ignoring case; for a list, whether it holds item `b` |
 | `find c in Entity where ... order by ...` | the records that meet a condition; see [Queries](#queries) |
+| `ask question yes a no b`, `ask question for type ...` | in a command, the answer typed on the terminal: a bool for yes or no, or a value of the type; see [Commands](#commands) |
 | `new Entity` | a new record of the entity, with its defaults; `save` stores it |
 | `files f in store where ... order by ...` | the files of a file store that meet a condition; see [Files](#files) |
 | `read text of f` | the text a file holds |
@@ -1598,7 +1644,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | page | app | theme | code | function | action | engine
+declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -1652,6 +1698,13 @@ engine        = "engine" Name "from" String
                     ("keep" name ":" type-ref "=" expr)*
                     function*
 service       = "clock" | "random" | "log" | "language"
+cli           = "cli" Name
+                    ["help" text]
+command       = "command" [group] name ["(" [param ("," param)*] ")"]
+                    ("help" text | "option" name ":" type-ref
+                        ("," ("default" expr | "min" expr | "max" expr | "required" | "help" text))*)*
+                    statement*                                // also "print" expr ["columns" field ("," field)*] and "exit" expr
+command-ask   = "ask" text ("yes" text "no" text | "for" type-ref ["default" expr] ["from" expr])
 engine-call   = Engine "." name "(" [expr ("," expr)*] ")"
 list-of       = "[" [expr ("," expr)*] "]"
 item          = expr "[" expr "]"

@@ -1,0 +1,7 @@
+project Ledger
+    title "Ledger"
+    stack csharp cli
+    output "out"
+    language "en"
+    currency EUR
+    datasource main sqlite "data/ledger.db"

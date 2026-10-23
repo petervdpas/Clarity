@@ -4,10 +4,10 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Clarity.Avalonia;
+using Clarity.Runtime;
 using Xunit;
 
-namespace Clarity.Avalonia.Tests;
+namespace Clarity.Runtime.Tests;
 
 public class SettingsCaseTests
 {

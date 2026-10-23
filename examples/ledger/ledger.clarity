@@ -1,0 +1,132 @@
+module ledger
+
+// Money coming in or going out of an account.
+enum Side
+    Income label @sideIncome
+    Expense label @sideExpense
+
+entity Account
+    name: text(60), required, unique, label @accountNameLabel
+    opened: date, label @accountOpenedLabel
+
+entity Entry
+    account: ref Account, required, label @entryAccountLabel
+    side: Side, label @entrySideLabel
+    amount: money, required, label @entryAmountLabel
+    booked: date, label @entryBookedLabel
+    note: text(200), label @entryNoteLabel
+
+// What each person sets for themselves, kept on their machine.
+settings
+    language
+    account: text, label @settingsAccountLabel
+
+/// The money in an account: what came in, less what went out.
+action balance(account: Account) -> money
+    effects db.read
+    let total: money = 0
+    for e in find e in Entry where e.account == account
+        if e.side == Income
+            total = total + e.amount
+        else
+            total = total - e.amount
+    return total
+
+cli Ledger
+    help @ledgerHelp
+
+command account add(name: text)
+    help @accountAddHelp
+    option opened: date, help @accountOpenedHelp
+    let found = find a in Account where a.name == name
+    if count(found) > 0
+        refuse @accountExists(name = name)
+    let a = new Account
+    a.name = name
+    a.opened = opened
+    if opened == none
+        a.opened = today()
+    save a
+    print @accountAdded(name = a.name)
+
+command account list
+    help @accountListHelp
+    let all = find a in Account order by a.name
+    print all columns name, opened
+
+command account remove(name: text)
+    help @accountRemoveHelp
+    let found = find a in Account where a.name == name
+    if count(found) == 0
+        refuse @noSuchAccount(name = name)
+    let account = found[1]
+    let entries = find e in Entry where e.account == account
+    let booked = count(entries)
+    if ask @removeAccount(name = name, booked = booked) yes @remove no @keep
+        for e in entries
+            delete e
+        delete account
+        print @accountRemoved(name = name)
+
+// The account `book` books on when it names none.
+command account use(name: text)
+    help @accountUseHelp
+    let found = find a in Account where a.name == name
+    if count(found) == 0
+        refuse @noSuchAccount(name = name)
+    settings.account = name
+    print @accountUsed(name = name)
+
+command book(amount: money)
+    help @bookHelp
+    option account: text, help @bookAccountHelp
+    option expense: bool, help @bookExpenseHelp
+    option day: date, help @bookDayHelp
+    option note: text, help @bookNoteHelp
+    let name = account
+    if name == ""
+        name = settings.account
+    if name == ""
+        refuse @noAccountGiven
+    let found = find a in Account where a.name == name
+    if count(found) == 0
+        refuse @noSuchAccount(name = name)
+    if amount <= 0
+        refuse @amountNotPositive
+    let e = new Entry
+    e.account = found[1]
+    e.side = Income
+    if expense
+        e.side = Expense
+    e.amount = amount
+    e.booked = day
+    if day == none
+        e.booked = today()
+    e.note = note
+    save e
+    print @entryBooked(amount = amount, name = name)
+
+command entries(name: text)
+    help @entriesHelp
+    let found = find a in Account where a.name == name
+    if count(found) == 0
+        refuse @noSuchAccount(name = name)
+    let account = found[1]
+    let all = find e in Entry where e.account == account order by e.booked
+    print all columns booked, side, amount, note
+    let total = balance(account)
+    print @balanceIs(amount = total)
+
+// Every account with its balance; ends with exit code 3 when one is below zero, for scripts.
+command report
+    help @reportHelp
+    let all = find a in Account order by a.name
+    let short = false
+    for a in all
+        let total = balance(a)
+        print @accountBalance(name = a.name, amount = total)
+        if total < 0
+            short = true
+    if short
+        message warning @accountsShort
+        exit 3

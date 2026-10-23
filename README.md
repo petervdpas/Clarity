@@ -32,6 +32,8 @@ examples/                example projects, each a project file with a folder of 
   calculator             a calculator: values in clicks, plain window data, a seven-segment display
   dial                   a speed dial drawn on a canvas by code, its needle placed by an engine
   noughts                noughts and crosses against an engine written in Clarity that keeps each window's game
+  ledger                 a command-line program alone: accounts and what is booked on them, in C#
+  stock                  a stock list with a window and a command line over the same items, in Go
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

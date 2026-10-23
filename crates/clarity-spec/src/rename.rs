@@ -207,7 +207,9 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                     expr(&arg.value, name, found);
                 }
             }
-            StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } => expr(value, name, found),
+            StmtKind::Save { value } | StmtKind::Delete { value } | StmtKind::CloseWith { value } | StmtKind::Print { value, .. } | StmtKind::Exit { code: value } => {
+                expr(value, name, found)
+            }
             StmtKind::Write { text, path, .. } => {
                 expr(text, name, found);
                 expr(path, name, found);
@@ -243,6 +245,12 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => expr(file, name, found),
+        ExprKind::Ask { question, form } => {
+            expr(question, name, found);
+            for e in crate::code::ask_exprs(form) {
+                expr(e, name, found);
+            }
+        }
         ExprKind::Key { args, .. } => {
             for arg in args {
                 expr(&arg.value, name, found);

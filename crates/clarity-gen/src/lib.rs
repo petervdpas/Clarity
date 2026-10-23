@@ -279,7 +279,7 @@ pub(crate) fn rows_shown(page: Option<&clarity_spec::model::Page>) -> std::colle
     fn walk(widgets: &[Widget], out: &mut std::collections::BTreeMap<String, Vec<String>>) {
         for widget in widgets {
             let p = &widget.props;
-            if let (WidgetKind::Table | WidgetKind::List, Some(name), Some(bind)) = (p.kind, &p.name, &p.bind)
+            if let (WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable, Some(name), Some(bind)) = (p.kind, &p.name, &p.bind)
                 && !bind.contains('.')
             {
                 out.entry(bind.clone()).or_default().push(name.clone());

@@ -47,6 +47,7 @@
   import TextInput from "./TextInput.svelte";
   import { readWidths, resized } from "../columnWidths";
   import { nextOrder, pageOf, pageWith, shownOrder, type Order } from "./tableView";
+  import { above, shownTree } from "./trees";
 
   let {
     columns,
@@ -60,6 +61,8 @@
     order = null,
     remember = null,
     page = null,
+    tree = null,
+    header = true,
     pageWords = { first: "First page", previous: "Previous page", next: "Next page", last: "Last page" },
     ondesignwidth,
     onselect,
@@ -84,6 +87,14 @@
     remember?: string | null;
     /** The rows shown at a time (`page 50`); none shows them all. */
     page?: number | null;
+    /**
+     * A tree (U1c): the field of each row that holds its parent, the words of
+     * the toggle, and the field a parent names a row by: its id, or in the
+     * designer the text sample references hold.
+     */
+    tree?: { parent: string; open: string; close: string; key?: string } | null;
+    /** Whether the column headers show; a tree shows none. */
+    header?: boolean;
     /** Clarity's own words on the page bar's buttons. */
     pageWords?: { first: string; previous: string; next: string; last: string };
     /** In the designer: a header edge was dragged; 0 takes the designed width away. */
@@ -115,7 +126,27 @@
   // selected by code shows its page.
   let at = $state(1);
   const paged = $derived(page ? pageOf(orderedRows.length, page, at) : null);
-  const shownRows = $derived(paged ? orderedRows.slice(Math.max(paged.from - 1, 0), paged.to) : orderedRows);
+  // A tree (conformance/trees.json): the rows under their parents, the open ones showing theirs.
+  let opened = $state(new Set<unknown>());
+  const idOf = (row: Row | undefined) => (row ? row[tree?.key ?? "id"] : undefined);
+  const treeRows = $derived(tree ? rows.map((r) => ({ id: idOf(r), parent: r[tree.parent] ?? null })) : []);
+  // The designer shows a tree all open, so its levels show.
+  const openIds = $derived(design ? new Set(treeRows.map((r) => r.id)) : opened);
+  const treeShown = $derived(tree ? shownTree(treeRows, openIds) : []);
+  const depths = $derived(new Map(treeShown.map((t) => [t.place, t])));
+  function toggle(place: number) {
+    const id = idOf(rows[place]);
+    const next = new Set(opened);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    opened = next;
+  }
+  $effect.pre(() => {
+    if (!tree || selected === null) return;
+    const missing = above(treeRows, selected).filter((id) => !opened.has(id));
+    if (missing.length) opened = new Set([...opened, ...missing]);
+  });
+  const shownRows = $derived(tree ? treeShown.map((t) => t.place) : paged ? orderedRows.slice(Math.max(paged.from - 1, 0), paged.to) : orderedRows);
   $effect.pre(() => {
     if (!page || selected === null) return;
     const place = orderedRows.indexOf(selected);
@@ -224,7 +255,7 @@
 </script>
 
 <div class="table-wrap" class:paged={paged !== null}>
-  <table class:fixed style:width={tableWidth}>
+  <table class:fixed class:no-header={!header} class:tree={tree !== null} style:width={tableWidth}>
     <thead>
       <tr bind:this={head}>
         {#each columns as column (column.field)}
@@ -259,10 +290,32 @@
         {@const row = rows[i]}
         <!-- A right click chooses the row first, so a context menu's handler finds it. -->
         <tr data-row={i} class:chosen={selected === i} onclick={() => choose(i)} oncontextmenu={() => choose(i)} ondblclick={() => !design && onopen(i)}>
-          {#each columns as column (column.field)}
+          {#each columns as column, c (column.field)}
             {@const cell = row[column.field]}
             {#if !column.edit}
               <td data-field={column.field} class:numeric={column.kind === "number"}>
+                {#if tree && c === 0}
+                  {@const at = depths.get(i)}
+                  <span class="indent" style:width="{(at?.depth ?? 0) * 16}px"></span>
+                  {#if at?.children}
+                    {@const isOpen = openIds.has(idOf(row))}
+                    <button
+                      type="button"
+                      class="toggle"
+                      aria-expanded={isOpen}
+                      aria-label={isOpen ? tree.close : tree.open}
+                      title={isOpen ? tree.close : tree.open}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        toggle(i);
+                      }}
+                      ondblclick={(e) => e.stopPropagation()}
+                      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d={isOpen ? "M 6 9 l 6 6 l 6 -6" : "M 9 6 l 6 6 l -6 6"} /></svg></button
+                    >
+                  {:else}
+                    <span class="toggle-space"></span>
+                  {/if}
+                {/if}
                 {#if column.kind === "color" && typeof cell === "string" && cell !== ""}<span class="cell-swatch" style:background-color={cell}></span>{/if}{shown(column, cell)}
               </td>
             {:else}
@@ -321,6 +374,41 @@
 {/if}
 
 <style>
+  table.no-header thead {
+    display: none;
+  }
+
+  table.tree td:first-child {
+    white-space: nowrap;
+  }
+
+  .indent,
+  .toggle-space {
+    display: inline-block;
+  }
+
+  .toggle-space {
+    width: 20px;
+  }
+
+  .toggle {
+    display: inline-flex;
+    width: 20px;
+    padding: 2px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+
+  .toggle svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+
   .table-wrap.paged {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;

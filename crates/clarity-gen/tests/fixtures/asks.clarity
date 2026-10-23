@@ -8,6 +8,12 @@ entity Friend
     name: text(80), required
     city: text(60)
 
+entity Folder
+    name: text(80), required
+    size: integer
+    parent: ref Folder
+    children: list<Folder>
+
 entity Album
     title: text(120), required
     copies: integer
@@ -75,6 +81,12 @@ page Albums: window
     dropdown name lentToBox at 7,15 span 6 bind album.lentTo search show name, city on change: tagsChanged
     dropdown name cityBox at 1,16 span 4 bind pal.city typed on change: tagsChanged
     dropdown name palBox at 5,16 span 4 bind album.lentTo search
+
+page Folders: window
+    on open: loadFolders
+    data folders: list<Folder>
+    tree name folderTree at 1,1 span 4 rows 8 bind folders children children on select: folderPicked
+    treetable name folderTable at 5,1 span 8 rows 8 bind folders children children columns name 200, size on open: folderPicked
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -179,3 +191,11 @@ code NewAlbum
     handler done
         save album
         close with album
+
+code Folders
+    handler loadFolders
+        folders = find f in Folder order by f.name
+
+    handler folderPicked
+        if folderTree.selected != none and folderTree.selected.size > 0
+            folderTable.visible = true

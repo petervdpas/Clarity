@@ -642,6 +642,8 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `page 50` | `select`, `open`, `change` |
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
+| `tree` | a list: `bind folders children children` | `children field`; `show field, ...` | `select`, `open` |
+| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable` | `select`, `open` |
 
 **Graphics**
 
@@ -688,6 +690,33 @@ A column may have a width, and a table may let the person resize and sort it:
 - `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes last either way.
 - `order by field [desc]`: the order the rows show in when the window opens, as in queries. The field must be one of the `columns`.
 - `page 50`: the rows show 50 at a time (1 to 1000), with a bar below the table to go to the first, previous, next and last page and the rows it shows, as `51-100 / 230`. The rows are ordered first, then paged. The table keeps its page when its rows come again, goes back to the first page when a header click sorts it, and shows the page of a row that code selects. The bar's buttons say Clarity's words `firstPage`, `previousPage`, `nextPage` and `lastPage`. Every renderer pages alike (`conformance/table-pages.json`).
+
+### Trees
+
+A `tree` and a `treetable` show a list the window holds as a tree. The entity has one reference to its own kind, a row's parent, and a list field of its own kind that stands for the rows under it:
+
+```clarity
+entity Folder
+    name: text(80), required
+    size: integer
+    parent: ref Folder
+    children: list<Folder>
+
+page Files: window
+    on open: loadFolders
+    data folders: list<Folder>
+    tree name folderTree at 1,1 span 4 rows 10 bind folders children children
+    treetable name folderTable at 5,1 span 8 rows 10 bind folders children children columns name 200, size
+
+code Files
+    handler loadFolders
+        folders = find f in Folder order by f.name
+```
+
+- A row whose parent is in the list shows under it; any other row shows at the top. Each level keeps the order of the list. A loop of parents is broken at its row that comes first in the list.
+- A row with rows under it has a toggle that shows or hides them; all start closed. Its words are Clarity's `expandRow` and `collapseRow`.
+- A tree shows each row's text, or the fields of `show`. A tree table shows `columns` under their headers, the first one indented.
+- `folderTree.selected` is the record picked, as for a table, and selecting a row in code opens the rows above it. Every renderer arranges the rows alike (`conformance/trees.json`).
 - Sorting changes only how the rows show. A row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
 
 ### Binding

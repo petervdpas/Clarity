@@ -1920,7 +1920,7 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             "selected" => {
                 let Part::Widget(props) = part else { return None };
-                if !matches!(props.kind, WidgetKind::Table | WidgetKind::List) {
+                if !matches!(props.kind, WidgetKind::Table | WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) {
                     return None;
                 }
                 let item = props.bind.as_deref().and_then(|b| self.data(b)).map(|d| self.env.data_type(d));

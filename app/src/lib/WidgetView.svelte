@@ -321,9 +321,12 @@
 
   /** The table's columns for the library part: how each field shows and is edited. */
   const tableColumns = $derived.by((): TableColumn[] => {
-    if (p.kind !== "table" || !collection) return [];
+    if (!["table", "tree", "treeTable"].includes(p.kind) || !collection) return [];
     const entity = collection.entity;
-    return p.columns.map((name) => {
+    // A tree shows the fields of `show`, else its record's text.
+    const display = entity.fields.find((f) => f.type.kind === "text" || f.type.kind === "email")?.name.name ?? "id";
+    const names = p.kind === "tree" ? (p.show.length ? p.show : [display]) : p.columns;
+    return names.map((name) => {
       const field = findField(entity, name);
       const label = field ? tr(preview, field.label) : name;
       if (!field) return { field: name, label, kind: "text", edit: false };
@@ -902,6 +905,31 @@
         page={p.page}
         pageWords={{ first: ownWord(preview, "First page"), previous: ownWord(preview, "Previous page"), next: ownWord(preview, "Next page"), last: ownWord(preview, "Last page") }}
         ondesignwidth={design ? designWidth : undefined}
+        onselect={(row) => selectRow(row)}
+        onopen={() => fire("open")}
+        onedit={() => fire("change")}
+      />
+    {:else if p.kind === "tree" || p.kind === "treeTable"}
+      <!-- A tree (U1c): the rows under their parents, by the one reference to their own kind. -->
+      {@const own = collection?.entity}
+      {@const parent = own?.fields.find((f) => f.type.kind === "ref" && f.type.entity.name === own.name.name)?.name.name ?? "parent"}
+      <Table
+        columns={tableColumns}
+        rows={collection?.rows ?? []}
+        selected={selectedRow ?? null}
+        {design}
+        {disabled}
+        {readonly}
+        resizable={p.resizable}
+        header={p.kind === "treeTable"}
+        tree={{
+          parent,
+          open: ownWord(preview, "Expand"),
+          close: ownWord(preview, "Collapse"),
+          // In the designer a sample reference holds the text of the row it points at.
+          key: live ? "id" : own?.fields.find((f) => f.type.kind === "text")?.name.name,
+        }}
+        remember={p.name ? `clarity-columns.${page.name.name}.${p.name}` : null}
         onselect={(row) => selectRow(row)}
         onopen={() => fire("open")}
         onedit={() => fire("change")}

@@ -68,6 +68,10 @@ pub enum WidgetKind {
     Splitter,
     Table,
     List,
+    /// A list of records as a tree, by the reference to their own kind.
+    Tree,
+    /// A table whose rows are a tree, its first column indented.
+    TreeTable,
     Image,
     Display,
     Canvas,
@@ -269,6 +273,8 @@ pub enum WidgetProperty {
     Search,
     /// `page 50`: a table's rows shown that many at a time.
     Page,
+    /// `children children`: the list field a tree's rows are arranged by.
+    Children,
 }
 
 /// The fewest and most rows a table's page holds.
@@ -693,6 +699,37 @@ const ENTRIES: &[Entry] = &[
         events: &[Event::Select, Event::Open, Event::Change],
         properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Page],
     },
+    // A list the window holds as a tree, arranged by `children` (U1c).
+    Entry {
+        kind: WidgetKind::Tree,
+        keyword: "tree",
+        name: "Tree",
+        category: Category::Data,
+        size: (4, 8),
+        caption: None,
+        bind: BindTarget::Collection,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Select, Event::Open],
+        properties: &[WidgetProperty::Children, WidgetProperty::Show],
+    },
+    Entry {
+        kind: WidgetKind::TreeTable,
+        keyword: "treetable",
+        name: "Tree table",
+        category: Category::Data,
+        size: (12, 8),
+        caption: None,
+        bind: BindTarget::Collection,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Select, Event::Open],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable],
+    },
     Entry {
         kind: WidgetKind::List,
         keyword: "list",
@@ -990,6 +1027,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         split: false,
         typed: false,
         page: None,
+        children: None,
         search: false,
         labels: None,
         made: false,
@@ -1064,6 +1102,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(bind) = &props.bind {
         parts.push(format!("bind {bind}"));
+    }
+    if let Some(children) = &props.children {
+        parts.push(format!("children {children}"));
     }
     if let Some(min) = &props.min {
         parts.push(format!("min {min}"));
@@ -1296,6 +1337,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Typed, props.typed, "typed"),
         (WidgetProperty::Search, props.search, "search"),
         (WidgetProperty::Page, props.page.is_some(), "page"),
+        (WidgetProperty::Children, props.children.is_some(), "children"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -1410,6 +1452,8 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::Splitter
             | WidgetKind::Table
             | WidgetKind::List
+            | WidgetKind::Tree
+            | WidgetKind::TreeTable
             | WidgetKind::Image
             | WidgetKind::Canvas
             | WidgetKind::Markdown

@@ -57,7 +57,18 @@ fn sample_row(project: &Project, entity: &Entity, i: usize) -> Row {
     entity
         .fields
         .iter()
-        .map(|field| (field.name.name.clone(), sample_value(project, field, i)))
+        .map(|field| {
+            let value = match &field.ty {
+                // A reference to the record's own kind makes a tree, as a
+                // tree part shows it: two rows at the top, the others under
+                // the rows before them.
+                FieldType::Ref { entity: target } if target.name == entity.name.name => {
+                    if i < 2 { Value::Null } else { Value::String(display_value(project, entity, (i - 2) / 2)) }
+                }
+                _ => sample_value(project, field, i),
+            };
+            (field.name.name.clone(), value)
+        })
         .collect()
 }
 

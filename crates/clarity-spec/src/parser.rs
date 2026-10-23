@@ -1506,6 +1506,7 @@ fn parse_widget_props(
         split: false,
         typed: false,
         page: None,
+        children: None,
         search: false,
         labels: None,
         made: false,
@@ -1768,6 +1769,10 @@ fn parse_widget_props(
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
+            }
+            "children" => {
+                applies(WidgetProperty::Children)?;
+                props.children = Some(cursor.expect_ident("the list field of the rows' own kind, as in children children")?.name);
             }
             "page" => {
                 applies(WidgetProperty::Page)?;

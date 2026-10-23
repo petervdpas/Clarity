@@ -1177,7 +1177,8 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</Grid>");
             }
-            WidgetKind::Table => {
+            // A tree (U1c) is Clarity's table in tree mode: its rows under their parents.
+            WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable => {
                 // Clarity's own table part: it owns how cells behave, the same as on the web.
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let selected = named.map(|n| format!(" SelectedItem=\"{{Binding {}.SelectedItem}}\"", member(n))).unwrap_or_default();
@@ -1210,10 +1211,30 @@ impl<'a> Window<'a> {
                         self.text("@lastPage")
                     );
                 }
+                // The parent each row's reference to its own kind names, and the toggle's words.
+                let tree = matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable);
+                if tree && let Some(entity) = entity {
+                    let parent = entity.fields.iter().find(|f| matches!(&f.ty, FieldType::Ref { entity: e } if e.name == entity.name.name));
+                    if let Some(parent) = parent {
+                        let _ = write!(options, " TreeParent=\"{}\"", property(&entity.name.name, &parent.name.name));
+                    }
+                    let _ = write!(options, " ExpandText=\"{}\" CollapseText=\"{}\"", self.text("@expandRow"), self.text("@collapseRow"));
+                    if p.kind == WidgetKind::Tree {
+                        options.push_str(" HeadersVisible=\"False\"");
+                    }
+                }
+                // A tree shows the fields of `show`, else its record's text.
+                let columns: Vec<String> = match (p.kind, entity) {
+                    (WidgetKind::Tree, Some(entity)) if p.show.is_empty() => {
+                        entity.fields.iter().find(|f| matches!(f.ty, FieldType::Text { .. } | FieldType::Email)).map(|f| vec![f.name.name.clone()]).unwrap_or_default()
+                    }
+                    (WidgetKind::Tree, _) => p.show.clone(),
+                    _ => p.columns.clone(),
+                };
                 let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{options}{plain_state}{extra}>");
                 let _ = writeln!(out, "{pad}  <c:ClarityTable.Columns>");
                 if let Some(entity) = entity {
-                    for column in &p.columns {
+                    for column in &columns {
                         let Some(field) = entity.field(column) else { continue };
                         let width = p.widths.get(column).copied();
                         let _ = writeln!(out, "{pad}    {}", self.table_column(entity, field, p.edit.contains(column), p.switches.contains(column), width));
@@ -1244,7 +1265,6 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</ListBox>");
             }
-            // A record's file, which the view model fetches to open it or save a copy.
             // A list field's items as chips (U1c); an enum's are picked from its values.
             WidgetKind::Tags => {
                 let field = p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty);
@@ -1265,6 +1285,7 @@ impl<'a> Window<'a> {
                     remove = self.text("@removeTag"),
                 );
             }
+            // A record's file, which the view model fetches to open it or save a copy.
             WidgetKind::File => {
                 let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
                 let path = bound.as_deref().unwrap_or_default();
@@ -1383,8 +1404,8 @@ impl<'a> Window<'a> {
                     Event::Change if input => format!("{control}.ValueChanged += (_, _) => {run};"),
                     // The table chooses an edited row first, so the handler finds it.
                     Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),
-                    Event::Select if kind == WidgetKind::Table => format!("{control}.Selected += (_, _) => {run};"),
-                    Event::Open if kind == WidgetKind::Table => format!("{control}.Opened += (_, _) => {run};"),
+                    Event::Select if matches!(kind, WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) => format!("{control}.Selected += (_, _) => {run};"),
+                    Event::Open if matches!(kind, WidgetKind::Table | WidgetKind::Tree | WidgetKind::TreeTable) => format!("{control}.Opened += (_, _) => {run};"),
                     Event::Change | Event::Select => format!("{control}.SelectionChanged += (_, _) => {run};"),
                     Event::Open => format!("{control}.DoubleTapped += (_, _) => {run};"),
                     Event::Enter => format!("{control}.GotFocus += (_, _) => {run};"),

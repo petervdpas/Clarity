@@ -446,6 +446,10 @@ pub struct WidgetProps {
     /// `page 50`: a table shows its rows that many at a time (U1c).
     #[serde(default)]
     pub page: Option<u32>,
+    /// `children children`: the list field of a tree's rows that lists
+    /// records of their own kind, arranged by its reference (U1c).
+    #[serde(default)]
+    pub children: Option<String>,
     pub show: Vec<String>,
     /// `typed`: a dropdown of a text field any text may be typed into, the
     /// values the field already has offered as it is typed (U1c).

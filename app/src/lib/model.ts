@@ -94,6 +94,9 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Previous page": { key: "previousPage", written: "Previous page" },
   "Next page": { key: "nextPage", written: "Next page" },
   "Last page": { key: "lastPage", written: "Last page" },
+  // A tree's toggle.
+  Expand: { key: "expandRow", written: "Expand" },
+  Collapse: { key: "collapseRow", written: "Collapse" },
   // A tags part's words.
   Add: { key: "addTag", written: "Add" },
   Remove: { key: "removeTag", written: "Remove" },

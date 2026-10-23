@@ -1,0 +1,63 @@
+{
+  "about": "Trees of U1c, as every renderer shows them. A tree's rows are the records of a list in the window (`rows`, each with its `id` and the id of its `parent`, or null), arranged by that parent: a row whose parent is in the list shows under it, any other row at the top. Rows keep the order of the list, under their parent as at the top. A loop of parents is broken at the row of the loop that comes first in the list, which shows at the top. `open` names the ids of the rows shown open; a closed row hides what is under it. `shows` is the rows shown, top to bottom, each as [its place in the list counted from 0, its depth from 0, whether rows are under it]. `reveal` opens every row above the row at place `at`, as a tree does when that row is selected; `opens` is the ids opened, in the order of the list.",
+  "cases": [
+    {
+      "name": "the top rows, closed",
+      "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 3, "parent": null }, { "id": 4, "parent": 2 }],
+      "open": [],
+      "shows": [[0, 0, true], [2, 0, false]]
+    },
+    {
+      "name": "an open row shows the rows under it, in the order of the list",
+      "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 3, "parent": null }, { "id": 4, "parent": 2 }, { "id": 5, "parent": 1 }],
+      "open": [1],
+      "shows": [[0, 0, true], [1, 1, true], [4, 1, false], [2, 0, false]]
+    },
+    {
+      "name": "open all the way down",
+      "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 3, "parent": null }, { "id": 4, "parent": 2 }],
+      "open": [1, 2],
+      "shows": [[0, 0, true], [1, 1, true], [3, 2, false], [2, 0, false]]
+    },
+    {
+      "name": "an open row under a closed one stays hidden",
+      "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 4, "parent": 2 }],
+      "open": [2],
+      "shows": [[0, 0, true]]
+    },
+    {
+      "name": "a row whose parent is not in the list shows at the top",
+      "rows": [{ "id": 7, "parent": 99 }, { "id": 8, "parent": 7 }],
+      "open": [7],
+      "shows": [[0, 0, true], [1, 1, false]]
+    },
+    {
+      "name": "a child may come before its parent in the list",
+      "rows": [{ "id": 2, "parent": 1 }, { "id": 1, "parent": null }],
+      "open": [1],
+      "shows": [[1, 0, true], [0, 1, false]]
+    },
+    {
+      "name": "a loop of parents is broken at its first row",
+      "rows": [{ "id": 1, "parent": 3 }, { "id": 2, "parent": 1 }, { "id": 3, "parent": 2 }],
+      "open": [1, 2],
+      "shows": [[0, 0, true], [1, 1, true], [2, 2, false]]
+    },
+    {
+      "name": "a row that is its own parent",
+      "rows": [{ "id": 1, "parent": 1 }],
+      "open": [1],
+      "shows": [[0, 0, false]]
+    },
+    {
+      "name": "no rows",
+      "rows": [],
+      "open": [],
+      "shows": []
+    }
+  ],
+  "reveal": [
+    { "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }, { "id": 3, "parent": 2 }, { "id": 4, "parent": null }], "at": 2, "opens": [1, 2] },
+    { "rows": [{ "id": 1, "parent": null }, { "id": 2, "parent": 1 }], "at": 0, "opens": [] }
+  ]
+}

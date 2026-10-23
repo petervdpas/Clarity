@@ -1260,6 +1260,9 @@ impl<'a> Checker<'a> {
                     self.error(file, format!("{at}: '{}' is not a column of the table; order by one it shows", order.field), widget.span);
                 }
                 self.check_edits(file, &at, entity, widget);
+                if matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable) {
+                    self.check_tree(file, &at, entity, widget);
+                }
             }
         }
     }
@@ -1292,6 +1295,24 @@ impl<'a> Checker<'a> {
                 }
                 Some(_) => {}
             }
+        }
+    }
+
+    /// A tree's rows are arranged by `children`, a list field of their own
+    /// kind, through the one reference to their own kind (their parent).
+    fn check_tree(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
+        let name = &entity.name.name;
+        let Some(children) = widget.props.children.as_deref() else {
+            return self.error(file, format!("{at}: a tree names the list of its own kind its rows have, as in 'children children'"), widget.span);
+        };
+        match entity.field(children).map(|f| &f.ty) {
+            None => return self.error(file, format!("{at}: {name} has no field '{children}'"), widget.span),
+            Some(FieldType::List { item }) if item.name == *name => {}
+            Some(_) => return self.error(file, format!("{at}: '{children}' is no list of {name} records"), widget.span),
+        }
+        let parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity: e } if e.name == *name)).count();
+        if parents != 1 {
+            self.error(file, format!("{at}: a tree of {name} needs one field 'ref {name}' to know a row's parent"), widget.span);
         }
     }
 

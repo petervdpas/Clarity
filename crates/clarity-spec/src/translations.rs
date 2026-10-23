@@ -57,6 +57,8 @@ pub const TAGS_KEYS: [(&str, &str); 2] = [("addTag", "Add"), ("removeTag", "Remo
 /// Clarity's words of the bar under a table shown a page at a time: its
 /// buttons to the first, the previous, the next and the last page.
 pub const PAGE_KEYS: [(&str, &str); 4] = [("firstPage", "First page"), ("previousPage", "Previous page"), ("nextPage", "Next page"), ("lastPage", "Last page")];
+/// Clarity's words of a tree's toggle, which shows or hides the rows under a row.
+pub const TREE_KEYS: [(&str, &str); 2] = [("expandRow", "Expand"), ("collapseRow", "Collapse")];
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -345,6 +347,7 @@ fn shown(project: &Project) -> Shown {
         w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
     }));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
+    let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
     let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Tags && w.props.bind.is_some()
     }));
@@ -359,6 +362,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
+        .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
         .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] });
     for (key, _) in own {
@@ -532,7 +536,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
-                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&FILE_KEYS).chain(&TAGS_KEYS).chain(&PAGE_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&FILE_KEYS).chain(&TAGS_KEYS).chain(&PAGE_KEYS).chain(&TREE_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
                     found.push(place(Diagnostic::warning(
                         format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
                         u.span,

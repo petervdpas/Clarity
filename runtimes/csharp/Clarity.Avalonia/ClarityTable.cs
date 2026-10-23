@@ -127,6 +127,54 @@ public sealed class ClarityTable : UserControl
     /// <summary>Where the person's widths are kept (<c>Window.part</c>); none keeps them for the run.</summary>
     public string? Remember { get; set; }
 
+    /// <summary>
+    /// A tree (U1c): the record's property that holds its parent's id. The rows
+    /// show under their parents, the first column indented with a toggle.
+    /// </summary>
+    public string? TreeParent
+    {
+        get => treeParent;
+        set
+        {
+            treeParent = value;
+            Build();
+        }
+    }
+
+    /// <summary>Whether the column headers show; a tree shows none.</summary>
+    public bool HeadersVisible
+    {
+        get => Grid.HeadersVisibility != DataGridHeadersVisibility.None;
+        set => Grid.HeadersVisibility = value ? DataGridHeadersVisibility.Column : DataGridHeadersVisibility.None;
+    }
+
+    /// <summary>Clarity's own words on a tree's toggle.</summary>
+    public string ExpandText { get; set; } = "Expand";
+    public string CollapseText { get; set; } = "Collapse";
+
+    /// <summary>Whether a row of a tree shows the rows under it.</summary>
+    public bool IsOpen(object row) => opened.Contains(IdOf(row));
+
+    /// <summary>Shows or hides the rows under a row of a tree.</summary>
+    public void Toggle(object row)
+    {
+        if (!opened.Remove(IdOf(row)))
+            opened.Add(IdOf(row));
+        ShowRows();
+    }
+
+    string? treeParent;
+    readonly HashSet<object?> opened = [];
+    readonly Dictionary<object, TreeShown> treeShown = new(ReferenceEqualityComparer.Instance);
+    List<object> treeRows = [];
+
+    static object? Read(object row, string property) => row.GetType().GetProperty(property)?.GetValue(row);
+    static object? IdOf(object row) => Read(row, "Id");
+    TreeRow[] TreeRows() => [.. treeRows.Select(r => new TreeRow(IdOf(r), Read(r, treeParent!)))];
+
+    /// <summary>A tree row's place: how deep it is and whether rows are under it.</summary>
+    public TreeShown? TreePlace(object row) => treeShown.TryGetValue(row, out var at) ? at : null;
+
     /// <summary>The rows shown at a time (<c>page 50</c>); 0 shows them all.</summary>
     public int PageSize
     {
@@ -280,6 +328,16 @@ public sealed class ClarityTable : UserControl
         }
         else if (change.Property == SelectedItemProperty && !ReferenceEquals(Grid.SelectedItem, SelectedItem))
         {
+            // A row of a tree selected by code opens the rows above it.
+            if (treeParent is not null && SelectedItem is { } picked && treeRows.IndexOf(picked) is var treePlace and >= 0)
+            {
+                var missing = Trees.Above(TreeRows(), treePlace).Where(id => !opened.Contains(id)).ToList();
+                if (missing.Count > 0)
+                {
+                    opened.UnionWith(missing);
+                    ShowRows();
+                }
+            }
             // A row selected by code shows its page.
             if (pageSize > 0 && SelectedItem is { } row && ordered.IndexOf(row) is var place and >= 0 && TablePages.With(pageSize, place) != Page)
                 TurnTo(TablePages.With(pageSize, place));
@@ -311,7 +369,7 @@ public sealed class ClarityTable : UserControl
 
     void RowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (order is not null || pageSize > 0)
+        if (order is not null || pageSize > 0 || treeParent is not null)
             ShowRows();
     }
 
@@ -328,6 +386,19 @@ public sealed class ClarityTable : UserControl
         var selected = SelectedItem;
         var column = order is { } o ? Columns.FirstOrDefault(c => c.Field == o.Field) : null;
         IEnumerable? rows = column is null || ItemsSource is null ? ItemsSource : Sorted(ItemsSource.Cast<object>().ToList(), column, order!.Descending);
+        // A tree (conformance/trees.json): the rows under their parents, the open ones showing theirs.
+        if (treeParent is not null)
+        {
+            treeRows = ItemsSource?.Cast<object>().ToList() ?? [];
+            treeShown.Clear();
+            var shownRows = new List<object>();
+            foreach (var at in Trees.Shown(TreeRows(), opened))
+            {
+                treeShown[treeRows[at.Place]] = at;
+                shownRows.Add(treeRows[at.Place]);
+            }
+            rows = shownRows;
+        }
         // A page at a time (conformance/table-pages.json): the page stays within the pages there are.
         if (pageSize > 0)
         {
@@ -444,6 +515,7 @@ public sealed class ClarityTable : UserControl
         foreach (var column in Columns)
         {
             var at = column;
+            var first = ReferenceEquals(column, Columns[0]);
             Grid.Columns.Add(new DataGridTemplateColumn
             {
                 Header = column.Header,
@@ -455,6 +527,9 @@ public sealed class ClarityTable : UserControl
                     var cell = Cell(at, ChoicesOf(at));
                     if (cell is IInput input)
                         input.ValueChanged += (_, _) => CellEdited(cell.DataContext);
+                    // A tree's first column: indented by the row's depth, with its toggle.
+                    if (first && treeParent is not null)
+                        return new Border { Tag = at.Field, Child = new TreeCell(this, cell) };
                     return new Border { Tag = at.Field, Child = cell };
                 }),
             });
@@ -528,5 +603,55 @@ static class Tips
     {
         ToolTip.SetTip(control, text);
         global::Avalonia.Automation.AutomationProperties.SetName(control, text);
+    }
+}
+
+/// <summary>The first cell of a tree's row: its indent, its toggle when rows are under it, and the cell.</summary>
+sealed class TreeCell : StackPanel
+{
+    readonly ClarityTable table;
+    readonly Border indent = new();
+    readonly Button toggle = new()
+    {
+        Classes = { "toggle" },
+        Width = 20,
+        Padding = new Thickness(2),
+        Background = global::Avalonia.Media.Brushes.Transparent,
+        BorderThickness = new Thickness(0),
+    };
+
+    public TreeCell(ClarityTable table, Control cell)
+    {
+        this.table = table;
+        Orientation = Orientation.Horizontal;
+        Children.Add(indent);
+        Children.Add(toggle);
+        Children.Add(cell);
+        toggle.Click += (_, e) =>
+        {
+            e.Handled = true;
+            if (DataContext is { } row)
+                table.Toggle(row);
+        };
+        DataContextChanged += (_, _) => Show();
+    }
+
+    void Show()
+    {
+        var at = DataContext is { } row ? table.TreePlace(row) : null;
+        indent.Width = (at?.Depth ?? 0) * 16;
+        var open = DataContext is { } r && table.IsOpen(r);
+        toggle.Opacity = at?.Children == true ? 1 : 0;
+        toggle.IsHitTestVisible = at?.Children == true;
+        ToolTip.SetTip(toggle, open ? table.CollapseText : table.ExpandText);
+        toggle.Content = new global::Avalonia.Controls.Shapes.Path
+        {
+            Data = global::Avalonia.Media.Geometry.Parse(open ? "M 6 9 l 6 6 l 6 -6" : "M 9 6 l 6 6 l -6 6"),
+            Stroke = global::Avalonia.Media.Brushes.Gray,
+            StrokeThickness = 2,
+            Width = 12,
+            Height = 12,
+            Stretch = global::Avalonia.Media.Stretch.Uniform,
+        };
     }
 }

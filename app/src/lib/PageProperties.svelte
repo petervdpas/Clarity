@@ -288,6 +288,21 @@
       </label>
     {/if}
 
+    {#if info.properties.includes("children")}
+      {@const own = (() => {
+        const decl = page.data.find((d) => d.name.name === p.bind);
+        return entities.find((e) => e.name.name === (decl ? dataEntity(decl) : null));
+      })()}
+      <label class="prop" title="The list field of the rows' own kind: a row shows under the row its reference to its own kind names">
+        <span>Children</span>
+        <select value={p.children ?? ""} onchange={(e) => update({ children: e.currentTarget.value || null })}>
+          <option value="">(none)</option>
+          {#each (own?.fields ?? []).filter((f) => f.type.kind === "list" && f.type.item.name === own?.name.name) as field (field.name.name)}
+            <option value={field.name.name}>{field.name.name}</option>
+          {/each}
+        </select>
+      </label>
+    {/if}
     {#if info.properties.includes("typed")}
       <label class="prop" title="Any text may be typed; the values the field already has are offered">
         <span>Typed</span>

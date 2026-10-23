@@ -70,7 +70,12 @@ order: TableOrder | null,
 /**
  * `page 50`: a table shows its rows that many at a time (U1c).
  */
-page: number | null, show: Array<string>, 
+page: number | null, 
+/**
+ * `children children`: the list field of a tree's rows that lists
+ * records of their own kind, arranged by its reference (U1c).
+ */
+children: string | null, show: Array<string>, 
 /**
  * `typed`: a dropdown of a text field any text may be typed into, the
  * values the field already has offered as it is typed (U1c).

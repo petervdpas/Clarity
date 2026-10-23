@@ -122,6 +122,10 @@
       <path d="M8 5 h10 l5 5 v13 h-15 z" />
       <path d="M18 5 v5 h5" />
       <rect x="27" y="10" width="15" height="8" rx="2" class="fill" />
+    {:else if kind === "tree" || kind === "treeTable"}
+      <path d="M8 6 h8 M12 6 v14 M12 13 h6 M12 20 h6" />
+      <rect x="18" y="10" width="{kind === 'tree' ? 14 : 24}" height="6" rx="1" class="fill" />
+      <rect x="18" y="17" width="{kind === 'tree' ? 10 : 24}" height="6" rx="1" class="fill" />
     {:else if kind === "tags"}
       <rect x="4" y="9" width="15" height="10" rx="5" class="fill" />
       <rect x="22" y="9" width="13" height="10" rx="5" class="fill" />

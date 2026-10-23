@@ -89,6 +89,11 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Save a copy": { key: "saveFileCopy", written: "Save a copy" },
   "Remove the file": { key: "removeFile", written: "Remove the file" },
   "A copy is in your Downloads folder": { key: "fileCopySaved", written: "A copy is in your Downloads folder" },
+  // The page bar of a table shown a page at a time.
+  "First page": { key: "firstPage", written: "First page" },
+  "Previous page": { key: "previousPage", written: "Previous page" },
+  "Next page": { key: "nextPage", written: "Next page" },
+  "Last page": { key: "lastPage", written: "Last page" },
   // A tags part's words.
   Add: { key: "addTag", written: "Add" },
   Remove: { key: "removeTag", written: "Remove" },

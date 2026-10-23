@@ -127,6 +127,56 @@ public sealed class ClarityTable : UserControl
     /// <summary>Where the person's widths are kept (<c>Window.part</c>); none keeps them for the run.</summary>
     public string? Remember { get; set; }
 
+    /// <summary>The rows shown at a time (<c>page 50</c>); 0 shows them all.</summary>
+    public int PageSize
+    {
+        get => pageSize;
+        set
+        {
+            pageSize = value;
+            Pager.IsVisible = value > 0;
+            ShowRows();
+        }
+    }
+
+    /// <summary>The page shown, from 1.</summary>
+    public int Page => paged?.Page ?? 1;
+
+    /// <summary>Clarity's own words on the page bar's buttons.</summary>
+    public string FirstText { get => First.Tip(); set => First.Tip(value); }
+    public string PreviousText { get => Previous.Tip(); set => Previous.Tip(value); }
+    public string NextText { get => Next.Tip(); set => Next.Tip(value); }
+    public string LastText { get => Last.Tip(); set => Last.Tip(value); }
+
+    /// <summary>The page bar below the rows, and its parts.</summary>
+    public StackPanel Pager { get; } = new() { Orientation = global::Avalonia.Layout.Orientation.Horizontal, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right, Spacing = 2, IsVisible = false, Classes = { "pager" } };
+    public Button First { get; } = PagerButton("M 17 18 l -6 -6 l 6 -6 M 7 6 v 12");
+    public Button Previous { get; } = PagerButton("M 15 18 l -6 -6 l 6 -6");
+    public Button Next { get; } = PagerButton("M 9 18 l 6 -6 l -6 -6");
+    public Button Last { get; } = PagerButton("M 7 18 l 6 -6 l -6 -6 M 17 6 v 12");
+    public TextBlock Shown { get; } = new() { VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(8, 0) };
+
+    static Button PagerButton(string path) => new()
+    {
+        Padding = new Thickness(2),
+        Background = global::Avalonia.Media.Brushes.Transparent,
+        BorderThickness = new Thickness(0),
+        Content = new global::Avalonia.Controls.Shapes.Path
+        {
+            Data = global::Avalonia.Media.Geometry.Parse(path),
+            Stroke = global::Avalonia.Media.Brushes.Gray,
+            StrokeThickness = 2,
+            Width = 16,
+            Height = 16,
+            Stretch = global::Avalonia.Media.Stretch.Uniform,
+        },
+    };
+
+    int pageSize;
+    int at = 1;
+    Paged? paged;
+    List<object> ordered = [];
+
     /// <summary>The order the rows show in now: a field and its way, or none for the data's order.</summary>
     public (string Field, bool Descending)? Ordered => order is { } o ? (o.Field, o.Descending) : null;
 
@@ -157,7 +207,17 @@ public sealed class ClarityTable : UserControl
 
     public ClarityTable()
     {
-        Content = Grid;
+        Pager.Children.Add(First);
+        Pager.Children.Add(Previous);
+        Pager.Children.Add(Shown);
+        Pager.Children.Add(Next);
+        Pager.Children.Add(Last);
+        First.Click += (_, _) => TurnTo(1);
+        Previous.Click += (_, _) => TurnTo(Page - 1);
+        Next.Click += (_, _) => TurnTo(Page + 1);
+        Last.Click += (_, _) => TurnTo(paged?.Pages ?? 1);
+        DockPanel.SetDock(Pager, Dock.Bottom);
+        Content = new DockPanel { Children = { Pager, Grid } };
         Columns.CollectionChanged += (_, _) => Build();
         Grid.SelectionChanged += (_, _) =>
         {
@@ -219,7 +279,12 @@ public sealed class ClarityTable : UserControl
             ShowRows();
         }
         else if (change.Property == SelectedItemProperty && !ReferenceEquals(Grid.SelectedItem, SelectedItem))
+        {
+            // A row selected by code shows its page.
+            if (pageSize > 0 && SelectedItem is { } row && ordered.IndexOf(row) is var place and >= 0 && TablePages.With(pageSize, place) != Page)
+                TurnTo(TablePages.With(pageSize, place));
             Grid.SelectedItem = SelectedItem;
+        }
     }
 
     /// <summary>The cell of <paramref name="row"/> in the column of <paramref name="field"/>, while it is shown.</summary>
@@ -240,13 +305,21 @@ public sealed class ClarityTable : UserControl
     public void SortBy(string field)
     {
         order = order?.Field == field ? order with { Descending = !order.Descending } : new Order(field, false);
+        at = 1;
         ShowRows();
     }
 
     void RowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (order is not null)
+        if (order is not null || pageSize > 0)
             ShowRows();
+    }
+
+    /// <summary>Shows page <paramref name="page"/>, kept within the pages there are.</summary>
+    public void TurnTo(int page)
+    {
+        at = page;
+        ShowRows();
     }
 
     /// <summary>The rows in the order they show: the data's, or sorted by Clarity's rules into a list of the same records.</summary>
@@ -254,7 +327,19 @@ public sealed class ClarityTable : UserControl
     {
         var selected = SelectedItem;
         var column = order is { } o ? Columns.FirstOrDefault(c => c.Field == o.Field) : null;
-        Grid.ItemsSource = column is null || ItemsSource is null ? ItemsSource : Sorted(ItemsSource.Cast<object>().ToList(), column, order!.Descending);
+        IEnumerable? rows = column is null || ItemsSource is null ? ItemsSource : Sorted(ItemsSource.Cast<object>().ToList(), column, order!.Descending);
+        // A page at a time (conformance/table-pages.json): the page stays within the pages there are.
+        if (pageSize > 0)
+        {
+            ordered = rows?.Cast<object>().ToList() ?? [];
+            paged = TablePages.Of(ordered.Count, pageSize, at);
+            at = paged.Page;
+            rows = ordered.Skip(Math.Max(paged.From - 1, 0)).Take(paged.To - Math.Max(paged.From - 1, 0)).ToList();
+            Shown.Text = paged.Text;
+            First.IsEnabled = Previous.IsEnabled = paged.Page > 1;
+            Next.IsEnabled = Last.IsEnabled = paged.Page < paged.Pages;
+        }
+        Grid.ItemsSource = rows;
         for (var i = 0; i < Columns.Count && i < Grid.Columns.Count; i++)
             Grid.Columns[i].Header = Columns[i].Field == column?.Field ? $"{Columns[i].Header} {(order!.Descending ? "▼" : "▲")}" : Columns[i].Header;
         if (selected is not null && !ReferenceEquals(Grid.SelectedItem, selected))
@@ -432,5 +517,16 @@ public sealed class ClarityTable : UserControl
             CellKind.Number => new NumberInput { Classes = { "cell" }, Format = column.Number ?? new FieldFormat(FormatKind.Decimal), [!NumberInput.ValueProperty] = Bound(column) },
             _ => new Clarity.Avalonia.TextInput { Classes = { "cell" }, [!Clarity.Avalonia.TextInput.ValueProperty] = Bound(column) },
         };
+    }
+}
+
+static class Tips
+{
+    public static string Tip(this Control control) => ToolTip.GetTip(control) as string ?? "";
+
+    public static void Tip(this Control control, string text)
+    {
+        ToolTip.SetTip(control, text);
+        global::Avalonia.Automation.AutomationProperties.SetName(control, text);
     }
 }

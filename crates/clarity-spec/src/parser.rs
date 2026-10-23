@@ -1505,6 +1505,7 @@ fn parse_widget_props(
         step: None,
         split: false,
         typed: false,
+        page: None,
         search: false,
         labels: None,
         made: false,
@@ -1767,6 +1768,15 @@ fn parse_widget_props(
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
+            }
+            "page" => {
+                applies(WidgetProperty::Page)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or(clause.span);
+                let size = cursor.expect_number("the rows of a page, as in page 50")?;
+                if !widgets::PAGE_SIZES.contains(&size) {
+                    return Err(Diagnostic::error(widgets::PAGE_PROBLEM.to_string(), at));
+                }
+                props.page = Some(size);
             }
             "typed" => {
                 applies(WidgetProperty::Typed)?;

@@ -398,6 +398,20 @@
           {@const order = p.order}
           <label><input type="checkbox" checked={order.desc} onchange={(e) => update({ order: { ...order, desc: e.currentTarget.checked } })} /> Descending</label>
         {/if}
+        <label class="order" title="Shows this many rows at a time, with a bar to go through the pages; empty shows them all">
+          <span>Rows per page</span>
+          <input
+            type="number"
+            min="1"
+            max="1000"
+            placeholder="all"
+            value={p.page ?? ""}
+            onchange={(e) => {
+              const size = Math.round(Number(e.currentTarget.value));
+              update({ page: e.currentTarget.value === "" || !(size >= 1 && size <= 1000) ? null : size });
+            }}
+          />
+        </label>
       </fieldset>
     {/if}
 

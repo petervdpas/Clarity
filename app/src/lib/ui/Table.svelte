@@ -46,7 +46,7 @@
   import NumberInput from "./NumberInput.svelte";
   import TextInput from "./TextInput.svelte";
   import { readWidths, resized } from "../columnWidths";
-  import { nextOrder, shownOrder, type Order } from "./tableView";
+  import { nextOrder, pageOf, pageWith, shownOrder, type Order } from "./tableView";
 
   let {
     columns,
@@ -59,6 +59,8 @@
     sortable = false,
     order = null,
     remember = null,
+    page = null,
+    pageWords = { first: "First page", previous: "Previous page", next: "Next page", last: "Last page" },
     ondesignwidth,
     onselect,
     onopen,
@@ -80,6 +82,10 @@
     order?: Order;
     /** Where the person's widths are kept, per window and table; none keeps them for the run. */
     remember?: string | null;
+    /** The rows shown at a time (`page 50`); none shows them all. */
+    page?: number | null;
+    /** Clarity's own words on the page bar's buttons. */
+    pageWords?: { first: string; previous: string; next: string; last: string };
     /** In the designer: a header edge was dragged; 0 takes the designed width away. */
     ondesignwidth?: (field: string, width: number) => void;
     /** Another row was chosen: Clarity's `select`. */
@@ -102,11 +108,24 @@
       sorting = order;
     }
   });
-  const shownRows = $derived(shownOrder(rows, columns, sorting));
+  const orderedRows = $derived(shownOrder(rows, columns, sorting));
+
+  // A page at a time (conformance/table-pages.json): the page stays when the
+  // rows come again, the first one shows when the order changes, and a row
+  // selected by code shows its page.
+  let at = $state(1);
+  const paged = $derived(page ? pageOf(orderedRows.length, page, at) : null);
+  const shownRows = $derived(paged ? orderedRows.slice(Math.max(paged.from - 1, 0), paged.to) : orderedRows);
+  $effect.pre(() => {
+    if (!page || selected === null) return;
+    const place = orderedRows.indexOf(selected);
+    if (place >= 0) at = pageWith(page, place);
+  });
 
   function sortBy(field: string) {
     if (!sortable || design) return;
     sorting = nextOrder(sorting, field);
+    at = 1;
   }
 
   // Widths: the person's (remembered), else the designed ones; while an edge is dragged, those being dragged.
@@ -204,7 +223,7 @@
   const shown = (column: TableColumn, value: JsonValue | undefined) => (column.shown ? column.shown(value) : value === null || value === undefined ? "" : String(value));
 </script>
 
-<div class="table-wrap">
+<div class="table-wrap" class:paged={paged !== null}>
   <table class:fixed style:width={tableWidth}>
     <thead>
       <tr bind:this={head}>
@@ -282,8 +301,69 @@
   </table>
   {#if columns.length === 0}<div class="empty">Choose columns in the properties</div>{/if}
 </div>
+{#if paged}
+  <!-- The page bar: to the first, previous, next and last page, and which rows show. -->
+  <div class="pager">
+    <button type="button" title={pageWords.first} aria-label={pageWords.first} disabled={design || paged.page === 1} onclick={() => (at = 1)}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 17 18 l -6 -6 l 6 -6 M 7 6 v 12" /></svg></button
+    >
+    <button type="button" title={pageWords.previous} aria-label={pageWords.previous} disabled={design || paged.page === 1} onclick={() => (at = paged.page - 1)}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 15 18 l -6 -6 l 6 -6" /></svg></button
+    >
+    <span class="shown">{paged.text}</span>
+    <button type="button" title={pageWords.next} aria-label={pageWords.next} disabled={design || paged.page === paged.pages} onclick={() => (at = paged.page + 1)}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 9 18 l 6 -6 l -6 -6" /></svg></button
+    >
+    <button type="button" title={pageWords.last} aria-label={pageWords.last} disabled={design || paged.page === paged.pages} onclick={() => (at = paged.pages)}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M 7 18 l 6 -6 l -6 -6 M 17 6 v 12" /></svg></button
+    >
+  </div>
+{/if}
 
 <style>
+  .table-wrap.paged {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    padding: 2px 4px;
+    border: var(--border-width) solid var(--border-strong);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+    font-size: var(--font-size);
+  }
+
+  .pager button {
+    display: inline-flex;
+    padding: 2px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .pager button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .pager svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+
+  .pager .shown {
+    padding: 0 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .cell-swatch {
     display: inline-block;
     width: 12px;

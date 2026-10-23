@@ -267,7 +267,13 @@ pub enum WidgetProperty {
     Typed,
     /// `search`: a dropdown of a reference whose records filter as it is typed.
     Search,
+    /// `page 50`: a table's rows shown that many at a time.
+    Page,
 }
+
+/// The fewest and most rows a table's page holds.
+pub const PAGE_SIZES: std::ops::RangeInclusive<u32> = 1..=1000;
+pub const PAGE_PROBLEM: &str = "a page holds 1 to 1000 rows";
 
 /// The narrowest and widest a table column can be written, in pixels.
 pub const MIN_COLUMN_WIDTH: u32 = 20;
@@ -685,7 +691,7 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[Event::Select, Event::Open, Event::Change],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Page],
     },
     Entry {
         kind: WidgetKind::List,
@@ -983,6 +989,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         step: None,
         split: false,
         typed: false,
+        page: None,
         search: false,
         labels: None,
         made: false,
@@ -1103,6 +1110,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(order) = &props.order {
         parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
+    }
+    if let Some(page) = props.page {
+        parts.push(format!("page {page}"));
     }
     if props.typed {
         parts.push("typed".to_string());
@@ -1285,6 +1295,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Labels, props.labels.is_some(), "labels"),
         (WidgetProperty::Typed, props.typed, "typed"),
         (WidgetProperty::Search, props.search, "search"),
+        (WidgetProperty::Page, props.page.is_some(), "page"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {
@@ -1292,6 +1303,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         }
     }
     dropdown_options(props)?;
+    if props.page.is_some_and(|p| !PAGE_SIZES.contains(&p)) {
+        return Err(PAGE_PROBLEM.to_string());
+    }
     if props.folded && !props.foldable {
         return Err("'folded' needs 'foldable': write 'foldable folded'".to_string());
     }

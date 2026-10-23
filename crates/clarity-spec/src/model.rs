@@ -443,6 +443,9 @@ pub struct WidgetProps {
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,
+    /// `page 50`: a table shows its rows that many at a time (U1c).
+    #[serde(default)]
+    pub page: Option<u32>,
     pub show: Vec<String>,
     /// `typed`: a dropdown of a text field any text may be typed into, the
     /// values the field already has offered as it is typed (U1c).

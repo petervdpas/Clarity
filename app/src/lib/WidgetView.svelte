@@ -899,6 +899,8 @@
         sortable={p.sortable}
         order={p.order}
         remember={p.name ? `clarity-columns.${page.name.name}.${p.name}` : null}
+        page={p.page}
+        pageWords={{ first: ownWord(preview, "First page"), previous: ownWord(preview, "Previous page"), next: ownWord(preview, "Next page"), last: ownWord(preview, "Last page") }}
         ondesignwidth={design ? designWidth : undefined}
         onselect={(row) => selectRow(row)}
         onopen={() => fire("open")}
@@ -1186,6 +1188,11 @@
   .image > .content,
   .canvas > .content {
     align-items: stretch;
+  }
+
+  /* A paged table's bar goes below it. */
+  .table > .content {
+    flex-direction: column;
   }
 
   .picture {

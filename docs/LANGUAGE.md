@@ -640,7 +640,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]` | `select`, `open`, `change` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `page 50` | `select`, `open`, `change` |
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 
 **Graphics**
@@ -687,6 +687,7 @@ A column may have a width, and a table may let the person resize and sort it:
 - `resizable`: the person drags the header edges to resize the columns. The widths are remembered for them, per window and table, and a double-click on an edge gives the designed widths back.
 - `sortable`: a click on a header sorts the rows by that column, a second click the other way. Text sorts ignoring case, numbers as numbers, an enum or `ref` by the label it shows, and an empty value comes last either way.
 - `order by field [desc]`: the order the rows show in when the window opens, as in queries. The field must be one of the `columns`.
+- `page 50`: the rows show 50 at a time (1 to 1000), with a bar below the table to go to the first, previous, next and last page and the rows it shows, as `51-100 / 230`. The rows are ordered first, then paged. The table keeps its page when its rows come again, goes back to the first page when a header click sorts it, and shows the page of a row that code selects. The bar's buttons say Clarity's words `firstPage`, `previousPage`, `nextPage` and `lastPage`. Every renderer pages alike (`conformance/table-pages.json`).
 - Sorting changes only how the rows show. A row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
 
 ### Binding

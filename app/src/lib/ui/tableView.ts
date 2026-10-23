@@ -47,3 +47,21 @@ export function shownOrder(rows: Record<string, JsonValue>[], columns: ({ field:
     return (order.desc ? -by : by) || a - b;
   });
 }
+
+/** A page of a table shown a page at a time (conformance/table-pages.json). */
+export type Paged = { page: number; pages: number; from: number; to: number; text: string };
+
+/** Page `page` of `count` rows, `size` to a page, kept within the pages there are. */
+export function pageOf(count: number, size: number, page: number): Paged {
+  const pages = Math.max(1, Math.ceil(count / size));
+  const shown = Math.min(Math.max(page, 1), pages);
+  if (count === 0) return { page: 1, pages: 1, from: 0, to: 0, text: "0 / 0" };
+  const from = (shown - 1) * size + 1;
+  const to = Math.min(shown * size, count);
+  return { page: shown, pages, from, to, text: `${from}-${to} / ${count}` };
+}
+
+/** The page that shows the row at place `at` of the shown order, counted from 0. */
+export function pageWith(size: number, at: number): number {
+  return Math.floor(at / size) + 1;
+}

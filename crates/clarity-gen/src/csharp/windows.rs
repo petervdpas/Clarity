@@ -1199,6 +1199,17 @@ impl<'a> Window<'a> {
                 if p.resizable && let Some(name) = named {
                     let _ = write!(options, " Remember=\"{}.{name}\"", self.page.name.name);
                 }
+                // A page at a time (U1c), the bar's buttons in Clarity's own words.
+                if let Some(size) = p.page {
+                    let _ = write!(
+                        options,
+                        " PageSize=\"{size}\" FirstText=\"{}\" PreviousText=\"{}\" NextText=\"{}\" LastText=\"{}\"",
+                        self.text("@firstPage"),
+                        self.text("@previousPage"),
+                        self.text("@nextPage"),
+                        self.text("@lastPage")
+                    );
+                }
                 let _ = writeln!(out, "{pad}<c:ClarityTable {at}{items}{selected}{options}{plain_state}{extra}>");
                 let _ = writeln!(out, "{pad}  <c:ClarityTable.Columns>");
                 if let Some(entity) = entity {

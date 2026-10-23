@@ -35,12 +35,12 @@ test("a picture that cannot be loaded shows as missing", async () => {
 });
 
 test("a program that carries its pictures in the page gives them from there", () => {
-  const page = globalThis as { clarityPictures?: Record<string, string> };
-  page.clarityPictures = { "logo.png": "data:image/png;base64,iVBORw0KGgo=" };
+  const page = globalThis as { clarityResources?: Record<string, string> };
+  page.clarityResources = { "logo.png": "data:image/png;base64,iVBORw0KGgo=" };
   try {
     assert.equal(bundled("logo.png"), "data:image/png;base64,iVBORw0KGgo=");
     assert.equal(bundled("other.png"), "resources/other.png");
   } finally {
-    delete page.clarityPictures;
+    delete page.clarityResources;
   }
 });

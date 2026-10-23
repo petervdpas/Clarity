@@ -1618,6 +1618,11 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// `arena.restart(2)`: a hear of a custom part, with values of its types.
     fn hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
+        if let Some((_, Part::Widget(p))) = self.part(&part.name)
+            && p.kind == crate::widgets::WidgetKind::Sound
+        {
+            return self.sound_hear(part, hear, args);
+        }
         let decl = match self.part(&part.name) {
             Some((_, Part::Widget(p))) => p.part.as_deref().and_then(|name| self.env.part_decl(name)),
             _ => None,
@@ -1644,6 +1649,42 @@ impl<'a> BodyChecker<'_, 'a> {
                 && !expected.accepts(&ty)
             {
                 self.error(format!("value '{}' of {called} is {}, not {}", param.name.name, expected.name(), ty.name()), arg.span);
+            }
+        }
+    }
+
+    /// What code tells a sound (DESIGN 5.22): its values, and the notes of a melody written in the code.
+    fn sound_hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
+        let Some(params) = crate::sound::hear(&hear.name) else {
+            self.error(format!("a sound hears play, stop, tone, melody or volume, not '{}'", hear.name), hear.span);
+            for arg in args {
+                self.expr(arg, None);
+            }
+            return;
+        };
+        let called = format!("{}.{}", part.name, hear.name);
+        if args.len() != params.len() {
+            let n = params.len();
+            self.error(format!("{called} takes {n} value{}, not {}", if n == 1 { "" } else { "s" }, args.len()), hear.span);
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let expected = params.get(i).map(|(_, ty)| match ty {
+                TypeInfo::Integer => Ty::Integer,
+                TypeInfo::Decimal => Ty::Decimal,
+                _ => Ty::Text,
+            });
+            let ty = self.expr(arg, expected);
+            if let (Some((name, _)), Some(expected)) = (params.get(i), expected)
+                && !expected.accepts(&ty)
+            {
+                self.error(format!("value '{name}' of {called} is {}, not {}", expected.name(), ty.name()), arg.span);
+            }
+        }
+        if hear.name == "melody"
+            && let Some(Expr { kind: ExprKind::Str { value: notes }, span, .. }) = args.first()
+        {
+            for word in crate::sound::melody(notes, 60).1 {
+                self.error(format!("'{word}' in the melody is not a note: a note is A to G, then # or b, then an octave 0 to 8, as in C4, F#3, Bb; a rest is -"), *span);
             }
         }
     }

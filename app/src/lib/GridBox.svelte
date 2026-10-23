@@ -36,7 +36,9 @@
 
   // While a part is dragged, the designer offers rows below the content to drop on.
   const dragging = $derived(design && pageDesigner.drag !== null);
-  const rows = $derived(fixedRows ?? gridRows(widgets, dragging ? 3 : 0, dragging ? 4 : 1));
+  // A sound has no place in the grid (DESIGN 5.22): the designer shows it in a tray.
+  const placed = $derived(widgets.filter((w) => w.props.kind !== "sound"));
+  const rows = $derived(fixedRows ?? gridRows(placed, dragging ? 3 : 0, dragging ? 4 : 1));
 
   // Fluid, in the designer as when the window runs: columns always share the
   // width, and rows holding a part that grows (a table, a panel) share the
@@ -44,7 +46,7 @@
   const growing = $derived.by(() => {
     const found = new Set<number>();
     if (fixedRows !== null) return found;
-    for (const w of widgets) {
+    for (const w of placed) {
       if (!widgetGrows(preview, w)) continue;
       for (let r = w.props.row; r < w.props.row + w.props.height; r++) found.add(r);
     }
@@ -69,7 +71,7 @@
   const blocked = $derived.by(() => {
     if (!ghost) return false;
     const moving = pageDesigner.drag?.kind === "move" || pageDesigner.drag?.kind === "resize" ? pageDesigner.drag.item : null;
-    return widgets.some((w) => w.span.start !== moving && overlaps(w.props, ghost));
+    return placed.some((w) => w.span.start !== moving && overlaps(w.props, ghost));
   });
 </script>
 
@@ -92,7 +94,7 @@
     {/each}
   {/if}
 
-  {#each widgets as widget (widget.span.start)}
+  {#each placed as widget (widget.span.start)}
     {#if widget.props.kind === "popover"}
       <!-- A popover has no place in the grid: it opens next to its part. -->
       <PopoverView {preview} {page} {data} {design} {widget} {onnavigate} />

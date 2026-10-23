@@ -211,6 +211,7 @@ fn a_resource_has_a_type_by_its_extension() {
     assert_eq!(kind_of("floor-plan.dxf"), ResourceKind::Drawing);
     assert_eq!(kind_of("icon.svg"), ResourceKind::Drawing);
     assert_eq!(kind_of("data.csv"), ResourceKind::File);
+    assert_eq!(kind_of("roll.WAV"), ResourceKind::Sound);
     // The types a new resource can have, each with its name and extensions; the first extension is the one a file gets.
     let listed: Vec<(ResourceKind, String, Vec<String>)> = kinds().into_iter().map(|k| (k.kind, k.name, k.extensions)).collect();
     assert_eq!(listed[0], (ResourceKind::Markdown, "Markdown".to_string(), vec!["md".to_string()]));
@@ -218,5 +219,6 @@ fn a_resource_has_a_type_by_its_extension() {
     assert_eq!(listed[1].2, ["png", "jpg", "jpeg", "gif", "bmp", "webp"]);
     assert_eq!(listed[2], (ResourceKind::Pdf, "PDF".to_string(), vec!["pdf".to_string()]));
     assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["svg".to_string(), "dxf".to_string()]));
-    assert_eq!(listed[4], (ResourceKind::File, "Other file".to_string(), vec![]));
+    assert_eq!(listed[4], (ResourceKind::Sound, "Sound".to_string(), vec!["wav".to_string(), "mp3".to_string(), "flac".to_string()]));
+    assert_eq!(listed[5], (ResourceKind::File, "Other file".to_string(), vec![]));
 }

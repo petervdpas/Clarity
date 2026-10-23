@@ -330,7 +330,7 @@
     const names = JSON.stringify(next.project.resources?.files.map((f) => f.name) ?? []);
     if (names !== pictureNames) {
       pictureNames = names;
-      loadPicturesWith((name) => invoke<string>("project_picture", { name }));
+      loadPicturesWith((name) => invoke<string>("project_resource", { name }));
     }
     preview = next;
     // Keep the open windows that still exist after an edit.

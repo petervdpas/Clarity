@@ -14,7 +14,7 @@ mod vault;
 mod agent;
 mod manual;
 mod migrations;
-mod pictures;
+mod resource_urls;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -830,7 +830,7 @@ pub fn run() {
             translations::add_language,
             themes::theme_styles,
             themes::theme_starter,
-            pictures::project_picture,
+            resource_urls::project_resource,
             vault::vault_info,
             vault::vault_create,
             vault::vault_unlock,

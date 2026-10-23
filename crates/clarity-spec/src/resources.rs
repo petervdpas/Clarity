@@ -24,6 +24,10 @@ pub const MARKDOWN_EXTENSION: &str = "md";
 /// web renderer, and Avalonia through Skia.
 pub const PICTURE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
 
+/// The sound files every stack plays (DESIGN 5.22): the browser engines of
+/// the web stacks and SoundFlow on Avalonia read these alike.
+pub const SOUND_EXTENSIONS: [&str; 3] = ["wav", "mp3", "flac"];
+
 /// A file of the resources folder that the application carries as it is,
 /// such as a picture. The renderer knows it by name; the bytes go into
 /// generated applications.
@@ -65,6 +69,8 @@ pub enum ResourceKind {
     Pdf,
     /// A vector drawing, in SVG or DXF; an image does not show one yet.
     Drawing,
+    /// A sound every stack plays, which a sound part plays.
+    Sound,
     /// Any other file, carried as it is.
     File,
 }
@@ -87,6 +93,7 @@ pub fn kinds() -> Vec<ResourceKindInfo> {
         kind(ResourceKind::Picture, "Picture", &PICTURE_EXTENSIONS),
         kind(ResourceKind::Pdf, "PDF", &["pdf"]),
         kind(ResourceKind::Drawing, "Drawing", &["svg", "dxf"]),
+        kind(ResourceKind::Sound, "Sound", &SOUND_EXTENSIONS),
         kind(ResourceKind::File, "Other file", &[]),
     ]
 }
@@ -104,6 +111,11 @@ fn has_extension(name: &str, wanted: &[&str]) -> bool {
 /// Whether a file name is a picture every stack can show.
 pub fn is_picture(name: &str) -> bool {
     has_extension(name, &PICTURE_EXTENSIONS)
+}
+
+/// Whether a file name is a sound every stack can play.
+pub fn is_sound(name: &str) -> bool {
+    has_extension(name, &SOUND_EXTENSIONS)
 }
 
 /// Whether a file name is a Markdown document.
@@ -141,6 +153,7 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
     let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
     let pictures: Vec<&str> = names.iter().copied().filter(|n| is_picture(n)).collect();
     let documents: Vec<&str> = markdown.keys().map(String::as_str).collect();
+    let sounds: Vec<&str> = names.iter().copied().filter(|n| is_sound(n)).collect();
     let mut found = Vec::new();
     for file in &project.files {
         for page in &file.pages {
@@ -148,7 +161,7 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
                 let kind = widget.props.kind;
                 let mut problems = Vec::new();
                 if let Some(source) = widget.props.source.as_deref() {
-                    problems.extend(source_problem(kind, source, &pictures, &documents));
+                    problems.extend(source_problem(kind, source, &pictures, &documents, &sounds));
                 }
                 if let Some(key) = widget.props.caption.as_deref().and_then(crate::translations::key_of) {
                     problems.extend(key_problems(project, kind, key, &names));
@@ -164,8 +177,12 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
 }
 
 /// What is wrong with the file a part names as its `source`.
-fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str]) -> Option<String> {
+fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: &[&str], sounds: &[&str]) -> Option<String> {
     Some(match kind {
+        WidgetKind::Sound if !is_sound(source) => format!("'{source}' is not a sound every stack can play; use a .wav, .mp3 or .flac file"),
+        WidgetKind::Sound if sounds.contains(&source) => return None,
+        WidgetKind::Sound if sounds.is_empty() => format!("sound '{source}' is not in the resources folder, which has no sounds yet"),
+        WidgetKind::Sound => format!("sound '{source}' is not in the resources folder; it has {}", sounds.join(", ")),
         WidgetKind::Image if !is_picture(source) => format!("'{source}' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp or .webp file"),
         WidgetKind::Image if pictures.contains(&source) => return None,
         WidgetKind::Image if pictures.is_empty() => format!("image '{source}' is not in the resources folder, which has no pictures yet"),

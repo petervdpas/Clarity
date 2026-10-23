@@ -35,7 +35,7 @@ examples/                example projects, each a project file with a folder of 
   ledger                 a command-line program alone: accounts and what is booked on them, in C#
   stock                  a stock list with a window and a command line over the same items, in Go
   orbs                   a game whose field of orbs a native library draws with SFML (a custom part), in C++
-  dice                   dice thrown on a table drawn in 3D with Bevy (a custom part in Rust), with a history of rolls
+  dice                   dice thrown on a table drawn in 3D with Bevy (a custom part in Rust), with sound and a history of rolls
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

@@ -274,12 +274,15 @@
       </label>
     {/if}
 
+    <!-- A sound has no place in the grid (DESIGN 5.22). -->
+    {#if p.kind !== "sound"}
     <div class="position">
       <label><span>Column</span><input type="number" min="1" value={p.col} onchange={(e) => update({ col: numberOf(e) })} /></label>
       <label><span>Row</span><input type="number" min="1" value={p.row} onchange={(e) => update({ row: numberOf(e) })} /></label>
       <label><span>Width</span><input type="number" min="1" value={p.width} onchange={(e) => update({ width: numberOf(e) })} /></label>
       <label><span>Height</span><input type="number" min="1" value={p.height} onchange={(e) => update({ height: numberOf(e) })} /></label>
     </div>
+    {/if}
 
     {#if info.bind === "field"}
       <label class="prop">
@@ -747,7 +750,7 @@
     {/if}
     {#if info.properties.includes("source")}
       <!-- A file of the resources, of the kind the part shows; a key points each language at one instead. -->
-      {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : "picture", resourceKinds.list)}
+      {@const choices = resourceChoices(preview.project.resources?.files, p.kind === "markdown" ? "markdown" : p.kind === "sound" ? "sound" : "picture", resourceKinds.list)}
       <label class="prop">
         <span>Source</span>
         <select value={p.source ?? ""} onchange={(e) => update({ source: textOf(e) })}>
@@ -758,6 +761,18 @@
       </label>
     {/if}
 
+    {#if info.properties.includes("volume")}
+      <label class="prop" title="How loud it plays, from 0 to 100">
+        <span>Volume</span>
+        <input type="number" min="0" max="100" value={p.volume ?? ""} placeholder="100" onchange={(e) => update({ volume: textOf(e) === null ? null : numberOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("repeat")}
+      <label class="prop" title="Plays its source over and over until code stops it">
+        <span>Repeat</span>
+        <input type="checkbox" checked={p.repeat} onchange={(e) => update({ repeat: e.currentTarget.checked })} />
+      </label>
+    {/if}
     {#if info.properties.includes("split")}
       <label class="prop" title="An arrow beside the button opens its menu">
         <span>Split</span>

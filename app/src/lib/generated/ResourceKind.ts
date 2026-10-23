@@ -3,4 +3,4 @@
 /**
  * The type of a resource, by its extension.
  */
-export type ResourceKind = "markdown" | "picture" | "pdf" | "drawing" | "file";
+export type ResourceKind = "markdown" | "picture" | "pdf" | "drawing" | "sound" | "file";

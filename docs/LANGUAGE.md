@@ -657,6 +657,12 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
 | `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `pointer`, `key` |
 
+**Media**
+
+| Part | Binds to | Own properties | Events |
+|---|---|---|---|
+| `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | none |
+
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
 `change` fires when the person changes an input's value to one that differs, and only then, on every stack:
@@ -866,6 +872,35 @@ table name grid at 1,1 span 12 rows 6 bind albums columns title
 ```
 
 Next runs the handler of `on next` on the step the person is on, then moves one step on. A `refuse` in it keeps the person on the step and says why; a handler that sets `wizard.step` itself decides where the wizard goes. Without `on next`, Next just moves on. Back goes one step back and runs nothing, so what was entered stays. Finish, on the last step, runs `on finish`, which saves, closes the dialog with its value (`close with order`), or does what the wizard is for.
+
+### Sound
+
+A sound part plays the project's sound files and makes tones and melodies (DESIGN 5.22). It is heard, not seen: it stands on the window without a place in its grid, and the designer keeps it in a tray under the window. Code tells it what to play, as it tells a custom part:
+
+```clarity
+page Table: window
+    sound name rattle source "roll.wav" volume 80
+    sound name fanfare
+
+code Table
+    handler rollClicked
+        rattle.play()
+
+    handler diceLanded(total: integer, faces: text)
+        if total == count * 6
+            fanfare.melody("C5/2 E5/2 G5/2 C6*2", 160)
+```
+
+| Code | What it does |
+|---|---|
+| `rattle.play()` | plays its `source` from the start; over and over with `repeat` |
+| `rattle.stop()` | stops everything it plays |
+| `fanfare.tone(440, 0.5)` | a tone of 440 hertz for half a second |
+| `fanfare.melody("C4 E4 G4", 120)` | the notes, at 120 beats a minute |
+| `rattle.volume(50)` | how loud it plays from now on, 0 to 100 |
+
+- A note is a letter `A` to `G`, then `#` or `b`, then an octave `0` to `8`, 4 unless given: `C4`, `F#3`, `Bb`. `-` is a rest. Each lasts a beat; `*2` makes it two beats, `/2` half a beat. A melody written in the code is checked; one made while the program runs skips the words that are not notes.
+- A sound file is a `.wav`, `.mp3` or `.flac` file of the resources folder: those every stack plays. Its resource view in Clarity plays it.
 
 ### Custom parts
 

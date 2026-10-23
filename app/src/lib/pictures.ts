@@ -11,7 +11,7 @@ export type PictureLoader = (name: string) => Promise<string>;
  * shells, whose page has no folder, carry them in the page itself.
  */
 export function bundled(name: string): string {
-  const carried = (globalThis as { clarityPictures?: Record<string, string> }).clarityPictures?.[name];
+  const carried = (globalThis as { clarityResources?: Record<string, string> }).clarityResources?.[name];
   return carried ?? `resources/${encodeURIComponent(name)}`;
 }
 

@@ -10,6 +10,7 @@ pub mod edit;
 pub mod formats;
 pub mod engines;
 pub mod resources;
+pub mod sound;
 pub mod keyed;
 pub mod themes;
 pub mod translations;
@@ -141,7 +142,8 @@ fn make_hears(files: &mut [model::SpecFile]) {
     use code::{Stmt, StmtKind};
     fn custom_parts(widgets: &[model::Widget], found: &mut Vec<String>) {
         for widget in widgets {
-            if widget.props.kind == widgets::WidgetKind::Custom
+            // A custom part and a sound hear what code tells them (DESIGN 5.19, 5.22).
+            if matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound)
                 && let Some(name) = &widget.props.name
             {
                 found.push(name.clone());

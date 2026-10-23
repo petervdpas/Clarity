@@ -3,6 +3,7 @@
 ## 0.1.9
 
 - Colors external libraries: `library` with `cmake` and its `function` lines.
+- Colors the `sound` part.
 
 ## 0.1.8
 

@@ -53,12 +53,22 @@
       const next = await invoke<Preview>("replace_resource_file", { name, from: picked });
       if (kind === "markdown") text = next.project.resources?.markdown[name] ?? "";
       // The picture shows anew, not as it was loaded.
-      if (kind === "picture") loadPicturesWith((picture) => invoke<string>("project_picture", { name: picture }));
+      if (kind === "sound") soundUrl = null;
+      if (kind === "picture") loadPicturesWith((picture) => invoke<string>("project_resource", { name: picture }));
       onapplied(next);
     } catch (err) {
       error = String(err);
     }
   }
+
+  /** A sound of the resources, to listen to here; loaded once it shows. */
+  let soundUrl = $state<string | null>(null);
+  $effect(() => {
+    if (kind !== "sound" || soundUrl !== null) return;
+    invoke<string>("project_resource", { name })
+      .then((url) => (soundUrl = url))
+      .catch((err) => (error = String(err)));
+  });
 
   function keydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -95,6 +105,11 @@
     {@const url = pictureUrl(name)}
     <div class="picture">
       {#if url}<img src={url} alt={name} />{:else}<p class="uses">Loading the picture...</p>{/if}
+    </div>
+  {:else if kind === "sound"}
+    <div class="sound">
+      {#if soundUrl}<audio controls src={soundUrl}></audio>{:else}<p class="uses">Loading the sound...</p>{/if}
+      <p class="uses">A sound part plays it: <code>sound name ... source "{name}"</code>, then <code>play()</code> in code.</p>
     </div>
   {:else}
     <p class="uses">The application carries this {typeName === "Other file" ? "file" : typeName} as it is{kind === "drawing" ? "; an image does not show a drawing yet" : ""}.</p>

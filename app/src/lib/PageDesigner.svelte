@@ -65,6 +65,7 @@
     { key: "containers", name: "Containers" },
     { key: "data", name: "Data" },
     { key: "graphics", name: "Graphics" },
+    { key: "media", name: "Media" },
   ];
 
   let canvas: HTMLElement | undefined = $state();
@@ -496,6 +497,27 @@
         </FrameView>
       </div>
     </ShownWindow>
+    {#if !app}
+      <!-- Parts heard, not seen, have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22). -->
+      {@const unplaced = page.widgets.filter((w) => w.props.kind === "sound")}
+      {#if unplaced.length > 0}
+        <div class="tray" role="listbox" aria-label="Parts without a place in the window">
+          {#each unplaced as w (w.span.start)}
+            <span role="option" aria-selected={pageDesigner.selected === w.span.start} class:selected={pageDesigner.selected === w.span.start}>
+              <PartTile
+                kind={w.props.kind}
+                name={w.props.name ?? w.props.kind}
+                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}. Pick it to set it in the inspector."
+                onpointerdown={(e) => {
+                  e.stopPropagation();
+                  pageDesigner.selected = w.span.start;
+                }}
+              />
+            </span>
+          {/each}
+        </div>
+      {/if}
+    {/if}
   </div>
 
   {#if filled}
@@ -581,6 +603,21 @@
     flex-direction: column;
     gap: 10px;
     min-width: 0;
+  }
+
+  .tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+  }
+
+  .tray .selected {
+    outline: 2px solid var(--code-keyword);
+    border-radius: 4px;
   }
 
   .parts {

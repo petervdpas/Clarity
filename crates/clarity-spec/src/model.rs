@@ -555,6 +555,12 @@ pub struct WidgetProps {
     pub split: bool,
     /// A form's label column: `labels 3` gives each input in it a label in its first 3 columns.
     pub labels: Option<u32>,
+    /// A sound's volume, 0 to 100: `volume 80`; 100 without it (DESIGN 5.22).
+    #[serde(default)]
+    pub volume: Option<u32>,
+    /// `repeat`: a sound plays its source over and over until it is stopped.
+    #[serde(default)]
+    pub repeat: bool,
     /// Made by Clarity, not written: a label of a form's label column. The
     /// designer leaves it alone and it is never written back.
     pub made: bool,

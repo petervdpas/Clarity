@@ -1533,6 +1533,8 @@ fn parse_widget_props(
         measure: None,
         search: false,
         labels: None,
+        volume: None,
+        repeat: false,
         made: false,
         style: None,
         readonly: false,
@@ -1605,6 +1607,9 @@ fn parse_widget_props(
             continue;
         }
         match word {
+            "at" | "span" | "rows" if kind == WidgetKind::Sound => {
+                return Err(Diagnostic::error("a sound has no place in the window: it is heard, not seen, so it has no 'at', 'span' or 'rows'", clause.span));
+            }
             "at" if kind == WidgetKind::Popover => {
                 return Err(Diagnostic::error("a popover has no 'at': it opens next to the part named in 'for'", clause.span));
             }
@@ -1811,6 +1816,19 @@ fn parse_widget_props(
                 applies(WidgetProperty::Labels)?;
                 props.labels = Some(cursor.expect_number("the columns of its label column, as in labels 3")?);
             }
+            "volume" => {
+                applies(WidgetProperty::Volume)?;
+                let at = cursor.peek().map(|t| t.span).unwrap_or_default();
+                let volume = cursor.expect_number("a volume from 0 to 100")?;
+                if volume > 100 {
+                    return Err(Diagnostic::error("a sound's volume is 0 to 100", at));
+                }
+                props.volume = Some(volume);
+            }
+            "repeat" => {
+                applies(WidgetProperty::Repeat)?;
+                props.repeat = true;
+            }
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
@@ -1920,8 +1938,9 @@ fn parse_widget_props(
         }
     }
 
-    // A popover stands outside the window's grid, on a grid of its own.
-    if kind == WidgetKind::Popover {
+    // A popover stands outside the window's grid, on a grid of its own; a
+    // sound has no place at all.
+    if matches!(kind, WidgetKind::Popover | WidgetKind::Sound) {
         props.col = 1;
         props.row = 1;
         placed = true;

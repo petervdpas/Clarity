@@ -1397,6 +1397,14 @@ impl<'a> Window<'a> {
                 // A .NET library's control, shown through the part's adapter.
                 let _ = writeln!(out, "{pad}<parts:{kind} {at}{state}{value}{plain_state}{extra} />");
             }
+            // Heard, not seen: no place in the grid (DESIGN 5.22). Code tells it through its state.
+            WidgetKind::Sound => {
+                let state = named.map(|n| format!(" State=\"{{Binding {}}}\"", member(n))).unwrap_or_default();
+                let source = p.source.as_deref().map(|s| format!(" Source=\"{}\"", attr(s))).unwrap_or_default();
+                let volume = p.volume.map(|v| format!(" Volume=\"{v}\"")).unwrap_or_default();
+                let repeat = if p.repeat { " Repeat=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:Sound{state}{source}{volume}{repeat} />");
+            }
             WidgetKind::Image | WidgetKind::Canvas => {
                 let what = if p.kind == WidgetKind::Image { "Image" } else { "Canvas" };
                 let source = p.source.as_deref().unwrap_or_default();

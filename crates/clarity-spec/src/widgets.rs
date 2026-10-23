@@ -77,6 +77,9 @@ pub enum WidgetKind {
     Image,
     Display,
     Canvas,
+    /// Sound files of the resources, tones and melodies, which code tells
+    /// it to play; it shows nothing and has no place in the grid (DESIGN 5.22).
+    Sound,
     /// A part an outside library draws, placed by the name it is declared by
     /// (`Arena`, DESIGN 5.19); `props.part` names its declaration.
     Custom,
@@ -91,6 +94,8 @@ pub enum Category {
     Containers,
     Data,
     Graphics,
+    /// Sound: parts that are heard, not seen.
+    Media,
 }
 
 /// Something that happens to a part, which a handler in the code behind
@@ -248,6 +253,10 @@ pub enum WidgetProperty {
     Default,
     Cancel,
     Digits,
+    /// `volume 80`: how loud a sound plays, 0 to 100.
+    Volume,
+    /// `repeat`: a sound plays its source until it is stopped.
+    Repeat,
     Units,
     /// `foldable` and `folded`: a panel or form folds by its header.
     Foldable,
@@ -855,6 +864,22 @@ const ENTRIES: &[Entry] = &[
     // words, so it is never typed and reads well in messages. The Parts
     // palette lists the declared parts in its place.
     Entry {
+        kind: WidgetKind::Sound,
+        keyword: "sound",
+        name: "Sound",
+        category: Category::Media,
+        // Never in the grid: the designer keeps it in a tray under the window.
+        size: (1, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
+    },
+    Entry {
         kind: WidgetKind::Custom,
         keyword: "custom part",
         name: "Custom part",
@@ -1095,6 +1120,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         measure: (kind == WidgetKind::Chart).then_some(crate::model::ChartMeasure::Count),
         search: false,
         labels: None,
+        volume: None,
+        repeat: false,
         made: false,
         style: None,
         readonly: false,
@@ -1131,6 +1158,23 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 }
 
 pub fn widget_line(props: &WidgetProps) -> String {
+    // A sound has no place: its name, its source, its volume, whether it repeats (DESIGN 5.22).
+    if props.kind == WidgetKind::Sound {
+        let mut parts = vec![keyword(props.kind).to_string()];
+        if let Some(name) = &props.name {
+            parts.push(format!("name {name}"));
+        }
+        if let Some(source) = &props.source {
+            parts.push(format!("source {}", quote(source)));
+        }
+        if let Some(volume) = props.volume {
+            parts.push(format!("volume {volume}"));
+        }
+        if props.repeat {
+            parts.push("repeat".to_string());
+        }
+        return parts.join(" ");
+    }
     let first = match (&props.part, props.kind) {
         (Some(part), WidgetKind::Custom) => part.clone(),
         _ => keyword(props.kind).to_string(),

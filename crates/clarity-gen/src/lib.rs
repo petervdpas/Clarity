@@ -17,7 +17,7 @@ mod query;
 mod readme;
 mod rust;
 mod schema;
-mod web;
+pub mod web;
 
 pub use csharp::{avalonia_theme, runtime_version as csharp_runtime_version};
 pub use go::runtime_version as go_runtime_version;

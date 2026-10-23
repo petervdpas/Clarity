@@ -152,6 +152,14 @@ split: boolean,
  */
 labels: number | null, 
 /**
+ * A sound's volume, 0 to 100: `volume 80`; 100 without it (DESIGN 5.22).
+ */
+volume: number | null, 
+/**
+ * `repeat`: a sound plays its source over and over until it is stopped.
+ */
+repeat: boolean, 
+/**
  * Made by Clarity, not written: a label of a form's label column. The
  * designer leaves it alone and it is never written back.
  */

@@ -180,6 +180,9 @@
       <line x1="12" y1="9" x2="34" y2="9" />
       <line x1="12" y1="14" x2="30" y2="14" />
       <line x1="12" y1="19" x2="32" y2="19" />
+    {:else if kind === "sound"}
+      <path d="M12 11 h6 l7 -6 v18 l-7 -6 h-6 z" class="fill" />
+      <path d="M29 9 q4 5 0 10 M33 6 q7 8 0 16" class="line" />
     {:else if kind === "image"}
       <rect x="8" y="3" width="32" height="22" rx="1" />
       <path d="M10 23 l9 -10 l6 6 l4 -4 l9 8 z" class="fill" />

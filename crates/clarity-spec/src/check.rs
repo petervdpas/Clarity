@@ -965,9 +965,15 @@ impl<'a> Checker<'a> {
                 self.error(file, "a popover opens next to a part: write 'for' and the part's name", widget.span);
             }
             let inside = widget.children.iter().chain(widget.pages.iter().flat_map(|page| &page.children));
-            for nested in inside.filter(|w| w.props.kind == WidgetKind::Popover) {
-                self.error(file, "a popover stands on the window, not in another part", nested.span);
+            for nested in inside {
+                match nested.props.kind {
+                    WidgetKind::Popover => self.error(file, "a popover stands on the window, not in another part", nested.span),
+                    WidgetKind::Sound => self.error(file, "a sound stands on the window, not in another part", nested.span),
+                    _ => {}
+                }
             }
+            // A sound has no place at all (DESIGN 5.22).
+            let popover = popover || p.kind == WidgetKind::Sound;
             if let Some(menu) = &widget.menu {
                 // A context menu is named only when code hides or disables it as a whole.
                 if let Some(menu_name) = menu.name.as_deref().filter(|n| !crate::names::is_camel_case(n)) {
@@ -997,7 +1003,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            for other in widgets[..index].iter().filter(|o| !popover && o.props.kind != WidgetKind::Popover) {
+            for other in widgets[..index].iter().filter(|o| !popover && !matches!(o.props.kind, WidgetKind::Popover | WidgetKind::Sound)) {
                 if overlaps(&other.props, p) {
                     self.error(
                         file,

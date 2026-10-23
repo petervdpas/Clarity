@@ -22,6 +22,8 @@ page Table: window
     data rolls: list<Roll>
     data count: integer, default 2
     data shown: integer
+    sound name rattle source "roll.wav" volume 80
+    sound name fanfare volume 60
     Dice name board at 1,1 span 8 rows 12 count 2 on landed: diceLanded
     label @countLabel name countLabel for countSlider at 9,1 span 4
     slider name countSlider at 9,2 span 4 bind count min 1 max 6 on change: countChanged
@@ -33,6 +35,9 @@ page Table: window
 code Table
     handler diceLanded(total: integer, faces: text)
         shown = total
+        // Every die a six: a fanfare.
+        if total == count * 6
+            fanfare.melody("C5/2 E5/2 G5/2 C6*2", 160)
         let roll = new Roll
         roll.dice = count
         roll.total = total
@@ -45,4 +50,5 @@ code Table
         board.count = count
 
     handler rollClicked
+        rattle.play()
         board.roll()

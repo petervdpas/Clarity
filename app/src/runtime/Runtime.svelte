@@ -20,6 +20,8 @@
   import { allParts, findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
   import { handlerCall } from "../lib/calls";
   import type { Place } from "../lib/customParts";
+  import { SoundPart } from "../lib/sound";
+  import { bundled } from "../lib/pictures";
   import { dataEntity, isList, translatedDefaults } from "../lib/windowData";
   import { findApp } from "../lib/frame";
   import { Navigator } from "../lib/navigator";
@@ -144,6 +146,22 @@
     messages = messages.filter((m) => m.id !== id);
   }
 
+  /** The sound parts of the open windows (DESIGN 5.22), by window instance and part name. */
+  const sounds = new Map<string, SoundPart>();
+
+  /** The sound part `part` of a window, made when code first tells it something; null when it is no sound. */
+  function soundOf(instance: number, window: string, part: string): SoundPart | null {
+    const key = `${instance}\n${part}`;
+    const known = sounds.get(key);
+    if (known) return known;
+    const target = model ? findPage(model, window) : undefined;
+    const widget = target ? allParts(target).find((w) => w.props.name === part) : undefined;
+    if (widget?.props.kind !== "sound") return null;
+    const made = new SoundPart({ source: widget.props.source, volume: widget.props.volume ?? null, repeat: widget.props.repeat ?? false }, bundled);
+    sounds.set(key, made);
+    return made;
+  }
+
   /** Set when this is a desktop window of its own (`in new window`), not the main one. */
   let apart = false;
 
@@ -151,9 +169,11 @@
   function received(reply: Reply, start = false): Reply {
     // A handler may have set the settings; the app's start has only their defaults.
     if (!start) adopt(reply.state.data[SETTINGS]);
-    // The hears go to the custom parts of the window the handler ran on.
+    // The hears go to the sounds and custom parts of the window the handler ran on.
     for (const h of reply.hears ?? []) {
-      invoke("hear_part", { instance: reply.state.instance ?? 0, part: h.part, hear: h.hear, values: h.values }).catch(() => {});
+      const sound = soundOf(reply.state.instance ?? 0, reply.state.window, h.part);
+      if (sound) sound.hear(h.hear, h.values);
+      else invoke("hear_part", { instance: reply.state.instance ?? 0, part: h.part, hear: h.hear, values: h.values }).catch(() => {});
     }
     if (!model || !reply.shown) return reply;
     const data = { ...reply.state.data };
@@ -234,6 +254,13 @@
         const open = new Set(next.map((s) => s.instance));
         for (const gone of stack.filter((s) => s.instance !== undefined && !open.has(s.instance))) {
           invoke("close_parts", { instance: gone.instance }).catch(() => {});
+          // Its sounds stop.
+          for (const [key, sound] of sounds) {
+            if (key.startsWith(`${gone.instance}\n`)) {
+              sound.close();
+              sounds.delete(key);
+            }
+          }
         }
         stack = next;
         // Data may have changed: reference lists and values load again when needed.

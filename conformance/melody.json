@@ -1,0 +1,126 @@
+{
+  "about": "Melodies a sound part plays (DESIGN 5.22): notes apart by spaces. A note is a letter A to G, then # or b, then an octave 0 to 8 (4 unless given); - is a rest. A note lasts one beat, *n n beats, /n a nth of a beat; a beat lasts 60 / tempo seconds. `plays` gives each note's frequency in hertz (A4 is 440, equal temperament, rounded to 2 decimals; null for a rest) and its seconds (rounded to 4 decimals). `skips` are the words that are not notes: the checker reports them in a melody written in the code, and a running program skips them. Every runtime runs these cases.",
+  "cases": [
+    {
+      "notes": "A4",
+      "tempo": 60,
+      "plays": [
+        {
+          "hertz": 440.0,
+          "seconds": 1.0
+        }
+      ],
+      "skips": []
+    },
+    {
+      "notes": "C4 E4 G4 C5*2",
+      "tempo": 120,
+      "plays": [
+        {
+          "hertz": 261.63,
+          "seconds": 0.5
+        },
+        {
+          "hertz": 329.63,
+          "seconds": 0.5
+        },
+        {
+          "hertz": 392.0,
+          "seconds": 0.5
+        },
+        {
+          "hertz": 523.25,
+          "seconds": 1.0
+        }
+      ],
+      "skips": []
+    },
+    {
+      "notes": "C#4 Db4 Bb3 B#3",
+      "tempo": 60,
+      "plays": [
+        {
+          "hertz": 277.18,
+          "seconds": 1.0
+        },
+        {
+          "hertz": 277.18,
+          "seconds": 1.0
+        },
+        {
+          "hertz": 233.08,
+          "seconds": 1.0
+        },
+        {
+          "hertz": 261.63,
+          "seconds": 1.0
+        }
+      ],
+      "skips": []
+    },
+    {
+      "notes": "- G/2 G/2 A*3",
+      "tempo": 90,
+      "plays": [
+        {
+          "hertz": null,
+          "seconds": 0.6667
+        },
+        {
+          "hertz": 392.0,
+          "seconds": 0.3333
+        },
+        {
+          "hertz": 392.0,
+          "seconds": 0.3333
+        },
+        {
+          "hertz": 440.0,
+          "seconds": 2.0
+        }
+      ],
+      "skips": []
+    },
+    {
+      "notes": "C0 C8",
+      "tempo": 60,
+      "plays": [
+        {
+          "hertz": 16.35,
+          "seconds": 1.0
+        },
+        {
+          "hertz": 4186.01,
+          "seconds": 1.0
+        }
+      ],
+      "skips": []
+    },
+    {
+      "notes": "E4 x H2 C9 c4 E4",
+      "tempo": 60,
+      "plays": [
+        {
+          "hertz": 329.63,
+          "seconds": 1.0
+        },
+        {
+          "hertz": 329.63,
+          "seconds": 1.0
+        }
+      ],
+      "skips": [
+        "x",
+        "H2",
+        "C9",
+        "c4"
+      ]
+    },
+    {
+      "notes": "",
+      "tempo": 100,
+      "plays": [],
+      "skips": []
+    }
+  ]
+}

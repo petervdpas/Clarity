@@ -353,25 +353,29 @@ pub fn single_page(project: &Project) -> String {
         let link = format!("<link rel=\"stylesheet\" href=\"./{}\">", file.path.trim_start_matches("ui/"));
         html = html.replace(&link, &format!("<style>{}</style>", safe(file.text.clone(), "style")));
     }
-    let pictures: serde_json::Map<String, serde_json::Value> = files
+    // The pictures and sounds the renderer finds by name, as data URLs.
+    let carried: serde_json::Map<String, serde_json::Value> = files
         .iter()
         .filter_map(|f| {
-            let name = f.path.strip_prefix("ui/resources/").filter(|n| clarity_spec::resources::is_picture(n))?;
+            let name = f.path.strip_prefix("ui/resources/").filter(|n| clarity_spec::resources::is_picture(n) || clarity_spec::resources::is_sound(n))?;
             let bytes = f.bytes.as_deref()?;
             let kind = match name.rsplit('.').next().unwrap_or_default().to_lowercase().as_str() {
                 "png" => "image/png",
                 "jpg" | "jpeg" => "image/jpeg",
                 "gif" => "image/gif",
                 "bmp" => "image/bmp",
+                "wav" => "audio/wav",
+                "mp3" => "audio/mpeg",
+                "flac" => "audio/flac",
                 _ => "image/webp",
             };
             let url = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
             Some((name.to_string(), serde_json::Value::String(url)))
         })
         .collect();
-    if !pictures.is_empty() {
-        let map = safe(serde_json::Value::Object(pictures).to_string(), "script");
-        html = html.replace("  </head>", &format!("    <script>window.clarityPictures = {map};</script>\n  </head>"));
+    if !carried.is_empty() {
+        let map = safe(serde_json::Value::Object(carried).to_string(), "script");
+        html = html.replace("  </head>", &format!("    <script>window.clarityResources = {map};</script>\n  </head>"));
     }
     html
 }

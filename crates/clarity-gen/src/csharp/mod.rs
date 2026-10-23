@@ -457,6 +457,16 @@ public static class Shown
 {arms}        _ => null,
     }});
 
+    /// <summary>A link's address (conformance/small-parts.json): an email address to write to, one with a scheme as it is, else none.</summary>
+    public static readonly IValueConverter Address = new FuncValueConverter<string?, Uri?>(value =>
+    {{
+        var text = value?.Trim() ?? \"\";
+        if (text.Length == 0)
+            return null;
+        var address = text.Contains('@') && !text.Contains(':') ? $\"mailto:{{text}}\" : text;
+        return Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null;
+    }});
+
     /// <summary>A picture of the resources by its name, as a key gives it in the language shown.</summary>
     public static readonly IValueConverter Picture = new FuncValueConverter<string?, Bitmap?>(name =>
         string.IsNullOrEmpty(name) ? null : new Bitmap(AssetLoader.Open(new Uri($\"avares://{{typeof(Shown).Assembly.GetName().Name}}/resources/{{name}}\"))));

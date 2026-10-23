@@ -92,6 +92,18 @@ tooltip: string | null,
  */
 icon: string | null, 
 /**
+ * The address a link opens: `to "https://lucide.dev"`.
+ */
+to: string | null, 
+/**
+ * The number a progress bar is full at, as written: `max 250`; 100 without it.
+ */
+max: string | null, 
+/**
+ * A split button: its `menu` block opens from the arrow beside it.
+ */
+split: boolean, 
+/**
  * A named style of the project's theme: `style primary`.
  */
 style: string | null, 

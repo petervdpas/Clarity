@@ -2643,7 +2643,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
 
 /// Checkboxes and switches, which hold whether they are on when they are not bound.
 fn has_checked(props: &WidgetProps) -> bool {
-    matches!(props.kind, WidgetKind::Checkbox | WidgetKind::Switch)
+    matches!(props.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle)
 }
 
 /// Text inputs that hold their own text when they are not bound.

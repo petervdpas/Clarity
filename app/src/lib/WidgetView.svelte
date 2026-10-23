@@ -18,6 +18,7 @@
   import type { Command } from "./generated/Command";
   import { itemClicks, itemShown } from "./overlays";
   import { previewPopovers } from "./previewPopovers.svelte";
+  import { linkAddress, progressFull } from "./smallParts";
   import { openLink } from "./backend";
   import { DEFAULT_DIGITS } from "./display";
   import { DEFAULT_UNITS } from "./drawing";
@@ -226,6 +227,14 @@
     else if (p.onClick) onnavigate(p.onClick, p.newWindow);
   }
 
+  /** A link: its address, the address it binds, or its click. */
+  function followLink() {
+    if (design) return;
+    const address = p.to ?? (p.bind ? linkAddress(value) : null);
+    if (address) openLink(address);
+    else if (!p.to && !p.bind) click();
+  }
+
   /** Opens a popover of the window: live in its part state, in a preview here. */
   function openPopover(name: string) {
     if (live) live.setVisible(name, true);
@@ -236,10 +245,18 @@
   let menuAt = $state<{ x: number; y: number } | null>(null);
 
   function openMenu(e: MouseEvent) {
-    if (design || !widget.menu || disabled) return;
+    // A split button's menu opens from its arrow, not a right click.
+    if (design || !widget.menu || disabled || p.split) return;
     e.preventDefault();
     e.stopPropagation();
     menuAt = { x: e.clientX, y: e.clientY };
+  }
+
+  /** A split button's arrow: its menu, below the button. */
+  function openSplit(e: MouseEvent) {
+    if (design || !widget.menu) return;
+    const at = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect();
+    menuAt = { x: at.left, y: at.bottom + 2 };
   }
 
   /** A context menu's item: its handler, or the window or popover it opens. */
@@ -388,6 +405,21 @@
       <span class="help-text" class:error={targetError !== null} id={p.for ? helpId(p.for) : undefined} aria-live="polite"
         >{targetError ?? caption ?? (targetField?.modifiers.help ? tr(preview, targetField.modifiers.help) : "")}</span
       >
+    {:else if p.kind === "separator"}
+      <span class="separator-line" class:vertical={p.orientation === "vertical"} role="separator" aria-orientation={p.orientation === "vertical" ? "vertical" : "horizontal"}></span>
+    {:else if p.kind === "badge"}
+      <span class="badge {partClass ?? ''}" {id}>{bound ? displayValue(preview, bound.field, value) : (caption ?? "")}</span>
+    {:else if p.kind === "link"}
+      <button type="button" class="link" {id} {disabled} tabindex={p.tabOrder ?? undefined} onclick={followLink}
+        >{bound ? displayValue(preview, bound.field, value) : (caption ?? "")}</button
+      >
+    {:else if p.kind === "progress"}
+      {@const full = progressFull(value, p.max)}
+      <span class="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(full * 100)} {id}>
+        <span class="progress-fill" style:width="{full * 100}%"></span>
+      </span>
+    {:else if p.kind === "busy"}
+      <span class="busy" role="status" {id}><span class="spinner"></span>{caption ?? ""}</span>
     {:else if p.kind === "icon"}
       <span class="icon-part" title={p.tooltip ? tr(preview, p.tooltip) : undefined}><Icon paths={preview.icons} name={p.icon ?? ""} size={20} /></span>
     {:else if p.kind === "heading"}
@@ -523,9 +555,42 @@
         }}
       />
     {:else if p.kind === "button"}
-      <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
-        >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
+      {#if p.split}
+        <!-- A split button: its click, and an arrow that opens its menu below it. -->
+        <span class="split">
+          <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+            >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
+          ><button type="button" class="push arrow {partClass ?? ''}" {disabled} aria-label="More" aria-haspopup="menu" onclick={openSplit}
+            ><Icon paths={{ down: "M 6 9 l 6 6 l 6 -6" }} name="down" /></button
+          >
+        </span>
+      {:else}
+        <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+          >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
+        >
+      {/if}
+    {:else if p.kind === "toggle"}
+      {@const pressed = bound ? value === true : partState?.checked === true}
+      <button
+        type="button"
+        {id}
+        class="push toggle {partClass ?? ''}"
+        class:pressed
+        aria-pressed={pressed}
+        disabled={disabled || readonly}
+        tabindex={p.tabOrder ?? undefined}
+        title={!caption && p.name ? p.name : undefined}
+        onclick={() => {
+          if (design) return;
+          if (bound) setValue(!pressed);
+          else if (live && p.name) live.setChecked(p.name, !pressed);
+          fire("change");
+        }}>{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
       >
+    {:else if p.kind === "buttons"}
+      <div class="buttons" role="group">
+        <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} fixedRows={1} joined container={offset} {onnavigate} />
+      </div>
     {:else if p.kind === "panel" || p.kind === "form"}
       <fieldset class={p.kind} class:bare={p.kind === "form" && !p.caption && !p.foldable} class:folded={folded && !design}>
         {#if p.foldable}
@@ -1025,6 +1090,138 @@
   .tab-strip button.selected {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  .split {
+    display: flex;
+    width: 100%;
+    height: 100%;
+  }
+
+  .split > .push:first-child {
+    flex: 1;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .split > .arrow {
+    width: auto;
+    flex: none;
+    padding: 0 6px;
+    border-left-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .toggle.pressed {
+    background: var(--accent-soft, var(--panel-alt));
+    border-color: var(--accent);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.2);
+  }
+
+  .buttons {
+    flex: 1;
+    display: flex;
+    min-width: 0;
+  }
+
+  /* Joined: only the outer corners of the group are round. */
+  .buttons :global(.widget .push) {
+    border-radius: 0;
+  }
+
+  .buttons :global(.widget:not(:first-child) .push) {
+    margin-left: calc(-1 * var(--border-width, 1px));
+  }
+
+  .buttons :global(.widget:first-child .push) {
+    border-top-left-radius: var(--radius-button);
+    border-bottom-left-radius: var(--radius-button);
+  }
+
+  .buttons :global(.widget:last-child .push) {
+    border-top-right-radius: var(--radius-button);
+    border-bottom-right-radius: var(--radius-button);
+  }
+
+  .separator-line {
+    flex: 1;
+    align-self: center;
+    height: var(--border-width, 1px);
+    background: var(--border-strong);
+  }
+
+  .separator-line.vertical {
+    flex: none;
+    align-self: stretch;
+    width: var(--border-width, 1px);
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .badge {
+    align-self: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--font-size-small);
+    white-space: nowrap;
+  }
+
+  .link {
+    align-self: center;
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+  }
+
+  .link:disabled {
+    color: var(--text-muted);
+    cursor: default;
+  }
+
+  .progress {
+    flex: 1;
+    align-self: center;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--panel-alt);
+    border: var(--border-width, 1px) solid var(--border);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .busy {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .icon-part {

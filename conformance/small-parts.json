@@ -1,0 +1,20 @@
+{
+  "about": "The small parts of U1b. `address` gives what a link bound to a field opens for the field's value: an email address (an @ and no scheme) to write to, an address with a scheme as it is, and nothing for an empty value or one without a scheme. `progress` gives how full a progress bar is, from 0 to 1, for a value and its `max` (100 without one): below 0 is empty, above max is full, and no value is empty.",
+  "address": [
+    { "value": "https://lucide.dev", "opens": "https://lucide.dev" },
+    { "value": "ada@example.org", "opens": "mailto:ada@example.org" },
+    { "value": "mailto:ada@example.org", "opens": "mailto:ada@example.org" },
+    { "value": "  https://example.org/a b  ", "opens": "https://example.org/a b" },
+    { "value": "lucide.dev", "opens": null },
+    { "value": "", "opens": null },
+    { "value": null, "opens": null }
+  ],
+  "progress": [
+    { "value": 50, "max": null, "full": 0.5 },
+    { "value": 125, "max": "250", "full": 0.5 },
+    { "value": 0.25, "max": "1", "full": 0.25 },
+    { "value": -3, "max": null, "full": 0 },
+    { "value": 400, "max": "250", "full": 1 },
+    { "value": null, "max": null, "full": 0 }
+  ]
+}

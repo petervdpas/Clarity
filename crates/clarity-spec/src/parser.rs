@@ -1426,6 +1426,9 @@ fn parse_widget_props(
         units: None,
         tooltip: None,
         icon: None,
+        to: None,
+        max: None,
+        split: false,
         style: None,
         readonly: false,
         foldable: false,
@@ -1678,6 +1681,18 @@ fn parse_widget_props(
                 props.placeholder = Some(cursor.expect_text("a placeholder text")?);
             }
             "tooltip" => props.tooltip = Some(cursor.expect_text("a tooltip text")?),
+            "split" => {
+                applies(WidgetProperty::Split)?;
+                props.split = true;
+            }
+            "to" => {
+                applies(WidgetProperty::To)?;
+                props.to = Some(cursor.expect_string("an address, as in to \"https://lucide.dev\"")?);
+            }
+            "max" => {
+                applies(WidgetProperty::Max)?;
+                props.max = Some(cursor.expect(TokenKind::Number, "the number it is full at, as in max 250")?.text.clone());
+            }
             "icon" => {
                 applies(WidgetProperty::Icon)?;
                 props.icon = Some(cursor.expect_string("an icon's name, as in icon \"save\"")?);

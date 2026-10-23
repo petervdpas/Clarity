@@ -393,6 +393,12 @@ pub struct WidgetProps {
     pub tooltip: Option<String>,
     /// The icon a button shows beside its caption, or the icon an `icon` part is: `icon "save"`.
     pub icon: Option<String>,
+    /// The address a link opens: `to "https://lucide.dev"`.
+    pub to: Option<String>,
+    /// The number a progress bar is full at, as written: `max 250`; 100 without it.
+    pub max: Option<String>,
+    /// A split button: its `menu` block opens from the arrow beside it.
+    pub split: bool,
     /// A named style of the project's theme: `style primary`.
     pub style: Option<String>,
     /// An input that shows its value but cannot be changed.

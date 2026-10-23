@@ -11,6 +11,8 @@ entity Album
     title: text(120), required
     copies: integer
     format: Format
+    site: url
+    favourite: bool
 
 page Albums: window
     data album: Album
@@ -21,6 +23,19 @@ page Albums: window
     button "Format" name formatButton at 7,1 span 2 on click: formatClicked
     button "Pick" name pickButton at 9,1 span 2 on click: pickClicked
     button "New" name newButton at 11,1 span 2 on click: newClicked
+    separator name line at 1,2 span 12
+    link "Lucide" name lucideLink at 1,3 span 2 to "https://lucide.dev"
+    link name siteLink at 3,3 span 3 bind album.site
+    badge name copiesBadge at 6,3 span 1 bind album.copies
+    progress name copiesBar at 7,3 span 3 bind album.copies max 10
+    busy "Lending..." name lendingBusy at 10,3 span 3
+    toggle "Favourite" name favouriteToggle icon "star" at 1,4 span 2 bind album.favourite on change: favouriteChanged
+    buttons name sideButtons at 3,4 span 2
+        toggle name leftToggle icon "text-align-start" at 1,1 span 1 on change: leftChanged
+        toggle name rightToggle icon "text-align-end" at 2,1 span 1
+    button "Save" name saveButton split at 5,4 span 2 on click: favouriteChanged
+        menu
+            item "Save a copy" name saveCopyItem on click: newClicked
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -74,6 +89,12 @@ code Albums
 
     handler pickClicked
         ask PickFriend then lend(album)
+
+    handler favouriteChanged
+        save album
+
+    handler leftChanged
+        rightToggle.checked = not leftToggle.checked
 
     handler newClicked
         ask NewAlbum then added

@@ -417,6 +417,18 @@
         <TextField {preview} {onapplied} text={p.placeholder} placeholder="shown while the input is empty" onwrite={(text) => update({ placeholder: text })} />
       </label>
     {/if}
+    {#if info.properties.includes("to")}
+      <label class="prop">
+        <span>Opens</span>
+        <input value={p.to ?? ""} placeholder="https://..." onchange={(e) => update({ to: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("max")}
+      <label class="prop">
+        <span>Full at</span>
+        <input value={p.max ?? ""} placeholder="100" inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />
+      </label>
+    {/if}
     {#if p.kind === "icon" || info.properties.includes("icon")}
       <label class="prop">
         <span>Icon</span>
@@ -542,6 +554,19 @@
           {#if p.source && !choices.includes(p.source)}<option value={p.source}>{p.source} (not in the resources)</option>{/if}
         </select>
       </label>
+    {/if}
+
+    {#if info.properties.includes("split")}
+      <label class="prop" title="An arrow beside the button opens its menu">
+        <span>Split</span>
+        <input type="checkbox" checked={p.split} onchange={(e) => update({ split: e.currentTarget.checked })} />
+      </label>
+    {/if}
+    {#if !location.widget.menu && info.container !== "steps"}
+      <button
+        title={p.split ? "The menu behind the split button's arrow" : "A menu a right click on the part opens"}
+        onclick={() => onedit({ op: "addMenu", item: location.widget.span.start })}>{p.split ? "Add its menu" : "Add a context menu"}</button
+      >
     {/if}
 
     {#if info.container === "tabs"}

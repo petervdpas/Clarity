@@ -89,6 +89,26 @@
       <rect x="4" y="3" width="12" height="6" rx="1" class="fill" />
       <rect x="17" y="3" width="12" height="6" rx="1" />
       <rect x="4" y="9" width="40" height="16" rx="1" />
+    {:else if kind === "toggle"}
+      <rect x="10" y="7" width="28" height="14" rx="3" class="fill" />
+      <path d="M17 14 l4 4 l9 -9" />
+    {:else if kind === "buttons"}
+      <rect x="6" y="7" width="12" height="14" rx="3" />
+      <rect x="18" y="7" width="12" height="14" class="fill" />
+      <rect x="30" y="7" width="12" height="14" rx="3" />
+    {:else if kind === "separator"}
+      <line x1="4" y1="14" x2="44" y2="14" />
+    {:else if kind === "link"}
+      <text x="24" y="17.5" text-anchor="middle" class="ink small">link</text>
+      <line x1="12" y1="20" x2="36" y2="20" />
+    {:else if kind === "badge"}
+      <rect x="12" y="8" width="24" height="12" rx="6" class="fill" />
+      <text x="24" y="17" text-anchor="middle" class="ink small">3</text>
+    {:else if kind === "progress"}
+      <rect x="4" y="10" width="40" height="8" rx="4" />
+      <rect x="4" y="10" width="24" height="8" rx="4" class="fill" />
+    {:else if kind === "busy"}
+      <path d="M24 6 A8 8 0 1 1 16 14" />
     {:else if kind === "icon"}
       <circle cx="24" cy="14" r="8" />
       <path d="M24 9 L25.5 12.5 L29 13 L26.5 15.5 L27 19 L24 17.2 L21 19 L21.5 15.5 L19 13 L22.5 12.5 Z" class="fill" />

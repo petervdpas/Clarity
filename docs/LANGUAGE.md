@@ -523,6 +523,11 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `help` | nothing | `for input` | none |
 | `heading` | nothing | none | none |
 | `icon` | nothing; its first word is the icon it shows: `icon "triangle-alert"` | none | none |
+| `badge` | a text, integer, decimal, money or enum value, or its caption | none | none |
+| `link` | a url, email or text value, or its caption with `to "https://..."` or `on click` | `to`, `taborder` | `click` |
+| `separator` | nothing: a line, level or `vertical` | `vertical` | none |
+| `progress` | an integer or decimal value, from 0 to `max` (100 without it) | `max 250` | none |
+| `busy` | nothing: a running indicator with its caption, shown and hidden by code with `visible` | none | none |
 | `text` | a field of any type: `bind customer.name` | none | none |
 | `markdown` | a key whose value is a Markdown file per language, `@gameRules`; a file of the resources, `source "license.md"`; or a text, `bind notes` | `source "file"` | none |
 
@@ -539,7 +544,8 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
-| `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"` | `click` |
+| `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |
+| `toggle` | bool, or its own `checked` when unbound | `readonly`, `taborder`, `icon "bold"` | `change` |
 
 **Containers**
 
@@ -550,6 +556,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `tabs` | `tab @key` blocks, each with parts | none | `change` |
 | `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
 | `popover` | parts on its own grid, opened next to the part in `for` | none | none |
+| `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
@@ -697,6 +704,18 @@ popover name filters for filterButton span 4 rows 2
     checkbox @onlyVinylCaption name vinylBox at 1,1 span 4 bind onlyVinyl on change: refilter
 ```
 
+A button with `split` has an arrow beside it that opens its `menu` block, written as a context menu is; the button itself runs its `on click`. A toggle is a button that stays pressed: bound to a bool as a checkbox is, or holding its own, which code reads and sets as `part.checked`; its `on change` runs when the person presses it.
+
+```clarity
+toggle @boldCaption name boldToggle icon "bold" at 1,1 span 2 bind note.bold on change: restyle
+buttons name alignButtons at 3,1 span 3
+    toggle name leftToggle icon "text-align-start" at 1,1 span 1 on change: alignLeft
+    toggle name rightToggle icon "text-align-end" at 2,1 span 1 on change: alignRight
+button @saveCaption name saveButton split at 7,1 span 2 on click: save
+    menu
+        item @saveAsItem name saveAsItem on click: saveAs
+```
+
 Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. Named items hide and disable as any part does.
 
 ```clarity
@@ -770,6 +789,8 @@ A sidebar is a named part: `sidebar left name nav width 280 min 200 max 480 resi
 A window can declare its own regions. A window's region replaces the app's region of the same kind, and a window's sidebar replaces the app's sidebar on the same side. The other regions still come from the app.
 
 ### Commands
+
+A link does one of three things: opens the address in `to`, opens the address it binds (an email address to write to), or runs its `on click`. The checker wants exactly one, and a whole address in `to` (`"https://lucide.dev"`, not `"lucide.dev"`).
 
 Icons are [Lucide](https://lucide.dev)'s, by name: `icon "save"`, `icon "trash"`, `icon "triangle-alert"`. A button, a menu item and a toolbar or ribbon button show one beside their caption, and the `icon` part shows one on its own. The checker knows every name and suggests the nearest for a misspelt one; the designer offers them all. An application carries only the icons it uses, with Lucide's license in its `THIRD_PARTY_NOTICES.md`.
 

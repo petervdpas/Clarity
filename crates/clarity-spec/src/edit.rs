@@ -70,6 +70,8 @@ pub enum Edit {
     },
     /// Add a tab to a tabs widget.
     AddTab { item: u32, title: String },
+    /// Give a part a `menu` block with one item: its context menu, or a split button's dropdown.
+    AddMenu { item: u32 },
     /// Declare data on a page.
     AddData {
         page: u32,
@@ -831,6 +833,7 @@ impl Doc {
                 props,
             } => self.update_widget(*item, *container, props),
             Edit::AddTab { item, title } => self.add_tab(*item, title),
+            Edit::AddMenu { item } => self.add_menu(*item),
             Edit::AddData {
                 page,
                 name,
@@ -1278,6 +1281,26 @@ impl Doc {
         let tab = self.fresh_node(indent, format!("{keyword} {}", text_token(title)));
         let id = tab.id;
         self.node_mut(&path).children.push(tab);
+        Ok(Some(id))
+    }
+
+    /// A `menu` block first under the part, with one named item to start from.
+    fn add_menu(&mut self, item: u32) -> EditResult<Option<u32>> {
+        let (path, _) = self.find(item, "a part", |k| matches!(k, Kind::Widget(_)))?;
+        if self.node(&path).children.iter().any(|c| starts_with_keyword(&c.tokens, "menu", None)) {
+            return fail("the part has a menu already");
+        }
+        let used = self.used_names(path[0]);
+        let name = std::iter::once("firstItem".to_string())
+            .chain((2..).map(|n| format!("firstItem{n}")))
+            .find(|n| !used.contains(n))
+            .expect("an unused name exists");
+        let indent = self.node(&path).child_indent();
+        let mut menu = self.fresh_node(indent, "menu".to_string());
+        let first = self.fresh_node(indent + INDENT_STEP, format!("item \"First item\" name {name}"));
+        let id = first.id;
+        menu.children.push(first);
+        self.node_mut(&path).children.insert(0, menu);
         Ok(Some(id))
     }
 

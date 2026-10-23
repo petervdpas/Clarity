@@ -19,7 +19,7 @@ width: number | null,
 /**
  * Overrides the catalog caption.
  */
-caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
+caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addMenu", item: number, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
 /**
  * `data.field`
  */

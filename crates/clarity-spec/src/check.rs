@@ -818,6 +818,55 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The rules of a separator, a link and a progress bar (U1b).
+    fn check_small_part(&mut self, file: usize, widget: &Widget) {
+        let p = &widget.props;
+        match p.kind {
+            WidgetKind::Buttons => {
+                for inner in &widget.children {
+                    if !matches!(inner.props.kind, WidgetKind::Button | WidgetKind::Toggle) {
+                        self.error(file, "a button group holds buttons and toggles", inner.span);
+                    } else if inner.props.row != 1 || inner.props.height != 1 {
+                        self.error(file, "the buttons of a group stand in one row: at row 1, one row high", inner.span);
+                    }
+                }
+            }
+            WidgetKind::Button if p.split => {
+                if widget.menu.is_none() {
+                    self.error(file, "a split button opens its menu: write a 'menu' block under it", widget.span);
+                }
+                let clicks = p.on_click.is_some() || p.handlers.iter().any(|h| h.event == widgets::Event::Click);
+                if !clicks {
+                    self.error(file, "a split button runs its click too: wire 'on click'", widget.span);
+                }
+            }
+            WidgetKind::Separator if p.caption.is_some() => {
+                self.error(file, "a separator has no caption: it is only a line", widget.span);
+            }
+            WidgetKind::Link => {
+                let clicks = p.on_click.is_some() || p.handlers.iter().any(|h| h.event == widgets::Event::Click);
+                let ways = [p.to.is_some(), p.bind.is_some(), clicks].iter().filter(|w| **w).count();
+                if ways == 0 {
+                    self.error(file, "a link opens an address ('to'), what it binds or runs a handler ('on click')", widget.span);
+                } else if ways > 1 {
+                    self.error(file, "a link opens an address, what it binds or runs a handler: one of them", widget.span);
+                }
+                if let Some(to) = p.to.as_deref().filter(|t| !is_address(t)) {
+                    self.error(file, format!("'{to}' is no address; write it whole, as in \"https://{to}\""), widget.span);
+                }
+            }
+            WidgetKind::Progress => {
+                if p.bind.is_none() {
+                    self.error(file, "a progress bar shows a number: bind one, as in 'bind done'", widget.span);
+                }
+                if p.max.as_deref().is_some_and(|m| m.parse::<f64>().map_or(true, |n| n <= 0.0)) {
+                    self.error(file, "'max' is a number above 0: the number the bar is full at", widget.span);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn check_widgets(
         &mut self,
         file: usize,
@@ -831,6 +880,7 @@ impl<'a> Checker<'a> {
             if let Some(icon) = p.icon.as_deref().filter(|i| crate::icons::path(i).is_none()) {
                 self.error(file, crate::icons::unknown(icon), widget.span);
             }
+            self.check_small_part(file, widget);
             // A popover is outside the grid: only its own parts are placed, on its own grid.
             let popover = p.kind == WidgetKind::Popover;
             if popover && p.for_part.is_none() {
@@ -1383,4 +1433,9 @@ pub(crate) fn listed(names: &[&str]) -> String {
         [only] => (*only).to_string(),
         [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
+}
+
+/// Whether a link's `to` is a whole address: a scheme and what follows it.
+fn is_address(to: &str) -> bool {
+    ["https://", "http://", "mailto:", "tel:"].iter().any(|scheme| to.starts_with(scheme) && to.len() > scheme.len())
 }

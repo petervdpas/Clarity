@@ -658,6 +658,19 @@ impl<'a> Window<'a> {
         out
     }
 
+    /// What a badge, a link or a busy indicator says: what it binds, shown
+    /// in the person's format; else its caption, which code can set.
+    fn shown_text(&self, p: &clarity_spec::model::WidgetProps, bound: Option<&str>, named: Option<&str>, caption: &str) -> String {
+        match (bound, p.bind.as_deref().and_then(|b| self.bound_field(b))) {
+            (Some(path), Some((entity, field))) => format!("{{Binding {path}, Converter={{x:Static {}}}}}", self.shown_converter(entity, &field.name.name)),
+            (Some(path), None) => format!("{{Binding {path}, Converter={{x:Static local:Shown.Converter}}}}"),
+            _ => match named {
+                Some(n) if p.caption.is_some() => format!("{{Binding {}.Caption}}", member(n)),
+                _ => self.text(caption),
+            },
+        }
+    }
+
     /// A popover of the window, by name.
     fn popover(&self, name: &str) -> Option<&'a Widget> {
         self.page.widgets.iter().find(|w| w.props.kind == WidgetKind::Popover && w.props.name.as_deref() == Some(name))
@@ -666,12 +679,14 @@ impl<'a> Window<'a> {
     /// A part, with the class of its style, whose values come from the theme shown.
     fn widget(&self, widget: &Widget, depth: usize, out: &mut String) {
         let mut own = String::new();
-        let depth = if widget.menu.is_some() { depth + 1 } else { depth };
+        // A split button's menu is its own dropdown; any other part's is a context menu around it.
+        let context = widget.menu.as_ref().filter(|_| !widget.props.split);
+        let depth = if context.is_some() { depth + 1 } else { depth };
         self.part_axaml(widget, depth, &mut own);
         if let Some(style) = widget.props.style.as_deref() {
             own = with_class(&own, &style_class(style));
         }
-        let Some(menu) = &widget.menu else {
+        let Some(menu) = context else {
             out.push_str(&own);
             return;
         };
@@ -758,6 +773,71 @@ impl<'a> Window<'a> {
                         let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"help\" Text=\"{}\"{extra} />", self.text(&caption_text));
                     }
                 }
+            }
+            // A button that stays pressed: Avalonia's ToggleButton, bound as a checkbox is.
+            WidgetKind::Toggle => {
+                let value = match (bound.as_deref(), named) {
+                    (Some(b), _) => format!(" IsChecked=\"{{Binding {b}}}\""),
+                    (None, Some(n)) => format!(" IsChecked=\"{{Binding {}.IsChecked}}\"", member(n)),
+                    (None, None) => String::new(),
+                };
+                let text = match named {
+                    Some(n) if p.caption.is_some() => format!("{{Binding {}.Caption}}", member(n)),
+                    _ => self.text(&caption_text),
+                };
+                let read_only = if p.readonly { " IsEnabled=\"False\"" } else { "" };
+                let tip = if p.caption.is_none() && p.tooltip.is_none() { named.map(|n| format!(" ToolTip.Tip=\"{}\"", attr(n))).unwrap_or_default() } else { String::new() };
+                let inside = match (&p.icon, p.caption.is_some()) {
+                    (Some(icon), true) => format!("<StackPanel Orientation=\"Horizontal\" Spacing=\"6\" HorizontalAlignment=\"Center\">{}<TextBlock Text=\"{text}\" VerticalAlignment=\"Center\" /></StackPanel>", icon_xaml(icon, 16)),
+                    (Some(icon), false) => icon_xaml(icon, 16),
+                    (None, _) => format!("<TextBlock Text=\"{text}\" />"),
+                };
+                let _ = writeln!(out, "{pad}<ToggleButton {at} Classes=\"toggle\"{value}{read_only}{tip}{plain_state}{extra}>{inside}</ToggleButton>");
+            }
+            // Buttons and toggles joined in one row: their own grid, without the space between columns.
+            WidgetKind::Buttons => {
+                let _ = writeln!(out, "{pad}<Border {at} Classes=\"buttons\"{plain_state}{extra}>");
+                let mut inner = String::new();
+                self.grid(&widget.children, p.width, Some(1), false, depth + 1, &mut inner);
+                out.push_str(&inner.replacen(&format!("ColumnSpacing=\"{GAP}\""), "ColumnSpacing=\"0\"", 1));
+                let _ = writeln!(out, "{pad}</Border>");
+            }
+            // A line between parts, level unless vertical.
+            WidgetKind::Separator => {
+                let class = if p.orientation == Some(clarity_spec::model::Orientation::Vertical) { "separator vertical" } else { "separator" };
+                let _ = writeln!(out, "{pad}<Border {at} Classes=\"{class}\"{plain_state}{extra} />");
+            }
+            // A short text or number in a pill: what it binds, or its caption.
+            WidgetKind::Badge => {
+                let text = self.shown_text(p, bound.as_deref(), named, &caption_text);
+                let _ = writeln!(out, "{pad}<Border {at} Classes=\"badge\"{plain_state}{extra}><TextBlock Text=\"{text}\" /></Border>");
+            }
+            // A link: Avalonia's HyperlinkButton, opening its address, what it binds, or running a handler.
+            WidgetKind::Link => {
+                let text = self.shown_text(p, bound.as_deref(), named, &caption_text);
+                let mut attrs = format!("Content=\"{text}\"");
+                if let Some(to) = &p.to {
+                    let _ = write!(attrs, " NavigateUri=\"{}\"", attr(to));
+                } else if let Some(path) = bound.as_deref() {
+                    let _ = write!(attrs, " NavigateUri=\"{{Binding {path}, Converter={{x:Static local:Shown.Address}}}}\"");
+                } else if let Some(command) = self.click_command(Self::handler(widget, Event::Click).map(|h| self.command(h)), p.on_click.as_deref(), p.new_window) {
+                    let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
+                }
+                let _ = writeln!(out, "{pad}<HyperlinkButton {at} {attrs}{plain_state}{extra} />");
+            }
+            // A bar for a number, from 0 to its max.
+            WidgetKind::Progress => {
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let max = p.max.as_deref().unwrap_or("100");
+                let _ = writeln!(out, "{pad}<ProgressBar {at} Classes=\"progress\" Minimum=\"0\" Maximum=\"{max}\"{value}{plain_state}{extra} />");
+            }
+            // Busy: Avalonia's running bar with what it is busy with.
+            WidgetKind::Busy => {
+                let text = self.shown_text(p, None, named, &caption_text);
+                let _ = writeln!(
+                    out,
+                    "{pad}<StackPanel {at} Classes=\"busy\" Orientation=\"Horizontal\"{plain_state}{extra}><ProgressBar IsIndeterminate=\"True\" /><TextBlock Text=\"{text}\" /></StackPanel>"
+                );
             }
             WidgetKind::Heading => {
                 let _ = writeln!(out, "{pad}<TextBlock {at} Classes=\"heading\" Text=\"{}\"{plain_state}{extra} />", self.text(&caption_text));
@@ -891,6 +971,25 @@ impl<'a> Window<'a> {
                     } else {
                         let _ = write!(attrs, " HotKey=\"{}\"", attr(&gesture(key)));
                     }
+                }
+                if p.split {
+                    // A split button: Avalonia's SplitButton, its menu the flyout behind the arrow.
+                    let label = match &p.icon {
+                        Some(icon) => format!(
+                            "\n{pad}  <StackPanel Orientation=\"Horizontal\" Spacing=\"6\">{}<TextBlock Text=\"{content}\" VerticalAlignment=\"Center\" /></StackPanel>",
+                            icon_xaml(icon, 16)
+                        ),
+                        None => format!("\n{pad}  <TextBlock Text=\"{content}\" />"),
+                    };
+                    let attrs = attrs.replacen(&format!("Content=\"{content}\""), "", 1);
+                    let attrs = attrs.trim_start();
+                    let _ = writeln!(out, "{pad}<SplitButton {at} {attrs}{plain_state}{extra}>{label}");
+                    let _ = writeln!(out, "{pad}  <SplitButton.Flyout>\n{pad}    <MenuFlyout Placement=\"BottomEdgeAlignedLeft\">");
+                    for item in widget.menu.iter().flat_map(|m| &m.items) {
+                        self.menu_item(item, depth + 3, out);
+                    }
+                    let _ = writeln!(out, "{pad}    </MenuFlyout>\n{pad}  </SplitButton.Flyout>\n{pad}</SplitButton>");
+                    return;
                 }
                 match &p.icon {
                     // An icon beside the caption.
@@ -1124,6 +1223,8 @@ impl<'a> Window<'a> {
                 );
                 let line = match h.event {
                     Event::Click => continue,
+                    // A toggle tells its change when the person presses it, not when code sets it.
+                    Event::Change if kind == WidgetKind::Toggle => format!("{control}.Click += (_, _) => {run};"),
                     Event::Change if input => format!("{control}.ValueChanged += (_, _) => {run};"),
                     // The table chooses an edited row first, so the handler finds it.
                     Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),
@@ -1281,7 +1382,18 @@ public partial class {name}View : UserControl
             }
             let mut args = vec![string(n)];
             if let Some(c) = &widget.props.caption
-                && matches!(widget.props.kind, WidgetKind::Button | WidgetKind::Label | WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Heading)
+                && matches!(
+                    widget.props.kind,
+                    WidgetKind::Button
+                        | WidgetKind::Label
+                        | WidgetKind::Checkbox
+                        | WidgetKind::Switch
+                        | WidgetKind::Toggle
+                        | WidgetKind::Heading
+                        | WidgetKind::Badge
+                        | WidgetKind::Link
+                        | WidgetKind::Busy
+                )
             {
                 args.push(format!("caption: {}", Texts::kept(c)));
             }

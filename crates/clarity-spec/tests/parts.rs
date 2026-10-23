@@ -178,7 +178,7 @@ fn the_catalog_has_a_text_group_and_picks_inputs_per_type() {
         .collect();
     assert_eq!(
         text,
-        [WidgetKind::Label, WidgetKind::Help, WidgetKind::Heading, WidgetKind::Icon, WidgetKind::Text, WidgetKind::Markdown]
+        [WidgetKind::Label, WidgetKind::Help, WidgetKind::Heading, WidgetKind::Icon, WidgetKind::Badge, WidgetKind::Link, WidgetKind::Text, WidgetKind::Markdown]
     );
     use clarity_spec::model::FieldType;
     assert_eq!(

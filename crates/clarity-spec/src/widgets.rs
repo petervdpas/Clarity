@@ -18,6 +18,20 @@ pub enum WidgetKind {
     Heading,
     /// An icon of its own: `icon "triangle-alert"`.
     Icon,
+    /// A line between parts, level or `vertical`.
+    Separator,
+    /// Text that opens an address (`to`), the address it binds, or runs a handler.
+    Link,
+    /// A short text or number in a pill.
+    Badge,
+    /// A bar for a number it binds, from 0 to `max`.
+    Progress,
+    /// A busy indicator, which code shows and hides with `visible`.
+    Busy,
+    /// A button that stays pressed: a bool, as a checkbox.
+    Toggle,
+    /// Buttons and toggles joined in one row.
+    Buttons,
     Text,
     Markdown,
     Textbox,
@@ -221,6 +235,12 @@ pub enum WidgetProperty {
     OrderBy,
     /// `icon "save"`: the icon a button shows beside its caption.
     Icon,
+    /// `to "https://..."`: the address a link opens.
+    To,
+    /// `max 250`: the number a progress bar is full at.
+    Max,
+    /// `split`: a button whose `menu` opens from an arrow beside it.
+    Split,
 }
 
 /// The narrowest and widest a table column can be written, in pixels.
@@ -342,6 +362,38 @@ const ENTRIES: &[Entry] = &[
     text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Nothing, &[]),
     // An icon of its own; what it shows is its first word: `icon "triangle-alert"`.
     text_part(WidgetKind::Icon, "icon", "Icon", (1, 1), None, BindTarget::Nothing, &[]),
+    // A short text or number in a pill: written, or what it binds.
+    Entry {
+        kind: WidgetKind::Badge,
+        keyword: "badge",
+        name: "Badge",
+        category: Category::Text,
+        size: (1, 1),
+        caption: Some("New"),
+        bind: BindTarget::Field,
+        field_types: &["text", "integer", "decimal", "money", "enum"],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    // Text that opens an address, the address it binds, or runs a handler.
+    Entry {
+        kind: WidgetKind::Link,
+        keyword: "link",
+        name: "Link",
+        category: Category::Text,
+        size: (2, 1),
+        caption: Some("Link"),
+        bind: BindTarget::Field,
+        field_types: &["url", "email", "text"],
+        input: false,
+        container: None,
+        clickable: true,
+        events: &[Event::Click],
+        properties: &[WidgetProperty::To, WidgetProperty::TabOrder],
+    },
     text_part(WidgetKind::Text, "text", "Text", (4, 1), None, BindTarget::Field, &[]),
     // Text written in Markdown: a file of the resources folder
     // (`source "rules.md"`, one per language) or a text it binds.
@@ -356,6 +408,10 @@ const ENTRIES: &[Entry] = &[
     Entry {
         caption: Some("Check box"),
         ..input(WidgetKind::Checkbox, "checkbox", "Check box", (3, 1), &["bool"], &[Event::Change], PICKED)
+    },
+    Entry {
+        caption: Some("Toggle"),
+        ..input(WidgetKind::Toggle, "toggle", "Toggle button", (2, 1), &["bool"], &[Event::Change], &[WidgetProperty::Readonly, WidgetProperty::TabOrder, WidgetProperty::Icon])
     },
     Entry {
         caption: Some("Switch"),
@@ -391,6 +447,7 @@ const ENTRIES: &[Entry] = &[
             WidgetProperty::Default,
             WidgetProperty::Cancel,
             WidgetProperty::Icon,
+            WidgetProperty::Split,
         ],
     },
     Entry {
@@ -437,6 +494,38 @@ const ENTRIES: &[Entry] = &[
         clickable: false,
         events: &[Event::Change],
         properties: &[],
+    },
+    // Buttons and toggles joined in one row.
+    Entry {
+        kind: WidgetKind::Buttons,
+        keyword: "buttons",
+        name: "Button group",
+        category: Category::Containers,
+        size: (4, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[],
+        properties: &[],
+    },
+    // A line between parts.
+    Entry {
+        kind: WidgetKind::Separator,
+        keyword: "separator",
+        name: "Separator",
+        category: Category::Containers,
+        size: (12, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::Orientation],
     },
     Entry {
         kind: WidgetKind::Steps,
@@ -512,6 +601,37 @@ const ENTRIES: &[Entry] = &[
         clickable: false,
         events: &[Event::Select, Event::Open],
         properties: &[WidgetProperty::Show],
+    },
+    Entry {
+        kind: WidgetKind::Progress,
+        keyword: "progress",
+        name: "Progress",
+        category: Category::Data,
+        size: (6, 1),
+        caption: None,
+        bind: BindTarget::Field,
+        field_types: &["integer", "decimal"],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::Max],
+    },
+    // Busy: shown while code says so, with what it is busy with.
+    Entry {
+        kind: WidgetKind::Busy,
+        keyword: "busy",
+        name: "Busy",
+        category: Category::Data,
+        size: (3, 1),
+        caption: Some("Busy..."),
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[],
     },
     Entry {
         kind: WidgetKind::Display,
@@ -711,7 +831,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         sortable: false,
         order: None,
         show: Vec::new(),
-        orientation: has_property(kind, WidgetProperty::Orientation)
+        // A splitter is written with its direction; a separator is level unless written vertical.
+        orientation: (has_property(kind, WidgetProperty::Orientation) && kind != WidgetKind::Separator)
             .then_some(Orientation::Horizontal),
         surface: has_property(kind, WidgetProperty::Surface).then_some(Surface::Svg),
         renderer: None,
@@ -722,6 +843,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         units: None,
         tooltip: None,
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
+        to: None,
+        max: None,
+        split: false,
         style: None,
         readonly: false,
         foldable: false,
@@ -768,6 +892,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(icon) = props.icon.as_ref().filter(|_| props.kind != WidgetKind::Icon) {
         parts.push(format!("icon {}", quote(icon)));
     }
+    if props.split {
+        parts.push("split".to_string());
+    }
     // A popover has no place in the window's grid: it opens next to its part.
     if props.kind == WidgetKind::Popover {
         if let Some(target) = &props.for_part {
@@ -785,8 +912,14 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(orientation) = props.orientation {
         parts.push(orientation_keyword(orientation).to_string());
     }
+    if let Some(to) = &props.to {
+        parts.push(format!("to {}", quote(to)));
+    }
     if let Some(bind) = &props.bind {
         parts.push(format!("bind {bind}"));
+    }
+    if let Some(max) = &props.max {
+        parts.push(format!("max {max}"));
     }
     if let Some(digits) = props.digits {
         parts.push(format!("digits {digits}"));
@@ -975,6 +1108,9 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Sortable, props.sortable, "sortable"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
         (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
+        (WidgetProperty::To, props.to.is_some(), "to"),
+        (WidgetProperty::Max, props.max.is_some(), "max"),
+        (WidgetProperty::Split, props.split, "split"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {

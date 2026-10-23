@@ -17,6 +17,7 @@
     container,
     onnavigate,
     fixedRows = null,
+    joined = false,
   }: {
     preview: Preview;
     page: Page;
@@ -29,6 +30,8 @@
     onnavigate: (target: string, newWindow?: boolean) => void;
     /** A grid with a fixed number of rows, such as the footer. */
     fixedRows?: number | null;
+    /** Parts that touch, without the space between columns: a button group. */
+    joined?: boolean;
   } = $props();
 
   // While a part is dragged, the designer offers rows below the content to drop on.
@@ -81,7 +84,7 @@
   bind:clientHeight={height}
   style:grid-template-rows={rowTemplate}
   style:grid-auto-rows="{ROW_HEIGHT}px"
-  style:gap="{GAP}px"
+  style:gap={joined ? "0px" : `${GAP}px`}
 >
   {#if design && pageDesigner.showGrid}
     {#each { length: (rows + freeRows) * columns } as _, i (i)}

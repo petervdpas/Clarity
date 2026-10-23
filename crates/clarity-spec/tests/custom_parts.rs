@@ -292,3 +292,28 @@ fn sample_text_shows_no_label_key() {
     assert!(!text.contains('@'), "{text}");
     assert!(text.starts_with("Player "), "{text}");
 }
+
+#[test]
+fn a_rust_or_go_part_names_its_crate_or_package() {
+    let text = "module game\n\npart Arena\n    crate \"parts/Arena\"\n\npart Field\n    go \"parts/field\"\n";
+    let (file, diagnostics) = parse(text, "game.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    assert_eq!(file.parts[0].library, Some(PartLibrary::Crate { folder: "parts/Arena".into() }));
+    assert_eq!(file.parts[1].library, Some(PartLibrary::Go { folder: "parts/field".into() }));
+}
+
+#[test]
+fn a_crate_or_go_part_needs_its_folder_with_its_manifest() {
+    use clarity_spec::native::{self, PartFile};
+    let text = "module game\n\npart Arena\n    crate \"parts/Arena\"\n\npart Field\n    go \"parts/field\"\n";
+    let checked = |files: Vec<PartFile>| {
+        let mut p = load_keyed([("game.clarity", text)], &[], "en");
+        native::attach(&mut p, files);
+        p.diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect::<Vec<_>>()
+    };
+    let file = |part: &str, path: &str| PartFile { part: part.into(), path: path.into(), bytes: b"x".to_vec() };
+    assert_eq!(checked(vec![file("Arena", "Cargo.toml"), file("Field", "go.mod")]), Vec::<String>::new());
+    assert!(has(&checked(vec![file("Field", "go.mod")]), "part Arena: its folder 'parts/Arena' is not there"));
+    assert!(has(&checked(vec![file("Arena", "src/lib.rs"), file("Field", "go.mod")]), "'parts/Arena' has no Cargo.toml"));
+    assert!(has(&checked(vec![file("Arena", "Cargo.toml"), file("Field", "field.go")]), "'parts/field' has no go.mod"));
+}

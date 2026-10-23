@@ -669,6 +669,39 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
             }
         }
     }
+    found.extend(part_language_problems(settings, project));
+    found
+}
+
+/// A custom part is written in the project's own language (DESIGN 5.19): each
+/// part whose library line is another language's.
+fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) -> Vec<clarity_spec::Diagnostic> {
+    use clarity_spec::code::PartLibrary;
+    let (language, fits): (&str, &str) = match settings.stack.backend {
+        Backend::C => ("C", "native \"folder\""),
+        Backend::Cpp => ("C++", "native \"folder\""),
+        Backend::Rust => ("Rust", "a crate, crate \"folder\""),
+        Backend::Go => ("Go", "a package, go \"folder\""),
+        Backend::Csharp => ("C#", "a .NET control, nuget \"Package\" version or dll \"file\""),
+    };
+    let mut found = Vec::new();
+    for f in &project.files {
+        for part in &f.parts {
+            let (written, ok) = match &part.library {
+                Some(PartLibrary::Native { .. }) => ("C or C++ (native)", matches!(settings.stack.backend, Backend::C | Backend::Cpp)),
+                Some(PartLibrary::Crate { .. }) => ("Rust (crate)", settings.stack.backend == Backend::Rust),
+                Some(PartLibrary::Go { .. }) => ("Go (go)", settings.stack.backend == Backend::Go),
+                Some(PartLibrary::Nuget { .. } | PartLibrary::Dll { .. }) => (".NET", settings.stack.backend == Backend::Csharp),
+                None => continue,
+            };
+            if !ok {
+                found.push(
+                    clarity_spec::Diagnostic::error(format!("part {} is {written}, but the project is written in {language}: write it as {fits}", part.name.name), part.name.span)
+                        .in_file(&f.path),
+                );
+            }
+        }
+    }
     found
 }
 

@@ -5,8 +5,10 @@
 // libraries. Everything runs on a thread of its own, so a stack calls it
 // from any thread, and a tell reaches the stack on that thread.
 //
-// Written once in C and built, with a project's generated glue and its
-// native parts, into the shared library every stack links.
+// The host of the C and C++ stacks, whose parts are C or C++: built with a
+// project's generated glue and its parts into the shared library the
+// program loads. The Rust and Go runtimes host their parts in their own
+// language (clarity_runtime::parts, the Go runtime's parts package).
 
 #pragma once
 

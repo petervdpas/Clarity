@@ -14,13 +14,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
+	"github.com/petervdpas/Clarity/runtimes/go/parts"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -329,24 +329,16 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 			c.partWindows[a.Instance] = window.Name()
 			application.InvokeSync(func() { parent = partParent(window.NativeWindow()) })
 		}
-		placePart(a.Instance, a.Part, a.Kind, parent, a.X, a.Y, a.Width, a.Height, a.Shown)
+		parts.Place(a.Instance, a.Part, a.Kind, uint64(parent), a.X, a.Y, a.Width, a.Height, a.Shown)
 		return Answer{}
 	case "set_part":
-		value := string(a.Value)
-		if value == "" {
-			value = "null"
-		}
-		setPart(a.Instance, a.Part, a.Name, value)
+		parts.Set(a.Instance, a.Part, a.Name, a.Value)
 		return Answer{}
 	case "hear_part":
-		values, _ := json.Marshal(a.Values)
-		if a.Values == nil {
-			values = []byte("[]")
-		}
-		hearPart(a.Instance, a.Part, a.Hear, string(values))
+		parts.Hear(a.Instance, a.Part, a.Hear, a.Values)
 		return Answer{}
 	case "close_parts":
-		closeParts(a.Instance)
+		parts.Close(a.Instance)
 		delete(c.partWindows, a.Instance)
 		return Answer{}
 	case "close_apart":
@@ -413,8 +405,8 @@ func Run(options Options, bind func(*Service) application.Service) error {
 		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 	// Custom parts draw in X11 child windows: under Wayland the toolkit runs on XWayland.
-	parts := partsLibrary()
-	if parts != "" && runtime.GOOS == "linux" && os.Getenv("GDK_BACKEND") == "" {
+	hasParts := parts.Present()
+	if hasParts && runtime.GOOS == "linux" && os.Getenv("GDK_BACKEND") == "" {
 		_ = os.Setenv("GDK_BACKEND", "x11")
 	}
 	service := New(options)
@@ -425,39 +417,26 @@ func Run(options Options, bind func(*Service) application.Service) error {
 		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 	})
 	service.window("main", options.Width, options.Height)
-	if parts != "" {
-		// A part tells on its own thread; the renderer of its window hears it.
-		err := startParts(parts, func(window uint64, part, tell, values string) {
+	if hasParts {
+		// A part tells on the part host's goroutine; the renderer of its window hears it.
+		err := parts.Start(func(window uint64, part, tell string, given []any) {
 			service.mu.Lock()
 			name, ok := service.partWindows[window]
 			service.mu.Unlock()
 			if !ok {
 				return
 			}
+			values, _ := json.Marshal(given)
 			if desktop, found := service.app.Window.GetByName(name); found {
-				desktop.ExecJS("window.clarityTold && window.clarityTold(" + strconv.FormatUint(window, 10) + ", " + quoted(part) + ", " + quoted(tell) + ", " + values + ")")
+				desktop.ExecJS("window.clarityTold && window.clarityTold(" + strconv.FormatUint(window, 10) + ", " + quoted(part) + ", " + quoted(tell) + ", " + string(values) + ")")
 			}
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
-		defer stopParts()
+		defer parts.Stop()
 	}
 	return service.app.Run()
-}
-
-// partsLibrary is libclarity_parts beside the program, which holds its
-// custom parts; empty when it has none.
-func partsLibrary() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	path := filepath.Join(filepath.Dir(exe), "libclarity_parts.so")
-	if _, err := os.Stat(path); err != nil {
-		return ""
-	}
-	return path
 }
 
 // quoted is text as a JavaScript string.

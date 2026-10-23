@@ -9,6 +9,7 @@ mod cli;
 mod logic;
 mod model;
 mod names;
+pub(crate) mod parts;
 
 pub use cli::generate as generate_cli;
 
@@ -52,6 +53,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         features.push("engines");
     }
+    // Custom parts written in Rust (DESIGN 5.19): the runtime's part host.
+    let rust_parts = parts::crate_parts(project);
+    if !rust_parts.is_empty() {
+        features.push("parts");
+    }
     features.sort();
     features.dedup();
     let Some(main_window) = main_window(project) else {
@@ -60,7 +66,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let mut files = vec![
-        text("Cargo.toml", cargo_toml(&crate_name, &features, !crate::parts::native_parts(project).is_empty())),
+        text("Cargo.toml", cargo_toml(&crate_name, &features, &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>())),
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
         text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))),
         text("src/model.json", crate::web::model_json(project)),
@@ -106,7 +112,17 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
     files.extend(crate::engine_files(project, "engines"));
     // The native parts, built before the program and copied beside it in either build.
-    files.extend(crate::parts::out_files(project, &["../target/debug", "../target/release"]));
+    // Each part's crate, its interface written from its declaration, and the glue that makes it.
+    for part in &rust_parts {
+        let n = &part.name.name;
+        for file in project.part_files.iter().flatten().filter(|f| f.part == *n && f.path != "src/clarity.rs") {
+            files.push(OutFile { path: format!("parts/{n}/{}", file.path), text: String::new(), bytes: Some(file.bytes.clone().into()) });
+        }
+        files.push(text(&format!("parts/{n}/src/clarity.rs"), parts::interface(part)));
+    }
+    if !rust_parts.is_empty() {
+        files.push(text("src/parts.rs", parts::glue(project)));
+    }
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
     }
@@ -173,10 +189,11 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, features: &[&str], parts: bool) -> String {
+fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)]) -> String {
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
-    // The webview's GTK window, which custom parts draw in, as Tauri's own GTK crates give it.
-    let parts = if parts { "\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n" } else { "" };
+    // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
+    let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
+    let parts = if parts.is_empty() { String::new() } else { format!("{crates}\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n") };
     format!(
         r#"[package]
 name = "{name}"
@@ -252,7 +269,8 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     // Custom parts drawn by native libraries (DESIGN 6.5): the shell's side of the part host.
-    let native = !crate::parts::native_parts(project).is_empty();
+    let native = !parts::crate_parts(project).is_empty();
+    let parts_mod = if native { "mod parts;\n" } else { "" };
     let (parts_code, parts_manage, parts_commands, parts_start) = if native {
         (PARTS, "\n        .manage(PartWindows::default())\n        .setup(|app| {\n            start_parts(app.handle().clone());\n            Ok(())\n        })", "\n            place_part,\n            set_part,\n            hear_part,\n            close_parts,", PARTS_X11)
     } else {
@@ -446,7 +464,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         r#"{HEADER}{ALLOW}
 mod schema;
 mod modules;
-{engines_mod}
+{engines_mod}{parts_mod}
 use std::sync::Mutex;
 
 use clarity_runtime::ui::{{RefOption, Reply, Ui, WindowState, from_data, to_data}};
@@ -850,18 +868,18 @@ async fn place_part(window: tauri::WebviewWindow, windows: tauri::State<'_, Part
         known.insert(instance, window.label().to_string());
     }
     let parent = part_parent(&window);
-    clarity_runtime::parts::place(instance, &part, &kind, parent, x, y, width, height, shown);
+    clarity_runtime::parts::place(instance, &part, &kind, parent as u64, x, y, width, height, shown);
     Ok(())
 }
 
 #[tauri::command]
 fn set_part(instance: u64, part: String, name: String, value: Value) {
-    clarity_runtime::parts::set(instance, &part, &name, &value.to_string());
+    clarity_runtime::parts::set(instance, &part, &name, value);
 }
 
 #[tauri::command]
 fn hear_part(instance: u64, part: String, hear: String, values: Vec<Value>) {
-    clarity_runtime::parts::hear(instance, &part, &hear, &Value::from(values).to_string());
+    clarity_runtime::parts::hear(instance, &part, &hear, values);
 }
 
 #[tauri::command]
@@ -878,11 +896,11 @@ fn start_parts(handle: tauri::AppHandle) {
         return;
     }
     let told = handle.clone();
-    let started = clarity_runtime::parts::start(Box::new(move |window, part, tell, values| {
+    let started = clarity_runtime::parts::start(Box::new(move |window, part, tell, values: &[Value]| {
         use tauri::Manager;
         let label = told.state::<PartWindows>().0.lock().ok().and_then(|known| known.get(&window).cloned());
         if let Some(webview) = label.and_then(|label| told.get_webview_window(&label)) {
-            let script = format!("window.clarityTold && window.clarityTold({window}, {}, {}, {values})", Value::from(part), Value::from(tell));
+            let script = format!("window.clarityTold && window.clarityTold({window}, {}, {}, {})", Value::from(part), Value::from(tell), Value::from(values.to_vec()));
             let _ = webview.eval(&script);
         }
     }));
@@ -893,7 +911,9 @@ fn start_parts(handle: tauri::AppHandle) {
 "#;
 
 /// Under Wayland the toolkit runs on XWayland, so custom parts can draw in X11 child windows.
-const PARTS_X11: &str = r#"    if clarity_runtime::parts::present() && std::env::var_os("GDK_BACKEND").is_none() {
+const PARTS_X11: &str = r#"    // The program's custom parts, for the part host.
+    parts::register();
+    if clarity_runtime::parts::present() && std::env::var_os("GDK_BACKEND").is_none() {
         // Set before any thread starts.
         unsafe { std::env::set_var("GDK_BACKEND", "x11") };
     }

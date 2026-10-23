@@ -1,7 +1,6 @@
-// Custom parts drawn by native libraries (DESIGN 5.19 and 6.5): what a
-// window's code sets and tells a part, kept in its PartState until the
-// NativePart that shows it hears it, and the values crossing to the part
-// host as JSON, as every stack writes them.
+// Custom parts on Avalonia (DESIGN 5.19 and 6.5): what a window's code sets
+// and tells a part, kept in its PartState until the part that shows it
+// hears it, and the values crossing to and from it as JSON.
 
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
@@ -10,7 +9,7 @@ using Xunit;
 
 namespace Clarity.Avalonia.Tests;
 
-public class NativePartTests
+public class PartStateTests
 {
     [Fact]
     public void APropertyReadsAsCodeSetItElseItsFallback()
@@ -30,7 +29,7 @@ public class NativePartTests
         arena.Hear("restart", 1L);
         arena.Hear("say", "Well done", true);
         var heard = new List<string>();
-        arena.Listen((name, value) => { }, (hear, values) => heard.Add($"{hear} {NativePart.Json(values)}"));
+        arena.Listen((name, value) => { }, (hear, values) => heard.Add($"{hear} {DotNetPart.Json(values)}"));
         arena.Hear("pause");
         Assert.Equal(["restart [1]", "say [\"Well done\",true]", "pause []"], heard);
     }
@@ -38,23 +37,23 @@ public class NativePartTests
     [Fact]
     public void ValuesCrossAsEveryStackWritesThem()
     {
-        Assert.Equal("7", NativePart.Json(7L));
-        Assert.Equal("\"2.50\"", NativePart.Json(2.50m));
-        Assert.Equal("\"Level one\"", NativePart.Json("Level one"));
-        Assert.Equal("true", NativePart.Json(true));
-        Assert.Equal("\"2026-10-23\"", NativePart.Json(new DateOnly(2026, 10, 23)));
-        Assert.Equal("null", NativePart.Json(null));
+        Assert.Equal("7", DotNetPart.Json(7L));
+        Assert.Equal("\"2.50\"", DotNetPart.Json(2.50m));
+        Assert.Equal("\"Level one\"", DotNetPart.Json("Level one"));
+        Assert.Equal("true", DotNetPart.Json(true));
+        Assert.Equal("\"2026-10-23\"", DotNetPart.Json(new DateOnly(2026, 10, 23)));
+        Assert.Equal("null", DotNetPart.Json(null));
     }
 
     [Fact]
     public void ATellsValuesReadAsTheHandlersTypes()
     {
         var values = JsonDocument.Parse("[42, \"Ann\", true, \"9.95\"]").RootElement.EnumerateArray().ToArray();
-        Assert.Equal(42L, NativePart.Read<long>(values, 0));
-        Assert.Equal("Ann", NativePart.Read<string>(values, 1));
-        Assert.True(NativePart.Read<bool>(values, 2));
-        Assert.Equal(9.95m, NativePart.Read<decimal>(values, 3));
-        Assert.Equal(0L, NativePart.Read<long>(values, 9));
+        Assert.Equal(42L, DotNetPart.Read<long>(values, 0));
+        Assert.Equal("Ann", DotNetPart.Read<string>(values, 1));
+        Assert.True(DotNetPart.Read<bool>(values, 2));
+        Assert.Equal(9.95m, DotNetPart.Read<decimal>(values, 3));
+        Assert.Equal(0L, DotNetPart.Read<long>(values, 9));
     }
 }
 

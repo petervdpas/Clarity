@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- Colors `crate` and `go`, the library lines of custom parts written in Rust and Go.
+
 ## 0.1.7
 
 - Colors the words of custom parts: `part` with `native`, `nuget`, `dll`, `binds`, `tells`, `hears` and `preview`. A canvas no longer has `renderer`.

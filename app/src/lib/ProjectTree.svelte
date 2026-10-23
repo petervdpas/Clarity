@@ -83,7 +83,9 @@
   function libraryNote(part: (typeof customParts)[number]["part"]): string {
     const l = part.library;
     if (!l) return "no library";
-    if (l.kind === "native") return "native";
+    if (l.kind === "native") return "C, C++";
+    if (l.kind === "crate") return "Rust";
+    if (l.kind === "go") return "Go";
     return l.kind === "nuget" ? "NuGet" : "DLL";
   }
   // The commands of the command-line program (DESIGN 5.20), by what is typed, with their module.

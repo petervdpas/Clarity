@@ -1389,18 +1389,13 @@ impl<'a> Window<'a> {
                     "{pad}<c:CanvasView {at} Drawing=\"{{Binding {name}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{click}{plain_state}{extra} />",
                 );
             }
-            // A custom part a native library draws (DESIGN 5.19), in a native window Avalonia keeps.
+            // A custom part (DESIGN 5.19): a .NET library's control.
             WidgetKind::Custom => {
                 let kind = p.part.as_deref().unwrap_or_default();
                 let state = named.map(|n| format!(" State=\"{{Binding {}}}\"", member(n))).unwrap_or_default();
                 let value = bound.as_ref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let native = crate::parts::declaration(self.project, kind).is_none_or(|d| matches!(d.library, Some(clarity_spec::code::PartLibrary::Native { .. })));
-                if native {
-                    let _ = writeln!(out, "{pad}<c:NativePart {at} Kind=\"{}\"{state}{value}{plain_state}{extra} />", attr(kind));
-                } else {
-                    // A .NET library's control, shown through the part's adapter.
-                    let _ = writeln!(out, "{pad}<parts:{kind} {at}{state}{value}{plain_state}{extra} />");
-                }
+                // A .NET library's control, shown through the part's adapter.
+                let _ = writeln!(out, "{pad}<parts:{kind} {at}{state}{value}{plain_state}{extra} />");
             }
             WidgetKind::Image | WidgetKind::Canvas => {
                 let what = if p.kind == WidgetKind::Image { "Image" } else { "Canvas" };
@@ -1841,7 +1836,7 @@ public partial class {name}View : UserControl
                     .params
                     .iter()
                     .enumerate()
-                    .map(|(i, p)| format!("NativePart.Read<{}>(values, {i})", super::names::value_type(&crate::type_ref_info(self.project, &p.ty))))
+                    .map(|(i, p)| format!("DotNetPart.Read<{}>(values, {i})", super::names::value_type(&crate::type_ref_info(self.project, &p.ty))))
                     .collect();
                 let _ = write!(cases, "            case {}:\n                Handle(() => On{}({}));\n                break;\n", string(&wired.tell), pascal(&wired.handler), values.join(", "));
             }

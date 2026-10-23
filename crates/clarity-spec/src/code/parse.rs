@@ -806,6 +806,12 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
                     line.next();
                     part.library = Some(PartLibrary::Native { folder: line.expect_string("the library's folder, as in native \"parts/Arena\"")? });
                 }
+                "crate" | "go" => {
+                    library(&part, &line)?;
+                    line.next();
+                    let folder = line.expect_string(if word == "crate" { "the crate's folder, as in crate \"parts/Arena\"" } else { "the package's folder, as in go \"parts/arena\"" })?;
+                    part.library = Some(if word == "crate" { PartLibrary::Crate { folder } } else { PartLibrary::Go { folder } });
+                }
                 "nuget" => {
                     library(&part, &line)?;
                     line.next();
@@ -850,7 +856,7 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
                     part.preview = Some(line.expect_string("a picture of the resources, as in preview \"arena.png\"")?);
                 }
                 _ => {
-                    let name = line.expect_ident("a property, as in speed: integer, or native, nuget, dll, binds, tells, hears, size or preview")?;
+                    let name = line.expect_ident("a property, as in speed: integer, or native, crate, go, nuget, dll, binds, tells, hears, size or preview")?;
                     line.expect(TokenKind::Colon, "':' and a type, as in speed: integer")?;
                     let ty = parse_type_ref(&mut line)?;
                     let mut property = PartProperty { name, ty, default: None, min: None, max: None, span: child.span() };

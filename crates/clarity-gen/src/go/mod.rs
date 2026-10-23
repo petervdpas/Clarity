@@ -12,6 +12,7 @@ mod cli;
 mod logic;
 mod model;
 mod names;
+pub(crate) mod parts;
 
 use clarity_project::Settings;
 use clarity_spec::Project;
@@ -132,16 +133,39 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.extend(crate::engine_files(project, "engines"));
         files.push(text("engines.go", engines_go(project)));
     }
-    // The native parts, built before the program and copied beside it.
-    files.extend(crate::parts::out_files(project, &["../bin"]));
+    // Each custom part's module, its interface written from its declaration, and the glue that makes it.
+    let go_parts = parts::go_parts(project);
+    for (part, folder) in &go_parts {
+        let n = &part.name.name;
+        let into = parts::out_folder(folder);
+        for file in project.part_files.iter().flatten().filter(|f| f.part == *n && f.path != "clarity.go") {
+            files.push(OutFile { path: format!("{into}/{}", file.path), text: String::new(), bytes: Some(file.bytes.clone().into()) });
+        }
+        files.push(text(&format!("{into}/clarity.go"), parts::interface(part, folder)));
+    }
+    if !go_parts.is_empty() {
+        files.push(text("parts.go", parts::glue(project)));
+    }
     files.push(text("main.go", main_go(project, settings, &module, &databases, &servers, &owners, &main_window)));
     // The modules the code imports itself, which go.mod lists as direct.
     let mut direct = vec![RUNTIME_MODULE, "github.com/wailsapp/wails/v3"];
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
     }
-    files.push(text("go.mod", go_mod(&module, &left_out, &direct)));
-    files.push(text("go.sum", go_sum(&left_out)));
+    let mut go_mod_text = go_mod(&module, &left_out, &direct);
+    // Each part is a module of its own beside the program's; what it requires, and its sums, the program's too.
+    let mut part_sums = String::new();
+    for (part, folder) in &go_parts {
+        let path = parts::module_of(project, &part.name.name, folder);
+        let mut lines = format!("\t{path} v0.0.0\n");
+        for (module, version) in parts::requirements_of(project, &part.name.name) {
+            lines.push_str(&format!("\t{module} {version} // indirect\n"));
+        }
+        go_mod_text.push_str(&format!("\nrequire (\n{lines})\n\nreplace {path} => ./{}\n", parts::out_folder(folder)));
+        part_sums.push_str(&parts::sums_of(project, &part.name.name));
+    }
+    files.push(text("go.mod", go_mod_text));
+    files.push(text("go.sum", go_sum(&left_out) + &part_sums));
     Ok(files)
 }
 
@@ -345,6 +369,8 @@ fn schema_go(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec
 /// shell asks the program's `windows` for their data and handlers.
 /// `--check` stops after the databases.
 fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(String, Sql, String)], servers: &[&Server], owners: &[logic::Owner], main_window: &str) -> String {
+    // The program's custom parts, for the part host (DESIGN 5.19).
+    let register_parts = if parts::go_parts(project).is_empty() { "" } else { "\tregisterParts()\n" };
     // The runtime's packages and Wails, by path as gofmt keeps them; a server
     // database's package turns its driver on when it is imported.
     let mut imports: Vec<(String, String)> = vec![
@@ -659,7 +685,7 @@ func main() {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}}}, bind); err != nil {{
+{register_parts}\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}}}, bind); err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}

@@ -1118,10 +1118,16 @@ The thresholds (12 inputs, the target size) are settings of the rule, with these
 
 Raised by the user on 2026-10-23: a developer should be able to put a part in a window that an outside library draws, such as a game scene drawn with SFML, a map or a code editor. A custom part is a link to that library. Every part is Clarity's own today; the early sketch of custom widgets (`widget ColorPicker`, from before the designer) was never built and is replaced by this.
 
-**Two kinds of library.** A part's library is one of these:
+**In the project's own language.** A part is written in the language of the project's stack, with that language's own libraries and packages (decided with the user, 2026-10-23): a project that picks a stack picks its parts' language. The library line says which:
 
-- **Native**, a shared library written in C or C++ (or anything that exports C functions), using whatever it likes inside: SFML, SDL, raylib, OpenGL. It speaks a small C interface Clarity writes for it, and draws into a native child window the host gives it at the part's place. All five stacks link it, each in its own way (section 6.5), so a project keeps its part when it changes stack.
-- **.NET**, an Avalonia control from a NuGet package or a DLL (Mapsui, AvaloniaEdit, ScottPlot). Only the C# stack can hold it; a project on another stack gets a problem at the part.
+| Stack | Library line | The part is |
+|---|---|---|
+| C, C++ | `native "parts/Arena"` | C or C++ with its `CMakeLists.txt`, using SFML, SDL, raylib or anything CMake finds |
+| Rust | `crate "parts/Arena"` | a Rust crate with its `Cargo.toml`, using any crate |
+| Go | `go "parts/arena"` | a Go package with its `go.mod`, using any module |
+| C# | `nuget "Package" version` or `dll "file"` | an Avalonia control from that package or assembly, through a C# adapter |
+
+A native, Rust or Go part draws into a native child window the host gives it at the part's place; a C# part is an Avalonia control in the window itself. A part whose library line does not fit the project's stack is a problem at the declaration, so changing stack shows each part that must be written again.
 
 **The declaration is Clarity.** What the rest of the project sees is declared in a module, so the checker, code, the Parts palette and the properties panel treat the part as they treat a built-in one, without knowing what is inside it. The words are the ones engines already use for talking with the screen (section 5.12):
 
@@ -1153,7 +1159,14 @@ page Game: window
 - **`size`** is the span and rows the Parts palette drops it with.
 - A part is placed by its name, written as declared (`Arena ...`), so it never clashes with a built-in keyword, which is always lower case.
 
-**A native part's interface.** Clarity writes `parts/Arena/clarity/Arena.h`, a C header with the part's functions typed from the declaration, and writes it again whenever the declaration changes. The library implements them; a function that no longer fits the declaration fails its build.
+**The part's interface, in its language.** Clarity writes one file of the part's folder from the declaration, and writes it again whenever the declaration changes; the part implements what it asks, and one that no longer fits the declaration fails its build:
+
+- C or C++: `parts/Arena/clarity/Arena.h`, the functions below.
+- Rust: `parts/Arena/src/clarity.rs`, the trait `ArenaPart` that the crate's `Arena` implements, the `Window` it draws in (with the raw handle wgpu and Bevy take; a Bevy app runs without its own window loop and updates once a frame), and `ArenaHost` with a method per tell. The file needs nothing of Clarity's: the crate depends on `raw-window-handle` only.
+- Go: `parts/arena/clarity.go`, the interface `Part` that the package's `New(window, width, height, host)` makes, the `Window`, and `Host` with a method per tell; the package's module needs nothing of Clarity's either.
+- C#: the generated half of the adapter, below.
+
+In C and C++:
 
 ```c
 ArenaPart *Arena_create(void *parent, int width, int height, ArenaHost *host);
@@ -1174,7 +1187,7 @@ void Arena_scored(ArenaHost *host, int64_t points);
 - The host calls everything on the UI thread. `Arena_frame` comes about 60 times a second while the part is shown, for a part that animates; a still part leaves it empty. The child window gets the mouse and keyboard itself, so the library reads them as it would in its own window.
 - A tell or change the library reports is queued and goes to the backend as an event, after the call it came in.
 
-**Built by Clarity.** `parts/Arena/` holds a `CMakeLists.txt` that makes a shared library named after the part; Clarity runs CMake on it before Build and Run when the folder changed, as it rebuilds a Rust engine, and shows its errors as problems. A folder may instead hold the library already built, under `lib/<platform>/`. Declaring a part writes a starter that builds without other libraries (it keeps its values and draws nothing), with the lines for SFML ready to switch on. Clarity never writes over a file in `parts/` after the first, except under `clarity/`, which is Clarity's.
+**Built with the program.** A C or C++ part's `CMakeLists.txt` makes a library named after the part, which the program's own CMake build takes in; a Rust part's crate is a path dependency of the program's; a Go part's module is required by the program's and replaced by its folder, its requirements and sums joining the program's. Declaring a part writes a starter in its language that builds without other libraries (it keeps its values and draws nothing). Clarity never writes over a file of the part's folder after the first, except its interface file.
 
 **A .NET part's adapter.** The control in the package is not Clarity's, so a small C# class sits between them: `parts/Notes/Notes.cs`, the developer's half of a partial class, holding the control and passing values to it and from it. The generated half (on Clarity.Avalonia's `DotNetPart`) calls a partial method the adapter must write for the value (`ShowValue`), each property (`Show<Property>`) and each hear (`On<Hear>`), so the C# compiler reports an adapter that no longer fits its declaration, and gives the adapter a method per tell and `Changed(value)` to call. Declaring the part writes a starter adapter.
 
@@ -1182,7 +1195,7 @@ void Arena_scored(ArenaHost *host, int64_t points);
 
 **On the design canvas** a part is a box with its name and size, or a picture of it (`preview "arena.png"` in the declaration, from the resources). Preview in the IDE shows the box too: the library is loaded only by the built program. Run shows the real part.
 
-**On Linux** a native part needs X11 for its child window, as SFML does. A program that holds one starts under X11 (XWayland on a Wayland desktop); Avalonia already does.
+**On Linux** a C, C++, Rust or Go part needs X11 for its child window, as SFML does. A program that holds one starts under X11 (XWayland on a Wayland desktop).
 
 **Checked.** A part's declaration is checked like an entity's; a window that sets an undeclared property, wires an undeclared tell or calls an undeclared hear gets an error; a missing library, one whose build fails or a .NET part on another stack is a problem at the declaration; the usability rules (section 5.18) apply to its properties as to a built-in part's.
 
@@ -1338,14 +1351,14 @@ impl ApproveOrder for Actions {
 
 ### 6.5 Custom parts in the output (2026-10-23, decided)
 
-How each stack carries a custom part (section 5.19). The frontend still holds no business logic: a part receives data and tells, and validation stays generated from the dictionary and repeated on the backend.
+How each stack carries a custom part (section 5.19), in the stack's own language. The frontend still holds no business logic: a part receives data and tells, and validation stays generated from the dictionary and repeated on the backend.
 
-- **Clarity's part host, written once.** `clarity_parts` is a small C runtime (in `runtimes/parts/`) that every stack links: it makes a native child window for each part (an X11 window on Linux, a child `HWND` on Windows, an `NSView` on macOS), places and hides it, calls the library's `frame` about 60 times a second, and passes values, hears and tells. It runs the parts on a thread of its own, so it needs nothing of the host's main loop or threads, and the stacks call it alike.
-- **Generated glue.** For each project the generator writes a C file that turns the part host's plain calls (create a part of a kind, set a property by name, a hear with its values) into the typed functions of each part's header, and the typed tells back into one call to the host. CMake builds the glue, the part host and every native part into one shared library, `clarity_parts`, copied next to the program (`$ORIGIN` and `@loader_path` on Linux and macOS). CMake and a C++ compiler join the tools P3 checks, only for a project that has a native part.
-- **Web stacks (Rust, Go, C, C++).** The renderer draws a placeholder where the part sits and tells the shell its rectangle (in the webview's pixels) whenever it moves, resizes, shows or hides, or a dialog, popover, menu or open dropdown covers it. It sets each property and the bound value on the part when the window opens and when a reply changes them, and gives it the hears a reply carries. A tell comes back from the shell as a renderer event and runs its handler as a click does, with the tell's values. The shell's part is small: it gives the part host the webview's native window (on Linux the WebKitGTK view's X11 window) and passes the renderer's calls on, through the shell's own commands; each stack links the library its own way (C and C++ in CMake, Rust through `extern "C"` and `build.rs`, Go through cgo).
-- **Avalonia.** A native part is a generated control on `NativeControlHost` (Clarity.Avalonia's `NativePart`), which makes the child window, gives it to the part host through `DllImport`, and posts tells to the UI thread; Avalonia moves and hides it with the layout. A .NET part's package is a `PackageReference` in the generated `.csproj` (a DLL a `Reference` with its path), and its adapter and generated half go into the generated project's `parts/<Name>/` folder, as in the project. Both are placed in the window's AXAML and bound to the view model like a built-in part. The bases they build on are in Clarity.Avalonia, so it needs a package version.
+- **A part host per runtime.** The runtime of a stack whose parts draw in native windows hosts them in its own language: `runtimes/parts` in C for the C and C++ stacks, `clarity_runtime::parts` for Rust (the `parts` feature), and the `parts` package of the Go runtime. Each makes a native child window for each part (an X11 window on Linux), places and hides it, calls the part's frame about 60 times a second, and passes values, hears and tells, on a thread of its own, so it needs nothing of the shell's main loop. They behave alike, each tested with a test part of its own.
+- **Generated glue.** The program registers each kind of part with its host and turns the host's plain calls (a property by name, a hear with its values) into the part's typed ones, and its typed tells back: `parts/glue.c` built with the part into `libclarity_parts` beside a C or C++ program, which the shell loads; `src/parts.rs` in a Rust program; `parts.go` in a Go program.
+- **Web stacks (Rust, Go, C, C++).** The renderer draws a placeholder where the part sits and tells the shell its rectangle (in the webview's pixels) whenever it moves, resizes, shows or hides, or a dialog, popover, menu or open dropdown covers it. It sets each property and the bound value on the part when the window opens and when a reply changes them, and gives it the hears a reply carries. A tell comes back from the shell as a renderer event and runs its handler as a question's answer does, with the tell's values. The shell gives the part host the webview's native window (on Linux the WebKitGTK view's X11 window) and passes the renderer's calls on, through its own commands.
+- **Avalonia.** A C# part is an Avalonia control from its package, through its adapter: the package is a `PackageReference` in the generated `.csproj` (a DLL a `Reference` with its path), and the adapter and its generated half (on Clarity.Avalonia's `DotNetPart`) go into the generated project's `parts/<Name>/`. It is placed in the window's AXAML and bound to the view model like a built-in part.
 - **Backends.** A custom part's properties are part state as `visible` is, held by name, and its hears go out with the part changes of the reply, so every runtime carries them with no code per custom part (`conformance/custom-parts.json`). A tell comes in as an event with values.
-- **Owned, never written over.** The files in `parts/` are the developer's, except `clarity/`. The generated project lists them in its `AGENTS.md` and `CLAUDE.md` as owned (RT1), so another AI edits those and not the copies.
+- **Owned, never written over.** The files of a part's folder are the developer's, except its interface file. The generated project lists them in its `AGENTS.md` and `CLAUDE.md` as owned (RT1), so another AI edits those and not the copies.
 
 ### 6.6 Regeneration
 

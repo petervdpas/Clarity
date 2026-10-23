@@ -170,7 +170,7 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>A property of a custom part as type <typeparamref name="T"/>: as written or set,
     /// else <paramref name="fallback"/>, its declared default as JSON.</summary>
     public T ValueAs<T>(string name, string fallback) =>
-        values.TryGetValue(name, out var value) && value is T typed ? typed : JsonSerializer.Deserialize<T>(fallback, NativePart.Options)!;
+        values.TryGetValue(name, out var value) && value is T typed ? typed : JsonSerializer.Deserialize<T>(fallback, DotNetPart.Options)!;
 
     /// <summary>Gives a custom part a hear: <c>arena.restart(2)</c>. One given before the part
     /// shows waits for it.</summary>

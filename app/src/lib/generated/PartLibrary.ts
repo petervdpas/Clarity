@@ -3,4 +3,4 @@
 /**
  * The library that draws a custom part.
  */
-export type PartLibrary = { "kind": "native", folder: string, } | { "kind": "nuget", package: string, version: string, } | { "kind": "dll", file: string, };
+export type PartLibrary = { "kind": "native", folder: string, } | { "kind": "crate", folder: string, } | { "kind": "go", folder: string, } | { "kind": "nuget", package: string, version: string, } | { "kind": "dll", file: string, };

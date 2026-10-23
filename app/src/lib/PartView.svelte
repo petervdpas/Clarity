@@ -31,7 +31,9 @@
   const library = $derived.by(() => {
     const l = decl.library;
     if (!l) return "no library yet";
-    if (l.kind === "native") return `a native library built from ${l.folder}`;
+    if (l.kind === "native") return `C or C++ built from ${l.folder}`;
+    if (l.kind === "crate") return `the Rust crate in ${l.folder}`;
+    if (l.kind === "go") return `the Go package in ${l.folder}`;
     if (l.kind === "nuget") return `the NuGet package ${l.package} ${l.version}, through its adapter in parts/${name}`;
     return `${l.file}, through its adapter in parts/${name}`;
   });

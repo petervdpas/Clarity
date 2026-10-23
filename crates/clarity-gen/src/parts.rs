@@ -412,12 +412,19 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
             written.push(adapter);
         }
     }
-    for part in native_parts(project) {
-        let Some(PartLibrary::Native { folder }) = &part.library else { continue };
+    // A native, Rust or Go part: its starter where the folder has none, and
+    // the file of Clarity's (the header, `src/clarity.rs`, `clarity.go`) always.
+    for part in project.files.iter().flat_map(|f| &f.parts) {
+        let (folder, files, manifest, own): (&String, Vec<(String, String)>, &str, &str) = match &part.library {
+            Some(PartLibrary::Native { folder }) => (folder, starter(part), native::BUILD_FILE, "clarity/"),
+            Some(PartLibrary::Crate { folder }) => (folder, crate::rust::parts::starter(part), "Cargo.toml", "src/clarity.rs"),
+            Some(PartLibrary::Go { folder }) => (folder, crate::go::parts::starter(part), "go.mod", "clarity.go"),
+            _ => continue,
+        };
         let root = dir.join(folder);
-        let fresh = !root.join(native::BUILD_FILE).exists();
-        for (path, text) in starter(part) {
-            let own = path.starts_with(native::OWN_FOLDER);
+        let fresh = !root.join(manifest).exists();
+        for (path, text) in files {
+            let own = path.starts_with(own);
             if !own && !fresh {
                 continue;
             }
@@ -443,4 +450,15 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
 pub fn dotnet_adapter(project: &Project, name: &str) -> Option<String> {
     let part = crate::csharp::parts::dotnet_parts(project).into_iter().find(|p| p.name.name == name)?;
     Some(crate::csharp::parts::adapter_starter(project, part))
+}
+
+/// What declaring a part writes into its folder, by its library: C or C++
+/// with CMake, a Rust crate, or a Go module.
+pub fn starter_for(part: &PartDecl) -> Vec<(String, String)> {
+    match &part.library {
+        Some(PartLibrary::Native { .. }) => starter(part),
+        Some(PartLibrary::Crate { .. }) => crate::rust::parts::starter(part),
+        Some(PartLibrary::Go { .. }) => crate::go::parts::starter(part),
+        _ => Vec::new(),
+    }
 }

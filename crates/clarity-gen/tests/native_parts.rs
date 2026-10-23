@@ -72,19 +72,96 @@ void Arena_restart(ArenaPart*, int64_t level) { fprintf(stderr, "arena restart %
 void Arena_say(ArenaPart*, const char*, bool) {}
 "#;
 
-fn project() -> clarity_spec::Project {
-    let mut p = load_keyed([("game.clarity", GAME)], &[], "en");
-    let starter = parts::starter(&p.files[0].parts[0]);
+/// The test's part in Rust: as the C++ one, it tells and says what it hears.
+const TEST_PART_RUST: &str = r#"mod clarity;
+pub use clarity::*;
+
+pub struct Arena {
+    host: ArenaHost,
+    frames: u32,
+}
+
+impl ArenaPart for Arena {
+    fn create(_window: Window, _width: u32, _height: u32, host: ArenaHost) -> Self {
+        Arena { host, frames: 0 }
+    }
+    fn frame(&mut self) {
+        self.frames += 1;
+        if self.frames == 20 {
+            self.host.scored(7, "test");
+        }
+    }
+    fn set_value(&mut self, _value: i64) {}
+    fn set_speed(&mut self, speed: i64) {
+        eprintln!("arena speed {speed}");
+    }
+    fn set_title(&mut self, title: String) {
+        eprintln!("arena title {title}");
+    }
+    fn set_running(&mut self, _running: bool) {}
+    fn restart(&mut self, level: i64) {
+        eprintln!("arena restart {level}");
+    }
+    fn say(&mut self, _words: String, _loud: bool) {}
+}
+"#;
+
+/// The test's part in Go.
+const TEST_PART_GO: &str = r#"package arena
+
+import (
+	"fmt"
+	"os"
+)
+
+type part struct {
+	host   Host
+	frames int
+}
+
+func New(window Window, width, height int, host Host) Part { return &part{host: host} }
+
+func (p *part) Resize(width, height int) {}
+func (p *part) Frame() {
+	p.frames++
+	if p.frames == 20 {
+		p.host.Scored(7, "test")
+	}
+}
+func (p *part) SetEnabled(enabled bool)       {}
+func (p *part) SetValue(value int64)          {}
+func (p *part) SetSpeed(speed int64)          { fmt.Fprintf(os.Stderr, "arena speed %d\n", speed) }
+func (p *part) SetTitle(title string)         { fmt.Fprintf(os.Stderr, "arena title %s\n", title) }
+func (p *part) SetRunning(running bool)       {}
+func (p *part) Restart(level int64)           { fmt.Fprintf(os.Stderr, "arena restart %d\n", level) }
+func (p *part) Say(words string, loud bool)   {}
+"#;
+
+/// The game, its part written in the language of `backend`.
+fn project_for(backend: clarity_project::Backend) -> clarity_spec::Project {
+    use clarity_project::Backend;
+    let (line, test_file, test_part) = match backend {
+        Backend::Rust => ("crate \"parts/Arena\"", "src/lib.rs", TEST_PART_RUST),
+        Backend::Go => ("go \"parts/arena\"", "arena.go", TEST_PART_GO),
+        _ => ("native \"parts/Arena\"", "Arena.cpp", TEST_PART),
+    };
+    let text = GAME.replace("native \"parts/Arena\"", line);
+    let mut p = load_keyed([("game.clarity", text.as_str())], &[], "en");
+    let starter = parts::starter_for(&p.files[0].parts[0]);
     let files = starter
         .into_iter()
         .map(|(path, text)| {
-            let text = if path == "Arena.cpp" { TEST_PART.to_string() } else { text };
+            let text = if path == test_file { test_part.to_string() } else { text };
             PartFile { part: "Arena".into(), path, bytes: text.into_bytes() }
         })
         .collect();
     clarity_spec::native::attach(&mut p, files);
     assert!(!p.has_errors(), "{:?}", p.diagnostics);
     p
+}
+
+fn project() -> clarity_spec::Project {
+    project_for(clarity_project::Backend::Cpp)
 }
 
 #[test]
@@ -167,7 +244,7 @@ fn built(backend: clarity_project::Backend, build: &[&str]) -> std::path::PathBu
     if backend == clarity_project::Backend::Csharp {
         settings.stack.ui = clarity_project::Ui::Avalonia;
     }
-    let files = clarity_gen::generate(&project(), &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let files = clarity_gen::generate(&project_for(backend), &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../target/generated/native-parts-{backend:?}"));
     // A Rust build keeps its target folder between runs; it takes minutes.
     if backend != clarity_project::Backend::Rust {
@@ -256,28 +333,40 @@ fn a_c_program_places_its_native_part() {
 }
 
 #[test]
-#[ignore = "builds a Tauri program with a native part and runs it in Xvfb; slow; run with --ignored"]
-fn a_rust_program_places_its_native_part() {
+#[ignore = "builds a Tauri program with a part written in Rust and runs it in Xvfb; slow; run with --ignored"]
+fn a_rust_program_places_its_rust_part() {
     let dir = built(clarity_project::Backend::Rust, &["cargo", "build", "--color", "never"]);
-    assert!(dir.join("target/debug/libclarity_parts.so").exists());
     places_its_part(&dir, "target/debug/game", ":95");
 }
 
 #[test]
-#[ignore = "builds a Go program with a native part and runs it in Xvfb; slow; run with --ignored"]
-fn a_go_program_places_its_native_part() {
+#[ignore = "builds a Go program with a part written in Go and runs it in Xvfb; slow; run with --ignored"]
+fn a_go_program_places_its_go_part() {
     let dir = built(clarity_project::Backend::Go, &["go", "build", "-o", "bin/game", "."]);
-    assert!(dir.join("bin/libclarity_parts.so").exists());
     places_its_part(&dir, "bin/game", ":96");
 }
 
 #[test]
-#[ignore = "builds a C# program with a native part and runs it in Xvfb; slow; run with --ignored"]
-fn a_csharp_program_places_its_native_part() {
-    let dir = built(clarity_project::Backend::Csharp, &["dotnet", "build", "--nologo", "-v", "quiet", "-warnaserror"]);
-    let program = format!("bin/Debug/{}/Game", "net10.0");
-    assert!(dir.join("bin/Debug/net10.0/libclarity_parts.so").exists());
-    places(&dir, &program, ":92", "part");
+fn the_rust_and_go_interfaces_type_the_declaration() {
+    use clarity_project::Backend;
+    let rust = parts::starter_for(&project_for(Backend::Rust).files[0].parts[0]);
+    let rust = &rust.iter().find(|(p, _)| p == "src/clarity.rs").unwrap().1;
+    for line in ["pub trait ArenaPart {", "fn set_speed(&mut self, speed: i64);", "fn say(&mut self, words: String, loud: bool);", "pub fn scored(&self, points: i64, by: &str) {"] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+    let go = parts::starter_for(&project_for(Backend::Go).files[0].parts[0]);
+    let go = &go.iter().find(|(p, _)| p == "clarity.go").unwrap().1;
+    for line in ["package arena", "\tSetSpeed(speed int64)", "\tSay(words string, loud bool)", "func (h Host) Scored(points int64, by string) {"] {
+        assert!(go.contains(line), "{line}\n{go}");
+    }
+}
+
+#[test]
+fn a_part_in_another_language_than_the_stacks_is_refused() {
+    let mut settings = settings();
+    settings.stack.backend = clarity_project::Backend::Rust;
+    let refused = clarity_gen::generate(&project(), &settings).unwrap_err();
+    assert!(refused.iter().any(|e| e.contains("part Arena is C or C++ (native), but the project is written in Rust")), "{refused:?}");
 }
 
 /// A part drawn by a .NET library: its package, and the starter adapter.
@@ -349,7 +438,7 @@ fn a_dotnet_part_on_another_stack_is_refused() {
     settings.stack.backend = clarity_project::Backend::Go;
     settings.stack.ui = clarity_project::Ui::Web;
     let refused = clarity_gen::generate(&notes_project(), &settings).unwrap_err();
-    assert!(refused.iter().any(|e| e.contains("only the C# stack shows")), "{refused:?}");
+    assert!(refused.iter().any(|e| e.contains("part Notes is .NET, but the project is written in Go")), "{refused:?}");
 }
 
 #[test]

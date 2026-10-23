@@ -42,7 +42,7 @@ pub fn native_files(dir: &Path, project: &Project) -> std::io::Result<Vec<PartFi
     for part in project.files.iter().flat_map(|f| &f.parts) {
         let name = &part.name.name;
         let folder = match &part.library {
-            Some(PartLibrary::Native { folder }) => folder.clone(),
+            Some(PartLibrary::Native { folder } | PartLibrary::Crate { folder } | PartLibrary::Go { folder }) => folder.clone(),
             Some(PartLibrary::Nuget { .. } | PartLibrary::Dll { .. }) => adapter_folder(name),
             None => continue,
         };
@@ -92,10 +92,14 @@ pub fn attach(project: &mut Project, files: Vec<PartFile>) {
             let own: Vec<&PartFile> = files.iter().filter(|f| f.part == *name).collect();
             let adapter = format!("{name}.cs");
             let problem = match &part.library {
-                Some(PartLibrary::Native { folder }) if own.is_empty() => Some(format!("part {name}: its folder '{folder}' is not there or is empty")),
+                Some(PartLibrary::Native { folder } | PartLibrary::Crate { folder } | PartLibrary::Go { folder }) if own.is_empty() => {
+                    Some(format!("part {name}: its folder '{folder}' is not there or is empty"))
+                }
                 Some(PartLibrary::Native { folder }) if !own.iter().any(|f| f.path == BUILD_FILE) => {
                     Some(format!("part {name}: '{folder}' has no {BUILD_FILE}, which builds its library"))
                 }
+                Some(PartLibrary::Crate { folder }) if !own.iter().any(|f| f.path == "Cargo.toml") => Some(format!("part {name}: '{folder}' has no Cargo.toml, which makes it a crate")),
+                Some(PartLibrary::Go { folder }) if !own.iter().any(|f| f.path == "go.mod") => Some(format!("part {name}: '{folder}' has no go.mod, which makes it a module")),
                 Some(PartLibrary::Nuget { .. } | PartLibrary::Dll { .. }) if !own.iter().any(|f| f.path == adapter) => {
                     Some(format!("part {name}: '{}/{adapter}' is not there; it shows the library's control", adapter_folder(name)))
                 }

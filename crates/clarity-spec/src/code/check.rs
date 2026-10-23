@@ -99,7 +99,7 @@ fn check_parts(env: &Env, file: &SpecFile, out: &mut Output) {
     for part in &file.parts {
         let name = &part.name.name;
         if part.library.is_none() {
-            out.push(Diagnostic::error(format!("part {name} needs its library: native \"folder\", nuget \"Package\" version or dll \"file\""), part.name.span));
+            out.push(Diagnostic::error(format!("part {name} needs its library, in the project's language: native \"folder\" (C, C++), crate \"folder\" (Rust), go \"folder\" (Go), nuget \"Package\" version or dll \"file\" (C#)"), part.name.span));
         }
         let mut seen: Vec<&str> = Vec::new();
         let names = part.properties.iter().map(|p| &p.name).chain(part.tells.iter().map(|t| &t.name)).chain(part.hears.iter().map(|h| &h.name));

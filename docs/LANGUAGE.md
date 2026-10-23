@@ -885,9 +885,11 @@ part Arena
 
 | Line | What it says |
 |---|---|
-| `native "folder"` | A shared library built from that folder with its `CMakeLists.txt`, written in C or C++ (or anything that exports C functions) and speaking the C header Clarity writes for it. Every stack links it. |
-| `nuget "Package" version` | An Avalonia control from a NuGet package, with a C# adapter beside it. The C# stack only. |
-| `dll "file"` | An Avalonia control from a .NET assembly in the project. The C# stack only. |
+| `native "folder"` | C or C++ in that folder with its `CMakeLists.txt`, using SFML, SDL or anything CMake finds. The C and C++ stacks. |
+| `crate "folder"` | A Rust crate in that folder, using any crate (Bevy, wgpu, softbuffer). The Rust stack. |
+| `go "folder"` | A Go package in that folder with its `go.mod`, using any module. The Go stack. |
+| `nuget "Package" version` | An Avalonia control from a NuGet package, with a C# adapter beside it. The C# stack. |
+| `dll "file"` | An Avalonia control from a .NET assembly in the project. The C# stack. |
 | `binds type` | The type of value it shows and edits, which `bind` gives it. Without it the part binds nothing. |
 | `name: type, default v, min a, max b` | A property, set in the window and in code. Text, a number, a date, a duration, an enum or bool. |
 | `tells name(values)` | One of its events, with typed values. |
@@ -914,7 +916,11 @@ code Game
 - `arena.restart(2)` gives the part a hear with its values.
 - `visible` and `enabled` are every part's: code hides and disables a custom part as any other.
 
-**A native library** is built from its folder (`native "parts/Arena"`), which holds its `CMakeLists.txt` and its sources. Clarity writes `parts/Arena/clarity/Arena.h`, the C functions the library implements and the tells it calls, typed from the declaration, and writes it again when the declaration changes; declaring a part writes a starter that builds without other libraries. Build and Run write both (`clarity parts shop.clarity` does it from the command line), build the library with CMake into `libclarity_parts` beside the program, and every stack loads it. The library draws in a native child window at the part's place; it runs on Linux with X11 (a program with such a part starts under XWayland on a Wayland desktop), and its functions are called on a thread of their own, `Arena_frame` about 60 times a second. While a Clarity dialog, popover, menu or open list lies over the part, the part steps aside. `CLARITY_PARTS_TRACE=1` prints where each part is placed.
+A part is written in the project's own language: a library line of another language is an error at the part, so a project that changes stack sees each part to write again.
+
+**C, C++, Rust or Go.** The part's folder holds its sources: a `CMakeLists.txt`, a crate's `Cargo.toml` or a module's `go.mod`. Clarity writes one file of it from the declaration, and writes it again when the declaration changes: `clarity/Arena.h` (C functions), `src/clarity.rs` (the trait `ArenaPart` and `ArenaHost`, whose methods are the tells) or `clarity.go` (the interface `Part`, which the package's `New` makes, and `Host`). With Bevy, run its App without its own window loop and call `app.update()` in `frame`.
+
+Build and Run write the interface file and, for a new part, a starter (`clarity parts shop.clarity` does it from the command line), and build the part with the program: a C or C++ part with CMake into `libclarity_parts` beside the program, which it loads; a crate as a dependency of the program's; a Go module required by the program's. The part draws in a native child window at the part's place; it runs on Linux with X11 (a program with such a part starts under XWayland on a Wayland desktop), and it is called on a thread of its own, its frame about 60 times a second. While a Clarity dialog, popover, menu or open list lies over the part, the part steps aside. `CLARITY_PARTS_TRACE=1` prints where each part is placed.
 
 **A .NET library** (`nuget` or `dll`, the C# stack only) is shown through an adapter in `parts/Notes/Notes.cs`, half of a partial class: it holds the library's control and writes `ShowValue`, a `Show<Property>` per property and an `On<Hear>` per hear, which the half Clarity generates calls; it calls a tell by its name (`CaretMoved(3)`) and `Changed(value)` when the person changed the value. Declaring the part writes a starter adapter; one that no longer fits the declaration does not compile.
 

@@ -534,8 +534,12 @@ pub struct PartDecl {
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum PartLibrary {
-    /// `native "parts/Arena"`: a shared library built from that folder, speaking Clarity's C header.
+    /// `native "parts/Arena"`: C or C++ built from that folder with CMake (the C and C++ stacks).
     Native { folder: String },
+    /// `crate "parts/Arena"`: a Rust crate in that folder (the Rust stack).
+    Crate { folder: String },
+    /// `go "parts/arena"`: a Go package in that folder, with its go.mod (the Go stack).
+    Go { folder: String },
     /// `nuget "AvaloniaEdit" 11.1.0`: an Avalonia control from a NuGet package.
     Nuget { package: String, version: String },
     /// `dll "libs/Plot.dll"`: an Avalonia control from a .NET assembly.

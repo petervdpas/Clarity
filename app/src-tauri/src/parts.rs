@@ -19,13 +19,23 @@ pub struct PartFileInfo {
     pub own: bool,
 }
 
+/// The file of a part's folder that is Clarity's, written from the declaration.
+fn own_file(library: &PartLibrary, name: &str) -> Option<String> {
+    match library {
+        PartLibrary::Native { .. } => Some(format!("{}/{name}.h", clarity_spec::native::OWN_FOLDER)),
+        PartLibrary::Crate { .. } => Some("src/clarity.rs".into()),
+        PartLibrary::Go { .. } => Some("clarity.go".into()),
+        _ => None,
+    }
+}
+
 /// The part's folder in the project, and the project.
 fn folder_of(state: &WatchState, name: &str) -> Result<(PathBuf, clarity_spec::Project), String> {
     let dir = crate::open_dir_of(state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).ok_or_else(|| format!("there is no part {name}"))?;
     let folder = match &part.library {
-        Some(PartLibrary::Native { folder }) => folder.clone(),
+        Some(PartLibrary::Native { folder } | PartLibrary::Crate { folder } | PartLibrary::Go { folder }) => folder.clone(),
         Some(_) => clarity_spec::native::adapter_folder(name),
         None => return Err(format!("part {name} names no library yet")),
     };
@@ -45,15 +55,15 @@ fn inside(folder: &Path, path: &str) -> Result<PathBuf, String> {
 pub fn part_files(name: String, state: State<WatchState>) -> Result<Vec<PartFileInfo>, String> {
     let (folder, project) = folder_of(&state, &name)?;
     let dir = crate::open_dir_of(&state)?;
+    let own = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).and_then(|p| p.library.as_ref()).and_then(|l| own_file(l, &name));
     let mut files: Vec<PartFileInfo> = clarity_spec::native::native_files(&dir, &project)
         .map_err(|err| err.to_string())?
         .into_iter()
-        .filter(|f| f.part == name && folder.join(&f.path).is_file())
+        .filter(|f| f.part == name && folder.join(&f.path).is_file() && Some(&f.path) != own.as_ref())
         .map(|f| PartFileInfo { path: f.path, own: false })
         .collect();
-    let header = format!("{}/{name}.h", clarity_spec::native::OWN_FOLDER);
-    if folder.join(&header).is_file() {
-        files.push(PartFileInfo { path: header, own: true });
+    if let Some(own) = own.filter(|o| folder.join(o).is_file()) {
+        files.push(PartFileInfo { path: own, own: true });
     }
     Ok(files)
 }
@@ -67,9 +77,10 @@ pub fn part_file_text(name: String, path: String, state: State<WatchState>) -> R
 
 #[tauri::command]
 pub fn save_part_file(name: String, path: String, text: String, state: State<WatchState>) -> Result<(), String> {
-    let (folder, _) = folder_of(&state, &name)?;
-    if path.starts_with(&format!("{}/", clarity_spec::native::OWN_FOLDER)) {
-        return Err("the header is Clarity's: it follows the part's declaration".into());
+    let (folder, project) = folder_of(&state, &name)?;
+    let own = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).and_then(|p| p.library.as_ref()).and_then(|l| own_file(l, &name));
+    if Some(&path) == own.as_ref() {
+        return Err(format!("{path} is Clarity's: it follows the part's declaration"));
     }
     let file = inside(&folder, &path)?;
     std::fs::write(&file, text).map_err(|err| format!("cannot write {}: {err}", file.display()))

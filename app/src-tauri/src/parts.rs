@@ -22,7 +22,7 @@ pub struct PartFileInfo {
 }
 
 /// Folders a build leaves, which the tree does not show.
-const BUILD_FOLDERS: [&str; 5] = ["build", "target", "bin", "obj", "node_modules"];
+pub const BUILD_FOLDERS: [&str; 5] = ["build", "target", "bin", "obj", "node_modules"];
 
 /// Every file and folder under `folder`, folders first at each level, by
 /// name; without build output and hidden entries. `own` is Clarity's file.
@@ -77,20 +77,64 @@ fn own_of(dir: &Path, project: &clarity_spec::Project, name: &str) -> Option<Str
     }
 }
 
-/// The folder of the part or library `name` in the project, and the project.
+/// A custom part's or a library's folder in the project: what it is, its
+/// language, the folder (relative to the project's folder) and the file in
+/// it that is Clarity's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PartFolder {
+    /// `part` or `library`.
+    pub kind: &'static str,
+    pub name: String,
+    pub language: &'static str,
+    pub folder: String,
+    pub own: Option<String>,
+}
+
+/// The project's custom parts and libraries that name their library, with their folders.
+pub fn part_folders(dir: &Path, project: &clarity_spec::Project) -> Vec<PartFolder> {
+    let mut out = Vec::new();
+    for part in project.files.iter().flat_map(|f| &f.parts) {
+        let name = &part.name.name;
+        let (language, folder) = match &part.library {
+            Some(PartLibrary::Native { folder }) => ("C or C++", folder.clone()),
+            Some(PartLibrary::Crate { folder }) => ("Rust", folder.clone()),
+            Some(PartLibrary::Go { folder }) => ("Go", folder.clone()),
+            Some(_) => ("C#", clarity_spec::native::adapter_folder(name)),
+            None => continue,
+        };
+        out.push(PartFolder { kind: "part", name: name.clone(), language, folder, own: own_of(dir, project, name) });
+    }
+    for library in clarity_gen::libraries::libraries(project) {
+        use clarity_spec::code::LibrarySource;
+        let language = match &library.source {
+            Some(LibrarySource::Nuget { .. } | LibrarySource::Dll { .. }) => "C#",
+            Some(LibrarySource::Crate { .. }) => "Rust",
+            Some(LibrarySource::Go { .. }) => "Go",
+            Some(LibrarySource::Cmake { .. }) => "C or C++",
+            None => continue,
+        };
+        let name = &library.name.name;
+        out.push(PartFolder { kind: "library", name: name.clone(), language, folder: clarity_spec::native::library_folder(name), own: own_of(dir, project, name) });
+    }
+    out
+}
+
+/// The folder of the part or library `name` in the project's folder `dir`.
+fn folder_in(dir: &Path, project: &clarity_spec::Project, name: &str) -> Result<PathBuf, String> {
+    if let Some(found) = part_folders(dir, project).into_iter().find(|f| f.name == name) {
+        return Ok(dir.join(found.folder));
+    }
+    match project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name) {
+        Some(_) => Err(format!("part {name} names no library yet")),
+        None => Err(format!("there is no part or library {name}")),
+    }
+}
+
+/// The folder of the part or library `name` in the open project, and the project.
 fn folder_of(state: &WatchState, name: &str) -> Result<(PathBuf, clarity_spec::Project), String> {
     let dir = crate::open_dir_of(state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    if clarity_gen::libraries::library(&project, name).is_some() {
-        return Ok((dir.join(clarity_spec::native::library_folder(name)), project));
-    }
-    let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).ok_or_else(|| format!("there is no part or library {name}"))?;
-    let folder = match &part.library {
-        Some(PartLibrary::Native { folder } | PartLibrary::Crate { folder } | PartLibrary::Go { folder }) => folder.clone(),
-        Some(_) => clarity_spec::native::adapter_folder(name),
-        None => return Err(format!("part {name} names no library yet")),
-    };
-    Ok((dir.join(folder), project))
+    Ok((folder_in(&dir, &project, name)?, project))
 }
 
 /// A path inside the folder: no way out of it.
@@ -200,8 +244,16 @@ pub fn build_steps(kind: &str) -> Option<Vec<Vec<String>>> {
 /// built (Bevy, say) is not built twice.
 #[tauri::command]
 pub fn build_part(name: String, state: State<WatchState>, app: tauri::AppHandle) -> Result<(), String> {
-    let (folder, project) = folder_of(&state, &name)?;
     let dir = crate::open_dir_of(&state)?;
+    start_part_build(app, &dir, &name)
+}
+
+/// Starts building the part or library `name` of the project in `dir` on its
+/// own; its output goes to the Output panel, as Build in its view does.
+pub fn start_part_build(app: tauri::AppHandle, dir: &Path, name: &str) -> Result<(), String> {
+    let name = name.to_string();
+    let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let folder = folder_in(dir, &project, &name)?;
     let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name);
     let kind = match (part.and_then(|p| p.library.as_ref()), clarity_gen::libraries::library(&project, &name).and_then(|l| l.source.as_ref())) {
         (Some(PartLibrary::Native { .. }), _) => "native",
@@ -218,6 +270,16 @@ pub fn build_part(name: String, state: State<WatchState>, app: tauri::AppHandle)
         }
     }
     crate::build::start_part(app, name, folder, steps, env)
+}
+
+/// Whether the part or library `name` builds on its own (see `build_steps`).
+pub fn builds_alone(project: &clarity_spec::Project, name: &str) -> bool {
+    let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name);
+    matches!(part.and_then(|p| p.library.as_ref()), Some(PartLibrary::Native { .. } | PartLibrary::Crate { .. } | PartLibrary::Go { .. }))
+        || matches!(
+            clarity_gen::libraries::library(project, name).and_then(|l| l.source.as_ref()),
+            Some(clarity_spec::code::LibrarySource::Crate { .. } | clarity_spec::code::LibrarySource::Go { .. })
+        )
 }
 
 /// Writes every part's header from its declaration, and a starter where a

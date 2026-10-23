@@ -7,7 +7,7 @@
 
 /// Every topic, in the order of the manual. A topic file that is not listed
 /// here fails the tests, and so does a listed one that the index leaves out.
-const TOPICS: [(&str, &str); 29] = [
+const TOPICS: [(&str, &str); 32] = [
     ("start.overview", include_str!("../../../docs/manual/start.overview.md")),
     ("start.first-project", include_str!("../../../docs/manual/start.first-project.md")),
     ("project.file", include_str!("../../../docs/manual/project.file.md")),
@@ -15,12 +15,15 @@ const TOPICS: [(&str, &str); 29] = [
     ("design.windows", include_str!("../../../docs/manual/design.windows.md")),
     ("design.parts", include_str!("../../../docs/manual/design.parts.md")),
     ("design.frame", include_str!("../../../docs/manual/design.frame.md")),
+    ("design.custom-parts", include_str!("../../../docs/manual/design.custom-parts.md")),
+    ("design.sound", include_str!("../../../docs/manual/design.sound.md")),
     ("design.text", include_str!("../../../docs/manual/design.text.md")),
     ("code.language", include_str!("../../../docs/manual/code.language.md")),
     ("code.handlers", include_str!("../../../docs/manual/code.handlers.md")),
     ("code.functions", include_str!("../../../docs/manual/code.functions.md")),
     ("code.queries", include_str!("../../../docs/manual/code.queries.md")),
     ("code.data-events", include_str!("../../../docs/manual/code.data-events.md")),
+    ("code.libraries", include_str!("../../../docs/manual/code.libraries.md")),
     ("code.engines", include_str!("../../../docs/manual/code.engines.md")),
     ("data.entities", include_str!("../../../docs/manual/data.entities.md")),
     ("data.migrations", include_str!("../../../docs/manual/data.migrations.md")),

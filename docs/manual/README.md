@@ -17,6 +17,8 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Windows](design.windows.md): How a window is declared and designed: its kind, its data and events, the snap grid, and how one window opens another.
 - [Parts](design.parts.md): The parts you place on a window, grouped as the Parts palette shows them, with what each binds to and its events, and the properties panel.
 - [The app and its frame](design.frame.md): The `app` block: the main window, the frame every window shares (menu, toolbar, ribbon, sidebars, footer), keys, and the built-in click targets.
+- [Custom parts](design.custom-parts.md): How to put a part on a window that an outside library draws, such as a game scene drawn with SFML or Bevy, written in your project's own language.
+- [Sound](design.sound.md): How a window plays sound files, tones and melodies with the sound part, on every stack.
 - [Design as text](design.text.md): The text panel of the designer: a window as Clarity text, with the canvas following what you type, and the code behind next to it.
 
 ## Writing Clarity code
@@ -26,6 +28,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Functions and actions](code.functions.md): How to write logic that is not tied to one window: functions and actions in a module, with parameters, results, contracts and effects.
 - [Queries](code.queries.md): How to read records with `find`, and how code lists, reads and writes files in a file store.
 - [Data events](code.data-events.md): How to run code whenever a record is saved or deleted, from any window or action, and how a refusal stops it.
+- [Libraries](code.libraries.md): How code calls a package of your project's own language, such as a NuGet package or a Rust crate, through a library you declare.
 - [Engines](code.engines.md): How to make, edit and build a processing engine compiled to WebAssembly in Clarity, call it from code, or bring one written in another language.
 
 ## Data

@@ -120,6 +120,15 @@ thing share one key, such as `saveCaption` for every Save button.
 language file points the key at its file: `gameRules resource \"rules-nl.md\"`. A file that is the same in every \
 language is shown by its source (`markdown source \"license.md\"`). Pictures you cannot write; use those the \
 overview lists (`image source \"logo.png\"`, or a key pointing each language at one).
+- A custom part (`part Arena`) is a part an outside library draws; a library (`library Words`) gives code functions \
+from a package. Both are written in the project's own language: C or C++ (`native`, `cmake`), Rust (`crate`), Go \
+(`go`), C# (`nuget`, `dll`); never another stack's. Read the manual topics design.custom-parts and code.libraries \
+first. The overview lists their folders and files: read and write those files by their paths (like \
+parts/Arena/src/lib.rs). The file Clarity writes from the declaration (src/clarity.rs, clarity.go, the clarity \
+folder's header, the .g.cs half) is read only: change the declaration and the file follows. Build one on its own \
+with the build tool's part to see its compiler's errors. A sound (`sound name rattle source \"roll.wav\"`, see \
+design.sound) plays sound files of the resources, tones and melodies; it has no place in the window. Sound files you \
+cannot write; use those the overview lists.
 - Lay windows out to use the full width of their grid: inputs and tables reach the last column, labels sit left of \
 their inputs, buttons sit together at the bottom right.
 - Data is designed in a diagram first. When asked for new or changed data (\"an order system with customers and \
@@ -187,6 +196,9 @@ pub trait Execute {
     /// Generates and builds the project (with `run`, starts it too), as the
     /// toolbar does, and waits for the end; gives the build's output.
     fn build(&mut self, file: &Path, run: bool) -> Result<String, String>;
+    /// Builds the custom part or library `name` of the project in `dir` on
+    /// its own, in its folder, and waits for the end; gives the output.
+    fn build_part(&mut self, dir: &Path, name: &str) -> Result<String, String>;
 }
 
 /// The tools, on one project: the project file and its folder of modules.
@@ -238,6 +250,10 @@ impl ProjectTools {
         if let Some(name) = path.strip_prefix("diagrams/") {
             return super::diagrams::diagram_file(dir, name);
         }
+        // A file of a custom part's or a library's folder: `parts/Arena/src/lib.rs`.
+        if let Some(found) = self.part_file(path)? {
+            return Ok(found);
+        }
         let relative = Path::new(path);
         let fine = !path.is_empty()
             && relative.is_relative()
@@ -247,6 +263,36 @@ impl ProjectTools {
             return Err(format!("'{path}' is not a module of the project: use a path like todo.clarity inside the project's folder, or `project`"));
         }
         Ok(dir.join(relative))
+    }
+
+    /// The part folders of the project: its custom parts and libraries.
+    fn part_folders(&self) -> Result<Vec<super::parts::PartFolder>, String> {
+        let (_, dir) = self.open()?;
+        let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read the project: {err}"))?;
+        Ok(super::parts::part_folders(dir, &project))
+    }
+
+    /// A file inside a custom part's or a library's folder, when `path` names
+    /// one: never outside it, and never in its build output.
+    fn part_file(&self, path: &str) -> Result<Option<PathBuf>, String> {
+        let (_, dir) = self.open()?;
+        for folder in self.part_folders()? {
+            let Some(inside) = path.strip_prefix(&format!("{}/", folder.folder)) else { continue };
+            let pieces: Vec<&str> = inside.split('/').collect();
+            if inside.is_empty() || pieces.iter().any(|p| p.is_empty() || *p == "." || *p == ".." || p.starts_with('.')) || inside.contains('\\') {
+                return Err(format!("'{path}' is not a file of {} {}: write a path like {}/src/lib.rs", folder.kind, folder.name, folder.folder));
+            }
+            if pieces.len() > 1 && super::parts::BUILD_FOLDERS.contains(&pieces[0]) {
+                return Err(format!("'{path}' is in the build's output of {} {}, which is not written by hand", folder.kind, folder.name));
+            }
+            return Ok(Some(dir.join(&folder.folder).join(inside)));
+        }
+        Ok(None)
+    }
+
+    /// The file Clarity writes in a part's or library's folder, when `path` is it.
+    fn clarity_s_file(&self, path: &str) -> Result<bool, String> {
+        Ok(self.part_folders()?.iter().any(|f| f.own.as_ref().is_some_and(|own| path == format!("{}/{own}", f.folder))))
     }
 
     /// The project's problems, as `file:line:col: error: message` lines.
@@ -288,6 +334,17 @@ impl ProjectTools {
                 out.push_str(&format!("- resources/{}\n", r.name));
             }
         }
+        let folders = self.part_folders()?;
+        if !folders.is_empty() {
+            out.push_str("\nCustom parts and libraries (their folders, in the project's language; read and write their files by these paths):\n");
+            for f in &folders {
+                out.push_str(&format!("{} {}: {}, in {}\n", f.kind, f.name, f.language, f.folder));
+                for entry in super::parts::tree(&dir.join(&f.folder), f.own.as_deref()).into_iter().filter(|e| !e.folder) {
+                    let mark = if entry.own { " (Clarity's, read only)" } else { "" };
+                    out.push_str(&format!("- {}/{}{mark}\n", f.folder, entry.path));
+                }
+            }
+        }
         let diagrams = clarity_spec::diagrams::diagram_files(dir).unwrap_or_default();
         if !diagrams.is_empty() {
             out.push_str("\nDiagrams (diagrams/, design that proposes changes; read one with read_file):\n");
@@ -305,6 +362,9 @@ impl ProjectTools {
     }
 
     fn write(&mut self, path: &str, text: &str) -> Result<String, String> {
+        if self.clarity_s_file(path.trim())? {
+            return Err(format!("{path} is Clarity's: Clarity writes it from the declaration, so change the declaration instead"));
+        }
         let file = self.file_of(path)?;
         let before = std::fs::read_to_string(&file).ok();
         if let Some(folder) = file.parent() {
@@ -452,9 +512,25 @@ impl ProjectTools {
     /// Runs or builds the application, after the person allows it.
     fn build(&mut self, input: &Value) -> Result<String, String> {
         let run = input["run"].as_bool().unwrap_or(false);
-        let file = self.open()?.0.clone();
+        let (file, dir) = self.open()?.clone();
         if self.runs == Runs::Never {
             return Err("running and building are turned off in Clarity's settings (Agent); ask the person to press Run or Build".into());
+        }
+        // A custom part or a library, built on its own in its folder.
+        if let Some(part) = input["part"].as_str().map(str::trim).filter(|p| !p.is_empty()) {
+            let folder = self.part_folders()?.into_iter().find(|f| f.name == part).ok_or_else(|| format!("there is no custom part or library {part} with a folder"))?;
+            let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read the project: {err}"))?;
+            if !super::parts::builds_alone(&project, part) {
+                return Err(format!("{} {part} is built with the program: build the application instead", folder.kind));
+            }
+            let execute = self.execute.as_mut().ok_or("running and building are not available here")?;
+            let what = format!("Build {} {part} on its own, in {}", folder.kind, folder.folder);
+            if self.runs == Runs::Ask && !execute.ask(&what) {
+                return Ok("The person denied this, so nothing ran. Do not ask again in this turn; say what they can do instead.".into());
+            }
+            let output = execute.build_part(&dir, part)?;
+            self.output = output.clone();
+            return Ok(output);
         }
         let execute = self.execute.as_mut().ok_or("running and building are not available here")?;
         let what = if run { "Run the application: generate it, build it and start it" } else { "Build the application: generate it and build it" };
@@ -618,8 +694,14 @@ impl Tools for ProjectTools {
         if self.runs != Runs::Never {
             tools.push(tool(
                 "build",
-                "Runs the application (run: true: generate, build and start it, as the Run button does) or builds it (run: false, as the Build button does). The person may be asked first and may deny it. Gives the build's output.",
-                schema(json!({ "run": { "type": "boolean", "description": "true to start the application after building it." } }), &["run"]),
+                "Runs the application (run: true: generate, build and start it, as the Run button does) or builds it (run: false, as the Build button does). With part, builds that custom part or library on its own in its folder (C and C++ with CMake, Rust with Cargo, Go with go build), to see its compiler's errors. The person may be asked first and may deny it. Gives the build's output.",
+                schema(
+                    json!({
+                        "run": { "type": "boolean", "description": "true to start the application after building it." },
+                        "part": { "type": "string", "description": "Optional: a custom part or library to build on its own, like Arena." }
+                    }),
+                    &[],
+                ),
             ));
         }
         tools
@@ -739,11 +821,23 @@ impl Execute for AppExecute {
     fn build(&mut self, file: &Path, run: bool) -> Result<String, String> {
         // As the toolbar: Run is a debug build that starts, Build a release build.
         crate::build::start(self.app.clone(), file.to_path_buf(), !run, run, None)?;
+        Ok(self.finished())
+    }
+
+    fn build_part(&mut self, dir: &Path, name: &str) -> Result<String, String> {
+        crate::parts::start_part_build(self.app.clone(), dir, name)?;
+        Ok(self.finished())
+    }
+}
+
+impl AppExecute {
+    /// Waits for the build to end; gives the Output panel's text.
+    fn finished(&self) -> String {
         let builds = self.app.state::<crate::build::BuildState>();
         while builds.busy.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(200));
         }
-        Ok(builds.output.lock().map(|o| o.text()).unwrap_or_default())
+        builds.output.lock().map(|o| o.text()).unwrap_or_default()
     }
 }
 
@@ -1056,6 +1150,66 @@ mod tests {
         built: Vec<bool>,
     }
 
+    /// A project with a custom part in Rust, its crate written by Clarity's starter.
+    fn with_part(name: &str) -> (PathBuf, PathBuf, PathBuf, ProjectTools) {
+        let (root, file, dir) = project(name);
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+        let declared = tools.call("write_file", &json!({"path": "arena.clarity", "text": "module arena\n\npart Arena\n    crate \"parts/Arena\"\n    hears restart\n    size 4 x 3\n"}));
+        assert!(!declared.is_error, "{}", declared.text);
+        let project = clarity_project::load_modules(&dir).unwrap();
+        clarity_gen::parts::write_part_folders(&dir, &project).unwrap();
+        (root, file, dir, tools)
+    }
+
+    #[test]
+    fn the_agent_writes_a_part_s_code_but_not_clarity_s_file() {
+        let (root, _, dir, mut tools) = with_part("part-files");
+        let lib = tools.call("read_file", &json!({"path": "parts/Arena/src/lib.rs"}));
+        assert!(!lib.is_error && lib.text.contains("impl ArenaPart for Arena"), "{}", lib.text);
+        let wrote = tools.call("write_file", &json!({"path": "parts/Arena/src/sound.rs", "text": "pub fn ping() {}"}));
+        assert!(!wrote.is_error, "{}", wrote.text);
+        assert_eq!(std::fs::read_to_string(dir.join("parts/Arena/src/sound.rs")).unwrap(), "pub fn ping() {}\n");
+        // Clarity's own file is read, never written; build output and other folders are out of reach.
+        assert!(!tools.call("read_file", &json!({"path": "parts/Arena/src/clarity.rs"})).is_error);
+        let own = tools.call("write_file", &json!({"path": "parts/Arena/src/clarity.rs", "text": "x"}));
+        assert!(own.is_error && own.text.contains("Clarity writes it from the declaration"), "{}", own.text);
+        for path in ["parts/Arena/target/debug/x", "parts/Arena/../escape.rs", "parts/Other/x.rs", "parts/Arena"] {
+            assert!(tools.call("write_file", &json!({"path": path, "text": "x"})).is_error, "{path}");
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_overview_lists_parts_and_libraries_with_their_files() {
+        let (root, _, _, mut tools) = with_part("part-overview");
+        let overview = tools.call("project_overview", &json!({})).text;
+        assert!(overview.contains("Custom parts and libraries"), "{overview}");
+        assert!(overview.contains("part Arena: Rust, in parts/Arena"), "{overview}");
+        assert!(overview.contains("- parts/Arena/src/lib.rs") && overview.contains("- parts/Arena/src/clarity.rs (Clarity's, read only)"), "{overview}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_build_tool_builds_a_part_on_its_own_after_asking() {
+        let (root, _, _, mut tools) = with_part("part-build");
+        let person = std::rc::Rc::new(std::cell::RefCell::new(Asked { allow: true, asked: vec![], built: vec![] }));
+        tools.execute = Some(Box::new(person.clone()));
+        let built = tools.call("build", &json!({"part": "Arena"}));
+        assert!(!built.is_error, "{}", built.text);
+        assert_eq!(person.borrow().asked, ["Build part Arena on its own, in parts/Arena"]);
+        assert!(tools.call("build", &json!({"part": "Nothing"})).is_error);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_agent_is_told_of_parts_libraries_and_sound() {
+        let told = instructions();
+        assert!(told.contains("custom part") && told.contains("library") && told.contains("sound"), "{told}");
+        for topic in ["design.custom-parts", "code.libraries", "design.sound"] {
+            assert!(manual_topic(topic).is_ok(), "{topic}");
+        }
+    }
+
     impl Execute for std::rc::Rc<std::cell::RefCell<Asked>> {
         fn ask(&mut self, what: &str) -> bool {
             let mut asked = self.borrow_mut();
@@ -1066,6 +1220,10 @@ mod tests {
         fn build(&mut self, _file: &Path, run: bool) -> Result<String, String> {
             self.borrow_mut().built.push(run);
             Ok("The last build succeeded: running. Its output (1 line):\ndotnet build".into())
+        }
+
+        fn build_part(&mut self, _dir: &Path, name: &str) -> Result<String, String> {
+            Ok(format!("The last build succeeded: {name} built."))
         }
     }
 
@@ -1147,21 +1305,21 @@ mod tests {
         let out = dir.join("build/app");
         // Each program in its own folder of the output (DESIGN 5.20).
         std::fs::create_dir_all(out.join("desktop/Modules")).unwrap();
-        std::fs::create_dir_all(out.join("desktop/obj")).unwrap();
+        std::fs::create_dir_all(out.join("desktop/target/debug")).unwrap();
         std::fs::write(out.join("desktop/Modules/Todo.cs"), "Lists.At(xs, 1)").unwrap();
         std::fs::write(out.join("desktop/App.csproj"), "<Project />").unwrap();
-        std::fs::write(out.join("desktop/obj/project.assets.json"), "{}").unwrap();
+        std::fs::write(out.join("desktop/target/debug/app"), "binary").unwrap();
 
-        // The listing leaves the toolchain's own folders out; the stack here is the starter's.
+        // The listing leaves the toolchain's own folders out; the stack here is the starter's (Rust, whose output is target).
         let listed = tools.call("read_generated", &json!({}));
         assert!(!listed.is_error, "{}", listed.text);
         assert!(listed.text.contains(&out.display().to_string()), "{}", listed.text);
         assert!(listed.text.contains("- desktop/Modules/Todo.cs") && listed.text.contains("- desktop/App.csproj"), "{}", listed.text);
-        assert!(!listed.text.contains("obj/"), "{}", listed.text);
+        assert!(!listed.text.contains("target/"), "{}", listed.text);
         let read = tools.call("read_generated", &json!({"path": "desktop/Modules/Todo.cs"}));
         assert_eq!(read.text, "Lists.At(xs, 1)");
         // What the toolchain wrote can still be read when asked by name.
-        assert_eq!(tools.call("read_generated", &json!({"path": "desktop/obj/project.assets.json"})).text, "{}");
+        assert_eq!(tools.call("read_generated", &json!({"path": "desktop/target/debug/app"})).text, "binary");
         // Only inside out, and only reading.
         for path in ["../todo.clarity", "/etc/passwd", "Modules/../../todo.clarity"] {
             assert!(tools.call("read_generated", &json!({"path": path})).is_error, "{path}");

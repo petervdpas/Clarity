@@ -31,4 +31,12 @@ formats: { [key in string]: Array<FormatInfo> },
 /**
  * Clarity's own theme, which every theme starts from.
  */
-baseTheme: ThemeDecl, };
+baseTheme: ThemeDecl, 
+/**
+ * The icons the project shows, by name, each an SVG path in a 24 by 24 box.
+ */
+icons: { [key in string]: string }, 
+/**
+ * Every icon's name, for the designer to offer.
+ */
+iconNames: Array<string>, };

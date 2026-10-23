@@ -101,6 +101,20 @@ fn all_commands(commands: &[Command]) -> Vec<&Command> {
     out
 }
 
+/// The property of the generated Icons class that holds an icon: `triangle-alert` is `TriangleAlert`.
+pub(super) fn icon_member(name: &str) -> String {
+    pascal(name)
+}
+
+/// An icon drawn `size` pixels square from the generated Icons class, in
+/// the foreground of what holds it (the style Path.icon in App.axaml).
+fn icon_xaml(name: &str, size: u32) -> String {
+    format!(
+        "<Viewbox Width=\"{size}\" Height=\"{size}\"><Canvas Width=\"24\" Height=\"24\"><Path Classes=\"icon\" Data=\"{{x:Static local:Icons.{}}}\" /></Canvas></Viewbox>",
+        icon_member(name)
+    )
+}
+
 /// Whether a part takes extra height when the window grows (the web
 /// renderer's `widgetGrows`).
 fn grows(widget: &Widget) -> bool {
@@ -564,7 +578,14 @@ impl<'a> Window<'a> {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
         attrs.push_str(&state);
-        let _ = writeln!(out, "{pad}<MenuItem {attrs} />");
+        match &item.props.icon {
+            Some(icon) => {
+                let _ = writeln!(out, "{pad}<MenuItem {attrs}>\n{pad}  <MenuItem.Icon>{}</MenuItem.Icon>\n{pad}</MenuItem>", icon_xaml(icon, 16));
+            }
+            None => {
+                let _ = writeln!(out, "{pad}<MenuItem {attrs} />");
+            }
+        }
     }
 
     /// A toolbar or ribbon button.
@@ -582,7 +603,19 @@ impl<'a> Window<'a> {
         if let Some(command) = self.click_command(item.props.handler.as_deref().map(pascal), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
-        let _ = writeln!(out, "{pad}<Button {attrs} />");
+        let Some(icon) = &item.props.icon else {
+            let _ = writeln!(out, "{pad}<Button {attrs} />");
+            return;
+        };
+        // An icon beside the caption; a large ribbon button has a bigger one above it.
+        let attrs = attrs.replacen(&format!(" Content=\"{content}\""), "", 1).replacen(&format!("Content=\"{content}\" "), "", 1).replacen(&format!("Content=\"{content}\""), "", 1);
+        let (orientation, size) = if item.props.large { ("Vertical", 24) } else { ("Horizontal", 16) };
+        let space = if attrs.is_empty() { String::new() } else { format!(" {attrs}") };
+        let _ = writeln!(out, "{pad}<Button{space}>");
+        let _ = writeln!(out, "{pad}  <StackPanel Orientation=\"{orientation}\" Spacing=\"4\" HorizontalAlignment=\"Center\">");
+        let _ = writeln!(out, "{pad}    {}", icon_xaml(icon, size));
+        let _ = writeln!(out, "{pad}    <TextBlock Text=\"{content}\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" />");
+        let _ = writeln!(out, "{pad}  </StackPanel>\n{pad}</Button>");
     }
 
     /// A grid of parts: `columns` shared columns; rows of the shared height,
@@ -859,7 +892,30 @@ impl<'a> Window<'a> {
                         let _ = write!(attrs, " HotKey=\"{}\"", attr(&gesture(key)));
                     }
                 }
-                let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra} />");
+                match &p.icon {
+                    // An icon beside the caption.
+                    Some(icon) => {
+                        let attrs = attrs.replacen(&format!("Content=\"{content}\""), "", 1);
+                        let attrs = attrs.trim_start();
+                        let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra}>");
+                        let _ = writeln!(out, "{pad}  <StackPanel Orientation=\"Horizontal\" Spacing=\"6\" HorizontalAlignment=\"Center\">");
+                        let _ = writeln!(out, "{pad}    {}", icon_xaml(icon, 16));
+                        let _ = writeln!(out, "{pad}    <TextBlock Text=\"{content}\" VerticalAlignment=\"Center\" />");
+                        let _ = writeln!(out, "{pad}  </StackPanel>\n{pad}</Button>");
+                    }
+                    None => {
+                        let _ = writeln!(out, "{pad}<Button {at} {attrs}{plain_state}{extra} />");
+                    }
+                }
+            }
+            // An icon of its own, centered in its cells.
+            WidgetKind::Icon => {
+                let icon = p.icon.as_deref().unwrap_or("circle");
+                let _ = writeln!(
+                    out,
+                    "{pad}<Border {at} Classes=\"icon\"{plain_state}{extra}>{}</Border>",
+                    icon_xaml(icon, 20).replacen("<Viewbox ", "<Viewbox HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" ", 1)
+                );
             }
             // A foldable panel or form is an Expander: open while the part is not folded.
             WidgetKind::Form | WidgetKind::Panel if p.foldable && named.is_some() => {

@@ -16,6 +16,8 @@ pub enum WidgetKind {
     Label,
     Help,
     Heading,
+    /// An icon of its own: `icon "triangle-alert"`.
+    Icon,
     Text,
     Markdown,
     Textbox,
@@ -217,6 +219,8 @@ pub enum WidgetProperty {
     Sortable,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
+    /// `icon "save"`: the icon a button shows beside its caption.
+    Icon,
 }
 
 /// The narrowest and widest a table column can be written, in pixels.
@@ -336,6 +340,8 @@ const ENTRIES: &[Entry] = &[
     text_part(WidgetKind::Label, "label", "Label", (3, 1), Some("Label"), BindTarget::Nothing, &[WidgetProperty::For]),
     text_part(WidgetKind::Help, "help", "Help text", (4, 1), None, BindTarget::Nothing, &[WidgetProperty::For]),
     text_part(WidgetKind::Heading, "heading", "Heading", (6, 1), Some("Heading"), BindTarget::Nothing, &[]),
+    // An icon of its own; what it shows is its first word: `icon "triangle-alert"`.
+    text_part(WidgetKind::Icon, "icon", "Icon", (1, 1), None, BindTarget::Nothing, &[]),
     text_part(WidgetKind::Text, "text", "Text", (4, 1), None, BindTarget::Field, &[]),
     // Text written in Markdown: a file of the resources folder
     // (`source "rules.md"`, one per language) or a text it binds.
@@ -384,6 +390,7 @@ const ENTRIES: &[Entry] = &[
             WidgetProperty::Shortcut,
             WidgetProperty::Default,
             WidgetProperty::Cancel,
+            WidgetProperty::Icon,
         ],
     },
     Entry {
@@ -714,6 +721,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         digits: None,
         units: None,
         tooltip: None,
+        icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
         style: None,
         readonly: false,
         foldable: false,
@@ -747,11 +755,18 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 
 pub fn widget_line(props: &WidgetProps) -> String {
     let mut parts = vec![keyword(props.kind).to_string()];
+    // The icon part's first word is the icon it shows; a button's icon follows its name.
+    if let Some(icon) = props.icon.as_ref().filter(|_| props.kind == WidgetKind::Icon) {
+        parts.push(quote(icon));
+    }
     if let Some(caption) = &props.caption {
         parts.push(crate::lexer::text_token(caption));
     }
     if let Some(name) = &props.name {
         parts.push(format!("name {name}"));
+    }
+    if let Some(icon) = props.icon.as_ref().filter(|_| props.kind != WidgetKind::Icon) {
+        parts.push(format!("icon {}", quote(icon)));
     }
     // A popover has no place in the window's grid: it opens next to its part.
     if props.kind == WidgetKind::Popover {
@@ -959,6 +974,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
+        (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {

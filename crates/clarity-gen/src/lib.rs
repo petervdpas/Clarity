@@ -353,6 +353,17 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         text: readme::readme(settings),
         bytes: None,
     });
+    // The icons the application shows are Lucide's, whose license travels with them.
+    if !clarity_spec::icons::used(project).is_empty() {
+        files.push(OutFile {
+            path: "THIRD_PARTY_NOTICES.md".to_string(),
+            text: format!(
+                "# Third-party notices\n\nThe icons this application shows are from [Lucide](https://lucide.dev), under this license:\n\n```text\n{}```\n",
+                clarity_spec::icons::LICENSE
+            ),
+            bytes: None,
+        });
+    }
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }

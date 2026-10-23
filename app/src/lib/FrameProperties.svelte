@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconField from "./IconField.svelte";
   import TextField from "./TextField.svelte";
   import { NARROWEST, WIDEST } from "./sidebars";
   import type { SidebarProps } from "./generated/SidebarProps";
@@ -106,7 +107,7 @@
     </label>
     <label class="prop">
       <span>Icon</span>
-      <input value={p.icon ?? ""} placeholder="icon name" onchange={(e) => update(p, { icon: textOf(e) })} />
+      <IconField {preview} icon={p.icon} onwrite={(icon) => update(p, { icon })} />
     </label>
     {#if p.kind === "item"}
       <label class="prop">

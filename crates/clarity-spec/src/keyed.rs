@@ -263,6 +263,11 @@ impl Maker {
                 let base = name.clone().unwrap_or_else(|| format!("{}Item", words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[])));
                 self.at(tokens.get(1), &base, edits);
             }
+            // An icon part's first word is the icon's name, no text people read.
+            "icon" => {
+                let part = name.clone().unwrap_or_else(|| "icon".to_string());
+                self.at(following(tokens, "tooltip"), &format!("{part}Tooltip"), edits);
+            }
             _ => {
                 let Some(kind) = crate::widgets::by_keyword(first).map(|_| first.clone()).or_else(|| (first == "button").then(|| first.clone())) else {
                     return;

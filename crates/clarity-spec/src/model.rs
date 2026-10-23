@@ -391,6 +391,8 @@ pub struct WidgetProps {
     pub units: Option<CanvasUnits>,
     /// Text shown when the pointer rests on the part.
     pub tooltip: Option<String>,
+    /// The icon a button shows beside its caption, or the icon an `icon` part is: `icon "save"`.
+    pub icon: Option<String>,
     /// A named style of the project's theme: `style primary`.
     pub style: Option<String>,
     /// An input that shows its value but cannot be changed.

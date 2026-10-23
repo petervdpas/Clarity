@@ -793,6 +793,9 @@ impl<'a> Checker<'a> {
                     Some(_) => {}
                 }
             }
+            if let Some(icon) = p.icon.as_deref().filter(|i| crate::icons::path(i).is_none()) {
+                self.error(file, crate::icons::unknown(icon), command.span);
+            }
             if p.kind == CommandKind::Item && !command.items.is_empty() && p.on_click.is_some() {
                 self.error(
                     file,
@@ -825,6 +828,9 @@ impl<'a> Checker<'a> {
         for (index, widget) in widgets.iter().enumerate() {
             let p = &widget.props;
             let name = widgets::keyword(p.kind);
+            if let Some(icon) = p.icon.as_deref().filter(|i| crate::icons::path(i).is_none()) {
+                self.error(file, crate::icons::unknown(icon), widget.span);
+            }
             // A popover is outside the grid: only its own parts are placed, on its own grid.
             let popover = p.kind == WidgetKind::Popover;
             if popover && p.for_part.is_none() {

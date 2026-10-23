@@ -153,6 +153,13 @@
       <Setter Property="Foreground" Value="{DynamicResource ClarityMuted}" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
+    <!-- An icon (Lucide's, drawn from the generated Icons class): a round line in the foreground around it. -->
+    <Style Selector="Path.icon">
+      <Setter Property="Stroke" Value="{Binding $self.(TextElement.Foreground)}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+    </Style>
     <!-- A popover: its own grid in a raised panel next to its part (DESIGN 5.16). -->
     <Style Selector="Border.popover">
       <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconField from "./IconField.svelte";
   import FrameProperties from "./FrameProperties.svelte";
   import TextField from "./TextField.svelte";
   import type { App } from "./generated/App";
@@ -414,6 +415,12 @@
       <label class="prop">
         <span>Placeholder</span>
         <TextField {preview} {onapplied} text={p.placeholder} placeholder="shown while the input is empty" onwrite={(text) => update({ placeholder: text })} />
+      </label>
+    {/if}
+    {#if p.kind === "icon" || info.properties.includes("icon")}
+      <label class="prop">
+        <span>Icon</span>
+        <IconField {preview} icon={p.icon} onwrite={(icon) => update({ icon: icon ?? (p.kind === "icon" ? p.icon : null) })} />
       </label>
     {/if}
     <label class="prop">

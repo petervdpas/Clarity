@@ -26,12 +26,12 @@ app Shop
         item \"Help\" name helpItem
             item \"About\" name aboutItem on click -> Overview
     toolbar name mainToolbar
-        button \"New\" name newButton icon \"add\" on click -> CustomerCard
+        button \"New\" name newButton icon \"plus\" on click -> CustomerCard
         separator
     ribbon name mainRibbon
         tab \"Home\" name homeTab
             group \"Customers\" name customersGroup
-                button \"New\" name newRibbon icon \"add\" large on click -> CustomerCard
+                button \"New\" name newRibbon icon \"plus\" large on click -> CustomerCard
     sidebar left name leftSidebar width 192
         list name list1 at 1,1 span 3 rows 10 bind recent show name
     footer
@@ -187,8 +187,8 @@ fn a_submenu_item_has_no_click_target() {
 #[test]
 fn commands_have_names_and_click_handlers() {
     let app = APP.replace(
-        "button \"New\" name newButton icon \"add\" on click -> CustomerCard\n        separator",
-        "button \"New\" name newButton icon \"add\" on click: newClicked\n        separator",
+        "button \"New\" name newButton icon \"plus\" on click -> CustomerCard\n        separator",
+        "button \"New\" name newButton icon \"plus\" on click: newClicked\n        separator",
     );
     // Wired but without code behind yet: a warning, not an error.
     assert_eq!(

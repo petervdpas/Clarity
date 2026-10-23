@@ -27,11 +27,12 @@ page PickFriend: dialog gives Friend
     data onlyNamed: bool
     table name grid at 1,1 span 12 rows 6 bind friends columns name
         menu
-            item "Pick" name pickItem on click: picked
+            item "Pick" name pickItem icon "user-check" on click: picked
             separator
             item "Filter" name filterItem on click -> filters
-    button "OK" name okButton at 1,7 span 2 on click: picked
+    button "OK" name okButton icon "check" at 1,7 span 2 on click: picked
     button "Filter" name filterButton at 3,7 span 2 on click -> filters
+    icon "users" name friendsIcon at 6,7
     popover name filters for filterButton span 4 rows 1
         checkbox "Only named" name namedBox at 1,1 span 4 bind onlyNamed on change: refilter
 

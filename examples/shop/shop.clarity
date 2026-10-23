@@ -21,10 +21,10 @@ app Shop
         item @ordersItem name ordersItem
             item @allOrdersItem name allOrdersItem on click -> OrderBrowse
     toolbar name mainToolbar
-        button @customers2Caption name customers2 icon "people" on click -> CustomerBrowse
-        button @orders2Caption name orders2 icon "cart" on click -> OrderBrowse
+        button @customers2Caption name customers2 icon "users" on click -> CustomerBrowse
+        button @orders2Caption name orders2 icon "shopping-cart" on click -> OrderBrowse
         separator
-        button @cardButtonCaption name cardButton icon "card" on click -> CustomerCard
+        button @cardButtonCaption name cardButton icon "credit-card" on click -> CustomerCard
     footer
         status @shopStatus
 

@@ -1425,6 +1425,7 @@ fn parse_widget_props(
         digits: None,
         units: None,
         tooltip: None,
+        icon: None,
         style: None,
         readonly: false,
         foldable: false,
@@ -1434,7 +1435,10 @@ fn parse_widget_props(
         default_button: false,
         cancel: false,
     };
-    if cursor.peek_is_text() {
+    // An icon part's first word is the icon it shows, no text people read.
+    if kind == WidgetKind::Icon {
+        props.icon = Some(cursor.expect_string("the icon it shows, as in icon \"triangle-alert\"")?);
+    } else if cursor.peek_is_text() {
         props.caption = Some(cursor.expect_text("a caption")?);
     }
 
@@ -1674,6 +1678,10 @@ fn parse_widget_props(
                 props.placeholder = Some(cursor.expect_text("a placeholder text")?);
             }
             "tooltip" => props.tooltip = Some(cursor.expect_text("a tooltip text")?),
+            "icon" => {
+                applies(WidgetProperty::Icon)?;
+                props.icon = Some(cursor.expect_string("an icon's name, as in icon \"save\"")?);
+            }
             "style" => props.style = Some(cursor.expect_ident("a style of the project's theme")?.name),
             "readonly" => {
                 applies(WidgetProperty::Readonly)?;

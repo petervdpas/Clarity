@@ -88,6 +88,10 @@ units: CanvasUnits | null,
  */
 tooltip: string | null, 
 /**
+ * The icon a button shows beside its caption, or the icon an `icon` part is: `icon "save"`.
+ */
+icon: string | null, 
+/**
  * A named style of the project's theme: `style primary`.
  */
 style: string | null, 

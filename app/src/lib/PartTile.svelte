@@ -89,6 +89,9 @@
       <rect x="4" y="3" width="12" height="6" rx="1" class="fill" />
       <rect x="17" y="3" width="12" height="6" rx="1" />
       <rect x="4" y="9" width="40" height="16" rx="1" />
+    {:else if kind === "icon"}
+      <circle cx="24" cy="14" r="8" />
+      <path d="M24 9 L25.5 12.5 L29 13 L26.5 15.5 L27 19 L24 17.2 L21 19 L21.5 15.5 L19 13 L22.5 12.5 Z" class="fill" />
     {:else if kind === "popover"}
       <rect x="4" y="3" width="14" height="6" rx="1" class="fill" />
       <path d="M10 9 L13 12 L16 9" />

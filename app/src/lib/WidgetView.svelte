@@ -14,6 +14,7 @@
   import CanvasView from "./ui/CanvasView.svelte";
   import MarkdownView from "./ui/MarkdownView.svelte";
   import PartMenu from "./ui/PartMenu.svelte";
+  import Icon from "./ui/Icon.svelte";
   import type { Command } from "./generated/Command";
   import { itemClicks, itemShown } from "./overlays";
   import { previewPopovers } from "./previewPopovers.svelte";
@@ -387,6 +388,8 @@
       <span class="help-text" class:error={targetError !== null} id={p.for ? helpId(p.for) : undefined} aria-live="polite"
         >{targetError ?? caption ?? (targetField?.modifiers.help ? tr(preview, targetField.modifiers.help) : "")}</span
       >
+    {:else if p.kind === "icon"}
+      <span class="icon-part" title={p.tooltip ? tr(preview, p.tooltip) : undefined}><Icon paths={preview.icons} name={p.icon ?? ""} size={20} /></span>
     {:else if p.kind === "heading"}
       <h2 class="heading-text">{#if unset && !caption}<span class="unset">{unset}</span>{/if}{caption ?? ""}</h2>
     {:else if p.kind === "text"}
@@ -521,7 +524,7 @@
       />
     {:else if p.kind === "button"}
       <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
-        >{caption ?? ""}</button
+        >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
       >
     {:else if p.kind === "panel" || p.kind === "form"}
       <fieldset class={p.kind} class:bare={p.kind === "form" && !p.caption && !p.foldable} class:folded={folded && !design}>
@@ -693,6 +696,7 @@
 {#if menuAt && widget.menu}
   <PartMenu
     items={widget.menu.items}
+    icons={preview.icons}
     x={menuAt.x}
     y={menuAt.y}
     caption={(text) => tr(preview, text)}
@@ -865,9 +869,14 @@
     outline: 1px dashed var(--border-strong);
   }
 
+  /* An icon stands beside the caption. */
   .push {
     width: 100%;
     height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
   }
 
   .numeric {
@@ -1016,6 +1025,12 @@
   .tab-strip button.selected {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  .icon-part {
+    flex: 1;
+    display: grid;
+    place-items: center;
   }
 
   .steps {

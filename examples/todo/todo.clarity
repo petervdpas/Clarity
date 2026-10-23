@@ -24,7 +24,7 @@ app Todo
             group @peopleGroup name peopleGroup
                 button @usersButtonCaption name usersButton icon "list" large on click -> Users
             group @settingsGroup name settingsGroup
-                button @languageButtonCaption name languageButton icon "language" large on click -> language
+                button @languageButtonCaption name languageButton icon "languages" large on click -> language
 
 page Main: window
     title @mainTitle

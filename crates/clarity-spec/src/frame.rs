@@ -326,10 +326,10 @@ mod tests {
         let mut props = new_command(CommandKind::Button, Some("New".to_string()));
         props.on_click = Some("CustomerCard".to_string());
         props.large = true;
-        props.icon = Some("add".to_string());
+        props.icon = Some("plus".to_string());
         assert_eq!(
             command_line(&props),
-            "button \"New\" icon \"add\" large on click -> CustomerCard"
+            "button \"New\" icon \"plus\" large on click -> CustomerCard"
         );
         assert_eq!(
             command_line(&new_command(CommandKind::Separator, None)),

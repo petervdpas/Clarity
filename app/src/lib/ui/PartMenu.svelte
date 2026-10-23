@@ -5,9 +5,11 @@
   // greyed. A click outside it or Escape closes it.
   import { onMount } from "svelte";
   import type { Command } from "../generated/Command";
+  import Icon from "./Icon.svelte";
 
   let {
     items,
+    icons = {},
     x,
     y,
     caption,
@@ -17,6 +19,8 @@
     onclose,
   }: {
     items: Command[];
+    /** The drawings of the icons the application shows, by name. */
+    icons?: Record<string, string>;
     /** Where the pointer was, in the window. */
     x: number;
     y: number;
@@ -76,6 +80,7 @@
     {:else}
       <div class="entry" class:sub={item.items.length > 0}>
         <button type="button" role="menuitem" disabled={!enabled(item.props.name)} onclick={() => run(item)}>
+          {#if item.props.icon}<Icon paths={icons} name={item.props.icon} />{/if}
           <span>{item.props.caption ? caption(item.props.caption) : ""}</span>
           {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
           {#if item.items.length > 0}<span class="arrow">&rsaquo;</span>{/if}
@@ -115,6 +120,7 @@
 
   .entry > button {
     display: flex;
+    align-items: center;
     width: 100%;
     gap: 12px;
     text-align: left;

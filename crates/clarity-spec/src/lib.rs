@@ -14,6 +14,7 @@ pub mod themes;
 pub mod translations;
 pub mod frame;
 pub mod highlight;
+pub mod icons;
 pub mod layout;
 pub mod lexer;
 pub mod migrate;
@@ -364,13 +365,22 @@ pub struct Preview {
     #[serde(rename = "baseTheme")]
     #[ts(rename = "baseTheme")]
     pub base_theme: model::ThemeDecl,
+    /// The icons the project shows, by name, each an SVG path in a 24 by 24 box.
+    pub icons: BTreeMap<String, String>,
+    /// Every icon's name, for the designer to offer.
+    #[serde(rename = "iconNames")]
+    #[ts(rename = "iconNames")]
+    pub icon_names: Vec<String>,
 }
 
 impl Preview {
     pub fn new(project: Project) -> Self {
         let samples = sample::sample_data(&project);
         let displays = sample::display_values(&project);
+        let icons = icons::used(&project);
         Self {
+            icons,
+            icon_names: icons::names().map(str::to_string).collect(),
             project,
             samples,
             displays,

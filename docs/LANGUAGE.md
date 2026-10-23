@@ -522,6 +522,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `label` | nothing | `for input` | none |
 | `help` | nothing | `for input` | none |
 | `heading` | nothing | none | none |
+| `icon` | nothing; its first word is the icon it shows: `icon "triangle-alert"` | none | none |
 | `text` | a field of any type: `bind customer.name` | none | none |
 | `markdown` | a key whose value is a Markdown file per language, `@gameRules`; a file of the resources, `source "license.md"`; or a text, `bind notes` | `source "file"` | none |
 
@@ -538,7 +539,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
-| `button` | nothing | `taborder`, `key`, `default`, `cancel` | `click` |
+| `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"` | `click` |
 
 **Containers**
 
@@ -730,7 +731,7 @@ app Shop
     ribbon name mainRibbon collapsible
         tab @homeTab name homeTab
             group @customersGroup name customersGroup
-                button @newButtonCaption name newButton icon "add" large on click -> CustomerForm
+                button @newButtonCaption name newButton icon "plus" large on click -> CustomerForm
                 button @browseButtonCaption name browseButton icon "list" on click -> CustomerBrowse
     sidebar left name leftSidebar width 192
         list name recentList at 1,1 span 3 rows 10 bind recent show name
@@ -770,13 +771,15 @@ A window can declare its own regions. A window's region replaces the app's regio
 
 ### Commands
 
+Icons are [Lucide](https://lucide.dev)'s, by name: `icon "save"`, `icon "trash"`, `icon "triangle-alert"`. A button, a menu item and a toolbar or ribbon button show one beside their caption, and the `icon` part shows one on its own. The checker knows every name and suggests the nearest for a misspelt one; the designer offers them all. An application carries only the icons it uses, with Lucide's license in its `THIRD_PARTY_NOTICES.md`.
+
 Menu items and toolbar and ribbon buttons are commands. Their properties:
 
 | Property | On | Meaning |
 |---|---|---|
 | `"caption"` | all | The text, right after the kind. A menu item needs one; a button needs a caption or an icon. |
 | `name n` | all | The command's name, for handlers. |
-| `icon "name"` | all | An icon. |
+| `icon "name"` | all | An icon, by its name among Clarity's icons. |
 | `key "Ctrl+N"` | menu items | The key for it, shown in the menu. |
 | `large` | ribbon buttons | A large button. |
 | `on click -> Target` | all | Opens a window, or `close`, `quit`, `language` or `theme`. |

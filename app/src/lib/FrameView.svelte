@@ -1,5 +1,6 @@
 <script lang="ts">
   import { shownTab } from "./ribbons";
+  import Icon from "./ui/Icon.svelte";
   import { STRIP_WIDTH, sidebarNow, sidebarWidth, type SidebarHere } from "./sidebars";
   // The frame around a window: menu, toolbar and ribbon at the top, sidebars
   // at the sides, the footer at the bottom, and the window body in between.
@@ -143,10 +144,6 @@
     return id !== null && (command.span.start === id || command.items.some(containsPicked));
   }
 
-  function iconLetter(icon: string): string {
-    return icon.slice(0, 1).toUpperCase();
-  }
-
   function onwindowpointerdown(e: PointerEvent) {
     if (openMenu === null) return;
     if (!(e.target instanceof Element) || !e.target.closest(".menubar")) openMenu = null;
@@ -175,6 +172,7 @@
           onclick={(e) => !design && run(e, item, editable)}
           ondblclick={(e) => codeOf(e, item, editable)}
         >
+          {#if item.props.icon}<Icon paths={preview.icons} name={item.props.icon} />{/if}
           <span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>
           {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
           {#if item.items.length > 0}<span class="arrow">&rsaquo;</span>{/if}
@@ -205,7 +203,7 @@
       onclick={(e) => !design && run(e, item, editable)}
       ondblclick={(e) => codeOf(e, item, editable)}
     >
-      {#if item.props.icon}<span class="icon">{iconLetter(item.props.icon)}</span>{/if}
+      {#if item.props.icon}<Icon paths={preview.icons} name={item.props.icon} size={large && item.props.large ? 24 : 16} />{/if}
       {#if item.props.caption}<span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>{/if}
     </button>
   {/if}
@@ -531,6 +529,7 @@
 
   .entry > button {
     display: flex;
+    align-items: center;
     width: 100%;
     gap: 12px;
     text-align: left;
@@ -592,23 +591,6 @@
   .tool.large {
     flex-direction: column;
     padding: 4px 10px;
-  }
-
-  .tool.large .icon {
-    width: 24px;
-    height: 24px;
-    font-size: 13px;
-  }
-
-  .icon {
-    display: inline-grid;
-    place-items: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 3px;
-    background: var(--accent-soft);
-    font-size: 10px;
-    font-weight: 700;
   }
 
   .vsep {

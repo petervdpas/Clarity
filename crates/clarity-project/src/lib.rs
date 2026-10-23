@@ -701,6 +701,29 @@ fn part_language_problems(settings: &Settings, project: &clarity_spec::Project) 
                 );
             }
         }
+        // A library is the project's language's package (DESIGN 5.21).
+        for library in &f.libraries {
+            use clarity_spec::code::LibrarySource;
+            let (written, ok) = match &library.source {
+                Some(LibrarySource::Cmake { .. }) => ("C or C++ (cmake)", matches!(settings.stack.backend, Backend::C | Backend::Cpp)),
+                Some(LibrarySource::Crate { .. }) => ("a Rust crate", settings.stack.backend == Backend::Rust),
+                Some(LibrarySource::Go { .. }) => ("a Go module", settings.stack.backend == Backend::Go),
+                Some(LibrarySource::Nuget { .. } | LibrarySource::Dll { .. }) => (".NET", settings.stack.backend == Backend::Csharp),
+                None => continue,
+            };
+            if !ok {
+                let package = match settings.stack.backend {
+                    Backend::C | Backend::Cpp => "cmake \"Package\"",
+                    Backend::Rust => "crate \"name\" \"version\"",
+                    Backend::Go => "go \"module\" version",
+                    Backend::Csharp => "nuget \"Package\" version or dll \"file\"",
+                };
+                found.push(
+                    clarity_spec::Diagnostic::error(format!("library {} is {written}, but the project is written in {language}: use {package}", library.name.name), library.name.span)
+                        .in_file(&f.path),
+                );
+            }
+        }
     }
     found
 }

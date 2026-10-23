@@ -135,7 +135,7 @@ fn block_spans_cover_children() {
 #[test]
 fn windows_are_pages_not_screens() {
     let msgs = messages("module m\nscreen F: form Customer\n");
-    assert!(msgs[0].contains("expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command' or 'part'"), "{msgs:#?}");
+    assert!(msgs[0].contains("expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command', 'part' or 'library'"), "{msgs:#?}");
 }
 
 #[test]

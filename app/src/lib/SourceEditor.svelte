@@ -6,15 +6,24 @@
 </script>
 
 <script lang="ts">
-  // Clarity text with line numbers, problems from the backend while it is
-  // typed, and Save and Revert. What it edits (a window's design, its code
+  // Clarity text in CodeMirror, with line numbers, colors and problems from
+  // the backend while it is typed, search (Ctrl+F), undo, and Save and Revert. What it edits (a window's design, its code
   // behind, a function) is up to the caller, through `load`, `check` and
   // `save`; the backend decides what is valid.
 
+  import { onDestroy } from "svelte";
+  import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from "@codemirror/state";
+  import { Decoration, EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, placeholder as placeholderText, type DecorationSet } from "@codemirror/view";
+  import { defaultKeymap, history, historyKeymap, indentLess } from "@codemirror/commands";
+  import { bracketMatching, foldGutter, indentUnit } from "@codemirror/language";
+  import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+  import { lintGutter, setDiagnostics, type Diagnostic as Marked } from "@codemirror/lint";
+  import { rust } from "@codemirror/lang-rust";
   import { invoke } from "./backend";
+  import { ideLook } from "./codeMirrorLook";
   import type { Diagnostic } from "./generated/Diagnostic";
   import type { Piece } from "./generated/Piece";
-  import { linesOf, rustPieces, type Segment } from "./highlight";
+  import type { PieceKind } from "./generated/PieceKind";
 
   let {
     load,
@@ -65,17 +74,10 @@
   let problems = $state<Diagnostic[]>([]);
   let error = $state<string | null>(null);
   let saving = $state(false);
-  let editor: HTMLTextAreaElement | undefined = $state();
-  let gutter: HTMLElement | undefined = $state();
-  let paint: HTMLElement | undefined = $state();
-  /** The colored runs of the lines last colored, by their text. */
-  let colored = $state.raw(new Map<string, Segment[]>());
-  const painted = $derived(text.split("\n").map((line) => colored.get(line) ?? [{ text: line, kind: null }]));
+  let host = $state<HTMLDivElement | null>(null);
+  let view = $state.raw<EditorView | null>(null);
 
   const dirty = $derived(text !== saved);
-  const lineCount = $derived(text.split("\n").length);
-  const errorLines = $derived(new Set(problems.filter((p) => p.severity === "error").map((p) => p.span.line)));
-  const warningLines = $derived(new Set(problems.filter((p) => p.severity === "warning").map((p) => p.span.line)));
   const errorCount = $derived(problems.filter((p) => p.severity === "error").length);
   const jumps = $derived(
     navPattern === null
@@ -91,10 +93,10 @@
 
   async function reload() {
     try {
-      const view = await load();
-      saved = view.text;
-      text = view.text;
-      problems = view.problems;
+      const loaded = await load();
+      saved = loaded.text;
+      show(loaded.text);
+      problems = loaded.problems;
       error = null;
     } catch (err) {
       error = String(err);
@@ -110,17 +112,52 @@
     }
   });
 
-  // Color the text while it is typed; a line typed since shows plain until then.
+  /** The class of each piece Clarity's lexer finds. */
+  const PIECE_CLASSES: Record<PieceKind, string> = {
+    keyword: "cm-clarity-keyword",
+    type: "cm-clarity-type",
+    name: "",
+    literal: "cm-clarity-literal",
+    number: "cm-clarity-number",
+    text: "cm-clarity-text",
+    slot: "cm-clarity-slot",
+    key: "cm-clarity-key",
+    comment: "cm-clarity-comment",
+  };
+
+  const painted = StateEffect.define<DecorationSet>();
+  /** The colors of the text as last asked, moved along with what is typed since. */
+  const paint = StateField.define<DecorationSet>({
+    create: () => Decoration.none,
+    update: (marks, tr) => {
+      for (const e of tr.effects) if (e.is(painted)) return e.value;
+      return marks.map(tr.changes);
+    },
+    provide: (field) => EditorView.decorations.from(field),
+  });
+
+  function marksOf(state: EditorState, pieces: Piece[]): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>();
+    const sorted = [...pieces].sort((a, b) => a.line - b.line || a.from - b.from);
+    for (const p of sorted) {
+      const name = PIECE_CLASSES[p.kind];
+      if (!name || p.line < 1 || p.line > state.doc.lines) continue;
+      const line = state.doc.line(p.line);
+      const from = line.from + Math.min(p.from, line.length);
+      const to = line.from + Math.min(p.to, line.length);
+      if (to > from) builder.add(from, to, Decoration.mark({ class: name }));
+    }
+    return builder.finish();
+  }
+
+  // Color Clarity while it is typed, as the backend's lexer reads it.
   $effect(() => {
     const draft = text;
-    if (language === "plain") return;
-    if (language === "rust") {
-      colored = linesOf(draft, rustPieces(draft));
-      return;
-    }
+    if (language !== "clarity") return;
     const timer = setTimeout(async () => {
       try {
-        colored = linesOf(draft, await invoke<Piece[]>("highlight", { text: draft }));
+        const pieces = await invoke<Piece[]>("highlight", { text: draft });
+        if (view && view.state.doc.toString() === draft) view.dispatch({ effects: painted.of(marksOf(view.state, pieces)) });
       } catch {
         // Without the backend the text stays plain.
       }
@@ -128,30 +165,20 @@
     return () => clearTimeout(timer);
   });
 
-  /** The colored copy covers what the text area shows, not its scrollbars. */
-  function fit() {
-    if (!editor || !paint) return;
-    paint.style.right = `${editor.offsetWidth - editor.clientWidth}px`;
-    paint.style.bottom = `${editor.offsetHeight - editor.clientHeight}px`;
-  }
-
+  // The problems, marked in the text and its gutter.
   $effect(() => {
-    void text;
-    if (!editor) return;
-    fit();
-    const watching = new ResizeObserver(fit);
-    watching.observe(editor);
-    return () => watching.disconnect();
+    const marked = problems;
+    if (!view) return;
+    const doc = view.state.doc;
+    const diagnostics: Marked[] = marked
+      .filter((p) => p.span.line >= 1 && p.span.line <= doc.lines)
+      .map((p) => {
+        const line = doc.line(p.span.line);
+        const from = Math.min(line.from + Math.max(p.span.col - 1, 0), line.to);
+        return { from, to: Math.max(from, line.to), severity: p.severity === "error" ? "error" : "warning", message: p.message };
+      });
+    view.dispatch(setDiagnostics(view.state, diagnostics));
   });
-
-  function scrolled() {
-    if (!editor) return;
-    if (gutter) gutter.scrollTop = editor.scrollTop;
-    if (paint) {
-      paint.scrollTop = editor.scrollTop;
-      paint.scrollLeft = editor.scrollLeft;
-    }
-  }
 
   // Check the text while it is typed.
   $effect(() => {
@@ -189,21 +216,18 @@
   }
 
   function revert() {
-    text = saved;
+    show(saved);
     error = null;
     reload();
   }
 
   /** Puts the caret on `line` (1-based); `inside` moves to the line after it. */
   export function goToLine(line: number, inside = false) {
-    if (!editor) return;
-    const lines = text.split("\n");
-    const index = Math.min(inside ? line : line - 1, lines.length - 1);
-    const offset = lines.slice(0, index).reduce((sum, l) => sum + l.length + 1, 0) + (lines[index]?.length ?? 0);
-    editor.focus();
-    editor.setSelectionRange(offset, offset);
-    const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 18;
-    editor.scrollTop = Math.max(0, (index - 3) * lineHeight);
+    if (!view) return;
+    const doc = view.state.doc;
+    const at = doc.line(Math.max(1, Math.min(inside ? line + 1 : line, doc.lines))).to;
+    view.focus();
+    view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 60 }) });
   }
 
   /** Jumps into the block whose jump button has `name`; false when there is none. */
@@ -213,37 +237,95 @@
     return target !== undefined;
   }
 
-  /** Tab indents, Enter keeps the indentation (one level more after a block line), Ctrl+S saves. */
-  function onkeydown(e: KeyboardEvent) {
-    if (!editor) return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      store();
-      return;
-    }
-    if (e.key === "Escape") {
-      onclose();
-      return;
-    }
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    if (e.key === "Tab" && !e.shiftKey) {
-      e.preventDefault();
-      insert(start, end, INDENT);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-      const line = text.slice(lineStart, start);
-      const indent = /^ */.exec(line)?.[0] ?? "";
-      insert(start, end, "\n" + indent + (opensBlock.test(line) ? INDENT : ""));
-    }
+  /** Puts `value` in the editor, as loading or reverting does. */
+  function show(value: string) {
+    text = value;
+    if (view && view.state.doc.toString() !== value) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
   }
 
-  function insert(start: number, end: number, value: string) {
-    text = text.slice(0, start) + value + text.slice(end);
-    const caret = start + value.length;
-    requestAnimationFrame(() => editor?.setSelectionRange(caret, caret));
+  /** Enter keeps the indentation, one level more after a line that opens a block. */
+  function newline(target: EditorView): boolean {
+    const { state } = target;
+    const range = state.selection.main;
+    const line = state.doc.lineAt(range.from);
+    const before = line.text.slice(0, range.from - line.from);
+    const indent = /^ */.exec(before)?.[0] ?? "";
+    const insert = "\n" + indent + (opensBlock.test(before) ? INDENT : "");
+    target.dispatch(state.update(state.replaceSelection(insert), { scrollIntoView: true, userEvent: "input" }));
+    return true;
   }
+
+  /** Tab puts in one level, at the caret or before each chosen line. */
+  function tab(target: EditorView): boolean {
+    const { state } = target;
+    if (state.selection.ranges.some((r) => !r.empty && state.doc.lineAt(r.from).number !== state.doc.lineAt(r.to).number)) {
+      const changes = [];
+      for (const r of state.selection.ranges) {
+        for (let n = state.doc.lineAt(r.from).number; n <= state.doc.lineAt(r.to).number; n++) changes.push({ from: state.doc.line(n).from, insert: INDENT });
+      }
+      target.dispatch({ changes, userEvent: "input.indent" });
+    } else {
+      target.dispatch(state.update(state.replaceSelection(INDENT), { scrollIntoView: true, userEvent: "input" }));
+    }
+    return true;
+  }
+
+  function languageOf(of: typeof language): Extension {
+    return of === "rust" ? rust() : [];
+  }
+
+  const languages = new Compartment();
+  const editing = new Compartment();
+
+  function editable(): Extension {
+    return [EditorState.readOnly.of(readonly), EditorView.editable.of(!readonly), placeholderText(placeholder)];
+  }
+
+  $effect(() => {
+    if (!host || view) return;
+    view = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: text,
+        extensions: [
+          lineNumbers(),
+          foldGutter(),
+          lintGutter(),
+          highlightActiveLine(),
+          highlightActiveLineGutter(),
+          drawSelection(),
+          history(),
+          bracketMatching(),
+          highlightSelectionMatches(),
+          search({ top: true }),
+          indentUnit.of(INDENT),
+          EditorState.tabSize.of(4),
+          keymap.of([
+            { key: "Mod-s", preventDefault: true, run: () => (void store(), true) },
+            { key: "Escape", run: () => (onclose(), false) },
+            { key: "Enter", run: newline },
+            { key: "Tab", run: tab, shift: indentLess },
+            ...searchKeymap,
+            ...historyKeymap,
+            ...defaultKeymap,
+          ]),
+          languages.of(languageOf(language)),
+          editing.of(editable()),
+          paint,
+          ideLook,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) text = update.state.doc.toString();
+          }),
+        ],
+      }),
+    });
+  });
+
+  $effect(() => {
+    view?.dispatch({ effects: [languages.reconfigure(languageOf(language)), editing.reconfigure(editable())] });
+  });
+
+  onDestroy(() => view?.destroy());
 </script>
 
 <div class="source">
@@ -271,29 +353,7 @@
   </div>
   {/if}
 
-  <div class="editor">
-    <div class="gutter" bind:this={gutter} aria-hidden="true">
-      {#each { length: lineCount } as _, i (i)}
-        <div class:error={errorLines.has(i + 1)} class:warning={!errorLines.has(i + 1) && warningLines.has(i + 1)}>{i + 1}</div>
-      {/each}
-    </div>
-    <div class="surface">
-      <pre class="paint" bind:this={paint} aria-hidden="true">{#each painted as line, i (i)}{#each line as run, j (j)}{#if run.kind}<span
-                class={run.kind}>{run.text}</span
-              >{:else}{run.text}{/if}{/each}{"\n"}{/each}{" "}</pre>
-      <textarea
-        class:colored={language !== "plain"}
-        bind:this={editor}
-        bind:value={text}
-        {onkeydown}
-        onscroll={scrolled}
-        spellcheck="false"
-        wrap="off"
-        {readonly}
-        {placeholder}
-      ></textarea>
-    </div>
-  </div>
+  <div class="editor" bind:this={host}></div>
 
   {#if !readonly}
   <footer>
@@ -354,106 +414,12 @@
 
   .editor {
     flex: 1;
-    display: flex;
     min-height: 0;
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 19px;
-  }
-
-  .gutter {
     overflow: hidden;
-    padding: 8px 8px 8px 12px;
-    text-align: right;
-    color: var(--text-muted);
-    background: var(--panel-alt);
-    user-select: none;
-    min-width: 36px;
   }
 
-  .gutter .error {
-    color: var(--error);
-    font-weight: 700;
-  }
-
-  .gutter .warning {
-    color: var(--warning, #d9a400);
-  }
-
-  /* The text area on top takes the typing; the colored copy under it shows. */
-  .surface {
-    flex: 1;
-    position: relative;
-    min-width: 0;
-    background: var(--bg, var(--panel));
-  }
-
-  textarea,
-  .paint {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: 8px 12px;
-    font: inherit;
-    line-height: inherit;
-    tab-size: 4;
-    white-space: pre;
-    border: none;
-  }
-
-  textarea {
-    width: 100%;
+  .editor :global(.cm-editor) {
     height: 100%;
-    resize: none;
-    border-radius: 0;
-    background: transparent;
-    color: var(--text);
-    outline: none;
-  }
-
-  textarea.colored {
-    color: transparent;
-    caret-color: var(--text);
-  }
-
-  textarea::placeholder {
-    color: var(--text-muted);
-  }
-
-  .paint {
-    overflow: hidden;
-    color: var(--text);
-    pointer-events: none;
-  }
-
-  .paint .keyword {
-    color: var(--code-keyword);
-  }
-
-  .paint .type {
-    color: var(--code-type);
-  }
-
-  .paint .literal,
-  .paint .number {
-    color: var(--code-literal);
-  }
-
-  .paint .text {
-    color: var(--code-text);
-  }
-
-  .paint .slot {
-    color: var(--code-slot);
-  }
-
-  .paint .key {
-    color: var(--code-key);
-  }
-
-  .paint .comment {
-    color: var(--code-comment);
-    font-style: italic;
   }
 
   footer {

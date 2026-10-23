@@ -156,7 +156,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(vec!["the project has no window to start with".to_string()]);
     };
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty())), text("CMakePresets.json", PRESETS.to_string())];
+    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty()) + &crate::libraries::cmake_lines(project, &program)), text("CMakePresets.json", PRESETS.to_string())];
     files.extend(crate::parts::out_files(project, &[]));
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files) {
@@ -164,7 +164,15 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
 
     let (records_h, records_c) = model::emit(project);
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n\n{}", records_h.trim_end().to_string() + "\n")));
+    // Each library's header, so every module calls it (DESIGN 5.21).
+    let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.h\"\n", l.name.name)).collect();
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let own = crate::libraries::own_file(library, false);
+        files.extend(crate::libraries::adapter_files(project, n, &own));
+        files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::c_header(library, false)));
+    }
     files.push(text("src/records.c", format!("{HEADER}\n#include <stdlib.h>\n#include <string.h>\n\n#include \"app.h\"\n\n{}", records_c.trim_end().to_string() + "\n")));
 
     let mut errors = Vec::new();

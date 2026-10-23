@@ -109,7 +109,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let engines = !crate::engines(project).is_empty();
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty())),
+        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty()) + &crate::libraries::cmake_lines(project, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     files.extend(crate::parts::out_files(project, &[]));
@@ -119,7 +119,15 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
 
     let (records_h, records_cpp) = model::emit(project);
-    files.push(text("src/records.hpp", namespaced(&program, "#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n", &records_h)));
+    // Each library's header, so every module calls it (DESIGN 5.21).
+    let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.hpp\"\n", l.name.name)).collect();
+    files.push(text("src/records.hpp", namespaced(&program, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{library_includes}"), &records_h)));
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let own = crate::libraries::own_file(library, true);
+        files.extend(crate::libraries::adapter_files(project, n, &own));
+        files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::c_header(library, true)));
+    }
     files.push(text("src/records.cpp", namespaced(&program, "#include \"records.hpp\"\n", &records_cpp)));
 
     let mut errors = Vec::new();

@@ -1409,6 +1409,15 @@ impl<'a> Emitter<'a> {
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args, pre)
             }
+            // A function of a library, through its package (DESIGN 5.21).
+            ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
+                let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+                let mut name = function.name.clone();
+                if let Some(first) = name.get_mut(0..1) {
+                    first.make_ascii_uppercase();
+                }
+                format!("{}lib.{name}({})", crate::libraries::go_package(&engine.name), values.join(", "))
+            }
             // A function of an engine, through its typed function in engines.go (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {
                 let params: Vec<clarity_spec::code::TypeRef> = self

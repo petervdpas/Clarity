@@ -1,0 +1,201 @@
+<script lang="ts">
+  // An external library (DESIGN 5.21): its package, the functions code
+  // calls, and its adapter's files, opened and edited here. Its declaration is
+  // Clarity, edited as text; the file of the adapter that types its functions
+  // is Clarity's, written from the declaration, and shown to read.
+
+  import { invoke } from "./backend";
+  import SourceEditor from "./SourceEditor.svelte";
+  import CodeEditor from "./CodeEditor.svelte";
+  import { languageOfFile } from "./codeLanguages";
+  import { paramsText } from "./customParts";
+  import type { CodeView } from "./generated/CodeView";
+  import type { DeclTrial } from "./generated/DeclTrial";
+  import type { Edit } from "./generated/Edit";
+  import type { LibraryDecl } from "./generated/LibraryDecl";
+  import type { SpecFile } from "./generated/SpecFile";
+
+  let {
+    decl,
+    file,
+    onapply,
+  }: {
+    decl: LibraryDecl;
+    /** The module that declares it. */
+    file: SpecFile;
+    onapply: (edit: Edit) => Promise<void>;
+  } = $props();
+
+  type PartFile = { path: string; own: boolean };
+
+  const name = $derived(decl.name.name);
+  const item = $derived(decl.span.start);
+  const library = $derived.by(() => {
+    const l = decl.source;
+    if (!l) return "no package yet";
+    if (l.kind === "nuget") return `the NuGet package ${l.package} ${l.version}`;
+    if (l.kind === "dll") return l.file;
+    if (l.kind === "crate") return `the crate ${l.name} ${l.version}`;
+    if (l.kind === "go") return `the Go module ${l.module} ${l.version}`;
+    return `${l.package}, as CMake finds it`;
+  });
+
+  let files = $state<PartFile[]>([]);
+  let open = $state<PartFile | null>(null);
+  let note = $state<string | null>(null);
+
+  async function list() {
+    try {
+      files = await invoke<PartFile[]>("part_files", { name });
+      if (open && !files.some((f) => f.path === open?.path)) open = null;
+    } catch (err) {
+      files = [];
+      note = String(err);
+    }
+  }
+
+  $effect(() => {
+    void name;
+    void file.version;
+    void list();
+  });
+
+  async function writeFolders() {
+    const written = await invoke<string[]>("write_part_folders").catch((err) => {
+      note = String(err);
+      return null;
+    });
+    if (written) note = written.length > 0 ? `Wrote ${written.join(", ")}` : "The header and the library's files are up to date.";
+    await list();
+  }
+</script>
+
+<div class="part">
+  <header>
+    <strong>{name}</strong>
+    <span class="muted">library in module {file.module?.name ?? ""}, calling {library} from libraries/{name}</span>
+  </header>
+
+  <div class="panes">
+    <aside>
+      <section>
+        <h3>What code calls</h3>
+        <ul class="functions">
+          {#each decl.functions as f (f.name.name)}
+            <li><code>{name}.{f.name.name}({paramsText(f.params)})</code></li>
+          {:else}
+            <li class="muted">No functions yet: add <code>function name(values) -> type</code> lines.</li>
+          {/each}
+        </ul>
+      </section>
+
+      <section>
+        <h3>Its adapter</h3>
+        <ul class="files">
+          {#each files as f (f.path)}
+            <li>
+              <button class:active={open?.path === f.path} onclick={() => (open = f)}>
+                <code>{f.path}</code>
+                {#if f.own}<span class="muted">Clarity's</span>{/if}
+              </button>
+            </li>
+          {:else}
+            <li class="muted">No files yet.</li>
+          {/each}
+        </ul>
+        <button onclick={writeFolders} title="Writes the file that types the functions, and a starter adapter where the folder has none">Write its files</button>
+        {#if note}<p class="muted">{note}</p>{/if}
+      </section>
+    </aside>
+
+    <section class="code">
+      {#if open}
+        {@const shown = open}
+        <div class="tab"><code>{shown.path}</code>{#if shown.own}<span class="muted"> written from the declaration</span>{/if}</div>
+        <CodeEditor
+          load={() => invoke<string>("part_file_text", { name, path: shown.path })}
+          save={(text) => invoke<void>("save_part_file", { name, path: shown.path, text })}
+          reloadKey={name + "\n" + shown.path + "\n" + file.version}
+          language={languageOfFile(shown.path)}
+          readonly={shown.own}
+          onclose={() => (open = null)}
+        />
+      {:else}
+        <div class="tab"><code>library {name}</code></div>
+        <SourceEditor
+          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
+          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
+          save={(text) => onapply({ op: "replaceDecl", item, text })}
+          reloadKey={file.path + "\n" + item + "\n" + file.version}
+        />
+      {/if}
+    </section>
+  </div>
+</div>
+
+<style>
+  .part {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding: 12px 16px;
+    gap: 10px;
+    box-sizing: border-box;
+  }
+  header {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .muted {
+    opacity: 0.7;
+  }
+  .panes {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+  }
+  aside {
+    width: 300px;
+    flex: none;
+    overflow: auto;
+  }
+  h3 {
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 8px 0;
+  }
+  .functions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .files {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 8px;
+  }
+  .files button {
+    width: 100%;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .files button.active {
+    font-weight: bold;
+  }
+  .code {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .tab {
+    padding: 4px 0;
+  }
+</style>

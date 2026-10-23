@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, CliDecl, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -883,6 +883,79 @@ pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pars
         }
     }
     Ok(part)
+}
+
+/// `library Words` with its package line and its `function` lines (DESIGN 5.21).
+pub(crate) fn parse_library(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<LibraryDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let name = cursor.expect_ident("the library's name, as in 'library Words'")?;
+    cursor.expect_end()?;
+    if !name.name.starts_with(|c: char| c.is_ascii_uppercase()) {
+        diagnostics.push(Diagnostic::error(format!("a library's name starts with a capital, as in 'library {}'", capitalized(&name.name)), name.span));
+    }
+    let mut library = LibraryDecl { name, source: None, functions: Vec::new(), span: node.span() };
+    for child in &node.children {
+        let parsed = (|| {
+            no_children(child)?;
+            let mut line = Cursor::new(child.line);
+            let word = line.peek().map(|t| t.text.clone()).unwrap_or_default();
+            // A version is read as written: `2.14.1` and `v1.0.1` are several tokens.
+            let rest = |line: &mut Cursor| {
+                let mut version = String::new();
+                while let Some(token) = line.next() {
+                    version.push_str(&token.text);
+                }
+                version
+            };
+            let source = match word.as_str() {
+                "function" => {
+                    line.next();
+                    let name = line.expect_ident("a function name")?;
+                    line.expect(TokenKind::LParen, "'(' and the parameters")?;
+                    let params = parse_params(&mut line)?;
+                    let returns = if line.eat(TokenKind::Arrow) { Some(parse_type_ref(&mut line)?) } else { None };
+                    line.expect_end()?;
+                    library.functions.push(super::EngineFunction { name, params, returns, span: child.span() });
+                    return Ok(());
+                }
+                "nuget" => {
+                    line.next();
+                    let package = line.expect_string("the package, as in nuget \"Humanizer.Core\" 2.14.1")?;
+                    LibrarySource::Nuget { package, version: rest(&mut line) }
+                }
+                "dll" => {
+                    line.next();
+                    LibrarySource::Dll { file: line.expect_string("the assembly, as in dll \"libs/Plot.dll\"")? }
+                }
+                "crate" => {
+                    line.next();
+                    let name = line.expect_string("the crate, as in crate \"humanize\" \"0.1\"")?;
+                    let version = line.expect_string("the crate's version, as in crate \"humanize\" \"0.1\"")?;
+                    LibrarySource::Crate { name, version }
+                }
+                "go" => {
+                    line.next();
+                    let module = line.expect_string("the module, as in go \"github.com/dustin/go-humanize\" v1.0.1")?;
+                    LibrarySource::Go { module, version: rest(&mut line) }
+                }
+                "cmake" => {
+                    line.next();
+                    LibrarySource::Cmake { package: line.expect_string("what CMake finds, as in cmake \"SFML\"")? }
+                }
+                _ => return Err(line.error_here("a library holds its package (nuget, dll, crate, go or cmake) and its function lines")),
+            };
+            if library.source.is_some() {
+                return Err(Diagnostic::error("a library has one package", child.line.span));
+            }
+            library.source = Some(source);
+            line.expect_end()
+        })();
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
+        }
+    }
+    Ok(library)
 }
 
 fn capitalized(name: &str) -> String {

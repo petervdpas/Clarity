@@ -11,6 +11,7 @@ mod cli;
 mod logic;
 mod model;
 mod names;
+pub(crate) use names::value_type as value_type_of;
 mod texts;
 mod themes;
 mod windows;
@@ -86,7 +87,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let texts = texts::Texts::of(project);
     let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines, parts::references(project)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -114,6 +115,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
+    }
+    // The libraries: each adapter, and the half generated from its declaration (DESIGN 5.21).
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let own = crate::libraries::own_file(library, false);
+        files.extend(crate::libraries::adapter_files(project, n, &own));
+        files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::csharp_half(project, library)));
     }
     // The .NET parts: each adapter, and the half generated from its declaration.
     for part in parts::dotnet_parts(project) {
@@ -212,6 +220,12 @@ fn csproj(name: &str, servers: &[&Server], carried: bool, engines: bool, dotnet:
 {resources}</Project>
 "
     )
+}
+
+/// The libraries' packages and assemblies, in an item group (DESIGN 5.21).
+fn library_references(project: &Project) -> String {
+    let lines = crate::libraries::csharp_references(project);
+    if lines.is_empty() { lines } else { format!("  <ItemGroup>\n{lines}  </ItemGroup>\n") }
 }
 
 /// The runtime's name for a database kind.

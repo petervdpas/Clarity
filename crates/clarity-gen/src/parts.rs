@@ -443,7 +443,44 @@ pub fn write_part_folders(dir: &std::path::Path, project: &Project) -> std::io::
             written.push(target);
         }
     }
+    // A library's adapter, written once, and the file of Clarity's always (DESIGN 5.21).
+    let cpp = project_is_cpp(dir);
+    for library in crate::libraries::libraries(project) {
+        let root = dir.join(native::library_folder(&library.name.name));
+        let Some(source) = &library.source else { continue };
+        let fresh = !root.join(native::library_manifest(&library.name.name, source)).exists();
+        let own = crate::libraries::own_file(library, cpp);
+        for (path, text) in crate::libraries::starter(project, library, cpp, crate::go::runtime_version()) {
+            let mine = path == own;
+            let target = root.join(&path);
+            if (!mine && (!fresh || target.exists())) || std::fs::read_to_string(&target).ok().as_deref() == Some(text.as_str()) {
+                continue;
+            }
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&target, text)?;
+            written.push(target);
+        }
+        // A C# library's generated half lives in the project too, for the editor.
+        if matches!(source, clarity_spec::code::LibrarySource::Nuget { .. } | clarity_spec::code::LibrarySource::Dll { .. }) {
+            let target = root.join(&own);
+            let text = crate::libraries::csharp_half(project, library);
+            if std::fs::read_to_string(&target).ok().as_deref() != Some(text.as_str()) {
+                std::fs::create_dir_all(&root)?;
+                std::fs::write(&target, text)?;
+                written.push(target);
+            }
+        }
+    }
     Ok(written)
+}
+
+/// Whether the project in `dir` is on the C++ stack, which a CMake library's
+/// adapter is then written for (else C).
+fn project_is_cpp(dir: &std::path::Path) -> bool {
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    clarity_project::load(&file).settings.is_some_and(|s| s.stack.backend == clarity_project::Backend::Cpp)
 }
 
 /// The starter adapter of .NET part `name`, as declaring it writes it.

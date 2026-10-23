@@ -8,6 +8,7 @@ import type { Entity } from "./Entity";
 import type { EnumDecl } from "./EnumDecl";
 import type { FunctionDecl } from "./FunctionDecl";
 import type { Ident } from "./Ident";
+import type { LibraryDecl } from "./LibraryDecl";
 import type { Page } from "./Page";
 import type { PartDecl } from "./PartDecl";
 import type { ThemeDecl } from "./ThemeDecl";
@@ -50,4 +51,8 @@ commands: Array<CommandDecl>,
 /**
  * Its custom parts, drawn by outside libraries (DESIGN 5.19).
  */
-parts: Array<PartDecl>, };
+parts: Array<PartDecl>, 
+/**
+ * Its outside libraries, called from code (DESIGN 5.21).
+ */
+libraries: Array<LibraryDecl>, };

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, CommandDecl, EngineBody, EngineState, Param, PartDecl,
+use super::{AskForm, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -171,6 +171,36 @@ fn check_parts(env: &Env, file: &SpecFile, out: &mut Output) {
                 checker.error(format!("'min' and 'max' bound a number; {own} is {}", ty.name()), bounds[0].span);
             } else if bounds.iter().any(|b| written_number(b).is_none()) {
                 checker.error(format!("'min' and 'max' of {own} are numbers, as in min 1"), bounds[0].span);
+            }
+        }
+    }
+}
+
+/// A library's declaration (DESIGN 5.21): its package, one name per
+/// function, and plain values in and out.
+fn check_libraries(env: &Env, file: &SpecFile, out: &mut Output) {
+    for library in &file.libraries {
+        let name = &library.name.name;
+        if library.source.is_none() {
+            out.push(Diagnostic::error(
+                format!("library {name} needs its package, in the project's language: nuget \"Package\" version or dll \"file\" (C#), crate \"name\" \"version\" (Rust), go \"module\" version (Go), cmake \"Package\" (C, C++)"),
+                library.name.span,
+            ));
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for function in &library.functions {
+            if seen.contains(&function.name.name.as_str()) {
+                out.push(Diagnostic::error(format!("library {name} has two functions named '{}'", function.name.name), function.name.span));
+            }
+            seen.push(&function.name.name);
+            for ty in function.params.iter().map(|p| &p.ty).chain(&function.returns) {
+                match env.type_ref(ty) {
+                    Ok(t) if !matches!(t, Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Bool | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Unknown) => {
+                        out.push(Diagnostic::error(format!("a library's values are text, a number, a date, a duration or bool, not {}", t.name()), ty.span));
+                    }
+                    Ok(_) => {}
+                    Err(message) => out.push(Diagnostic::error(message, ty.span)),
+                }
             }
         }
     }
@@ -582,6 +612,11 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name)
     }
 
+    /// A library declared in a visible module (DESIGN 5.21).
+    fn library(&self, name: &str) -> Option<&'a LibraryDecl> {
+        self.visible.iter().flat_map(|f| &f.libraries).find(|l| l.name.name == name)
+    }
+
     /// A custom part declared in a visible module (DESIGN 5.19).
     fn part_decl(&self, name: &str) -> Option<&'a PartDecl> {
         self.visible.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name)
@@ -951,6 +986,7 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
     }
     check_engines(env, file, out);
     check_parts(env, file, out);
+    check_libraries(env, file, out);
     check_placed_parts(env, file, out);
     let owners = owners(file);
     for owner in &owners {
@@ -1554,6 +1590,32 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// A shape on a canvas, in the canvas's own draw handler or one it runs.
+    /// `Words.spell(42)`: a function of a library, with values of its types (DESIGN 5.21).
+    fn library_call(&mut self, expr: &Expr, library: &'a LibraryDecl, function: &Ident, args: &[Expr]) -> Ty<'a> {
+        let Some(callee) = library.functions.iter().find(|f| f.name.name == function.name) else {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            self.error(format!("library {} has no function {}", library.name.name, function.name), function.span);
+            return Ty::Unknown;
+        };
+        let called = format!("{}.{}", library.name.name, function.name);
+        if args.len() != callee.params.len() {
+            let n = callee.params.len();
+            self.error(format!("{called} takes {n} argument{}, not {}", if n == 1 { "" } else { "s" }, args.len()), expr.span);
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let expected = callee.params.get(i).and_then(|p| self.env.type_ref(&p.ty).ok());
+            let ty = self.expr(arg, expected);
+            if let (Some(expected), Some(param)) = (expected, callee.params.get(i))
+                && !expected.accepts(&ty)
+            {
+                self.error(format!("argument '{}' of {called} is {} {}, not {}", param.name.name, article(&expected.name()), expected.name(), ty.name()), arg.span);
+            }
+        }
+        callee.returns.as_ref().and_then(|r| self.env.type_ref(r).ok()).unwrap_or(Ty::Unknown)
+    }
+
     /// `arena.restart(2)`: a hear of a custom part, with values of its types.
     fn hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
         let decl = match self.part(&part.name) {
@@ -2643,6 +2705,11 @@ impl<'a> BodyChecker<'_, 'a> {
     /// A call to a function of an engine: checked against its signature
     /// like a call to a function (DESIGN 5.11).
     fn engine_call(&mut self, expr: &Expr, engine: &Ident, function: &Ident, args: &[Expr]) -> Ty<'a> {
+        if self.env.engine(&engine.name).is_none()
+            && let Some(library) = self.env.library(&engine.name)
+        {
+            return self.library_call(expr, library, function, args);
+        }
         let Some(decl) = self.env.engine(&engine.name) else {
             for arg in args {
                 self.expr(arg, None);

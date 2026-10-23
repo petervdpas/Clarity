@@ -972,6 +972,11 @@ impl<'a> Emitter<'a> {
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args)
             }
+            // A function of a library, through its adapter (DESIGN 5.21).
+            ExprKind::EngineCall { engine, function, args } if crate::libraries::library(self.project, &engine.name).is_some() => {
+                let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+                format!("{}.{}.{}({})", crate::libraries::CSHARP_NAMESPACE, engine.name, pascal(&function.name), values.join(", "))
+            }
             // A function of an engine, through the runtime's host (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } => {
                 let returns = self

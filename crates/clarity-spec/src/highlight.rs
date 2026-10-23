@@ -59,7 +59,7 @@ const KEYWORDS: &[&str] = &[
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit",
     // Custom parts (DESIGN 5.19).
-    "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview",
+    "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "library", "cmake",
     // Parts and the frame.
     "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",

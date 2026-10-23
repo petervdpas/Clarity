@@ -5,6 +5,7 @@
 
 pub mod tools;
 mod c;
+pub mod libraries;
 pub mod parts;
 mod commands;
 mod csharp;
@@ -405,7 +406,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     check_stores(project, settings)?;
     // A custom part is written in the project's own language (DESIGN 5.19).
-    let misfits: Vec<String> = clarity_project::target_problems(settings, project, "").into_iter().map(|d| d.message).filter(|m| m.starts_with("part ")).collect();
+    let misfits: Vec<String> = clarity_project::target_problems(settings, project, "").into_iter().map(|d| d.message).filter(|m| m.starts_with("part ") || m.starts_with("library ")).collect();
     if !misfits.is_empty() {
         return Err(misfits);
     }

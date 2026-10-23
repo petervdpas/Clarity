@@ -924,6 +924,29 @@ Build and Run write the interface file and, for a new part, a starter (`clarity 
 
 **A .NET library** (`nuget` or `dll`, the C# stack only) is shown through an adapter in `parts/Notes/Notes.cs`, half of a partial class: it holds the library's control and writes `ShowValue`, a `Show<Property>` per property and an `On<Hear>` per hear, which the half Clarity generates calls; it calls a tell by its name (`CaretMoved(3)`) and `Changed(value)` when the person changed the value. Declaring the part writes a starter adapter; one that no longer fits the declaration does not compile.
 
+### External libraries
+
+A library of the project's own language, called from code (DESIGN 5.21). It is declared in a module with its package and the functions code calls; an adapter in `libraries/Words/`, in the project's language, writes them with the package.
+
+```clarity
+library Words
+    nuget "Humanizer.Core" 2.14.1
+    function spell(n: integer) -> text
+
+action describe(order: Order)
+    effects db.write
+    order.words = Words.spell(42)
+```
+
+| Line | Stack |
+|---|---|
+| `nuget "Package" version`, `dll "file"` | C#: the adapter `Words.cs` is the other half of the static partial class `Words.g.cs` declares |
+| `crate "name" "version"` | Rust: a crate whose `Words` implements the trait `WordsLibrary` of `src/clarity.rs` |
+| `go "module" version` | Go: a module whose package has the functions `clarity.go` types |
+| `cmake "Package"` | C, C++: a CMake target `Words` with the functions of `clarity/Words.h` or `.hpp` |
+
+Code calls a function as `Words.spell(42)`, checked like an engine's. Values in and out are text, a number, a date, a duration or bool. A library of another language than the project's is an error, and declaring one writes a starter adapter (Build, Run, or `clarity parts shop.clarity`).
+
 ## 7. The app and its frame
 
 A project has one `app` block. It names the main window and declares the frame every window shares: a menu, a toolbar, a ribbon, sidebars and a footer.
@@ -1701,7 +1724,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command | custom-part
+declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command | custom-part | library
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -1723,6 +1746,9 @@ custom-part   = "part" Name
                     ["binds" type-ref] ["size" n "x" n] ["preview" String]
                     (name ":" type-ref ("," ("default" | "min" | "max") value)*)*
                     (("tells" | "hears") name ["(" params ")"])*
+library       = "library" Name
+                    ("nuget" String version | "dll" String | "crate" String String | "go" String version | "cmake" String)
+                    ("function" name "(" params ")" ["->" type-ref])*
 part          = kind [String] property*
               | Name property* (name value)* ("on" name ":" handler)*   // a custom part
                     (part | "tab" String | "pane")*        // containers only

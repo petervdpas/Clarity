@@ -66,6 +66,7 @@ enum DeclKind {
     Page,
     App,
     Part,
+    Library,
 }
 
 impl DeclKind {
@@ -76,6 +77,7 @@ impl DeclKind {
             Self::Page => "page",
             Self::App => "app",
             Self::Part => "part",
+            Self::Library => "library",
         }
     }
 }
@@ -182,7 +184,8 @@ impl<'a> Checker<'a> {
                         .enumerate()
                         .map(|(i, a)| (DeclKind::App, i, &a.name)),
                 )
-                .chain(file.parts.iter().enumerate().map(|(i, p)| (DeclKind::Part, i, &p.name)));
+                .chain(file.parts.iter().enumerate().map(|(i, p)| (DeclKind::Part, i, &p.name)))
+                .chain(file.libraries.iter().enumerate().map(|(i, l)| (DeclKind::Library, i, &l.name)));
             for (kind, index, name) in names {
                 let existing = self.decls.entry(&name.name).or_default();
                 if existing.iter().any(|d| d.module == module) {

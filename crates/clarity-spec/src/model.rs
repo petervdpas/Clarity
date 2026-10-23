@@ -47,6 +47,8 @@ pub struct SpecFile {
     pub commands: Vec<crate::code::CommandDecl>,
     /// Its custom parts, drawn by outside libraries (DESIGN 5.19).
     pub parts: Vec<crate::code::PartDecl>,
+    /// Its outside libraries, called from code (DESIGN 5.21).
+    pub libraries: Vec<crate::code::LibraryDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

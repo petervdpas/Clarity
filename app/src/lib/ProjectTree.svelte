@@ -78,6 +78,8 @@
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));
+  // The outside libraries code calls (DESIGN 5.21), with their modules.
+  const libraries = $derived(preview.project.files.flatMap((f) => f.libraries.map((library) => ({ library, module: f.module?.name ?? "" }))));
   // The custom parts outside libraries draw (DESIGN 5.19), with their modules.
   const customParts = $derived(preview.project.files.flatMap((f) => f.parts.map((part) => ({ part, module: f.module?.name ?? "" }))));
   function libraryNote(part: (typeof customParts)[number]["part"]): string {
@@ -283,6 +285,18 @@
         </button>
       {:else}
         <p class="empty">No custom parts yet: parts an outside library draws, declared with <code>part Name</code> in a module.</p>
+      {/each}
+    </details>
+
+    <details open={libraries.length > 0}>
+      <summary>Libraries <span class="count">{libraries.length}</span></summary>
+      {#each libraries as { library, module } (library.name.name)}
+        <button class="row" class:current={is("library", library.name.name)} title="in module {module}" onclick={() => onselect({ kind: "library", name: library.name.name })}>
+          {library.name.name}
+          <span class="note">{library.source?.kind ?? "no package"}</span>
+        </button>
+      {:else}
+        <p class="empty">No libraries yet: packages of the project's language that code calls, declared with <code>library Name</code>.</p>
       {/each}
     </details>
 

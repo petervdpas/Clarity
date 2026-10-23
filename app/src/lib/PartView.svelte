@@ -6,6 +6,8 @@
 
   import { invoke } from "./backend";
   import SourceEditor from "./SourceEditor.svelte";
+  import CodeEditor from "./CodeEditor.svelte";
+  import { languageOfFile } from "./codeLanguages";
   import { paramsText } from "./customParts";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
@@ -113,15 +115,12 @@
       {#if open}
         {@const shown = open}
         <div class="tab"><code>{shown.path}</code>{#if shown.own}<span class="muted"> written from the declaration</span>{/if}</div>
-        <SourceEditor
-          load={async () => ({ text: await invoke<string>("part_file_text", { name, path: shown.path }), problems: [] })}
-          check={async () => []}
+        <CodeEditor
+          load={() => invoke<string>("part_file_text", { name, path: shown.path })}
           save={(text) => invoke<void>("save_part_file", { name, path: shown.path, text })}
           reloadKey={name + "\n" + shown.path + "\n" + file.version}
-          language="plain"
+          language={languageOfFile(shown.path)}
           readonly={shown.own}
-          errorsBlockSave={false}
-          opensBlock={/[{(]\s*$/}
           onclose={() => (open = null)}
         />
       {:else}

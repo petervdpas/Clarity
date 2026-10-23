@@ -29,11 +29,31 @@ fn own_file(library: &PartLibrary, name: &str) -> Option<String> {
     }
 }
 
-/// The part's folder in the project, and the project.
+/// The file of a library's folder that is Clarity's (DESIGN 5.21).
+fn library_own(dir: &Path, project: &clarity_spec::Project, name: &str) -> Option<String> {
+    let library = clarity_gen::libraries::library(project, name)?;
+    let file = dir.with_extension(clarity_spec::SPEC_EXTENSION);
+    let cpp = clarity_project::load(&file).settings.is_some_and(|s| s.stack.backend == clarity_project::Backend::Cpp);
+    Some(clarity_gen::libraries::own_file(library, cpp))
+}
+
+/// The file of Clarity's in the folder of the part or library `name`.
+fn own_of(dir: &Path, project: &clarity_spec::Project, name: &str) -> Option<String> {
+    let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name);
+    match part.and_then(|p| p.library.as_ref()) {
+        Some(library) => own_file(library, name),
+        None => library_own(dir, project, name),
+    }
+}
+
+/// The folder of the part or library `name` in the project, and the project.
 fn folder_of(state: &WatchState, name: &str) -> Result<(PathBuf, clarity_spec::Project), String> {
     let dir = crate::open_dir_of(state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
-    let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).ok_or_else(|| format!("there is no part {name}"))?;
+    if clarity_gen::libraries::library(&project, name).is_some() {
+        return Ok((dir.join(clarity_spec::native::library_folder(name)), project));
+    }
+    let part = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).ok_or_else(|| format!("there is no part or library {name}"))?;
     let folder = match &part.library {
         Some(PartLibrary::Native { folder } | PartLibrary::Crate { folder } | PartLibrary::Go { folder }) => folder.clone(),
         Some(_) => clarity_spec::native::adapter_folder(name),
@@ -55,7 +75,7 @@ fn inside(folder: &Path, path: &str) -> Result<PathBuf, String> {
 pub fn part_files(name: String, state: State<WatchState>) -> Result<Vec<PartFileInfo>, String> {
     let (folder, project) = folder_of(&state, &name)?;
     let dir = crate::open_dir_of(&state)?;
-    let own = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).and_then(|p| p.library.as_ref()).and_then(|l| own_file(l, &name));
+    let own = own_of(&dir, &project, &name);
     let mut files: Vec<PartFileInfo> = clarity_spec::native::native_files(&dir, &project)
         .map_err(|err| err.to_string())?
         .into_iter()
@@ -78,7 +98,8 @@ pub fn part_file_text(name: String, path: String, state: State<WatchState>) -> R
 #[tauri::command]
 pub fn save_part_file(name: String, path: String, text: String, state: State<WatchState>) -> Result<(), String> {
     let (folder, project) = folder_of(&state, &name)?;
-    let own = project.files.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name).and_then(|p| p.library.as_ref()).and_then(|l| own_file(l, &name));
+    let dir = crate::open_dir_of(&state)?;
+    let own = own_of(&dir, &project, &name);
     if Some(&path) == own.as_ref() {
         return Err(format!("{path} is Clarity's: it follows the part's declaration"));
     }

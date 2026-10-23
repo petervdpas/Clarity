@@ -44,6 +44,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         clis: Vec::new(),
         commands: Vec::new(),
         parts: Vec::new(),
+        libraries: Vec::new(),
     };
 
     for (index, node) in tree.iter().enumerate() {
@@ -377,6 +378,9 @@ fn parse_top_level(
         Some("part") => {
             file.parts.push(crate::code::parse::parse_part(node, diagnostics)?);
         }
+        Some("library") => {
+            file.libraries.push(crate::code::parse::parse_library(node, diagnostics)?);
+        }
         Some("theme") => {
             cursor.next();
             let name = cursor.expect_ident("a theme name")?;
@@ -391,7 +395,7 @@ fn parse_top_level(
         }
         _ => {
             return Err(cursor.error_here(
-                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command' or 'part'",
+                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command', 'part' or 'library'",
             ));
         }
     }

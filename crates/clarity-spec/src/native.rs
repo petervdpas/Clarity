@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use crate::code::PartLibrary;
+use crate::code::{LibrarySource, PartLibrary};
 use crate::diagnostic::Diagnostic;
 use crate::model::Project;
 
@@ -28,6 +28,21 @@ pub struct PartFile {
 
 /// Folders a part's build leaves, which are not its sources.
 const LEFT_OUT: [&str; 4] = ["build", "out", "target", OWN_FOLDER];
+
+/// Where a library's adapter is: `libraries/<Name>` (DESIGN 5.21).
+pub fn library_folder(library: &str) -> String {
+    format!("libraries/{library}")
+}
+
+/// The file a library's adapter folder must hold, by its language.
+pub fn library_manifest(library: &str, source: &LibrarySource) -> String {
+    match source {
+        LibrarySource::Nuget { .. } | LibrarySource::Dll { .. } => format!("{library}.cs"),
+        LibrarySource::Crate { .. } => "Cargo.toml".into(),
+        LibrarySource::Go { .. } => "go.mod".into(),
+        LibrarySource::Cmake { .. } => BUILD_FILE.into(),
+    }
+}
 
 /// Where a .NET part's adapter is: `parts/<Name>`.
 pub fn adapter_folder(part: &str) -> String {
@@ -51,6 +66,20 @@ pub fn native_files(dir: &Path, project: &Project) -> std::io::Result<Vec<PartFi
             read_folder(&root, "", name, &mut found)?;
         }
         if let Some(PartLibrary::Dll { file }) = &part.library {
+            let path = dir.join(file);
+            let at = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            if path.is_file() && !found.iter().any(|f| f.part == *name && f.path == at) {
+                found.push(PartFile { part: name.clone(), path: at, bytes: std::fs::read(&path)? });
+            }
+        }
+    }
+    for library in project.files.iter().flat_map(|f| &f.libraries) {
+        let name = &library.name.name;
+        let root = dir.join(library_folder(name));
+        if root.is_dir() {
+            read_folder(&root, "", name, &mut found)?;
+        }
+        if let Some(LibrarySource::Dll { file }) = &library.source {
             let path = dir.join(file);
             let at = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             if path.is_file() && !found.iter().any(|f| f.part == *name && f.path == at) {
@@ -110,6 +139,26 @@ pub fn attach(project: &mut Project, files: Vec<PartFile>) {
             };
             if let Some(problem) = problem {
                 found.push(Diagnostic::error(problem, part.name.span).in_file(&file.path));
+            }
+        }
+    }
+    for file in &project.files {
+        for library in &file.libraries {
+            let Some(source) = &library.source else { continue };
+            let name = &library.name.name;
+            let manifest = library_manifest(name, source);
+            let own: Vec<&PartFile> = files.iter().filter(|f| f.part == *name).collect();
+            let problem = if !own.iter().any(|f| f.path == manifest) {
+                Some(format!("library {name}: '{}/{manifest}' is not there; its adapter calls the library", library_folder(name)))
+            } else if let LibrarySource::Dll { file: dll } = source
+                && !own.iter().any(|f| Some(f.path.as_str()) == Path::new(dll).file_name().and_then(|n| n.to_str()))
+            {
+                Some(format!("library {name}: its assembly '{dll}' is not there"))
+            } else {
+                None
+            };
+            if let Some(problem) = problem {
+                found.push(Diagnostic::error(problem, library.name.span).in_file(&file.path));
             }
         }
     }

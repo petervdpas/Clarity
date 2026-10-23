@@ -123,7 +123,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             }
             Err(mut problems) => errors.append(&mut problems),
         }
-        files.push(text(&format!("{}_module.go", names::module(&m.name)), go_file(&body)));
+        files.push(text(&format!("{}_module.go", names::module(&m.name)), go_file_with(&body, &library_imports(project))));
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -132,6 +132,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !engines.is_empty() {
         files.extend(crate::engine_files(project, "engines"));
         files.push(text("engines.go", engines_go(project)));
+    }
+    // Each library's module, its function types written from its declaration (DESIGN 5.21).
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let own = crate::libraries::own_file(library, false);
+        files.extend(crate::libraries::adapter_files(project, n, &own));
+        files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::go_interface(library)));
     }
     // Each custom part's module, its interface written from its declaration, and the glue that makes it.
     let go_parts = parts::go_parts(project);
@@ -153,6 +160,21 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         direct.push("github.com/shopspring/decimal");
     }
     let mut go_mod_text = go_mod(&module, &left_out, &direct);
+    // Each library is a module of its own beside the program's, as each part is (DESIGN 5.21).
+    let required: Vec<String> = go_mod_text.lines().filter_map(|l| l.trim().split_whitespace().next().map(String::from)).collect();
+    let mut library_sums = String::new();
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let path = crate::libraries::go_module(project, n);
+        let mut lines = format!("\t{path} v0.0.0\n");
+        for (module, version) in crate::libraries::go_requirements(project, n) {
+            if !required.contains(&module) {
+                lines.push_str(&format!("\t{module} {version} // indirect\n"));
+            }
+        }
+        go_mod_text.push_str(&format!("\nrequire (\n{lines})\n\nreplace {path} => ./{}\n", crate::libraries::folder(n)));
+        library_sums.push_str(&crate::libraries::go_sums(project, n));
+    }
     // Each part is a module of its own beside the program's; what it requires, and its sums, the program's too.
     let mut part_sums = String::new();
     for (part, folder) in &go_parts {
@@ -165,7 +187,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         part_sums.push_str(&parts::sums_of(project, &part.name.name));
     }
     files.push(text("go.mod", go_mod_text));
-    files.push(text("go.sum", go_sum(&left_out) + &part_sums));
+    files.push(text("go.sum", go_sum(&left_out) + &part_sums + &library_sums));
     Ok(files)
 }
 
@@ -291,6 +313,12 @@ fn module_of(line: &str) -> &str {
 /// A Go file of package main: its body and the imports it uses, as Go
 /// refuses an import that is not used.
 fn go_file(body: &str) -> String {
+    go_file_with(body, &[])
+}
+
+/// As `go_file`, with the libraries the body may call (DESIGN 5.21): their
+/// package's name in the code, and its module.
+pub(crate) fn go_file_with(body: &str, libraries: &[(String, String)]) -> String {
     let mut imports = Vec::new();
     if body.contains("slices.") {
         imports.push("\t\"slices\"\n".to_string());
@@ -306,6 +334,12 @@ fn go_file(body: &str) -> String {
     if body.contains("decimal.") {
         third.push("\t\"github.com/shopspring/decimal\"\n".to_string());
     }
+    for (alias, module) in libraries {
+        if body.contains(&format!("{alias}.")) {
+            third.push(format!("\t{alias} \"{module}\"\n"));
+        }
+    }
+    third.sort_by_key(|line| line.split('"').nth(1).unwrap_or_default().to_string());
     let mut block = imports.concat();
     if !imports.is_empty() && !third.is_empty() {
         block.push('\n');
@@ -317,6 +351,14 @@ fn go_file(body: &str) -> String {
         return format!("{HEADER}\npackage main\n");
     }
     format!("{HEADER}\npackage main\n\n{imports}{body}\n")
+}
+
+/// The libraries' packages as the code names them (`wordslib`), with their modules.
+fn library_imports(project: &Project) -> Vec<(String, String)> {
+    crate::libraries::libraries(project)
+        .into_iter()
+        .map(|l| (format!("{}lib", crate::libraries::go_package(&l.name.name)), crate::libraries::go_module(project, &l.name.name)))
+        .collect()
 }
 
 /// The runtime's name for a database kind.

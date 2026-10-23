@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Colors external libraries: `library` with `cmake` and its `function` lines.
+
 ## 0.1.8
 
 - Colors `crate` and `go`, the library lines of custom parts written in Rust and Go.

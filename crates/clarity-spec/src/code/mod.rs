@@ -529,6 +529,36 @@ pub struct PartDecl {
     pub span: Span,
 }
 
+/// `library Words` (DESIGN 5.21): an outside library in the project's own
+/// language, with the functions code calls, written by the adapter in
+/// `libraries/Words/`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct LibraryDecl {
+    pub name: Ident,
+    /// Its package; none written is an error the checker reports.
+    pub source: Option<LibrarySource>,
+    pub functions: Vec<EngineFunction>,
+    pub span: Span,
+}
+
+/// Where a library comes from, in the project's language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum LibrarySource {
+    /// `nuget "Humanizer.Core" 2.14.1` (C#).
+    Nuget { package: String, version: String },
+    /// `dll "libs/Plot.dll"` (C#).
+    Dll { file: String },
+    /// `crate "humanize" "0.1"` (Rust).
+    Crate { name: String, version: String },
+    /// `go "github.com/dustin/go-humanize" v1.0.1` (Go).
+    Go { module: String, version: String },
+    /// `cmake "SFML"`: what the adapter's CMake finds (C, C++).
+    Cmake { package: String },
+}
+
 /// The library that draws a custom part.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]

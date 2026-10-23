@@ -66,7 +66,15 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let mut files = vec![
-        text("Cargo.toml", cargo_toml(&crate_name, &features, &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>())),
+        text(
+            "Cargo.toml",
+            cargo_toml(
+                &crate_name,
+                &features,
+                &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
+                &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
+            ),
+        ),
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
         text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))),
         text("src/model.json", crate::web::model_json(project)),
@@ -122,6 +130,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     if !rust_parts.is_empty() {
         files.push(text("src/parts.rs", parts::glue(project)));
+    }
+    // Each library's crate, its trait written from its declaration (DESIGN 5.21).
+    for library in crate::libraries::libraries(project) {
+        let n = &library.name.name;
+        let own = crate::libraries::own_file(library, false);
+        files.extend(crate::libraries::adapter_files(project, n, &own));
+        files.push(text(&format!("{}/{own}", crate::libraries::folder(n)), crate::libraries::rust_interface(library)));
     }
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
@@ -189,11 +204,14 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)]) -> String {
+fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
     let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
     let parts = if parts.is_empty() { String::new() } else { format!("{crates}\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n") };
+    // Each library's crate (DESIGN 5.21), before the parts' Linux table.
+    let libraries: String = libraries.iter().map(|(package, library)| format!("{package} = {{ path = \"libraries/{library}\" }}\n")).collect();
+    let parts = format!("{libraries}{parts}");
     format!(
         r#"[package]
 name = "{name}"

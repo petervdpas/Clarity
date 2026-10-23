@@ -573,6 +573,10 @@
       <button onclick={() => onedit({ op: "addTab", item: location.widget.span.start, title: `Tab ${location.widget.pages.length + 1}` })}>
         Add tab
       </button>
+    {:else if info.container === "accordion"}
+      <button onclick={() => onedit({ op: "addTab", item: location.widget.span.start, title: `Section ${location.widget.pages.length + 1}` })}>
+        Add section
+      </button>
     {:else if info.container === "steps"}
       <button onclick={() => onedit({ op: "addTab", item: location.widget.span.start, title: `Step ${location.widget.pages.length + 1}` })}>
         Add step
@@ -586,13 +590,14 @@
     {@const tab = inner.widget.pages[inner.index]}
     {#if tab.title !== null}
       {@const step = inner.widget.props.kind === "steps"}
-      <div class="kind">{step ? "Step" : "Tab"}</div>
+      {@const section = inner.widget.props.kind === "accordion"}
+      <div class="kind">{step ? "Step" : section ? "Section" : "Tab"}</div>
       <label class="prop">
         <span>Title</span>
         <TextField {preview} {onapplied} text={tab.title} onwrite={(text) => onedit({ op: "setTitle", target: tab.span.start, title: text ?? "" })} />
       </label>
       <div class="actions">
-        <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>{step ? "Remove step" : "Remove tab"}</button>
+        <button class="danger" onclick={() => onedit({ op: "remove", item: tab.span.start })}>{step ? "Remove step" : section ? "Remove section" : "Remove tab"}</button>
       </div>
     {:else}
       <div class="kind">Pane</div>

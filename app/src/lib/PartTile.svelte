@@ -89,6 +89,16 @@
       <rect x="4" y="3" width="12" height="6" rx="1" class="fill" />
       <rect x="17" y="3" width="12" height="6" rx="1" />
       <rect x="4" y="9" width="40" height="16" rx="1" />
+    {:else if kind === "accordion"}
+      <rect x="4" y="3" width="40" height="5" rx="1" class="fill" />
+      <rect x="4" y="9" width="40" height="10" rx="1" />
+      <rect x="4" y="20" width="40" height="5" rx="1" class="fill" />
+    {:else if kind === "scroll"}
+      <rect x="4" y="3" width="40" height="22" rx="2" />
+      <line x1="40" y1="6" x2="40" y2="14" />
+      <line x1="9" y1="9" x2="32" y2="9" />
+      <line x1="9" y1="15" x2="32" y2="15" />
+      <line x1="9" y1="21" x2="26" y2="21" />
     {:else if kind === "toggle"}
       <rect x="10" y="7" width="28" height="14" rx="3" class="fill" />
       <path d="M17 14 l4 4 l9 -9" />

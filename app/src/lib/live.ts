@@ -44,6 +44,8 @@ export type PartState = {
   tab?: number | null;
   /** The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json). */
   step?: number | null;
+  /** The open section of an accordion, counted from 1, 0 for none (conformance/accordions.json). */
+  open?: number | null;
 };
 
 export interface Live {
@@ -68,6 +70,8 @@ export interface Live {
   setRibbon(part: string, change: { tab?: number; collapsed?: boolean }): void;
   /** Keeps the step a wizard is on, sent with the next event. */
   setStep(part: string, step: number): void;
+  /** Keeps the section the person opened in an accordion (0: none), sent with the next event. */
+  setOpen(part: string, open: number): void;
   /** Keeps whether a part shows: a popover the person opened or closed, sent with the next event. */
   setVisible(part: string, visible: boolean): void;
   /** The records a reference field can point at, as id and display text. */

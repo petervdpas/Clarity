@@ -169,6 +169,19 @@ TEST(a_wizards_step_is_as_every_runtime_says) {
     }
 }
 
+TEST(an_accordions_open_section_is_as_every_runtime_says) {
+    auto file = conformance("accordions.json");
+    for (const auto& c : file["open"]) {
+        Ui ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"faq", c["part"]}}}}.get<WindowState>());
+        CHECK_EQ(ui.open_section("faq"), c["open"].get<int64_t>());
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        ui.set_open_section("faq", c["open"].get<int64_t>());
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["faq"], c["part"]);
+    }
+}
+
 TEST(a_ribbons_open_tab_is_as_every_runtime_says) {
     auto file = conformance("ribbons.json");
     for (const auto& c : file["tab"]) {

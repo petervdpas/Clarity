@@ -35,6 +35,9 @@ type PartState struct {
 	// Step is the step a wizard (a steps part) is on, counted from 1; nil is
 	// the first (conformance/steps.json).
 	Step *int64 `json:"step,omitempty"`
+	// Open is the open section of an accordion, counted from 1, 0 for none;
+	// nil is the first (conformance/accordions.json).
+	Open *int64 `json:"open,omitempty"`
 	// Text is what an unbound text input holds; the screen sends it with each event.
 	Text *string `json:"text,omitempty"`
 	// Checked is whether an unbound checkbox or switch is on.
@@ -309,6 +312,18 @@ func (u *Ui) Step(part string) int64 {
 
 func (u *Ui) SetStep(part string, value int64) {
 	u.part(part, func(p *PartState) { p.Step = &value })
+}
+
+// OpenSection is the open section of an accordion, counted from 1; 0 when none is open.
+func (u *Ui) OpenSection(part string) int64 {
+	if o := u.parts[part].Open; o != nil {
+		return *o
+	}
+	return 1
+}
+
+func (u *Ui) SetOpenSection(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Open = &value })
 }
 
 // X is where a canvas was last clicked, across: canvas.x; 0 before any click.

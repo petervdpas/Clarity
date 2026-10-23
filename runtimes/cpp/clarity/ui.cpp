@@ -34,6 +34,7 @@ bool Ui::collapsed(const std::string& part, bool design) const { return part_or(
 bool Ui::maximized(const std::string& part) const { return part_or(parts_, part, &PartState::maximized, false); }
 int64_t Ui::tab(const std::string& part) const { return part_or(parts_, part, &PartState::tab, int64_t(1)); }
 int64_t Ui::step(const std::string& part) const { return part_or(parts_, part, &PartState::step, int64_t(1)); }
+int64_t Ui::open_section(const std::string& part) const { return part_or(parts_, part, &PartState::open, int64_t(1)); }
 bool Ui::checked(const std::string& part) const { return part_or(parts_, part, &PartState::checked, false); }
 std::string Ui::text(const std::string& part) const { return part_or(parts_, part, &PartState::text, std::string()); }
 
@@ -105,6 +106,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.maximized) out["maximized"] = *p.maximized;
     if (p.tab) out["tab"] = *p.tab;
     if (p.step) out["step"] = *p.step;
+    if (p.open) out["open"] = *p.open;
     if (p.text) out["text"] = *p.text;
     if (p.checked) out["checked"] = *p.checked;
     if (p.drawing) out["drawing"] = *p.drawing;
@@ -125,6 +127,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("maximized", p.maximized);
     take("tab", p.tab);
     take("step", p.step);
+    take("open", p.open);
     take("text", p.text);
     take("checked", p.checked);
     if (in.contains("drawing") && in["drawing"].is_array()) p.drawing = in["drawing"];

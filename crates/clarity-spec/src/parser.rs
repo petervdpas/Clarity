@@ -1340,8 +1340,12 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
     match widgets::container(kind) {
         None => no_children(node)?,
         Some(ContainerKind::Plain) => widget.children = parse_widgets(&node.children, diagnostics),
-        Some(container @ (ContainerKind::Tabs | ContainerKind::Steps)) => {
-            let keyword = if container == ContainerKind::Tabs { "tab" } else { "step" };
+        Some(container @ (ContainerKind::Tabs | ContainerKind::Steps | ContainerKind::Accordion)) => {
+            let keyword = match container {
+                ContainerKind::Tabs => "tab",
+                ContainerKind::Steps => "step",
+                _ => "section",
+            };
             for child in &node.children {
                 match parse_widget_page(child, keyword, diagnostics) {
                     Ok(page) => widget.pages.push(page),
@@ -1372,12 +1376,17 @@ fn parse_widget_page(
         let expected = match keyword {
             "tab" => "'tab \"Title\"'",
             "step" => "'step \"Title\"'",
+            "section" => "'section \"Title\"'",
             _ => "'pane'",
         };
         return Err(cursor.error_here(format!("expected {expected}")));
     }
-    let title = if keyword == "tab" || keyword == "step" {
-        Some(cursor.expect_text(if keyword == "tab" { "a tab title" } else { "a step title" })?)
+    let title = if matches!(keyword, "tab" | "step" | "section") {
+        Some(cursor.expect_text(match keyword {
+            "tab" => "a tab title",
+            "step" => "a step title",
+            _ => "a section title",
+        })?)
     } else {
         None
     };

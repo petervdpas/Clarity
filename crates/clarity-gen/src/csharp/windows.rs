@@ -1056,6 +1056,23 @@ impl<'a> Window<'a> {
                 self.grid(&widget.children, p.width, Some(p.height), false, depth + 2, out);
                 let _ = writeln!(out, "{pad}  </Border>\n{pad}</Popup>");
             }
+            // An accordion is the runtime's AccordionView: its open section follows the part's state.
+            WidgetKind::Accordion => {
+                let open = named.map(|n| format!(" Open=\"{{Binding {}.OpenSection}}\"", member(n))).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:AccordionView {at}{open}{plain_state}{extra}>");
+                for page in &widget.pages {
+                    let _ = writeln!(out, "{pad}  <c:SectionItem Header=\"{}\">", self.text(page.title.as_deref().unwrap_or_default()));
+                    self.grid(&page.children, p.width, None, false, depth + 2, out);
+                    let _ = writeln!(out, "{pad}  </c:SectionItem>");
+                }
+                let _ = writeln!(out, "{pad}</c:AccordionView>");
+            }
+            // A scroll box: its own grid in a ScrollViewer, so parts below its rows scroll into view.
+            WidgetKind::Scroll => {
+                let _ = writeln!(out, "{pad}<ScrollViewer {at} Classes=\"scroll\" HorizontalScrollBarVisibility=\"Disabled\" VerticalScrollBarVisibility=\"Auto\"{plain_state}{extra}>");
+                self.grid(&widget.children, p.width, None, false, depth + 1, out);
+                let _ = writeln!(out, "{pad}</ScrollViewer>");
+            }
             // A wizard is the runtime's StepsView: its step follows the part's state.
             WidgetKind::Steps => {
                 let step = named.map(|n| format!(" Step=\"{{Binding {}.Step}}\"", member(n))).unwrap_or_default();
@@ -1225,6 +1242,8 @@ impl<'a> Window<'a> {
                     Event::Click => continue,
                     // A toggle tells its change when the person presses it, not when code sets it.
                     Event::Change if kind == WidgetKind::Toggle => format!("{control}.Click += (_, _) => {run};"),
+                    // An accordion tells when the person opened or folded a section.
+                    Event::Change if kind == WidgetKind::Accordion => format!("{control}.Changed += () => {run};"),
                     Event::Change if input => format!("{control}.ValueChanged += (_, _) => {run};"),
                     // The table chooses an edited row first, so the handler finds it.
                     Event::Change if kind == WidgetKind::Table => format!("{control}.Edited += _ => {run};"),

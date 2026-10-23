@@ -1,0 +1,25 @@
+{
+  "about": "An accordion (U1b, `accordion name faq` with `section` blocks). One section is open at a time, counted from 1; 0 is none. The renderer sends it as the part's `open`, and a handler reads and sets it as `faq.open`. `open` gives the part's state and what `faq.open` reads: the first section without one. `set` gives what setting it sends back. `shown` gives the open section the renderer shows for an accordion of `sections`: the asked one when it is there, else none. `press` gives what a press on the header of section `press` makes the open section: that section, or none when it was the open one, which folds it.",
+  "open": [
+    { "part": {}, "open": 1 },
+    { "part": { "open": 2 }, "open": 2 },
+    { "part": { "open": 0 }, "open": 0 }
+  ],
+  "set": [
+    { "open": 3, "part": { "open": 3 } },
+    { "open": 0, "part": { "open": 0 } }
+  ],
+  "shown": [
+    { "sections": 3, "open": 1, "shown": 1 },
+    { "sections": 3, "open": 3, "shown": 3 },
+    { "sections": 3, "open": 0, "shown": 0 },
+    { "sections": 3, "open": 5, "shown": 0 },
+    { "sections": 3, "open": -1, "shown": 0 }
+  ],
+  "press": [
+    { "sections": 3, "open": 2, "press": 3, "open after": 3 },
+    { "sections": 3, "open": 2, "press": 2, "open after": 0 },
+    { "sections": 3, "open": 0, "press": 1, "open after": 1 },
+    { "sections": 3, "open": 7, "press": 2, "open after": 2 }
+  ]
+}

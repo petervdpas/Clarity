@@ -47,7 +47,7 @@
             id: inner.span.start,
             key: String(inner.span.start),
             depth: depth + 1,
-            kind: inner.title === null ? "Pane" : p.kind === "steps" ? "Step" : "Tab",
+            kind: inner.title === null ? "Pane" : p.kind === "steps" ? "Step" : p.kind === "accordion" ? "Section" : "Tab",
             text: inner.title ? tr(preview, inner.title) : "",
             removable: inner.title !== null,
           });

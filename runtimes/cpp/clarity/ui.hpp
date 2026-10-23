@@ -39,6 +39,8 @@ struct PartState {
     std::optional<int64_t> tab;
     /// The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json).
     std::optional<int64_t> step;
+    /// The open section of an accordion, counted from 1, 0 for none (conformance/accordions.json).
+    std::optional<int64_t> open;
     /// What an unbound text input holds; the screen sends it with each event.
     std::optional<std::string> text;
     /// Whether an unbound checkbox or switch is on.
@@ -175,6 +177,9 @@ public:
     /// The step a wizard is on, counted from 1.
     int64_t step(const std::string& part) const;
     void set_step(const std::string& part, int64_t value) { parts_[part].step = value; }
+    /// The open section of an accordion, counted from 1; 0 when none is open.
+    int64_t open_section(const std::string& part) const;
+    void set_open_section(const std::string& part, int64_t value) { parts_[part].open = value; }
     /// The text of an unbound text input.
     std::string text(const std::string& part) const;
     void set_text(const std::string& part, std::string value) { parts_[part].text = std::move(value); }

@@ -972,6 +972,9 @@ impl<'a> Checker<'a> {
                         ContainerKind::Tabs if widget.pages.is_empty() => {
                             self.error(file, "tabs need at least one 'tab'", widget.span);
                         }
+                        ContainerKind::Accordion if widget.pages.is_empty() => {
+                            self.error(file, "an accordion needs at least one 'section'", widget.span);
+                        }
                         ContainerKind::Steps if widget.pages.len() < 2 => {
                             self.error(file, "steps need at least two 'step' blocks: a wizard of one step is a panel", widget.span);
                         }

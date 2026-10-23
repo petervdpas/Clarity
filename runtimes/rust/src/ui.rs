@@ -284,6 +284,10 @@ pub struct PartState {
     /// the first (conformance/steps.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step: Option<i64>,
+    /// The open section of an accordion, counted from 1, 0 for none; none
+    /// is the first (conformance/accordions.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open: Option<i64>,
     /// What an unbound text input holds; the screen sends it with each
     /// event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -567,6 +571,15 @@ impl Ui {
 
     pub fn set_step(&mut self, part: &str, value: i64) {
         self.parts.entry(part.to_string()).or_default().step = Some(value);
+    }
+
+    /// The open section of an accordion, counted from 1; 0 when none is open.
+    pub fn open_section(&self, part: &str) -> i64 {
+        self.parts.get(part).and_then(|p| p.open).unwrap_or(1)
+    }
+
+    pub fn set_open_section(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().open = Some(value);
     }
 
     /// The text of an unbound text input.

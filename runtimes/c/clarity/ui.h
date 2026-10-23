@@ -30,6 +30,9 @@ typedef struct {
     /// The step a wizard (a steps part) is on, counted from 1 (conformance/steps.json).
     bool has_step;
     int64_t step;
+    /// The open section of an accordion, counted from 1, 0 for none (conformance/accordions.json).
+    bool has_open;
+    int64_t open;
     /// What an unbound text input holds (NULL: not set); the screen sends it with each event.
     const char* text;
     /// Whether an unbound checkbox or switch is on.
@@ -178,6 +181,9 @@ void clarity_ui_set_tab(ClarityUi* ui, const char* part, int64_t value);
 /// The step a wizard is on, counted from 1.
 int64_t clarity_ui_step(const ClarityUi* ui, const char* part);
 void clarity_ui_set_step(ClarityUi* ui, const char* part, int64_t value);
+/// The open section of an accordion, counted from 1; 0 when none is open.
+int64_t clarity_ui_open_section(const ClarityUi* ui, const char* part);
+void clarity_ui_set_open_section(ClarityUi* ui, const char* part, int64_t value);
 /// The text of an unbound text input.
 const char* clarity_ui_text(const ClarityUi* ui, const char* part);
 void clarity_ui_set_text(ClarityUi* ui, const char* part, const char* value);

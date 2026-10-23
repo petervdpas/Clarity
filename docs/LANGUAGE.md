@@ -557,6 +557,8 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
 | `popover` | parts on its own grid, opened next to the part in `for` | none | none |
 | `buttons` | buttons and toggles joined in one row, on its own grid | none | none |
+| `accordion` | `section @key` blocks, each with parts; one open at a time | none | `change` |
+| `scroll` | parts, on its own grid; parts below its rows scroll into view | none | none |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
@@ -703,6 +705,8 @@ button @filterButton name filterButton at 1,7 span 2 on click -> filters
 popover name filters for filterButton span 4 rows 2
     checkbox @onlyVinylCaption name vinylBox at 1,1 span 4 bind onlyVinyl on change: refilter
 ```
+
+An accordion shows its sections' titles one under the other, with the open section's parts under its title; the first is open to start. A press on a title opens that section, or folds it when it was the open one, and runs `on change`; code reads and sets the open section as `faq.open` (0 folds them all). A scroll box holds parts on its own grid like a panel, and parts placed below its rows scroll into view.
 
 A button with `split` has an arrow beside it that opens its `menu` block, written as a context menu is; the button itself runs its `on click`. A toggle is a button that stays pressed: bound to a bool as a checkbox is, or holding its own, which code reads and sets as `part.checked`; its `on change` runs when the person presses it.
 
@@ -925,6 +929,7 @@ A name that is both data and a part in the same window is an error.
 | `maximized` | maximizable sidebars | bool: whether it fills the window | yes |
 | `tab` | ribbons | integer: the open tab, counted from 1 | yes |
 | `step` | wizards (`steps`) | integer: the step shown, counted from 1 | yes |
+| `open` | accordions | integer: the open section, counted from 1; 0 when none is open | yes |
 | `collapsed` | collapsible ribbons | bool: whether it is folded to its tabs | yes |
 
 A bound input is changed through its data: `customer.name = "Ada"` changes the text box bound to `customer.name`.

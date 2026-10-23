@@ -1803,6 +1803,8 @@ impl<'a> BodyChecker<'_, 'a> {
             "tab" if matches!(part, Part::Ribbon(_)) => value(Ty::Integer),
             // The step a wizard is on, counted from 1.
             "step" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Steps) => value(Ty::Integer),
+            // The open section of an accordion, from 1; 0 when none is open.
+            "open" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Accordion) => value(Ty::Integer),
             "folded" if matches!(part, Part::Widget(props) if props.foldable) => value(Ty::Bool),
             "text" if matches!(part, Part::Widget(props) if has_text(props)) => value(Ty::Text),
             "checked" if matches!(part, Part::Widget(props) if has_checked(props)) => value(Ty::Bool),

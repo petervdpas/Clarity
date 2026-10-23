@@ -259,6 +259,11 @@ impl Maker {
                 let base = format!("{owner}{}Step", upper(&words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[])));
                 self.at(tokens.get(1), &base, edits);
             }
+            // A section of an accordion is named by its title.
+            "section" => {
+                let base = format!("{owner}{}Section", upper(&words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[])));
+                self.at(tokens.get(1), &base, edits);
+            }
             "item" => {
                 let base = name.clone().unwrap_or_else(|| format!("{}Item", words_key(tokens.get(1).map_or("", |t| t.text.as_str()), &[])));
                 self.at(tokens.get(1), &base, edits);

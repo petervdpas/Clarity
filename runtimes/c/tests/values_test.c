@@ -253,6 +253,30 @@ void a_wizards_step_is_as_every_runtime_says(void) {
     cJSON_Delete(file);
 }
 
+void an_accordions_open_section_is_as_every_runtime_says(void) {
+    cJSON* file = conformance("accordions.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "open")) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "faq", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        CHECK(clarity_ui_open_section(clarity_ui(&state), "faq") == (int64_t)cJSON_GetObjectItemCaseSensitive(c, "open")->valuedouble);
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        clarity_ui_set_open_section(ui, "faq", (int64_t)cJSON_GetObjectItemCaseSensitive(c, "open")->valuedouble);
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "faq"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_Delete(file);
+}
+
 void a_ribbons_open_tab_is_as_every_runtime_says(void) {
     cJSON* file = conformance("ribbons.json");
     const cJSON* c;

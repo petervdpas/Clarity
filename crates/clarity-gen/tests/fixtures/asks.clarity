@@ -36,6 +36,14 @@ page Albums: window
     button "Save" name saveButton split at 5,4 span 2 on click: favouriteChanged
         menu
             item "Save a copy" name saveCopyItem on click: newClicked
+    accordion name notesAccordion at 1,5 span 6 rows 4 on change: favouriteChanged
+        section "Title"
+            text name titleText at 1,1 span 6 bind album.title
+        section "Site"
+            text name siteText at 1,1 span 6 bind album.site
+    scroll name moreScroll at 7,5 span 6 rows 2
+        textbox name titleBox at 1,1 span 6 bind album.title
+        number name copiesBox at 1,4 span 3 bind album.copies
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -95,6 +103,8 @@ code Albums
 
     handler leftChanged
         rightToggle.checked = not leftToggle.checked
+        if notesAccordion.open == 0
+            notesAccordion.open = 2
 
     handler newClicked
         ask NewAlbum then added

@@ -102,6 +102,10 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     public long Step { get => step; set => SetProperty(ref step, value); }
     long step = 1;
 
+    /// <summary>The open section of an accordion, counted from 1, 0 for none (conformance/accordions.json).</summary>
+    public long OpenSection { get => openSection; set => SetProperty(ref openSection, value); }
+    long openSection = 1;
+
     /// <summary>The text an unbound input holds.</summary>
     public string Text { get => text; set => SetProperty(ref text, value); }
     string text = "";

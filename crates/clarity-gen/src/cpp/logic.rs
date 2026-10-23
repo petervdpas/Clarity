@@ -550,6 +550,7 @@ impl<'a> Emitter<'a> {
                 if let Some((part, property)) = self.part_property(target) {
                     let method = match property.as_str() {
                         "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" => format!("set_{property}"),
+                        "open" => "set_open_section".to_string(),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
                             return;
@@ -911,6 +912,7 @@ impl<'a> Emitter<'a> {
             "maximized" => format!("ui.maximized({quoted})"),
             "tab" => format!("ui.tab({quoted})"),
             "step" => format!("ui.step({quoted})"),
+            "open" => format!("ui.open_section({quoted})"),
             "selected" => match info.bind {
                 Some(bind) => format!("ui.selected({quoted}, {})", ident(&bind)),
                 None => {

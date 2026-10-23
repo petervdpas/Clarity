@@ -133,6 +133,25 @@ fn a_wizards_step_is_as_every_runtime_says() {
     }
 }
 
+const ACCORDIONS: &str = include_str!("../../../conformance/accordions.json");
+
+#[test]
+fn an_accordions_open_section_is_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(ACCORDIONS).unwrap();
+    for case in file["open"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("faq".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        assert_eq!(Ui::from_state(&state).open_section("faq"), case["open"].as_i64().unwrap(), "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        ui.set_open_section("faq", case["open"].as_i64().unwrap());
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["faq"]).unwrap(), case["part"], "{case}");
+    }
+}
+
 const RIBBONS: &str = include_str!("../../../conformance/ribbons.json");
 
 #[test]

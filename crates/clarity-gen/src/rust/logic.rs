@@ -587,6 +587,8 @@ impl<'a> Emitter<'a> {
             "maximized" => "maximized",
             "tab" => "tab",
             "step" => "step",
+            // An accordion's open section: `ui.open_section`, as `ui.open` opens a window.
+            "open" => "open_section",
             "selected" => "selected",
             "x" => "x",
             "y" => "y",

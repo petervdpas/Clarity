@@ -19,6 +19,7 @@
   import { itemClicks, itemShown } from "./overlays";
   import { previewPopovers } from "./previewPopovers.svelte";
   import { linkAddress, progressFull } from "./smallParts";
+  import { pressedSection, shownSection } from "./accordions";
   import { openLink } from "./backend";
   import { DEFAULT_DIGITS } from "./display";
   import { DEFAULT_UNITS } from "./drawing";
@@ -250,6 +251,19 @@
     e.preventDefault();
     e.stopPropagation();
     menuAt = { x: e.clientX, y: e.clientY };
+  }
+
+  // An accordion's open section where no application runs; live, the part's state keeps it.
+  let openHere = $state(1);
+
+  /** A press on the header of section `press` (from 1): it opens, or folds when it was open. */
+  function pressSection(press: number) {
+    if (design) return;
+    const count = widget.pages.length;
+    if (live && p.name) {
+      live.setOpen(p.name, pressedSection(partState?.open, press, count));
+      void fire("change");
+    } else openHere = pressedSection(openHere, press, count);
   }
 
   /** A split button's arrow: its menu, below the button. */
@@ -587,6 +601,33 @@
           fire("change");
         }}>{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
       >
+    {:else if p.kind === "accordion"}
+      {@const open = design ? activeTab + 1 : shownSection(live && p.name ? partState?.open : openHere, widget.pages.length)}
+      <div class="accordion">
+        {#each widget.pages as section, index (section.span.start)}
+          <button
+            type="button"
+            class="section-header"
+            class:open={open === index + 1}
+            class:selected={design && pageDesigner.selected === section.span.start}
+            aria-expanded={open === index + 1}
+            data-tab-switch="{offset}:{index}"
+            {disabled}
+            onpointerdown={(e) => design && pressTab(e, index, section.span.start)}
+            onclick={() => pressSection(index + 1)}
+            ><span class="chevron" class:closed={open !== index + 1}>&#9662;</span>{section.title ? tr(preview, section.title) : ""}</button
+          >
+          {#if open === index + 1}
+            <div class="section-page">
+              <GridBox {preview} {page} {data} {design} widgets={section.children} columns={p.width} container={section.span.start} {onnavigate} />
+            </div>
+          {/if}
+        {/each}
+      </div>
+    {:else if p.kind === "scroll"}
+      <div class="scroll-box">
+        <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} container={offset} {onnavigate} />
+      </div>
     {:else if p.kind === "buttons"}
       <div class="buttons" role="group">
         <GridBox {preview} {page} {data} {design} widgets={widget.children} columns={p.width} fixedRows={1} joined container={offset} {onnavigate} />
@@ -955,6 +996,8 @@
   .memo > .content,
   .panel > .content,
   .tabs > .content,
+  .accordion > .content,
+  .scroll > .content,
   .steps > .content,
   .splitter > .content,
   .table > .content,
@@ -1090,6 +1133,41 @@
   .tab-strip button.selected {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  .accordion {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+  }
+
+  .section-header.selected {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .section-page {
+    flex: 1;
+    min-height: 0;
+    padding: calc(var(--padding) * 2) 0;
+    overflow: hidden;
+  }
+
+  .scroll-box {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .split {

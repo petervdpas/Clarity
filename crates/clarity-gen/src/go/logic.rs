@@ -637,6 +637,7 @@ impl<'a> Emitter<'a> {
                         "maximized" => "SetMaximized",
                         "tab" => "SetTab",
                         "step" => "SetStep",
+                        "open" => "SetOpenSection",
                         "text" => "SetText",
                         "checked" => "SetChecked",
                         other => {
@@ -1118,6 +1119,7 @@ impl<'a> Emitter<'a> {
             "maximized" => format!("ui.Maximized({quoted})"),
             "tab" => format!("ui.Tab({quoted})"),
             "step" => format!("ui.Step({quoted})"),
+            "open" => format!("ui.OpenSection({quoted})"),
             "text" => format!("ui.Text({quoted})"),
             "checked" => format!("ui.Checked({quoted})"),
             "x" => format!("ui.X({quoted})"),

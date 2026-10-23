@@ -281,6 +281,9 @@
     setStep(part: string, step: number) {
       if (current) current.parts[part] = { ...current.parts[part], step };
     },
+    setOpen(part: string, open: number) {
+      if (current) current.parts[part] = { ...current.parts[part], open };
+    },
     setVisible(part: string, visible: boolean) {
       if (current) current.parts[part] = { ...current.parts[part], visible };
     },

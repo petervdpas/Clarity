@@ -32,6 +32,10 @@ pub enum WidgetKind {
     Toggle,
     /// Buttons and toggles joined in one row.
     Buttons,
+    /// `section "Title"` blocks that fold, one open at a time.
+    Accordion,
+    /// Parts on its own grid, scrolling when they reach below its rows.
+    Scroll,
     Text,
     Markdown,
     Textbox,
@@ -200,6 +204,8 @@ pub enum ContainerKind {
     Tabs,
     /// Children inside `step "Title"` blocks, one shown at a time.
     Steps,
+    /// Children inside `section "Title"` blocks, which fold, one open at a time.
+    Accordion,
     /// Children inside exactly two `pane` blocks.
     Splitter,
 }
@@ -493,6 +499,38 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Tabs),
         clickable: false,
         events: &[Event::Change],
+        properties: &[],
+    },
+    // Sections that fold, one open at a time.
+    Entry {
+        kind: WidgetKind::Accordion,
+        keyword: "accordion",
+        name: "Accordion",
+        category: Category::Containers,
+        size: (6, 8),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Accordion),
+        clickable: false,
+        events: &[Event::Change],
+        properties: &[],
+    },
+    // Parts that scroll into view below its rows.
+    Entry {
+        kind: WidgetKind::Scroll,
+        keyword: "scroll",
+        name: "Scroll box",
+        category: Category::Containers,
+        size: (6, 6),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[],
         properties: &[],
     },
     // Buttons and toggles joined in one row.
@@ -1216,6 +1254,8 @@ fn grows(kind: WidgetKind) -> bool {
             | WidgetKind::Panel
             | WidgetKind::Tabs
             | WidgetKind::Steps
+            | WidgetKind::Accordion
+            | WidgetKind::Scroll
             | WidgetKind::Splitter
             | WidgetKind::Table
             | WidgetKind::List

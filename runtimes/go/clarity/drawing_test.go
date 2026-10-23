@@ -235,6 +235,45 @@ func TestAWizardsStepIsAsEveryRuntimeSays(t *testing.T) {
 	}
 }
 
+func TestAnAccordionsOpenSectionIsAsEveryRuntimeSays(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/accordions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Open []struct {
+			Part json.RawMessage `json:"part"`
+			Open int64           `json:"open"`
+		} `json:"open"`
+		Set []struct {
+			Open int64           `json:"open"`
+			Part json.RawMessage `json:"part"`
+		} `json:"set"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Open) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Open {
+		var part PartState
+		if err := json.Unmarshal(c.Part, &part); err != nil {
+			t.Fatal(err)
+		}
+		ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{"faq": part}})
+		if got := ui.OpenSection("faq"); got != c.Open {
+			t.Errorf("%s: %d, want %d", c.Part, got, c.Open)
+		}
+	}
+	for _, c := range file.Set {
+		ui := NewUi(WindowState{Window: "Main"})
+		ui.SetOpenSection("faq", c.Open)
+		reply, _ := ui.Reply("Main", map[string]any{})
+		got, _ := json.Marshal(reply.State.Parts["faq"])
+		if normal(got) != normal(c.Part) {
+			t.Errorf("sends %s, want %s", got, c.Part)
+		}
+	}
+}
+
 func TestARibbonsOpenTabIsAsEveryRuntimeSays(t *testing.T) {
 	text, err := os.ReadFile("../../../conformance/ribbons.json")
 	if err != nil {

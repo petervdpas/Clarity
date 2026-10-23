@@ -24,6 +24,12 @@ public sealed record Choice(object? Value, string Label)
     /// <summary>The records of an entity as the choices of a reference.</summary>
     public static Choice[] Of<R>(IEnumerable<R> records, Func<R, string> label) where R : IRecord<R> =>
         Of(records, label, r => r.Id);
+
+    /// <summary>The project's languages, each by its own name: the choices of the setting <c>language</c>.</summary>
+    public static Choice[] LanguagesOffered => [.. Locale.Offered.Select(l => new Choice(l, Languages.Name(l)))];
+
+    /// <summary>The offered themes by their titles in the language shown: the choices of the setting <c>theme</c>.</summary>
+    public static Choice[] ThemesOffered => [.. Themes.Offered.Select(t => new Choice(t.Name, Locale.Translate(t.Label)))];
 }
 
 /// <summary>

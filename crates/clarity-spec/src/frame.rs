@@ -382,23 +382,46 @@ pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Pag
 /// Whether any click target of the project opens `in new window`: only then
 /// does an application make a second desktop window.
 pub fn opens_new_windows(project: &crate::model::Project) -> bool {
-    fn widgets(list: &[crate::model::Widget]) -> bool {
+    any_click(project, &|w| w.new_window, &|c| c.new_window)
+}
+
+/// Whether any part, menu item or button of the project clicks to `target`,
+/// as `on click -> theme` does.
+pub fn clicks_to(project: &crate::model::Project, target: &str) -> bool {
+    let to = |on_click: &Option<String>| on_click.as_deref() == Some(target);
+    any_click(project, &|w| to(&w.on_click), &|c| to(&c.on_click))
+}
+
+/// Whether any part (`part`) or command (`command`) of the project's windows and frames answers yes.
+fn any_click(
+    project: &crate::model::Project,
+    part: &dyn Fn(&crate::model::WidgetProps) -> bool,
+    command: &dyn Fn(&crate::model::CommandProps) -> bool,
+) -> bool {
+    let commands = |list: &[crate::model::Command]| -> bool {
+        fn walk(list: &[crate::model::Command], command: &dyn Fn(&crate::model::CommandProps) -> bool) -> bool {
+            list.iter().any(|c| command(&c.props) || walk(&c.items, command))
+        }
+        walk(list, command)
+    };
+    fn widgets(
+        list: &[crate::model::Widget],
+        part: &dyn Fn(&crate::model::WidgetProps) -> bool,
+        commands: &dyn Fn(&[crate::model::Command]) -> bool,
+    ) -> bool {
         list.iter().any(|w| {
-            w.props.new_window
+            part(&w.props)
                 || w.menu.as_ref().is_some_and(|m| commands(&m.items))
-                || widgets(&w.children)
-                || w.pages.iter().any(|p| widgets(&p.children))
+                || widgets(&w.children, part, commands)
+                || w.pages.iter().any(|p| widgets(&p.children, part, commands))
         })
-    }
-    fn commands(list: &[crate::model::Command]) -> bool {
-        list.iter().any(|c| c.props.new_window || commands(&c.items))
     }
     let frame = |f: &crate::model::Frame| {
         f.menu.as_ref().is_some_and(|m| commands(&m.items))
             || f.toolbar.as_ref().is_some_and(|t| commands(&t.items))
             || f.ribbon.as_ref().is_some_and(|r| r.tabs.iter().flat_map(|t| &t.groups).any(|g| commands(&g.items)))
-            || f.sidebars.iter().any(|s| widgets(&s.widgets))
-            || f.footer.as_ref().is_some_and(|ft| widgets(&ft.widgets))
+            || f.sidebars.iter().any(|s| widgets(&s.widgets, part, &commands))
+            || f.footer.as_ref().is_some_and(|ft| widgets(&ft.widgets, part, &commands))
     };
-    project.pages().any(|p| widgets(&p.widgets) || frame(&p.frame)) || project.apps().any(|a| frame(&a.frame))
+    project.pages().any(|p| widgets(&p.widgets, part, &commands) || frame(&p.frame)) || project.apps().any(|a| frame(&a.frame))
 }

@@ -1262,7 +1262,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url => format!("clarity::sql::text({})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity::sql::text({})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity::sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity::sql::decimal(clarity::Decimal({}))", self.value(value)),
             FieldType::Bool => format!("clarity::sql::boolean({})", self.value(value)),

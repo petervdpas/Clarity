@@ -1,6 +1,7 @@
 //! Clarity spec language: lexer, parser, checker and the neutral model.
 
 pub mod check;
+pub mod colors;
 pub mod code;
 pub mod diagnostic;
 pub mod diagrams;
@@ -60,6 +61,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagnostics.extend(file_diagnostics);
     }
     resolve_data(&mut files);
+    give_settings(&mut files);
     make_form_labels(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
@@ -126,6 +128,27 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
     for file in files.iter_mut() {
         for page in &mut file.pages {
             walk(&mut page.widgets, &page.data, &entities);
+        }
+    }
+}
+
+/// With a `settings` block, every window and the app has the settings as
+/// data of its own, `settings`, without a `data` line (DESIGN 5.17).
+fn give_settings(files: &mut [model::SpecFile]) {
+    use parser::{SETTINGS_DATA, SETTINGS_ENTITY};
+    let Some(span) = files.iter().flat_map(|f| &f.entities).find(|e| e.settings).map(|e| e.span) else { return };
+    let decl = model::DataDecl {
+        name: model::Ident { name: SETTINGS_DATA.to_string(), span },
+        of: model::DataKind::Record { entity: model::Ident { name: SETTINGS_ENTITY.to_string(), span } },
+        made: true,
+        span,
+    };
+    for file in files.iter_mut() {
+        let data = file.pages.iter_mut().map(|p| &mut p.data).chain(file.apps.iter_mut().map(|a| &mut a.data));
+        for list in data {
+            if !list.iter().any(|d| d.name.name == SETTINGS_DATA) {
+                list.push(decl.clone());
+            }
         }
     }
 }

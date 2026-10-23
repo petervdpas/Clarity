@@ -1,0 +1,9 @@
+module themes
+
+theme Light
+    title @lightTheme
+    mode light
+
+theme Dark
+    title @darkTheme
+    mode dark

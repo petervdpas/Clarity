@@ -81,6 +81,9 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "No picture": { key: "noPicture", written: "No picture" },
   "Load a picture": { key: "loadPicture", written: "Load a picture" },
   "Remove the picture": { key: "removePicture", written: "Remove the picture" },
+  // The headings of the pickers of the click targets `language` and `theme`.
+  Language: { key: "languagePicker", written: "Language" },
+  Theme: { key: "themePicker", written: "Theme" },
 };
 
 /** One of Clarity's own words (`Yes`, `No`, a dialog's buttons, a picture's) in the language texts show in. */
@@ -132,7 +135,7 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
 }
 
 /** The field types a table cell can edit, as the language allows them in `edit`. */
-const CELL_EDIT_KINDS = ["text", "email", "url", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
+const CELL_EDIT_KINDS = ["text", "email", "url", "color", "integer", "decimal", "money", "bool", "date", "dateTime", "enum", "ref"];
 
 export function cellEdits(field: Field): boolean {
   return CELL_EDIT_KINDS.includes(field.type.kind);

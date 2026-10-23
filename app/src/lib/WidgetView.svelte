@@ -9,6 +9,7 @@
   import DateInput from "./ui/DateInput.svelte";
   import NumberInput from "./ui/NumberInput.svelte";
   import SliderInput from "./ui/SliderInput.svelte";
+  import ColorInput from "./ui/ColorInput.svelte";
   import { numberRange } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
@@ -30,8 +31,9 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, keyFile, markdownOf, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
+  import { languageName, languagesOf } from "./translate";
   import { numberEditing } from "./format";
   import { pageDesigner } from "./pageDesignerStore.svelte";
   import { GAP, allParts, rowAt, boundField, fieldOf, findPart, helpId, partId, widgetInfo, withProps, type PageData } from "./pages";
@@ -152,7 +154,10 @@
   const shown = $derived(bound || !p.name ? text : (partState?.text ?? ""));
 
   function setValue(next: JsonValue) {
-    if (bound) bound.record[bound.field.name.name] = next;
+    if (!bound) return;
+    bound.record[bound.field.name.name] = next;
+    // A setting is kept at once, and switches the language or theme it names.
+    if (live && !design && p.bind?.split(".")[0] === "settings") live.keepSettings();
   }
 
   // A picture field: its stored picture comes on its own; a new one is
@@ -342,6 +347,8 @@
         return "date";
       case "dateTime":
         return "moment";
+      case "color":
+        return "color";
       default:
         return "text";
     }
@@ -350,6 +357,9 @@
   /** An enum's values (never empty), or the records a reference can point at after an empty choice. */
   function choicesOf(field: NonNullable<ReturnType<typeof findField>>): TableColumn["choices"] {
     const type = field.type;
+    // The settings' own: the project's languages by their own names, the offered themes by their titles.
+    if (type.kind === "language") return languagesOf(preview.project.locale.language, Object.keys(preview.project.translations)).map((l) => ({ value: l, label: languageName(l) }));
+    if (type.kind === "theme") return offeredThemes(preview).map((t) => ({ value: t.name.name, label: tr(preview, t.label) }));
     if (type.kind === "enum") return (findEnum(preview, type.name.name)?.variants ?? []).map((v) => ({ value: v.name.name, label: tr(preview, v.label) }));
     if (type.kind !== "ref") return [];
     // Running, a reference holds the id of its record; in the designer, the sample's text.
@@ -519,6 +529,21 @@
         onsubmit={submit}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
+      />
+    {:else if p.kind === "color"}
+      <ColorInput
+        {id}
+        value={bound ? (value as string | null) : shown}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else setText(next);
+          fire("change");
+        }}
       />
     {:else if p.kind === "slider"}
       <SliderInput

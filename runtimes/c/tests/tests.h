@@ -20,6 +20,8 @@
     X(a_wizards_step_is_as_every_runtime_says)                   \
     X(an_accordions_open_section_is_as_every_runtime_says)       \
     X(dates_and_times_read_and_write_as_text)                     \
+    X(the_settings_file_is_where_every_runtime_puts_it)           \
+    X(settings_kept_are_read_back)                               \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \
     X(every_query_case_gives_its_sql_on_every_database)           \

@@ -74,6 +74,8 @@ export interface Live {
   setOpen(part: string, open: number): void;
   /** Keeps whether a part shows: a popover the person opened or closed, sent with the next event. */
   setVisible(part: string, visible: boolean): void;
+  /** The person changed a setting (DESIGN 5.17) through an input bound to it: the shell keeps it. */
+  keepSettings(): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
   /**

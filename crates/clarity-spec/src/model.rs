@@ -70,6 +70,10 @@ pub struct Entity {
     /// `key "InvoiceID"`: the integer column that identifies a record, in
     /// an existing table; `id` otherwise.
     pub key: Option<String>,
+    /// The project's settings (`settings` block, DESIGN 5.17): kept per
+    /// person on their machine, never in the database; named `Settings`.
+    #[serde(default)]
+    pub settings: bool,
     pub span: Span,
 }
 
@@ -136,6 +140,12 @@ pub enum FieldType {
     Image,
     Email,
     Url,
+    /// A color, kept as text `#rrggbb` (U1c).
+    Color,
+    /// The language shown, a setting of Clarity's own (`language` in `settings`).
+    Language,
+    /// The theme shown, a setting of Clarity's own (`theme` in `settings`).
+    Theme,
     Id,
     /// A named type that must resolve to an enum.
     Enum {
@@ -158,7 +168,7 @@ impl FieldType {
     }
 
     pub fn is_textual(&self) -> bool {
-        matches!(self, Self::Text { .. } | Self::Email | Self::Url)
+        matches!(self, Self::Text { .. } | Self::Email | Self::Url | Self::Color | Self::Language | Self::Theme)
     }
 }
 
@@ -257,6 +267,9 @@ pub struct CanvasUnits {
 pub struct DataDecl {
     pub name: Ident,
     pub of: DataKind,
+    /// Made by Clarity, not written: every window's `settings`.
+    #[serde(default)]
+    pub made: bool,
     pub span: Span,
 }
 
@@ -725,7 +738,12 @@ impl Project {
 
     /// The entities that live in data source `source`.
     pub fn entities_in<'a>(&'a self, source: &'a str) -> impl Iterator<Item = &'a Entity> + 'a {
-        self.files.iter().filter(move |f| f.source.as_ref().map_or(self.default_source(), |s| s.name.as_str()) == source).flat_map(|f| &f.entities)
+        // The settings are kept per person, never in a data source.
+        self.files
+            .iter()
+            .filter(move |f| f.source.as_ref().map_or(self.default_source(), |s| s.name.as_str()) == source)
+            .flat_map(|f| &f.entities)
+            .filter(|e| !e.settings)
     }
 
     pub fn has_errors(&self) -> bool {
@@ -736,6 +754,11 @@ impl Project {
 
     pub fn entities(&self) -> impl Iterator<Item = &Entity> {
         self.files.iter().flat_map(|f| f.entities.iter())
+    }
+
+    /// The entities whose records a database keeps: all but the settings.
+    pub fn stored_entities(&self) -> impl Iterator<Item = &Entity> {
+        self.entities().filter(|e| !e.settings)
     }
 
     pub fn enums(&self) -> impl Iterator<Item = &EnumDecl> {

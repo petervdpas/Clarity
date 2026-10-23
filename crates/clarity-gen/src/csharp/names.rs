@@ -44,8 +44,14 @@ pub fn function(project: &Project, name: &str) -> String {
 const TAKEN: [&str; 1] = ["db"];
 
 /// Members every record has, which a field cannot be called.
-const RECORD_MEMBERS: [&str; 16] = [
+const RECORD_MEMBERS: [&str; 21] = [
     "Id",
+    // The settings' own members (model::settings_class).
+    "Current",
+    "Start",
+    "ToJson",
+    "Described",
+    "ProgramName",
     "Pictures",
     "SourceName",
     "TableName",
@@ -138,7 +144,7 @@ pub fn backing(name: &str) -> String {
 /// The C# type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url => "string".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "string".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "long".into(),
         FieldType::Decimal { .. } | FieldType::Money => "decimal".into(),
         FieldType::Bool => "bool".into(),

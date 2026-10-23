@@ -3,4 +3,5 @@ project Todo
     stack csharp avalonia desktop
     output "out"
     language "en"
+    theme Light Dark
     datasource main sqlite "data/todo.db"

@@ -181,6 +181,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Store    string              `json:"store"`
 		Path     string              `json:"path"`
 		Address  string              `json:"address"`
+		Settings map[string]any      `json:"settings"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -196,6 +197,15 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	switch command {
 	case "start":
 		return Answer{Value: map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}}
+	case "read_settings":
+		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+		return Answer{Value: clarity.ReadSettings(c.options.Name)}
+	case "keep_settings":
+		// The person's settings, as the screen has them now.
+		if err := clarity.KeepSettings(c.options.Name, a.Settings); err != nil {
+			return failed(err)
+		}
+		return Answer{}
 	case "set_language":
 		// The language the screen picked, which text code makes is translated to.
 		clarity.SetLanguage(a.Language)

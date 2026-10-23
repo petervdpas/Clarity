@@ -23,7 +23,7 @@ use crate::code::{Expr, ExprKind, Stmt, StmtKind, each_expr_in};
 use crate::diagnostic::Diagnostic;
 use crate::formats::language_problem;
 use crate::lexer::{TokenKind, lex, quote};
-use crate::model::{Command, DataDecl, DataKind, Frame, Literal, Project, Widget};
+use crate::model::{Command, DataDecl, DataKind, FieldType, Frame, Literal, Project, Widget};
 use crate::span::Span;
 
 /// The folder of translation files in a project's module folder.
@@ -38,6 +38,9 @@ pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok
 /// empty state, and on its buttons to load a picture and to remove it.
 /// Clarity's words on the buttons of a wizard, the `steps` part.
 pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("finish", "Finish")];
+/// Clarity's words heading the pickers of the click targets `language` and `theme`.
+pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
+pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -322,7 +325,16 @@ fn shown(project: &Project) -> Shown {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
     let wizard = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
-    let own = RENDERER_KEYS.iter().chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] }).chain(if wizard { STEP_KEYS.as_slice() } else { &[] });
+    // The pickers' headings, which also label the settings' own `language` and `theme`.
+    let setting = |ty: FieldType| project.entities().any(|e| e.settings && e.fields.iter().any(|f| f.ty == ty));
+    let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language);
+    let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
+    let own = RENDERER_KEYS
+        .iter()
+        .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
+        .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
+        .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] });
     for (key, _) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: None });
     }
@@ -494,7 +506,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
-                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
                     found.push(place(Diagnostic::warning(
                         format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
                         u.span,

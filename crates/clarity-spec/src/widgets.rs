@@ -47,6 +47,8 @@ pub enum WidgetKind {
     Dropdown,
     Radio,
     Date,
+    /// A color, typed as `#rrggbb` or picked from a palette.
+    Color,
     /// A number between a lowest and a highest value, dragged along a bar.
     Slider,
     /// A number typed, or moved a step at a time with its arrows.
@@ -433,7 +435,8 @@ const ENTRIES: &[Entry] = &[
         caption: Some("Switch"),
         ..input(WidgetKind::Switch, "switch", "Switch", (3, 1), &["bool"], &[Event::Change], PICKED)
     },
-    input(WidgetKind::Dropdown, "dropdown", "Dropdown", (4, 1), &["enum", "ref"], &[Event::Change], PICKED),
+    // Also the language and the theme of the settings: the project's languages, the offered themes.
+    input(WidgetKind::Dropdown, "dropdown", "Dropdown", (4, 1), &["enum", "ref", "language", "theme"], &[Event::Change], PICKED),
     input(
         WidgetKind::Radio,
         "radio",
@@ -444,6 +447,8 @@ const ENTRIES: &[Entry] = &[
         &[WidgetProperty::Orientation, WidgetProperty::Readonly, WidgetProperty::TabOrder],
     ),
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
+    // A color (U1c): typed as #rrggbb, or picked from the palette every renderer shares.
+    input(WidgetKind::Color, "color", "Color", (3, 1), &["color"], &[Event::Change], PICKED),
     // A number between its lowest and highest value (U1c): the range is written, or the field's own.
     input(
         WidgetKind::Slider,
@@ -868,6 +873,9 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Image => "image",
         FieldType::Email => "email",
         FieldType::Url => "url",
+        FieldType::Color => "color",
+        FieldType::Language => "language",
+        FieldType::Theme => "theme",
         FieldType::Id => "id",
         FieldType::Enum { .. } => "enum",
         FieldType::Ref { .. } => "ref",
@@ -884,6 +892,7 @@ pub fn cell_edits(ty: &FieldType) -> bool {
         FieldType::Text { .. }
             | FieldType::Email
             | FieldType::Url
+            | FieldType::Color
             | FieldType::Integer
             | FieldType::Decimal { .. }
             | FieldType::Money

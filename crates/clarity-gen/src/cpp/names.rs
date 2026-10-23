@@ -62,7 +62,7 @@ pub fn string(text: &str) -> String {
 /// The C++ type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url => "std::string".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "std::string".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "int64_t".into(),
         FieldType::Decimal { .. } | FieldType::Money => "clarity::Decimal".into(),
         FieldType::Bool => "bool".into(),

@@ -82,7 +82,7 @@ pub fn string_or_null(text: Option<&str>) -> String {
 /// The C type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url => "const char*".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "const char*".into(),
         // A reference holds the id of its record; 0 is none.
         FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Ref { .. } => "int64_t".into(),
         FieldType::Decimal { .. } | FieldType::Money => "ClarityDecimal".into(),

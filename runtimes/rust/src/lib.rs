@@ -11,6 +11,7 @@ pub mod files;
 pub mod i18n;
 pub mod picture;
 pub mod query;
+pub mod settings;
 pub mod sql;
 mod store;
 pub mod ui;

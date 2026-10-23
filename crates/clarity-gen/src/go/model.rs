@@ -81,7 +81,7 @@ pub fn decimal_literal(text: &str) -> String {
 /// The value a new record starts with, when it differs from Go's zero value.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) if !s.is_empty() => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) if !s.is_empty() => Some(string(s)),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) if n != "0" => Some(n.clone()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) if n.parse::<f64>().is_ok_and(|v| v != 0.0) => {
             Some(decimal_literal(n))
@@ -106,7 +106,7 @@ fn to_value(f: &Field) -> String {
 fn read(i: usize, f: &Field, project: &Project) -> String {
     let column = string(&f.name.name);
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url => format!("read.Text({i}, {column})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("read.Text({i}, {column})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("read.Integer({i}, {column})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("read.Decimal({i}, {column})"),
         FieldType::Bool => format!("read.Bool({i}, {column})"),

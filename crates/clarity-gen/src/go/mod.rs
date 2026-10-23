@@ -472,7 +472,7 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         }
     }
     let mut options = String::new();
-    for entity in project.entities() {
+    for entity in project.stored_entities() {
         let name = &entity.name.name;
         let shown = entity
             .fields

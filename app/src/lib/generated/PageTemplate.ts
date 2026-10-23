@@ -3,4 +3,4 @@
 /**
  * What a new window starts with.
  */
-export type PageTemplate = { "kind": "blank" } | { "kind": "form", entity: string, } | { "kind": "browse", entity: string, };
+export type PageTemplate = { "kind": "blank" } | { "kind": "form", entity: string, } | { "kind": "browse", entity: string, } | { "kind": "settings" };

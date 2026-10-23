@@ -73,7 +73,7 @@
     const main = app?.main?.name;
     return all.toSorted((a, b) => Number(b.page.name.name === main) - Number(a.page.name.name === main));
   });
-  const entities = $derived(files.flatMap((f) => f.entities.map((entity) => ({ entity, module: f.module?.name ?? "" }))));
+  const entities = $derived(files.flatMap((f) => f.entities.filter((e) => !e.settings).map((entity) => ({ entity, module: f.module?.name ?? "" }))));
   const enums = $derived(files.flatMap((f) => f.enums.map((decl) => ({ decl, module: f.module?.name ?? "" }))));
   const themes = $derived(files.flatMap((f) => f.themes.map((theme) => ({ theme, module: f.module?.name ?? "" }))));
   const engines = $derived(projectEngines(preview.project));

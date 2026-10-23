@@ -119,7 +119,7 @@
       {#each file.pages as p (p.name.name)}
         <li><button onclick={() => onopen("window", p.name.name)}><span class="kind">{p.kind}</span>{p.name.name}</button></li>
       {/each}
-      {#each file.entities as e (e.name.name)}
+      {#each file.entities.filter((e) => !e.settings) as e (e.name.name)}
         <li><button onclick={() => onopen("entity", e.name.name)}><span class="kind">entity</span>{e.name.name}</button></li>
       {/each}
       {#each file.enums as e (e.name.name)}
@@ -200,7 +200,7 @@
     </ul>
   </section>
 
-  {#if file.entities.length > 0}
+  {#if file.entities.some((e) => !e.settings)}
     <section>
       <h3>Data events</h3>
       <p class="muted">
@@ -209,7 +209,7 @@
         delete, and nothing of it is kept.
       </p>
       <ul>
-        {#each file.entities as e (e.name.name)}
+        {#each file.entities.filter((e) => !e.settings) as e (e.name.name)}
           {@const events = eventsOf(e.name.name)}
           <li>
             {#if events}

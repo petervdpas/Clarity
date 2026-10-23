@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "clarity/db_internal.h"
+#include "clarity/settings.h"
 #include "webview/webview.h"
 
 #if defined(__linux__)
@@ -157,6 +158,17 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         cJSON_AddItemToObject(started, "model", cJSON_Parse(s->options.model));
         cJSON_AddStringToObject(started, "main", s->options.main);
         return value(started);
+    }
+    if (strcmp(command, "read_settings") == 0) {
+        // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+        return value(clarity_read_settings(s->options.name));
+    }
+    if (strcmp(command, "keep_settings") == 0) {
+        // The person's settings, as the screen has them now.
+        const cJSON* settings = cJSON_GetObjectItemCaseSensitive(args, "settings");
+        if (!cJSON_IsObject(settings)) return error_text("keep_settings takes the settings as an object");
+        if (!clarity_keep_settings(s->options.name, settings)) return failed();
+        return value(cJSON_CreateNull());
     }
     if (strcmp(command, "open_window") == 0) {
         ClarityWindowState* opened;

@@ -8,8 +8,8 @@ use crate::parser::parse as parse_spec;
 use super::{DiagramField, Line};
 
 /// Clarity's own type words.
-pub(super) const CLARITY_TYPES: [&str; 13] =
-    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "ref", "list"];
+pub(super) const CLARITY_TYPES: [&str; 14] =
+    ["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "ref", "list"];
 
 /// Type words of other languages and databases, read as Clarity's.
 const FOREIGN_TYPES: [(&str, &str); 8] = [

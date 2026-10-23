@@ -61,7 +61,7 @@
     "duration",
     "bytes",
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),
-    ...preview.project.files.flatMap((f) => f.entities.flatMap((e) => [e.name.name, `list<${e.name.name}>`])),
+    ...preview.project.files.flatMap((f) => f.entities.filter((e) => !e.settings).flatMap((e) => [e.name.name, `list<${e.name.name}>`])),
   ]);
 
   /** The code fills the editor, the declaration set aside. */

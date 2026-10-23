@@ -8,6 +8,12 @@ entity Task
     done: bool, default false, label @taskDoneLabel
     finished_by: ref Person, label @taskFinishedByLabel
 
+// What each person sets for themselves, kept on their machine.
+settings
+    language
+    theme
+    showDone: bool, default true, label @settingsShowDoneLabel
+
 app Todo
     title @todoTitle
     main Main
@@ -16,6 +22,8 @@ app Todo
             item @usersItem name usersItem on click -> Users
             separator
             item @languageItem name languageItem on click -> language
+            item @themeItem name themeItem on click -> theme
+            item @preferencesItem name preferencesItem on click -> Preferences
             separator
             item @quitItem name quitItem key "Ctrl+Q" on click -> quit
     // A ribbon the person folds to its tabs with a double click.
@@ -25,6 +33,7 @@ app Todo
                 button @usersButtonCaption name usersButton icon "list" large on click -> Users
             group @settingsGroup name settingsGroup
                 button @languageButtonCaption name languageButton icon "languages" large on click -> language
+                button @themeButtonCaption name themeButton large on click -> theme
 
 page Main: window
     title @mainTitle
@@ -35,7 +44,7 @@ page Main: window
     label @newTitleLabel name newTitleLabel at 1,1 span 2 for newTitle
     textbox name newTitle at 3,1 span 8 placeholder @newTitlePlaceholder
     button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
-    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
+    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
     button @usersButtonCaption name usersButton at 1,10 span 2 on click -> Users
     button @deleteButtonCaption name deleteButton at 11,10 span 2 on click: deleteClicked
 
@@ -44,8 +53,24 @@ page Users: window
     data people: list<Person>
     data person: Person
     on open: usersOpened
+    // This window has its own menu and ribbon: they lead back to Main, not to Users.
+    menu name usersMenu
+        item @fileItem name usersFileItem
+            item @mainItem name mainItem on click -> close
+            separator
+            item @languageItem name usersLanguageItem on click -> language
+            item @themeItem name usersThemeItem on click -> theme
+            separator
+            item @quitItem name usersQuitItem key "Ctrl+Q" on click -> quit
+    ribbon name usersRibbon collapsible
+        tab @homeTab name usersHomeTab
+            group @peopleGroup name usersPeopleGroup
+                button @mainButtonCaption name mainButton icon "list" large on click -> close
+            group @settingsGroup name usersSettingsGroup
+                button @languageButtonCaption name usersLanguageButton icon "languages" large on click -> language
+                button @themeButtonCaption name usersThemeButton large on click -> theme
 
-    table name peopleGrid at 1,1 span 12 rows 6 bind people columns name on select: personSelected
+    table name peopleGrid at 1,1 span 12 rows 6 bind people columns name resizable on select: personSelected
     form name personForm at 1,7 span 12 rows 1 bind person
         label @nameLabel name nameLabel at 1,1 span 2 for name
         textbox name name at 3,1 span 8 bind person.name placeholder @namePlaceholder
@@ -55,14 +80,31 @@ page Users: window
     button @deletePersonButtonCaption name deletePersonButton at 9,9 span 2 on click: deletePersonClicked
     button @closeButtonCaption name closeButton at 11,9 span 2 cancel on click: closeClicked
 
+page Preferences: dialog
+    title @preferencesTitle
+
+    form name settingsForm at 1,1 span 12 rows 3 bind settings labels 3
+        dropdown name languageBox at 4,1 span 6 bind settings.language
+        dropdown name themeBox at 4,2 span 6 bind settings.theme
+        checkbox @settingsShowDoneLabel name showDoneBox at 4,3 span 6 bind settings.showDone
+    button @closeButtonCaption name closeButton at 11,5 span 2 cancel on click -> close
+
 code Main
     handler windowOpened
+        showTasks()
         deleteButton.enabled = false
 
     handler windowReturned
-        // Users may have been added, changed or removed.
-        reload tasks
+        // Users may have been added, changed or removed, and the settings changed.
+        showTasks()
         deleteButton.enabled = false
+
+    handler showTasks
+        // Done tasks show while the person's settings say so.
+        if settings.showDone
+            reload tasks
+        else
+            tasks = find t in Task where t.done == false
 
     handler rowSelected
         deleteButton.enabled = true
@@ -75,7 +117,7 @@ code Main
         task.title = newTitle.text
         save task
         newTitle.text = ""
-        reload tasks
+        showTasks()
 
     handler taskChanged
         save grid.selected
@@ -83,7 +125,7 @@ code Main
     handler deleteClicked
         let task = grid.selected
         delete task
-        reload tasks
+        showTasks()
         deleteButton.enabled = false
 
 code Users

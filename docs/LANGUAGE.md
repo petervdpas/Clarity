@@ -111,7 +111,7 @@ translation nl
 - The default language gives every key a text; an empty one is an error. Another language may leave a key empty (`savedName ""`): it shows the default's text until it is translated.
 - A key's text may have slots, which code gives values by name: `message @savedName(name = customer.name)`. Each language keeps the slots of the default's text and may move them; a slot missing or added is an error, and so is a use that leaves one out or gives one the text does not have.
 - A key no design or code uses is a warning; it can go. A text with letters written in quotes where people read it is an error that asks for a key.
-- `yes` and `no` are what the screen shows for bools; `noPicture`, `loadPicture` and `removePicture` what an image part bound to a picture shows of its own. Every project gives them their texts.
+- `yes` and `no` are what the screen shows for bools; `noPicture`, `loadPicture` and `removePicture` what an image part bound to a picture shows of its own. `languagePicker` and `themePicker` head the pickers that the click targets `language` and `theme` open; a project that uses them gives them their texts. Every project gives them their texts.
 - The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, else the default. The designer can show the canvas and Preview in any of the project's languages.
 - A project written before texts had keys gets them with **Make texts keys**, or `clarity spec keys <folder>`: each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value, and old translation files give the same keys their translations.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
@@ -199,6 +199,7 @@ The declarations a module can hold:
 |---|---|
 | `enum Name` | [4](#4-data-enums-and-entities) |
 | `entity Name` | [4](#4-data-enums-and-entities) |
+| `settings` | [Settings](#settings), one per project |
 | `page Name: kind` | [5](#5-windows) |
 | `app Name` | [7](#7-the-app-and-its-frame), one per project |
 | `code Name` | [8](#8-code-behind) |
@@ -251,6 +252,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `image` | a picture (png, jpg, gif, bmp or webp), kept in the database, or with `store` as a file; see [Pictures in records](#pictures-in-records) |
 | `email` | an e-mail address |
 | `url` | a web address |
+| `color` | a color, kept as text `#rrggbb`: `default "#3b82f6"`; code sets it as such text |
 | `id` | the id of a record |
 | an enum name | one value of that enum |
 | `ref Entity` | a reference to a record of another entity |
@@ -381,6 +383,7 @@ How fields are stored:
 | `text(n)` | TEXT | VARCHAR(n) | VARCHAR(n); TEXT above 768 | NVARCHAR(n); NVARCHAR(MAX) above 4000 |
 | `text`, `url` | TEXT | TEXT | TEXT | NVARCHAR(MAX) |
 | `email` | TEXT | VARCHAR(320) | VARCHAR(320) | NVARCHAR(320) |
+| `color` | TEXT | VARCHAR(7) | VARCHAR(7) | NVARCHAR(7) |
 | `integer`, `id`, `ref` | INTEGER | BIGINT | BIGINT | BIGINT |
 | `decimal(p, s)` | TEXT | NUMERIC(p,s) | DECIMAL(p,s) | DECIMAL(p,s) |
 | `money` | TEXT | NUMERIC(19,4) | DECIMAL(19,4) | DECIMAL(19,4) |
@@ -429,6 +432,27 @@ Clarity reads and writes the records of an external database, but never changes 
 - **Checking.** Each time the project loads, Clarity compares the entities with the tables of the database. A missing table or column is an error; a column whose type does not fit the field, and a required column that no field fills (so new records cannot be saved), are warnings. When the database cannot be read, a warning says its tables were not checked.
 - **Read-only.** With `readonly` on the data source, `save` and `delete` of its records are errors.
 - **Take ownership.** The Own button of an external source on the Project tab, or `clarity own shop.clarity erp`, makes Clarity the owner. It writes the source's first step, a `baseline`, which describes the mapped tables as they are and creates only what is missing, so it changes nothing in the database it was taken from (and a new, empty database gets the tables). Then it removes `external`. From there on the dictionary drives the tables through ordinary steps, and the mapped names stay: `table`, `key` and `column` work on owned entities too.
+
+### Settings
+
+What each person sets for themselves, such as the language, the theme, whether the toolbar shows or how many rows a page holds, are settings: one `settings` block per project, in any module.
+
+```clarity
+settings
+    language
+    theme
+    showToolbar: bool, default true, label @showToolbarSetting
+    exportFolder: text
+    pageSize: integer, min 10, max 200, default 50
+```
+
+- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color or an enum. A reference, a list, a picture or an id is no setting.
+- **Clarity's own.** `language` and `theme` take no type: they are the language and the theme shown, labeled with Clarity's words `languagePicker` and `themePicker`. Setting either switches the language or the theme, as the pickers of the click targets `language` and `theme` do, and those pickers change the same settings.
+- **Kept per person.** Settings are never in the database. Each person's are kept on their machine, as `settings.json` in a folder named after the application, in the folder for application settings of their system (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere). A setting not kept yet has its `default`; a kept value that no longer fits (a setting removed, an enum value gone, a number past its ends) is dropped.
+- **In every window.** Every window and the app have `settings` as their data without a `data` line. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
+- **A settings window.** New window offers "Settings window" when the project has settings: a dialog with a labeled form of every setting and a Close button.
+
+The name `Settings` is theirs: no entity can have it, and no window can have other data called `settings`.
 
 ## 5. Windows
 
@@ -544,6 +568,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `dropdown` | an enum, `ref Entity` | `readonly`, `taborder` | `change` |
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
+| `color` | color | `readonly`, `taborder` | `change` |
 | `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
 | `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |
@@ -555,6 +580,8 @@ A slider and a spin box move a number between its lowest value (`min`) and its h
 slider name discountSlider at 1,1 span 6 bind line.discount min 0 max 50 step 0.5 on change: discountMoved
 spinbox name quantityBox at 7,1 span 2 bind line.quantity
 ```
+
+A color input shows a swatch and the color as `#rrggbb`. The swatch opens a palette of 60 colors, the same on every stack; a color can also be typed, with or without `#`, in three or six digits (`f0a` is `#ff00aa`). Text that is no color stays as typed and is marked, and the field keeps its color. Tables show a color column with its swatch and edit it with the same input.
 
 **Containers**
 

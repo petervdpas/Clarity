@@ -48,7 +48,7 @@ pub struct Piece {
 /// from the widget catalog.
 const KEYWORDS: &[&str] = &[
     // Declarations and settings.
-    "module", "use", "source", "enum", "entity", "page", "app", "theme", "code", "function", "action", "engine", "handler", "project",
+    "module", "use", "source", "enum", "entity", "settings", "page", "app", "theme", "code", "function", "action", "engine", "handler", "project",
     "stack", "output", "datasource", "filestore", "language", "currency", "auth", "external", "readonly", "translation", "migration",
     "baseline", "title", "main", "data", "size", "grid", "columns", "label", "help", "column", "table", "key", "default", "format",
     "pattern", "min", "max", "required", "unique", "owned", "computed", "store", "from", "uses", "says", "state", "per", "window",
@@ -67,7 +67,7 @@ const KEYWORDS: &[&str] = &[
 
 /// Clarity's own types.
 const TYPES: &[&str] =
-    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "id", "ref", "image"];
+    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "color", "id", "ref", "image"];
 
 const LITERALS: &[&str] = &["true", "false", "none"];
 

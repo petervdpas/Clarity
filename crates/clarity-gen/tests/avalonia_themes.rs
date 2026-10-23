@@ -265,3 +265,17 @@ fn a_style_sets_how_its_text_shows() {
     has(night, "<TextAlignment x:Key=\"ClarityStylePrimaryAlign\">Left</TextAlignment>");
     has(night, "<HorizontalAlignment x:Key=\"ClarityStylePrimaryContent\">Center</HorizontalAlignment>");
 }
+
+#[test]
+fn a_theme_title_shows_in_the_language_shown() {
+    // A keyed title is kept by its key, which the theme picker translates as it opens.
+    let mut project = clarity_spec::keyed::load_keyed([("shop.clarity", SHOP)], &[], "en");
+    use_themes(&mut project, &["Shop", "NightOwl"]);
+    let night = project.files[0].themes.iter().find(|t| t.name.name == "NightOwl").unwrap();
+    let key = night.label.strip_prefix('@').unwrap_or_else(|| panic!("the title is a key: {}", night.label)).to_string();
+    let files = generate(&project, &settings()).unwrap_or_else(|e| panic!("{e:#?}"));
+    let offered = file(&files, "AppThemes.cs");
+    has(offered, &format!("new(\"NightOwl\", \"{key}\", ThemeVariant.Dark,"));
+    assert!(!offered.contains("\"@"), "no key is shown as written:\n{offered}");
+    has(file(&files, "Texts.cs"), &format!("Locale.Translate(\"{key}\")"));
+}

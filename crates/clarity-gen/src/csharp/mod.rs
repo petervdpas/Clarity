@@ -86,7 +86,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
-        let mut code = format!("{HEADER}\nusing Clarity.Avalonia;\nusing Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
+        // The settings read and keep JSON, numbers and dates written the same everywhere.
+        let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\nusing Avalonia.Threading;\n" } else { "" };
+        let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Avalonia;\nusing Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
         code.push_str(&model::emit(project, file, &name, &texts));
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
@@ -358,6 +360,8 @@ fn app_cs(project: &Project, name: &str, main_window: &str) -> String {
     };
     let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
     let application = string(name);
+    // The person's settings, after the language and theme they may name (DESIGN 5.17).
+    let settings_start = if project.entities().any(|e| e.settings) { "            Settings.Start();\n" } else { "" };
     format!(
         "{HEADER}
 using Avalonia;
@@ -379,7 +383,7 @@ public partial class App : Application
             Remembered.Use({application});
             Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
 {engines_language}            Themes.Start(AppThemes.Offered);
-            var db = Program.OpenDatabases();
+{settings_start}            var db = Program.OpenDatabases();
             desktop.Exit += (_, _) => db.Dispose();
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));

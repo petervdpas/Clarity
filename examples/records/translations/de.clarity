@@ -142,6 +142,8 @@ translation de
     ok "OK"
     cancel "Abbrechen"
     dismiss "Schließen"
+    languagePicker "Sprache"
+    themePicker "Design"
     noPicture "Kein Bild"
     loadPicture "Bild laden"
     removePicture "Bild entfernen"

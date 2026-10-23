@@ -1,0 +1,304 @@
+{
+  "about": "Settings (DESIGN 5.17), kept per person as JSON on their machine. A kept value is taken back only when it still fits its setting; one that does not (a setting removed, an enum value gone, a number past its `min` or `max`, a value of another type) is dropped, and the setting has its default. `fits` gives whether a kept value fits a setting: its type (`text`, `email`, `url`, `color`, `integer`, `duration`, `decimal`, `money`, `bool`, `date`, `datetime`, `enum` with its `values`, `language` with the project's `languages`, `theme` with the offered `themes`), and `min` and `max` for numbers. Decimals and money are kept as text, so they stay exact; dates as `2026-10-23`, moments as `2026-10-23T14:30:00`. `kept` gives the settings a start takes from what was kept: only the settings there are, and only values that fit. `file` gives where an application keeps them, for its system (`windows`, `macos`, or another, `linux`) and its environment: in the folder for application settings (`APPDATA` on Windows; `Library/Application Support` in `HOME` on macOS; `XDG_CONFIG_HOME`, else `.config` in `HOME`, elsewhere), in a folder of the program's name, as `settings.json`; nowhere (null) when the environment names no such folder. Paths are written with `/`.",
+  "fits": [
+    {
+      "setting": {
+        "type": "text"
+      },
+      "value": "C:/export",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "text"
+      },
+      "value": 12,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "color"
+      },
+      "value": "#3b82f6",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "color"
+      },
+      "value": "blue",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "integer"
+      },
+      "value": 50,
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "integer"
+      },
+      "value": 2.5,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "integer"
+      },
+      "value": "50",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "integer",
+        "min": "10",
+        "max": "200"
+      },
+      "value": 5,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "integer",
+        "min": "10",
+        "max": "200"
+      },
+      "value": 200,
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "decimal"
+      },
+      "value": "1.25",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "money",
+        "max": "100"
+      },
+      "value": "100.01",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "decimal"
+      },
+      "value": "lots",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "bool"
+      },
+      "value": false,
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "bool"
+      },
+      "value": "false",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "date"
+      },
+      "value": "2026-10-23",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "date"
+      },
+      "value": "23-10-2026",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "datetime"
+      },
+      "value": "2026-10-23T14:30:00",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "enum",
+        "values": [
+          "compact",
+          "roomy"
+        ]
+      },
+      "value": "roomy",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "enum",
+        "values": [
+          "compact",
+          "roomy"
+        ]
+      },
+      "value": "huge",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "language",
+        "languages": [
+          "en",
+          "nl"
+        ]
+      },
+      "value": "nl",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "language",
+        "languages": [
+          "en",
+          "nl"
+        ]
+      },
+      "value": "de",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "theme",
+        "themes": [
+          "Light",
+          "Dark"
+        ]
+      },
+      "value": "Dark",
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "theme",
+        "themes": [
+          "Light",
+          "Dark"
+        ]
+      },
+      "value": "Sepia",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "text"
+      },
+      "value": null,
+      "fits": false
+    }
+  ],
+  "kept": [
+    {
+      "settings": {
+        "showToolbar": {
+          "type": "bool"
+        },
+        "pageSize": {
+          "type": "integer",
+          "min": "10",
+          "max": "200"
+        },
+        "density": {
+          "type": "enum",
+          "values": [
+            "compact",
+            "roomy"
+          ]
+        }
+      },
+      "kept": {
+        "showToolbar": false,
+        "pageSize": 500,
+        "density": "roomy",
+        "removed": "gone"
+      },
+      "takes": {
+        "showToolbar": false,
+        "density": "roomy"
+      }
+    },
+    {
+      "settings": {
+        "language": {
+          "type": "language",
+          "languages": [
+            "en",
+            "nl"
+          ]
+        }
+      },
+      "kept": {},
+      "takes": {}
+    }
+  ],
+  "file": [
+    {
+      "os": "linux",
+      "env": {
+        "XDG_CONFIG_HOME": "/home/ada/.config-x",
+        "HOME": "/home/ada"
+      },
+      "program": "todo",
+      "file": "/home/ada/.config-x/todo/settings.json"
+    },
+    {
+      "os": "linux",
+      "env": {
+        "HOME": "/home/ada"
+      },
+      "program": "todo",
+      "file": "/home/ada/.config/todo/settings.json"
+    },
+    {
+      "os": "linux",
+      "env": {
+        "XDG_CONFIG_HOME": "",
+        "HOME": "/home/ada"
+      },
+      "program": "todo",
+      "file": "/home/ada/.config/todo/settings.json"
+    },
+    {
+      "os": "macos",
+      "env": {
+        "HOME": "/Users/ada"
+      },
+      "program": "shop",
+      "file": "/Users/ada/Library/Application Support/shop/settings.json"
+    },
+    {
+      "os": "windows",
+      "env": {
+        "APPDATA": "C:/Users/ada/AppData/Roaming"
+      },
+      "program": "shop",
+      "file": "C:/Users/ada/AppData/Roaming/shop/settings.json"
+    },
+    {
+      "os": "linux",
+      "env": {},
+      "program": "todo",
+      "file": null
+    },
+    {
+      "os": "windows",
+      "env": {
+        "HOME": "C:/Users/ada"
+      },
+      "program": "shop",
+      "file": null
+    }
+  ]
+}

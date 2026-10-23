@@ -52,7 +52,8 @@ impl Writer {
 /// each entity it draws that has a place.
 pub fn data_model_placed(project: &Project, only: Option<&[String]>, places: &[(String, i32, i32)]) -> View {
     let mut view = data_model_of(project, only);
-    for entity in project.files.iter().flat_map(|f| &f.entities).filter(|e| drawn(only, &e.name.name)) {
+    // The settings are kept per person, not data of the project.
+    for entity in project.files.iter().flat_map(|f| &f.entities).filter(|e| !e.settings && drawn(only, &e.name.name)) {
         if let Some((_, x, y)) = places.iter().find(|(name, _, _)| *name == entity.name.name) {
             view.text.push_str(&format!("    {}{} at {x},{y}\n", super::erd_model::PLACE, entity.name.name));
         }
@@ -79,7 +80,7 @@ pub fn data_model_of(project: &Project, only: Option<&[String]>) -> View {
     let entities: Vec<(&str, &Entity)> = project
         .files
         .iter()
-        .flat_map(|f| f.entities.iter().map(move |e| (f.path.as_str(), e)))
+        .flat_map(|f| f.entities.iter().filter(|e| !e.settings).map(move |e| (f.path.as_str(), e)))
         .filter(|(_, e)| drawn(only, &e.name.name))
         .collect();
     for (path, entity) in &entities {

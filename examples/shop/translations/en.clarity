@@ -95,3 +95,5 @@ translation en
     ok "OK"
     cancel "Cancel"
     dismiss "Dismiss"
+    languagePicker "Language"
+    themePicker "Theme"

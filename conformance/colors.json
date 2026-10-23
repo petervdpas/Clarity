@@ -1,0 +1,25 @@
+{
+  "about": "The color field type of U1c, kept as text '#rrggbb'. `read` gives the color a typed text is: with or without '#', in three or six hexadecimal digits, in any case, around spaces; written back as '#' and six lowercase digits. Empty text is no color (\"\"); anything else is no color at all (null), and the input keeps its value. `palette` is the colors the color input offers, in rows, the same on every renderer.",
+  "read": [
+    { "typed": "#3b82f6", "color": "#3b82f6" },
+    { "typed": "#3B82F6", "color": "#3b82f6" },
+    { "typed": "3b82f6", "color": "#3b82f6" },
+    { "typed": "#abc", "color": "#aabbcc" },
+    { "typed": "  F0A ", "color": "#ff00aa" },
+    { "typed": "", "color": "" },
+    { "typed": "   ", "color": "" },
+    { "typed": "#12345", "color": null },
+    { "typed": "#1234567", "color": null },
+    { "typed": "blue", "color": null },
+    { "typed": "#ggg", "color": null },
+    { "typed": "##abc", "color": null }
+  ],
+  "palette": [
+    ["#ffffff", "#f8fafc", "#e5e7eb", "#d1d5db", "#9ca3af", "#6b7280", "#4b5563", "#374151", "#1f2937", "#000000"],
+    ["#e2e8f0", "#fecaca", "#fed7aa", "#fde68a", "#bbf7d0", "#99f6e4", "#bfdbfe", "#c7d2fe", "#e9d5ff", "#fbcfe8"],
+    ["#94a3b8", "#f87171", "#fb923c", "#fbbf24", "#4ade80", "#2dd4bf", "#60a5fa", "#818cf8", "#c084fc", "#f472b6"],
+    ["#64748b", "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6", "#3b82f6", "#6366f1", "#a855f7", "#ec4899"],
+    ["#475569", "#dc2626", "#ea580c", "#d97706", "#16a34a", "#0d9488", "#2563eb", "#4f46e5", "#9333ea", "#db2777"],
+    ["#1e293b", "#991b1b", "#9a3412", "#92400e", "#166534", "#115e59", "#1e40af", "#3730a3", "#6b21a8", "#9d174d"]
+  ]
+}

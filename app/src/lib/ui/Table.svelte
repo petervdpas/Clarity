@@ -3,7 +3,7 @@
   import type { Choice } from "./ChoiceInput.svelte";
 
   /** What a cell holds: the kind of value of its column. */
-  export type CellKind = "text" | "number" | "bool" | "choice" | "date" | "moment";
+  export type CellKind = "text" | "number" | "bool" | "choice" | "date" | "moment" | "color";
 
   /** A column of a table: the field it shows, and whether and how it is edited. */
   export type TableColumn = {
@@ -40,6 +40,7 @@
   // the designed widths.
   import CheckInput from "./CheckInput.svelte";
   import ChoiceInput from "./ChoiceInput.svelte";
+  import ColorInput from "./ColorInput.svelte";
   import DateInput from "./DateInput.svelte";
   import DateTimeInput from "./DateTimeInput.svelte";
   import NumberInput from "./NumberInput.svelte";
@@ -242,13 +243,17 @@
           {#each columns as column (column.field)}
             {@const cell = row[column.field]}
             {#if !column.edit}
-              <td data-field={column.field} class:numeric={column.kind === "number"}>{shown(column, cell)}</td>
+              <td data-field={column.field} class:numeric={column.kind === "number"}>
+                {#if column.kind === "color" && typeof cell === "string" && cell !== ""}<span class="cell-swatch" style:background-color={cell}></span>{/if}{shown(column, cell)}
+              </td>
             {:else}
               <td data-field={column.field} class="edit" class:numeric={column.kind === "number"}>
                 {#if column.kind === "bool"}
                   <CheckInput switch={column.switch} label={column.label} checked={cell === true} disabled={inert || readonly} onchange={(next) => edit(i, column.field, next)} />
                 {:else if column.kind === "choice"}
                   <ChoiceInput label={column.label} value={cell} choices={column.choices ?? []} disabled={inert || readonly} onchange={(next) => edit(i, column.field, next)} />
+                {:else if column.kind === "color"}
+                  <ColorInput label={column.label} value={typeof cell === "string" ? cell : null} disabled={inert} {readonly} onchange={(next) => edit(i, column.field, next)} />
                 {:else if column.kind === "moment"}
                   <DateTimeInput value={cell} label={column.label} disabled={inert} {readonly} onchange={(next) => edit(i, column.field, next)} />
                 {:else if column.kind === "date"}
@@ -279,6 +284,16 @@
 </div>
 
 <style>
+  .cell-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    border: 1px solid rgb(0 0 0 / 0.2);
+    border-radius: 2px;
+  }
+
   .table-wrap {
     flex: 1;
     overflow: auto;

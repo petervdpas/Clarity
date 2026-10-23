@@ -10,6 +10,7 @@
 extern char** environ;
 #endif
 
+#include "clarity/settings.hpp"
 #include "webview/webview.h"
 
 namespace clarity::shell {
@@ -70,6 +71,15 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         WindowState state = args.contains("state") ? args["state"].get<WindowState>() : WindowState{};
         json with = args.value("with", json::object());
         if (command == "start") return value({{"model", json::parse(options_.model)}, {"main", options_.main}});
+        // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+        if (command == "read_settings") return value(read_settings(options_.name));
+        // The person's settings, as the screen has them now.
+        if (command == "keep_settings") {
+            const auto& settings = args.contains("settings") ? args["settings"] : json(nullptr);
+            if (!settings.is_object()) throw InvalidError("keep_settings takes the settings as an object");
+            keep_settings(options_.name, settings);
+            return value(nullptr);
+        }
         if (command == "open_window") return value(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));
         if (command == "close_window") {
             auto reply = on_event(state, "close");

@@ -341,6 +341,11 @@ fn parse_top_level(
             cursor.expect_end()?;
             file.entities.push(parse_entity(node, name, diagnostics));
         }
+        Some("settings") => {
+            cursor.next();
+            cursor.expect_end()?;
+            file.entities.push(parse_settings(node, diagnostics));
+        }
         Some("page") => {
             cursor.next();
             file.pages.push(parse_page(node, cursor, diagnostics)?);
@@ -462,9 +467,56 @@ fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
         fields,
         table,
         key,
+        settings: false,
         span: node.span(),
     }
 }
+
+/// The `settings` block (DESIGN 5.17): fields as an entity's, and Clarity's
+/// own `language` and `theme` without a type; read as the record type `Settings`.
+fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
+    let mut fields = Vec::new();
+    for child in &node.children {
+        // Labeled with Clarity's own words, which head the pickers too.
+        let own = match child.line.tokens.as_slice() {
+            [word] if word.text == "language" => Some((FieldType::Language, "@languagePicker")),
+            [word] if word.text == "theme" => Some((FieldType::Theme, "@themePicker")),
+            _ => None,
+        };
+        let field = match own {
+            Some((ty, label)) => no_children(child).map(|_| {
+                let word = &child.line.tokens[0];
+                Field {
+                    name: Ident { name: word.text.clone(), span: word.span },
+                    type_text: word.text.clone(),
+                    ty,
+                    modifiers: Modifiers { label: Some(label.to_string()), ..Modifiers::default() },
+                    label: label.to_string(),
+                    span: child.line.span,
+                }
+            }),
+            None => parse_field(child),
+        };
+        match field {
+            Ok(field) => fields.push(field),
+            Err(diag) => diagnostics.push(diag),
+        }
+    }
+    let span = node.span();
+    Entity {
+        name: Ident { name: SETTINGS_ENTITY.to_string(), span: node.line.tokens.first().map_or(span, |t| t.span) },
+        fields,
+        table: None,
+        key: None,
+        settings: true,
+        span,
+    }
+}
+
+/// The record type of the project's settings.
+pub const SETTINGS_ENTITY: &str = "Settings";
+/// Every window's own data with the settings.
+pub const SETTINGS_DATA: &str = "settings";
 
 fn parse_field(node: &Node) -> ParseResult<Field> {
     no_children(node)?;
@@ -529,6 +581,7 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
         "image" => FieldType::Image,
         "email" => FieldType::Email,
         "url" => FieldType::Url,
+        "color" => FieldType::Color,
         "id" => FieldType::Id,
         "ref" => FieldType::Ref {
             entity: cursor.expect_ident("an entity name after 'ref'")?,
@@ -852,7 +905,7 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
         TypeRefKind::Named { name: entity } if default.is_none() => DataKind::Record { entity: Ident { name: entity, span: ty.span } },
         _ => DataKind::Value { ty, default },
     };
-    Ok(DataDecl { name, of, span })
+    Ok(DataDecl { name, of, made: false, span })
 }
 
 // ---------------------------------------------------------------------------

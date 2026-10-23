@@ -93,8 +93,8 @@ impl Sql {
         let number = |n: &str| if self == Sql::Sqlite { self.text(n) } else { n.to_string() };
         let ty = if column.ty == FieldType::Image { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
         let value = match (&column.ty, default) {
-            (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) => Some(self.text(s)),
-            (FieldType::Text { .. } | FieldType::Email | FieldType::Url, _) => Some(self.text("")),
+            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(self.text(s)),
+            (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, _) => Some(self.text("")),
             (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
             (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => Some("0".into()),
             (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(number(n)),
@@ -158,10 +158,13 @@ impl Sql {
                 _ => format!("NVARCHAR({n})"),
             },
             (Sql::Mssql, FieldType::Text { max_length: None } | FieldType::Url) => "NVARCHAR(MAX)".into(),
-            (_, FieldType::Text { max_length: None } | FieldType::Url) => "TEXT".into(),
+            (_, FieldType::Text { max_length: None } | FieldType::Url | FieldType::Language | FieldType::Theme) => "TEXT".into(),
             // The longest address there can be.
             (Sql::Mssql, FieldType::Email) => "NVARCHAR(320)".into(),
             (_, FieldType::Email) => "VARCHAR(320)".into(),
+            // `#rrggbb`.
+            (Sql::Mssql, FieldType::Color) => "NVARCHAR(7)".into(),
+            (_, FieldType::Color) => "VARCHAR(7)".into(),
             (_, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Ref { .. }) => "BIGINT".into(),
             (_, FieldType::Decimal { precision, scale }) => decimal(*precision, *scale),
             (_, FieldType::Money) => decimal(19, 4),
@@ -252,7 +255,7 @@ impl Sql {
         let name = self.quote(column.stored());
         let index = self.index_name(table, column);
         let on = self.quote(&table.table_name());
-        let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url);
+        let textual = matches!(column.ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme);
         let optional = matches!(column.ty, FieldType::Date | FieldType::DateTime | FieldType::Ref { .. });
         let missing = if baseline { " IF NOT EXISTS" } else { "" };
         match self {
@@ -337,7 +340,7 @@ EXEC sp_executesql @sql;",
     /// The value of `name`, a column stored as `old`, as a column of type
     /// `new` stores it.
     pub fn convert(self, name: &str, old: &FieldType, new: &FieldType, new_ty: &str) -> String {
-        let textual = |ty: &FieldType| matches!(ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Enum { .. });
+        let textual = |ty: &FieldType| matches!(ty, FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Enum { .. });
         // Empty text is no value, so it does not become a number or a date.
         let value = if textual(old) && !textual(new) {
             format!("NULLIF({name}, '')")

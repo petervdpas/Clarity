@@ -74,7 +74,7 @@ impl<'a> Known<'a> {
         let mut entities = BTreeMap::new();
         let mut enums = BTreeMap::new();
         for file in &project.files {
-            for entity in &file.entities {
+            for entity in file.entities.iter().filter(|e| !e.settings) {
                 entities.insert(entity.name.name.as_str(), (file, entity));
             }
             for decl in &file.enums {

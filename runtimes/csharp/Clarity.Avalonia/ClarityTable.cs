@@ -36,6 +36,8 @@ public enum CellKind
     Choice,
     Date,
     Moment,
+    /// <summary>A color, "#rrggbb": a swatch beside it, edited with the color input.</summary>
+    Color,
 }
 
 /// <summary>A column of a table: the record's property it shows, and whether and how it is edited.</summary>
@@ -375,6 +377,9 @@ public sealed class ClarityTable : UserControl
         ShowRows();
     }
 
+    /// <summary>A kept color as the brush of its swatch.</summary>
+    static readonly IValueConverter ColorBrush = new global::Avalonia.Data.Converters.FuncValueConverter<string?, global::Avalonia.Media.IBrush?>(Palette.Brush);
+
     static Binding Bound(TableColumn column, IValueConverter? converter = null) => new(column.Field) { Mode = BindingMode.TwoWay, Converter = converter };
 
     /// <summary>A choice column's choices: its own, or those its window keeps.</summary>
@@ -383,6 +388,25 @@ public sealed class ClarityTable : UserControl
 
     static Control Cell(TableColumn column, IEnumerable<Choice>? choices)
     {
+        if (!column.Edit && column.Kind == CellKind.Color)
+            return new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    new Border
+                    {
+                        Classes = { "swatch" },
+                        Width = 12,
+                        Height = 12,
+                        CornerRadius = new CornerRadius(2),
+                        [!Border.BackgroundProperty] = new Binding(column.Field) { Converter = ColorBrush, Mode = BindingMode.OneWay },
+                    },
+                    new TextBlock { Classes = { "cell" }, [!TextBlock.TextProperty] = new Binding(column.Field) { Mode = BindingMode.OneWay } },
+                },
+            };
         if (!column.Edit)
             return new TextBlock
             {
@@ -403,6 +427,7 @@ public sealed class ClarityTable : UserControl
             CellKind.Bool => new CheckInput { Classes = { "cell" }, [!CheckBox.IsCheckedProperty] = Bound(column) },
             CellKind.Choice => new ChoiceInput { Classes = { "cell" }, Choices = choices, [!ChoiceInput.ValueProperty] = Bound(column) },
             CellKind.Date => new DateInput { Classes = { "cell" }, [!DateInput.ValueProperty] = Bound(column) },
+            CellKind.Color => new ColorInput { Classes = { "cell" }, [!ColorInput.ValueProperty] = Bound(column) },
             CellKind.Moment => new DateTimeInput { Classes = { "cell" }, [!DateTimeInput.ValueProperty] = Bound(column) },
             CellKind.Number => new NumberInput { Classes = { "cell" }, Format = column.Number ?? new FieldFormat(FormatKind.Decimal), [!NumberInput.ValueProperty] = Bound(column) },
             _ => new Clarity.Avalonia.TextInput { Classes = { "cell" }, [!Clarity.Avalonia.TextInput.ValueProperty] = Bound(column) },

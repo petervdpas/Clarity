@@ -302,6 +302,7 @@ impl<'a> Window<'a> {
             FieldType::Enum { .. } | FieldType::Ref { .. } => "Choice",
             FieldType::Date => "Date",
             FieldType::DateTime => "Moment",
+            FieldType::Color => "Color",
             _ => "Text",
         };
         let mut attributes = format!(
@@ -906,6 +907,16 @@ impl<'a> Window<'a> {
             }
             // Clarity's own inputs (Clarity.Avalonia), which tell when the person
             // changed their value and only then, the same as on the web.
+            // A color (U1c): Clarity's ColorInput, a swatch with the shared palette and the color to type.
+            WidgetKind::Color => {
+                let value = match (&bound, named) {
+                    (Some(path), _) => format!(" Value=\"{{Binding {path}}}\""),
+                    (None, Some(n)) => format!(" Value=\"{{Binding {}.Text}}\"", member(n)),
+                    (None, None) => String::new(),
+                };
+                let read_only = if p.readonly { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(out, "{pad}<c:ColorInput {at}{value}{read_only}{plain_state}{extra} />");
+            }
             // A number between its lowest and highest value (U1c), Clarity's SliderInput.
             WidgetKind::Slider => {
                 let value = match (&bound, named) {
@@ -968,6 +979,9 @@ impl<'a> Window<'a> {
                     // A plain value of an enum: `data pending: Operation`.
                     None if let Some(e) = p.bind.as_deref().and_then(|b| self.value_enum(b)) => format!(" Choices=\"{{x:Static local:Choices.{e}}}\""),
                     Some(FieldType::Ref { entity }) => format!(" Choices=\"{{Binding {}Choices}}\"", entity.name),
+                    // The settings' own: the project's languages, the offered themes.
+                    Some(FieldType::Language) => " Choices=\"{x:Static c:Choice.LanguagesOffered}\"".to_string(),
+                    Some(FieldType::Theme) => " Choices=\"{x:Static c:Choice.ThemesOffered}\"".to_string(),
                     _ => String::new(),
                 };
                 let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
@@ -1269,6 +1283,7 @@ impl<'a> Window<'a> {
                         | WidgetKind::Number
                         | WidgetKind::Spinbox
                         | WidgetKind::Slider
+                        | WidgetKind::Color
                         | WidgetKind::Checkbox
                         | WidgetKind::Switch
                         | WidgetKind::Dropdown
@@ -1364,6 +1379,9 @@ public partial class {name}View : UserControl
                     properties,
                     "    public List<{entity}> {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    List<{entity}> {field};\n\n"
                 );
+            } else if self.project.entity(entity).is_some_and(|e| e.settings) {
+                // Every window shows the same settings.
+                let _ = write!(properties, "    public {entity} {prop} => {entity}.Current;\n\n");
             } else {
                 let _ = write!(
                     properties,

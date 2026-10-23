@@ -103,6 +103,7 @@ pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
     };
     checker.collect();
     checker.check_single_app();
+    checker.check_settings();
     for (file_index, file) in files.iter().enumerate() {
         checker.check_file(file_index, file);
     }
@@ -159,9 +160,11 @@ impl<'a> Checker<'a> {
                 .enumerate()
                 .map(|(i, e)| (DeclKind::Enum, i, &e.name))
                 .chain(
+                    // The settings are found as every window's `settings`, not by name.
                     file.entities
                         .iter()
                         .enumerate()
+                        .filter(|(_, e)| !e.settings)
                         .map(|(i, e)| (DeclKind::Entity, i, &e.name)),
                 )
                 .chain(
@@ -368,7 +371,20 @@ impl<'a> Checker<'a> {
     fn data_context(&mut self, file: usize, decls: &'a [DataDecl]) -> PageContext<'a> {
         let mut data: HashMap<&str, Held<'a>> = HashMap::new();
         for decl in decls {
+            // Every window's settings, made by Clarity; written data cannot take their place.
+            if decl.made {
+                data.insert(&decl.name.name, Held::Record(self.settings()));
+                continue;
+            }
+            if self.settings().is_some() && decl.name.name == crate::parser::SETTINGS_DATA {
+                self.error(file, "every window has 'settings' of its own; give this data another name", decl.name.span);
+                continue;
+            }
             let held = match &decl.of {
+                DataKind::Record { entity } | DataKind::List { entity } if self.settings().is_some() && entity.name == crate::parser::SETTINGS_ENTITY => {
+                    self.error(file, "every window has the settings as 'settings'; bind that", entity.span);
+                    continue;
+                }
                 DataKind::Record { entity } | DataKind::List { entity } => {
                     let found = if self.decls.contains_key(entity.name.as_str()) {
                         self.resolve(file, entity, DeclKind::Entity).map(|(f, i)| &self.files[f].entities[i])
@@ -428,6 +444,37 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+    }
+
+    /// The settings (DESIGN 5.17): one block, of plain values, and the name
+    /// `Settings` theirs.
+    fn check_settings(&mut self) {
+        let files = self.files;
+        let blocks: Vec<(usize, &Entity)> = files.iter().enumerate().flat_map(|(i, f)| f.entities.iter().filter(|e| e.settings).map(move |e| (i, e))).collect();
+        for (file, extra) in blocks.iter().skip(1) {
+            self.error(*file, "a project has one 'settings' block", extra.name.span);
+        }
+        if blocks.is_empty() {
+            return;
+        }
+        for (file, f) in files.iter().enumerate() {
+            for entity in f.entities.iter().filter(|e| !e.settings && e.name.name == crate::parser::SETTINGS_ENTITY) {
+                self.error(file, "'Settings' is the name of the project's settings; give this entity another name", entity.name.span);
+            }
+        }
+        for (file, settings) in blocks {
+            for field in &settings.fields {
+                let plain = !matches!(field.ty, FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::Id);
+                if !plain {
+                    self.error(file, format!("a setting is a plain value; '{}' cannot be {}", field.name.name, field.type_text), field.span);
+                }
+            }
+        }
+    }
+
+    /// The project's settings, when it has them.
+    fn settings(&self) -> Option<&'a Entity> {
+        self.files.iter().flat_map(|f| &f.entities).find(|e| e.settings)
     }
 
     fn check_app(&mut self, file: usize, app: &'a App) {
@@ -1385,6 +1432,12 @@ impl<'a> Checker<'a> {
         let name = &field.name.name;
         let ok = match (&field.ty, default) {
             (FieldType::Bool, Literal::Bool(_)) => true,
+            (FieldType::Color, Literal::Str(text)) => {
+                if !crate::colors::is_kept(text) {
+                    self.error(file, format!("{} ('{name}')", crate::colors::COLOR_PROBLEM), field.span);
+                }
+                true
+            }
             (t, Literal::Number(_)) if t.is_numeric() => true,
             (t, Literal::Str(_)) if t.is_textual() => true,
             (FieldType::Date | FieldType::DateTime, Literal::Str(_)) => true,

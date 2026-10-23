@@ -14,6 +14,13 @@ entity Album
     site: url
     favourite: bool
     rating: decimal(3, 1), min 0, max 5
+    tint: color, default "#3b82f6"
+
+settings
+    language
+    theme
+    showToolbar: bool, default true
+    pageSize: integer, min 10, max 200, default 50
 
 page Albums: window
     data album: Album
@@ -50,6 +57,9 @@ page Albums: window
         number name copiesBox at 1,4 span 3 bind album.copies
     slider name ratingSlider at 1,11 span 6 bind album.rating step 0.5 on change: favouriteChanged
     spinbox name copiesSpin at 7,11 span 3 bind album.copies min 0 max 99
+    color name tintBox at 10,11 span 3 bind album.tint on change: favouriteChanged
+    switch name toolbarSwitch at 1,12 span 3 bind settings.showToolbar
+    dropdown name languageBox at 4,12 span 3 bind settings.language
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -108,6 +118,7 @@ code Albums
         save album
 
     handler leftChanged
+        settings.pageSize = settings.pageSize + 10
         rightToggle.checked = not leftToggle.checked
         if notesAccordion.open == 0
             notesAccordion.open = 2

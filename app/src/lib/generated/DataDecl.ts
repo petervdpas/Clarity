@@ -7,4 +7,8 @@ import type { Span } from "./Span";
  * What a window holds: `data customer: Customer`, `data orders:
  * list<Order>`, `data shown: decimal`.
  */
-export type DataDecl = { name: Ident, of: DataKind, span: Span, };
+export type DataDecl = { name: Ident, of: DataKind, 
+/**
+ * Made by Clarity, not written: every window's `settings`.
+ */
+made: boolean, span: Span, };

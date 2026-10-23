@@ -24,6 +24,9 @@ pub enum PageTemplate {
     /// A filter for the first text field, a table of the entity, and New
     /// and Open buttons.
     Browse { entity: String },
+    /// A dialog with a form of every setting of the project (DESIGN 5.17),
+    /// labeled, and a Close button.
+    Settings,
 }
 
 /// Columns a browse template shows, at most.
@@ -55,7 +58,51 @@ pub fn page_from_template(
                 .collect();
             Ok(browse_page(name, &title, entity, &columns))
         }
+        PageTemplate::Settings => {
+            let settings = project.entities().find(|e| e.settings).ok_or("the project has no settings; write a 'settings' block first")?;
+            Ok(settings_page(name, &title, settings))
+        }
     }
+}
+
+/// A settings window: a form bound to `settings` with a label column, an
+/// input for each setting (a spin box for a whole number between two ends,
+/// a check box that labels itself for yes or no), and a Close button.
+fn settings_page(name: &str, title: &str, settings: &Entity) -> String {
+    use crate::parser::SETTINGS_DATA;
+    let columns = DEFAULT_PAGE_COLUMNS;
+    let mut lines = Vec::new();
+    for (i, field) in settings.fields.iter().enumerate() {
+        let row = i as u32 + 1;
+        let kind = match &field.ty {
+            FieldType::Integer if field.modifiers.min.is_some() && field.modifiers.max.is_some() => WidgetKind::Spinbox,
+            other => widgets::widget_for(other),
+        };
+        let mut input = new_props(kind, LABEL + 1, row);
+        input.name = Some(camel_case(&format!("{} box", field.name.name)));
+        input.bind = Some(format!("{SETTINGS_DATA}.{}", field.name.name));
+        input.width = input_width(kind, &field.ty, columns - LABEL);
+        // A check box labels itself, with room for its label.
+        if matches!(kind, WidgetKind::Checkbox | WidgetKind::Switch) {
+            input.caption = Some(field.modifiers.label.clone().unwrap_or_else(|| default_label(&field.name.name)));
+            input.width = 6.min(columns - LABEL);
+        }
+        lines.push(format!("    {}", widget_line(&input)));
+    }
+    let mut form = new_props(WidgetKind::Form, 1, 1);
+    form.name = Some(camel_case(&format!("{SETTINGS_DATA} form")));
+    form.width = columns;
+    form.height = (settings.fields.len() as u32).max(1);
+    form.bind = Some(SETTINGS_DATA.to_string());
+    form.labels = Some(LABEL);
+    let mut close = button("Close", columns - 1, form.height + 2);
+    close.name = Some("closeButton".to_string());
+    close.cancel = true;
+    close.on_click = Some("close".to_string());
+    let mut all = vec![widget_line(&form)];
+    all.extend(lines);
+    all.push(widget_line(&close));
+    format!("page {name}: dialog\n    title {}\n\n{}", quote(title), body(&all))
 }
 
 fn find_entity<'a>(project: &'a Project, name: &str) -> Result<&'a Entity, String> {
@@ -100,7 +147,7 @@ fn body(lines: &[String]) -> String {
 fn input_width(kind: WidgetKind, ty: &FieldType, room: u32) -> u32 {
     let wide = match ty {
         FieldType::Text { max_length } => max_length.is_none_or(|n| n > 40),
-        FieldType::Email | FieldType::Url => true,
+        FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => true,
         _ => false,
     };
     let width = if wide { 6 } else { widgets::default_size(kind).0 };

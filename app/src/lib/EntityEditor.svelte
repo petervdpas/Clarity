@@ -36,11 +36,11 @@
     stores: string[];
   } = $props();
 
-  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "id"];
+  const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "id"];
   const types = $derived([
     ...BASE_TYPES,
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),
-    ...preview.project.files.flatMap((f) => f.entities.flatMap((e) => [`ref ${e.name.name}`, `list<${e.name.name}>`])),
+    ...preview.project.files.flatMap((f) => f.entities.filter((e) => !e.settings).flatMap((e) => [`ref ${e.name.name}`, `list<${e.name.name}>`])),
   ]);
 
   /** Format and Store are columns only when a field of this entity can have one. */

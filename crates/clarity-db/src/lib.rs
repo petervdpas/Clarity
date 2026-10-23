@@ -175,7 +175,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         return true;
     }
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Enum { .. } => k == Kind::Text,
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Enum { .. } => k == Kind::Text,
         FieldType::Integer | FieldType::Id | FieldType::Duration => matches!(k, Kind::Integer | Kind::Number),
         FieldType::Decimal { .. } | FieldType::Money => matches!(k, Kind::Number | Kind::Integer),
         FieldType::Bool => matches!(k, Kind::Bool | Kind::Integer),
@@ -329,7 +329,7 @@ pub fn import(schema: &LiveSchema, tables: &[String], module: &str, source: &str
 pub fn drift(project: &Project, source: &str, schema: &LiveSchema) -> Vec<Diagnostic> {
     let mut found = Vec::new();
     for file in &project.files {
-        for entity in file.entities.iter().filter(|e| project.source_of(&e.name.name) == Some(source)) {
+        for entity in file.entities.iter().filter(|e| !e.settings && project.source_of(&e.name.name) == Some(source)) {
             found.extend(entity_drift(entity, source, schema).into_iter().map(|d| d.in_file(&file.path)));
         }
     }

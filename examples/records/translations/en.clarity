@@ -141,6 +141,8 @@ translation en
     ok "OK"
     cancel "Cancel"
     dismiss "Dismiss"
+    languagePicker "Language"
+    themePicker "Theme"
     noPicture "No picture"
     loadPicture "Load a picture"
     removePicture "Remove the picture"

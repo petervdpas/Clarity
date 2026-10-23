@@ -23,6 +23,7 @@
   import AskDialog from "../lib/ui/AskDialog.svelte";
   import Dialog from "../lib/ui/Dialog.svelte";
   import { answerValues, type Ask } from "../lib/asks";
+  import { keptSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
   import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
 
   /** One open window, as the backend sends it. */
@@ -140,7 +141,9 @@
   let apart = false;
 
   /** A reply with the texts its handlers put in text values filled in the person's language and format. */
-  function received(reply: Reply): Reply {
+  function received(reply: Reply, start = false): Reply {
+    // A handler may have set the settings; the app's start has only their defaults.
+    if (!start) adopt(reply.state.data[SETTINGS]);
     if (!model || !reply.shown) return reply;
     const data = { ...reply.state.data };
     for (const [name, text] of Object.entries(reply.shown)) data[name] = shownText(model, text);
@@ -153,6 +156,54 @@
     if (!model || !target) return received(reply);
     const decls = [...target.data, ...(findApp(model)?.data ?? [])];
     return received({ ...reply, state: { ...reply.state, data: translatedDefaults(decls, reply.state.data, (text) => tr(model!, text)) } });
+  }
+
+  // The person's settings (DESIGN 5.17), when the project has them: what the
+  // shell kept, over their defaults. Every open window has them as its data
+  // `settings`; a change from an input, a handler or a picker is kept by the
+  // shell and switches the language and the theme.
+  const SETTINGS = "settings";
+  let settings: Record<string, unknown> | null = null;
+
+  /** The settings when the application starts: what was kept and still fits, over the defaults. */
+  async function startSettings(preview: Preview) {
+    if (!settingsEntity(preview)) return;
+    const kept = await invoke<Record<string, unknown> | null>("read_settings").catch(() => null);
+    const themes = offeredThemes(preview).map((t) => t.name.name);
+    const language = languageChoice.language ?? base;
+    const theme = themeOf(preview)?.name.name ?? themes[0] ?? "";
+    settings = { ...settingsDefaults(preview, language, theme), ...keptSettings(settingsOf(preview, languages, themes), kept ?? {}) };
+    apply(settings);
+  }
+
+  /** The data a window opens with: its settings as they are now. */
+  function withSettings(withData: Record<string, unknown>): Record<string, unknown> {
+    return settings ? { ...withData, [SETTINGS]: { ...settings } } : withData;
+  }
+
+  /** The settings changed: every open window has them, the shell keeps them, the language and theme follow. */
+  function adopt(next: unknown) {
+    if (!settings || !next || typeof next !== "object") return;
+    const values = next as Record<string, unknown>;
+    if (JSON.stringify(values) === JSON.stringify(settings)) return;
+    settings = { ...values };
+    for (const state of stack) if (SETTINGS in state.data) state.data[SETTINGS] = { ...settings };
+    const { id: _id, ...kept } = settings;
+    invoke("keep_settings", { settings: kept }).catch((err) => say({ level: "error", text: errorText(err) }));
+    apply(settings);
+  }
+
+  /** Shows the language and theme the settings name, when they have them. */
+  function apply(values: Record<string, unknown>) {
+    if (typeof values.language === "string" && values.language !== "" && values.language !== (languageChoice.language ?? base)) {
+      languageChoice.language = values.language === base ? null : values.language;
+      store(LANGUAGE_KEY, values.language);
+      void tellLanguage();
+    }
+    if (typeof values.theme === "string" && values.theme !== "" && values.theme !== themeChoice.theme) {
+      themeChoice.theme = values.theme;
+      store(THEME_KEY, values.theme);
+    }
   }
 
   /** Tells the backend the language the screen picked, so the text code makes is in it too. */
@@ -174,14 +225,14 @@
       },
     },
     {
-      open: async (window, withData) => opened(await invoke<Reply>("open_window", { window, with: withData })),
+      open: async (window, withData) => opened(await invoke<Reply>("open_window", { window, with: withSettings(withData) })),
       close: async (state) => received(await invoke<Reply>("close_window", { state: $state.snapshot(state) })),
       returnTo: async (state) => received(await invoke<Reply>("return_to", { state: $state.snapshot(state) })),
       // A desktop window of its own opens at the size of the window it shows.
       openApart: (window, withData) => {
         const target = model ? findPage(model, window) : undefined;
         const size = target ? windowSize(target) : undefined;
-        return invoke("open_apart", { window, with: withData, width: size?.width, height: size?.height });
+        return invoke("open_apart", { window, with: withSettings(withData), width: size?.width, height: size?.height });
       },
       // The main window ends the application; a window of its own just closes.
       quit: () => invoke(apart ? "close_apart" : "quit_app"),
@@ -287,6 +338,9 @@
     setVisible(part: string, visible: boolean) {
       if (current) current.parts[part] = { ...current.parts[part], visible };
     },
+    keepSettings() {
+      if (current) adopt($state.snapshot(current.data[SETTINGS]));
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {
@@ -371,12 +425,15 @@
     choosing = null;
     store(LANGUAGE_KEY, language);
     void tellLanguage();
+    // The picker changes the same setting a settings window shows.
+    if (settings && "language" in settings) adopt({ ...settings, language });
   }
 
   function chooseTheme(theme: string) {
     themeChoice.theme = theme;
     choosing = null;
     store(THEME_KEY, theme);
+    if (settings && "theme" in settings) adopt({ ...settings, theme });
   }
 
   // The app's `on start` runs before its main window opens; windows it opens
@@ -384,6 +441,7 @@
   invoke<{ model: Preview; main: string }>("start").then(async (start) => {
     model = start.model;
     remember(start.model);
+    await startSettings(start.model);
     await tellLanguage();
     try {
       // A desktop window of its own starts with the window it was opened for.
@@ -393,7 +451,7 @@
         await nav.open(own.window, own.with);
         return;
       }
-      const started = received(await invoke<Reply>("start_app"));
+      const started = received(await invoke<Reply>("start_app"), true);
       await nav.open(start.main);
       await nav.follow(started, -1);
     } catch (err) {
@@ -426,7 +484,7 @@
 
   {#if choosing === "language"}
     <ChoicePicker
-      title="Language"
+      title={model ? ownWord(model, "Language") : "Language"}
       choices={languages.map((l) => ({ value: l, label: languageName(l), lang: l }))}
       current={languageChoice.language ?? base}
       onchoose={chooseLanguage}
@@ -434,7 +492,7 @@
     />
   {:else if choosing === "theme" && model}
     <ChoicePicker
-      title="Theme"
+      title={ownWord(model, "Theme")}
       choices={offeredThemes(model).map((t) => ({ value: t.name.name, label: tr(model!, t.label) }))}
       current={themeOf(model)?.name.name}
       onchoose={chooseTheme}

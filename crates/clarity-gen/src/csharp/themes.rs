@@ -509,7 +509,8 @@ pub fn app_themes(themes: &[&ThemeDecl], namespace: &str) -> String {
             entries,
             "        new({}, {}, {variant}, () => (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri({}))),",
             string(&theme.name.name),
-            string(&theme.label),
+            // A keyed title by its key, which the theme picker translates as it opens.
+            super::texts::Texts::kept(&theme.label),
             string(&format!("avares://{namespace}/{}", theme_path(theme)))
         );
     }

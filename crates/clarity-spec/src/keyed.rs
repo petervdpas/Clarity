@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{PICTURE_KEYS, RENDERER_KEYS, STEP_KEYS, has_letters};
+use crate::translations::{LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, STEP_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -61,7 +61,19 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     // Clarity's own words; an image part bound to a picture has its own, and a wizard.
     let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind ")));
     let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps ")));
-    let own = RENDERER_KEYS.iter().chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] }).chain(if wizards { STEP_KEYS.as_slice() } else { &[] });
+    // The pickers of the click targets `language` and `theme` have a heading.
+    // The settings' own `language` and `theme` are labeled with the same words.
+    let clicks_to = |target: &str| {
+        modules.iter().any(|(_, text)| {
+            text.lines().any(|l| l.split_whitespace().collect::<Vec<_>>().windows(2).any(|w| w == ["->", target]) || (l.starts_with(' ') && l.trim() == target))
+        })
+    };
+    let own = RENDERER_KEYS
+        .iter()
+        .chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] })
+        .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if clicks_to("language") { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
+        .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }
@@ -348,9 +360,14 @@ impl Maker {
 
 /// The block a top-level line starts, and its name.
 fn top(tokens: &[Token]) -> (Block, String) {
-    let name = tokens.get(1).map(|t| t.text.clone()).unwrap_or_default();
+    let name = match tokens[0].text.as_str() {
+        "settings" => crate::parser::SETTINGS_ENTITY.to_string(),
+        _ => tokens.get(1).map(|t| t.text.clone()).unwrap_or_default(),
+    };
     let block = match tokens[0].text.as_str() {
         "entity" => Block::Entity,
+        // The settings' fields are keyed as an entity's: `settingsPageSizeLabel`.
+        "settings" => Block::Entity,
         "enum" => Block::Enum,
         "page" | "app" => Block::Window,
         "theme" => Block::Theme,

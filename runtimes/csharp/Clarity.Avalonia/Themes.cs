@@ -31,6 +31,9 @@ public static class Themes
     /// <summary>The name of the theme shown; null when the application has none.</summary>
     public static string? Current { get; private set; }
 
+    /// <summary>The person chose another theme.</summary>
+    public static event Action? Changed;
+
     /// <summary>Shows the theme kept from an earlier run while it is still offered, else the first.</summary>
     public static void Start(Theme[] themes)
     {
@@ -53,6 +56,7 @@ public static class Themes
             return;
         Remembered.Set(Key, name);
         Show(theme);
+        Changed?.Invoke();
     }
 
     static void Show(Theme? theme)

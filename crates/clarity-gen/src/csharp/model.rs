@@ -14,7 +14,11 @@ pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts) 
         out.push_str(&enum_decl(decl, namespace, texts));
     }
     for entity in &file.entities {
-        out.push_str(&record(project, entity));
+        if entity.settings {
+            out.push_str(&settings_class(project, entity, namespace));
+        } else {
+            out.push_str(&record(project, entity));
+        }
     }
     out
 }
@@ -66,8 +70,8 @@ fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The initial value of a field, when it has one beyond C#'s own default.
 fn initial(field: &Field) -> Option<String> {
     match (&field.ty, field.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url, Some(Literal::Str(s))) => Some(string(s)),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url, _) => Some("\"\"".into()),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, _) => Some("\"\"".into()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
@@ -75,6 +79,130 @@ fn initial(field: &Field) -> Option<String> {
         (FieldType::List { .. }, _) => Some("[]".into()),
         _ => None,
     }
+}
+
+/// The person's settings (DESIGN 5.17) as one shared object: every
+/// window's `Settings` is `Settings.Current`. `Start` takes back what was
+/// kept and still fits (Clarity.Avalonia's KeptSettings), shows its language
+/// and theme, keeps every change, and follows the pickers.
+fn settings_class(project: &Project, entity: &Entity, program: &str) -> String {
+    let name = &entity.name.name;
+    let mut properties = String::new();
+    let mut described = String::new();
+    let mut taken = String::new();
+    let mut json = String::new();
+    let mut follow = String::new();
+    let mut shown = String::new();
+    for f in &entity.fields {
+        let ty = field_type(&f.ty);
+        let prop = property(name, &f.name.name);
+        let field = backing(&f.name.name);
+        let key = string(&f.name.name);
+        let init = initial(f).map(|v| format!(" = {v}")).unwrap_or_default();
+        properties.push_str(&format!("    public {ty} {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}
+    {ty} {field}{init};
+"));
+        let bound = |l: &Option<Literal>| match l {
+            Some(Literal::Number(n)) => string(n),
+            _ => "null".into(),
+        };
+        let (tag, values) = match &f.ty {
+            FieldType::Text { .. } => ("text", "null".to_string()),
+            FieldType::Enum { name } => ("enum", format!("Enum.GetNames<{}>()", name.name)),
+            FieldType::Language => ("language", "Locale.Offered".into()),
+            FieldType::Theme => ("theme", "[.. Themes.Offered.Select(t => t.Name)]".into()),
+            FieldType::DateTime => ("datetime", "null".into()),
+            other => (clarity_spec::widgets::field_type_tag(other), "null".into()),
+        };
+        described.push_str(&format!(
+            "        [{key}] = new({}, {}, {}, {values}),
+",
+            string(tag),
+            bound(&f.modifiers.min),
+            bound(&f.modifiers.max)
+        ));
+        let read = match &f.ty {
+            FieldType::Integer | FieldType::Duration => "v.GetValue<long>()".to_string(),
+            FieldType::Decimal { .. } | FieldType::Money => "decimal.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)".into(),
+            FieldType::Bool => "v.GetValue<bool>()".into(),
+            FieldType::Date => "DateOnly.ParseExact(v.GetValue<string>(), \"yyyy-MM-dd\", CultureInfo.InvariantCulture)".into(),
+            FieldType::DateTime => "DateTime.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)".into(),
+            FieldType::Enum { name } => format!("Enum.Parse<{}>(v.GetValue<string>())", name.name),
+            _ => "v.GetValue<string>()".into(),
+        };
+        taken.push_str(&format!("        if (kept[{key}] is {{ }} {field}Kept) settings.{prop} = {};
+", read.replace("v.", &format!("{field}Kept."))));
+        let written = match &f.ty {
+            FieldType::Decimal { .. } | FieldType::Money => format!("{prop}.ToString(CultureInfo.InvariantCulture)"),
+            FieldType::Date => format!("{prop}?.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture)"),
+            FieldType::DateTime => format!("{prop}?.ToString(\"yyyy-MM-ddTHH:mm:ss\", CultureInfo.InvariantCulture)"),
+            FieldType::Enum { .. } => format!("{prop}.ToString()"),
+            _ => prop.clone(),
+        };
+        json.push_str(&format!("        [{key}] = {written},
+"));
+        match &f.ty {
+            FieldType::Language => {
+                shown.push_str(&format!("        if (!kept.ContainsKey({key})) settings.{prop} = Locale.Current;
+        else if (settings.{prop} != Locale.Current) Locale.Choose(settings.{prop});
+"));
+                follow.push_str(&format!(
+                    "            // The views are rebuilt for a language, so the input that changed it is done first.
+            if (e.PropertyName == nameof({prop}) && settings.{prop} != Locale.Current) Dispatcher.UIThread.Post(() => Locale.Choose(settings.{prop}));
+"
+                ));
+                shown.push_str(&format!("        Locale.Changed += () => settings.{prop} = Locale.Current;
+"));
+            }
+            FieldType::Theme => {
+                shown.push_str(&format!("        if (!kept.ContainsKey({key})) settings.{prop} = Themes.Current ?? \"\";
+        else if (settings.{prop} != Themes.Current) Themes.Choose(settings.{prop});
+"));
+                follow.push_str(&format!("            if (e.PropertyName == nameof({prop}) && settings.{prop} != Themes.Current) Themes.Choose(settings.{prop});
+"));
+                shown.push_str(&format!("        Themes.Changed += () => settings.{prop} = Themes.Current ?? \"\";
+"));
+            }
+            _ => {}
+        }
+    }
+    let _ = project;
+    format!(
+        "/// <summary>The person's settings: one for the whole application, shared by every window, kept on their machine as they change.</summary>
+public sealed partial class {name} : ObservableObject
+{{
+    const string ProgramName = {program};
+
+    /// <summary>The settings shown, the same in every window.</summary>
+    public static {name} Current {{ get; private set; }} = new();
+
+{properties}
+    /// <summary>Takes back what was kept and still fits, shows its language and theme, and keeps every change.</summary>
+    public static void Start()
+    {{
+        var settings = new {name}();
+        var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName));
+{taken}        Current = settings;
+{shown}        settings.PropertyChanged += (_, e) =>
+        {{
+            KeptSettings.Keep(ProgramName, settings.ToJson());
+{follow}        }};
+    }}
+
+    /// <summary>The settings as a kept value is checked against them.</summary>
+    static Dictionary<string, Setting> Described() => new()
+    {{
+{described}    }};
+
+    /// <summary>The settings as they are kept.</summary>
+    public JsonObject ToJson() => new()
+    {{
+{json}    }};
+}}
+
+",
+        program = string(program)
+    )
 }
 
 /// How a field is stored: most values go as they are, enums by name.
@@ -89,7 +217,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
 
 fn from_sql(field: &Field) -> String {
     match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url => "GetText".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "GetText".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
         FieldType::Bool => "GetBoolean".into(),

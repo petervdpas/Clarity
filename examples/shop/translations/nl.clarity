@@ -96,3 +96,5 @@ translation nl
     ok "OK"
     cancel "Annuleren"
     dismiss "Sluiten"
+    languagePicker "Taal"
+    themePicker "Thema"

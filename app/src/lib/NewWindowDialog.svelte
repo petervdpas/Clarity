@@ -29,7 +29,9 @@
     path = file.path;
   });
 
-  const entities = $derived(preview.project.files.flatMap((f) => f.entities.map((e) => e.name.name)));
+  /** The project's settings, which a settings window shows (DESIGN 5.17). */
+  const hasSettings = $derived(preview.project.files.some((f) => f.entities.some((e) => e.settings)));
+  const entities = $derived(preview.project.files.flatMap((f) => f.entities.filter((e) => !e.settings).map((e) => e.name.name)));
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -37,7 +39,13 @@
     if (!target || !name.trim()) return;
     const [kind, entity] = start.split(":");
     const template: PageTemplate =
-      kind === "form" ? { kind: "form", entity } : kind === "browse" ? { kind: "browse", entity } : { kind: "blank" };
+      kind === "form"
+        ? { kind: "form", entity }
+        : kind === "browse"
+          ? { kind: "browse", entity }
+          : kind === "settings"
+            ? { kind: "settings" }
+            : { kind: "blank" };
     onsubmit(target, name.trim(), template);
   }
 
@@ -57,6 +65,7 @@
       <span>Start from</span>
       <select bind:value={start}>
         <option value="blank">Blank window</option>
+        {#if hasSettings}<option value="settings">Settings window</option>{/if}
         {#each entities as entity (entity)}
           <option value="form:{entity}">Form for {entity}</option>
           <option value="browse:{entity}">Browse for {entity}</option>

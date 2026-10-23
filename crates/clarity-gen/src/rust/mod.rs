@@ -221,6 +221,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
+    let program = crate_name(settings);
     // An engine whose file does not fit its declaration stops the application at start, not at its first call.
     let (engines_mod, check_engines, close_engines) = if crate::engines(project).is_empty() {
         ("", "", "    let _ = instance;\n")
@@ -391,7 +392,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         })
         .collect();
     let options: String = project
-        .entities()
+        .stored_entities()
         .map(|e| {
             let name = &e.name.name;
             let text = display_field(e).map_or("format!(\"#{}\", r.id)".to_string(), |f| format!("r.{f}.clone()"));
@@ -424,6 +425,8 @@ use serde_json::{{Map, Value}};
 /// The windows, frame and data dictionary the renderer draws from.
 const MODEL: &str = include_str!("model.json");
 const MAIN_WINDOW: &str = {main_window:?};
+/// The program's name, which names the folder its settings are kept in.
+const PROGRAM: &str = {program:?};
 /// The database of each data source: its kind, and its file or connection
 /// (`env:NAME` reads it from that environment variable when the
 /// application starts).
@@ -616,6 +619,18 @@ fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
 }}
 
+/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
+#[tauri::command]
+fn read_settings() -> Map<String, Value> {{
+    clarity_runtime::settings::read(PROGRAM)
+}}
+
+/// Keeps the person's settings, as the screen has them now.
+#[tauri::command]
+fn keep_settings(settings: Map<String, Value>) -> Answer<()> {{
+    clarity_runtime::settings::keep(PROGRAM, &settings).map_err(|err| Value::from(err.to_string()))
+}}
+
 /// The language the screen picked, which text code makes is translated to.
 #[tauri::command]
 fn set_language(language: Option<String>) {{
@@ -651,6 +666,8 @@ fn main() {{
             ref_options,
             picture,
             store_file,{apart_commands}
+            read_settings,
+            keep_settings,
             set_language,
             set_title,
             open_link,

@@ -13,4 +13,9 @@ table: string | null,
  * `key "InvoiceID"`: the integer column that identifies a record, in
  * an existing table; `id` otherwise.
  */
-key: string | null, span: Span, };
+key: string | null, 
+/**
+ * The project's settings (`settings` block, DESIGN 5.17): kept per
+ * person on their machine, never in the database; named `Settings`.
+ */
+settings: boolean, span: Span, };

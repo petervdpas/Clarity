@@ -172,6 +172,8 @@ impl Output {
 /// What a file can see: its own module and the modules it uses.
 struct Env<'a> {
     visible: Vec<&'a SpecFile>,
+    /// The project's settings, seen from every module.
+    settings: Option<&'a Entity>,
     /// Functions of the same module declared in files before this one.
     earlier_functions: Vec<&'a FunctionDecl>,
 }
@@ -195,12 +197,13 @@ impl<'a> Env<'a> {
             .collect();
         Self {
             visible,
+            settings: files.iter().flat_map(|f| &f.entities).find(|e| e.settings),
             earlier_functions,
         }
     }
 
     fn entity(&self, name: &str) -> Option<&'a Entity> {
-        self.visible.iter().flat_map(|f| &f.entities).find(|e| e.name.name == name)
+        self.visible.iter().flat_map(|f| &f.entities).find(|e| e.name.name == name && !e.settings).or_else(|| self.settings.filter(|s| s.name.name == name))
     }
 
     fn enum_decl(&self, name: &str) -> Option<&'a EnumDecl> {
@@ -256,7 +259,7 @@ impl<'a> Env<'a> {
 
     fn field_type(&self, ty: &FieldType) -> Ty<'a> {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url => Ty::Text,
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => Ty::Text,
             FieldType::Integer | FieldType::Id => Ty::Integer,
             FieldType::Decimal { .. } => Ty::Decimal,
             FieldType::Money => Ty::Money,
@@ -1677,6 +1680,22 @@ impl<'a> BodyChecker<'_, 'a> {
         let value_ty = if self.shows(target) { self.shown_text(value) } else { self.expr(value, Some(ty)) };
         if !ty.accepts(&value_ty) {
             self.error(format!("cannot set {} to {}", ty.name(), value_ty.name()), value.span);
+        }
+        // A color field takes text, written as a color is kept.
+        if let ExprKind::Str { value: text } = &value.kind
+            && self.field_of(target).is_some_and(|f| f.ty == FieldType::Color)
+            && !crate::colors::is_kept(text)
+        {
+            self.error(crate::colors::COLOR_PROBLEM, value.span);
+        }
+    }
+
+    /// The field a member path names, as `product.tint`, once its record is resolved.
+    fn field_of(&self, target: &Expr) -> Option<&'a crate::model::Field> {
+        let ExprKind::Member { object, member } = &target.kind else { return None };
+        match self.out.types.types.get(&(object.span.start, object.span.end))? {
+            TypeInfo::Record(entity) => self.env.entity(entity)?.field(&member.name),
+            _ => None,
         }
     }
 

@@ -52,14 +52,14 @@
   } = $props();
 
   /** Clarity's field types, offered when a field's type is typed. */
-  const CLARITY_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url"];
+  const CLARITY_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color"];
 
   let tab = $state<"design" | "text">("design");
   let error = $state<string | null>(null);
 
   /** The project's entities and enums: the boxes a click opens. */
   const known = $derived(
-    preview.project.files.flatMap((f) => [...f.entities.map((e) => e.name.name), ...f.enums.map((e) => e.name.name)]),
+    preview.project.files.flatMap((f) => [...f.entities.filter((e) => !e.settings).map((e) => e.name.name), ...f.enums.map((e) => e.name.name)]),
   );
   const enums = $derived(preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)));
 

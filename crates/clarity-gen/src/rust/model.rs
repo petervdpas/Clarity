@@ -83,6 +83,8 @@ fn to_sql(field: &Field) -> String {
         FieldType::Enum { .. } => format!("sql::name(&{value})"),
         FieldType::Ref { .. } => format!("sql::reference({value})"),
         FieldType::Image => format!("sql::picture(&{value})"),
+        // Its content, then its name in the column beside it.
+        FieldType::File => format!("sql::file_content(&{value}),\n            sql::file_name(&{value})"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -98,6 +100,7 @@ fn from_sql(field: &Field) -> &'static str {
         FieldType::Enum { .. } => "get_name",
         FieldType::Ref { .. } => "get_reference",
         FieldType::Image => "get_picture",
+        FieldType::File => "get_file",
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -122,19 +125,24 @@ fn record(project: &Project, entity: &Entity) -> String {
         return out;
     }
 
-    let columns = stored(entity).map(|f| format!("{:?}", entity.column_of(&f.name.name))).collect::<Vec<_>>().join(", ");
-    let to_values: String = stored(entity).map(|f| format!("            {},\n", to_sql(f))).collect();
-    let from_values: String = stored(entity)
-        .enumerate()
-        .map(|(i, f)| {
-            format!(
-                "            {}: sql::{}({:?}, &values[{i}])?,\n",
-                ident(&f.name.name),
-                from_sql(f),
-                f.name.name
-            )
+    // A file has the column of its name beside its own.
+    let columns = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
         })
-        .collect();
+        .map(|c| format!("{c:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let to_values: String = stored(entity).map(|f| format!("            {},\n", to_sql(f))).collect();
+    let mut at = 0;
+    let mut from_values = String::new();
+    for f in stored(entity) {
+        let values = if f.ty == FieldType::File { format!("&values[{at}], &values[{}]", at + 1) } else { format!("&values[{at}]") };
+        from_values.push_str(&format!("            {}: sql::{}({:?}, {values})?,\n", ident(&f.name.name), from_sql(f), f.name.name));
+        at += if f.ty == FieldType::File { 2 } else { 1 };
+    }
     let lists: String = entity
         .fields
         .iter()
@@ -154,8 +162,12 @@ fn record(project: &Project, entity: &Entity) -> String {
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| f.ty == FieldType::Image)
-        .map(|f| format!("PictureColumn {{ column: {:?}, store: {:?} }}", entity.column_of(&f.name.name), f.modifiers.store.as_deref()))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .map(|f| {
+            let column = entity.column_of(&f.name.name);
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            format!("PictureColumn {{ column: {column:?}, store: {:?}, name: {name:?} }}", f.modifiers.store.as_deref())
+        })
         .collect();
     let pictures = if pictures.is_empty() {
         String::new()

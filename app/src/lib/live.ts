@@ -87,6 +87,12 @@ export interface Live {
   storeFile(store: string, path: string): string | null | undefined;
   /** Forgets a fetched picture that a new one replaces. */
   forgetPicture(entity: string, id: number, field: string): void;
+  /** A record's stored file, fetched on its own, as base64; null when there is none. */
+  fileData(entity: string, id: number, field: string): Promise<string | null>;
+  /** Opens a file in the program the system uses for its kind. */
+  openFile(name: string, data: string): Promise<void>;
+  /** Saves a copy of a file in the person's Downloads folder, and says so. */
+  saveFile(name: string, data: string): Promise<void>;
 }
 
 export function provideLive(live: Live) {

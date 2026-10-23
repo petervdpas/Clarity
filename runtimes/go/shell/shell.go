@@ -182,6 +182,8 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Path     string              `json:"path"`
 		Address  string              `json:"address"`
 		Settings map[string]any      `json:"settings"`
+		Name     string              `json:"name"`
+		Data     string              `json:"data"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -245,6 +247,27 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 			return answer(nil, err)
 		}
 		return answer(clarity.DataURL(b))
+	case "file_data":
+		// The file of a file field of a record, fetched on its own, as base64.
+		b, err := c.options.Windows.Picture(db, a.Entity, a.ID, a.Field)
+		if err != nil || b == nil {
+			return answer(nil, err)
+		}
+		return answer(clarity.FileData(b), nil)
+	case "open_file":
+		// Opens a file in the program the system uses for its kind.
+		b, err := clarity.FromFileData(a.Data)
+		if err == nil {
+			err = clarity.OpenFile(a.Name, b)
+		}
+		return answer(nil, err)
+	case "save_file":
+		// Saves a copy of a file in the person's Downloads folder; where it went.
+		b, err := clarity.FromFileData(a.Data)
+		if err != nil {
+			return failed(err)
+		}
+		return answer(clarity.SaveCopy(a.Name, b))
 	case "store_file":
 		// A picture linked from a file of a store, before its record is saved.
 		b, err := db.StoreFile(a.Store, a.Path)

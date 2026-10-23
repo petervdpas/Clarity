@@ -250,6 +250,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `datetime` | a date with a time |
 | `duration` | a length of time in whole seconds, shown and typed as `3:45` or `1:02:03` everywhere |
 | `image` | a picture (png, jpg, gif, bmp or webp), kept in the database, or with `store` as a file; see [Pictures in records](#pictures-in-records) |
+| `file` | any file, with its name, kept in the database, or with `store` as a file; see [Files in records](#files-in-records) |
 | `email` | an e-mail address |
 | `url` | a web address |
 | `color` | a color, kept as text `#rrggbb`: `default "#3b82f6"`; code sets it as such text |
@@ -301,6 +302,21 @@ entity Artist
 - In code, a picture is compared with `none` and set to `none`: `if album.cover != none`, `album.cover = none`. Copying a picture from one record to another comes later. A query can find the records with or without one: `where a.cover == none`.
 - A table or list does not show a picture column; an image part does.
 - Moving a field's pictures between the database and a file store, or between `image` and another type, is a change that can lose data: pictures do not move by themselves.
+
+### Files in records
+
+A `file` field holds any file a record keeps, such as a manual, a contract or a spreadsheet, with its name, or none:
+
+```clarity
+entity Product
+    manual: file, label @manualLabel
+    sheet: file, store documents, label @sheetLabel
+```
+
+- **Where it is kept.** Without `store`, the file is in the database: its bytes in the field's column and its name in a column beside it, `manual_name`, which migrations add, rename and remove with the field. With `store`, it is a file of that file store, in a folder named by its contents and under its own name (`3fa9c1.../datasheet.pdf`); the column holds that path, and the name column is there too. A field cannot become a file or stop being one; remove it and add a new field.
+- **The file part** shows the file's name, or Clarity's word `noFile`, with buttons to choose a file, open it in the program the system uses for its kind, save a copy, and remove it: `file name manualBox at 1,1 span 8 bind product.manual`. Choosing and removing are its `change`. A copy goes to the person's Downloads folder under the file's name (with ` (2)` and on when that name is taken there), and the part says so in Clarity's word `fileCopySaved`. Its buttons are Clarity's words `chooseFile`, `openFile`, `saveFileCopy` and `removeFile`.
+- **Reading records never carries the file itself,** only its name; the file comes on its own when it is opened or copied.
+- **In code,** `product.manual.name` and `product.manual.extension` read its name and extension, a file is compared with and set to `none`, and set to a file of a store, as `files f in documents` finds them (see [Files](#files)). A file cannot be unique or have a default, and a table or list does not show a file column; a file part does.
 
 ### Formats
 
@@ -384,6 +400,7 @@ How fields are stored:
 | `text`, `url` | TEXT | TEXT | TEXT | NVARCHAR(MAX) |
 | `email` | TEXT | VARCHAR(320) | VARCHAR(320) | NVARCHAR(320) |
 | `color` | TEXT | VARCHAR(7) | VARCHAR(7) | NVARCHAR(7) |
+| `file` | BLOB, and TEXT for its name | BYTEA, VARCHAR(255) | LONGBLOB, VARCHAR(255) | VARBINARY(MAX), NVARCHAR(255) |
 | `integer`, `id`, `ref` | INTEGER | BIGINT | BIGINT | BIGINT |
 | `decimal(p, s)` | TEXT | NUMERIC(p,s) | DECIMAL(p,s) | DECIMAL(p,s) |
 | `money` | TEXT | NUMERIC(19,4) | DECIMAL(19,4) | DECIMAL(19,4) |
@@ -569,6 +586,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `radio` | an enum, as one button per value | `horizontal` or `vertical`, `readonly`, `taborder` | `change` |
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
 | `color` | color | `readonly`, `taborder` | `change` |
+| `file` | file | `readonly`, `taborder` | `change` |
 | `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
 | `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `button` | nothing | `taborder`, `key`, `default`, `cancel`, `icon "save"`, `split` | `click` |

@@ -464,7 +464,7 @@ impl<'a> Checker<'a> {
         }
         for (file, settings) in blocks {
             for field in &settings.fields {
-                let plain = !matches!(field.ty, FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::Id);
+                let plain = !matches!(field.ty, FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File | FieldType::Id);
                 if !plain {
                     self.error(file, format!("a setting is a plain value; '{}' cannot be {}", field.name.name, field.type_text), field.span);
                 }
@@ -1247,6 +1247,11 @@ impl<'a> Checker<'a> {
                             format!("{at}: '{field}' is a picture; show it in an image part"),
                             widget.span,
                         ),
+                        Some(f) if f.ty == FieldType::File => self.error(
+                            file,
+                            format!("{at}: '{field}' is a file; show it in a file part"),
+                            widget.span,
+                        ),
                         Some(_) => {}
                     }
                 }
@@ -1359,8 +1364,16 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if m.store.is_some() && field.ty != FieldType::Image {
-            self.error(file, format!("only an image field has a store ('{name}')"), field.span);
+        if m.store.is_some() && !matches!(field.ty, FieldType::Image | FieldType::File) {
+            self.error(file, format!("only an image or a file field has a store ('{name}')"), field.span);
+        }
+        if field.ty == FieldType::File {
+            if m.unique {
+                self.error(file, format!("a file cannot be unique ('{name}')"), field.span);
+            }
+            if m.default.is_some() {
+                self.error(file, format!("a file has no default; it starts empty ('{name}')"), field.span);
+            }
         }
         if field.ty == FieldType::Image {
             if m.unique {
@@ -1415,7 +1428,7 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if let Some(default) = m.default.as_ref().filter(|_| field.ty != FieldType::Image) {
+        if let Some(default) = m.default.as_ref().filter(|_| !matches!(field.ty, FieldType::Image | FieldType::File)) {
             self.check_default(file, field, default);
         }
     }

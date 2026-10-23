@@ -84,6 +84,29 @@ public sealed partial class Db : IDisposable
             var at = R.ColumnNames.ToList().IndexOf(picture.Column);
             if (at < 0 || values[at] is not byte[] bytes)
                 continue;
+            // A file of a file field is kept under its own name, in a folder named by its contents.
+            if (picture.Name is { } nameColumn)
+            {
+                if (picture.Store is not { } fileStore)
+                    continue;
+                var named = R.ColumnNames.ToList().IndexOf(nameColumn) is var n and >= 0 ? values[n] as string : null;
+                var path = RecordFiles.StorePath(bytes, named);
+                var kept = Pictures.InStore(StoreFolder(fileStore), path);
+                try
+                {
+                    if (!File.Exists(kept))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(kept)!);
+                        File.WriteAllBytes(kept, bytes);
+                    }
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    throw new StorageException($"cannot write {kept}: {e.Message}", e);
+                }
+                values[at] = path;
+                continue;
+            }
             var name = Pictures.FileName(bytes);
             if (picture.Store is not { } store)
                 continue;

@@ -78,7 +78,7 @@ fn rust_records_hold_their_pictures() {
 ");
     has(music, "            sql::picture(&self.cover),\n");
     has(music, "            cover: sql::get_picture(\"cover\", &values[1])?,\n");
-    has(music, "    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: \"cover\", store: None }, PictureColumn { column: \"photo\", store: Some(\"photos\") }];\n");
+    has(music, "    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: \"cover\", store: None, name: None }, PictureColumn { column: \"photo\", store: Some(\"photos\"), name: None }];\n");
     let main = text(&files, "src/main.rs");
     has(main, "const STORES: &[(&str, &str)] = &[(\"photos\", \"env:PHOTO_FOLDER\")];");
     has(main, "db.add_store(name, at).expect(\"cannot open a file store\");");

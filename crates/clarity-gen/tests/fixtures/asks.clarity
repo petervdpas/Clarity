@@ -15,6 +15,7 @@ entity Album
     favourite: bool
     rating: decimal(3, 1), min 0, max 5
     tint: color, default "#3b82f6"
+    booklet: file
 
 settings
     language
@@ -60,6 +61,7 @@ page Albums: window
     color name tintBox at 10,11 span 3 bind album.tint on change: favouriteChanged
     switch name toolbarSwitch at 1,12 span 3 bind settings.showToolbar
     dropdown name languageBox at 4,12 span 3 bind settings.language
+    file name bookletBox at 1,13 span 8 bind album.booklet on change: bookletChanged
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -123,6 +125,11 @@ code Albums
         if notesAccordion.open == 0
             notesAccordion.open = 2
         albumCopiesBoxLabel.visible = leftToggle.checked
+
+    handler bookletChanged
+        if album.booklet != none and album.booklet.extension != "pdf"
+            lendingBusy.visible = album.booklet.name == ""
+            album.booklet = none
 
     handler newClicked
         ask NewAlbum then added

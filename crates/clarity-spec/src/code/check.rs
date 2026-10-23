@@ -56,6 +56,8 @@ pub enum TypeInfo {
     Duration,
     /// A picture of an image field.
     Image,
+    /// The file of a `file` field: its name and extension are read.
+    RecordFile,
     /// A file of a file store, and a list of them.
     File,
     Files,
@@ -268,6 +270,7 @@ impl<'a> Env<'a> {
             FieldType::DateTime => Ty::DateTime,
             FieldType::Duration => Ty::Duration,
             FieldType::Image => Ty::Image,
+            FieldType::File => Ty::RecordFile,
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
             FieldType::Ref { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
@@ -286,6 +289,8 @@ enum Ty<'a> {
     DateTime,
     Duration,
     Image,
+    /// The file of a `file` field.
+    RecordFile,
     File,
     Files,
     Bytes,
@@ -310,6 +315,7 @@ impl Ty<'_> {
             Ty::DateTime => TypeInfo::DateTime,
             Ty::Duration => TypeInfo::Duration,
             Ty::Image => TypeInfo::Image,
+            Ty::RecordFile => TypeInfo::RecordFile,
             Ty::File => TypeInfo::File,
             Ty::Bytes => TypeInfo::Bytes,
             Ty::Files => TypeInfo::Files,
@@ -332,6 +338,7 @@ impl Ty<'_> {
             Ty::DateTime => "datetime".into(),
             Ty::Duration => "duration".into(),
             Ty::Image => "image".into(),
+            Ty::RecordFile => "file".into(),
             Ty::File => "file".into(),
             Ty::Bytes => "bytes".into(),
             Ty::Files => "list<file>".into(),
@@ -353,7 +360,7 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Image | Ty::File | Ty::Files | Ty::Bytes)
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Image | Ty::RecordFile | Ty::File | Ty::Files | Ty::Bytes)
     }
 
     fn same(&self, other: &Ty) -> bool {
@@ -1669,6 +1676,13 @@ impl<'a> BodyChecker<'_, 'a> {
         if let Err(message) = writable {
             self.error(message, target.span);
         }
+        // A file of a store becomes a record's file; another record's cannot be copied yet.
+        if matches!(ty, Ty::RecordFile) && !matches!(value.kind, ExprKind::Empty) {
+            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::Unknown) {
+                self.error("a file cannot be copied from one record to another yet", value.span);
+            }
+            return;
+        }
         if matches!(ty, Ty::Image) && !matches!(value.kind, ExprKind::Empty) {
             // A file of a file store becomes the picture; another record's
             // picture cannot be copied yet.
@@ -1856,6 +1870,14 @@ impl<'a> BodyChecker<'_, 'a> {
                 ty: Ty::Unknown,
                 writable: Ok(()),
             }),
+            // A record's file: its name and extension, read only.
+            Ty::RecordFile => match member {
+                "name" | "extension" => Some(Place::Value { ty: Ty::Text, writable: Err(format!("a file's {member} is read, not set")) }),
+                _ => {
+                    self.error(format!("a file of a record has name and extension, not '{member}'"), span);
+                    None
+                }
+            },
             Ty::Bytes => match member {
                 "size" => Some(Place::Value { ty: Ty::Integer, writable: Err("the size of bytes is read, not set".into()) }),
                 _ => {
@@ -2501,7 +2523,7 @@ impl<'a> BodyChecker<'_, 'a> {
     /// a date and time or a reference, and of nothing else.
     fn empty(&mut self, expected: Option<Ty<'a>>, span: Span) -> Ty<'a> {
         match expected {
-            Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Image | Ty::Unknown)) => ty,
+            Some(ty @ (Ty::Date | Ty::DateTime | Ty::Record(_) | Ty::Image | Ty::RecordFile | Ty::Unknown)) => ty,
             Some(Ty::Text) => {
                 self.error("text is never none; empty text is \"\"", span);
                 Ty::Unknown

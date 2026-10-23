@@ -52,6 +52,19 @@ impl Column {
         self.column.as_deref().unwrap_or(&self.name)
     }
 
+    /// The column beside a `file` field that holds the file's name
+    /// (`manual_name`), which comes and goes with it; none for other fields.
+    pub fn name_column(&self) -> Option<Column> {
+        (self.ty == FieldType::File).then(|| Column {
+            name: format!("{}_name", self.name),
+            ty: FieldType::Text { max_length: Some(FILE_NAME_LENGTH) },
+            unique: false,
+            default: None,
+            column: Some(format!("{}_name", self.stored())),
+            store: None,
+        })
+    }
+
     /// Whether two columns store the same kind of value; a rename is
     /// proposed only between such columns.
     fn same_type(&self, other: &Column) -> bool {
@@ -65,6 +78,9 @@ impl Column {
         self.same_type(other) || (seconds(&self.ty) && seconds(&other.ty))
     }
 }
+
+/// The longest name of a file of a `file` field.
+pub const FILE_NAME_LENGTH: u32 = 255;
 
 /// The stored shape of an entity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -237,6 +253,10 @@ impl Schema {
             }
             Op::ChangeField { entity, field, ty, store } => {
                 let column = self.table_mut(entity)?.column_mut(field)?;
+                // A file has a column for its name, which no other value has.
+                if (column.ty == FieldType::File) != (*ty == FieldType::File) {
+                    return Err(format!("{entity}.{field} cannot become a file or stop being one; remove it and add a new field"));
+                }
                 column.ty = ty.clone();
                 column.store = store.clone();
             }

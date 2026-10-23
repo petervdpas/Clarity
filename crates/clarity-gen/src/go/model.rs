@@ -99,6 +99,8 @@ fn to_value(f: &Field) -> String {
     match &f.ty {
         FieldType::Enum { .. } => format!("string({value})"),
         FieldType::Image => format!("clarity.PictureValue({value})"),
+        // Its content, then its name in the column beside it.
+        FieldType::File => format!("clarity.FileContent({value}), clarity.FileNameValue({value})"),
         _ => value,
     }
 }
@@ -114,6 +116,7 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
         FieldType::DateTime => format!("read.DateTime({i}, {column})"),
         FieldType::Ref { .. } => format!("read.Reference({i}, {column})"),
         FieldType::Image => format!("read.Picture({i}, {column})"),
+        FieldType::File => format!("read.File({i}, {column})"),
         FieldType::Enum { name } => {
             let names: String =
                 project.enum_decl(&name.name).map(|d| d.variants.iter().map(|v| format!(", {}", string(&v.name.name))).collect()).unwrap_or_default();
@@ -131,11 +134,22 @@ fn record(project: &Project, entity: &Entity) -> String {
     }
     let defaults: Vec<String> =
         stored(entity).filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
-    let columns = stored(entity).map(|f| string(entity.column_of(&f.name.name))).collect::<Vec<_>>().join(", ");
+    // A file has the column of its name beside its own.
+    let columns = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
+        })
+        .map(|c| string(&c))
+        .collect::<Vec<_>>()
+        .join(", ");
     let values = stored(entity).map(to_value).collect::<Vec<_>>().join(", ");
     let mut load = String::new();
-    for (i, f) in stored(entity).enumerate() {
-        let _ = writeln!(load, "\tr.{} = {}", field(&f.name.name), read(i, f, project));
+    let mut at = 0;
+    for f in stored(entity) {
+        let _ = writeln!(load, "\tr.{} = {}", field(&f.name.name), read(at, f, project));
+        at += if f.ty == FieldType::File { 2 } else { 1 };
     }
     let mut out = format!(
         "type {name} struct {{\n{}}}\n\n// New{name} is a new {} with its defaults.\nfunc New{name}() {name} {{\n\treturn {name}{{{}}}\n}}\n\n",
@@ -156,10 +170,12 @@ fn record(project: &Project, entity: &Entity) -> String {
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| f.ty == FieldType::Image)
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
         .map(|f| {
+            let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map(|s| format!(", Store: {}", string(s))).unwrap_or_default();
-            format!("{{Column: {}{store}}}", string(entity.column_of(&f.name.name)))
+            let name = if f.ty == FieldType::File { format!(", Name: {}", string(&format!("{column}_name"))) } else { String::new() };
+            format!("{{Column: {}{store}{name}}}", string(column))
         })
         .collect();
     if !pictures.is_empty() {

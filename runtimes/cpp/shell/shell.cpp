@@ -101,6 +101,21 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             auto bytes = options_.windows->picture(db, text_of(args, "entity"), args.value("id", int64_t(0)), text_of(args, "field"));
             return value(bytes ? json(data_url(*bytes)) : json());
         }
+        if (command == "file_data") {
+            // The file of a file field of a record, fetched on its own, as base64.
+            auto bytes = options_.windows->picture(db, text_of(args, "entity"), args.value("id", int64_t(0)), text_of(args, "field"));
+            return value(bytes ? json(base64(*bytes)) : json());
+        }
+        if (command == "open_file") {
+            // Opens a file in the program the system uses for its kind, from a temporary copy.
+            std::string file = temporary_copy(text_of(args, "name"), from_base64(text_of(args, "data")));
+            if (!open_link || !open_link(file)) return {{"error", "cannot open " + file}};
+            return value(nullptr);
+        }
+        if (command == "save_file") {
+            // Saves a copy of a file in the person's Downloads folder; where it went.
+            return value(save_copy(text_of(args, "name"), from_base64(text_of(args, "data"))));
+        }
         if (command == "store_file") {
             // A picture linked from a file of a store, before its record is saved.
             return value(data_url(db.store_file(text_of(args, "store"), text_of(args, "path"))));

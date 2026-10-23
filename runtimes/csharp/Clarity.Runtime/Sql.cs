@@ -24,6 +24,16 @@ public static class Sql
     /// <summary>A picture as it is saved: none, the one stored already (kept), or a new one.</summary>
     public static object? Picture(Picture? value) => value is null ? null : value.Bytes ?? (object?)value.FilePath ?? Kept;
 
+    /// <summary>What a file field stores in its own column: as a picture does.</summary>
+    public static object? FileContent(RecordFile? file) => Picture(file?.Content);
+
+    /// <summary>What a file field stores in the column of its name: "" for no file, as the column is never NULL.</summary>
+    public static string FileName(RecordFile? file) => file?.Name ?? "";
+
+    /// <summary>A record's file, from whether it has one (as for a picture) and its name.</summary>
+    public static RecordFile? GetFile(string column, object? content, object? name) =>
+        GetPicture(column, content) is { } picture ? new RecordFile(RecordFiles.CleanName(name as string), picture) : null;
+
     /// <summary>
     /// Whether a record has a picture: what the select list reads of one kept in
     /// the database (1 or 0), or the path of its file in a file store.

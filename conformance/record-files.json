@@ -1,0 +1,124 @@
+{
+  "about": "The file field of U1c: any file a record keeps, with its name. `storePaths` gives the path of a file in a file store: a folder named by the first 32 hex digits of the SHA-256 of its bytes, and in it the file under its own name, so two files of the same name and different contents both stay, and the same file is kept once; the name is the last part of what was chosen (after any `/` or `\\`), trimmed, `file` when nothing is left. `names` gives the name a path in a store shows: its last part. `downloads` gives the folder a copy is saved in, for the system (`windows`, `macos`, or another, `linux`) and its environment: `Downloads` in `USERPROFILE` on Windows, in `HOME` elsewhere; null when the environment names no home. `copies` gives the name a copy gets in that folder when names are taken there: the name itself, else ` (2)`, ` (3)` and on before its extension.",
+  "storePaths": [
+    {
+      "text": "%PDF-1.7 manual",
+      "chosen": "manual.pdf",
+      "path": "3b0099601a81501ed1728f6da4f6831b/manual.pdf"
+    },
+    {
+      "text": "hello",
+      "chosen": "C:\\Users\\ada\\notes.txt",
+      "path": "2cf24dba5fb0a30e26e83b2ac5b9e29e/notes.txt"
+    },
+    {
+      "text": "hello",
+      "chosen": "/home/ada/notes.txt",
+      "path": "2cf24dba5fb0a30e26e83b2ac5b9e29e/notes.txt"
+    },
+    {
+      "text": "hello",
+      "chosen": "  report.docx  ",
+      "path": "2cf24dba5fb0a30e26e83b2ac5b9e29e/report.docx"
+    },
+    {
+      "text": "x",
+      "chosen": "",
+      "path": "2d711642b726b04401627ca9fbac32f5/file"
+    },
+    {
+      "text": "x",
+      "chosen": "dir/",
+      "path": "2d711642b726b04401627ca9fbac32f5/file"
+    }
+  ],
+  "names": [
+    {
+      "path": "3fa9c1d2e4f5061728394a5b6c7d8e9f/datasheet.pdf",
+      "name": "datasheet.pdf"
+    },
+    {
+      "path": "00112233445566778899aabbccddeeff/Read me",
+      "name": "Read me"
+    }
+  ],
+  "downloads": [
+    {
+      "os": "linux",
+      "env": {
+        "HOME": "/home/ada"
+      },
+      "folder": "/home/ada/Downloads"
+    },
+    {
+      "os": "macos",
+      "env": {
+        "HOME": "/Users/ada"
+      },
+      "folder": "/Users/ada/Downloads"
+    },
+    {
+      "os": "windows",
+      "env": {
+        "USERPROFILE": "C:/Users/ada",
+        "HOME": "/x"
+      },
+      "folder": "C:/Users/ada/Downloads"
+    },
+    {
+      "os": "linux",
+      "env": {},
+      "folder": null
+    },
+    {
+      "os": "windows",
+      "env": {
+        "HOME": "C:/Users/ada"
+      },
+      "folder": null
+    }
+  ],
+  "copies": [
+    {
+      "name": "manual.pdf",
+      "taken": [],
+      "saved": "manual.pdf"
+    },
+    {
+      "name": "manual.pdf",
+      "taken": [
+        "manual.pdf"
+      ],
+      "saved": "manual (2).pdf"
+    },
+    {
+      "name": "manual.pdf",
+      "taken": [
+        "manual.pdf",
+        "manual (2).pdf"
+      ],
+      "saved": "manual (3).pdf"
+    },
+    {
+      "name": "notes",
+      "taken": [
+        "notes"
+      ],
+      "saved": "notes (2)"
+    },
+    {
+      "name": "archive.tar.gz",
+      "taken": [
+        "archive.tar.gz"
+      ],
+      "saved": "archive.tar (2).gz"
+    },
+    {
+      "name": ".profile",
+      "taken": [
+        ".profile"
+      ],
+      "saved": ".profile (2)"
+    }
+  ]
+}

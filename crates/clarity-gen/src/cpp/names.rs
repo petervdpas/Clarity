@@ -71,6 +71,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "std::optional<int64_t>".into(),
         FieldType::Image => "std::optional<clarity::Picture>".into(),
+        FieldType::File => "std::optional<clarity::RecordFile>".into(),
         FieldType::List { item } => format!("std::vector<{}>", item.name),
     }
 }
@@ -85,6 +86,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "std::optional<clarity::Date>".into(),
         TypeInfo::DateTime => "std::optional<clarity::DateTime>".into(),
         TypeInfo::Image => "std::optional<clarity::Picture>".into(),
+        TypeInfo::RecordFile => "std::optional<clarity::RecordFile>".into(),
         TypeInfo::File => "clarity::FileEntry".into(),
         TypeInfo::Files => "std::vector<clarity::FileEntry>".into(),
         TypeInfo::Bytes => "clarity::Bytes".into(),

@@ -40,7 +40,9 @@ func NewPicture(b []byte) *Picture { return &Picture{Bytes: b} }
 
 // PictureColumn is an image field's column, and the file store it keeps its
 // pictures in; without one they are in the database.
-type PictureColumn struct{ Column, Store string }
+// For a file field, Name is the column beside it that holds the file's
+// name: any file is kept, not only a picture, and in a store under its name.
+type PictureColumn struct{ Column, Store, Name string }
 
 // Pictured is a record with image fields: reading it gives only whether
 // there is a picture, and saving leaves a stored picture alone.
@@ -243,6 +245,37 @@ func (db *Db) savedValues(record Record) ([]any, error) {
 		p, ok := pictureColumn(record, c)
 		b, isNew := values[i].([]byte)
 		if !ok || !isNew {
+			continue
+		}
+		// A file of a file field is kept under its own name, in a folder named by its contents.
+		if p.Name != "" {
+			if p.Store == "" {
+				continue
+			}
+			named := ""
+			for j, c := range columns {
+				if c == p.Name {
+					named, _ = values[j].(string)
+				}
+			}
+			folder, err := db.storeFolder(p.Store)
+			if err != nil {
+				return nil, err
+			}
+			path := StorePath(b, named)
+			file, err := inStore(folder, path)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := os.Stat(file); err != nil {
+				if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+					return nil, &StorageError{What: "cannot make " + filepath.Dir(file) + ": " + err.Error(), Err: err}
+				}
+				if err := os.WriteFile(file, b, 0o644); err != nil {
+					return nil, &StorageError{What: "cannot write " + file + ": " + err.Error(), Err: err}
+				}
+			}
+			values[i] = path
 			continue
 		}
 		name, err := FileName(b)

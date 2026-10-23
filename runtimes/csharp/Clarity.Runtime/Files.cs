@@ -100,6 +100,13 @@ public sealed partial class Db
         return fieldStore == file.Store ? Picture.InStore(file.Path) : Picture.New(bytes);
     }
 
+    /// <summary>
+    /// A file of a store as the file of a file field kept in <paramref name="fieldStore"/>
+    /// (null: in the database), under its name: the file itself when it is in that store, else a copy.
+    /// </summary>
+    public RecordFile RecordFileFrom(FileEntry file, string? fieldStore) =>
+        new(file.Name, fieldStore == file.Store ? Picture.InStore(file.Path) : Picture.New(ReadFile(file)));
+
     byte[] ReadFile(FileEntry file)
     {
         var path = Pictures.InStore(StoreFolder(file.Store), file.Path);

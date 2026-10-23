@@ -183,7 +183,7 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         FieldType::DateTime => matches!(k, Kind::DateTime | Kind::Text),
         FieldType::Ref { .. } => k == Kind::Integer,
         // The picture itself, or the path of its file in a file store.
-        FieldType::Image => matches!(k, Kind::Blob | Kind::Text),
+        FieldType::Image | FieldType::File => matches!(k, Kind::Blob | Kind::Text),
         FieldType::List { .. } => false,
     }
 }

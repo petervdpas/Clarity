@@ -382,6 +382,20 @@
       }
       return undefined;
     },
+    fileData(entity: string, id: number, field: string) {
+      return invoke<string | null>("file_data", { entity, id, field }).catch((err) => {
+        say({ level: "error", text: errorText(err) });
+        return null;
+      });
+    },
+    openFile(name: string, data: string) {
+      return invoke<void>("open_file", { name, data }).catch((err) => say({ level: "error", text: errorText(err) }));
+    },
+    saveFile(name: string, data: string) {
+      return invoke<string>("save_file", { name, data })
+        .then(() => say({ level: "info", text: model ? ownWord(model, "A copy is in your Downloads folder") : "A copy is in your Downloads folder" }))
+        .catch((err) => say({ level: "error", text: errorText(err) }));
+    },
     forgetPicture(entity: string, id: number, field: string) {
       delete pictures[pictureKey(entity, id, field)];
     },

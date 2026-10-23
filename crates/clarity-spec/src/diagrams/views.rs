@@ -129,7 +129,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
         .files
         .iter()
         .flat_map(|f| f.entities.iter().map(move |e| (f.path.as_str(), e)))
-        .filter(|(_, e)| drawn(only, &e.name.name))
+        .filter(|(_, e)| !e.settings && drawn(only, &e.name.name))
         .collect();
     let shown = |name: &str| entities.iter().any(|(_, e)| e.name.name == name);
     for file in &project.files {
@@ -139,7 +139,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
             b.values = e.variants.iter().map(|v| v.name.name.clone()).collect();
             design.boxes.push(b);
         }
-        for entity in file.entities.iter().filter(|e| drawn(only, &e.name.name)) {
+        for entity in file.entities.iter().filter(|e| !e.settings && drawn(only, &e.name.name)) {
             let mut b = class_box(&entity.name.name, ClassBoxKind::Entity, module.clone());
             for field in &entity.fields {
                 match &field.ty {

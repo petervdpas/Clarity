@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "clarity/db_internal.h"
+#include "clarity/record_file.h"
 #include "clarity/settings.h"
 #include "webview/webview.h"
 
@@ -211,6 +212,26 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!bytes.data) return value(NULL);
         const char* url;
         return clarity_data_url(bytes, &url) ? value(cJSON_CreateString(url)) : failed();
+    }
+    if (strcmp(command, "file_data") == 0) {
+        // The file of a file field of a record, fetched on its own, as base64.
+        const cJSON* id = cJSON_GetObjectItemCaseSensitive(args, "id");
+        ClarityBytes bytes = {0};
+        if (!windows->picture(db, text_of(args, "entity"), cJSON_IsNumber(id) ? (int64_t)id->valuedouble : 0, text_of(args, "field"), &bytes)) return failed();
+        return value(bytes.data ? cJSON_CreateString(clarity_base64(bytes)) : NULL);
+    }
+    if (strcmp(command, "open_file") == 0) {
+        // Opens a file in the program the system uses for its kind, from a temporary copy.
+        const char* file = NULL;
+        if (!clarity_temporary_copy(text_of(args, "name"), clarity_from_base64(text_of(args, "data")), &file)) return failed();
+        bool (*open)(const char*) = s->open_link ? s->open_link : clarity_open_in_browser;
+        return open(file) ? value(NULL) : error_text(clarity_format("cannot open %s", file));
+    }
+    if (strcmp(command, "save_file") == 0) {
+        // Saves a copy of a file in the person's Downloads folder; where it went.
+        const char* file = NULL;
+        if (!clarity_save_copy(text_of(args, "name"), clarity_from_base64(text_of(args, "data")), &file)) return failed();
+        return value(cJSON_CreateString(file));
     }
     if (strcmp(command, "store_file") == 0) {
         // A picture linked from a file of a store, before its record is saved.

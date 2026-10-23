@@ -41,6 +41,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "Option<Id>".into(),
         FieldType::Image => "Option<Picture>".into(),
+        FieldType::File => "Option<RecordFile>".into(),
         FieldType::List { item } => format!("Vec<{}>", item.name),
     }
 }
@@ -55,6 +56,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "Option<NaiveDate>".into(),
         TypeInfo::DateTime => "Option<NaiveDateTime>".into(),
         TypeInfo::Image => "Option<Picture>".into(),
+        TypeInfo::RecordFile => "Option<RecordFile>".into(),
         TypeInfo::File => "FileEntry".into(),
         TypeInfo::Files => "Vec<FileEntry>".into(),
         TypeInfo::Bytes => "Vec<u8>".into(),

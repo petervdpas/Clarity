@@ -186,7 +186,7 @@ struct Customer {
 impl Record for Customer {
     const TABLE: &'static str = "customer";
     const COLUMNS: &'static [&'static str] = &["name", "email", "kind", "credit_limit", "vip", "remarks", "phone", "portrait"];
-    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: "portrait", store: None }];
+    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: "portrait", store: None, name: None }];
     fn id(&self) -> Id {
         self.id
     }

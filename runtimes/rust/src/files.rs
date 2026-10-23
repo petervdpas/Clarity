@@ -44,7 +44,7 @@ fn walk(store: &str, folder: &Path, prefix: &str, out: &mut Vec<FileEntry>) -> R
         if meta.is_dir() {
             walk(store, &path, &format!("{inside}/"), out)?;
         } else if meta.is_file() {
-            let extension = Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let extension = extension_of(&name);
             let modified = meta.modified().ok().map(|t| DateTime::<Utc>::from(t).naive_utc().with_nanosecond(0).unwrap_or_default());
             out.push(FileEntry { store: store.to_string(), path: inside, name, extension, size: meta.len() as i64, modified });
         }
@@ -109,4 +109,23 @@ impl Db {
             _ => Picture::New(bytes),
         })
     }
+
+    /// A file of a store as the file of a `file` field, under its name:
+    /// linked when it is in the field's own store, else copied.
+    pub fn record_file_from(&self, file: &FileEntry, field_store: Option<&str>) -> Result<crate::RecordFile> {
+        let content = match field_store {
+            Some(store) if store == file.store => Picture::InStore(file.path.clone()),
+            _ => {
+                let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+                Picture::New(std::fs::read(&path).map_err(|e| failed("read", &path, e))?)
+            }
+        };
+        Ok(crate::RecordFile { name: file.name.clone(), content })
+    }
+}
+
+/// The extension of a file's name, in lowercase, without its dot; empty
+/// when it has none.
+pub fn extension_of(name: &str) -> String {
+    Path::new(name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
 }

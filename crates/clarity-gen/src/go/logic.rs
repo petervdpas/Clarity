@@ -670,7 +670,9 @@ impl<'a> Emitter<'a> {
                 {
                     let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone()).unwrap_or_default();
                     let file = bare(self.value(value, &mut pre));
-                    let picture = self.lift(format!("db.PictureFrom({file}, {})", string(&store)), &mut pre);
+                    // A file field keeps any file, under its name; an image only a picture.
+                    let made = if self.types.type_of(target) == TypeInfo::RecordFile { "RecordFileFrom" } else { "PictureFrom" };
+                    let picture = self.lift(format!("db.{made}({file}, {})", string(&store)), &mut pre);
                     let place = self.place(target, &mut pre);
                     out.push_str(&pre);
                     out.push_str(&format!("{place} = {picture}\n"));
@@ -1072,6 +1074,12 @@ impl<'a> Emitter<'a> {
                 if self.types.type_of(object) == TypeInfo::Bytes {
                     let object = self.place(object, pre);
                     return format!("int64(len({object}))");
+                }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let object = self.place(object, pre);
+                    let read = if member.name == "extension" { "RecordFileExtension" } else { "RecordFileName" };
+                    return format!("clarity.{read}({object})");
                 }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for Go", print::expr(expr)));

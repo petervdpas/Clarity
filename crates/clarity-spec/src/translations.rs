@@ -41,6 +41,16 @@ pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("
 /// Clarity's words heading the pickers of the click targets `language` and `theme`.
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
+/// Clarity's words of a file part bound to a file field: its empty state,
+/// its buttons, and what it says when a copy was saved.
+pub const FILE_KEYS: [(&str, &str); 6] = [
+    ("noFile", "No file"),
+    ("chooseFile", "Choose a file"),
+    ("openFile", "Open"),
+    ("saveFileCopy", "Save a copy"),
+    ("removeFile", "Remove the file"),
+    ("fileCopySaved", "A copy is in your Downloads folder"),
+];
 pub const PICTURE_KEYS: [(&str, &str); 3] = [("noPicture", "No picture"), ("loadPicture", "Load a picture"), ("removePicture", "Remove the picture")];
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -325,6 +335,9 @@ fn shown(project: &Project) -> Shown {
         w.props.kind == crate::widgets::WidgetKind::Image && w.props.bind.is_some()
     }));
     let wizard = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Steps));
+    let bound_file = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
+        w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
+    }));
     // The pickers' headings, which also label the settings' own `language` and `theme`.
     let setting = |ty: FieldType| project.entities().any(|e| e.settings && e.fields.iter().any(|f| f.ty == ty));
     let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language);
@@ -333,6 +346,7 @@ fn shown(project: &Project) -> Shown {
         .iter()
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
         .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] });
     for (key, _) in own {
@@ -506,7 +520,7 @@ pub fn attach<'a>(project: &mut Project, files: impl IntoIterator<Item = (&'a st
             match values.get(&u.key).filter(|v| !v.trim().is_empty()) {
                 // Clarity knows its own words: until the language file has one, it shows Clarity's English.
                 None if u.place == "Clarity" => {
-                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
+                    let english = RENDERER_KEYS.iter().chain(&PICTURE_KEYS).chain(&STEP_KEYS).chain(&FILE_KEYS).chain(&LANGUAGE_PICKER_KEYS).chain(&THEME_PICKER_KEYS).find(|(k, _)| *k == u.key).map_or("", |(_, v)| *v);
                     found.push(place(Diagnostic::warning(
                         format!("Clarity's word '{}' is not in {default} yet; it shows \"{english}\" until it is", u.key),
                         u.span,

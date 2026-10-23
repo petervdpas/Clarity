@@ -114,6 +114,14 @@
     {:else if kind === "badge"}
       <rect x="12" y="8" width="24" height="12" rx="6" class="fill" />
       <text x="24" y="17" text-anchor="middle" class="ink small">3</text>
+    {:else if kind === "color"}
+      <rect x="6" y="7" width="12" height="14" rx="2" class="fill" />
+      <rect x="21" y="7" width="21" height="14" rx="2" />
+      <text x="31.5" y="17.5" text-anchor="middle" class="ink small">#</text>
+    {:else if kind === "file"}
+      <path d="M8 5 h10 l5 5 v13 h-15 z" />
+      <path d="M18 5 v5 h5" />
+      <rect x="27" y="10" width="15" height="8" rx="2" class="fill" />
     {:else if kind === "slider"}
       <line x1="6" y1="14" x2="42" y2="14" />
       <rect x="6" y="12.5" width="16" height="3" rx="1.5" class="fill" />

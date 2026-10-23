@@ -110,6 +110,11 @@ Picture Db::picture_from(const FileEntry& file, const std::optional<std::string>
     return Picture::of(std::move(bytes));
 }
 
+RecordFile Db::record_file_from(const FileEntry& file, const std::optional<std::string>& field_store) {
+    if (field_store && *field_store == file.store) return {file.name, Picture::in_store(file.path)};
+    return {file.name, Picture::of(read_file(file.store, file.path))};
+}
+
 Bytes Db::store_file(const std::string& store, const std::string& path) { return read_file(store, path); }
 
 }  // namespace clarity

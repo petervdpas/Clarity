@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "clarity/errors.hpp"
+#include "clarity/record_file.hpp"
 #include "clarity/picture.hpp"
 #include "clarity/query.hpp"
 #include "clarity/store.hpp"
@@ -204,6 +205,9 @@ public:
     /// A file as the picture of a field kept in `field_store` (none: in the
     /// database): the file itself when it is in that store, else a copy.
     Picture picture_from(const FileEntry& file, const std::optional<std::string>& field_store);
+    /// A file of a store as the file of a file field, under its name: linked
+    /// when it is in the field's own store, else copied.
+    RecordFile record_file_from(const FileEntry& file, const std::optional<std::string>& field_store);
     /// The bytes of the file `path` of a store: a picture linked from a file
     /// before its record is saved.
     Bytes store_file(const std::string& store, const std::string& path);

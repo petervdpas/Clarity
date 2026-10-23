@@ -1206,6 +1206,26 @@ impl<'a> Window<'a> {
                 }
                 let _ = writeln!(out, "{pad}</ListBox>");
             }
+            // A record's file, which the view model fetches to open it or save a copy.
+            WidgetKind::File => {
+                let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
+                let path = bound.as_deref().unwrap_or_default();
+                let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
+                let in_store = self.bound_field(p.bind.as_deref().unwrap_or_default()).is_some_and(|(_, f)| f.modifiers.store.is_some());
+                let fetch_file = if in_store { format!(" FetchFile=\"{{Binding {}}}\"", picture_file(data, field)) } else { String::new() };
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:FileInput {at} File=\"{{Binding {path}}}\" Record=\"{{Binding {record}}}\" Fetch=\"{{Binding {fetch}}}\"{fetch_file} EmptyText=\"{empty}\" ChooseText=\"{choose}\" OpenText=\"{open}\" SaveText=\"{save}\" RemoveText=\"{remove}\"{read_only}{plain_state}{extra} />",
+                    record = member(data),
+                    fetch = picture_fetch(data, field),
+                    // Clarity's own words, by key.
+                    empty = self.text("@noFile"),
+                    choose = self.text("@chooseFile"),
+                    open = self.text("@openFile"),
+                    save = self.text("@saveFileCopy"),
+                    remove = self.text("@removeFile"),
+                );
+            }
             // A record's picture, which the view model fetches when it is stored.
             WidgetKind::Image if p.bind.as_deref().is_some_and(|b| b.contains('.')) => {
                 let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
@@ -1271,6 +1291,10 @@ impl<'a> Window<'a> {
         for widget in &self.parts {
             let Some(name) = &widget.props.name else { continue };
             let control = control(name);
+            // A file part says where a copy went, in Clarity's own words.
+            if widget.props.kind == WidgetKind::File {
+                out.push(format!("{control}.CopySaved += _ => Vm.Say(Level.Info, Clarity.Runtime.Text.Of(\"fileCopySaved\"));"));
+            }
             for h in &widget.props.handlers {
                 let run = format!("Vm.{}Command.Execute(null)", self.command(h));
                 let kind = widget.props.kind;
@@ -1284,6 +1308,7 @@ impl<'a> Window<'a> {
                         | WidgetKind::Spinbox
                         | WidgetKind::Slider
                         | WidgetKind::Color
+                        | WidgetKind::File
                         | WidgetKind::Checkbox
                         | WidgetKind::Switch
                         | WidgetKind::Dropdown
@@ -1406,7 +1431,7 @@ public partial class {name}View : UserControl
         }
         // The picture each picture field shows when the record has one stored.
         let mut fetches: BTreeMap<String, (&str, String)> = BTreeMap::new();
-        for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Image) {
+        for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File)) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
             let Some(entity) = self.entity_of(data) else { continue };
             fetches.insert(

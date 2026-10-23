@@ -91,7 +91,7 @@ impl Sql {
     pub fn storage(self, column: &Column, enum_first: impl Fn(&str) -> Option<String>) -> (String, Option<String>) {
         let default = column.default.as_ref();
         let number = |n: &str| if self == Sql::Sqlite { self.text(n) } else { n.to_string() };
-        let ty = if column.ty == FieldType::Image { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
+        let ty = if matches!(column.ty, FieldType::Image | FieldType::File) { self.picture_type(column.store.is_some()) } else { self.column_type(&column.ty) };
         let value = match (&column.ty, default) {
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(self.text(s)),
             (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, _) => Some(self.text("")),
@@ -108,7 +108,7 @@ impl Sql {
                 };
                 Some(self.text(&value.unwrap_or_default()))
             }
-            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image, _) => None,
+            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File, _) => None,
         };
         // MySQL takes a default for long text only as an expression.
         let value = match value {
@@ -174,7 +174,7 @@ impl Sql {
             (Sql::Postgres, FieldType::DateTime) => "TIMESTAMP".into(),
             (Sql::Mysql, FieldType::DateTime) => "DATETIME".into(),
             (_, FieldType::DateTime) => "DATETIME2".into(),
-            (_, FieldType::Image) => self.picture_type(false),
+            (_, FieldType::Image | FieldType::File) => self.picture_type(false),
             (Sql::Postgres, FieldType::Enum { .. }) => "TEXT".into(),
             (Sql::Mssql, FieldType::Enum { .. }) => "NVARCHAR(100)".into(),
             (_, FieldType::Enum { .. }) => "VARCHAR(100)".into(),

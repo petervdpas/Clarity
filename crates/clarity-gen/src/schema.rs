@@ -93,7 +93,8 @@ impl Writer<'_> {
     /// indexes. A baseline creates only what is missing.
     fn table_sql(&self, table: &Table, table_name: &str) -> String {
         let mut lines = vec![self.sql.key(table.key_column())];
-        lines.extend(table.columns.iter().map(|c| self.column_sql(c)));
+        // A file's name has a column beside it.
+        lines.extend(table.columns.iter().flat_map(|c| std::iter::once(c.clone()).chain(c.name_column())).map(|c| self.column_sql(&c)));
         let missing = if self.baseline { " IF NOT EXISTS" } else { "" };
         format!("CREATE TABLE{missing} {} (\n    {}\n);", self.q(table_name), lines.join(",\n    "))
     }
@@ -134,6 +135,10 @@ impl Writer<'_> {
             let Some(old) = before.column(&column.name) else { continue };
             targets.push(self.q(column.stored()));
             sources.push(self.converted(old, column));
+            if let (Some(name_now), Some(name_was)) = (column.name_column(), old.name_column()) {
+                targets.push(self.q(name_now.stored()));
+                sources.push(self.q(name_was.stored()));
+            }
         }
         self.push(format!(
             "INSERT INTO {} ({}) SELECT {} FROM {};",
@@ -159,7 +164,7 @@ impl Writer<'_> {
             _ if old_ty == new_ty => Some(name),
             // A picture does not move between the database and a file store,
             // nor become another kind of value.
-            (FieldType::Image, _) | (_, FieldType::Image) => None,
+            (FieldType::Image | FieldType::File, _) | (_, FieldType::Image | FieldType::File) => None,
             _ if self.sql == Sql::Sqlite => Some(format!("CAST({name} AS {new_ty})")),
             _ => Some(self.sql.convert(&name, &old.ty, &new.ty, &new_ty)),
         }
@@ -190,8 +195,10 @@ impl Writer<'_> {
 
     fn remove_column(&mut self, before: &Table, column: &Column) {
         self.release(before, column);
-        for statement in self.sql.drop_column(&before.table_name(), column.stored()) {
-            self.push(statement);
+        for gone in std::iter::once(column.clone()).chain(column.name_column()) {
+            for statement in self.sql.drop_column(&before.table_name(), gone.stored()) {
+                self.push(statement);
+            }
         }
     }
 
@@ -244,6 +251,9 @@ impl Writer<'_> {
             self.push(self.sql.drop_unique(table_before, from));
         }
         self.push(self.sql.rename_column(&table_after.table_name(), from.stored(), to.stored()));
+        if let (Some(name_from), Some(name_to)) = (from.name_column(), to.name_column()) {
+            self.push(self.sql.rename_column(&table_after.table_name(), name_from.stored(), name_to.stored()));
+        }
         if to.unique {
             self.push(self.sql.unique_index(table_after, to, self.baseline));
         }
@@ -284,6 +294,9 @@ impl Writer<'_> {
                 let column = table_after.column(&column.name).cloned().expect("applied above");
                 self.check_unique(entity, &column);
                 self.push(self.sql.add_column(&table_after.table_name(), &self.column_sql(&column)));
+                if let Some(name) = column.name_column() {
+                    self.push(self.sql.add_column(&table_after.table_name(), &self.column_sql(&name)));
+                }
                 if column.unique {
                     self.push(self.sql.unique_index(&table_after, &column, self.baseline));
                 }

@@ -138,6 +138,9 @@ pub enum FieldType {
     /// A picture: kept in the database, or as a file in a file store
     /// (`store photos`).
     Image,
+    /// Any file, with its name: kept in the database (its name in a column
+    /// beside it) or, with `store`, as a file of a file store (U1c).
+    File,
     Email,
     Url,
     /// A color, kept as text `#rrggbb` (U1c).

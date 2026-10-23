@@ -81,6 +81,13 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "No picture": { key: "noPicture", written: "No picture" },
   "Load a picture": { key: "loadPicture", written: "Load a picture" },
   "Remove the picture": { key: "removePicture", written: "Remove the picture" },
+  // A file part's words.
+  "No file": { key: "noFile", written: "No file" },
+  "Choose a file": { key: "chooseFile", written: "Choose a file" },
+  Open: { key: "openFile", written: "Open" },
+  "Save a copy": { key: "saveFileCopy", written: "Save a copy" },
+  "Remove the file": { key: "removeFile", written: "Remove the file" },
+  "A copy is in your Downloads folder": { key: "fileCopySaved", written: "A copy is in your Downloads folder" },
   // The headings of the pickers of the click targets `language` and `theme`.
   Language: { key: "languagePicker", written: "Language" },
   Theme: { key: "themePicker", written: "Theme" },

@@ -66,9 +66,9 @@ fn a_store_is_one_of_the_project_settings() {
 }
 
 #[test]
-fn only_an_image_field_has_a_store() {
+fn only_an_image_or_a_file_field_has_a_store() {
     let source = with("title: text(120)", "title: text(120), store photos");
-    assert_eq!(errors(&load(&source, Some(&["photos"]))), ["only an image field has a store ('title')"]);
+    assert_eq!(errors(&load(&source, Some(&["photos"]))), ["only an image or a file field has a store ('title')"]);
 }
 
 #[test]

@@ -211,6 +211,8 @@ fn to_sql(entity: &str, field: &Field) -> String {
     match &field.ty {
         FieldType::Enum { .. } => format!("Sql.Name({value})"),
         FieldType::Image => format!("Sql.Picture({value})"),
+        // Its content, then its name in the column beside it.
+        FieldType::File => format!("Sql.FileContent({value}), Sql.FileName({value})"),
         _ => value,
     }
 }
@@ -226,13 +228,23 @@ fn from_sql(field: &Field) -> String {
         FieldType::Enum { name } => format!("GetName<{}>", name.name),
         FieldType::Ref { .. } => "GetReference".into(),
         FieldType::Image => "GetPicture".into(),
+        FieldType::File => "GetFile".into(),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
 
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
-    let columns = stored(entity).map(|f| string(entity.column_of(&f.name.name))).collect::<Vec<_>>().join(", ");
+    // A file has the column of its name beside its own.
+    let columns = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
+        })
+        .map(|c| string(&c))
+        .collect::<Vec<_>>()
+        .join(", ");
     let properties: String = entity
         .fields
         .iter()
@@ -245,17 +257,13 @@ fn record(project: &Project, entity: &Entity) -> String {
         })
         .collect();
     let to_values = stored(entity).map(|f| to_sql(name, f)).collect::<Vec<_>>().join(", ");
-    let from_values: String = stored(entity)
-        .enumerate()
-        .map(|(i, f)| {
-            format!(
-                "        {} = Sql.{}({}, values[{i}]),\n",
-                property(name, &f.name.name),
-                from_sql(f),
-                string(&f.name.name)
-            )
-        })
-        .collect();
+    let mut at = 0;
+    let mut from_values = String::new();
+    for f in stored(entity) {
+        let values = if f.ty == FieldType::File { format!("values[{at}], values[{}]", at + 1) } else { format!("values[{at}]") };
+        from_values.push_str(&format!("        {} = Sql.{}({}, {values}),\n", property(name, &f.name.name), from_sql(f), string(&f.name.name)));
+        at += if f.ty == FieldType::File { 2 } else { 1 };
+    }
     // The data events written in the entity's code block; each runs the
     // method generated from it.
     let events: Vec<DataEvent> = project
@@ -304,10 +312,12 @@ fn pictures(entity: &Entity) -> String {
     let columns: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| f.ty == FieldType::Image)
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
         .map(|f| {
+            let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("null".to_string(), string);
-            format!("new({}, {store})", string(entity.column_of(&f.name.name)))
+            let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
+            format!("new({}, {store}{name})", string(column))
         })
         .collect();
     if columns.is_empty() {

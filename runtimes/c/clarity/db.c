@@ -5,6 +5,7 @@
 
 #include "clarity/db_internal.h"
 #include "clarity/disk.h"
+#include "clarity/record_file.h"
 
 char* clarity_lasting(const char* text) {
     size_t length = strlen(text);
@@ -146,6 +147,21 @@ static bool store_record(ClarityDb* db, const ClarityEntity* entity, void* recor
     for (size_t i = 0; i < n; ++i) {
         const ClarityPictureColumn* p = picture_of(entity, entity->columns[i]);
         if (!p || values[i].kind != CLARITY_BYTES) continue;
+        // A file of a file field is kept under its own name, in a folder named by its contents.
+        if (p->name) {
+            if (!p->store) continue;
+            const char* named = "";
+            for (size_t j = 0; j < n; ++j)
+                if (strcmp(entity->columns[j], p->name) == 0 && values[j].kind == CLARITY_TEXT) named = values[j].text;
+            const char* folder = NULL;
+            if (!clarity_store_folder(db, p->store, &folder)) return false;
+            const char* path = clarity_store_path(values[i].bytes, named);
+            const char* file = NULL;
+            if (!clarity_in_store(folder, path, &file)) return false;
+            if (!clarity_exists(file) && !(clarity_make_folders(clarity_parent(file)) && clarity_write_file(file, values[i].bytes))) return false;
+            values[i] = clarity_text_value(path);
+            continue;
+        }
         const char* name = NULL;
         if (!clarity_picture_file_name(values[i].bytes, &name)) return false;
         if (!p->store) continue;

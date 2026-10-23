@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, STEP_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, STEP_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -61,6 +61,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     // Clarity's own words; an image part bound to a picture has its own, and a wizard.
     let pictures = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("image ") && l.contains(" bind ")));
     let wizards = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("steps ")));
+    let files = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("file ") && l.contains(" bind ")));
     // The pickers of the click targets `language` and `theme` have a heading.
     // The settings' own `language` and `theme` are labeled with the same words.
     let clicks_to = |target: &str| {
@@ -72,6 +73,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .iter()
         .chain(if pictures { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
+        .chain(if files { FILE_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("language") { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] });
     for (key, value) in own {

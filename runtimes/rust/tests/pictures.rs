@@ -68,7 +68,7 @@ struct Album {
 impl Record for Album {
     const TABLE: &'static str = "album";
     const COLUMNS: &'static [&'static str] = &["title", "cover", "photo"];
-    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: "cover", store: None }, PictureColumn { column: "photo", store: Some("photos") }];
+    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: "cover", store: None, name: None }, PictureColumn { column: "photo", store: Some("photos"), name: None }];
 
     fn id(&self) -> Id {
         self.id

@@ -11,6 +11,7 @@
 #pragma once
 
 #include "clarity/picture.h"
+#include "clarity/record_file.h"
 #include "clarity/query.h"
 #include "clarity/store.h"
 
@@ -119,6 +120,9 @@ bool clarity_write_bytes(ClarityDb* db, const char* store, const char* path, Cla
 /// A file as the picture of a field kept in `field_store` (NULL: in the
 /// database): the file itself when it is in that store, else a copy.
 bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityPicture** out);
+/// A file of a store as the file of a file field, under its name: linked
+/// when it is in the field's own store, else copied.
+bool clarity_record_file_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityRecordFile** out);
 /// The bytes of the file `path` of a store: a picture linked from a file
 /// before its record is saved.
 bool clarity_store_file(ClarityDb* db, const char* store, const char* path, ClarityBytes* out);

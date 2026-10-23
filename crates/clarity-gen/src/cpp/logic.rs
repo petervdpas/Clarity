@@ -576,7 +576,9 @@ impl<'a> Emitter<'a> {
                     let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone());
                     let store = store.map_or("std::nullopt".to_string(), |s| string(&s));
                     let (place, file) = (self.place(target), self.value(value));
-                    let _ = writeln!(out, "{place} = db.picture_from({file}, {store});");
+                    // A file field keeps any file, under its name; an image only a picture.
+                    let made = if self.types.type_of(target) == TypeInfo::RecordFile { "record_file_from" } else { "picture_from" };
+                    let _ = writeln!(out, "{place} = db.{made}({file}, {store});");
                     return;
                 }
                 let (place, code) = (self.place(target), self.value(value));
@@ -867,6 +869,11 @@ impl<'a> Emitter<'a> {
                 }
                 if self.types.type_of(object) == TypeInfo::Bytes {
                     return format!("static_cast<int64_t>({}.size())", self.place(object));
+                }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let read = if member.name == "extension" { "record_file_extension" } else { "record_file_name" };
+                    return format!("clarity::{read}({})", self.place(object));
                 }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for C++", print::expr(expr)));
@@ -1275,8 +1282,8 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("clarity::sql::integer({}.id)", self.value(value)),
                 _ => format!("clarity::sql::reference({})", self.value(value)),
             },
-            FieldType::Image | FieldType::List { .. } => {
-                self.errors.push("a picture or a list is compared with none only".into());
+            FieldType::Image | FieldType::File | FieldType::List { .. } => {
+                self.errors.push("a picture, a file or a list is compared with none only".into());
                 String::new()
             }
         }

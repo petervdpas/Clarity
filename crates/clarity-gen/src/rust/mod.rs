@@ -591,6 +591,30 @@ fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> An
     locked(&app, |db| picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes)).transpose())
 }}
 
+/// The file of a `file` field of a record, fetched on its own, as base64.
+#[tauri::command]
+fn file_data(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {{
+    locked(&app, |db| Ok(picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes))))
+}}
+
+/// Opens a file in the program the system uses for its kind.
+#[tauri::command]
+fn open_file(name: String, data: String) -> Answer<()> {{
+    let bytes = decoded(&data)?;
+    clarity_runtime::record_file::open(&name, &bytes).map_err(|err| Value::from(err.to_string()))
+}}
+
+/// Saves a copy of a file in the person's Downloads folder; where it went.
+#[tauri::command]
+fn save_file(name: String, data: String) -> Answer<String> {{
+    let bytes = decoded(&data)?;
+    clarity_runtime::record_file::save_copy(&name, &bytes).map(|file| file.display().to_string()).map_err(|err| Value::from(err.to_string()))
+}}
+
+fn decoded(data: &str) -> Answer<Vec<u8>> {{
+    clarity_runtime::record_file::from_data(data).map_err(|err| Value::from(err.to_string()))
+}}
+
 /// A file of a store, as the page shows it: a picture linked from a file
 /// before its record is saved.
 #[tauri::command]
@@ -665,6 +689,9 @@ fn main() {{
             answer_event,
             ref_options,
             picture,
+            file_data,
+            open_file,
+            save_file,
             store_file,{apart_commands}
             read_settings,
             keep_settings,

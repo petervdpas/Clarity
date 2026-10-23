@@ -126,7 +126,7 @@ pub(crate) use crate::type_ref_info;
 
 /// Values of these types are copied; the others are cloned when read.
 fn is_copy(ty: &TypeInfo) -> bool {
-    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
+    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::RecordFile | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
 }
 
 fn is_decimal(ty: &TypeInfo) -> bool {
@@ -284,7 +284,9 @@ impl<'a> Emitter<'a> {
                     let store = store.map_or("None".to_string(), |s| format!("Some({s:?})"));
                     let place = self.place(target);
                     let file = self.object(value);
-                    out.push_str(&format!("{pad}{place} = Some(db.picture_from(&{file}, {store})?);\n"));
+                    // A `file` field keeps any file, under its name; an image only a picture.
+                    let made = if to == TypeInfo::RecordFile { "record_file_from" } else { "picture_from" };
+                    out.push_str(&format!("{pad}{place} = Some(db.{made}(&{file}, {store})?);\n"));
                     return;
                 }
                 // A list position: the position and value first, so they may read the list.
@@ -675,6 +677,14 @@ impl<'a> Emitter<'a> {
                     let object = self.object(object);
                     return format!("{object}.{}", member.name);
                 }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let object = self.object(object);
+                    return match member.name.as_str() {
+                        "extension" => format!("{object}.as_ref().map(|f| clarity_runtime::files::extension_of(&f.name)).unwrap_or_default()"),
+                        _ => format!("{object}.as_ref().map(|f| f.name.clone()).unwrap_or_default()"),
+                    };
+                }
                 if self.types.type_of(object) == TypeInfo::Bytes {
                     let object = self.object(object);
                     return format!("({object}.len() as i64)");
@@ -972,8 +982,8 @@ impl<'a> Emitter<'a> {
             FieldType::DateTime => format!("sql::date_time({})", self.value(value)),
             FieldType::Enum { .. } => format!("sql::name(&{})", self.value(value)),
             // The checker allows only `== none` and `!= none`, handled before.
-            FieldType::Image => {
-                self.errors.push("a picture is compared with none only".into());
+            FieldType::Image | FieldType::File => {
+                self.errors.push("a picture or a file is compared with none only".into());
                 String::new()
             }
             FieldType::Ref { .. } => {

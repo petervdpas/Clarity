@@ -803,7 +803,12 @@ impl<'a> Emitter<'a> {
                     let store = self.project.entity(&owner).and_then(|e| e.field(&member.name)).and_then(|f| f.modifiers.store.clone());
                     let file = bare(self.value(value, &mut pre));
                     let store = store.map_or_else(|| "NULL".to_string(), |s| string(&s));
-                    let picture = self.lift("ClarityPicture*", &format!("clarity_picture_from(db, {file}, {store}, {{out}})"), &mut pre);
+                    // A file field keeps any file, under its name; an image only a picture.
+                    let picture = if to == TypeInfo::RecordFile {
+                        self.lift("ClarityRecordFile*", &format!("clarity_record_file_from(db, {file}, {store}, {{out}})"), &mut pre)
+                    } else {
+                        self.lift("ClarityPicture*", &format!("clarity_picture_from(db, {file}, {store}, {{out}})"), &mut pre)
+                    };
                     let place = self.place(target, &mut pre);
                     out.push_str(&pre);
                     let _ = writeln!(out, "{place} = {picture};");
@@ -1228,6 +1233,7 @@ impl<'a> Emitter<'a> {
             TypeInfo::DateTime => format!("clarity_json_date_time({value})"),
             TypeInfo::Enum(name) => format!("clarity_json_text({}_name({value}))", prefix(&name)),
             TypeInfo::Image => format!("clarity_picture_json({value})"),
+            TypeInfo::RecordFile => format!("clarity_file_json({value})"),
             other => {
                 self.errors.push(format!("{other:?} cannot be given to a window"));
                 String::new()
@@ -1297,6 +1303,12 @@ impl<'a> Emitter<'a> {
                 if self.types.type_of(object) == TypeInfo::Bytes {
                     let object = self.place(object, pre);
                     return format!("((int64_t)({object}).size)");
+                }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let object = self.place(object, pre);
+                    let read = if member.name == "extension" { "clarity_record_file_extension" } else { "clarity_record_file_name" };
+                    return format!("{read}({object})");
                 }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet for C", print::expr(expr)));
@@ -1841,8 +1853,8 @@ impl<'a> Emitter<'a> {
                 }
                 _ => format!("clarity_reference_value({})", bare(self.value(value, pre))),
             },
-            FieldType::Image | FieldType::List { .. } => {
-                self.errors.push("a picture or a list field can only be compared with none in a query".into());
+            FieldType::Image | FieldType::File | FieldType::List { .. } => {
+                self.errors.push("a picture, a file or a list field can only be compared with none in a query".into());
                 String::new()
             }
         }

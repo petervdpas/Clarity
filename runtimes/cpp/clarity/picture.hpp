@@ -42,6 +42,9 @@ struct Picture {
 struct PictureColumn {
     std::string column;
     std::optional<std::string> store;
+    /// For a file field: the column beside it that holds the file's name.
+    /// Any file is kept, not only a picture, and in a store under its name.
+    std::optional<std::string> name = std::nullopt;
 };
 
 /// A kind of picture every stack shows.

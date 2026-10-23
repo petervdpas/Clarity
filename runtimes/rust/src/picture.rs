@@ -34,6 +34,9 @@ pub enum Picture {
 pub struct PictureColumn {
     pub column: &'static str,
     pub store: Option<&'static str>,
+    /// For a `file` field: the column beside it that holds its name. Any
+    /// file is kept, not only a picture, and in a store under its name.
+    pub name: Option<&'static str>,
 }
 
 /// The kinds of picture every stack shows.

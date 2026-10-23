@@ -91,6 +91,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::DateTime => "ClarityDateTime".into(),
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Image => "ClarityPicture*".into(),
+        FieldType::File => "ClarityRecordFile*".into(),
         FieldType::List { item } => list_type(&item.name),
     }
 }
@@ -123,6 +124,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "ClarityDate".into(),
         TypeInfo::DateTime => "ClarityDateTime".into(),
         TypeInfo::Image => "ClarityPicture*".into(),
+        TypeInfo::RecordFile => "ClarityRecordFile*".into(),
         TypeInfo::File => "ClarityFile".into(),
         TypeInfo::Files => "ClarityFileList".into(),
         TypeInfo::Bytes => "ClarityBytes".into(),
@@ -146,7 +148,7 @@ pub fn param_type(ty: &TypeInfo) -> String {
 pub fn zero(ty: &TypeInfo) -> String {
     match ty {
         TypeInfo::Text => "\"\"".into(),
-        TypeInfo::Image => "NULL".into(),
+        TypeInfo::Image | TypeInfo::RecordFile => "NULL".into(),
         TypeInfo::Bool => "false".into(),
         TypeInfo::Integer | TypeInfo::Duration | TypeInfo::Unknown => "0".into(),
         other => format!("({}){{0}}", value_type(other)),

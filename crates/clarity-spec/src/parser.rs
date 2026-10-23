@@ -582,6 +582,7 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
         "email" => FieldType::Email,
         "url" => FieldType::Url,
         "color" => FieldType::Color,
+        "file" => FieldType::File,
         "id" => FieldType::Id,
         "ref" => FieldType::Ref {
             entity: cursor.expect_ident("an entity name after 'ref'")?,

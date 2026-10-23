@@ -22,6 +22,9 @@
     X(dates_and_times_read_and_write_as_text)                     \
     X(the_settings_file_is_where_every_runtime_puts_it)           \
     X(settings_kept_are_read_back)                               \
+    X(a_file_in_a_store_is_kept_under_its_name_in_a_folder_of_its_contents) \
+    X(a_copy_goes_to_the_downloads_folder_under_a_free_name)     \
+    X(a_file_is_kept_with_its_name_in_the_database_or_its_store) \
     X(text_travels_as_the_other_runtimes_send_it)                 \
     X(the_scratch_arena_is_emptied_after_a_command)               \
     X(every_query_case_gives_its_sql_on_every_database)           \

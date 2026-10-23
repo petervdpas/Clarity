@@ -40,8 +40,13 @@ public sealed class Picture : IEquatable<Picture>
     public override int GetHashCode() => Bytes is null ? 0 : Bytes.Length;
 }
 
-/// <summary>An image field's column, and the file store it keeps its pictures in; without one they are in the database.</summary>
-public sealed record PictureColumn(string Column, string? Store);
+/// <summary>
+/// An image field's column, and the file store it keeps its pictures in;
+/// without one they are in the database. For a file field, <paramref name="Name"/>
+/// is the column beside it that holds the file's name: any file is kept, not
+/// only a picture, and in a store under its name.
+/// </summary>
+public sealed record PictureColumn(string Column, string? Store, string? Name = null);
 
 /// <summary>A kind of picture every stack shows.</summary>
 public sealed record PictureKind(string Extension, string MediaType);

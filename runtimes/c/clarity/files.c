@@ -130,4 +130,15 @@ bool clarity_picture_from(ClarityDb* db, const ClarityFile* file, const char* fi
     return true;
 }
 
+bool clarity_record_file_from(ClarityDb* db, const ClarityFile* file, const char* field_store, ClarityRecordFile** out) {
+    if (field_store && strcmp(field_store, file->store) == 0) {
+        *out = clarity_record_file(file->name, clarity_picture_in_store(file->path));
+        return true;
+    }
+    ClarityBytes bytes = {0};
+    if (!read_in_store(db, file->store, file->path, &bytes)) return false;
+    *out = clarity_record_file(file->name, clarity_picture_new(bytes));
+    return true;
+}
+
 bool clarity_store_file(ClarityDb* db, const char* store, const char* path, ClarityBytes* out) { return read_in_store(db, store, path, out); }

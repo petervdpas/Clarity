@@ -83,6 +83,24 @@ int64_t Db::store_record(const std::string& source, const std::string& table, co
         const PictureColumn* p = picture_of(columns[i]);
         auto bytes = std::get_if<Bytes>(&values[i]);
         if (!p || !bytes) continue;
+        // A file of a file field is kept under its own name, in a folder named by its contents.
+        if (p->name) {
+            if (!p->store) continue;
+            std::string named;
+            for (size_t j = 0; j < columns.size(); ++j)
+                if (columns[j] == *p->name)
+                    if (auto text = std::get_if<std::string>(&values[j])) named = *text;
+            std::string path = store_path(*bytes, named);
+            auto file = in_store(store_folder(*p->store), path);
+            if (!std::filesystem::exists(file)) {
+                std::filesystem::create_directories(file.parent_path());
+                std::ofstream out(file, std::ios::binary);
+                out.write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
+                if (!out) throw StorageError("cannot write " + file.string());
+            }
+            values[i] = path;
+            continue;
+        }
         std::string name = file_name(*bytes);
         if (!p->store) continue;
         auto file = store_folder(*p->store) / name;

@@ -10,6 +10,7 @@
   import NumberInput from "./ui/NumberInput.svelte";
   import SliderInput from "./ui/SliderInput.svelte";
   import ColorInput from "./ui/ColorInput.svelte";
+  import FileInput, { type RecordFileValue } from "./ui/FileInput.svelte";
   import { numberRange } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
@@ -166,6 +167,13 @@
   const canLoadPicture = $derived(!!live && !design && !readonly && !disabled);
   let fileInput = $state<HTMLInputElement | null>(null);
   let pictureProblem = $state(false);
+
+  /** The bytes of a record's file, as base64: new ones as chosen, a stored one fetched; then `use` them. */
+  async function withFileData(file: RecordFileValue | null, use: (name: string, data: string) => Promise<void> | undefined) {
+    if (!file || !live || design) return;
+    const data = file.data ?? (file.stored && bound && boundEntity ? await live.fileData(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name) : null);
+    if (data) await use(file.name, data);
+  }
 
   function forgetFetched() {
     if (live && bound && boundEntity) live.forgetPicture(boundEntity, Number(bound.record.id ?? 0), bound.field.name.name);
@@ -529,6 +537,32 @@
         onsubmit={submit}
         onfocus={() => fire("enter")}
         onblur={() => fire("leave")}
+      />
+    {:else if p.kind === "file"}
+      {@const kept = (bound ? value : null) as RecordFileValue | null}
+      <FileInput
+        {id}
+        value={kept}
+        words={{
+          none: ownWord(preview, "No file"),
+          choose: ownWord(preview, "Choose a file"),
+          open: ownWord(preview, "Open"),
+          save: ownWord(preview, "Save a copy"),
+          remove: ownWord(preview, "Remove the file"),
+        }}
+        {describedBy}
+        disabled={design || disabled}
+        {readonly}
+        onchoose={(name, data) => {
+          setValue({ name, data });
+          fire("change");
+        }}
+        onremove={() => {
+          setValue(null);
+          fire("change");
+        }}
+        onopen={() => withFileData(kept, (name, data) => live?.openFile(name, data))}
+        onsave={() => withFileData(kept, (name, data) => live?.saveFile(name, data))}
       />
     {:else if p.kind === "color"}
       <ColorInput

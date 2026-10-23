@@ -353,7 +353,9 @@ impl<'a> Emitter<'a> {
                     let store = store.map_or("null".to_string(), |s| string(&s));
                     let place = self.place(target);
                     let file = self.value(value);
-                    out.push_str(&format!("{pad}{place} = {db}.PictureFrom({file}, {store});\n"));
+                    // A file field keeps any file, under its name; an image only a picture.
+                    let made = if self.types.type_of(target) == TypeInfo::RecordFile { "RecordFileFrom" } else { "PictureFrom" };
+                    out.push_str(&format!("{pad}{place} = {db}.{made}({file}, {store});\n"));
                     return;
                 }
                 // A list position, counted from 1.
@@ -707,6 +709,12 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object);
                     return format!("{object}.LongLength");
                 }
+                // A record's file: its name, and the extension of its name.
+                if self.types.type_of(object) == TypeInfo::RecordFile {
+                    let object = self.place(object);
+                    let read = if field.name == "extension" { "ExtensionOf" } else { "NameOf" };
+                    return format!("RecordFiles.{read}({object})");
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -1053,8 +1061,8 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("{}.Id", self.value(value)),
                 _ => self.value(value),
             },
-            FieldType::List { .. } => {
-                self.errors.push("a list field cannot be compared in a query".into());
+            FieldType::List { .. } | FieldType::File => {
+                self.errors.push("a list or a file field cannot be compared in a query".into());
                 String::new()
             }
             _ => self.value(value),

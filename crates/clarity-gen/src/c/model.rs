@@ -96,6 +96,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Enum { name } => format!("clarity_text_value({}_name({value}))", prefix(&name.name)),
         FieldType::Ref { .. } => format!("clarity_reference_value({value})"),
         FieldType::Image => format!("clarity_picture_value({value})"),
+        FieldType::File => unreachable!("a file field stores two values, written by its record"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -114,6 +115,8 @@ fn read(i: usize, f: &Field) -> String {
         FieldType::DateTime => get("date_time"),
         FieldType::Ref { .. } => get("reference"),
         FieldType::Image => get("picture"),
+        // Whether it has one, then its name beside it.
+        FieldType::File => format!("    if (!clarity_get_file({column}, values[{i}], values[{}], &{target})) return false;\n", i + 1),
         FieldType::Enum { name } => format!(
             "    const char* {field}_name = NULL;\n    if (!clarity_get_text({column}, values[{i}], &{field}_name)) return false;\n    {target} = {}_from({field}_name);\n",
             prefix(&name.name),
@@ -136,6 +139,7 @@ fn json_of(f: &Field) -> String {
         FieldType::Enum { name } => format!("clarity_json_text({}_name({value}))", prefix(&name.name)),
         FieldType::Ref { .. } => format!("clarity_json_reference({value})"),
         FieldType::Image => format!("clarity_picture_json({value})"),
+        FieldType::File => format!("clarity_file_json({value})"),
         FieldType::List { item } => format!("{}_list_json(&{value})", prefix(&item.name)),
     }
 }
@@ -154,6 +158,7 @@ fn json_read(f: &Field) -> String {
         FieldType::DateTime => get("date_time"),
         FieldType::Ref { .. } => get("reference"),
         FieldType::Image => get("picture"),
+        FieldType::File => get("file"),
         FieldType::Enum { name } => format!(
             "    const char* {field}_name = NULL;\n    if (!clarity_json_get_text(in, {key}, &{field}_name)) return false;\n    if ({field}_name) {target} = {}_from({field}_name);\n",
             prefix(&name.name),
@@ -182,24 +187,43 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     );
 
     let mut source = String::new();
-    let columns: Vec<String> = stored(entity).map(|f| string(entity.column_of(&f.name.name))).collect();
+    // A file has the column of its name beside its own.
+    let columns: Vec<String> = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
+        })
+        .map(|c| string(&c))
+        .collect();
     if !columns.is_empty() {
         let _ = write!(source, "static const char* const {p}_columns[] = {{{}}};\n\n", columns.join(", "));
     }
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| f.ty == FieldType::Image)
-        .map(|f| format!("{{{}, {}}}", string(entity.column_of(&f.name.name)), string_or_null(f.modifiers.store.as_deref())))
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
+        .map(|f| {
+            let column = entity.column_of(&f.name.name);
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            format!("{{{}, {}, {}}}", string(column), string_or_null(f.modifiers.store.as_deref()), string_or_null(name.as_deref()))
+        })
         .collect();
     if !pictures.is_empty() {
         let _ = write!(source, "static const ClarityPictureColumn {p}_pictures[] = {{{}}};\n\n", pictures.join(", "));
     }
     let mut values = String::new();
     let mut reads = String::new();
-    for (i, f) in stored(entity).enumerate() {
-        let _ = writeln!(values, "    out[{i}] = {};", to_value(f));
+    let mut i = 0;
+    for f in stored(entity) {
+        if f.ty == FieldType::File {
+            let value = format!("r->{}", ident(&f.name.name));
+            let _ = writeln!(values, "    out[{i}] = clarity_file_content_value({value});\n    out[{}] = clarity_file_name_value({value});", i + 1);
+        } else {
+            let _ = writeln!(values, "    out[{i}] = {};", to_value(f));
+        }
         reads.push_str(&read(i, f));
+        i += if f.ty == FieldType::File { 2 } else { 1 };
     }
     let used = if values.is_empty() { "    (void)record;\n    (void)out;\n" } else { "" };
     let r = if values.is_empty() { "" } else { "    const {name}* r = record;\n" }.replace("{name}", name);

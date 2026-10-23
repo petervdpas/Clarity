@@ -80,6 +80,27 @@ pub fn get_picture(column: &str, value: &SqlValue) -> Result<Option<crate::pictu
     Ok(there.then_some(crate::picture::Picture::Stored))
 }
 
+/// What a `file` field stores in its own column: as a picture does.
+pub fn file_content(value: &Option<crate::RecordFile>) -> SqlValue {
+    picture(&value.as_ref().map(|f| f.content.clone()))
+}
+
+/// What a `file` field stores in the column of its name.
+pub fn file_name(value: &Option<crate::RecordFile>) -> SqlValue {
+    // The column is text that is never NULL: an empty name for no file.
+    SqlValue::Text(value.as_ref().map_or_else(String::new, |f| f.name.clone()))
+}
+
+/// A record's file, from whether it has one (as for a picture) and its name.
+pub fn get_file(column: &str, content: &SqlValue, name: &SqlValue) -> Result<Option<crate::RecordFile>> {
+    let Some(content) = get_picture(column, content)? else { return Ok(None) };
+    let name = match name {
+        SqlValue::Text(name) => name.clone(),
+        _ => String::new(),
+    };
+    Ok(Some(crate::RecordFile { name: crate::record_file::clean_name(&name), content }))
+}
+
 /// An enum value, stored by its name.
 pub fn name<E: ToString>(value: &E) -> SqlValue {
     SqlValue::Text(value.to_string())

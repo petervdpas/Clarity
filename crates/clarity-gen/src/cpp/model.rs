@@ -103,6 +103,8 @@ fn to_value(f: &Field) -> String {
         FieldType::Enum { .. } => format!("clarity::sql::text(name_of({value}))"),
         FieldType::Ref { .. } => format!("clarity::sql::reference({value})"),
         FieldType::Image => format!("clarity::sql::picture({value})"),
+        // Its content, then its name in the column beside it.
+        FieldType::File => format!("clarity::file_content({value}), clarity::file_name_value({value})"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -120,6 +122,7 @@ fn read(i: usize, f: &Field) -> String {
         FieldType::DateTime => get("date_time"),
         FieldType::Ref { .. } => get("reference"),
         FieldType::Image => get("picture"),
+        FieldType::File => format!("clarity::get_file({column}, values[{i}], values[{}])", i + 1),
         FieldType::Enum { name } => format!("{}({})", from_name(&name.name), get("text")),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
@@ -153,14 +156,24 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
         let init = initial(project, f).map(|v| format!(" = {v}")).unwrap_or_default();
         let _ = writeln!(fields, "    {} {}{init};", field_type(&f.ty), ident(&f.name.name));
     }
-    let columns: Vec<String> = stored(entity).map(|f| string(entity.column_of(&f.name.name))).collect();
+    // A file has the column of its name beside its own.
+    let columns: Vec<String> = stored(entity)
+        .flat_map(|f| {
+            let column = entity.column_of(&f.name.name).to_string();
+            let name = (f.ty == FieldType::File).then(|| format!("{column}_name"));
+            std::iter::once(column).chain(name)
+        })
+        .map(|c| string(&c))
+        .collect();
     let pictures: Vec<String> = entity
         .fields
         .iter()
-        .filter(|f| f.ty == FieldType::Image)
+        .filter(|f| matches!(f.ty, FieldType::Image | FieldType::File))
         .map(|f| {
+            let column = entity.column_of(&f.name.name);
             let store = f.modifiers.store.as_deref().map_or("std::nullopt".to_string(), string);
-            format!("{{{}, {store}}}", string(entity.column_of(&f.name.name)))
+            let name = if f.ty == FieldType::File { format!(", {}", string(&format!("{column}_name"))) } else { String::new() };
+            format!("{{{}, {store}{name}}}", string(column))
         })
         .collect();
     let source_name = project.source_of(name).unwrap_or_default();
@@ -194,8 +207,10 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let values: Vec<String> = stored(entity).map(to_value).collect();
     let _ = write!(source, "std::vector<clarity::SqlValue> {name}::values() const {{\n    return {{{}}};\n}}\n\n", values.join(", "));
     let mut reads = String::new();
-    for (i, f) in stored(entity).enumerate() {
+    let mut i = 0;
+    for f in stored(entity) {
         let _ = writeln!(reads, "    r.{} = {};", ident(&f.name.name), read(i, f));
+        i += if f.ty == FieldType::File { 2 } else { 1 };
     }
     let _ = write!(source, "{name} {name}::from_values(int64_t id, const clarity::Row& values) {{\n    {name} r;\n    r.id = id;\n{reads}    return r;\n}}\n\n");
     if !pictures.is_empty() {

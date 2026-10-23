@@ -107,6 +107,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "*int64".into(),
         FieldType::Image => "*clarity.Picture".into(),
+        FieldType::File => "*clarity.RecordFile".into(),
         FieldType::List { item } => format!("[]{}", item.name),
     }
 }
@@ -121,6 +122,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "*clarity.Date".into(),
         TypeInfo::DateTime => "*clarity.DateTime".into(),
         TypeInfo::Image => "*clarity.Picture".into(),
+        TypeInfo::RecordFile => "*clarity.RecordFile".into(),
         TypeInfo::File => "clarity.FileEntry".into(),
         TypeInfo::Files => "[]clarity.FileEntry".into(),
         TypeInfo::Bytes => "[]byte".into(),

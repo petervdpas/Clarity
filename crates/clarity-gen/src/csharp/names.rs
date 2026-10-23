@@ -153,6 +153,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { .. } => "long?".into(),
         FieldType::Image => "Picture?".into(),
+        FieldType::File => "RecordFile?".into(),
         FieldType::List { item } => format!("List<{}>", item.name),
     }
 }
@@ -167,6 +168,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Date => "DateOnly?".into(),
         TypeInfo::DateTime => "DateTime?".into(),
         TypeInfo::Image => "Picture?".into(),
+        TypeInfo::RecordFile => "RecordFile?".into(),
         TypeInfo::File => "FileEntry".into(),
         TypeInfo::Files => "List<FileEntry>".into(),
         TypeInfo::Bytes => "byte[]".into(),

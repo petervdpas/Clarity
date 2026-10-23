@@ -11,6 +11,7 @@ pub mod files;
 pub mod i18n;
 pub mod picture;
 pub mod query;
+pub mod record_file;
 pub mod settings;
 pub mod sql;
 mod store;
@@ -34,6 +35,7 @@ pub use chrono::{NaiveDate, NaiveDateTime};
 pub use dialect::Dialect;
 pub use files::FileEntry;
 pub use picture::{Picture, PictureColumn};
+pub use record_file::RecordFile;
 pub use query::{Cond, Hop, Op, Query, contains};
 pub use rust_decimal::Decimal;
 pub use sql::SqlValue;
@@ -368,6 +370,25 @@ impl Db {
         for picture in R::PICTURES {
             let Some(at) = R::COLUMNS.iter().position(|c| *c == picture.column) else { continue };
             let SqlValue::Blob(bytes) = &values[at] else { continue };
+            // A file of a `file` field is kept under its own name, in a folder named by its contents.
+            if let Some(name_column) = picture.name {
+                if let Some(store) = picture.store {
+                    let name = R::COLUMNS.iter().position(|c| *c == name_column).and_then(|i| match &values[i] {
+                        SqlValue::Text(name) => Some(name.clone()),
+                        _ => None,
+                    });
+                    let path = record_file::store_path(bytes, name.as_deref().unwrap_or(""));
+                    let file = picture::in_store(self.store_folder(store)?, &path)?;
+                    if !file.exists() {
+                        if let Some(folder) = file.parent() {
+                            std::fs::create_dir_all(folder).map_err(|e| Error::Storage(format!("cannot make {}: {e}", folder.display())))?;
+                        }
+                        std::fs::write(&file, bytes).map_err(|e| Error::Storage(format!("cannot write {}: {e}", file.display())))?;
+                    }
+                    values[at] = SqlValue::Text(path);
+                }
+                continue;
+            }
             let name = picture::file_name(bytes)?;
             if let Some(store) = picture.store {
                 let file = self.store_folder(store)?.join(&name);

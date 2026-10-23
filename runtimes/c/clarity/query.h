@@ -28,6 +28,9 @@ ClarityCond* clarity_compare(const char* column, ClarityOp op, ClarityValue valu
 ClarityCond* clarity_number(const char* column, ClarityOp op, ClarityValue value);
 /// The column's text contains `text`, ignoring case.
 ClarityCond* clarity_contains(const char* column, const char* text);
+/// Whether the JSON list kept in the column holds `item`, exactly: a list
+/// field's `a.tags contains "live"`.
+ClarityCond* clarity_holds(const char* column, ClarityValue item);
 ClarityCond* clarity_one_of(const char* column, size_t count, const ClarityValue* values);
 /// `clarity_one_of` for a decimal or money column.
 ClarityCond* clarity_one_of_numbers(const char* column, size_t count, const ClarityValue* values);

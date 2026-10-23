@@ -926,6 +926,9 @@ impl<'a> Emitter<'a> {
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("Cond::is_none({column:?})");
                     if op == BinaryOp::Eq { test } else { format!("{test}.negated()") }
+                } else if let FieldType::Values { item } = &ty {
+                    // A list field holds the item.
+                    format!("Cond::holds({column:?}, {})", self.sql_value(&item.field_type(), value))
                 } else if op == BinaryOp::Contains {
                     format!("Cond::contains({column:?}, &{})", self.text_ref(value))
                 } else {

@@ -37,6 +37,9 @@ public:
     static Cond number(const std::string& column, Op op, SqlValue value);
     /// The column's text contains `text`, ignoring case.
     static Cond contains(const std::string& column, const std::string& text);
+    /// Whether the JSON list kept in the column holds `item`, exactly: a list
+    /// field's `a.tags contains "live"`.
+    static Cond holds(const std::string& column, SqlValue item);
     static Cond one_of(const std::string& column, std::vector<SqlValue> values);
     /// `one_of` for a decimal or money column.
     static Cond one_of_numbers(const std::string& column, std::vector<SqlValue> values);

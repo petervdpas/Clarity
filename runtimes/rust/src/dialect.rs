@@ -2,6 +2,8 @@
 //! read and write records are written here, so the rest of the runtime
 //! works the same on every database.
 
+use crate::sql::SqlValue;
+
 /// The database a data source is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dialect {
@@ -58,6 +60,38 @@ impl Dialect {
             Dialect::Sqlite => format!("{} LIKE {mark} ESCAPE '!'", self.quote(column)),
             _ => format!("LOWER({}) LIKE LOWER({mark}) ESCAPE '!'", self.quote(column)),
         }
+    }
+
+    /// Whether the JSON list kept in `column` holds the item `mark`, exactly
+    /// (a list field, U1c), as `item` gives it.
+    pub(crate) fn holds(self, column: &str, mark: &str) -> String {
+        let column = self.quote(column);
+        match self {
+            Dialect::Sqlite => format!("EXISTS (SELECT 1 FROM json_each({column}) WHERE value = {mark})"),
+            Dialect::Postgres => format!("{column}::jsonb @> {mark}::jsonb"),
+            Dialect::Mysql => format!("JSON_CONTAINS({column}, {mark})"),
+            Dialect::Mssql => format!("EXISTS (SELECT 1 FROM OPENJSON({column}) WHERE [value] = {mark})"),
+        }
+    }
+
+    /// An item of a list as `holds` looks for it: SQLite compares the item
+    /// itself, PostgreSQL a list of it as JSON, MySQL the item as JSON, and
+    /// SQL Server its text. A date or a decimal is its text, as a list keeps it.
+    pub(crate) fn item(self, item: &SqlValue) -> SqlValue {
+        let text = match item {
+            SqlValue::Integer(n) if self == Dialect::Sqlite => return SqlValue::Integer(*n),
+            SqlValue::Integer(n) => return SqlValue::Text(if self == Dialect::Postgres { format!("[{n}]") } else { n.to_string() }),
+            SqlValue::Text(s) => s.clone(),
+            SqlValue::Decimal(d) => d.to_string(),
+            SqlValue::Date(d) => d.format(crate::sql::DATE).to_string(),
+            other => format!("{other:?}"),
+        };
+        let json = serde_json::to_string(&text).unwrap_or_default();
+        SqlValue::Text(match self {
+            Dialect::Sqlite | Dialect::Mssql => text,
+            Dialect::Postgres => format!("[{json}]"),
+            Dialect::Mysql => json,
+        })
     }
 
     /// Text that LIKE matches as it is: wildcards are escaped with `!`.

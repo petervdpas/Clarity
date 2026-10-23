@@ -2464,8 +2464,17 @@ impl<'a> BodyChecker<'_, 'a> {
                     _ => return self.error(general, expr.span),
                 };
                 let field_ty = self.expr(field, None);
-                if matches!(field_ty, Ty::Values(_)) {
-                    return self.error(format!("a query cannot look inside {}; go through the records with 'for'", field_ty.name()), expr.span);
+                // A list is looked into for one item: `a.tags contains "live"`.
+                if let Ty::Values(item) = field_ty {
+                    if *op != BinaryOp::Contains || !std::ptr::eq(field, left) {
+                        return self.error(format!("a query looks into {} with contains, as in 'a.tags contains x'", field_ty.name()), expr.span);
+                    }
+                    let value_ty = self.expr(value, Some(item_ty(item)));
+                    if !item_ty(item).accepts(&value_ty) {
+                        self.error(format!("cannot look for {} in {}", value_ty.name(), field_ty.name()), expr.span);
+                    }
+                    self.out.types.types.insert((expr.span.start, expr.span.end), TypeInfo::Bool);
+                    return;
                 }
                 // A reference is compared with a record of its entity.
                 if let Ty::Record(entity) = field_ty

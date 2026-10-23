@@ -146,6 +146,8 @@ code Albums
             lendingBusy.visible = play == none
         if album.formats contains Cd
             album.scores = [1, 2.5]
+        let live = find a in Album where a.tags contains "live" or a.formats contains Vinyl or a.plays contains today()
+        lendingBusy.visible = count(live) > 0
 
     handler newClicked
         ask NewAlbum then added

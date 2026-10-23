@@ -3,7 +3,9 @@
 #include <ctype.h>
 #include <string.h>
 
-typedef enum { COMPARE, CONTAINS, ONE_OF, IS_TRUE, IS_NONE, THROUGH, AND, OR, NOT } Kind;
+#include "cjson/cJSON.h"
+
+typedef enum { COMPARE, CONTAINS, HOLDS, ONE_OF, IS_TRUE, IS_NONE, THROUGH, AND, OR, NOT } Kind;
 
 struct ClarityCond {
     Kind kind;
@@ -63,6 +65,33 @@ ClarityCond* clarity_contains(const char* column, const char* text) {
     ClarityCond* c = cond(CONTAINS, column);
     c->text = clarity_copy(text);
     return c;
+}
+
+ClarityCond* clarity_holds(const char* column, ClarityValue item) {
+    ClarityCond* c = cond(HOLDS, column);
+    c->values = kept(1, &item);
+    c->count = 1;
+    return c;
+}
+
+// An item of a list as `holds` looks for it: SQLite compares the item
+// itself, PostgreSQL a list of it as JSON, MySQL the item as JSON, and SQL
+// Server its text. A date or a decimal is its text, as a list keeps it.
+static ClarityValue list_item(ClarityDialect d, ClarityValue item) {
+    const char* text = "";
+    switch (item.kind) {
+    case CLARITY_INTEGER:
+        if (d == CLARITY_SQLITE) return item;
+        return clarity_text_value(clarity_format(d == CLARITY_POSTGRES ? "[%lld]" : "%lld", (long long)item.integer));
+    case CLARITY_TEXT: text = item.text ? item.text : ""; break;
+    case CLARITY_DECIMAL: text = clarity_decimal_text(item.decimal); break;
+    case CLARITY_DATE: text = clarity_date_text(item.date); break;
+    default: break;
+    }
+    if (d == CLARITY_SQLITE || d == CLARITY_MSSQL) return clarity_text_value(text);
+    // JSON lives in the scratch arena.
+    const char* json = cJSON_PrintUnformatted(cJSON_CreateString(text));
+    return clarity_text_value(d == CLARITY_POSTGRES ? clarity_format("[%s]", json) : json);
 }
 
 ClarityCond* clarity_one_of(const char* column, size_t count, const ClarityValue* values) {
@@ -131,6 +160,7 @@ static const char* cond_sql(const ClarityCond* c, ClarityDialect d, ClarityValue
         const char* pattern = clarity_format("%%%s%%", clarity_escape_like(d, c->text));
         return clarity_contains_sql(d, c->column, param(d, params, clarity_text_value(pattern), false));
     }
+    case HOLDS: return clarity_holds_sql(d, c->column, param(d, params, list_item(d, c->values[0]), false));
     case ONE_OF: {
         ClarityBuffer out = {0};
         clarity_buffer_add(&out, column_sql(d, c->column, c->numeric));

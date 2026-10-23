@@ -39,6 +39,11 @@ type compareCond struct {
 
 type containsCond struct{ column, text string }
 
+type holdsCond struct {
+	column string
+	item   any
+}
+
 type oneOfCond struct {
 	column  string
 	values  []any
@@ -76,6 +81,10 @@ func Number(column string, op Op, value any) Cond {
 
 // Contains is the column's text containing text, ignoring case.
 func Contains(column, text string) Cond { return containsCond{column, text} }
+
+// Holds is a list field's JSON list holding the item, exactly
+// (a.tags contains "live").
+func Holds(column string, item any) Cond { return holdsCond{column, item} }
 
 // OneOf is the column equal to one of the values.
 func OneOf(column string, values []any) Cond { return oneOfCond{column, values, false} }
@@ -125,6 +134,10 @@ func (c compareCond) sql(d Dialect, params *[]any) string {
 func (c containsCond) sql(d Dialect, params *[]any) string {
 	pattern := "%" + d.escapeLike(c.text) + "%"
 	return d.contains(c.column, param(d, params, pattern, false))
+}
+
+func (c holdsCond) sql(d Dialect, params *[]any) string {
+	return d.holds(c.column, param(d, params, d.item(c.item), false))
 }
 
 func (c oneOfCond) sql(d Dialect, params *[]any) string {

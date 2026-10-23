@@ -55,6 +55,16 @@ std::string contains(Dialect d, const std::string& column, const std::string& ma
     return "LOWER(" + quote(d, column) + ") LIKE LOWER(" + mark + ") ESCAPE '!'";
 }
 
+std::string holds(Dialect d, const std::string& column, const std::string& mark) {
+    std::string quoted = quote(d, column);
+    switch (d) {
+    case Dialect::Sqlite: return "EXISTS (SELECT 1 FROM json_each(" + quoted + ") WHERE value = " + mark + ")";
+    case Dialect::Postgres: return quoted + "::jsonb @> " + mark + "::jsonb";
+    case Dialect::Mysql: return "JSON_CONTAINS(" + quoted + ", " + mark + ")";
+    default: return "EXISTS (SELECT 1 FROM OPENJSON(" + quoted + ") WHERE [value] = " + mark + ")";
+    }
+}
+
 std::string escape_like(Dialect d, const std::string& text) {
     std::string out;
     for (char c : text) {

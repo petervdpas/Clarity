@@ -68,6 +68,7 @@ static ClarityCond* cond(const cJSON* value) {
     if (strcmp(kind, "compare") == 0) return clarity_compare(text(inner, "column"), op(item(inner, "op")), sql_value(item(inner, "value")));
     if (strcmp(kind, "number") == 0) return clarity_number(text(inner, "column"), op(item(inner, "op")), sql_value(item(inner, "value")));
     if (strcmp(kind, "contains") == 0) return clarity_contains(text(inner, "column"), text(inner, "text"));
+    if (strcmp(kind, "holds") == 0) return clarity_holds(text(inner, "column"), sql_value(item(inner, "value")));
     if (strcmp(kind, "oneOf") == 0) {
         size_t n = values(item(inner, "values"), &list);
         return clarity_one_of(text(inner, "column"), n, list);

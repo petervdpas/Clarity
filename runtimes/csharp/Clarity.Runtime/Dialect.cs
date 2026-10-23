@@ -62,6 +62,48 @@ public static class DialectSql
         _ => $"LOWER({dialect.Quote(column)}) LIKE LOWER({mark}) ESCAPE '!'",
     };
 
+    /// <summary>
+    /// Whether the JSON list kept in <paramref name="column"/> holds the item
+    /// <paramref name="mark"/>, exactly (a list field, U1c), as <see cref="Item"/> gives it.
+    /// </summary>
+    internal static string Holds(this Dialect dialect, string column, string mark) => dialect switch
+    {
+        Dialect.Sqlite => $"EXISTS (SELECT 1 FROM json_each({dialect.Quote(column)}) WHERE value = {mark})",
+        Dialect.Postgres => $"{dialect.Quote(column)}::jsonb @> {mark}::jsonb",
+        Dialect.Mysql => $"JSON_CONTAINS({dialect.Quote(column)}, {mark})",
+        _ => $"EXISTS (SELECT 1 FROM OPENJSON({dialect.Quote(column)}) WHERE [value] = {mark})",
+    };
+
+    /// <summary>
+    /// An item of a list as <see cref="Holds"/> looks for it: SQLite compares the item
+    /// itself, PostgreSQL a list of it as JSON, MySQL the item as JSON, and SQL Server
+    /// its text. A date or a decimal is its text, as a list keeps it.
+    /// </summary>
+    internal static object Item(this Dialect dialect, object? item)
+    {
+        if (item is long n)
+            return dialect switch
+            {
+                Dialect.Sqlite => n,
+                Dialect.Postgres => $"[{n}]",
+                _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+        var text = item switch
+        {
+            null => "",
+            decimal d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            DateOnly d => d.ToString(Sql.DateFormat, System.Globalization.CultureInfo.InvariantCulture),
+            _ => item.ToString() ?? "",
+        };
+        var json = ListFields.Kept([text]);
+        return dialect switch
+        {
+            Dialect.Postgres => json,
+            Dialect.Mysql => json[1..^1],
+            _ => text,
+        };
+    }
+
     /// <summary>Text that LIKE matches as it is: wildcards are escaped with <c>!</c>.</summary>
     internal static string EscapeLike(this Dialect dialect, string text)
     {

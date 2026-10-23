@@ -89,6 +89,8 @@ func caseCond(t *testing.T, value any) Cond {
 		return Number(field("column").(string), caseOp(t, field("op")), caseValue(t, field("value")))
 	case "contains":
 		return Contains(field("column").(string), field("text").(string))
+	case "holds":
+		return Holds(field("column").(string), caseValue(t, field("value")))
 	case "oneOf":
 		return OneOf(field("column").(string), caseValues(t, field("values")))
 	case "oneOfNumbers":

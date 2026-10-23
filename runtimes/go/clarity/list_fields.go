@@ -39,9 +39,9 @@ func ReadList[T any](r *Reader, i int, column string) []T {
 	return items
 }
 
-// Holds is `list contains item` in code: decimals by their value, dates by
+// ListHolds is `list contains item` in code: decimals by their value, dates by
 // the day.
-func Holds[T any](list []T, item T) bool {
+func ListHolds[T any](list []T, item T) bool {
 	for _, x := range list {
 		if sameItem(any(x), any(item)) {
 			return true

@@ -48,6 +48,16 @@ const char* clarity_contains_sql(ClarityDialect d, const char* column, const cha
     return clarity_format("LOWER(%s) LIKE LOWER(%s) ESCAPE '!'", clarity_quote(d, column), mark);
 }
 
+const char* clarity_holds_sql(ClarityDialect d, const char* column, const char* mark) {
+    const char* quoted = clarity_quote(d, column);
+    switch (d) {
+    case CLARITY_SQLITE: return clarity_format("EXISTS (SELECT 1 FROM json_each(%s) WHERE value = %s)", quoted, mark);
+    case CLARITY_POSTGRES: return clarity_format("%s::jsonb @> %s::jsonb", quoted, mark);
+    case CLARITY_MYSQL: return clarity_format("JSON_CONTAINS(%s, %s)", quoted, mark);
+    default: return clarity_format("EXISTS (SELECT 1 FROM OPENJSON(%s) WHERE [value] = %s)", quoted, mark);
+    }
+}
+
 const char* clarity_escape_like(ClarityDialect d, const char* text) {
     ClarityBuffer out = {0};
     for (const char* c = text ? text : ""; *c; ++c) {

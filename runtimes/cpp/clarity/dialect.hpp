@@ -22,6 +22,8 @@ std::string mark(Dialect d, int n);
 std::string number(Dialect d, const std::string& expr);
 /// `column` containing the LIKE pattern `mark`, ignoring case; wildcards are escaped with !.
 std::string contains(Dialect d, const std::string& column, const std::string& mark);
+/// Whether the JSON list kept in `column` holds the item `mark` (a list field).
+std::string holds(Dialect d, const std::string& column, const std::string& mark);
 /// Text that LIKE matches as it is.
 std::string escape_like(Dialect d, const std::string& text);
 /// A bool column that is true.

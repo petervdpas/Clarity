@@ -7,7 +7,10 @@ package clarity
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/shopspring/decimal"
 )
 
 // Dialect is the database a data source is.
@@ -77,6 +80,59 @@ func (d Dialect) contains(column, mark string) string {
 		return d.Quote(column) + " LIKE " + mark + " ESCAPE '!'"
 	}
 	return "LOWER(" + d.Quote(column) + ") LIKE LOWER(" + mark + ") ESCAPE '!'"
+}
+
+// holds is whether the JSON list kept in column holds the item mark,
+// exactly (a list field, U1c), as item gives it.
+func (d Dialect) holds(column, mark string) string {
+	column = d.Quote(column)
+	switch d {
+	case Sqlite:
+		return "EXISTS (SELECT 1 FROM json_each(" + column + ") WHERE value = " + mark + ")"
+	case Postgres:
+		return column + "::jsonb @> " + mark + "::jsonb"
+	case Mysql:
+		return "JSON_CONTAINS(" + column + ", " + mark + ")"
+	default:
+		return "EXISTS (SELECT 1 FROM OPENJSON(" + column + ") WHERE [value] = " + mark + ")"
+	}
+}
+
+// item is an item of a list as holds looks for it: SQLite compares the item
+// itself, PostgreSQL a list of it as JSON, MySQL the item as JSON, and SQL
+// Server its text. A date or a decimal is its text, as a list keeps it.
+func (d Dialect) item(item any) any {
+	var text string
+	switch v := item.(type) {
+	case int64:
+		switch d {
+		case Sqlite:
+			return v
+		case Postgres:
+			return "[" + strconv.FormatInt(v, 10) + "]"
+		}
+		return strconv.FormatInt(v, 10)
+	case string:
+		text = v
+	case decimal.Decimal:
+		text = v.String()
+	case Date:
+		text = v.String()
+	case *Date:
+		if v != nil {
+			text = v.String()
+		}
+	default:
+		text = fmt.Sprint(v)
+	}
+	switch d {
+	case Postgres:
+		return ListValue([]string{text})
+	case Mysql:
+		json := ListValue([]string{text})
+		return json[1 : len(json)-1]
+	}
+	return text
 }
 
 // escapeLike is text that LIKE matches as it is: wildcards are escaped with !.

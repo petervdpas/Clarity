@@ -1793,6 +1793,9 @@ impl<'a> Emitter<'a> {
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("clarity_is_none({name})");
                     if op == BinaryOp::Eq { test } else { format!("clarity_not({test})") }
+                } else if let FieldType::Values { item } = &ty {
+                    // A list field holds the item.
+                    format!("clarity_holds({name}, {})", self.sql_value(&item.field_type(), value, pre))
                 } else if op == BinaryOp::Contains {
                     format!("clarity_contains({name}, {})", bare(self.value(value, pre)))
                 } else {

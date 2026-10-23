@@ -58,6 +58,8 @@ pub enum Cond {
     },
     /// The column's text contains `text`, ignoring case.
     Contains { column: &'static str, text: String },
+    /// The JSON list kept in the column holds the item, exactly (a list field).
+    Holds { column: &'static str, item: SqlValue },
     /// The column equals one of the values.
     OneOf {
         column: &'static str,
@@ -101,6 +103,11 @@ impl Cond {
             column,
             text: text.to_string(),
         }
+    }
+
+    /// `a.tags contains "live"`: whether a list field holds an item.
+    pub fn holds(column: &'static str, item: SqlValue) -> Cond {
+        Cond::Holds { column, item }
     }
 
     pub fn one_of(column: &'static str, values: Vec<SqlValue>) -> Cond {
@@ -170,6 +177,7 @@ impl Cond {
                 let pattern = format!("%{}%", dialect.escape_like(text));
                 dialect.contains(column, &param(SqlValue::Text(pattern), false))
             }
+            Cond::Holds { column, item } => dialect.holds(column, &param(dialect.item(item), false)),
             Cond::OneOf {
                 column,
                 values,

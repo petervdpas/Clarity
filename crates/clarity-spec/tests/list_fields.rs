@@ -92,7 +92,11 @@ fn code_uses_a_list_field_as_a_list_of_values() {
     let wrong = errors(MUSIC, &CODE.replace("album.tags contains \"jazz\"", "album.tracks contains \"jazz\""));
     assert!(wrong.iter().any(|m| m.contains("cannot look for text in list<integer>")), "{wrong:#?}");
     let query = errors(MUSIC, &CODE.replace("        album.prices = [1.50]\n", "        let found = find a in Album where a.tags contains \"jazz\"\n"));
-    assert!(query.iter().any(|m| m.contains("a query cannot look inside list<text>")), "{query:#?}");
+    assert!(query.is_empty(), "a query looks into a list with contains: {query:#?}");
+    let wrong_item = errors(MUSIC, &CODE.replace("        album.prices = [1.50]\n", "        let found = find a in Album where a.tracks contains \"one\"\n"));
+    assert!(wrong_item.iter().any(|m| m.contains("cannot look for text in list<integer>")), "{wrong_item:#?}");
+    let compared = errors(MUSIC, &CODE.replace("        album.prices = [1.50]\n", "        let found = find a in Album where a.tags == \"x\"\n"));
+    assert!(compared.iter().any(|m| m.contains("a query looks into list<text> with contains")), "{compared:#?}");
     let enum_wrong = errors(MUSIC, &CODE.replace("album.genres = [Jazz]", "album.genres = [\"Jazz\"]"));
     assert!(!enum_wrong.is_empty(), "text is not a Genre");
 }

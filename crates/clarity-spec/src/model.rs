@@ -192,6 +192,17 @@ impl ListItem {
         }
     }
 
+    /// One item as a field of its own type: what a query compares it as.
+    pub fn field_type(&self) -> FieldType {
+        match self {
+            ListItem::Text => FieldType::Text { max_length: None },
+            ListItem::Integer => FieldType::Integer,
+            ListItem::Decimal => FieldType::Decimal { precision: 0, scale: 0 },
+            ListItem::Date => FieldType::Date,
+            ListItem::Enum { name } => FieldType::Enum { name: name.clone() },
+        }
+    }
+
     /// The item type of `list<word>` for a plain value a list field holds.
     pub fn of_word(word: &str) -> Option<ListItem> {
         match word {

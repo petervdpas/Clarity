@@ -19,6 +19,8 @@ const char* clarity_mark(ClarityDialect d, int n);
 const char* clarity_number_sql(ClarityDialect d, const char* expr);
 /// `column` containing the LIKE pattern `mark`, ignoring case; wildcards are escaped with !.
 const char* clarity_contains_sql(ClarityDialect d, const char* column, const char* mark);
+/// Whether the JSON list kept in `column` holds the item `mark` (a list field).
+const char* clarity_holds_sql(ClarityDialect d, const char* column, const char* mark);
 /// Text that LIKE matches as it is.
 const char* clarity_escape_like(ClarityDialect d, const char* text);
 /// A bool column that is true.

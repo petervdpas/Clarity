@@ -70,6 +70,8 @@ public class QueryTests
                 return Cond.Number(Column(), ToOp(inner.GetProperty("op")), ToValue(inner.GetProperty("value")));
             case "contains":
                 return Cond.Contains(Column(), inner.GetProperty("text").GetString()!);
+            case "holds":
+                return Cond.Holds(Column(), ToValue(inner.GetProperty("value")));
             case "oneOf":
                 return Cond.OneOf(Column(), ToValues(inner.GetProperty("values")));
             case "oneOfNumbers":

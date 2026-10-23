@@ -1018,6 +1018,9 @@ impl<'a> Emitter<'a> {
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("Cond.IsNone({name})");
                     if op == BinaryOp::Eq { test } else { format!("{test}.Negated()") }
+                } else if let FieldType::Values { item } = &ty {
+                    // A list field holds the item.
+                    format!("Cond.Holds({name}, {})", self.sql_value(&item.field_type(), value))
                 } else if op == BinaryOp::Contains {
                     format!("Cond.Contains({name}, {})", self.value(value))
                 } else {

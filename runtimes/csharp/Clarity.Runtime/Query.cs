@@ -35,6 +35,9 @@ public abstract record Cond
     /// <summary>The column's text contains the text, ignoring case.</summary>
     sealed record ContainsCond(string Column, string Text) : Cond;
 
+    /// <summary>The JSON list kept in the column holds the item, exactly (a list field).</summary>
+    sealed record HoldsCond(string Column, object? Item) : Cond;
+
     /// <summary>The column equals one of the values.</summary>
     sealed record OneOfCond(string Column, IReadOnlyList<object?> Values, bool Numeric) : Cond;
 
@@ -58,6 +61,9 @@ public abstract record Cond
     public static Cond Number(string column, Op op, object? value) => new CompareCond(column, op, value, true);
 
     public static Cond Contains(string column, string text) => new ContainsCond(column, text);
+
+    /// <summary><c>a.tags contains "live"</c>: whether a list field holds an item.</summary>
+    public static Cond Holds(string column, object? item) => new HoldsCond(column, item);
 
     public static Cond OneOf(string column, IReadOnlyList<object?> values) => new OneOfCond(column, values, false);
 
@@ -90,6 +96,7 @@ public abstract record Cond
         {
             CompareCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} {OpSql(c.Op)} {Param(c.Value, c.Numeric)}",
             ContainsCond c => dialect.Contains(c.Column, Param($"%{dialect.EscapeLike(c.Text)}%", false)),
+            HoldsCond c => dialect.Holds(c.Column, Param(dialect.Item(c.Item), false)),
             OneOfCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} IN ({string.Join(", ", c.Values.Select(v => Param(v, c.Numeric)))})",
             IsTrueCond c => dialect.IsTrue(c.Column),
             IsNoneCond c => $"{dialect.Quote(c.Column)} IS NULL",

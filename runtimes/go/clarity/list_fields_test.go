@@ -96,13 +96,13 @@ func TestAColumnGivesItsItems(t *testing.T) {
 
 func TestAListHoldsItemsByTheirValue(t *testing.T) {
 	day := func(text string) *Date { d, _ := ParseDate(text); return &d }
-	if !Holds([]decimal.Decimal{decimal.RequireFromString("1.50")}, decimal.RequireFromString("1.5")) {
+	if !ListHolds([]decimal.Decimal{decimal.RequireFromString("1.50")}, decimal.RequireFromString("1.5")) {
 		t.Error("1.50 is 1.5")
 	}
-	if !Holds([]*Date{day("2026-10-23")}, day("2026-10-23")) || Holds([]*Date{day("2026-10-23")}, nil) {
+	if !ListHolds([]*Date{day("2026-10-23")}, day("2026-10-23")) || ListHolds([]*Date{day("2026-10-23")}, nil) {
 		t.Error("dates by the day")
 	}
-	if !Holds([]string{"jazz"}, "jazz") || Holds([]string{"jazz"}, "Jazz") {
+	if !ListHolds([]string{"jazz"}, "jazz") || ListHolds([]string{"jazz"}, "Jazz") {
 		t.Error("text as it is")
 	}
 }

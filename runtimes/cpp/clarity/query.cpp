@@ -3,10 +3,14 @@
 #include <algorithm>
 #include <cctype>
 
+#include <nlohmann/json.hpp>
+
+#include "clarity/text.hpp"
+
 namespace clarity {
 
 struct Cond::Node {
-    enum class Kind { Compare, Contains, OneOf, IsTrue, IsNone, Through, And, Or, Not } kind;
+    enum class Kind { Compare, Contains, Holds, OneOf, IsTrue, IsNone, Through, And, Or, Not } kind;
     std::string column;
     Op op = Op::Eq;
     std::vector<SqlValue> values;
@@ -33,6 +37,23 @@ std::string column_sql(Dialect d, const std::string& column, bool numeric) {
     return numeric ? number(d, quote(d, column)) : quote(d, column);
 }
 
+// An item of a list as `holds` looks for it: SQLite compares the item
+// itself, PostgreSQL a list of it as JSON, MySQL the item as JSON, and SQL
+// Server its text. A date or a decimal is its text, as a list keeps it.
+SqlValue list_item(Dialect d, const SqlValue& item) {
+    if (auto n = std::get_if<int64_t>(&item)) {
+        if (d == Dialect::Sqlite) return *n;
+        return d == Dialect::Postgres ? "[" + std::to_string(*n) + "]" : std::to_string(*n);
+    }
+    std::string text;
+    if (auto s = std::get_if<std::string>(&item)) text = *s;
+    else if (auto dec = std::get_if<Decimal>(&item)) text = dec->str();
+    else if (auto day = std::get_if<Date>(&item)) text = day->str();
+    if (d == Dialect::Sqlite || d == Dialect::Mssql) return text;
+    std::string json = nlohmann::json(text).dump();
+    return d == Dialect::Postgres ? "[" + json + "]" : json;
+}
+
 }  // namespace
 
 Cond Cond::compare(const std::string& column, Op op, SqlValue value) {
@@ -45,6 +66,10 @@ Cond Cond::number(const std::string& column, Op op, SqlValue value) {
 
 Cond Cond::contains(const std::string& column, const std::string& text) {
     return Cond(std::make_shared<Node>(Node{Node::Kind::Contains, column, Op::Eq, {}, false, text, {}, {}}));
+}
+
+Cond Cond::holds(const std::string& column, SqlValue item) {
+    return Cond(std::make_shared<Node>(Node{Node::Kind::Holds, column, Op::Eq, {std::move(item)}, false, "", {}, {}}));
 }
 
 Cond Cond::one_of(const std::string& column, std::vector<SqlValue> values) {
@@ -93,6 +118,8 @@ std::string Cond::sql(Dialect d, std::vector<SqlValue>& params) const {
     }
     case Node::Kind::Contains:
         return clarity::contains(d, n.column, param("%" + escape_like(d, n.text) + "%", false));
+    case Node::Kind::Holds:
+        return clarity::holds(d, n.column, param(list_item(d, n.values[0]), false));
     case Node::Kind::OneOf: {
         std::string out = column_sql(d, n.column, n.numeric) + " IN (";
         for (size_t i = 0; i < n.values.size(); ++i) out += (i ? ", " : "") + param(n.values[i], n.numeric);

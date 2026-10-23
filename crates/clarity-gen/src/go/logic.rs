@@ -1276,7 +1276,7 @@ impl<'a> Emitter<'a> {
             BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
                 let l = self.list_ref(left, pre);
                 let r = bare(if is_decimal(&item.info()) { self.decimal(right, pre) } else { self.value(right, pre) });
-                format!("clarity.Holds({l}, {r})")
+                format!("clarity.ListHolds({l}, {r})")
             }
             BinaryOp::Contains => {
                 let l = bare(self.value(left, pre));
@@ -1500,6 +1500,9 @@ impl<'a> Emitter<'a> {
                 let own = if matches!(value.kind, ExprKind::Empty) {
                     let test = format!("clarity.IsNone({name})");
                     if op == BinaryOp::Eq { test } else { format!("clarity.Not({test})") }
+                } else if let FieldType::Values { item } = &ty {
+                    // A list field holds the item.
+                    format!("clarity.Holds({name}, {})", self.sql_value(&item.field_type(), value, pre))
                 } else if op == BinaryOp::Contains {
                     format!("clarity.Contains({name}, {})", bare(self.value(value, pre)))
                 } else {

@@ -7,6 +7,9 @@
 
 #include <optional>
 #include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "clarity/picture.hpp"
 #include "clarity/value.hpp"
@@ -14,6 +17,10 @@
 namespace clarity::sql {
 
 inline SqlValue text(const std::string& value) { return value; }
+/// A list of values as its column keeps it: compact JSON, text as it is
+/// (conformance/list-fields.json).
+template <typename T>
+SqlValue list(const std::vector<T>& items) { return nlohmann::json(items).dump(); }
 inline SqlValue integer(int64_t value) { return value; }
 inline SqlValue decimal(const Decimal& value) { return value; }
 inline SqlValue boolean(bool value) { return value; }
@@ -24,6 +31,9 @@ inline SqlValue reference(const std::optional<int64_t>& value) { return value ? 
 SqlValue picture(const std::optional<Picture>& value);
 
 std::string get_text(const std::string& column, const SqlValue& value);
+/// The items of a list column as JSON, read as the field's list with
+/// `.get<std::vector<T>>()`; none when it is null or empty.
+nlohmann::json get_list(const std::string& column, const SqlValue& value);
 int64_t get_integer(const std::string& column, const SqlValue& value);
 Decimal get_decimal(const std::string& column, const SqlValue& value);
 bool get_boolean(const std::string& column, const SqlValue& value);

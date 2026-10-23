@@ -3,7 +3,7 @@
 //! `WithinCredit` for a function.
 
 use clarity_spec::Project;
-use clarity_spec::code::check::TypeInfo;
+use clarity_spec::code::check::{TypeInfo, ValueItem};
 use clarity_spec::model::FieldType;
 
 /// C# keywords, which a Clarity name may still use; a local escapes them with `@`.
@@ -155,6 +155,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "Picture?".into(),
         FieldType::File => "RecordFile?".into(),
         FieldType::List { item } => format!("List<{}>", item.name),
+        FieldType::Values { item } => format!("List<{}>", value_type(&ValueItem::of_list(item).info())),
     }
 }
 

@@ -1353,6 +1353,9 @@ impl<'a> Checker<'a> {
             FieldType::Ref { entity } | FieldType::List { item: entity } => {
                 self.resolve(file, entity, DeclKind::Entity);
             }
+            FieldType::Values { item: crate::model::ListItem::Enum { name } } => {
+                self.resolve(file, name, DeclKind::Enum);
+            }
             _ => {}
         }
 
@@ -1373,6 +1376,14 @@ impl<'a> Checker<'a> {
             }
             if m.default.is_some() {
                 self.error(file, format!("a file has no default; it starts empty ('{name}')"), field.span);
+            }
+        }
+        if matches!(field.ty, FieldType::Values { .. }) {
+            if m.unique {
+                self.error(file, format!("a list cannot be unique ('{name}')"), field.span);
+            }
+            if m.default.is_some() {
+                self.error(file, format!("a list has no default; it starts empty ('{name}')"), field.span);
             }
         }
         if field.ty == FieldType::Image {
@@ -1428,7 +1439,7 @@ impl<'a> Checker<'a> {
                 field.span,
             );
         }
-        if let Some(default) = m.default.as_ref().filter(|_| !matches!(field.ty, FieldType::Image | FieldType::File)) {
+        if let Some(default) = m.default.as_ref().filter(|_| !matches!(field.ty, FieldType::Image | FieldType::File | FieldType::Values { .. })) {
             self.check_default(file, field, default);
         }
     }

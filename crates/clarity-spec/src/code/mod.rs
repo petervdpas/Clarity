@@ -395,7 +395,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
-    /// `text contains part`, ignoring case.
+    /// `text contains part`, ignoring case; or whether a list of values holds an item.
     Contains,
 }
 

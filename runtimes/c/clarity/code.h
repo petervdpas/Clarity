@@ -59,12 +59,18 @@ typedef struct {
     size_t count;
 } ClarityTexts;
 
+typedef struct {
+    ClarityDate* items;
+    size_t count;
+} ClarityDates;
+
 /// A list of `count` items copied from `items` (NULL for none): `[1, 2, 3]`
 /// in code, or a copy of a list.
 ClarityIntegers clarity_integers(size_t count, const int64_t* items);
 ClarityDecimals clarity_decimals(size_t count, const ClarityDecimal* items);
 ClarityBools clarity_bools(size_t count, const bool* items);
 ClarityTexts clarity_texts(size_t count, const char* const* items);
+ClarityDates clarity_dates(size_t count, const ClarityDate* items);
 
 /// `xs[i]` in code: item i, counted from 1. False, with an error of
 /// CLARITY_VALUE, when the position is outside the list.
@@ -72,12 +78,23 @@ bool clarity_integers_at(ClarityIntegers list, int64_t position, int64_t* out);
 bool clarity_decimals_at(ClarityDecimals list, int64_t position, ClarityDecimal* out);
 bool clarity_bools_at(ClarityBools list, int64_t position, bool* out);
 bool clarity_texts_at(ClarityTexts list, int64_t position, const char** out);
+bool clarity_dates_at(ClarityDates list, int64_t position, ClarityDate* out);
 
 /// `xs[i] = value` in code.
 bool clarity_integers_set(ClarityIntegers list, int64_t position, int64_t value);
 bool clarity_decimals_set(ClarityDecimals list, int64_t position, ClarityDecimal value);
 bool clarity_bools_set(ClarityBools list, int64_t position, bool value);
 bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value);
+bool clarity_dates_set(ClarityDates list, int64_t position, ClarityDate value);
+/// The error of a position outside a list of `count` items: false.
+bool clarity_outside(int64_t position, size_t count);
+
+/// `list contains item` in code: text as it is, decimals by their value.
+bool clarity_integers_holds(ClarityIntegers list, int64_t item);
+bool clarity_decimals_holds(ClarityDecimals list, ClarityDecimal item);
+bool clarity_bools_holds(ClarityBools list, bool item);
+bool clarity_texts_holds(ClarityTexts list, const char* item);
+bool clarity_dates_holds(ClarityDates list, ClarityDate item);
 
 /// What an engine written in Clarity keeps from one command to the next,
 /// outside the scratch arena: `kept` takes a copy of `list` (of `text`), and
@@ -86,12 +103,14 @@ void clarity_integers_keep(ClarityIntegers* kept, ClarityIntegers list);
 void clarity_decimals_keep(ClarityDecimals* kept, ClarityDecimals list);
 void clarity_bools_keep(ClarityBools* kept, ClarityBools list);
 void clarity_texts_keep(ClarityTexts* kept, ClarityTexts list);
+void clarity_dates_keep(ClarityDates* kept, ClarityDates list);
 void clarity_text_keep(const char** kept, const char* text);
 /// What was kept goes: the instance it belonged to is gone.
 void clarity_integers_drop(ClarityIntegers* kept);
 void clarity_decimals_drop(ClarityDecimals* kept);
 void clarity_bools_drop(ClarityBools* kept);
 void clarity_texts_drop(ClarityTexts* kept);
+void clarity_dates_drop(ClarityDates* kept);
 void clarity_text_drop(const char** kept);
 
 /// The numbers `random(max)` gives: splitmix64, the sequence every runtime

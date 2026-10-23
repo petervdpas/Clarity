@@ -850,6 +850,8 @@ impl<'a> Emitter<'a> {
             other => other.symbol(),
         };
         match op {
+            // Whether a list holds an item.
+            BinaryOp::Contains if matches!(self.types.type_of(left), TypeInfo::Values(_)) => format!("{}.Contains({})", self.value(left), self.value(right)),
             BinaryOp::Contains => format!("Texts.Contains({}, {})", self.value(left), self.value(right)),
             BinaryOp::Add if *result == TypeInfo::Text => {
                 let (lt, rt) = (self.types.type_of(left), self.types.type_of(right));

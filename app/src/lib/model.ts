@@ -11,6 +11,7 @@ import { languageChoice } from "./i18n.svelte";
 import { keyValue, pickLanguage, translate, translateText, type Texts } from "./translate";
 import { isDark, pickTheme } from "./theme";
 import type { ThemeDecl } from "./generated/ThemeDecl";
+import { shownList, type Item } from "./listFields";
 import { scheme, themeChoice } from "./scheme.svelte";
 import { keepsItsDigits } from "./windowData";
 import { keyResource } from "./resources";
@@ -88,6 +89,9 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Save a copy": { key: "saveFileCopy", written: "Save a copy" },
   "Remove the file": { key: "removeFile", written: "Remove the file" },
   "A copy is in your Downloads folder": { key: "fileCopySaved", written: "A copy is in your Downloads folder" },
+  // A tags part's words.
+  Add: { key: "addTag", written: "Add" },
+  Remove: { key: "removeTag", written: "Remove" },
   // The headings of the pickers of the click targets `language` and `theme`.
   Language: { key: "languagePicker", written: "Language" },
   Theme: { key: "themePicker", written: "Theme" },
@@ -131,6 +135,9 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
     }
     case "list":
       return `${value} item(s)`;
+    // A list of values: its items joined (conformance/list-fields.json).
+    case "values":
+      return shownList(Array.isArray(value) ? (value as Item[]) : [], (item) => itemText(preview, field, item));
     default: {
       const format = fieldFormat(field);
       if (format && (typeof value === "string" || typeof value === "number") && value !== "") {
@@ -139,6 +146,15 @@ export function displayValue(preview: Preview, field: Field, value: JsonValue | 
       return String(value);
     }
   }
+}
+
+/** One item of a list field as people read it: a date in the person's format, an enum's value by its label. */
+export function itemText(preview: Preview, field: Field, item: Item): string {
+  if (field.type.kind !== "values") return String(item);
+  const listed = field.type.item;
+  if (listed.kind === "enum") return displayValue(preview, { ...field, type: { kind: "enum", name: listed.name } }, item);
+  if (listed.kind === "date") return displayValue(preview, { ...field, type: { kind: "date" }, modifiers: { ...field.modifiers, format: null } }, item);
+  return String(item);
 }
 
 /** The field types a table cell can edit, as the language allows them in `edit`. */

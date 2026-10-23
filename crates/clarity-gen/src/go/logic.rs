@@ -1161,7 +1161,7 @@ impl<'a> Emitter<'a> {
         let ty = self.types.type_of(expr);
         match &expr.kind {
             ExprKind::ListOf { items } => {
-                let decimals = matches!(ty, TypeInfo::Values(item) if is_decimal(&item.info()));
+                let decimals = matches!(&ty, TypeInfo::Values(item) if is_decimal(&item.info()));
                 let items: Vec<String> = items.iter().map(|i| bare(if decimals { self.decimal(i, pre) } else { self.value(i, pre) })).collect();
                 format!("{}{{{}}}", value_type(&ty), items.join(", "))
             }
@@ -1272,6 +1272,12 @@ impl<'a> Emitter<'a> {
         }
         let (lt, rt) = (self.types.type_of(left), self.types.type_of(right));
         match op {
+            // Whether a list holds an item.
+            BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
+                let l = self.list_ref(left, pre);
+                let r = bare(if is_decimal(&item.info()) { self.decimal(right, pre) } else { self.value(right, pre) });
+                format!("clarity.Holds({l}, {r})")
+            }
             BinaryOp::Contains => {
                 let l = bare(self.value(left, pre));
                 let r = bare(self.value(right, pre));

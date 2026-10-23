@@ -2,7 +2,7 @@
 //! stay as they are, with a trailing `_` where C or its library already
 //! uses the word, since C has one space of names for the whole program.
 
-use clarity_spec::code::check::TypeInfo;
+use clarity_spec::code::check::{TypeInfo, ValueItem};
 use clarity_spec::model::FieldType;
 
 /// The words C reserves, the names of the C library a program may well
@@ -93,6 +93,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "ClarityPicture*".into(),
         FieldType::File => "ClarityRecordFile*".into(),
         FieldType::List { item } => list_type(&item.name),
+        FieldType::Values { item } => values_type(&ValueItem::of_list(item)),
     }
 }
 
@@ -101,16 +102,29 @@ pub fn list_type(entity: &str) -> String {
     format!("{entity}List")
 }
 
-/// The C type of a list of plain values: `ClarityIntegers`.
-pub fn values_type(item: clarity_spec::code::check::ValueItem) -> String {
-    use clarity_spec::code::check::ValueItem;
+/// The C type of a list of plain values: `ClarityIntegers`, and for the
+/// values of an enum the list Clarity generates beside it: `GenreValues`.
+pub fn values_type(item: &ValueItem) -> String {
     match item {
-        ValueItem::Text => "ClarityTexts",
-        ValueItem::Integer => "ClarityIntegers",
-        ValueItem::Decimal => "ClarityDecimals",
-        ValueItem::Bool => "ClarityBools",
+        ValueItem::Text => "ClarityTexts".into(),
+        ValueItem::Integer => "ClarityIntegers".into(),
+        ValueItem::Decimal => "ClarityDecimals".into(),
+        ValueItem::Bool => "ClarityBools".into(),
+        ValueItem::Date => "ClarityDates".into(),
+        ValueItem::Enum(name) => format!("{name}Values"),
     }
-    .into()
+}
+
+/// What the functions of a list of plain values start with: `clarity_integers`, `genre_values`.
+pub fn values_prefix(item: &ValueItem) -> String {
+    match item {
+        ValueItem::Text => "clarity_texts".into(),
+        ValueItem::Integer => "clarity_integers".into(),
+        ValueItem::Decimal => "clarity_decimals".into(),
+        ValueItem::Bool => "clarity_bools".into(),
+        ValueItem::Date => "clarity_dates".into(),
+        ValueItem::Enum(name) => format!("{}_values", prefix(name)),
+    }
 }
 
 /// The C type of a value in code. A record is its struct; code passes and
@@ -130,7 +144,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::Bytes => "ClarityBytes".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => list_type(item),
-        TypeInfo::Values(item) => values_type(*item),
+        TypeInfo::Values(item) => values_type(item),
         TypeInfo::Unknown => "int64_t".into(),
     }
 }

@@ -226,6 +226,16 @@
     <Style Selector="StackPanel.busy > TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- The items of a tags input (U1c), each a chip with the button that removes it. -->
+    <Style Selector="Border.chip">
+      <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.chip Button.remove">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
     <!-- A popover: its own grid in a raised panel next to its part (DESIGN 5.16). -->
     <Style Selector="Border.popover">
       <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />

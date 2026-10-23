@@ -13,7 +13,7 @@ use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
 use clarity_spec::layout::{CONTENT_PADDING, GAP, POPOVER_COLUMN, ROW_HEIGHT};
-use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Literal, Page, PageKind, Widget, WidgetProps};
+use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, ListItem, Literal, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
 
@@ -1207,6 +1207,26 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}</ListBox>");
             }
             // A record's file, which the view model fetches to open it or save a copy.
+            // A list field's items as chips (U1c); an enum's are picked from its values.
+            WidgetKind::Tags => {
+                let field = p.bind.as_deref().and_then(|b| self.bound_field(b)).map(|(_, f)| &f.ty);
+                let (item, choices) = match field {
+                    Some(FieldType::Values { item: ListItem::Enum { name } }) => ("Choice", format!(" Choices=\"{{x:Static local:Choices.{}}}\"", name.name)),
+                    Some(FieldType::Values { item: ListItem::Integer }) => ("Integer", String::new()),
+                    Some(FieldType::Values { item: ListItem::Decimal }) => ("Decimal", String::new()),
+                    Some(FieldType::Values { item: ListItem::Date }) => ("Date", String::new()),
+                    _ => ("Text", String::new()),
+                };
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let read_only = if p.readonly { " IsReadOnly=\"True\"" } else { "" };
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:TagsInput {at} Item=\"{item}\"{choices}{value} AddText=\"{add}\" RemoveText=\"{remove}\"{read_only}{plain_state}{extra} />",
+                    // Clarity's own words, by key.
+                    add = self.text("@addTag"),
+                    remove = self.text("@removeTag"),
+                );
+            }
             WidgetKind::File => {
                 let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
                 let path = bound.as_deref().unwrap_or_default();
@@ -1309,6 +1329,7 @@ impl<'a> Window<'a> {
                         | WidgetKind::Slider
                         | WidgetKind::Color
                         | WidgetKind::File
+                        | WidgetKind::Tags
                         | WidgetKind::Checkbox
                         | WidgetKind::Switch
                         | WidgetKind::Dropdown

@@ -102,6 +102,12 @@ pub fn get_file(column: &str, content: &SqlValue, name: &SqlValue) -> Result<Opt
 }
 
 /// An enum value, stored by its name.
+/// A list of values as its column keeps it: compact JSON
+/// (conformance/list-fields.json).
+pub fn list<T: serde::Serialize>(items: &[T]) -> SqlValue {
+    SqlValue::Text(serde_json::to_string(items).unwrap_or_else(|_| "[]".to_string()))
+}
+
 pub fn name<E: ToString>(value: &E) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
@@ -179,6 +185,16 @@ pub fn get_reference(column: &str, value: &SqlValue) -> Result<Option<Id>> {
     match value {
         SqlValue::Null => Ok(None),
         SqlValue::Integer(n) => Ok(Some(*n)),
+        other => Err(invalid(column, other)),
+    }
+}
+
+/// The items of a list column; none when it is null or empty.
+pub fn get_list<T: serde::de::DeserializeOwned>(column: &str, value: &SqlValue) -> Result<Vec<T>> {
+    match value {
+        SqlValue::Null => Ok(Vec::new()),
+        SqlValue::Text(s) if s.trim().is_empty() => Ok(Vec::new()),
+        SqlValue::Text(s) => serde_json::from_str(s).map_err(|_| invalid(column, value)),
         other => Err(invalid(column, other)),
     }
 }

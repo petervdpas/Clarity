@@ -1,0 +1,43 @@
+{
+  "about": "Lists of values as fields (U1c): `list<text>`, `list<integer>`, `list<decimal>`, `list<date>` and `list<Enum>`, kept in one text column as JSON. `kept` is the column text a list is written as, exactly: compact, text as it is (only the quote, the backslash and control characters escaped), integers as numbers, decimals as text so nothing is lost (written without trailing zeros), dates as `yyyy-mm-dd`, an enum's values by name. `read` gives the items a column holds; a column that is null or empty holds none, and spaces between items do not matter. On the wire to the renderer a list is the same JSON array. `added` is what the tags input does with a typed item: trimmed, nothing for empty text or an item the list has, the list unchanged and the typed text kept (`refused`) when it is no value of the list's kind. `shown` is a list in a table cell: its items joined by a comma and a space, an enum's values by their labels.",
+  "kept": [
+    { "item": "text", "items": ["jazz", "live"], "column": "[\"jazz\",\"live\"]" },
+    { "item": "text", "items": [], "column": "[]" },
+    { "item": "text", "items": ["say \"hi\"", "a\\b", "café <b> & co"], "column": "[\"say \\\"hi\\\"\",\"a\\\\b\",\"café <b> & co\"]" },
+    { "item": "integer", "items": [1, 22, -3], "column": "[1,22,-3]" },
+    { "item": "decimal", "items": ["1.5", "2", "-0.25"], "column": "[\"1.5\",\"2\",\"-0.25\"]" },
+    { "item": "date", "items": ["2026-10-23", "2027-01-02"], "column": "[\"2026-10-23\",\"2027-01-02\"]" },
+    { "item": "enum", "items": ["Jazz", "Rock"], "column": "[\"Jazz\",\"Rock\"]" }
+  ],
+  "read": [
+    { "item": "text", "column": null, "items": [] },
+    { "item": "text", "column": "", "items": [] },
+    { "item": "text", "column": "[]", "items": [] },
+    { "item": "text", "column": "[ \"jazz\" , \"live\" ]", "items": ["jazz", "live"] },
+    { "item": "text", "column": "[\"say \\\"hi\\\"\",\"caf\\u00e9\"]", "items": ["say \"hi\"", "café"] },
+    { "item": "integer", "column": "[1,22,-3]", "items": [1, 22, -3] },
+    { "item": "decimal", "column": "[\"1.5\",\"2\"]", "items": ["1.5", "2"] },
+    { "item": "date", "column": "[\"2026-10-23\"]", "items": ["2026-10-23"] },
+    { "item": "enum", "column": "[\"Rock\"]", "items": ["Rock"] }
+  ],
+  "added": [
+    { "item": "text", "items": ["jazz"], "typed": "live", "gives": ["jazz", "live"] },
+    { "item": "text", "items": ["jazz"], "typed": "  live  ", "gives": ["jazz", "live"] },
+    { "item": "text", "items": ["jazz"], "typed": "jazz", "gives": ["jazz"] },
+    { "item": "text", "items": ["jazz"], "typed": "   ", "gives": ["jazz"] },
+    { "item": "integer", "items": [1], "typed": " 12 ", "gives": [1, 12] },
+    { "item": "integer", "items": [1], "typed": "1", "gives": [1] },
+    { "item": "integer", "items": [1], "typed": "1.5", "refused": true },
+    { "item": "integer", "items": [1], "typed": "twelve", "refused": true },
+    { "item": "decimal", "items": ["1.5"], "typed": "2.25", "gives": ["1.5", "2.25"] },
+    { "item": "decimal", "items": ["1.5"], "typed": "-3", "gives": ["1.5", "-3"] },
+    { "item": "decimal", "items": ["1.5"], "typed": "1,5", "refused": true }
+  ],
+  "shown": [
+    { "item": "text", "items": ["jazz", "live"], "text": "jazz, live" },
+    { "item": "text", "items": [], "text": "" },
+    { "item": "integer", "items": [1, 22], "text": "1, 22" },
+    { "item": "decimal", "items": ["1.5", "2"], "text": "1.5, 2" },
+    { "item": "enum", "items": ["Jazz", "Rock"], "labels": { "Jazz": "Jazz music", "Rock": "Rock" }, "text": "Jazz music, Rock" }
+  ]
+}

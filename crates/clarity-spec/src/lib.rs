@@ -154,8 +154,8 @@ fn give_settings(files: &mut [model::SpecFile]) {
 }
 
 /// Window data read as a record (`data pending: Operation`) whose type is
-/// an enum, and no entity, becomes a plain value: the parser reads one file
-/// and cannot tell.
+/// an enum, and no entity, becomes a plain value, and a field `list<Genre>`
+/// of an enum a list of values: the parser reads one file and cannot tell.
 fn resolve_data(files: &mut [model::SpecFile]) {
     use model::DataKind;
     let enums: std::collections::HashSet<String> = files.iter().flat_map(|f| &f.enums).map(|e| e.name.name.clone()).collect();
@@ -169,6 +169,15 @@ fn resolve_data(files: &mut [model::SpecFile]) {
             {
                 let ty = code::TypeRef { kind: code::TypeRefKind::Named { name: entity.name.clone() }, span: entity.span };
                 decl.of = DataKind::Value { ty, default: None };
+            }
+        }
+        // A field `list<Genre>` of an enum is a list of values (U1c).
+        for field in file.entities.iter_mut().flat_map(|e| &mut e.fields) {
+            if let model::FieldType::List { item } = &field.ty
+                && enums.contains(&item.name)
+                && !entities.contains(&item.name)
+            {
+                field.ty = model::FieldType::Values { item: model::ListItem::Enum { name: item.clone() } };
             }
         }
     }

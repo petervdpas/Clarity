@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <initializer_list>
 #include <optional>
@@ -81,6 +82,13 @@ const T& at(const std::vector<T>& list, int64_t position) {
 template <typename T>
 T& at(std::vector<T>& list, int64_t position) {
     return const_cast<T&>(at(static_cast<const std::vector<T>&>(list), position));
+}
+
+/// `list contains item` in code: whether a list holds an item, a whole
+/// number in a list of decimals by its value.
+template <typename T, typename U>
+bool holds(const std::vector<T>& list, const U& item) {
+    return std::find(list.begin(), list.end(), T(item)) != list.end();
 }
 
 /// The numbers `random(max)` gives: splitmix64, the sequence every runtime

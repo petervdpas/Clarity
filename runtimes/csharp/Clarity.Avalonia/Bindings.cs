@@ -50,6 +50,8 @@ public sealed class ShownConverter(Func<object?, string?> labels, FieldFormat? f
             decimal => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.Decimal), value),
             DateOnly => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.Date), value),
             DateTime => Locale.Formats.Show(format ?? new FieldFormat(FormatKind.DateTime), value),
+            // A list field: its items, each as it is shown (conformance/list-fields.json).
+            System.Collections.IList items => string.Join(", ", items.Cast<object?>().Select(i => Convert(i, targetType, parameter, culture))),
             _ => value.ToString(),
         };
 

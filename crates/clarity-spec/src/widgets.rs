@@ -51,6 +51,8 @@ pub enum WidgetKind {
     Color,
     /// A file of a record: chosen, opened, saved as a copy, removed.
     File,
+    /// A list of values as chips: typed or picked, and removed.
+    Tags,
     /// A number between a lowest and a highest value, dragged along a bar.
     Slider,
     /// A number typed, or moved a step at a time with its arrows.
@@ -451,6 +453,8 @@ const ENTRIES: &[Entry] = &[
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
     // A file of a record (U1c): its name, with buttons to choose, open, save a copy of and remove it.
     input(WidgetKind::File, "file", "File", (6, 1), &["file"], &[Event::Change], PICKED),
+    // A list field of values (U1c): its items as chips, a typed item or an enum's value added, one removed.
+    input(WidgetKind::Tags, "tags", "Tags", (6, 1), &["values"], &[Event::Change], PICKED),
     // A color (U1c): typed as #rrggbb, or picked from the palette every renderer shares.
     input(WidgetKind::Color, "color", "Color", (3, 1), &["color"], &[Event::Change], PICKED),
     // A number between its lowest and highest value (U1c): the range is written, or the field's own.
@@ -885,6 +889,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Enum { .. } => "enum",
         FieldType::Ref { .. } => "ref",
         FieldType::List { .. } => "list",
+        FieldType::Values { .. } => "values",
     }
 }
 

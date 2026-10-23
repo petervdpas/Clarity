@@ -548,6 +548,9 @@ pub(crate) fn parse_field_at(cursor: &mut Cursor, span: Span) -> ParseResult<Fie
     })
 }
 
+/// The plain types a list field cannot hold.
+const VALUE_WORDS: [&str; 12] = ["bool", "money", "datetime", "duration", "image", "file", "email", "url", "color", "id", "ref", "list"];
+
 pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
     let ident = cursor.expect_ident("a type")?;
     let ty = match ident.name.as_str() {
@@ -591,7 +594,14 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
             cursor.expect(TokenKind::Lt, "'<' after 'list'")?;
             let item = cursor.expect_ident("an entity name")?;
             cursor.expect(TokenKind::Gt, "'>'")?;
-            FieldType::List { item }
+            match crate::model::ListItem::of_word(&item.name) {
+                Some(item) => FieldType::Values { item },
+                None if VALUE_WORDS.contains(&item.name.as_str()) => {
+                    return Err(Diagnostic::error("a list field holds text, integer, decimal, date or an enum", item.span));
+                }
+                // An entity, or an enum once the project is loaded.
+                None => FieldType::List { item },
+            }
         }
         _ => FieldType::Enum { name: ident },
     };

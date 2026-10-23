@@ -258,6 +258,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | an enum name | one value of that enum |
 | `ref Entity` | a reference to a record of another entity |
 | `list<Entity>` | the records of another entity that belong to this one |
+| `list<text>`, `list<integer>`, `list<decimal>`, `list<date>`, `list<Enum>` | a list of values, kept in one column; see [Lists in records](#lists-in-records) |
 
 **Modifiers**
 
@@ -317,6 +318,23 @@ entity Product
 - **The file part** shows the file's name, or Clarity's word `noFile`, with buttons to choose a file, open it in the program the system uses for its kind, save a copy, and remove it: `file name manualBox at 1,1 span 8 bind product.manual`. Choosing and removing are its `change`. A copy goes to the person's Downloads folder under the file's name (with ` (2)` and on when that name is taken there), and the part says so in Clarity's word `fileCopySaved`. Its buttons are Clarity's words `chooseFile`, `openFile`, `saveFileCopy` and `removeFile`.
 - **Reading records never carries the file itself,** only its name; the file comes on its own when it is opened or copied.
 - **In code,** `product.manual.name` and `product.manual.extension` read its name and extension, a file is compared with and set to `none`, and set to a file of a store, as `files f in documents` finds them (see [Files](#files)). A file cannot be unique or have a default, and a table or list does not show a file column; a file part does.
+
+### Lists in records
+
+A field can hold a list of values: tags, the formats an album came out in, the days a show was played.
+
+```clarity
+entity Album
+    tags: list<text>
+    formats: list<Format>
+    plays: list<date>
+```
+
+- **The item types** are `text`, `integer`, `decimal`, `date` and an enum. A list is kept in one column as JSON (`["jazz","live"]`) and starts empty; migrations add it as an empty list. A field cannot become a list or stop being one; remove it and add a new field. A list cannot be unique, and has no default, `min` or `max`.
+- **The tags part** shows the items as chips, each with a button that removes it, and a place to add one: `tags name tagsBox at 1,1 span 6 bind album.tags`. Text and numbers are typed and taken on Enter or when the box is left; a typed item is trimmed, an item the list has is not added twice, and text that is no number stays as typed and is marked. A date is picked; an enum's values are picked from the ones the list has not. Adding and removing are its `change`. Its words are Clarity's `addTag` and `removeTag`.
+- **A table** shows a list column as its items joined by a comma and a space, an enum's values by their labels. It is not edited in the cell.
+- **In code** a list field is a list of values like any other: `for play in album.plays`, `count(album.tags)`, `album.tags[1]`, a new list `album.formats = [Vinyl, Cd]`, and `album.tags contains "live"` for whether it holds an item. A query cannot look inside a list.
+- Every stack keeps and reads a list alike: the cases are in `conformance/list-fields.json`.
 
 ### Formats
 
@@ -1266,7 +1284,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `a + b`, `a - b` | addition and subtraction; `+` also joins text |
 | `a == b`, `a != b`, `a < b`, `a <= b`, `a > b`, `a >= b` | comparison |
 | `x in [a, b, c]` | whether `x` equals one of the values |
-| `a contains b` | whether text `a` contains text `b`, ignoring case |
+| `a contains b` | whether text `a` contains text `b`, ignoring case; for a list, whether it holds item `b` |
 | `find c in Entity where ... order by ...` | the records that meet a condition; see [Queries](#queries) |
 | `new Entity` | a new record of the entity, with its defaults; `save` stores it |
 | `files f in store where ... order by ...` | the files of a file store that meet a condition; see [Files](#files) |
@@ -1383,7 +1401,7 @@ The types of values follow the data dictionary:
 | an enum | that enum |
 | a record | an entity, a `ref` |
 | a list of records | `list<Entity>`, a list in the window's data |
-| a list of values | `list<text>`, `list<integer>`, `list<decimal>`, `list<bool>`: in code and in what an engine keeps; a list is a value, so a copy changes on its own |
+| a list of values | `list<text>`, `list<integer>`, `list<decimal>`, `list<bool>`, `list<date>`, `list<Enum>`: in code, in what an engine keeps and in list fields; a list is a value, so a copy changes on its own |
 | `image` | an `image` field; compared with and set to `none`, or set to a file |
 | `file`, `list<file>` | a file of a file store, and a list of them; see [Files](#files) |
 | `bytes` | the contents of a file as they are (`read bytes of f`); `size` is their number |

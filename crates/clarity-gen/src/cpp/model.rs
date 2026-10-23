@@ -105,6 +105,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Image => format!("clarity::sql::picture({value})"),
         // Its content, then its name in the column beside it.
         FieldType::File => format!("clarity::file_content({value}), clarity::file_name_value({value})"),
+        FieldType::Values { .. } => format!("clarity::sql::list({value})"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -124,6 +125,7 @@ fn read(i: usize, f: &Field) -> String {
         FieldType::Image => get("picture"),
         FieldType::File => format!("clarity::get_file({column}, values[{i}], values[{}])", i + 1),
         FieldType::Enum { name } => format!("{}({})", from_name(&name.name), get("text")),
+        FieldType::Values { .. } => format!("{}.get<{}>()", get("list"), field_type(&f.ty)),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }

@@ -3,7 +3,7 @@
 //! local, `WithinCredit` for a function.
 
 use clarity_spec::Project;
-use clarity_spec::code::check::TypeInfo;
+use clarity_spec::code::check::{TypeInfo, ValueItem};
 use clarity_spec::model::FieldType;
 
 /// Go's keywords and predeclared names, which a local must not take.
@@ -109,6 +109,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "*clarity.Picture".into(),
         FieldType::File => "*clarity.RecordFile".into(),
         FieldType::List { item } => format!("[]{}", item.name),
+        FieldType::Values { item } => format!("[]{}", value_type(&ValueItem::of_list(item).info())),
     }
 }
 

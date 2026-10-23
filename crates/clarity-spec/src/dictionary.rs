@@ -46,6 +46,7 @@ pub fn type_text(ty: &FieldType) -> String {
         FieldType::Enum { name } => name.name.clone(),
         FieldType::Ref { entity } => format!("ref {}", entity.name),
         FieldType::List { item } => format!("list<{}>", item.name),
+        FieldType::Values { item } => format!("list<{}>", item.word()),
     }
 }
 

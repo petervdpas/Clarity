@@ -1041,6 +1041,11 @@ impl<'a> Emitter<'a> {
                 let (l, r) = (self.value(left), self.value(right));
                 format!("({l} {symbol} {r})")
             }
+            // Whether a list holds an item.
+            BinaryOp::Contains if matches!(lt, TypeInfo::Values(_)) => {
+                let (l, r) = (self.value(left), self.value(right));
+                format!("clarity::holds({l}, {r})")
+            }
             BinaryOp::Contains => {
                 let (l, r) = (self.value(left), self.value(right));
                 format!("clarity::text_contains({l}, {r})")
@@ -1282,7 +1287,7 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("clarity::sql::integer({}.id)", self.value(value)),
                 _ => format!("clarity::sql::reference({})", self.value(value)),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } => {
+            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list is compared with none only".into());
                 String::new()
             }

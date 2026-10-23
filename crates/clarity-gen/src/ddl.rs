@@ -108,6 +108,8 @@ impl Sql {
                 };
                 Some(self.text(&value.unwrap_or_default()))
             }
+            // A list starts empty.
+            (FieldType::Values { .. }, _) => Some(self.text("[]")),
             (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File, _) => None,
         };
         // MySQL takes a default for long text only as an expression.
@@ -179,6 +181,9 @@ impl Sql {
             (Sql::Mssql, FieldType::Enum { .. }) => "NVARCHAR(100)".into(),
             (_, FieldType::Enum { .. }) => "VARCHAR(100)".into(),
             (_, FieldType::List { .. }) => String::new(),
+            // A list of values as JSON: `["jazz","live"]`.
+            (Sql::Mssql, FieldType::Values { .. }) => "NVARCHAR(MAX)".into(),
+            (_, FieldType::Values { .. }) => "TEXT".into(),
         }
     }
 

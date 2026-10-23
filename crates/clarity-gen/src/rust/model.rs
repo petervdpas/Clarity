@@ -66,7 +66,7 @@ fn default_value(project: &Project, field: &Field) -> String {
             Some(_) => format!("{}::default()", name.name),
             None => "Default::default()".into(),
         },
-        (FieldType::List { .. }, _) => "Vec::new()".into(),
+        (FieldType::List { .. } | FieldType::Values { .. }, _) => "Vec::new()".into(),
         _ => "None".into(),
     }
 }
@@ -85,6 +85,7 @@ fn to_sql(field: &Field) -> String {
         FieldType::Image => format!("sql::picture(&{value})"),
         // Its content, then its name in the column beside it.
         FieldType::File => format!("sql::file_content(&{value}),\n            sql::file_name(&{value})"),
+        FieldType::Values { .. } => format!("sql::list(&{value})"),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -101,6 +102,7 @@ fn from_sql(field: &Field) -> &'static str {
         FieldType::Ref { .. } => "get_reference",
         FieldType::Image => "get_picture",
         FieldType::File => "get_file",
+        FieldType::Values { .. } => "get_list",
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }

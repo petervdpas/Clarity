@@ -11,6 +11,8 @@
   import SliderInput from "./ui/SliderInput.svelte";
   import ColorInput from "./ui/ColorInput.svelte";
   import FileInput, { type RecordFileValue } from "./ui/FileInput.svelte";
+  import TagsInput from "./ui/TagsInput.svelte";
+  import type { Item, ItemKind } from "./listFields";
   import { numberRange } from "./ranges";
   import RadioInput from "./ui/RadioInput.svelte";
   import TextInput from "./ui/TextInput.svelte";
@@ -32,7 +34,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEnum, findField, formatsOf, isNumeric, itemText, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { languageName, languagesOf } from "./translate";
   import { numberEditing } from "./format";
@@ -563,6 +565,24 @@
         }}
         onopen={() => withFileData(kept, (name, data) => live?.openFile(name, data))}
         onsave={() => withFileData(kept, (name, data) => live?.saveFile(name, data))}
+      />
+    {:else if p.kind === "tags"}
+      {@const type = bound?.field.type}
+      {@const listed = type?.kind === "values" ? type.item : null}
+      <TagsInput
+        {id}
+        items={(bound ? value : []) as Item[] | null}
+        kind={(listed?.kind ?? "text") as ItemKind}
+        choices={listed?.kind === "enum" ? (findEnum(preview, listed.name.name)?.variants ?? []).map((v) => ({ value: v.name.name, label: tr(preview, v.label) })) : []}
+        show={(item) => (bound ? itemText(preview, bound.field, item) : String(item))}
+        words={{ add: ownWord(preview, "Add"), remove: ownWord(preview, "Remove") }}
+        {describedBy}
+        disabled={design || disabled}
+        {readonly}
+        onchange={(next) => {
+          setValue(next);
+          fire("change");
+        }}
       />
     {:else if p.kind === "color"}
       <ColorInput

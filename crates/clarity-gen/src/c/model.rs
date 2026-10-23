@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 
 use clarity_spec::Project;
 use clarity_spec::code::{DataEvent, record_name};
-use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal};
+use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, ListItem, Literal};
 
 use super::names::{constant, decimal, field_type, ident, list_type, prefix, string, string_or_null};
 
@@ -56,9 +56,15 @@ fn enum_decl(decl: &EnumDecl) -> (String, String) {
         let _ = writeln!(labels, "    case {c}: return {};", string(&v.label));
         let _ = writeln!(reads, "    if (strcmp(name, {}) == 0) return {c};", string(&v.name.name));
     }
+    let header = header + &format!(
+        "/// A list of {name} values (`list<{name}>`), in the scratch arena.\ntypedef struct {{\n    {name}* items;\n    size_t count;\n}} {name}Values;\n\n{name}Values {p}_values(size_t count, const {name}* items);\nbool {p}_values_at({name}Values list, int64_t position, {name}* out);\nbool {p}_values_set({name}Values list, int64_t position, {name} value);\nbool {p}_values_holds({name}Values list, {name} item);\nvoid {p}_values_keep({name}Values* kept, {name}Values list);\nvoid {p}_values_drop({name}Values* kept);\n/// The values by name, as a list field keeps them and the screen reads them.\nClarityTexts {p}_values_names({name}Values list);\n{name}Values {p}_values_named(ClarityTexts names);\n\n"
+    );
     let first = values.first().cloned().unwrap_or_else(|| "0".into());
+    let lists = format!(
+        "{name}Values {p}_values(size_t count, const {name}* items) {{\n    {name}Values list = {{CLARITY_NEW({name}, count ? count : 1), count}};\n    if (count) memcpy(list.items, items, sizeof({name}) * count);\n    return list;\n}}\n\nbool {p}_values_at({name}Values list, int64_t position, {name}* out) {{\n    if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count);\n    *out = list.items[position - 1];\n    return true;\n}}\n\nbool {p}_values_set({name}Values list, int64_t position, {name} value) {{\n    if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count);\n    list.items[position - 1] = value;\n    return true;\n}}\n\nbool {p}_values_holds({name}Values list, {name} item) {{\n    for (size_t i = 0; i < list.count; ++i) if (list.items[i] == item) return true;\n    return false;\n}}\n\nvoid {p}_values_keep({name}Values* kept, {name}Values list) {{\n    {name}* items = list.count ? malloc(sizeof({name}) * list.count) : NULL;\n    if (list.count) memcpy(items, list.items, sizeof({name}) * list.count);\n    free(kept->items);\n    kept->items = items;\n    kept->count = list.count;\n}}\n\nvoid {p}_values_drop({name}Values* kept) {{\n    free(kept->items);\n    *kept = ({name}Values){{0}};\n}}\n\nClarityTexts {p}_values_names({name}Values list) {{\n    ClarityTexts names = {{CLARITY_NEW(const char*, list.count ? list.count : 1), list.count}};\n    for (size_t i = 0; i < list.count; ++i) names.items[i] = {p}_name(list.items[i]);\n    return names;\n}}\n\n{name}Values {p}_values_named(ClarityTexts names) {{\n    {name}Values list = {{CLARITY_NEW({name}, names.count ? names.count : 1), names.count}};\n    for (size_t i = 0; i < names.count; ++i) list.items[i] = {p}_from(names.items[i]);\n    return list;\n}}\n\n"
+    );
     let source = format!(
-        "const char* {p}_name({name} value) {{\n    switch (value) {{\n{names}    }}\n    return \"\";\n}}\n\nconst char* {p}_label({name} value) {{\n    switch (value) {{\n{labels}    }}\n    return \"\";\n}}\n\n{name} {p}_from(const char* name) {{\n    if (!name) return {first};\n{reads}    return {first};\n}}\n\n"
+        "const char* {p}_name({name} value) {{\n    switch (value) {{\n{names}    }}\n    return \"\";\n}}\n\nconst char* {p}_label({name} value) {{\n    switch (value) {{\n{labels}    }}\n    return \"\";\n}}\n\n{name} {p}_from(const char* name) {{\n    if (!name) return {first};\n{reads}    return {first};\n}}\n\n{lists}"
     );
     (header, source)
 }
@@ -97,6 +103,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Ref { .. } => format!("clarity_reference_value({value})"),
         FieldType::Image => format!("clarity_picture_value({value})"),
         FieldType::File => unreachable!("a file field stores two values, written by its record"),
+        FieldType::Values { item } => format!("{}_value({})", list_of(item), named(item, &value)),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -122,6 +129,13 @@ fn read(i: usize, f: &Field) -> String {
             prefix(&name.name),
             field = ident(&f.name.name)
         ),
+        // An enum's values are kept by name.
+        FieldType::Values { item: ListItem::Enum { name } } => format!(
+            "    ClarityTexts {field}_names = {{0}};\n    if (!clarity_get_texts({column}, values[{i}], &{field}_names)) return false;\n    {target} = {}_values_named({field}_names);\n",
+            prefix(&name.name),
+            field = ident(&f.name.name)
+        ),
+        FieldType::Values { item } => format!("    if (!clarity_get_{}({column}, values[{i}], &{target})) return false;\n", list_word(item)),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }
@@ -141,6 +155,7 @@ fn json_of(f: &Field) -> String {
         FieldType::Image => format!("clarity_picture_json({value})"),
         FieldType::File => format!("clarity_file_json({value})"),
         FieldType::List { item } => format!("{}_list_json(&{value})", prefix(&item.name)),
+        FieldType::Values { item } => format!("clarity_json_{}({})", list_word(item), named(item, &value)),
     }
 }
 
@@ -164,11 +179,39 @@ fn json_read(f: &Field) -> String {
             prefix(&name.name),
             field = ident(&f.name.name)
         ),
+        FieldType::Values { item: ListItem::Enum { name } } => format!(
+            "    ClarityTexts {field}_names = {{0}};\n    if (!clarity_json_get_texts(in, {key}, &{field}_names)) return false;\n    if ({field}_names.items) {target} = {}_values_named({field}_names);\n",
+            prefix(&name.name),
+            field = ident(&f.name.name)
+        ),
+        FieldType::Values { item } => get(list_word(item)),
         FieldType::List { item } => format!(
             "    const cJSON* {field}_items = cJSON_GetObjectItemCaseSensitive(in, {key});\n    if ({field}_items && !cJSON_IsNull({field}_items) && !{}_list_from_json({field}_items, &{target})) return false;\n",
             prefix(&item.name),
             field = ident(&f.name.name)
         ),
+    }
+}
+
+/// The runtime's word for a list field's list: `texts`; an enum's go by name.
+fn list_word(item: &ListItem) -> &'static str {
+    match item {
+        ListItem::Integer => "integers",
+        ListItem::Decimal => "decimals",
+        ListItem::Date => "dates",
+        ListItem::Text | ListItem::Enum { .. } => "texts",
+    }
+}
+
+fn list_of(item: &ListItem) -> String {
+    format!("clarity_{}", list_word(item))
+}
+
+/// A list field's list as the runtime keeps it: an enum's values by name.
+fn named(item: &ListItem, value: &str) -> String {
+    match item {
+        ListItem::Enum { name } => format!("{}_values_names({value})", prefix(&name.name)),
+        _ => value.to_string(),
     }
 }
 

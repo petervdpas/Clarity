@@ -157,9 +157,51 @@ pub enum FieldType {
     Ref {
         entity: Ident,
     },
+    /// Records of another entity, kept in their own table.
     List {
         item: Ident,
     },
+    /// A list of plain values, kept in one column as JSON (U1c):
+    /// `list<text>`, `list<Genre>`.
+    Values {
+        item: ListItem,
+    },
+}
+
+/// What a list field of plain values holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum ListItem {
+    Text,
+    Integer,
+    Decimal,
+    Date,
+    Enum { name: Ident },
+}
+
+impl ListItem {
+    /// The item type as Clarity writes it: `date`, `Genre`.
+    pub fn word(&self) -> &str {
+        match self {
+            ListItem::Text => "text",
+            ListItem::Integer => "integer",
+            ListItem::Decimal => "decimal",
+            ListItem::Date => "date",
+            ListItem::Enum { name } => &name.name,
+        }
+    }
+
+    /// The item type of `list<word>` for a plain value a list field holds.
+    pub fn of_word(word: &str) -> Option<ListItem> {
+        match word {
+            "text" => Some(ListItem::Text),
+            "integer" => Some(ListItem::Integer),
+            "decimal" => Some(ListItem::Decimal),
+            "date" => Some(ListItem::Date),
+            _ => None,
+        }
+    }
 }
 
 impl FieldType {

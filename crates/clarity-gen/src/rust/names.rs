@@ -1,6 +1,6 @@
 //! Clarity names and types as Rust names and types.
 
-use clarity_spec::code::check::TypeInfo;
+use clarity_spec::code::check::{TypeInfo, ValueItem};
 use clarity_spec::model::FieldType;
 
 /// Rust keywords, which a Clarity name may still use.
@@ -43,6 +43,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "Option<Picture>".into(),
         FieldType::File => "Option<RecordFile>".into(),
         FieldType::List { item } => format!("Vec<{}>", item.name),
+        FieldType::Values { item } => format!("Vec<{}>", value_type(&ValueItem::of_list(item).info())),
     }
 }
 

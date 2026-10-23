@@ -24,7 +24,7 @@ use clarity_spec::code::{
 };
 use clarity_spec::model::{Command, DataKind, FieldType, Frame, SpecFile, Widget};
 
-use super::names::{constant, decimal, ident, list_type, param_type, prefix, snake, string, value_type, values_type, zero};
+use super::names::{constant, decimal, ident, list_type, param_type, prefix, snake, string, value_type, values_prefix, values_type, zero};
 use crate::print;
 
 pub(crate) use crate::type_ref_info;
@@ -133,15 +133,6 @@ fn params(project: &Project, decl: &FunctionDecl) -> Vec<String> {
     params
 }
 
-/// The runtime's name of a list of plain values in its functions: `integers`.
-fn values_name(item: ValueItem) -> &'static str {
-    match item {
-        ValueItem::Text => "texts",
-        ValueItem::Integer => "integers",
-        ValueItem::Decimal => "decimals",
-        ValueItem::Bool => "bools",
-    }
-}
 
 /// The C type of what an engine written in Clarity keeps: `BoardKept`.
 fn kept_struct(engine: &str) -> String {
@@ -209,10 +200,10 @@ fn emit_engine(project: &Project, types: &FileTypes, engine: &EngineDecl, body: 
         }
         match info {
             TypeInfo::Values(item) => {
-                let list = values_name(item);
-                let _ = writeln!(keeps, "    clarity_{list}_keep(&into->{field}, from->{field});");
-                let _ = writeln!(copies, "    work.{field} = clarity_{list}(kept->{field}.count, kept->{field}.items);");
-                let _ = writeln!(drops, "    clarity_{list}_drop(&kept->{field});");
+                let list = values_prefix(&item);
+                let _ = writeln!(keeps, "    {list}_keep(&into->{field}, from->{field});");
+                let _ = writeln!(copies, "    work.{field} = {list}(kept->{field}.count, kept->{field}.items);");
+                let _ = writeln!(drops, "    {list}_drop(&kept->{field});");
             }
             TypeInfo::Text => {
                 let _ = writeln!(keeps, "    clarity_text_keep(&into->{field}, from->{field});");
@@ -822,7 +813,7 @@ impl<'a> Emitter<'a> {
                     let at = bare(self.value(index, &mut pre));
                     let code = bare(if is_decimal(&to) { self.decimal(value, &mut pre) } else { self.value(value, &mut pre) });
                     out.push_str(&pre);
-                    let _ = writeln!(out, "if (!clarity_{}_set({list}, {at}, {code})) return false;", values_name(item));
+                    let _ = writeln!(out, "if (!{}_set({list}, {at}, {code})) return false;", values_prefix(&item));
                     return;
                 }
                 let code = match &to {
@@ -861,7 +852,7 @@ impl<'a> Emitter<'a> {
             StmtKind::For { var, list, body } => {
                 let values = matches!(self.types.type_of(list), TypeInfo::Values(_));
                 let (item_type, list_c) = match self.types.type_of(list) {
-                    TypeInfo::Values(item) => (value_type(&item.info()), values_type(item)),
+                    TypeInfo::Values(item) => (value_type(&item.info()), values_type(&item)),
                     TypeInfo::Files => ("ClarityFile".to_string(), "ClarityFileList".to_string()),
                     TypeInfo::List(item) => (item.clone(), list_type(&item)),
                     other => {
@@ -1401,12 +1392,12 @@ impl<'a> Emitter<'a> {
                     return String::new();
                 };
                 let values: Vec<String> = items.iter().map(|i| bare(if item == ValueItem::Decimal { self.decimal(i, pre) } else { self.value(i, pre) })).collect();
-                let list = values_name(item);
+                let list = values_prefix(&item);
                 if values.is_empty() {
-                    format!("clarity_{list}(0, NULL)")
+                    format!("{list}(0, NULL)")
                 } else {
                     let item_type = if item == ValueItem::Text { "const char*".to_string() } else { value_type(&item.info()) };
-                    format!("clarity_{list}({}, ({item_type}[]){{{}}})", values.len(), values.join(", "))
+                    format!("{list}({}, ({item_type}[]){{{}}})", values.len(), values.join(", "))
                 }
             }
             ExprKind::Index { list, index } => {
@@ -1419,13 +1410,13 @@ impl<'a> Emitter<'a> {
                 };
                 let list = self.list_ref(list, pre);
                 let at = bare(self.value(index, pre));
-                self.lift(&value_type(&item.info()), &format!("clarity_{}_at({list}, {at}, {{out}})", values_name(item)), pre)
+                self.lift(&value_type(&item.info()), &format!("{}_at({list}, {at}, {{out}})", values_prefix(&item)), pre)
             }
             // A list of values is a value: what reads it gets a copy of its own.
             ExprKind::Name { .. } | ExprKind::Member { .. } if matches!(ty, TypeInfo::Values(_)) && self.part_property(expr).is_none() => {
                 let TypeInfo::Values(item) = ty else { return String::new() };
                 let list = self.place(expr, pre);
-                format!("clarity_{}({list}.count, {list}.items)", values_name(item))
+                format!("{}({list}.count, {list}.items)", values_prefix(&item))
             }
             ExprKind::Number { value } if is_decimal(&ty) => decimal(value),
             ExprKind::Number { value } => value.clone(),
@@ -1545,6 +1536,12 @@ impl<'a> Emitter<'a> {
         }
         let (lt, rt) = (self.types.type_of(left), self.types.type_of(right));
         match op {
+            // Whether a list holds an item.
+            BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
+                let l = self.list_ref(left, pre);
+                let r = bare(if is_decimal(&item.info()) { self.decimal(right, pre) } else { self.value(right, pre) });
+                format!("{}_holds({l}, {r})", values_prefix(item))
+            }
             BinaryOp::Contains => {
                 let l = bare(self.value(left, pre));
                 let r = bare(self.value(right, pre));
@@ -1853,7 +1850,7 @@ impl<'a> Emitter<'a> {
                 }
                 _ => format!("clarity_reference_value({})", bare(self.value(value, pre))),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } => {
+            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list field can only be compared with none in a query".into());
                 String::new()
             }

@@ -12,7 +12,7 @@ use super::{AskForm, EngineBody, EngineState,
 };
 use crate::diagnostic::Diagnostic;
 use crate::model::{
-    Command, CommandKind, CommandProps, DataDecl, DataKind, Entity, EnumDecl, FieldType, Frame, Ident, Literal, Page, SpecFile,
+    Command, CommandKind, CommandProps, DataDecl, DataKind, Entity, EnumDecl, FieldType, Frame, Ident, ListItem, Literal, Page, SpecFile,
     Widget, WidgetProps,
 };
 use crate::span::Span;
@@ -72,22 +72,27 @@ pub enum TypeInfo {
 }
 
 /// What a list of plain values holds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ValueItem {
     Text,
     Integer,
     Decimal,
     Bool,
+    Date,
+    /// The values of an enum, by its name: a field `list<Genre>`.
+    Enum(String),
 }
 
 impl ValueItem {
-    /// The item type as Clarity writes it: `integer`.
-    pub fn word(self) -> &'static str {
+    /// The item type as Clarity writes it: `integer`, `Genre`.
+    pub fn word(&self) -> &str {
         match self {
             ValueItem::Text => "text",
             ValueItem::Integer => "integer",
             ValueItem::Decimal => "decimal",
             ValueItem::Bool => "bool",
+            ValueItem::Date => "date",
+            ValueItem::Enum(name) => name,
         }
     }
 
@@ -98,17 +103,77 @@ impl ValueItem {
             "integer" => Some(ValueItem::Integer),
             "decimal" => Some(ValueItem::Decimal),
             "bool" => Some(ValueItem::Bool),
+            "date" => Some(ValueItem::Date),
             _ => None,
         }
     }
 
+    /// What a list field holds, as code sees it.
+    pub fn of_list(item: &ListItem) -> ValueItem {
+        match item {
+            ListItem::Text => ValueItem::Text,
+            ListItem::Integer => ValueItem::Integer,
+            ListItem::Decimal => ValueItem::Decimal,
+            ListItem::Date => ValueItem::Date,
+            ListItem::Enum { name } => ValueItem::Enum(name.name.clone()),
+        }
+    }
+
     /// The type of one item.
-    pub fn info(self) -> TypeInfo {
+    pub fn info(&self) -> TypeInfo {
         match self {
             ValueItem::Text => TypeInfo::Text,
             ValueItem::Integer => TypeInfo::Integer,
             ValueItem::Decimal => TypeInfo::Decimal,
             ValueItem::Bool => TypeInfo::Bool,
+            ValueItem::Date => TypeInfo::Date,
+            ValueItem::Enum(name) => TypeInfo::Enum(name.clone()),
+        }
+    }
+}
+
+/// What a list of plain values holds, as the checker knows it.
+#[derive(Debug, Clone, Copy)]
+enum Item<'a> {
+    Text,
+    Integer,
+    Decimal,
+    Bool,
+    Date,
+    Enum(&'a EnumDecl),
+}
+
+impl Item<'_> {
+    fn of_word(word: &str) -> Option<Self> {
+        Some(match ValueItem::of_word(word)? {
+            ValueItem::Text => Item::Text,
+            ValueItem::Integer => Item::Integer,
+            ValueItem::Decimal => Item::Decimal,
+            ValueItem::Bool => Item::Bool,
+            ValueItem::Date => Item::Date,
+            ValueItem::Enum(_) => return None,
+        })
+    }
+
+    fn info(self) -> ValueItem {
+        match self {
+            Item::Text => ValueItem::Text,
+            Item::Integer => ValueItem::Integer,
+            Item::Decimal => ValueItem::Decimal,
+            Item::Bool => ValueItem::Bool,
+            Item::Date => ValueItem::Date,
+            Item::Enum(e) => ValueItem::Enum(e.name.name.clone()),
+        }
+    }
+
+    fn word(self) -> String {
+        self.info().word().to_string()
+    }
+
+    fn same(self, other: Item) -> bool {
+        match (self, other) {
+            (Item::Enum(a), Item::Enum(b)) => std::ptr::eq(a, b),
+            (a, b) => std::mem::discriminant(&a) == std::mem::discriminant(&b),
         }
     }
 }
@@ -238,15 +303,16 @@ impl<'a> Env<'a> {
             TypeRefKind::File => Ty::File,
             TypeRefKind::Bytes => Ty::Bytes,
             TypeRefKind::List { item } if item == "file" => Ty::Files,
-            TypeRefKind::List { item } if ValueItem::of_word(item).is_some() => Ty::Values(ValueItem::of_word(item).expect("a value item")),
+            TypeRefKind::List { item } if Item::of_word(item).is_some() => Ty::Values(Item::of_word(item).expect("a value item")),
             TypeRefKind::Named { name } => match (self.entity(name), self.enum_decl(name)) {
                 (Some(entity), _) => Ty::Record(entity),
                 (None, Some(decl)) => Ty::Enum(decl),
                 (None, None) => return Err(format!("unknown type '{name}'")),
             },
-            TypeRefKind::List { item } => match self.entity(item) {
-                Some(entity) => Ty::List(entity),
-                None => return Err(format!("unknown entity '{item}'")),
+            TypeRefKind::List { item } => match (self.entity(item), self.enum_decl(item)) {
+                (Some(entity), _) => Ty::List(entity),
+                (None, Some(decl)) => Ty::Values(Item::Enum(decl)),
+                (None, None) => return Err(format!("unknown entity '{item}'")),
             },
         })
     }
@@ -274,6 +340,13 @@ impl<'a> Env<'a> {
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
             FieldType::Ref { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
+            FieldType::Values { item } => match item {
+                ListItem::Text => Ty::Values(Item::Text),
+                ListItem::Integer => Ty::Values(Item::Integer),
+                ListItem::Decimal => Ty::Values(Item::Decimal),
+                ListItem::Date => Ty::Values(Item::Date),
+                ListItem::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, |e| Ty::Values(Item::Enum(e))),
+            },
         }
     }
 }
@@ -298,7 +371,7 @@ enum Ty<'a> {
     Record(&'a Entity),
     List(&'a Entity),
     /// A list of plain values.
-    Values(ValueItem),
+    Values(Item<'a>),
     /// The type could not be found; the reason is reported once already.
     Unknown,
 }
@@ -322,7 +395,7 @@ impl Ty<'_> {
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
-            Ty::Values(item) => TypeInfo::Values(*item),
+            Ty::Values(item) => TypeInfo::Values(item.info()),
             Ty::Unknown => TypeInfo::Unknown,
         }
     }
@@ -367,7 +440,7 @@ impl Ty<'_> {
         match (self, other) {
             (Ty::Enum(a), Ty::Enum(b)) => std::ptr::eq(*a, *b),
             (Ty::Record(a), Ty::Record(b)) | (Ty::List(a), Ty::List(b)) => std::ptr::eq(*a, *b),
-            (Ty::Values(a), Ty::Values(b)) => a == b,
+            (Ty::Values(a), Ty::Values(b)) => a.same(*b),
             _ => std::mem::discriminant(self) == std::mem::discriminant(other),
         }
     }
@@ -1958,19 +2031,21 @@ impl<'a> BodyChecker<'_, 'a> {
                 };
                 let first = self.expr(&items[0], wanted);
                 let item = match first {
-                    Ty::Text => ValueItem::Text,
-                    Ty::Integer => ValueItem::Integer,
-                    Ty::Decimal | Ty::Money => ValueItem::Decimal,
-                    Ty::Bool => ValueItem::Bool,
+                    Ty::Text => Item::Text,
+                    Ty::Integer => Item::Integer,
+                    Ty::Decimal | Ty::Money => Item::Decimal,
+                    Ty::Bool => Item::Bool,
+                    Ty::Date => Item::Date,
+                    Ty::Enum(e) => Item::Enum(e),
                     Ty::Unknown => return Ty::Unknown,
                     other => {
-                        self.error(format!("a list holds text, integers, decimals or bools, not {}", other.name()), items[0].span);
+                        self.error(format!("a list holds text, integers, decimals, bools, dates or the values of an enum, not {}", other.name()), items[0].span);
                         return Ty::Unknown;
                     }
                 };
                 // An expected list of decimals takes integers too.
                 let item = match (wanted, item) {
-                    (Some(Ty::Decimal), ValueItem::Integer) => ValueItem::Decimal,
+                    (Some(Ty::Decimal), Item::Integer) => Item::Decimal,
                     _ => item,
                 };
                 for other in &items[1..] {
@@ -2389,6 +2464,9 @@ impl<'a> BodyChecker<'_, 'a> {
                     _ => return self.error(general, expr.span),
                 };
                 let field_ty = self.expr(field, None);
+                if matches!(field_ty, Ty::Values(_)) {
+                    return self.error(format!("a query cannot look inside {}; go through the records with 'for'", field_ty.name()), expr.span);
+                }
                 // A reference is compared with a record of its entity.
                 if let Ty::Record(entity) = field_ty
                     && matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
@@ -2553,6 +2631,14 @@ impl<'a> BodyChecker<'_, 'a> {
         match op {
             BinaryOp::Contains => {
                 let l = self.expr(left, None);
+                // `album.tags contains "jazz"`: whether a list holds an item.
+                if let Ty::Values(item) = l {
+                    let r = self.expr(right, Some(item_ty(item)));
+                    if !item_ty(item).accepts(&r) {
+                        self.error(format!("cannot look for {} in {}", r.name(), l.name()), join(left.span, right.span));
+                    }
+                    return Ty::Bool;
+                }
                 let r = self.expr(right, None);
                 let text = |t: &Ty| t.is_unknown() || matches!(t, Ty::Text);
                 if !(text(&l) && text(&r)) {
@@ -3018,11 +3104,13 @@ fn joins_text(expr: &Expr) -> bool {
 }
 
 /// The type of one item of a list of plain values.
-fn item_ty<'a>(item: ValueItem) -> Ty<'a> {
+fn item_ty(item: Item<'_>) -> Ty<'_> {
     match item {
-        ValueItem::Text => Ty::Text,
-        ValueItem::Integer => Ty::Integer,
-        ValueItem::Decimal => Ty::Decimal,
-        ValueItem::Bool => Ty::Bool,
+        Item::Text => Ty::Text,
+        Item::Integer => Ty::Integer,
+        Item::Decimal => Ty::Decimal,
+        Item::Bool => Ty::Bool,
+        Item::Date => Ty::Date,
+        Item::Enum(e) => Ty::Enum(e),
     }
 }

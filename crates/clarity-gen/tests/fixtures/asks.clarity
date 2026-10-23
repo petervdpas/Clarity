@@ -16,6 +16,10 @@ entity Album
     rating: decimal(3, 1), min 0, max 5
     tint: color, default "#3b82f6"
     booklet: file
+    tags: list<text>
+    formats: list<Format>
+    plays: list<date>
+    scores: list<decimal>
 
 settings
     language
@@ -62,6 +66,9 @@ page Albums: window
     switch name toolbarSwitch at 1,12 span 3 bind settings.showToolbar
     dropdown name languageBox at 4,12 span 3 bind settings.language
     file name bookletBox at 1,13 span 8 bind album.booklet on change: bookletChanged
+    tags name tagsBox at 1,14 span 6 bind album.tags on change: tagsChanged
+    tags name formatsBox at 7,14 span 6 bind album.formats
+    tags name playsBox at 1,15 span 6 bind album.plays
 
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
@@ -130,6 +137,15 @@ code Albums
         if album.booklet != none and album.booklet.extension != "pdf"
             lendingBusy.visible = album.booklet.name == ""
             album.booklet = none
+
+    handler tagsChanged
+        if album.tags contains "live" and count(album.tags) > 1
+            album.formats = [Vinyl]
+            album.tags[1] = "first"
+        for play in album.plays
+            lendingBusy.visible = play == none
+        if album.formats contains Cd
+            album.scores = [1, 2.5]
 
     handler newClicked
         ask NewAlbum then added

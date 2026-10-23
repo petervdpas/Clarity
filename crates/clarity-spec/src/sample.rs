@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
-use crate::model::{Entity, Field, FieldType, Literal, Project};
+use crate::model::{Entity, Field, FieldType, ListItem, Literal, Project};
 
 pub type Row = BTreeMap<String, Value>;
 
@@ -136,6 +136,21 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
             None => Value::Null,
         },
         FieldType::List { .. } => json!((i % 4) + 1),
+        // One to three items, as a tags part shows them.
+        FieldType::Values { item } => {
+            let items = (0..(i % 3) + 1).map(|n| match item {
+                ListItem::Text => Value::String(WORDS[(i + n) % WORDS.len()].to_lowercase()),
+                ListItem::Integer => json!((i + n) as i64 + 1),
+                ListItem::Decimal => Value::String(format_decimal((i + n) as i64 * 150 + 100, 2)),
+                ListItem::Date => Value::String(format!("2026-{:02}-{:02}", ((i + n) % 12) + 1, ((i + n) * 3 % 28) + 1)),
+                ListItem::Enum { name } => match project.enum_decl(&name.name) {
+                    Some(decl) if !decl.variants.is_empty() => Value::String(decl.variants[(i + n) % decl.variants.len()].name.name.clone()),
+                    _ => Value::Null,
+                },
+            });
+            let mut seen = Vec::new();
+            Value::Array(items.filter(|v| !v.is_null() && !seen.contains(v) && { seen.push(v.clone()); true }).collect())
+        }
     }
 }
 

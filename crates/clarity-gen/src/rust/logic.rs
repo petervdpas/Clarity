@@ -986,6 +986,11 @@ impl<'a> Emitter<'a> {
                 self.errors.push("a picture or a file is compared with none only".into());
                 String::new()
             }
+            // The checker keeps lists out of queries.
+            FieldType::Values { .. } => {
+                self.errors.push("a query cannot look inside a list".into());
+                String::new()
+            }
             FieldType::Ref { .. } => {
                 // A reference field holds the id already; a record has its own.
                 let stored_ref = match &value.kind {
@@ -1046,6 +1051,11 @@ impl<'a> Emitter<'a> {
             other => other.symbol(),
         };
         match op {
+            // Whether a list holds an item.
+            BinaryOp::Contains if let TypeInfo::Values(item) = &lt => {
+                let wanted = coerce(self.value(right), &rt, &item.info());
+                format!("{}.contains(&{wanted})", self.text_ref(left))
+            }
             BinaryOp::Contains => format!("contains(&{}, &{})", self.text_ref(left), self.text_ref(right)),
             BinaryOp::Add if *result == TypeInfo::Text => {
                 format!("[{}.show(), {}.show()].concat()", self.value(left), self.value(right))

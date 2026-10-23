@@ -9,7 +9,8 @@ use clarity_spec::Project;
 use clarity_spec::code::{DataEvent, record_name};
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
-use super::names::{field, field_type, local, pascal, string};
+use super::names::{field, field_type, local, pascal, string, value_type};
+use clarity_spec::code::check::ValueItem;
 
 /// The enums and records of `file`.
 pub fn emit(project: &Project, file: &SpecFile) -> String {
@@ -87,6 +88,8 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
             Some(decimal_literal(n))
         }
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
+        // An empty list, which travels as [] rather than null.
+        (FieldType::Values { .. }, _) => Some(format!("{}{{}}", field_type(&f.ty))),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
@@ -101,6 +104,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Image => format!("clarity.PictureValue({value})"),
         // Its content, then its name in the column beside it.
         FieldType::File => format!("clarity.FileContent({value}), clarity.FileNameValue({value})"),
+        FieldType::Values { .. } => format!("clarity.ListValue({value})"),
         _ => value,
     }
 }
@@ -122,6 +126,7 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
                 project.enum_decl(&name.name).map(|d| d.variants.iter().map(|v| format!(", {}", string(&v.name.name))).collect()).unwrap_or_default();
             format!("{}(read.Name({i}, {column}{names}))", name.name)
         }
+        FieldType::Values { item } => format!("clarity.ReadList[{}](read, {i}, {column})", value_type(&ValueItem::of_list(item).info())),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
     }
 }

@@ -102,3 +102,17 @@ void to_json(nlohmann::json& out, const Text& text);
 void from_json(const nlohmann::json& in, Text& text);
 
 }  // namespace clarity
+
+namespace nlohmann {
+
+/// A date that may be none, null when it is: an item of a list of dates.
+template <>
+struct adl_serializer<std::optional<clarity::Date>> {
+    static void to_json(json& out, const std::optional<clarity::Date>& d) { out = d ? json(*d) : json(nullptr); }
+    static void from_json(const json& in, std::optional<clarity::Date>& d) {
+        if (in.is_null()) d.reset();
+        else d = in.get<clarity::Date>();
+    }
+};
+
+}  // namespace nlohmann

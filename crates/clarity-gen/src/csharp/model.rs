@@ -4,7 +4,8 @@ use clarity_spec::Project;
 use clarity_spec::code::{DataEvent, record_name};
 use clarity_spec::model::{EnumDecl, Entity, Field, FieldType, Literal, SpecFile};
 
-use super::names::{backing, field_type, pascal, property, string};
+use super::names::{backing, field_type, pascal, property, string, value_type};
+use clarity_spec::code::check::ValueItem;
 use super::texts::Texts;
 
 /// The enums and records of `file`, in the application's `namespace`.
@@ -76,7 +77,7 @@ fn initial(field: &Field) -> Option<String> {
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
-        (FieldType::List { .. }, _) => Some("[]".into()),
+        (FieldType::List { .. } | FieldType::Values { .. }, _) => Some("[]".into()),
         _ => None,
     }
 }
@@ -213,12 +214,14 @@ fn to_sql(entity: &str, field: &Field) -> String {
         FieldType::Image => format!("Sql.Picture({value})"),
         // Its content, then its name in the column beside it.
         FieldType::File => format!("Sql.FileContent({value}), Sql.FileName({value})"),
+        // Its items as JSON.
+        FieldType::Values { .. } => format!("ListFields.Kept({value})"),
         _ => value,
     }
 }
 
 fn from_sql(field: &Field) -> String {
-    match &field.ty {
+    let read = match &field.ty {
         FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "GetText".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
@@ -229,8 +232,10 @@ fn from_sql(field: &Field) -> String {
         FieldType::Ref { .. } => "GetReference".into(),
         FieldType::Image => "GetPicture".into(),
         FieldType::File => "GetFile".into(),
+        FieldType::Values { item } => return format!("ListFields.Read<{}>", value_type(&ValueItem::of_list(item).info())),
         FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
-    }
+    };
+    format!("Sql.{read}")
 }
 
 fn record(project: &Project, entity: &Entity) -> String {
@@ -261,7 +266,7 @@ fn record(project: &Project, entity: &Entity) -> String {
     let mut from_values = String::new();
     for f in stored(entity) {
         let values = if f.ty == FieldType::File { format!("values[{at}], values[{}]", at + 1) } else { format!("values[{at}]") };
-        from_values.push_str(&format!("        {} = Sql.{}({}, {values}),\n", property(name, &f.name.name), from_sql(f), string(&f.name.name)));
+        from_values.push_str(&format!("        {} = {}({}, {values}),\n", property(name, &f.name.name), from_sql(f), string(&f.name.name)));
         at += if f.ty == FieldType::File { 2 } else { 1 };
     }
     // The data events written in the entity's code block; each runs the

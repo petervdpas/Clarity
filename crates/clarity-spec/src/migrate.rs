@@ -257,6 +257,11 @@ impl Schema {
                 if (column.ty == FieldType::File) != (*ty == FieldType::File) {
                     return Err(format!("{entity}.{field} cannot become a file or stop being one; remove it and add a new field"));
                 }
+                // A list keeps its items as JSON, which no other value is.
+                let list = |ty: &FieldType| matches!(ty, FieldType::Values { .. });
+                if list(&column.ty) != list(ty) {
+                    return Err(format!("{entity}.{field} cannot become a list or stop being one; remove it and add a new field"));
+                }
                 column.ty = ty.clone();
                 column.store = store.clone();
             }

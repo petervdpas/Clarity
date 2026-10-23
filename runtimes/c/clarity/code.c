@@ -52,7 +52,7 @@ void clarity_sort_files(ClarityFileList* files, size_t count, const ClarityFileO
     }
 }
 
-static bool outside(int64_t position, size_t count) {
+bool clarity_outside(int64_t position, size_t count) {
     return clarity_fail(CLARITY_VALUE, "there is no item %lld in a list of %zu", (long long)position, count);
 }
 
@@ -64,12 +64,12 @@ static bool outside(int64_t position, size_t count) {
         return list;                                                                      \
     }                                                                                     \
     bool clarity_##name##_at(List list, int64_t position, Item* out) {                    \
-        if (position < 1 || (uint64_t)position > list.count) return outside(position, list.count); \
+        if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count); \
         *out = list.items[position - 1];                                                  \
         return true;                                                                      \
     }                                                                                     \
     bool clarity_##name##_set(List list, int64_t position, Item value) {                  \
-        if (position < 1 || (uint64_t)position > list.count) return outside(position, list.count); \
+        if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count); \
         list.items[position - 1] = value;                                                 \
         return true;                                                                      \
     }
@@ -77,6 +77,33 @@ static bool outside(int64_t position, size_t count) {
 CLARITY_VALUES(ClarityIntegers, int64_t, integers)
 CLARITY_VALUES(ClarityDecimals, ClarityDecimal, decimals)
 CLARITY_VALUES(ClarityBools, bool, bools)
+CLARITY_VALUES(ClarityDates, ClarityDate, dates)
+
+bool clarity_integers_holds(ClarityIntegers list, int64_t item) {
+    for (size_t i = 0; i < list.count; ++i) if (list.items[i] == item) return true;
+    return false;
+}
+
+bool clarity_decimals_holds(ClarityDecimals list, ClarityDecimal item) {
+    for (size_t i = 0; i < list.count; ++i) if (clarity_decimal_compare(list.items[i], item) == 0) return true;
+    return false;
+}
+
+bool clarity_bools_holds(ClarityBools list, bool item) {
+    for (size_t i = 0; i < list.count; ++i) if (list.items[i] == item) return true;
+    return false;
+}
+
+bool clarity_texts_holds(ClarityTexts list, const char* item) {
+    for (size_t i = 0; i < list.count; ++i) if (clarity_same_text(list.items[i], item)) return true;
+    return false;
+}
+
+bool clarity_dates_holds(ClarityDates list, ClarityDate item) {
+    for (size_t i = 0; i < list.count; ++i)
+        if (list.items[i].year == item.year && list.items[i].month == item.month && list.items[i].day == item.day) return true;
+    return false;
+}
 
 ClarityTexts clarity_texts(size_t count, const char* const* items) {
     ClarityTexts list = {CLARITY_NEW(const char*, count ? count : 1), count};
@@ -85,13 +112,13 @@ ClarityTexts clarity_texts(size_t count, const char* const* items) {
 }
 
 bool clarity_texts_at(ClarityTexts list, int64_t position, const char** out) {
-    if (position < 1 || (uint64_t)position > list.count) return outside(position, list.count);
+    if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count);
     *out = list.items[position - 1];
     return true;
 }
 
 bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value) {
-    if (position < 1 || (uint64_t)position > list.count) return outside(position, list.count);
+    if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count);
     list.items[position - 1] = value;
     return true;
 }
@@ -109,6 +136,12 @@ bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value) {
 CLARITY_KEEP(ClarityIntegers, int64_t, integers)
 CLARITY_KEEP(ClarityDecimals, ClarityDecimal, decimals)
 CLARITY_KEEP(ClarityBools, bool, bools)
+CLARITY_KEEP(ClarityDates, ClarityDate, dates)
+
+void clarity_dates_drop(ClarityDates* kept) {
+    free(kept->items);
+    *kept = (ClarityDates){0};
+}
 
 void clarity_integers_drop(ClarityIntegers* kept) {
     free(kept->items);

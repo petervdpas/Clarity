@@ -53,7 +53,7 @@ public static class Sql
         return there ? Runtime.Picture.Stored : null;
     }
 
-    static InvalidValueException Invalid(string column, object? value) => new($"{column} cannot be {value ?? "null"}");
+    internal static InvalidValueException Invalid(string column, object? value) => new($"{column} cannot be {value ?? "null"}");
 
     public static string GetText(string column, object? value) => value switch
     {

@@ -122,6 +122,10 @@
       <path d="M8 5 h10 l5 5 v13 h-15 z" />
       <path d="M18 5 v5 h5" />
       <rect x="27" y="10" width="15" height="8" rx="2" class="fill" />
+    {:else if kind === "tags"}
+      <rect x="4" y="9" width="15" height="10" rx="5" class="fill" />
+      <rect x="22" y="9" width="13" height="10" rx="5" class="fill" />
+      <line x1="38" y1="10" x2="38" y2="18" />
     {:else if kind === "slider"}
       <line x1="6" y1="14" x2="42" y2="14" />
       <rect x="6" y="12.5" width="16" height="3" rx="1.5" class="fill" />

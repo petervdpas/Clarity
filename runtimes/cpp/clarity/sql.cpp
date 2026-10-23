@@ -31,6 +31,14 @@ std::string get_text(const std::string& column, const SqlValue& value) {
     unfit(column, "text");
 }
 
+nlohmann::json get_list(const std::string& column, const SqlValue& value) {
+    std::string text = get_text(column, value);
+    if (text.find_first_not_of(" \t\r\n") == std::string::npos) return nlohmann::json::array();
+    auto items = nlohmann::json::parse(text, nullptr, false);
+    if (!items.is_array()) unfit(column, "a list");
+    return items;
+}
+
 int64_t get_integer(const std::string& column, const SqlValue& value) {
     if (auto n = std::get_if<int64_t>(&value)) return *n;
     if (std::holds_alternative<std::monostate>(value)) return 0;

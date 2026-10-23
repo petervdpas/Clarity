@@ -1,5 +1,5 @@
 {
-  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), holds (a list column and one item: whether the JSON list kept in it holds the item exactly; an item of text, a whole number, or a date or a decimal as its text), oneOf and oneOfNumbers (column, values), isTrue (a column), isNone (a column with no value: an empty date or reference), through (a reference column, the table and key it refers to, and a condition on that table, which becomes a subquery), and, or (two conditions), not (one). An order key may go through references too, each hop a subquery on an alias t1, t2 and so on. A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
+  "about": "The SQL each runtime builds for a query (Clarity's find), per database. Every stack's runtime must give the same statement and parameters. A condition is one of: compare and number (column, op, value; number compares decimals and money as numbers), contains (column, text), holds (a list column and one item: whether the JSON list kept in it holds the item exactly; an item of text, a whole number, or a date or a decimal as its text), matches (full-text search: a table, its key, the columns marked search and the text typed; the record holds every word of the text, each as the start of a word; a word is a run of ASCII letters and digits and of any characters beyond ASCII, and text without words matches every record; SQLite looks in the table's FTS5 index named table__search, PostgreSQL in its GIN index on to_tsvector('simple', ...), MySQL in its FULLTEXT index for words of 3 or more characters and with REGEXP for shorter ones, SQL Server with LIKE at the start of a word), oneOf and oneOfNumbers (column, values), isTrue (a column), isNone (a column with no value: an empty date or reference), through (a reference column, the table and key it refers to, and a condition on that table, which becomes a subquery), and, or (two conditions), not (one). An order key may go through references too, each hop a subquery on an alias t1, t2 and so on. A value is text, integer, decimal (as text), bool, date or null. The select list is the key and then the columns, each quoted.",
   "cases": [
     {
       "name": "every record, in the order stored",
@@ -688,6 +688,170 @@
               "text": "2026-10-23"
             }
           ]
+        }
+      }
+    },
+    {
+      "name": "full-text search: every word as the start of a word",
+      "table": "album",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "filter": {
+          "matches": {
+            "table": "album",
+            "key": "id",
+            "columns": [
+              "title",
+              "notes",
+              "tags"
+            ],
+            "text": "Blue  note"
+          }
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE \"id\" IN (SELECT rowid FROM \"album__search\" WHERE \"album__search\" MATCH ?1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "\"Blue\"* AND \"note\"*"
+            }
+          ]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE to_tsvector('simple', coalesce(\"title\", '') || ' ' || coalesce(\"notes\", '') || ' ' || coalesce(\"tags\", '')) @@ to_tsquery('simple', $1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "Blue:* & note:*"
+            }
+          ]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `album` WHERE MATCH (`title`, `notes`, `tags`) AGAINST (? IN BOOLEAN MODE) ORDER BY `id`",
+          "params": [
+            {
+              "text": "+Blue* +note*"
+            }
+          ]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [album] WHERE ((N' ' + ISNULL([title], N'') + N' ' + ISNULL([notes], N'') + N' ' + ISNULL([tags], N'')) LIKE @P1 AND (N' ' + ISNULL([title], N'') + N' ' + ISNULL([notes], N'') + N' ' + ISNULL([tags], N'')) LIKE @P2) ORDER BY [id]",
+          "params": [
+            {
+              "text": "%[^0-9A-Za-z]Blue%"
+            },
+            {
+              "text": "%[^0-9A-Za-z]note%"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "full-text search: a short word, punctuation between words and a word beyond ASCII",
+      "table": "album",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "filter": {
+          "matches": {
+            "table": "album",
+            "key": "id",
+            "columns": [
+              "title",
+              "notes",
+              "tags"
+            ],
+            "text": "u2, café-noir"
+          }
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE \"id\" IN (SELECT rowid FROM \"album__search\" WHERE \"album__search\" MATCH ?1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "\"u2\"* AND \"café\"* AND \"noir\"*"
+            }
+          ]
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE to_tsvector('simple', coalesce(\"title\", '') || ' ' || coalesce(\"notes\", '') || ' ' || coalesce(\"tags\", '')) @@ to_tsquery('simple', $1) ORDER BY \"id\"",
+          "params": [
+            {
+              "text": "u2:* & café:* & noir:*"
+            }
+          ]
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `album` WHERE (MATCH (`title`, `notes`, `tags`) AGAINST (? IN BOOLEAN MODE) AND CONCAT_WS(' ', `title`, `notes`, `tags`) REGEXP ?) ORDER BY `id`",
+          "params": [
+            {
+              "text": "+café* +noir*"
+            },
+            {
+              "text": "(^|[^[:alnum:]])u2"
+            }
+          ]
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [album] WHERE ((N' ' + ISNULL([title], N'') + N' ' + ISNULL([notes], N'') + N' ' + ISNULL([tags], N'')) LIKE @P1 AND (N' ' + ISNULL([title], N'') + N' ' + ISNULL([notes], N'') + N' ' + ISNULL([tags], N'')) LIKE @P2 AND (N' ' + ISNULL([title], N'') + N' ' + ISNULL([notes], N'') + N' ' + ISNULL([tags], N'')) LIKE @P3) ORDER BY [id]",
+          "params": [
+            {
+              "text": "%[^0-9A-Za-z]u2%"
+            },
+            {
+              "text": "%[^0-9A-Za-z]café%"
+            },
+            {
+              "text": "%[^0-9A-Za-z]noir%"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "full-text search: text without words matches every record",
+      "table": "album",
+      "key": "id",
+      "columns": [
+        "title"
+      ],
+      "query": {
+        "filter": {
+          "matches": {
+            "table": "album",
+            "key": "id",
+            "columns": [
+              "title",
+              "notes",
+              "tags"
+            ],
+            "text": " - "
+          }
+        }
+      },
+      "expect": {
+        "sqlite": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE 1 = 1 ORDER BY \"id\"",
+          "params": []
+        },
+        "postgres": {
+          "sql": "SELECT \"id\", \"title\" FROM \"album\" WHERE 1 = 1 ORDER BY \"id\"",
+          "params": []
+        },
+        "mysql": {
+          "sql": "SELECT `id`, `title` FROM `album` WHERE 1 = 1 ORDER BY `id`",
+          "params": []
+        },
+        "mssql": {
+          "sql": "SELECT [id], [title] FROM [album] WHERE 1 = 1 ORDER BY [id]",
+          "params": []
         }
       }
     }

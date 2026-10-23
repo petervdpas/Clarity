@@ -285,6 +285,75 @@ impl Sql {
         }
     }
 
+    /// The full-text index of the table's fields marked `search`, which
+    /// `a matches x` looks in: an FTS5 table kept by triggers on SQLite, a
+    /// GIN index on PostgreSQL, a FULLTEXT index on MySQL; SQL Server looks
+    /// with LIKE, as its full-text search is seldom installed. The names
+    /// and the document match the runtimes' queries.
+    pub fn search_index(self, table: &Table, baseline: bool) -> Vec<String> {
+        let columns: Vec<String> = table.columns.iter().filter(|c| c.search).map(|c| self.quote(c.stored())).collect();
+        if columns.is_empty() {
+            return vec![];
+        }
+        let name = table.table_name();
+        let index = self.quote(&search_name(&name));
+        let on = self.quote(&name);
+        let list = columns.join(", ");
+        let missing = if baseline { " IF NOT EXISTS" } else { "" };
+        match self {
+            Sql::Sqlite => {
+                let key = self.quote(table.key_column());
+                let literal = |text: &str| format!("'{}'", text.replace('\'', "''"));
+                let new: Vec<String> = columns.iter().map(|c| format!("new.{c}")).collect();
+                let old: Vec<String> = columns.iter().map(|c| format!("old.{c}")).collect();
+                let insert = format!("INSERT INTO {index}(rowid, {list}) VALUES (new.{key}, {});", new.join(", "));
+                let delete = format!("INSERT INTO {index}({index}, rowid, {list}) VALUES ('delete', old.{key}, {});", old.join(", "));
+                let trigger = |when: &str| self.quote(&format!("{}_{when}", search_name(&name)));
+                vec![
+                    format!(
+                        "CREATE VIRTUAL TABLE{missing} {index} USING fts5({list}, content={}, content_rowid={}, tokenize='unicode61 remove_diacritics 0');",
+                        literal(&name),
+                        literal(table.key_column())
+                    ),
+                    format!("CREATE TRIGGER{missing} {} AFTER INSERT ON {on} BEGIN {insert} END;", trigger("insert")),
+                    format!("CREATE TRIGGER{missing} {} AFTER DELETE ON {on} BEGIN {delete} END;", trigger("delete")),
+                    format!("CREATE TRIGGER{missing} {} AFTER UPDATE ON {on} BEGIN {delete} {insert} END;", trigger("update")),
+                    format!("INSERT INTO {index}({index}) VALUES ('rebuild');"),
+                ]
+            }
+            Sql::Postgres => {
+                let document = columns.iter().map(|c| format!("coalesce({c}, '')")).collect::<Vec<_>>().join(" || ' ' || ");
+                vec![format!("CREATE INDEX{missing} {index} ON {on} USING GIN (to_tsvector('simple', {document}));")]
+            }
+            // Without stopwords, so every word is found.
+            Sql::Mysql => vec![
+                "SET SESSION innodb_ft_enable_stopword = 0;".to_string(),
+                format!("CREATE FULLTEXT INDEX {index} ON {on} ({list});"),
+            ],
+            Sql::Mssql => vec![],
+        }
+    }
+
+    /// Drops the table's full-text index, before a step changes the table.
+    pub fn drop_search(self, table: &Table) -> Vec<String> {
+        if !table.columns.iter().any(|c| c.search) {
+            return vec![];
+        }
+        let name = table.table_name();
+        let index = self.quote(&search_name(&name));
+        match self {
+            Sql::Sqlite => {
+                let mut out: Vec<String> =
+                    ["insert", "delete", "update"].iter().map(|when| format!("DROP TRIGGER IF EXISTS {};", self.quote(&format!("{}_{when}", search_name(&name))))).collect();
+                out.push(format!("DROP TABLE IF EXISTS {index};"));
+                out
+            }
+            Sql::Postgres => vec![format!("DROP INDEX IF EXISTS {index};")],
+            Sql::Mysql => vec![format!("DROP INDEX {index} ON {};", self.quote(&name))],
+            Sql::Mssql => vec![],
+        }
+    }
+
     pub fn add_foreign_key(self, table: &str, column: &str, target: &str, key: &str) -> String {
         format!(
             "ALTER TABLE {} ADD FOREIGN KEY ({}) REFERENCES {} ({});",
@@ -364,4 +433,9 @@ EXEC sp_executesql @sql;",
             _ => format!("CAST({value} AS {new_ty})"),
         }
     }
+}
+
+/// The name of a table's full-text index, as the runtimes look in it.
+pub fn search_name(table: &str) -> String {
+    format!("{table}__search")
 }

@@ -15,7 +15,7 @@ entity Folder
     children: list<Folder>
 
 entity Album
-    title: text(120), required
+    title: text(120), required, search
     copies: integer
     format: Format
     site: url
@@ -23,7 +23,7 @@ entity Album
     rating: decimal(3, 1), min 0, max 5
     tint: color, default "#3b82f6"
     booklet: file
-    tags: list<text>
+    tags: list<text>, search
     formats: list<Format>
     plays: list<date>
     scores: list<decimal>
@@ -170,6 +170,9 @@ code Albums
             album.scores = [1, 2.5]
         let live = find a in Album where a.tags contains "live" or a.formats contains Vinyl or a.plays contains today()
         lendingBusy.visible = count(live) > 0
+        // Full-text search: every word, each as the start of a word.
+        let heard = find a in Album where a matches album.title and not (a matches "live") order by a.title
+        lendingBusy.visible = count(heard) > 0
 
     handler newClicked
         ask NewAlbum then added

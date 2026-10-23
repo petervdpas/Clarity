@@ -1000,6 +1000,14 @@ impl<'a> Emitter<'a> {
                 format!("{}.Or({})", self.cond(left, var, entity), self.cond(right, var, entity))
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("{}.Negated()", self.cond(operand, var, entity)),
+            ExprKind::Binary { op: BinaryOp::Matches, .. } => {
+                let Some((search, text)) = crate::query::search(project, entity, var, expr) else {
+                    self.errors.push(format!("'{}' looks for words in no record of {var}", print::expr(expr)));
+                    return String::new();
+                };
+                let columns: Vec<String> = search.columns.iter().map(|c| string(c)).collect();
+                format!("Cond.Matches({}, {}, [{}], {})", string(&search.table), string(&search.key), columns.join(", "), self.value(text))
+            }
             ExprKind::Binary { op, left, right } => {
                 // The field on the left: `5 < c.x` is `c.x > 5`.
                 let (path, value, op) = match (path_of(left), path_of(right)) {

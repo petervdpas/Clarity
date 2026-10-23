@@ -84,6 +84,11 @@
     return value === "" ? null : value;
   }
 
+  /** Whether a full-text index can hold the field's words: text and lists of text. */
+  function searchable(type: Field["type"]): boolean {
+    return type.kind === "text" || type.kind === "email" || type.kind === "url" || (type.kind === "values" && type.item.kind === "text");
+  }
+
   let newName = $state("");
   let newType = $state("text(80)");
 
@@ -96,6 +101,7 @@
       unique: false,
       owned: false,
       computed: false,
+      search: false,
       min: null,
       max: null,
       pattern: null,
@@ -132,6 +138,7 @@
           <th>Type</th>
           <th title="A value is required">Req.</th>
           <th title="No two records have the same value">Unique</th>
+          <th title="In the full-text index that 'where a matches x' looks in: text and lists of text">Search</th>
           <th>Label</th>
           <th>Default</th>
           {#if hasFormat}<th title="How values are shown, in every locale">Format</th>{/if}
@@ -159,6 +166,11 @@
             </td>
             <td class="center">
               <input type="checkbox" checked={m.unique} onchange={(e) => update(field, { modifiers: { unique: e.currentTarget.checked } })} />
+            </td>
+            <td class="center">
+              {#if searchable(field.type) || m.search}
+                <input type="checkbox" checked={m.search} onchange={(e) => update(field, { modifiers: { search: e.currentTarget.checked } })} />
+              {/if}
             </td>
             <td><TextField {preview} {onapplied} text={m.label} placeholder={tr(preview, field.label)} onwrite={(text) => update(field, { modifiers: { label: text } })} /></td>
             <td>

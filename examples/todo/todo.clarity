@@ -5,7 +5,7 @@ entity Person
     color: color, default "#3b82f6", label @personColorLabel
 
 entity Task
-    title: text(120), required, label @taskTitleLabel
+    title: text(120), required, search, label @taskTitleLabel
     done: bool, default false, label @taskDoneLabel
     finished_by: ref Person, label @taskFinishedByLabel
 
@@ -45,9 +45,11 @@ page Main: window
     label @newTitleLabel name newTitleLabel at 1,1 span 2 for newTitle
     textbox name newTitle at 3,1 span 8 placeholder @newTitlePlaceholder
     button @addButtonCaption name addButton at 11,1 span 2 default on click: addClicked
-    table name grid at 1,2 span 12 rows 8 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
-    button @usersButtonCaption name usersButton at 1,10 span 2 on click -> Users
-    button @deleteButtonCaption name deleteButton at 11,10 span 2 on click: deleteClicked
+    label @searchLabel name searchLabel at 1,2 span 2 for searchBox
+    textbox name searchBox at 3,2 span 10 placeholder @searchPlaceholder on change: showTasks
+    table name grid at 1,3 span 12 rows 8 bind tasks columns title, done, finished_by resizable edit title, done as switch, finished_by on select: rowSelected on change: taskChanged
+    button @usersButtonCaption name usersButton at 1,11 span 2 on click -> Users
+    button @deleteButtonCaption name deleteButton at 11,11 span 2 on click: deleteClicked
 
 page Users: window
     title @usersTitle
@@ -103,11 +105,12 @@ code Main
         deleteButton.enabled = false
 
     handler showTasks
-        // Done tasks show while the person's settings say so.
+        // Done tasks show while the person's settings say so; the search
+        // box keeps the tasks with every word typed in their title.
         if settings.showDone
-            reload tasks
+            tasks = find t in Task where t matches searchBox.text
         else
-            tasks = find t in Task where t.done == false
+            tasks = find t in Task where t.done == false and t matches searchBox.text
 
     handler rowSelected
         deleteButton.enabled = true

@@ -67,3 +67,24 @@ fn resolve(project: &Project, entity: &str, through: &[&str], field: &str) -> Op
         field: field.to_string(),
     })
 }
+
+/// What `a matches x` looks in: the entity's table and key, and the columns
+/// of its fields marked `search`, by the names the database uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Search {
+    pub table: String,
+    pub key: String,
+    pub columns: Vec<String>,
+}
+
+/// The search of `entity`, when `expr` is `var matches text` (the checker
+/// made sure of the rest); its text is the right side.
+pub(crate) fn search<'e>(project: &Project, entity: &str, var: &str, expr: &'e Expr) -> Option<(Search, &'e Expr)> {
+    let ExprKind::Binary { op: clarity_spec::code::BinaryOp::Matches, left, right } = &expr.kind else { return None };
+    if !matches!(&left.kind, ExprKind::Name { name } if name == var) {
+        return None;
+    }
+    let decl = project.entity(entity)?;
+    let columns = decl.fields.iter().filter(|f| f.modifiers.search).map(|f| decl.column_of(&f.name.name).to_string()).collect();
+    Some((Search { table: decl.table_name(), key: decl.key_column().to_string(), columns }, right))
+}

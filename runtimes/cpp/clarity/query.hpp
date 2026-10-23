@@ -40,6 +40,10 @@ public:
     /// Whether the JSON list kept in the column holds `item`, exactly: a list
     /// field's `a.tags contains "live"`.
     static Cond holds(const std::string& column, SqlValue item);
+    /// Full-text search, `a matches x`: the record of `table` holds every
+    /// word of `text`, each as the start of a word, in the `columns` marked
+    /// `search`, through the table's full-text index.
+    static Cond matches(const std::string& table, const std::string& key, const std::vector<std::string>& columns, const std::string& text);
     static Cond one_of(const std::string& column, std::vector<SqlValue> values);
     /// `one_of` for a decimal or money column.
     static Cond one_of_numbers(const std::string& column, std::vector<SqlValue> values);

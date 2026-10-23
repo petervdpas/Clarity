@@ -324,15 +324,29 @@ impl Writer<'_> {
                 let column = table_before.column(field).expect("checked by apply");
                 self.push(self.sql.drop_unique(&table_before, column));
             }
+            // The index is built again at the end of the step.
+            Op::AddSearch { .. } | Op::RemoveSearch { .. } => {}
         }
     }
 
     /// The statements of one step, with the foreign keys of its new
     /// references last.
     fn write(&mut self, ops: &[Op]) -> Vec<String> {
+        let before = self.schema.clone();
         for op in ops {
             self.step(op);
         }
+        // The full-text index of each entity the step changes is dropped
+        // first and built again last, so renames and rebuilt tables keep it.
+        let touched: std::collections::HashSet<&str> = ops.iter().flat_map(Op::entities).collect();
+        let drops: Vec<String> = if self.baseline {
+            vec![]
+        } else {
+            before.tables.iter().filter(|t| touched.contains(t.name.as_str())).flat_map(|t| self.sql.drop_search(t)).collect()
+        };
+        let builds: Vec<String> =
+            self.schema.tables.iter().filter(|t| touched.contains(t.name.as_str())).flat_map(|t| self.sql.search_index(t, self.baseline)).collect();
+        self.out.splice(0..0, drops);
         for (entity, field) in std::mem::take(&mut self.references) {
             let Some(table) = self.schema.table(&entity) else { continue };
             let Some(column) = table.column(&field) else { continue };
@@ -341,6 +355,7 @@ impl Writer<'_> {
             let statement = self.sql.add_foreign_key(&table.table_name(), column.stored(), &target, &key);
             self.out.push(statement);
         }
+        self.out.extend(builds);
         std::mem::take(&mut self.out)
     }
 }

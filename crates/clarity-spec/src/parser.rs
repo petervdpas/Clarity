@@ -642,6 +642,7 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "unique" => flag(&mut modifiers.unique, duplicate),
         "owned" => flag(&mut modifiers.owned, duplicate),
         "computed" => flag(&mut modifiers.computed, duplicate),
+        "search" => flag(&mut modifiers.search, duplicate),
         "min" => set(&mut modifiers.min, parse_literal(cursor)?, duplicate),
         "max" => set(&mut modifiers.max, parse_literal(cursor)?, duplicate),
         "default" => set(&mut modifiers.default, parse_literal(cursor)?, duplicate),

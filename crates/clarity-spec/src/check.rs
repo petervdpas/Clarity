@@ -1456,6 +1456,15 @@ impl<'a> Checker<'a> {
         if m.store.is_some() && !matches!(field.ty, FieldType::Image | FieldType::File) {
             self.error(file, format!("only an image or a file field has a store ('{name}')"), field.span);
         }
+        // A full-text index reads words: text, and lists of text.
+        if m.search
+            && !matches!(
+                field.ty,
+                FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Values { item: crate::model::ListItem::Text }
+            )
+        {
+            self.error(file, format!("only text and lists of text can be searched ('{name}')"), field.span);
+        }
         if field.ty == FieldType::File {
             if m.unique {
                 self.error(file, format!("a file cannot be unique ('{name}')"), field.span);

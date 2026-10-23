@@ -88,6 +88,7 @@ export function valueField(decl: DataDecl): Field | null {
     unique: false,
     owned: false,
     computed: false,
+    search: false,
     min: null,
     max: null,
     pattern: null,

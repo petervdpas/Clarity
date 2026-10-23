@@ -38,6 +38,9 @@ public abstract record Cond
     /// <summary>The JSON list kept in the column holds the item, exactly (a list field).</summary>
     sealed record HoldsCond(string Column, object? Item) : Cond;
 
+    /// <summary>Full-text search: the record holds every word, each as the start of a word, in the searched columns.</summary>
+    sealed record MatchesCond(string Table, string Key, IReadOnlyList<string> Columns, IReadOnlyList<string> Typed) : Cond;
+
     /// <summary>The column equals one of the values.</summary>
     sealed record OneOfCond(string Column, IReadOnlyList<object?> Values, bool Numeric) : Cond;
 
@@ -64,6 +67,75 @@ public abstract record Cond
 
     /// <summary><c>a.tags contains "live"</c>: whether a list field holds an item.</summary>
     public static Cond Holds(string column, object? item) => new HoldsCond(column, item);
+
+    /// <summary>
+    /// Full-text search, <c>a matches x</c>: the record of <paramref name="table"/> holds every
+    /// word of <paramref name="text"/>, each as the start of a word, in the columns marked
+    /// <c>search</c>, through the table's full-text index.
+    /// </summary>
+    public static Cond Matches(string table, string key, IReadOnlyList<string> columns, string text) =>
+        new MatchesCond(table, key, columns, Words(text));
+
+    /// <summary>
+    /// The words of a search: runs of ASCII letters and digits and of any characters
+    /// beyond ASCII. Everything else parts them.
+    /// </summary>
+    public static IReadOnlyList<string> Words(string text)
+    {
+        var words = new List<string>();
+        var word = new System.Text.StringBuilder();
+        foreach (var c in text)
+        {
+            if (c >= 0x80 || char.IsAsciiLetterOrDigit(c))
+            {
+                word.Append(c);
+            }
+            else if (word.Length > 0)
+            {
+                words.Add(word.ToString());
+                word.Clear();
+            }
+        }
+        if (word.Length > 0)
+            words.Add(word.ToString());
+        return words;
+    }
+
+    /// <summary>The shortest word MySQL's full-text index keeps (innodb_ft_min_token_size).</summary>
+    const int MysqlShortest = 3;
+
+    static string MatchesSql(MatchesCond c, Dialect dialect, Func<object?, bool, string> param)
+    {
+        if (c.Typed.Count == 0)
+            return "1 = 1";
+        var quoted = c.Columns.Select(column => dialect.Quote(column)).ToList();
+        var parts = new List<string>();
+        switch (dialect)
+        {
+            case Dialect.Sqlite:
+                var index = dialect.Quote(c.Table + "__search");
+                var query = string.Join(" AND ", c.Typed.Select(w => $"\"{w}\"*"));
+                return $"{dialect.Quote(c.Key)} IN (SELECT rowid FROM {index} WHERE {index} MATCH {param(query, false)})";
+            case Dialect.Postgres:
+                var document = string.Join(" || ' ' || ", quoted.Select(q => $"coalesce({q}, '')"));
+                return $"to_tsvector('simple', {document}) @@ to_tsquery('simple', {param(string.Join(" & ", c.Typed.Select(w => w + ":*")), false)})";
+            case Dialect.Mysql:
+                // The index leaves out words shorter than 3 characters.
+                var columns = string.Join(", ", quoted);
+                var longer = c.Typed.Where(w => w.EnumerateRunes().Count() >= MysqlShortest).ToList();
+                if (longer.Count > 0)
+                    parts.Add($"MATCH ({columns}) AGAINST ({param(string.Join(" ", longer.Select(w => $"+{w}*")), false)} IN BOOLEAN MODE)");
+                foreach (var w in c.Typed.Where(w => w.EnumerateRunes().Count() < MysqlShortest))
+                    parts.Add($"CONCAT_WS(' ', {columns}) REGEXP {param("(^|[^[:alnum:]])" + w, false)}");
+                break;
+            default:
+                var text = $"(N' ' + {string.Join(" + N' ' + ", quoted.Select(q => $"ISNULL({q}, N'')"))})";
+                foreach (var w in c.Typed)
+                    parts.Add($"{text} LIKE {param($"%[^0-9A-Za-z]{w}%", false)}");
+                break;
+        }
+        return parts.Count > 1 ? $"({string.Join(" AND ", parts)})" : parts[0];
+    }
 
     public static Cond OneOf(string column, IReadOnlyList<object?> values) => new OneOfCond(column, values, false);
 
@@ -97,6 +169,7 @@ public abstract record Cond
             CompareCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} {OpSql(c.Op)} {Param(c.Value, c.Numeric)}",
             ContainsCond c => dialect.Contains(c.Column, Param($"%{dialect.EscapeLike(c.Text)}%", false)),
             HoldsCond c => dialect.Holds(c.Column, Param(dialect.Item(c.Item), false)),
+            MatchesCond c => MatchesSql(c, dialect, Param),
             OneOfCond c => $"{Query.ColumnSql(dialect, c.Column, c.Numeric)} IN ({string.Join(", ", c.Values.Select(v => Param(v, c.Numeric)))})",
             IsTrueCond c => dialect.IsTrue(c.Column),
             IsNoneCond c => $"{dialect.Quote(c.Column)} IS NULL",

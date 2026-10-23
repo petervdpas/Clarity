@@ -69,6 +69,15 @@ static ClarityCond* cond(const cJSON* value) {
     if (strcmp(kind, "number") == 0) return clarity_number(text(inner, "column"), op(item(inner, "op")), sql_value(item(inner, "value")));
     if (strcmp(kind, "contains") == 0) return clarity_contains(text(inner, "column"), text(inner, "text"));
     if (strcmp(kind, "holds") == 0) return clarity_holds(text(inner, "column"), sql_value(item(inner, "value")));
+    if (strcmp(kind, "matches") == 0) {
+        const cJSON* listed = item(inner, "columns");
+        size_t n = (size_t)cJSON_GetArraySize(listed);
+        const char** columns = CLARITY_NEW(const char*, n ? n : 1);
+        size_t i = 0;
+        const cJSON* column;
+        cJSON_ArrayForEach(column, listed) columns[i++] = column->valuestring;
+        return clarity_matches(text(inner, "table"), text(inner, "key"), n, columns, text(inner, "text"));
+    }
     if (strcmp(kind, "oneOf") == 0) {
         size_t n = values(item(inner, "values"), &list);
         return clarity_one_of(text(inner, "column"), n, list);

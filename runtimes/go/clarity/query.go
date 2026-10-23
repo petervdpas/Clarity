@@ -7,6 +7,7 @@ package clarity
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // Op is a comparison between a column and a value.
@@ -42,6 +43,12 @@ type containsCond struct{ column, text string }
 type holdsCond struct {
 	column string
 	item   any
+}
+
+type matchesCond struct {
+	table, key string
+	columns    []string
+	words      []string
 }
 
 type oneOfCond struct {
@@ -85,6 +92,85 @@ func Contains(column, text string) Cond { return containsCond{column, text} }
 // Holds is a list field's JSON list holding the item, exactly
 // (a.tags contains "live").
 func Holds(column string, item any) Cond { return holdsCond{column, item} }
+
+// Matches is full-text search (a matches x): the record of table holds
+// every word of text, each as the start of a word, in the columns marked
+// search, through the table's full-text index.
+func Matches(table, key string, columns []string, text string) Cond {
+	return matchesCond{table, key, columns, Words(text)}
+}
+
+// Words are the words of a search: runs of ASCII letters and digits and of
+// any characters beyond ASCII. Everything else parts them.
+func Words(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool {
+		return r < utf8.RuneSelf && !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
+	})
+}
+
+// mysqlShortest is the shortest word MySQL's full-text index keeps
+// (innodb_ft_min_token_size).
+const mysqlShortest = 3
+
+func (c matchesCond) sql(d Dialect, params *[]any) string {
+	if len(c.words) == 0 {
+		return "1 = 1"
+	}
+	quoted := make([]string, len(c.columns))
+	for i, column := range c.columns {
+		quoted[i] = d.Quote(column)
+	}
+	var parts []string
+	switch d {
+	case Sqlite:
+		query := make([]string, len(c.words))
+		for i, w := range c.words {
+			query[i] = `"` + w + `"*`
+		}
+		index := d.Quote(c.table + "__search")
+		return d.Quote(c.key) + " IN (SELECT rowid FROM " + index + " WHERE " + index + " MATCH " + param(d, params, strings.Join(query, " AND "), false) + ")"
+	case Postgres:
+		query := make([]string, len(c.words))
+		document := make([]string, len(quoted))
+		for i, w := range c.words {
+			query[i] = w + ":*"
+		}
+		for i, column := range quoted {
+			document[i] = "coalesce(" + column + ", '')"
+		}
+		return "to_tsvector('simple', " + strings.Join(document, " || ' ' || ") + ") @@ to_tsquery('simple', " + param(d, params, strings.Join(query, " & "), false) + ")"
+	case Mysql:
+		// The index leaves out words shorter than 3 characters.
+		columns := strings.Join(quoted, ", ")
+		var long []string
+		for _, w := range c.words {
+			if utf8.RuneCountInString(w) >= mysqlShortest {
+				long = append(long, "+"+w+"*")
+			}
+		}
+		if len(long) > 0 {
+			parts = append(parts, "MATCH ("+columns+") AGAINST ("+param(d, params, strings.Join(long, " "), false)+" IN BOOLEAN MODE)")
+		}
+		for _, w := range c.words {
+			if utf8.RuneCountInString(w) < mysqlShortest {
+				parts = append(parts, "CONCAT_WS(' ', "+columns+") REGEXP "+param(d, params, "(^|[^[:alnum:]])"+w, false))
+			}
+		}
+	default:
+		document := make([]string, len(quoted))
+		for i, column := range quoted {
+			document[i] = "ISNULL(" + column + ", N'')"
+		}
+		text := "(N' ' + " + strings.Join(document, " + N' ' + ") + ")"
+		for _, w := range c.words {
+			parts = append(parts, text+" LIKE "+param(d, params, "%[^0-9A-Za-z]"+w+"%", false))
+		}
+	}
+	if len(parts) > 1 {
+		return "(" + strings.Join(parts, " AND ") + ")"
+	}
+	return parts[0]
+}
 
 // OneOf is the column equal to one of the values.
 func OneOf(column string, values []any) Cond { return oneOfCond{column, values, false} }

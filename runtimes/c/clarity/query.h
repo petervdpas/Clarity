@@ -31,6 +31,10 @@ ClarityCond* clarity_contains(const char* column, const char* text);
 /// Whether the JSON list kept in the column holds `item`, exactly: a list
 /// field's `a.tags contains "live"`.
 ClarityCond* clarity_holds(const char* column, ClarityValue item);
+/// Full-text search, `a matches x`: the record of `table` holds every word
+/// of `text`, each as the start of a word, in the `count` columns marked
+/// `search`, through the table's full-text index.
+ClarityCond* clarity_matches(const char* table, const char* key, size_t count, const char* const* columns, const char* text);
 ClarityCond* clarity_one_of(const char* column, size_t count, const ClarityValue* values);
 /// `clarity_one_of` for a decimal or money column.
 ClarityCond* clarity_one_of_numbers(const char* column, size_t count, const ClarityValue* values);

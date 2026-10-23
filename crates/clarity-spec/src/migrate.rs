@@ -27,6 +27,8 @@ pub struct Column {
     pub name: String,
     pub ty: FieldType,
     pub unique: bool,
+    /// In the table's full-text index (`search`).
+    pub search: bool,
     /// The value existing records get when the field is added.
     pub default: Option<Literal>,
     /// The column it is stored in, when that is not the field's name.
@@ -41,6 +43,7 @@ impl Column {
             name: field.name.name.clone(),
             ty: field.ty.clone(),
             unique: field.modifiers.unique,
+            search: field.modifiers.search,
             default: field.modifiers.default.clone(),
             column: field.modifiers.column.clone(),
             store: field.modifiers.store.clone(),
@@ -59,6 +62,7 @@ impl Column {
             name: format!("{}_name", self.name),
             ty: FieldType::Text { max_length: Some(FILE_NAME_LENGTH) },
             unique: false,
+            search: false,
             default: None,
             column: Some(format!("{}_name", self.stored())),
             store: None,
@@ -143,6 +147,9 @@ pub enum Op {
     ChangeField { entity: String, field: String, ty: FieldType, store: Option<String> },
     AddUnique { entity: String, field: String },
     RemoveUnique { entity: String, field: String },
+    /// The field joins or leaves its table's full-text index.
+    AddSearch { entity: String, field: String },
+    RemoveSearch { entity: String, field: String },
     /// Store the entity in another table; None is the default name.
     MapTable { entity: String, table: Option<String> },
     /// Another column identifies a record; None is `id`.
@@ -157,6 +164,14 @@ impl Op {
         matches!(self, Op::RemoveEntity { .. } | Op::RemoveField { .. } | Op::ChangeField { .. })
     }
 
+    /// The entities the change is about: its name before and after a rename.
+    pub fn entities(&self) -> Vec<&str> {
+        match self {
+            Op::RenameEntity { from, to } => vec![from, to],
+            other => vec![other.entity()],
+        }
+    }
+
     /// The entity the change is about, as the dictionary names it after
     /// the change.
     fn entity(&self) -> &str {
@@ -169,6 +184,8 @@ impl Op {
             | Op::ChangeField { entity, .. }
             | Op::AddUnique { entity, .. }
             | Op::RemoveUnique { entity, .. }
+            | Op::AddSearch { entity, .. }
+            | Op::RemoveSearch { entity, .. }
             | Op::MapTable { entity, .. }
             | Op::MapKey { entity, .. }
             | Op::MapColumn { entity, .. } => entity,
@@ -274,6 +291,15 @@ impl Schema {
                 }
                 column.unique = add;
             }
+            Op::AddSearch { entity, field } | Op::RemoveSearch { entity, field } => {
+                let column = self.table_mut(entity)?.column_mut(field)?;
+                let add = matches!(op, Op::AddSearch { .. });
+                if column.search == add {
+                    let already = if add { "searched already" } else { "not searched" };
+                    return Err(format!("{entity}.{field} is {already}"));
+                }
+                column.search = add;
+            }
         }
         Ok(())
     }
@@ -350,7 +376,7 @@ fn expect_to(cursor: &mut Cursor) -> ParseResult<String> {
 fn parse_op(node: &Node) -> ParseResult<Op> {
     let mut cursor = Cursor::new(node.line);
     let verb = cursor.expect_ident("a migration step")?;
-    let what = cursor.expect_ident("'entity', 'field' or 'unique'")?;
+    let what = cursor.expect_ident("'entity', 'field', 'unique' or 'search'")?;
     let op = match (verb.name.as_str(), what.name.as_str()) {
         ("add", "entity") => {
             let name = cursor.expect_ident("an entity name")?.name;
@@ -426,6 +452,14 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
             let (entity, field) = field_path(&mut cursor)?;
             Op::RemoveUnique { entity, field }
         }
+        ("add", "search") => {
+            let (entity, field) = field_path(&mut cursor)?;
+            Op::AddSearch { entity, field }
+        }
+        ("remove", "search") => {
+            let (entity, field) = field_path(&mut cursor)?;
+            Op::RemoveSearch { entity, field }
+        }
         ("map", "table") => {
             let entity = cursor.expect_ident("an entity")?.name;
             Op::MapTable { entity, table: mapped_to(&mut cursor)? }
@@ -440,7 +474,7 @@ fn parse_op(node: &Node) -> ParseResult<Op> {
         }
         ("add" | "remove" | "rename" | "change" | "map", _) => {
             return Err(Diagnostic::error(
-                format!("expected 'entity', 'field' or 'unique' after '{}'", verb.name),
+                format!("expected 'entity', 'field', 'unique' or 'search' after '{}'", verb.name),
                 what.span,
             ));
         }
@@ -579,6 +613,11 @@ pub fn pending(project: &Project, source: &str, renames: &[Rename]) -> Vec<Op> {
                 let op = if wanted.unique { Op::AddUnique { entity, field } } else { Op::RemoveUnique { entity, field } };
                 take(&mut schema, op, &mut ops);
             }
+            if column.search != wanted.search {
+                let (entity, field) = (name.clone(), wanted.name.clone());
+                let op = if wanted.search { Op::AddSearch { entity, field } } else { Op::RemoveSearch { entity, field } };
+                take(&mut schema, op, &mut ops);
+            }
             if column.stored() != wanted.stored() {
                 let op = Op::MapColumn {
                     entity: name.clone(),
@@ -670,6 +709,9 @@ fn column_text(column: &Column) -> String {
     if column.unique {
         text.push_str(", unique");
     }
+    if column.search {
+        text.push_str(", search");
+    }
     if let Some(default) = &column.default {
         text.push_str(&format!(", default {}", literal_text(default)));
     }
@@ -714,6 +756,8 @@ pub fn op_text(op: &Op) -> String {
         }
         Op::AddUnique { entity, field } => format!("add unique {entity}.{field}"),
         Op::RemoveUnique { entity, field } => format!("remove unique {entity}.{field}"),
+        Op::AddSearch { entity, field } => format!("add search {entity}.{field}"),
+        Op::RemoveSearch { entity, field } => format!("remove search {entity}.{field}"),
         Op::MapTable { entity, table } => format!("map table {entity} {}", mapped_text(table)),
         Op::MapKey { entity, key } => format!("map key {entity} {}", mapped_text(key)),
         Op::MapColumn { entity, field, column } => format!("map column {entity}.{field} {}", mapped_text(column)),
@@ -729,6 +773,8 @@ fn short_text(op: &Op) -> String {
         Op::ChangeField { field, ty, .. } => format!("change field {field} to {}", type_text(ty)),
         Op::AddUnique { field, .. } => format!("make {field} unique"),
         Op::RemoveUnique { field, .. } => format!("make {field} not unique"),
+        Op::AddSearch { field, .. } => format!("search {field}"),
+        Op::RemoveSearch { field, .. } => format!("stop searching {field}"),
         Op::MapColumn { field, column: Some(column), .. } => format!("store {field} in column {}", quote(column)),
         Op::MapColumn { field, column: None, .. } => format!("store {field} in a column of its own name"),
         other => op_text(other),

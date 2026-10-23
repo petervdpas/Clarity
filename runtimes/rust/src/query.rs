@@ -60,6 +60,15 @@ pub enum Cond {
     Contains { column: &'static str, text: String },
     /// The JSON list kept in the column holds the item, exactly (a list field).
     Holds { column: &'static str, item: SqlValue },
+    /// Full-text search (`a matches x`): the record of `table` holds every
+    /// word of the text, each as the start of a word, in the columns marked
+    /// `search`, through the table's full-text index.
+    Matches {
+        table: &'static str,
+        key: &'static str,
+        columns: Vec<&'static str>,
+        words: Vec<String>,
+    },
     /// The column equals one of the values.
     OneOf {
         column: &'static str,
@@ -108,6 +117,16 @@ impl Cond {
     /// `a.tags contains "live"`: whether a list field holds an item.
     pub fn holds(column: &'static str, item: SqlValue) -> Cond {
         Cond::Holds { column, item }
+    }
+
+    /// `a matches x`: the words of `text` in the searched `columns`.
+    pub fn matches(table: &'static str, key: &'static str, columns: &[&'static str], text: &str) -> Cond {
+        Cond::Matches {
+            table,
+            key,
+            columns: columns.to_vec(),
+            words: words(text),
+        }
     }
 
     pub fn one_of(column: &'static str, values: Vec<SqlValue>) -> Cond {
@@ -178,6 +197,17 @@ impl Cond {
                 dialect.contains(column, &param(SqlValue::Text(pattern), false))
             }
             Cond::Holds { column, item } => dialect.holds(column, &param(dialect.item(item), false)),
+            Cond::Matches { table, key, columns, words } => {
+                let found = dialect.matches(table, key, columns, words);
+                let marks: Vec<String> = found.params.into_iter().map(|p| param(SqlValue::Text(p), false)).collect();
+                found.sql.iter().enumerate().fold(String::new(), |mut out, (i, part)| {
+                    out.push_str(part);
+                    if let Some(mark) = marks.get(i) {
+                        out.push_str(mark);
+                    }
+                    out
+                })
+            }
             Cond::OneOf {
                 column,
                 values,
@@ -203,6 +233,12 @@ impl Cond {
             Cond::Not(inner) => format!("NOT ({})", inner.sql(dialect, params)),
         }
     }
+}
+
+/// The words of a search: runs of ASCII letters and digits and of any
+/// characters beyond ASCII. Everything else parts them.
+pub fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| c.is_ascii() && !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_string).collect()
 }
 
 /// A column as a comparison reads it.

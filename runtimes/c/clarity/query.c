@@ -5,7 +5,7 @@
 
 #include "cjson/cJSON.h"
 
-typedef enum { COMPARE, CONTAINS, HOLDS, ONE_OF, IS_TRUE, IS_NONE, THROUGH, AND, OR, NOT } Kind;
+typedef enum { COMPARE, CONTAINS, HOLDS, MATCHES, ONE_OF, IS_TRUE, IS_NONE, THROUGH, AND, OR, NOT } Kind;
 
 struct ClarityCond {
     Kind kind;
@@ -16,6 +16,7 @@ struct ClarityCond {
     bool numeric;
     const char* text;
     ClarityHop hop;
+    const char* const* columns;
     ClarityCond* inner[2];
 };
 
@@ -94,6 +95,104 @@ static ClarityValue list_item(ClarityDialect d, ClarityValue item) {
     return clarity_text_value(d == CLARITY_POSTGRES ? clarity_format("[%s]", json) : json);
 }
 
+ClarityCond* clarity_matches(const char* table, const char* key, size_t count, const char* const* columns, const char* text) {
+    ClarityCond* c = cond(MATCHES, NULL);
+    c->hop = (ClarityHop){NULL, table, key};
+    const char** kept_columns = CLARITY_NEW(const char*, count ? count : 1);
+    for (size_t i = 0; i < count; ++i) kept_columns[i] = columns[i];
+    c->columns = kept_columns;
+    c->count = count;
+    c->text = clarity_copy(text ? text : "");
+    return c;
+}
+
+// A word of a search is a run of ASCII letters and digits and of any
+// characters beyond ASCII (UTF-8 bytes from 0x80).
+static bool word_byte(unsigned char b) { return b >= 0x80 || isalnum(b); }
+
+typedef struct {
+    const char** items;
+    size_t count;
+} Words;
+
+// The words of `text`, in the scratch arena.
+static Words words_of(const char* text) {
+    Words out = {CLARITY_NEW(const char*, strlen(text) / 2 + 1), 0};
+    for (const char* at = text; *at;) {
+        while (*at && !word_byte((unsigned char)*at)) ++at;
+        const char* start = at;
+        while (*at && word_byte((unsigned char)*at)) ++at;
+        if (at > start) out.items[out.count++] = clarity_format("%.*s", (int)(at - start), start);
+    }
+    return out;
+}
+
+// The characters of UTF-8 text.
+static size_t characters(const char* text) {
+    size_t n = 0;
+    for (; *text; ++text) n += ((unsigned char)*text & 0xC0) != 0x80;
+    return n;
+}
+
+// The shortest word MySQL's full-text index keeps (innodb_ft_min_token_size).
+#define MYSQL_SHORTEST 3
+
+static const char* param(ClarityDialect d, ClarityValues* params, ClarityValue value, bool numeric);
+
+static const char* matches_sql(const ClarityCond* c, ClarityDialect d, ClarityValues* params) {
+    Words words = words_of(c->text);
+    if (words.count == 0) return "1 = 1";
+    ClarityBuffer joined = {0};
+    for (size_t i = 0; i < c->count; ++i) {
+        if (i) clarity_buffer_add(&joined, d == CLARITY_POSTGRES ? " || ' ' || " : d == CLARITY_MSSQL ? " + N' ' + " : ", ");
+        const char* column = clarity_quote(d, c->columns[i]);
+        if (d == CLARITY_POSTGRES) clarity_buffer_addf(&joined, "coalesce(%s, '')", column);
+        else if (d == CLARITY_MSSQL) clarity_buffer_addf(&joined, "ISNULL(%s, N'')", column);
+        else clarity_buffer_add(&joined, column);
+    }
+    const char* columns = clarity_buffer_text(&joined);
+    ClarityBuffer query = {0};
+    ClarityBuffer out = {0};
+    size_t parts = 0;
+    switch (d) {
+    case CLARITY_SQLITE: {
+        for (size_t i = 0; i < words.count; ++i) clarity_buffer_addf(&query, "%s\"%s\"*", i ? " AND " : "", words.items[i]);
+        const char* index = clarity_quote(d, clarity_format("%s__search", c->hop.table));
+        const char* mark = param(d, params, clarity_text_value(clarity_buffer_text(&query)), false);
+        return clarity_format("%s IN (SELECT rowid FROM %s WHERE %s MATCH %s)", clarity_quote(d, c->hop.key), index, index, mark);
+    }
+    case CLARITY_POSTGRES: {
+        for (size_t i = 0; i < words.count; ++i) clarity_buffer_addf(&query, "%s%s:*", i ? " & " : "", words.items[i]);
+        const char* mark = param(d, params, clarity_text_value(clarity_buffer_text(&query)), false);
+        return clarity_format("to_tsvector('simple', %s) @@ to_tsquery('simple', %s)", columns, mark);
+    }
+    case CLARITY_MYSQL: {
+        // The index leaves out words shorter than 3 characters.
+        for (size_t i = 0; i < words.count; ++i)
+            if (characters(words.items[i]) >= MYSQL_SHORTEST) clarity_buffer_addf(&query, "%s+%s*", query.length ? " " : "", words.items[i]);
+        if (query.length) {
+            const char* mark = param(d, params, clarity_text_value(clarity_buffer_text(&query)), false);
+            clarity_buffer_addf(&out, "MATCH (%s) AGAINST (%s IN BOOLEAN MODE)", columns, mark);
+            ++parts;
+        }
+        for (size_t i = 0; i < words.count; ++i) {
+            if (characters(words.items[i]) >= MYSQL_SHORTEST) continue;
+            const char* mark = param(d, params, clarity_text_value(clarity_format("(^|[^[:alnum:]])%s", words.items[i])), false);
+            clarity_buffer_addf(&out, "%sCONCAT_WS(' ', %s) REGEXP %s", parts++ ? " AND " : "", columns, mark);
+        }
+        break;
+    }
+    default:
+        for (size_t i = 0; i < words.count; ++i) {
+            const char* mark = param(d, params, clarity_text_value(clarity_format("%%[^0-9A-Za-z]%s%%", words.items[i])), false);
+            clarity_buffer_addf(&out, "%s(N' ' + %s) LIKE %s", parts++ ? " AND " : "", columns, mark);
+        }
+        break;
+    }
+    const char* sql = clarity_buffer_text(&out);
+    return parts > 1 ? clarity_format("(%s)", sql) : sql;
+}
+
 ClarityCond* clarity_one_of(const char* column, size_t count, const ClarityValue* values) {
     ClarityCond* c = cond(ONE_OF, column);
     c->values = kept(count, values);
@@ -161,6 +260,7 @@ static const char* cond_sql(const ClarityCond* c, ClarityDialect d, ClarityValue
         return clarity_contains_sql(d, c->column, param(d, params, clarity_text_value(pattern), false));
     }
     case HOLDS: return clarity_holds_sql(d, c->column, param(d, params, list_item(d, c->values[0]), false));
+    case MATCHES: return matches_sql(c, d, params);
     case ONE_OF: {
         ClarityBuffer out = {0};
         clarity_buffer_add(&out, column_sql(d, c->column, c->numeric));

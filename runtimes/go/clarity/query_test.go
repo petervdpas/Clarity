@@ -91,6 +91,12 @@ func caseCond(t *testing.T, value any) Cond {
 		return Contains(field("column").(string), field("text").(string))
 	case "holds":
 		return Holds(field("column").(string), caseValue(t, field("value")))
+	case "matches":
+		var columns []string
+		for _, c := range field("columns").([]any) {
+			columns = append(columns, c.(string))
+		}
+		return Matches(field("table").(string), field("key").(string), columns, field("text").(string))
 	case "oneOf":
 		return OneOf(field("column").(string), caseValues(t, field("values")))
 	case "oneOfNumbers":

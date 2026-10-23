@@ -13,6 +13,28 @@ pub enum Dialect {
     Mssql,
 }
 
+/// A condition's SQL in pieces with a parameter between each two.
+pub(crate) struct Search {
+    pub sql: Vec<String>,
+    pub params: Vec<String>,
+}
+
+/// The shortest word MySQL's full-text index keeps (innodb_ft_min_token_size).
+const MYSQL_SHORTEST: usize = 3;
+
+/// The full-text index of a table: an FTS5 table on SQLite, an index on
+/// the others.
+pub fn search_index(table: &str) -> String {
+    format!("{table}__search")
+}
+
+/// The text PostgreSQL's full-text index is made on: the searched columns
+/// as one document. The migration's index uses the same expression.
+pub fn postgres_document(quoted: &[String]) -> String {
+    let joined = quoted.iter().map(|c| format!("coalesce({c}, '')")).collect::<Vec<_>>().join(" || ' ' || ");
+    format!("to_tsvector('simple', {joined})")
+}
+
 impl Dialect {
     /// The database's name, for messages.
     pub fn label(self) -> &'static str {
@@ -71,6 +93,72 @@ impl Dialect {
             Dialect::Postgres => format!("{column}::jsonb @> {mark}::jsonb"),
             Dialect::Mysql => format!("JSON_CONTAINS({column}, {mark})"),
             Dialect::Mssql => format!("EXISTS (SELECT 1 FROM OPENJSON({column}) WHERE [value] = {mark})"),
+        }
+    }
+
+    /// Full-text search of `columns` of `table` for every word, each as the
+    /// start of a word: the SQL in pieces, a parameter between each two.
+    /// Without words every record matches.
+    pub(crate) fn matches(self, table: &str, key: &str, columns: &[&str], words: &[String]) -> Search {
+        if words.is_empty() {
+            return Search { sql: vec!["1 = 1".into()], params: vec![] };
+        }
+        let quoted: Vec<String> = columns.iter().map(|c| self.quote(c)).collect();
+        // Several parts, each with one parameter, joined by AND.
+        let all = |parts: Vec<(String, String)>| {
+            let many = parts.len() > 1;
+            let mut sql = vec![if many { "(".to_string() } else { String::new() }];
+            let mut params = Vec::new();
+            for (i, (before, param)) in parts.into_iter().enumerate() {
+                let last = sql.last_mut().expect("one piece");
+                if i > 0 {
+                    last.push_str(" AND ");
+                }
+                last.push_str(&before);
+                params.push(param);
+                sql.push(String::new());
+            }
+            if many {
+                sql.last_mut().expect("one piece").push(')');
+            }
+            Search { sql, params }
+        };
+        match self {
+            Dialect::Sqlite => {
+                let index = self.quote(&search_index(table));
+                let query = words.iter().map(|w| format!("\"{w}\"*")).collect::<Vec<_>>().join(" AND ");
+                Search {
+                    sql: vec![format!("{} IN (SELECT rowid FROM {index} WHERE {index} MATCH ", self.quote(key)), ")".into()],
+                    params: vec![query],
+                }
+            }
+            Dialect::Postgres => {
+                let query = words.iter().map(|w| format!("{w}:*")).collect::<Vec<_>>().join(" & ");
+                Search { sql: vec![format!("{} @@ to_tsquery('simple', ", postgres_document(&quoted)), ")".into()], params: vec![query] }
+            }
+            Dialect::Mysql => {
+                // The index leaves out words shorter than 3 characters.
+                let (long, short): (Vec<&String>, Vec<&String>) = words.iter().partition(|w| w.chars().count() >= MYSQL_SHORTEST);
+                let columns = quoted.join(", ");
+                let mut parts = Vec::new();
+                if !long.is_empty() {
+                    let query = long.iter().map(|w| format!("+{w}*")).collect::<Vec<_>>().join(" ");
+                    parts.push((format!("MATCH ({columns}) AGAINST ("), query));
+                }
+                for w in short {
+                    parts.push((format!("CONCAT_WS(' ', {columns}) REGEXP "), format!("(^|[^[:alnum:]]){w}")));
+                }
+                let mut search = all(parts);
+                // AGAINST takes its mode after the parameter.
+                if !long.is_empty() {
+                    search.sql[1].insert_str(0, " IN BOOLEAN MODE)");
+                }
+                search
+            }
+            Dialect::Mssql => {
+                let text = format!("(N' ' + {})", quoted.iter().map(|c| format!("ISNULL({c}, N'')")).collect::<Vec<_>>().join(" + N' ' + "));
+                all(words.iter().map(|w| (format!("{text} LIKE "), format!("%[^0-9A-Za-z]{w}%"))).collect())
+            }
         }
     }
 

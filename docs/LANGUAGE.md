@@ -266,6 +266,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 |---|---|
 | `required` | The field must have a value. Windows mark its label. |
 | `unique` | No two records have the same value. Empty text counts as no value, so several records can leave a unique text field empty. |
+| `search` | The field is in its record's full-text index, which `where a matches x` looks in. For text (also `email` and `url`) and lists of text; see [Full-text search](#full-text-search). |
 | `min value`, `max value` | The lowest and highest value allowed. |
 | `pattern "regex"` | Text must match the regular expression. |
 | `default value` | The value of a new record: a number, a string, `true`, `false` or an enum value. |
@@ -381,6 +382,7 @@ migration "Phone and VAT"
 | `rename field Entity.old to new` | renames a field; its values stay |
 | `change field Entity.name: type` | changes a field's type, converting the values |
 | `add unique Entity.name`, `remove unique Entity.name` | makes a field unique, or not |
+| `add search Entity.name`, `remove search Entity.name` | puts a field in its entity's full-text index, or takes it out |
 | `map table Entity to "name"` | stores the entity in a table of another name (renames the table); `to default` goes back to the entity's name |
 | `map key Entity to "name"` | names the key column (renames it); `to default` is `id` |
 | `map column Entity.field to "name"` | stores a field in a column of another name (renames the column); `to default` is the field's name |
@@ -435,6 +437,7 @@ What differs between the databases:
 - **Changing a type.** SQLite builds the table again; the others add a column of the new type, copy the values over converted, and drop the old one. Empty text that becomes a number or a date gets the field's default.
 - **A failed step.** SQLite, PostgreSQL and SQL Server undo the whole step. MySQL cannot undo changes to tables, so it keeps the statements of the step that ran before the failure; the error says how many.
 - **Comparing text.** `==` and `contains` follow the database: MySQL and SQL Server usually ignore case in `==` too, and sort text by their own rules.
+- **Full-text search.** Each database keeps its own index of the fields marked `search`: SQLite an FTS5 table that triggers keep (`album__search`), PostgreSQL a GIN index on `to_tsvector('simple', ...)`, MySQL a FULLTEXT index without stopwords, and SQL Server none, as its full-text search is seldom installed: it looks with LIKE at the start of each word, reading every record. A step that changes an entity builds its index again. Whether accents count follows the database: MySQL usually ignores them, the others do not.
 - **Baseline steps**, Import and the check of external tables are for SQLite only for now. An external PostgreSQL, MySQL or SQL Server database can be mapped by hand and is read and written as it is.
 
 ### External databases
@@ -1345,7 +1348,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
-From tightest to loosest: member access (`.`) and items (`[i]`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in` and `contains`, `not`, `and`, `or`.
+From tightest to loosest: member access (`.`) and items (`[i]`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in`, `contains` and `matches`, `not`, `and`, `or`.
 
 ### Texts by key
 
@@ -1405,6 +1408,27 @@ code Customers
 - `order by` takes one or more fields, each optionally followed by `desc`, and may go through references too: `order by a.artist.name, a.title`. Without it, records come in the order they were stored.
 - A query reads one database, so it cannot go through a reference to an entity in another data source.
 - The database does the work: the condition becomes a query with parameters, so values never become part of the SQL text.
+
+#### Full-text search
+
+A field marked `search` is in its record's full-text index, and `a matches x` finds the records that hold every word of `x`, each as the start of a word, in any of those fields:
+
+```clarity
+entity Album
+    title: text(120), required, search
+    notes: text, search
+    tags: list<text>, search
+
+code AlbumBrowse
+    handler searchChanged
+        albums = find a in Album where a matches searchBox.text order by a.title
+```
+
+- Typing `blue no` finds an album titled *Blue Train* with the notes *on Blue Note*, and one tagged `blues` and `north`, but not *Kind of Blue* alone: every word must be there. Case does not count.
+- A word is a run of letters and digits; `hard-bop` is the two words `hard` and `bop`. Text without words, such as an empty search box, matches every record.
+- `matches` looks in the record of the query itself (`a matches x`), and combines with other conditions: `where a matches x and a.year > 1960`. The entity needs at least one field marked `search`.
+- `contains` stays the exact test: `a.title contains "lue"` finds *Blue Train*; `a matches "lue"` does not, as no word starts with it.
+- Every stack writes the same SQL per database; the cases are in `conformance/queries.json`.
 
 ### Files
 

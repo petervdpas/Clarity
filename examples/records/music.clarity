@@ -15,25 +15,25 @@ entity Genre
     children: list<Genre>, label @genreChildrenLabel
 
 entity Artist
-    name: text(80), required, unique, label @artistNameLabel
-    country: text(40), label @artistCountryLabel
+    name: text(80), required, unique, search, label @artistNameLabel
+    country: text(40), search, label @artistCountryLabel
     formed: integer, format plain, label @artistFormedLabel
     website: url, label @artistWebsiteLabel
     photo: image, store photos, label @artistPhotoLabel
 
 entity Album
-    title: text(120), required, label @albumTitleLabel
+    title: text(120), required, search, label @albumTitleLabel
     artist: ref Artist, required, label @albumArtistLabel
     genre: ref Genre, label @albumGenreLabel
     year: integer, format plain, min 1900, max 2100, label @albumYearLabel
     format: Format, default Cd, label @albumFormatLabel
-    record_label: text(60), label @albumRecordLabelLabel
+    record_label: text(60), search, label @albumRecordLabelLabel
     bought_on: date, label @albumBoughtOnLabel
     price: money, min 0, label @albumPriceLabel
     rating: integer, min 0, max 5, help @albumRatingHelp, label @albumRatingLabel
     cover: image, help @albumCoverHelp, label @albumCoverLabel
-    notes: text, label @albumNotesLabel
-    tags: list<text>, label @albumTagsLabel
+    notes: text, search, label @albumNotesLabel
+    tags: list<text>, search, label @albumTagsLabel
     booklet: file, label @albumBookletLabel
 
 // A track of an album; the album form lists them in order.
@@ -96,8 +96,8 @@ page AlbumBrowse: window
 
     heading @collectionHeadingCaption name collectionHeading at 1,1 span 6
     image name collectionLogo at 12,1 span 1 rows 1 source "logo.png" tooltip @collectionLogoTooltip
-    label @titleFilterLabel name titleFilterLabel at 1,2 span 2 for titleFilter
-    textbox name titleFilter at 3,2 span 10 placeholder @titleFilterPlaceholder on change: filterChanged
+    label @searchLabel name searchLabel at 1,2 span 2 for searchBox
+    textbox name searchBox at 3,2 span 10 placeholder @searchPlaceholder on change: filterChanged
     table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price, tags resizable sortable page 25 on open: openClicked
     button @exportListCaption name exportList at 1,11 span 2 on click: exportClicked
     button @newAlbumCaption name newAlbum at 9,11 span 2 on click -> AlbumForm
@@ -172,8 +172,8 @@ page ArtistBrowse: window
     data artists: list<Artist>
     on return: windowReturned
 
-    label @nameFilterLabel name nameFilterLabel at 1,1 span 2 for nameFilter
-    textbox name nameFilter at 3,1 span 10 on change: filterChanged
+    label @artistSearchLabel name artistSearchLabel at 1,1 span 2 for artistSearch
+    textbox name artistSearch at 3,1 span 10 placeholder @artistSearchPlaceholder on change: filterChanged
     list name artistList at 1,2 span 12 rows 8 bind artists show name, country, formed on open: openClicked
     button @findPhotosCaption name findPhotos at 1,10 span 2 on click: photosClicked
     button @backUpPhotosCaption name backUpPhotos at 3,10 span 2 on click: backupClicked
@@ -237,7 +237,8 @@ code AlbumBrowse
         filterChanged()
 
     handler filterChanged
-        albums = find a in Album where a.title contains titleFilter.text or a.artist.name contains titleFilter.text order by a.artist.name, a.title
+        // Words of the title, label, notes or tags, or part of the artist's name.
+        albums = find a in Album where a matches searchBox.text or a.artist.name contains searchBox.text order by a.artist.name, a.title
 
     handler openClicked
         open AlbumForm with album = grid.selected
@@ -291,7 +292,7 @@ code ArtistBrowse
         filterChanged()
 
     handler filterChanged
-        artists = find a in Artist where a.name contains nameFilter.text order by a.name
+        artists = find a in Artist where a matches artistSearch.text order by a.name
 
     handler openClicked
         open ArtistForm with artist = artistList.selected

@@ -2409,7 +2409,7 @@ impl<'a> BodyChecker<'_, 'a> {
         self.scopes.push(HashMap::new());
         self.define(var, Ty::Record(decl));
         if let Some(filter) = filter {
-            self.query_condition(filter, &var.name);
+            self.query_condition(filter, &var.name, decl);
         }
         for key in order {
             if key.var.name != var.name {
@@ -2447,14 +2447,28 @@ impl<'a> BodyChecker<'_, 'a> {
     /// A query condition: `and`, `or` and `not` of comparisons between a
     /// field of the record and a value, `contains`, `in`, and bool fields.
     /// Each becomes a condition the database evaluates.
-    fn query_condition(&mut self, expr: &Expr, var: &str) {
+    fn query_condition(&mut self, expr: &Expr, var: &str, decl: &'a Entity) {
         let general = format!("a query compares a field of {var} with a value, as in '{var}.name == x'");
         match &expr.kind {
             ExprKind::Binary { op: BinaryOp::And | BinaryOp::Or, left, right } => {
-                self.query_condition(left, var);
-                self.query_condition(right, var);
+                self.query_condition(left, var, decl);
+                self.query_condition(right, var, decl);
             }
-            ExprKind::Unary { op: UnaryOp::Not, operand } => self.query_condition(operand, var),
+            ExprKind::Unary { op: UnaryOp::Not, operand } => self.query_condition(operand, var, decl),
+            // `a matches x`: the words of x in the record's searched fields.
+            ExprKind::Binary { op: BinaryOp::Matches, left, right } => {
+                if !matches!(&left.kind, ExprKind::Name { name } if name == var) {
+                    return self.error(format!("'matches' looks for words in the records found, as in '{var} matches x'"), expr.span);
+                }
+                let words = self.expr(right, Some(Ty::Text));
+                if !words.is_unknown() && !matches!(words, Ty::Text) {
+                    self.error(format!("'matches' looks for text, not {}", words.name()), right.span);
+                }
+                if !decl.fields.iter().any(|f| f.modifiers.search) {
+                    self.error(format!("{} has no field marked search to look for words in", decl.name.name), expr.span);
+                }
+                self.out.types.types.insert((expr.span.start, expr.span.end), TypeInfo::Bool);
+            }
             ExprKind::Binary { op, left, right } if is_comparison(*op) => {
                 let sides = (self.query_field(left, var), self.query_field(right, var));
                 let (field, value) = match sides {
@@ -2638,6 +2652,15 @@ impl<'a> BodyChecker<'_, 'a> {
             return Ty::Bool;
         }
         match op {
+            BinaryOp::Matches => {
+                self.expr(left, None);
+                self.expr(right, None);
+                self.error(
+                    "'matches' looks for words in the records a find looks through, as in 'find a in Album where a matches x'",
+                    join(left.span, right.span),
+                );
+                Ty::Bool
+            }
             BinaryOp::Contains => {
                 let l = self.expr(left, None);
                 // `album.tags contains "jazz"`: whether a list holds an item.

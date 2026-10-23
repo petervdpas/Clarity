@@ -5,15 +5,15 @@ enum CustomerKind
     Business label @customerKindBusiness
 
 entity Customer
-    name: text(80), required, label @customerNameLabel
-    email: email, unique, label @customerEmailLabel
+    name: text(80), required, search, label @customerNameLabel
+    email: email, unique, search, label @customerEmailLabel
     kind: CustomerKind, default Private, label @customerKindLabel
     vat_number: text(14), help @customerVatNumberHelp, label @customerVatNumberLabel
     credit_limit: money, min 0, default 0, label @customerCreditLimitLabel
     active: bool, default true, label @customerActiveLabel
     since: date, label @customerSinceLabel
-    notes: text, help @customerNotesHelp, label @customerNotesLabel
-    tags: list<text>, label @customerTagsLabel
+    notes: text, search, help @customerNotesHelp, label @customerNotesLabel
+    tags: list<text>, search, label @customerTagsLabel
     contract: file, label @customerContractLabel
 
 page CustomerBrowse: window
@@ -21,10 +21,8 @@ page CustomerBrowse: window
     data customers: list<Customer>
     on return: windowReturned
 
-    label @nameFilterLabel name nameFilterLabel at 1,1 span 2 for nameFilter
-    textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
-    label @emailFilterLabel name emailFilterLabel at 7,1 span 2 for emailFilter
-    textbox name emailFilter at 9,1 span 4 on change: filterChanged
+    label @searchLabel name searchLabel at 1,1 span 2 for searchBox
+    textbox name searchBox at 3,1 span 10 placeholder @searchPlaceholder on change: filterChanged
     table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 on open: openClicked
     button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
     button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
@@ -72,7 +70,8 @@ code CustomerBrowse
         filterChanged()
 
     handler filterChanged
-        customers = find c in Customer where c.name contains nameFilter.text and c.email contains emailFilter.text order by c.name
+        // Every word typed, at the start of a word of the name, e-mail, notes or tags.
+        customers = find c in Customer where c matches searchBox.text order by c.name
 
     handler openClicked
         open CustomerForm with customer = grid.selected

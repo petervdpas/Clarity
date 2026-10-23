@@ -397,6 +397,9 @@ pub enum BinaryOp {
     Div,
     /// `text contains part`, ignoring case; or whether a list of values holds an item.
     Contains,
+    /// `a matches x` in a find: the record holds every word of `x`, each as
+    /// the start of a word, in its fields marked `search`.
+    Matches,
 }
 
 impl BinaryOp {
@@ -415,6 +418,7 @@ impl BinaryOp {
             Self::Mul => "*",
             Self::Div => "/",
             Self::Contains => "contains",
+            Self::Matches => "matches",
         }
     }
 }

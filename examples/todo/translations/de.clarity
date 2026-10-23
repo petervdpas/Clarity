@@ -47,3 +47,5 @@ translation de
     themePicker "Design"
     personColorLabel "Farbe"
     colorLabel "Farbe"
+    searchLabel "Suchen"
+    searchPlaceholder "Wörter aus dem Titel"

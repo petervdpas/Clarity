@@ -47,3 +47,5 @@ translation nl
     themePicker "Thema"
     personColorLabel "Kleur"
     colorLabel "Kleur"
+    searchLabel "Zoeken"
+    searchPlaceholder "Woorden uit de titel"

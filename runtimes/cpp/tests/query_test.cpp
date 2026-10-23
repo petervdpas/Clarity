@@ -57,6 +57,7 @@ Cond cond(const json& value) {
     if (kind == "number") return Cond::number(inner["column"], op(inner["op"]), sql_value(inner["value"]));
     if (kind == "contains") return Cond::contains(inner["column"], inner["text"]);
     if (kind == "holds") return Cond::holds(inner["column"], sql_value(inner["value"]));
+    if (kind == "matches") return Cond::matches(inner["table"], inner["key"], inner["columns"].get<std::vector<std::string>>(), inner["text"]);
     if (kind == "oneOf") return Cond::one_of(inner["column"], values(inner["values"]));
     if (kind == "oneOfNumbers") return Cond::one_of_numbers(inner["column"], values(inner["values"]));
     if (kind == "isTrue") return Cond::is_true(inner.get<std::string>());

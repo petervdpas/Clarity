@@ -740,6 +740,10 @@ fn parse_comparison(cursor: &mut Cursor) -> ParseResult<Expr> {
         let right = parse_additive(cursor)?;
         return Ok(binary(BinaryOp::Contains, left, right));
     }
+    if cursor.eat_keyword("matches") {
+        let right = parse_additive(cursor)?;
+        return Ok(binary(BinaryOp::Matches, left, right));
+    }
     if let Some(op) = cursor.peek_kind().and_then(comparison_op) {
         cursor.next();
         let right = parse_additive(cursor)?;

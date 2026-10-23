@@ -1776,6 +1776,21 @@ impl<'a> Emitter<'a> {
                 format!("clarity_or({l}, {})", self.cond(right, var, entity, pre))
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("clarity_not({})", self.cond(operand, var, entity, pre)),
+            ExprKind::Binary { op: BinaryOp::Matches, .. } => {
+                let Some((search, text)) = crate::query::search(project, entity, var, expr) else {
+                    self.errors.push(format!("'{}' looks for words in no record of {var}", print::expr(expr)));
+                    return String::new();
+                };
+                let columns: Vec<String> = search.columns.iter().map(|c| string(c)).collect();
+                format!(
+                    "clarity_matches({}, {}, {}, (const char*[]){{{}}}, {})",
+                    string(&search.table),
+                    string(&search.key),
+                    columns.len(),
+                    columns.join(", "),
+                    bare(self.value(text, pre))
+                )
+            }
             ExprKind::Binary { op, left, right } => {
                 let (path, value, op) = match (path_of(left), path_of(right)) {
                     (Some(path), _) => (path, right, *op),

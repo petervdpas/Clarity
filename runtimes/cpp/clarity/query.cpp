@@ -10,7 +10,7 @@
 namespace clarity {
 
 struct Cond::Node {
-    enum class Kind { Compare, Contains, Holds, OneOf, IsTrue, IsNone, Through, And, Or, Not } kind;
+    enum class Kind { Compare, Contains, Holds, Matches, OneOf, IsTrue, IsNone, Through, And, Or, Not } kind;
     std::string column;
     Op op = Op::Eq;
     std::vector<SqlValue> values;
@@ -54,6 +54,33 @@ SqlValue list_item(Dialect d, const SqlValue& item) {
     return d == Dialect::Postgres ? "[" + json + "]" : json;
 }
 
+// A word of a search is a run of ASCII letters and digits and of any
+// characters beyond ASCII (UTF-8 bytes from 0x80).
+bool word_byte(unsigned char b) { return b >= 0x80 || std::isalnum(b); }
+
+std::vector<std::string> words_of(const std::string& text) {
+    std::vector<std::string> out;
+    std::string word;
+    for (unsigned char b : text) {
+        if (word_byte(b)) {
+            word += char(b);
+        } else if (!word.empty()) {
+            out.push_back(word);
+            word.clear();
+        }
+    }
+    if (!word.empty()) out.push_back(word);
+    return out;
+}
+
+// The characters of UTF-8 text.
+size_t characters(const std::string& text) {
+    return size_t(std::count_if(text.begin(), text.end(), [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }));
+}
+
+// The shortest word MySQL's full-text index keeps (innodb_ft_min_token_size).
+constexpr size_t mysql_shortest = 3;
+
 }  // namespace
 
 Cond Cond::compare(const std::string& column, Op op, SqlValue value) {
@@ -70,6 +97,12 @@ Cond Cond::contains(const std::string& column, const std::string& text) {
 
 Cond Cond::holds(const std::string& column, SqlValue item) {
     return Cond(std::make_shared<Node>(Node{Node::Kind::Holds, column, Op::Eq, {std::move(item)}, false, "", {}, {}}));
+}
+
+Cond Cond::matches(const std::string& table, const std::string& key, const std::vector<std::string>& columns, const std::string& text) {
+    // The columns ride in the values, the table and key in the hop.
+    std::vector<SqlValue> names(columns.begin(), columns.end());
+    return Cond(std::make_shared<Node>(Node{Node::Kind::Matches, "", Op::Eq, std::move(names), false, text, Hop{"", table, key}, {}}));
 }
 
 Cond Cond::one_of(const std::string& column, std::vector<SqlValue> values) {
@@ -120,6 +153,42 @@ std::string Cond::sql(Dialect d, std::vector<SqlValue>& params) const {
         return clarity::contains(d, n.column, param("%" + escape_like(d, n.text) + "%", false));
     case Node::Kind::Holds:
         return clarity::holds(d, n.column, param(list_item(d, n.values[0]), false));
+    case Node::Kind::Matches: {
+        auto words = words_of(n.text);
+        if (words.empty()) return "1 = 1";
+        std::string columns;
+        for (size_t i = 0; i < n.values.size(); ++i) {
+            std::string column = quote(d, std::get<std::string>(n.values[i]));
+            if (i) columns += d == Dialect::Postgres ? " || ' ' || " : d == Dialect::Mssql ? " + N' ' + " : ", ";
+            columns += d == Dialect::Postgres ? "coalesce(" + column + ", '')" : d == Dialect::Mssql ? "ISNULL(" + column + ", N'')" : column;
+        }
+        std::string query;
+        std::vector<std::string> parts;
+        switch (d) {
+        case Dialect::Sqlite: {
+            for (size_t i = 0; i < words.size(); ++i) query += (i ? " AND " : "") + ("\"" + words[i] + "\"*");
+            std::string index = quote(d, n.hop.table + "__search");
+            return quote(d, n.hop.key) + " IN (SELECT rowid FROM " + index + " WHERE " + index + " MATCH " + param(query, false) + ")";
+        }
+        case Dialect::Postgres:
+            for (size_t i = 0; i < words.size(); ++i) query += (i ? " & " : "") + words[i] + ":*";
+            return "to_tsvector('simple', " + columns + ") @@ to_tsquery('simple', " + param(query, false) + ")";
+        case Dialect::Mysql:
+            // The index leaves out words shorter than 3 characters.
+            for (const auto& w : words)
+                if (characters(w) >= mysql_shortest) query += (query.empty() ? "+" : " +") + w + "*";
+            if (!query.empty()) parts.push_back("MATCH (" + columns + ") AGAINST (" + param(query, false) + " IN BOOLEAN MODE)");
+            for (const auto& w : words)
+                if (characters(w) < mysql_shortest) parts.push_back("CONCAT_WS(' ', " + columns + ") REGEXP " + param("(^|[^[:alnum:]])" + w, false));
+            break;
+        default:
+            for (const auto& w : words) parts.push_back("(N' ' + " + columns + ") LIKE " + param("%[^0-9A-Za-z]" + w + "%", false));
+            break;
+        }
+        std::string out;
+        for (size_t i = 0; i < parts.size(); ++i) out += (i ? " AND " : "") + parts[i];
+        return parts.size() > 1 ? "(" + out + ")" : out;
+    }
     case Node::Kind::OneOf: {
         std::string out = column_sql(d, n.column, n.numeric) + " IN (";
         for (size_t i = 0; i < n.values.size(); ++i) out += (i ? ", " : "") + param(n.values[i], n.numeric);

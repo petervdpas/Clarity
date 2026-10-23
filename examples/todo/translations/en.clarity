@@ -47,3 +47,5 @@ translation en
     themePicker "Theme"
     personColorLabel "Color"
     colorLabel "Color"
+    searchLabel "Search"
+    searchPlaceholder "Words of the title"

@@ -280,6 +280,10 @@ pub struct Modifiers {
     pub unique: bool,
     pub owned: bool,
     pub computed: bool,
+    /// `search`: the field is in its record's full-text index, which
+    /// `where a matches x` looks in (text and lists of text).
+    #[serde(default)]
+    pub search: bool,
     pub min: Option<Literal>,
     pub max: Option<Literal>,
     pub pattern: Option<String>,

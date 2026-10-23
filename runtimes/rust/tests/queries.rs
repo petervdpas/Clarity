@@ -60,6 +60,10 @@ fn cond(value: &Value) -> Cond {
         "number" => Cond::number(name(&inner["column"]), op(&inner["op"]), sql_value(&inner["value"])),
         "contains" => Cond::contains(name(&inner["column"]), inner["text"].as_str().expect("text")),
         "holds" => Cond::holds(name(&inner["column"]), sql_value(&inner["value"])),
+        "matches" => {
+            let columns: Vec<&'static str> = inner["columns"].as_array().expect("columns").iter().map(name).collect();
+            Cond::matches(name(&inner["table"]), name(&inner["key"]), &columns, inner["text"].as_str().expect("text"))
+        }
         "oneOf" => Cond::one_of(name(&inner["column"]), values(&inner["values"])),
         "oneOfNumbers" => Cond::one_of_numbers(name(&inner["column"]), values(&inner["values"])),
         "isTrue" => Cond::is_true(name(inner)),

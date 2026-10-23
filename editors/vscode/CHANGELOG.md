@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Colors `search`, the field modifier for full-text search, and `matches`, which finds the records holding every word typed.
+
+## 0.1.4
+
+- Colors the words of the newer parts and settings: `accordion`, `chart`, `slider`, `spinbox`, `toggle`, `tree`, `treetable`, `tags`, `popover`, `settings` and others, and `color` as a field type.
+
 ## 0.1.3
 
 - Colors the `markdown` part, and `resource` in a language file: a key that points at a file of the resources, `gameRules resource "rules-nl.md"`.

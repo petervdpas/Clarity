@@ -548,6 +548,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
 | `tabs` | `tab @key` blocks, each with parts | none | `change` |
 | `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
+| `popover` | parts on its own grid, opened next to the part in `for` | none | none |
 | `splitter` | exactly two `pane` blocks, each with parts | `horizontal` or `vertical` | none |
 
 A panel or form with `foldable` has a header the person clicks to fold it to that header and unfold it again; `foldable folded` starts it folded. Code reads and sets whether it is folded as `part.folded`, so a handler can open the section a message is about. In the designer it stays open, to edit what it holds. On Avalonia it is an Expander; on the web stacks the renderer folds it.
@@ -685,6 +686,24 @@ page NewOrder: dialog gives Order
             dropdown at 1,1 span 6 bind order.customer
         step @noteStep
             textbox at 1,1 span 12 bind order.note
+```
+
+A popover is a container outside the window's grid: it has no `at`, only a size, and `for` names the part it opens next to. It is closed until a click opens it (`on click -> filters`, from a button or a menu item) or code sets `filters.visible = true`; a click outside it or Escape closes it. It stands on the window, not inside another part.
+
+```clarity
+button @filterButton name filterButton at 1,7 span 2 on click -> filters
+popover name filters for filterButton span 4 rows 2
+    checkbox @onlyVinylCaption name vinylBox at 1,1 span 4 bind onlyVinyl on change: refilter
+```
+
+Any part can have a context menu: a `menu` block indented under it, with items written as the frame's menu items are (`item`, `separator`, submenus, `on click: handler` or `on click -> Target`). A right click opens it at the pointer; on a table or list it chooses the row under the pointer first, so the handler finds it as `grid.selected`. Named items hide and disable as any part does.
+
+```clarity
+table name grid at 1,1 span 12 rows 6 bind albums columns title
+    menu
+        item @openItem name openItem on click: openClicked
+        separator
+        item @deleteItem name deleteItem on click: deleteClicked
 ```
 
 Next runs the handler of `on next` on the step the person is on, then moves one step on. A `refuse` in it keeps the person on the step and says why; a handler that sets `wizard.step` itself decides where the wizard goes. Without `on next`, Next just moves on. Back goes one step back and runs nothing, so what was entered stays. Finish, on the last step, runs `on finish`, which saves, closes the dialog with its value (`close with order`), or does what the wizard is for.

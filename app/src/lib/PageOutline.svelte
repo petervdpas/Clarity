@@ -37,6 +37,10 @@
         const p = w.props;
         const text = p.name ?? (p.caption ? tr(preview, p.caption) : null) ?? p.bind ?? "";
         out.push({ id: w.span.start, key: String(w.span.start), depth, kind: widgetInfo(preview, p.kind).name, text, removable: true });
+        if (w.menu) {
+          out.push({ id: w.menu.span.start, key: String(w.menu.span.start), depth: depth + 1, kind: "Context menu", text: w.menu.name ?? "", removable: true });
+          commands(w.menu.items, depth + 2);
+        }
         walk(w.children, depth + 1);
         for (const inner of w.pages) {
           out.push({

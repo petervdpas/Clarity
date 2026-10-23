@@ -125,8 +125,6 @@
   let buildDone = $state<BuildDone | null>(null);
   let showOutput = $state(false);
   let outputPre: HTMLElement | undefined = $state();
-  /** The height the output panel has now. */
-  let outputHeight = $state(0);
 
   // The output follows the newest line.
   $effect(() => {
@@ -1354,10 +1352,9 @@
         {/if}
       </main>
       {#if showOutput}
-        <!-- Dragging starts from the height shown, which is less than the remembered one while the output is short. -->
-        <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", outputHeight - layout.sizes.output - d)} />
-        <!-- The toolchain's output while the application is generated and built: as tall as it is, up to the dragged height. -->
-        <section class="output-panel" aria-label="Build output" style:max-height="{layout.sizes.output}px" bind:clientHeight={outputHeight}>
+        <Splitter axis="y" label="Height of the output" onmove={(d) => layout.resize("output", -d)} />
+        <!-- The toolchain's output while the application is generated and built, at the height the person dragged it to. -->
+        <section class="output-panel" aria-label="Build output" style:height="{layout.sizes.output}px">
           <header>
             <strong>Output</strong>
             {#if building}
@@ -1558,7 +1555,7 @@
   }
 
   .output-panel pre {
-    flex: 0 1 auto;
+    flex: 1;
     min-height: 0;
     margin: 0;
     padding: 8px 12px;

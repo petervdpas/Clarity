@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PopoverView from "./PopoverView.svelte";
   import WidgetView from "./WidgetView.svelte";
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
@@ -89,7 +90,12 @@
   {/if}
 
   {#each widgets as widget (widget.span.start)}
-    <WidgetView {preview} {page} {data} {design} {widget} {onnavigate} />
+    {#if widget.props.kind === "popover"}
+      <!-- A popover has no place in the grid: it opens next to its part. -->
+      <PopoverView {preview} {page} {data} {design} {widget} {onnavigate} />
+    {:else}
+      <WidgetView {preview} {page} {data} {design} {widget} {onnavigate} />
+    {/if}
   {/each}
 
   {#if ghost}

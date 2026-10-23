@@ -13,6 +13,10 @@
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
   import CanvasView from "./ui/CanvasView.svelte";
   import MarkdownView from "./ui/MarkdownView.svelte";
+  import PartMenu from "./ui/PartMenu.svelte";
+  import type { Command } from "./generated/Command";
+  import { itemClicks, itemShown } from "./overlays";
+  import { previewPopovers } from "./previewPopovers.svelte";
   import { openLink } from "./backend";
   import { DEFAULT_DIGITS } from "./display";
   import { DEFAULT_UNITS } from "./drawing";
@@ -217,7 +221,31 @@
   function click() {
     if (design) return;
     if (p.handlers.some((h) => h.event === "click")) fire("click");
+    else if (p.onClick && findPart(page, p.onClick)?.props.kind === "popover") openPopover(p.onClick);
     else if (p.onClick) onnavigate(p.onClick, p.newWindow);
+  }
+
+  /** Opens a popover of the window: live in its part state, in a preview here. */
+  function openPopover(name: string) {
+    if (live) live.setVisible(name, true);
+    else previewPopovers[name] = true;
+  }
+
+  // The part's context menu, open at the pointer.
+  let menuAt = $state<{ x: number; y: number } | null>(null);
+
+  function openMenu(e: MouseEvent) {
+    if (design || !widget.menu || disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    menuAt = { x: e.clientX, y: e.clientY };
+  }
+
+  /** A context menu's item: its handler, or the window or popover it opens. */
+  function runItem(item: Command) {
+    if (item.props.handler && live) live.event(item.props.name ?? "", "click", item.props.handler);
+    else if (item.props.onClick && findPart(page, item.props.onClick)?.props.kind === "popover") openPopover(item.props.onClick);
+    else if (item.props.onClick) onnavigate(item.props.onClick, item.props.newWindow);
   }
 
   /** Chooses a row; `select` runs when it is another row than before, as on every stack. */
@@ -337,6 +365,8 @@
   class:disabled
   class:invalid={error !== null}
   data-widget={offset}
+  data-part={p.name}
+  oncontextmenu={openMenu}
   title={error ?? (p.tooltip ? tr(preview, p.tooltip) : undefined)}
   style:grid-column="{p.col} / span {p.width}"
   style:grid-row="{p.row} / span {p.height}"
@@ -588,7 +618,7 @@
     {:else if p.kind === "list"}
       <ul class="list">
         {#each collection?.rows ?? [] as row, i (i)}
-          <li class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
+          <li class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} oncontextmenu={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
         {/each}
       </ul>
     {:else if p.kind === "image" && p.bind}
@@ -659,6 +689,19 @@
     {/if}
   {/if}
 </div>
+
+{#if menuAt && widget.menu}
+  <PartMenu
+    items={widget.menu.items}
+    x={menuAt.x}
+    y={menuAt.y}
+    caption={(text) => tr(preview, text)}
+    shows={(name) => !live || !name || itemShown(live.parts[name])}
+    enabled={(name) => !live || !name || itemClicks(live.parts[name])}
+    onrun={runItem}
+    onclose={() => (menuAt = null)}
+  />
+{/if}
 
 <style>
   .widget.hidden {

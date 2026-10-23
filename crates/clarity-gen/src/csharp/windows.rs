@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::FileTypes;
 use clarity_spec::frame::{ShownFrame, shown};
-use clarity_spec::layout::{CONTENT_PADDING, GAP, ROW_HEIGHT};
+use clarity_spec::layout::{CONTENT_PADDING, GAP, POPOVER_COLUMN, ROW_HEIGHT};
 use clarity_spec::model::{App, Command, CommandKind, DataDecl, DataKind, Entity, Field, FieldType, Handler, Literal, Page, PageKind, Widget, WidgetProps};
 use clarity_spec::widgets::{Event, WidgetKind};
 use clarity_spec::widgets;
@@ -220,6 +220,10 @@ impl<'a> Window<'a> {
                 commands.extend(all_commands(&group.items));
             }
         }
+        // The items of the parts' context menus are commands as the frame's are.
+        for menu in parts.iter().filter_map(|w| w.menu.as_ref()) {
+            commands.extend(all_commands(&menu.items));
+        }
         let pickers = commands
             .iter()
             .filter(|c| matches!(c.props.on_click.as_deref(), Some(LANGUAGE | THEME)))
@@ -395,6 +399,8 @@ impl<'a> Window<'a> {
             target if self.project.pages().any(|p| p.name.name == target) => {
                 Some(format!("{}_{target}Command", if new_window { "OpenNew" } else { "Open" }))
             }
+            // A popover of the window opens next to its part.
+            target if self.popover(target).is_some() => Some(format!("Show_{target}Command")),
             _ => None,
         }
     }
@@ -537,8 +543,10 @@ impl<'a> Window<'a> {
             return;
         }
         let header = self.text(item.props.caption.as_deref().unwrap_or_default());
+        // A named item hides and disables as its part state says, as every part does.
+        let state = item.props.name.as_deref().map(|n| Self::state(n, false)).unwrap_or_default();
         if !item.items.is_empty() {
-            let _ = writeln!(out, "{pad}<MenuItem Header=\"{header}\">");
+            let _ = writeln!(out, "{pad}<MenuItem Header=\"{header}\"{state}>");
             for child in &item.items {
                 self.menu_item(child, depth + 1, out);
             }
@@ -555,6 +563,7 @@ impl<'a> Window<'a> {
         if let Some(command) = self.click_command(item.props.handler.as_deref().map(pascal), item.props.on_click.as_deref(), item.props.new_window) {
             let _ = write!(attrs, " Command=\"{{Binding {command}}}\"");
         }
+        attrs.push_str(&state);
         let _ = writeln!(out, "{pad}<MenuItem {attrs} />");
     }
 
@@ -616,14 +625,43 @@ impl<'a> Window<'a> {
         out
     }
 
+    /// A popover of the window, by name.
+    fn popover(&self, name: &str) -> Option<&'a Widget> {
+        self.page.widgets.iter().find(|w| w.props.kind == WidgetKind::Popover && w.props.name.as_deref() == Some(name))
+    }
+
     /// A part, with the class of its style, whose values come from the theme shown.
     fn widget(&self, widget: &Widget, depth: usize, out: &mut String) {
         let mut own = String::new();
+        let depth = if widget.menu.is_some() { depth + 1 } else { depth };
         self.part_axaml(widget, depth, &mut own);
-        match widget.props.style.as_deref() {
-            Some(style) => out.push_str(&with_class(&own, &style_class(style))),
-            None => out.push_str(&own),
+        if let Some(style) = widget.props.style.as_deref() {
+            own = with_class(&own, &style_class(style));
         }
+        let Some(menu) = &widget.menu else {
+            out.push_str(&own);
+            return;
+        };
+        // A part with a context menu stands in a panel that has it, in the
+        // part's place: a right click anywhere on the part opens it.
+        let p = &widget.props;
+        let mut place = format!("Grid.Column=\"{}\" Grid.Row=\"{}\"", p.col - 1, p.row - 1);
+        if p.width > 1 {
+            let _ = write!(place, " Grid.ColumnSpan=\"{}\"", p.width);
+        }
+        if p.height > 1 {
+            let _ = write!(place, " Grid.RowSpan=\"{}\"", p.height);
+        }
+        let pad = "  ".repeat(depth - 1);
+        let visible = p.name.as_deref().map(|n| format!(" IsVisible=\"{{Binding {}.IsVisible}}\"", member(n))).unwrap_or_default();
+        let named = menu.name.as_deref().map(|n| format!(" IsVisible=\"{{Binding {}.IsVisible}}\" IsEnabled=\"{{Binding {}.IsEnabled}}\"", member(n), member(n))).unwrap_or_default();
+        let _ = writeln!(out, "{pad}<Panel {place}{visible}>\n{pad}  <Panel.ContextMenu>\n{pad}    <ContextMenu{named}>");
+        for item in &menu.items {
+            self.menu_item(item, depth + 2, out);
+        }
+        let _ = writeln!(out, "{pad}    </ContextMenu>\n{pad}  </Panel.ContextMenu>");
+        out.push_str(&own.replacen(&format!(" {place}"), "", 1).replacen(&place, "", 1));
+        let _ = writeln!(out, "{pad}</Panel>");
     }
 
     fn part_axaml(&self, widget: &Widget, depth: usize, out: &mut String) {
@@ -849,6 +887,19 @@ impl<'a> Window<'a> {
                     let _ = writeln!(out, "{pad}  </TabItem>");
                 }
                 let _ = writeln!(out, "{pad}</TabControl>");
+            }
+            // A popover is Avalonia's Popup, open while its part state is visible
+            // and closed by a click outside it, next to the part in its `for`.
+            WidgetKind::Popover => {
+                let open = named.map(|n| format!(" IsOpen=\"{{Binding {}.IsVisible, Mode=TwoWay}}\"", member(n))).unwrap_or_default();
+                let target = p.for_part.as_deref().map(|t| format!(" PlacementTarget=\"{{Binding ElementName={}}}\"", control(t))).unwrap_or_default();
+                let name = named.map(|n| format!(" x:Name=\"{}\"", control(n))).unwrap_or_default();
+                // Its grid's width, with the padding and border of Border.popover around it.
+                let width = POPOVER_COLUMN * p.width + GAP * (p.width - 1) + 2 * 8 + 2;
+                let _ = writeln!(out, "{pad}<Popup{name}{open}{target} Placement=\"BottomEdgeAlignedLeft\" IsLightDismissEnabled=\"True\">");
+                let _ = writeln!(out, "{pad}  <Border Classes=\"popover\" Width=\"{width}\">");
+                self.grid(&widget.children, p.width, Some(p.height), false, depth + 2, out);
+                let _ = writeln!(out, "{pad}  </Border>\n{pad}</Popup>");
             }
             // A wizard is the runtime's StepsView: its step follows the part's state.
             WidgetKind::Steps => {
@@ -1185,8 +1236,14 @@ public partial class {name}View : UserControl
             if !help.is_empty() {
                 args.push(format!("help: {}", Texts::kept(&help)));
             }
-            // A foldable part starts as designed.
-            let starts = if widget.props.foldable && widget.props.folded { " { IsFolded = true }" } else { "" };
+            // A foldable part starts as designed; a popover starts closed.
+            let starts = if widget.props.kind == WidgetKind::Popover {
+                " { IsVisible = false }"
+            } else if widget.props.foldable && widget.props.folded {
+                " { IsFolded = true }"
+            } else {
+                ""
+            };
             let _ = writeln!(parts, "    public PartState {} {{ get; }} = new({}){starts};", member(n), args.join(", "));
         }
         // The menu and the toolbar have a state each.
@@ -1329,6 +1386,11 @@ public partial class {name}View : UserControl
         }
         if close {
             clicks.push_str("    [RelayCommand]\n    void CloseWindow_() => Handle(Close);\n\n");
+        }
+        // The popovers a click opens.
+        for popover in self.page.widgets.iter().filter(|w| w.props.kind == WidgetKind::Popover) {
+            let Some(n) = &popover.props.name else { continue };
+            let _ = write!(clicks, "    [RelayCommand]\n    void Show_{n}() => {}.IsVisible = true;\n\n", member(n));
         }
         if !errors.is_empty() {
             return Err(errors);

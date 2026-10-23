@@ -428,6 +428,8 @@ enum Kind {
     Use,
     /// A menu item, button or separator.
     Command,
+    /// A part's context menu: a `menu` block under it (DESIGN 5.16).
+    ContextMenu,
     RibbonTab,
     RibbonGroup,
     FooterStatus,
@@ -478,7 +480,8 @@ fn child_kind(parent: Kind, node: &LNode) -> Kind {
         Kind::Entity => Kind::Field,
         Kind::Enum => Kind::Variant,
         Kind::Page | Kind::App if is_region_line(&node.tokens) => region_kind(node),
-        Kind::Region(RegionKind::Menu) | Kind::Command
+        Kind::Widget(_) if starts_with_keyword(&node.tokens, "menu", None) => Kind::ContextMenu,
+        Kind::Region(RegionKind::Menu) | Kind::Command | Kind::ContextMenu
             if command_keyword_is(node, &[CommandKind::Item, CommandKind::Separator]) =>
         {
             Kind::Command
@@ -1028,11 +1031,13 @@ impl Doc {
                 let child_kind = child_kind(kind, child);
                 let named = child.tokens.windows(2).any(|w| w[0].kind == TokenKind::Ident && w[0].text == "name" && w[1].kind == TokenKind::Ident);
                 if matches!(child_kind, Kind::Widget(_)) && !named {
+                    // Before `at`; a popover, which has none, after its keyword.
                     let at = child
                         .tokens
                         .windows(2)
                         .find(|w| w[0].kind == TokenKind::Ident && w[0].text == "at" && w[1].kind == TokenKind::Number)
-                        .map(|w| w[0].span.start as usize);
+                        .map(|w| w[0].span.start as usize)
+                        .or_else(|| child.tokens.first().filter(|t| t.text == "popover").map(|t| t.span.end as usize + 1).filter(|end| *end <= child.text.len()));
                     if let (Some(at), Some(keyword)) = (at, child.tokens.first().map(|t| t.text.clone())) {
                         // After its purpose when the line says it, else numbered.
                         let name = match props_of_line(&child.tokens).as_ref().and_then(crate::names::suggested_name) {

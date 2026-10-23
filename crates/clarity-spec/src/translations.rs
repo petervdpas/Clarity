@@ -111,6 +111,9 @@ impl Shown {
             self.some(&p.caption, widget.span);
             self.some(&p.placeholder, widget.span);
             self.some(&p.tooltip, widget.span);
+            if let Some(menu) = &widget.menu {
+                self.commands(&menu.items);
+            }
             self.widgets(&widget.children);
             for page in &widget.pages {
                 self.some(&page.title, page.span);

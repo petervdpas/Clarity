@@ -213,11 +213,11 @@ fn a_radio_group_picks_an_enum_value() {
 fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.OrdersItem}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.OrdersItem}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" IsEnabled=\"{Binding OrdersItem.IsEnabled}\" IsVisible=\"{Binding OrdersItem.IsVisible}\" />");
     has(window, "<Separator />");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.QuitItem}\" Command=\"{Binding Quit_Command}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.QuitItem}\" Command=\"{Binding Quit_Command}\" IsEnabled=\"{Binding QuitItem.IsEnabled}\" IsVisible=\"{Binding QuitItem.IsVisible}\" />");
     // A window opens in a desktop window of its own only where the design says so.
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrderItem}\" Command=\"{Binding OpenNew_OrderFormCommand}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.AnotherOrderItem}\" Command=\"{Binding OpenNew_OrderFormCommand}\" IsEnabled=\"{Binding AnotherOrderItem.IsEnabled}\" IsVisible=\"{Binding AnotherOrderItem.IsVisible}\" />");
     has(window, "<TextBlock Classes=\"status\" Text=\"{x:Static local:Texts.ShopStatus}\" />");
 }
 
@@ -377,8 +377,8 @@ fn values_show_and_read_in_the_persons_format() {
 fn the_language_and_theme_targets_pick_in_place() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<MenuItem x:Name=\"picker1\" Header=\"{x:Static local:Texts.LanguageItem}\" />");
-    has(window, "<MenuItem x:Name=\"picker2\" Header=\"{x:Static local:Texts.ThemeItem}\" />");
+    has(window, "<MenuItem x:Name=\"picker1\" Header=\"{x:Static local:Texts.LanguageItem}\" IsEnabled=\"{Binding LanguageItem.IsEnabled}\" IsVisible=\"{Binding LanguageItem.IsVisible}\" />");
+    has(window, "<MenuItem x:Name=\"picker2\" Header=\"{x:Static local:Texts.ThemeItem}\" IsEnabled=\"{Binding ThemeItem.IsEnabled}\" IsVisible=\"{Binding ThemeItem.IsVisible}\" />");
     has(window, "<Button x:Name=\"picker3\" Content=\"{x:Static local:Texts.LookButtonCaption}\" />");
     let code = file(&files, "Windows/OrderFormView.axaml.cs");
     has(code, "        Pickers.Language(picker1);\n        Pickers.Theme(picker2);\n        Pickers.Theme(picker3);\n");

@@ -63,6 +63,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
 // ---------------------------------------------------------------------------
 // Block tree
 
+#[derive(Clone)]
 pub(crate) struct Node<'a> {
     pub(crate) line: &'a Line,
     pub(crate) children: Vec<Node<'a>>,
@@ -1314,8 +1315,28 @@ fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<W
         props,
         children: Vec::new(),
         pages: Vec::new(),
+        menu: None,
         span: node.span(),
     };
+    // A `menu` block under a part is its context menu (DESIGN 5.16); the rest is its content.
+    let (menus, content): (Vec<&Node>, Vec<&Node>) = node.children.iter().partition(|c| Cursor::new(c.line).peek().is_some_and(|t| t.text == "menu"));
+    for (i, menu) in menus.iter().enumerate() {
+        if i > 0 {
+            diagnostics.push(Diagnostic::error("a part has one context menu", menu.line.span));
+            continue;
+        }
+        let mut cursor = Cursor::new(menu.line);
+        cursor.eat_keyword("menu");
+        match region_name(&mut cursor, "menu") {
+            Ok(name) => {
+                let items = parse_commands(&menu.children, &[CommandKind::Item, CommandKind::Separator], diagnostics);
+                widget.menu = Some(Menu { name, items, span: menu.span() });
+            }
+            Err(diag) => diagnostics.push(diag),
+        }
+    }
+    let content: Vec<Node> = content.into_iter().cloned().collect();
+    let node = &Node { children: content, ..node.clone() };
     match widgets::container(kind) {
         None => no_children(node)?,
         Some(ContainerKind::Plain) => widget.children = parse_widgets(&node.children, diagnostics),
@@ -1451,6 +1472,9 @@ fn parse_widget_props(
         };
 
         match word {
+            "at" if kind == WidgetKind::Popover => {
+                return Err(Diagnostic::error("a popover has no 'at': it opens next to the part named in 'for'", clause.span));
+            }
             "at" => {
                 props.col = cursor.expect_number("a column")?;
                 cursor.expect(TokenKind::Comma, "',' and a row, as in 'at 1,2'")?;
@@ -1697,6 +1721,12 @@ fn parse_widget_props(
         }
     }
 
+    // A popover stands outside the window's grid, on a grid of its own.
+    if kind == WidgetKind::Popover {
+        props.col = 1;
+        props.row = 1;
+        placed = true;
+    }
     if !placed {
         return Err(Diagnostic::error(
             format!("a {name} needs a position, as in 'at 1,1'"),

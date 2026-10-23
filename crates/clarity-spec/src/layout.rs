@@ -42,6 +42,10 @@ pub const CONTENT_PADDING: u32 = 12;
 /// The width of one column of a sidebar, in pixels.
 pub const SIDEBAR_COLUMN: u32 = 64;
 
+/// The width of one column of a popover's grid, in pixels: a popover stands
+/// outside the window's grid, so its width does not follow the window's.
+pub const POPOVER_COLUMN: u32 = 80;
+
 /// The space beside a button's text, as a multiple of the theme's
 /// `padding` (above and below it is the padding itself).
 pub const BUTTON_SIDES: u32 = 3;

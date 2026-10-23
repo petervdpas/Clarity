@@ -1025,6 +1025,28 @@ code NewOrder
 - **Rules.** `steps` needs at least two `step` blocks. A step's parts are placed in the step's own grid, as a tab's are.
 - **Every stack.** The web renderer draws it in `lib/ui` (copied into each application) and Avalonia in Clarity.Avalonia, each in its own idiom; the step lives in the part's state, as a ribbon's open tab does. Conformance cases run the same steps on both.
 
+### 5.16 Context menus and popovers (2026-10-22, built)
+
+Decided with the user on 2026-10-22 (U1d), each the first of two shapes offered.
+
+```clarity
+page AlbumBrowse: window
+    data albums: list<Album>
+    data onlyVinyl: bool
+    table name grid at 1,1 span 12 rows 6 bind albums columns title
+        menu
+            item @openItem on click: openClicked
+            separator
+            item @deleteItem name deleteItem on click: deleteClicked
+    button @filterButton name filterButton at 1,7 span 2 on click -> filters
+    popover name filters for filterButton span 4 rows 2
+        checkbox @onlyVinylCaption at 1,1 span 4 bind onlyVinyl on change: refilter
+```
+
+- **A context menu** is a `menu` block indented under a part, its items written as the frame's menu items are (`item`, `separator`, nested items, `on click: handler` or `on click -> Target`, `name`, `key`). A right click (or the menu key) on the part opens it at the pointer. On a table or list, the right click chooses the row under the pointer first, as a click does, so the handler finds it as `grid.selected`. Named items hide and disable as any part does. Any part can have one, a container too: its `menu` line stands among its parts.
+- **A popover** is a container part, `popover`, with its own grid of parts, as a panel has. It is not placed in the window's grid: it has no `at`, only a size (`span`, `rows`), and `for part` names the part it opens next to. It shares the window's data and handlers. It is closed until opened: a click with `on click -> filters` opens it, and code opens and closes it with `filters.visible`. A click outside it or Escape closes it, and the renderer keeps that in the part's state.
+- **Every stack.** The web renderer draws both in `lib` (copied into each application); Avalonia uses its `ContextMenu` and `Popup` controls, bound to the part's state. The backends of the web stacks need nothing new: the menu's handlers run as any handler does, and `visible` is already part state.
+
 ## 6. Generation
 
 ### 6.1 Shape and behavior
@@ -1595,7 +1617,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | U1a | Forms and text parts (section 5.6): `form` bound to one record with `on submit`, `label for`, `help`, `heading`, `text`, `memo`, `password`, `switch`, `radio`; `placeholder`, `tooltip`, `readonly`, `taborder`, `key`, `default` and `cancel`; `error` and `readonly` as part properties in handlers; the form template and field drops place label, input and help together | done; open: a `time` part waits for a time field type, menu item keys are shown but not yet pressed at runtime |
 | U1b | Actions and containers: icon button, split button, toggle button, button group; expander, accordion, scroll box, separator, link, badge, icon, progress, busy indicator; containers that share the column lines of the grid around them (as CSS subgrid does), so a label and an input in a panel line up with those outside it, and a label column for forms | |
 | U1c | Data parts: tree, tree table, pager, search bar, lookup (a reference picked from a searchable list), chart; combo box, slider, spin box, color, file and tags inputs | |
-| U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | dialogs that give a value done (2026-10-22): `page X: dialog gives Type`, `close with value`, `ask X [with ...] then handler(values)` on every stack (the reply of the closing handler carries `result`; the web renderer remembers which open window asked; Avalonia hands the value to the opener). Not yet: wizards with steps, context menus, popovers |
+| U1d | Window kinds and overlays: dialogs with OK and Cancel results, wizards with steps, context menus, popovers | dialogs that give a value done (2026-10-22): `page X: dialog gives Type`, `close with value`, `ask X [with ...] then handler(values)` on every stack (the reply of the closing handler carries `result`; the web renderer remembers which open window asked; Avalonia hands the value to the opener). wizards with steps done (2026-10-22, 5.15); context menus and popovers done (2026-10-22, 5.16), on the web renderer and Avalonia's ContextMenu and Popup, with no runtime release needed |
 | U1e | Table columns (decided 2026-10-22): a width in pixels after a field (`columns title 240, artist, year 60`; a column without one shares what is left), `resizable` and `sortable` as options, and `order by field [desc]` for the order rows show in first, written as in queries. On the design canvas the header edges are dragged to set widths. Running: with `resizable` the person drags header edges and the widths are remembered per window and table for that person (double-click: the designed widths again); with `sortable` a click on a header sorts by it, again the other way. Sorting is the renderer's: rows keep their places in the data, so `selected` and the handlers see the same record. Web renderer: `lib/ui/Table.svelte`, copied by `clarity-gen`; Avalonia: ClarityTable in Clarity.Avalonia (widths remembered through `Remembered`), so a new package version and its NuGet upload | done (2026-10-22): spec, checker and renamer; IDE properties and header edges on the canvas; web table (sorting in the view, grips, widths in local storage, conformance/table-order.json); Avalonia ClarityTable (own sorting, Remembered widths), C# generator; Clarity.Avalonia 0.17.0 |
 | U1f | Clarity's own dialogs in the applications people design, as the IDE has them: `ask` in handlers with the answer running another handler (section 5.14, decided 2026-10-22), dialog windows closing `with` a value (with U1d), and `message` in the same dialog. Every stack in its idiom: the web renderer (`lib/ui`, copied by `clarity-gen`) and Avalonia (Clarity.Avalonia, so a new package version and its NuGet upload). With U1e, after the class diagram designer | done (2026-10-22), dialog windows closing `with` a value included (U1d): `ask` in the language and checker; replies carry the questions on every web stack (Rust crate 0.11.0, the Go module, the C and C++ runtimes) with `answer_event` running the answering handler; the web renderer's dialog (lib/ui/AskDialog.svelte, Dialog.svelte) with warnings and errors in it and a small x on notes; Avalonia asks through WindowViewModel.Ask and the Shell's dialog (Clarity.Avalonia 0.17.0); build tests for Go, C, C++ and C# |
 | I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | done for the web renderer (LANGUAGE.md section 4, Formats): `language "tag"` and `currency CODE` checked and on the Project tab, `format` a name checked per type (catalog in `clarity_spec::formats`, a Format column in the entity editor), the renderer formats and reads values with `Intl` (`app/src/lib/format.ts`), the shared cases in `conformance/formats.json` (`npm test`); Avalonia meets the same cases with G2; open: date inputs follow the system's locale through the browser's own date picker |

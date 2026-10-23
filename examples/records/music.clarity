@@ -95,7 +95,7 @@ page AlbumBrowse: window
     image name collectionLogo at 12,1 span 1 rows 1 source "logo.png" tooltip @collectionLogoTooltip
     label @titleFilterLabel name titleFilterLabel at 1,2 span 2 for titleFilter
     textbox name titleFilter at 3,2 span 10 placeholder @titleFilterPlaceholder on change: filterChanged
-    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price on open: openClicked
+    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price resizable on open: openClicked
     button @exportListCaption name exportList at 1,11 span 2 on click: exportClicked
     button @newAlbumCaption name newAlbum at 9,11 span 2 on click -> AlbumForm
     button @openCaption name openAlbum at 11,11 span 2 on click: openClicked

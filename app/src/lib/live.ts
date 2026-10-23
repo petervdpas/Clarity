@@ -68,6 +68,8 @@ export interface Live {
   setRibbon(part: string, change: { tab?: number; collapsed?: boolean }): void;
   /** Keeps the step a wizard is on, sent with the next event. */
   setStep(part: string, step: number): void;
+  /** Keeps whether a part shows: a popover the person opened or closed, sent with the next event. */
+  setVisible(part: string, visible: boolean): void;
   /** The records a reference field can point at, as id and display text. */
   refOptions(entity: string): { id: number; text: string }[];
   /**

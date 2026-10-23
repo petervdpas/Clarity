@@ -185,7 +185,7 @@
 
   function openPartCode(item: number) {
     const owner = app ? app.name.name : page.name.name;
-    const element = findFrameElement(page.frame, item);
+    const element = findFrameElement(page.frame, item, page.widgets);
     if (element?.kind === "command") {
       const props = element.command.props;
       const does = commandAction(props);
@@ -343,7 +343,7 @@
     if (target?.closest("input, textarea, select")) return;
     const selected = pageDesigner.selected;
     if ((e.key === "Delete" || e.key === "Backspace") && selected !== null) {
-      if (locateWidget(preview, page, selected) || locateInnerPage(page, selected) || findFrameElement(page.frame, selected)) {
+      if (locateWidget(preview, page, selected) || locateInnerPage(page, selected) || findFrameElement(page.frame, selected, page.widgets)) {
         e.preventDefault();
         edit({ op: "remove", item: selected });
       }
@@ -355,7 +355,7 @@
   // Drop a selection that no longer exists after an outside edit.
   $effect(() => {
     const s = pageDesigner.selected;
-    const gone = !locateWidget(preview, page, s ?? -1) && !locateInnerPage(page, s ?? -1) && !findFrameElement(page.frame, s ?? -1);
+    const gone = !locateWidget(preview, page, s ?? -1) && !locateInnerPage(page, s ?? -1) && !findFrameElement(page.frame, s ?? -1, page.widgets);
     if (s !== null && s !== page.span.start && gone) {
       pageDesigner.selected = null;
     }

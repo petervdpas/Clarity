@@ -304,6 +304,8 @@ pub struct Widget {
     pub children: Vec<Widget>,
     /// Tabs of a `tabs` widget or panes of a `splitter`.
     pub pages: Vec<WidgetPage>,
+    /// Its context menu: a `menu` block under the part (DESIGN 5.16).
+    pub menu: Option<Menu>,
     pub span: Span,
 }
 

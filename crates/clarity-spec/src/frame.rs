@@ -383,7 +383,12 @@ pub fn shown<'a>(app: Option<&'a crate::model::App>, page: &'a crate::model::Pag
 /// does an application make a second desktop window.
 pub fn opens_new_windows(project: &crate::model::Project) -> bool {
     fn widgets(list: &[crate::model::Widget]) -> bool {
-        list.iter().any(|w| w.props.new_window || widgets(&w.children) || w.pages.iter().any(|p| widgets(&p.children)))
+        list.iter().any(|w| {
+            w.props.new_window
+                || w.menu.as_ref().is_some_and(|m| commands(&m.items))
+                || widgets(&w.children)
+                || w.pages.iter().any(|p| widgets(&p.children))
+        })
     }
     fn commands(list: &[crate::model::Command]) -> bool {
         list.iter().any(|c| c.props.new_window || commands(&c.items))

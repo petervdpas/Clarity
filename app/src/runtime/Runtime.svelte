@@ -281,6 +281,9 @@
     setStep(part: string, step: number) {
       if (current) current.parts[part] = { ...current.parts[part], step };
     },
+    setVisible(part: string, visible: boolean) {
+      if (current) current.parts[part] = { ...current.parts[part], visible };
+    },
     refOptions(entity: string) {
       const known = options[entity];
       if (!known && !loading.has(entity)) {

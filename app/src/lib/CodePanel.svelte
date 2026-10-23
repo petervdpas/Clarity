@@ -52,7 +52,7 @@
   /** Whose code shows: the picked part's handlers, or the window's own events'. */
   const scope = $derived.by((): { label: string; roots: string[] } | null => {
     const selected = pageDesigner.selected;
-    const element = selected === null ? null : findFrameElement(page.frame, selected);
+    const element = selected === null ? null : findFrameElement(page.frame, selected, page.widgets);
     if (element?.kind === "command") {
       const c = element.command.props;
       const caption = c.caption ? tr(preview, c.caption) : (c.name ?? "the command");

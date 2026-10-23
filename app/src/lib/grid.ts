@@ -38,6 +38,8 @@ export function windowSize(page: { size: { width: number; height: number } | nul
   return page.size ?? { width: WINDOW_WIDTH, height: WINDOW_HEIGHT };
 }
 export const CONTENT_PADDING = 12;
+/** The width of one column of a popover's grid (layout.rs POPOVER_COLUMN): it does not follow the window's. */
+export const POPOVER_COLUMN = 80;
 
 /**
  * The row of `grid` at `offset` pixels from its top, as the screen shows

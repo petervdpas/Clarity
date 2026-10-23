@@ -18,6 +18,8 @@ use crate::widgets::{self, BindTarget, ContainerKind, WidgetKind};
 /// The entity is `None` when it did not resolve; that error is reported once.
 struct PageContext<'a> {
     data: HashMap<&'a str, Held<'a>>,
+    /// The popovers of the window, by name: a click opens them as it opens a window.
+    popovers: HashSet<&'a str>,
 }
 
 /// What a window's data holds, as its parts bind it. An entity that does
@@ -334,7 +336,8 @@ impl<'a> Checker<'a> {
             return;
         }
 
-        let context = self.data_context(file, &page.data);
+        let mut context = self.data_context(file, &page.data);
+        context.popovers = page.widgets.iter().filter(|w| w.props.kind == WidgetKind::Popover).filter_map(|w| w.props.name.as_deref()).collect();
         self.check_widgets(file, &context, &page.widgets, page.columns);
         if page.kind != PageKind::Window && !page.frame.is_empty() {
             let kind = if page.kind == PageKind::Dialog {
@@ -405,7 +408,7 @@ impl<'a> Checker<'a> {
                 );
             }
         }
-        PageContext { data }
+        PageContext { data, popovers: HashSet::new() }
     }
 
     // -- apps and frames --------------------------------------------------
@@ -587,6 +590,10 @@ impl<'a> Checker<'a> {
             .iter()
             .filter_map(|w| w.props.name.as_deref().map(|n| (n, w.span)))
             .collect();
+        for menu in all.iter().filter_map(|w| w.menu.as_ref()) {
+            named.extend(menu.name.as_deref().map(|n| (n, menu.span)));
+            commands(&menu.items, &mut named);
+        }
         if let Some(menu) = &frame.menu {
             named.extend(menu.name.as_deref().map(|n| (n, menu.span)));
             commands(&menu.items, &mut named);
@@ -612,12 +619,15 @@ impl<'a> Checker<'a> {
             let p = &widget.props;
             let Some(target) = &p.for_part else { continue };
             let at = format!("{} at {},{}", widgets::keyword(p.kind), p.col, p.row);
-            match all.iter().find(|w| w.props.name.as_deref() == Some(target.as_str())) {
+            let found = all.iter().find(|w| w.props.name.as_deref() == Some(target.as_str()));
+            match found {
                 None => self.error(
                     file,
                     format!("{at}: there is no part '{target}' in this window"),
                     widget.span,
                 ),
+                // A popover opens next to any part.
+                Some(_) if p.kind == WidgetKind::Popover => {}
                 Some(other) if !widgets::info(other.props.kind).input => self.error(
                     file,
                     format!(
@@ -815,7 +825,26 @@ impl<'a> Checker<'a> {
         for (index, widget) in widgets.iter().enumerate() {
             let p = &widget.props;
             let name = widgets::keyword(p.kind);
-            if p.col == 0 || p.row == 0 || p.width == 0 || p.height == 0 {
+            // A popover is outside the grid: only its own parts are placed, on its own grid.
+            let popover = p.kind == WidgetKind::Popover;
+            if popover && p.for_part.is_none() {
+                self.error(file, "a popover opens next to a part: write 'for' and the part's name", widget.span);
+            }
+            let inside = widget.children.iter().chain(widget.pages.iter().flat_map(|page| &page.children));
+            for nested in inside.filter(|w| w.props.kind == WidgetKind::Popover) {
+                self.error(file, "a popover stands on the window, not in another part", nested.span);
+            }
+            if let Some(menu) = &widget.menu {
+                // A context menu is named only when code hides or disables it as a whole.
+                if let Some(menu_name) = menu.name.as_deref().filter(|n| !crate::names::is_camel_case(n)) {
+                    self.error(file, crate::names::camel_case_problem("context menu", menu_name), menu.span);
+                }
+                if menu.items.is_empty() {
+                    self.warning(file, "the context menu has no items yet", menu.span);
+                }
+                self.check_commands(file, &menu.items);
+            }
+            if !popover && (p.col == 0 || p.row == 0 || p.width == 0 || p.height == 0) {
                 self.error(
                     file,
                     format!(
@@ -824,7 +853,7 @@ impl<'a> Checker<'a> {
                     ),
                     widget.span,
                 );
-            } else if p.col + p.width - 1 > columns {
+            } else if !popover && p.col + p.width - 1 > columns {
                 self.error(
                     file,
                     format!(
@@ -834,7 +863,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            for other in &widgets[..index] {
+            for other in widgets[..index].iter().filter(|o| !popover && o.props.kind != WidgetKind::Popover) {
                 if overlaps(&other.props, p) {
                     self.error(
                         file,
@@ -870,6 +899,8 @@ impl<'a> Checker<'a> {
                     // A button closes its window or quits like a menu item.
                 } else if frame::BUILT_IN_COMMANDS.contains(&target.as_str()) {
                     self.error(file, format!("'{target}' picks in a menu or a toolbar; a button can close its window or quit"), widget.span);
+                } else if page.popovers.contains(target.as_str()) {
+                    // A click opens a popover of its window next to its part.
                 } else {
                     self.check_click_target(file, target, widget.span);
                 }

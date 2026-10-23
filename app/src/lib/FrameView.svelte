@@ -156,7 +156,8 @@
 <svelte:window onpointerdown={onwindowpointerdown} />
 
 {#snippet entries(items: Command[], editable: boolean)}
-  {#each items as item (item.span.start)}
+  <!-- A named item hidden by code is left out, and a disabled one greyed, as every part. -->
+  {#each items.filter((i) => shows(i.props.name)) as item (item.span.start)}
     {#if item.props.kind === "separator"}
       <div
         class="separator-line"
@@ -168,6 +169,7 @@
       <div class="entry" class:sub={item.items.length > 0} class:show={design && containsPicked(item)}>
         <button
           class:picked={design && pageDesigner.selected === item.span.start}
+          disabled={!takesClicks(item.props.name)}
           title={design && !editable ? "From the app: double-click to edit it in the app" : undefined}
           onpointerdown={(e) => design && run(e, item, editable)}
           onclick={(e) => !design && run(e, item, editable)}

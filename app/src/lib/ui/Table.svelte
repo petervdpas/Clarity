@@ -237,7 +237,8 @@
     <tbody>
       {#each shownRows as i (i)}
         {@const row = rows[i]}
-        <tr data-row={i} class:chosen={selected === i} onclick={() => choose(i)} ondblclick={() => !design && onopen(i)}>
+        <!-- A right click chooses the row first, so a context menu's handler finds it. -->
+        <tr data-row={i} class:chosen={selected === i} onclick={() => choose(i)} oncontextmenu={() => choose(i)} ondblclick={() => !design && onopen(i)}>
           {#each columns as column (column.field)}
             {@const cell = row[column.field]}
             {#if !column.edit}

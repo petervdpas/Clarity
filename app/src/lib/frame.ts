@@ -71,7 +71,7 @@ export type FrameElement =
   | { kind: "ribbonGroup"; group: RibbonGroup; index: number; count: number }
   | { kind: "command"; command: Command; index: number; count: number; parent: "menu" | "toolbar" | "group" };
 
-export function findFrameElement(frame: Frame, offset: number): FrameElement | null {
+export function findFrameElement(frame: Frame, offset: number, widgets: Widget[] = []): FrameElement | null {
   const inCommands = (
     commands: Command[],
     parent: "menu" | "toolbar" | "group",
@@ -112,7 +112,20 @@ export function findFrameElement(frame: Frame, offset: number): FrameElement | n
     if (frame.footer.span.start === offset) return { kind: "footer", footer: frame.footer };
     if (frame.footer.statusSpan?.start === offset) return { kind: "status", footer: frame.footer };
   }
-  return null;
+  // A part's context menu and its items are edited as the frame's menu is (DESIGN 5.16).
+  const inParts = (list: Widget[]): FrameElement | null => {
+    for (const w of list) {
+      if (w.menu) {
+        if (w.menu.span.start === offset) return { kind: "menu", menu: w.menu };
+        const found = inCommands(w.menu.items, "menu");
+        if (found) return found;
+      }
+      const found = inParts(w.children) ?? w.pages.map((p) => inParts(p.children)).find((f) => f !== null) ?? null;
+      if (found) return found;
+    }
+    return null;
+  };
+  return inParts([...widgets, ...frame.sidebars.flatMap((s) => s.widgets), ...(frame.footer?.widgets ?? [])]);
 }
 
 /** Widget grids inside a frame (sidebars and the footer), for locating widgets. */

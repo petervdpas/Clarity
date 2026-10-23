@@ -153,6 +153,15 @@
       <Setter Property="Foreground" Value="{DynamicResource ClarityMuted}" />
       <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
+    <!-- A popover: its own grid in a raised panel next to its part (DESIGN 5.16). -->
+    <Style Selector="Border.popover">
+      <Setter Property="Background" Value="{DynamicResource ClarityPanel}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ClarityBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource ClarityRadiusPanel}" />
+      <Setter Property="Padding" Value="8" />
+      <Setter Property="BoxShadow" Value="0 4 16 0 #40000000" />
+    </Style>
     <!-- A note at the top right, with a small x that closes it. -->
     <Style Selector="Border.message">
       <Setter Property="Padding" Value="14,10,8,10" />

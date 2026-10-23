@@ -454,6 +454,13 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
         for handler in &widget.props.handlers {
             owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, span: widget.span });
         }
+        // Its context menu: the menu and its items are parts, their clicks run handlers.
+        if let Some(menu) = &widget.menu {
+            if let Some(name) = &menu.name {
+                owner.parts.insert(name, Part::Plain("menu"));
+            }
+            collect_commands(&menu.items, owner);
+        }
         collect_widgets(&widget.children, owner);
         for page in &widget.pages {
             collect_widgets(&page.children, owner);

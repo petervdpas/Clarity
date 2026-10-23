@@ -1,0 +1,14 @@
+{
+  "about": "Context menus and popovers (DESIGN 5.16). `popover` gives the part state of a popover and whether it shows: a popover is closed until it is opened, by a click with `on click -> name` or by code with `name.visible = true`; a click outside it or Escape closes it, and the renderer sends that as `visible: false`. `item` gives the part state of a named item of a context menu, whether it shows in the menu and whether it takes clicks: hidden by `visible = false`, greyed by `enabled = false`, as every part.",
+  "popover": [
+    { "part": {}, "shown": false },
+    { "part": { "visible": true }, "shown": true },
+    { "part": { "visible": false }, "shown": false }
+  ],
+  "item": [
+    { "part": {}, "shown": true, "clicks": true },
+    { "part": { "visible": false }, "shown": false, "clicks": false },
+    { "part": { "enabled": false }, "shown": true, "clicks": false },
+    { "part": { "visible": true, "enabled": true }, "shown": true, "clicks": true }
+  ]
+}

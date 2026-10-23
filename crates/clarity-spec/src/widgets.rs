@@ -33,6 +33,8 @@ pub enum WidgetKind {
     Tabs,
     /// A wizard: `step "Title"` blocks shown one at a time, with Back, Next and Finish (DESIGN 5.15).
     Steps,
+    /// Parts on their own grid, outside the window's, opened next to the part in `for` (DESIGN 5.16).
+    Popover,
     Splitter,
     Table,
     List,
@@ -445,6 +447,21 @@ const ENTRIES: &[Entry] = &[
         properties: &[],
     },
     Entry {
+        kind: WidgetKind::Popover,
+        keyword: "popover",
+        name: "Popover",
+        category: Category::Containers,
+        size: (4, 3),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: Some(ContainerKind::Plain),
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::For],
+    },
+    Entry {
         kind: WidgetKind::Splitter,
         keyword: "splitter",
         name: "Splitter",
@@ -736,7 +753,14 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(name) = &props.name {
         parts.push(format!("name {name}"));
     }
-    parts.push(format!("at {},{}", props.col, props.row));
+    // A popover has no place in the window's grid: it opens next to its part.
+    if props.kind == WidgetKind::Popover {
+        if let Some(target) = &props.for_part {
+            parts.push(format!("for {target}"));
+        }
+    } else {
+        parts.push(format!("at {},{}", props.col, props.row));
+    }
     parts.push(format!("span {}", props.width));
     // `rows` is left out only where the catalog height is also 1, so a
     // one-row panel does not read back at its default height.
@@ -795,7 +819,7 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(source) = &props.source {
         parts.push(format!("source {}", quote(source)));
     }
-    if let Some(target) = &props.for_part {
+    if let Some(target) = props.for_part.as_ref().filter(|_| props.kind != WidgetKind::Popover) {
         parts.push(format!("for {target}"));
     }
     if let Some(placeholder) = &props.placeholder {

@@ -42,7 +42,7 @@
   const styles = $derived(themeStyles(preview));
   const inner = $derived(selected === null || location ? null : locateInnerPage(page, selected));
   const p = $derived(location?.widget.props ?? null);
-  const frameElement = $derived(selected === null || location || inner ? null : findFrameElement(page.frame, selected));
+  const frameElement = $derived(selected === null || location || inner ? null : findFrameElement(page.frame, selected, page.widgets));
   const info = $derived(p ? widgetInfo(preview, p.kind) : null);
 
   const entities = $derived(preview.project.files.flatMap((f) => f.entities));
@@ -76,6 +76,12 @@
   const inputNames = $derived(
     allParts(page)
       .filter((w) => w.props.name !== null && widgetInfo(preview, w.props.kind).input)
+      .map((w) => w.props.name as string),
+  );
+  /** Named parts of the window a popover can open next to. */
+  const partNames = $derived(
+    allParts(page)
+      .filter((w) => w.props.name !== null && w.props.kind !== "popover")
       .map((w) => w.props.name as string),
   );
 
@@ -382,10 +388,10 @@
 
     {#if info.properties.includes("for")}
       <label class="prop">
-        <span>For input</span>
+        <span>{p.kind === "popover" ? "Next to" : "For input"}</span>
         <select value={p.for ?? ""} onchange={(e) => update({ for: textOf(e) })}>
           <option value="">(none)</option>
-          {#each inputNames as name (name)}
+          {#each p.kind === "popover" ? partNames : inputNames as name (name)}
             <option value={name}>{name}</option>
           {/each}
         </select>

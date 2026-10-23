@@ -423,6 +423,21 @@
         <input value={p.to ?? ""} placeholder="https://..." onchange={(e) => update({ to: textOf(e) })} />
       </label>
     {/if}
+    {#if info.properties.includes("labels")}
+      <label class="prop" title="Each input in the form gets its field's label in these first columns of its row">
+        <span>Label column</span>
+        <input
+          type="number"
+          min="0"
+          max={p.width - 1}
+          value={p.labels ?? 0}
+          onchange={(e) => {
+            const n = Number(e.currentTarget.value);
+            update({ labels: n > 0 ? n : null });
+          }}
+        />
+      </label>
+    {/if}
     {#if info.properties.includes("max")}
       <label class="prop">
         <span>Full at</span>

@@ -60,6 +60,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagnostics.extend(file_diagnostics);
     }
     resolve_data(&mut files);
+    make_form_labels(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
     Project {
@@ -75,6 +76,57 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         engines: None,
         stores: None,
         translations: BTreeMap::new(),
+    }
+}
+
+/// A form's label column (`labels 3`): a label part for each input in it,
+/// in the first columns of the input's row, showing the field's label and
+/// named after the input (`nameBoxLabel`), as the designer would write one.
+/// A checkbox, a switch and a toggle label themselves.
+fn make_form_labels(files: &mut [model::SpecFile]) {
+    use widgets::WidgetKind;
+    let entities: BTreeMap<String, model::Entity> = files.iter().flat_map(|f| &f.entities).map(|e| (e.name.name.clone(), e.clone())).collect();
+    fn walk(widgets: &mut [model::Widget], data: &[model::DataDecl], entities: &BTreeMap<String, model::Entity>) {
+        for widget in widgets.iter_mut() {
+            if widget.props.kind == WidgetKind::Form
+                && let Some(columns) = widget.props.labels
+            {
+                let entity = widget
+                    .props
+                    .bind
+                    .as_deref()
+                    .and_then(|b| data.iter().find(|d| d.name.name == b))
+                    .and_then(|d| d.entity())
+                    .and_then(|e| entities.get(&e.name));
+                let mut made = Vec::new();
+                for child in &widget.children {
+                    let p = &child.props;
+                    let labels_itself = matches!(p.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle);
+                    if !widgets::info(p.kind).input || labels_itself || p.made {
+                        continue;
+                    }
+                    let (Some(name), Some(field)) = (&p.name, p.bind.as_deref().and_then(|b| b.split_once('.')).and_then(|(_, f)| entity.and_then(|e| e.field(f)))) else { continue };
+                    let mut label = widgets::new_props(WidgetKind::Label, 1, p.row);
+                    label.width = columns;
+                    label.caption = Some(field.modifiers.label.clone().unwrap_or_else(|| model::default_label(&field.name.name)));
+                    label.name = Some(format!("{name}Label"));
+                    label.for_part = Some(name.clone());
+                    label.made = true;
+                    made.push(model::Widget { props: label, children: Vec::new(), pages: Vec::new(), menu: None, span: child.span });
+                }
+                made.append(&mut widget.children);
+                widget.children = made;
+            }
+            walk(&mut widget.children, data, entities);
+            for page in &mut widget.pages {
+                walk(&mut page.children, data, entities);
+            }
+        }
+    }
+    for file in files.iter_mut() {
+        for page in &mut file.pages {
+            walk(&mut page.widgets, &page.data, &entities);
+        }
     }
 }
 

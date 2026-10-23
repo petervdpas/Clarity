@@ -1035,7 +1035,7 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}  </DockPanel>\n{pad}</Border>");
             }
             WidgetKind::Tabs => {
-                let _ = writeln!(out, "{pad}<TabControl {at}{plain_state}{extra}>");
+                let _ = writeln!(out, "{pad}<TabControl {at} Classes=\"tabs\"{plain_state}{extra}>");
                 for tab in &widget.pages {
                     let _ = writeln!(out, "{pad}  <TabItem Header=\"{}\">", self.text(tab.title.as_deref().unwrap_or_default()));
                     self.grid(&tab.children, p.width, None, false, depth + 2, out);

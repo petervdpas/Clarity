@@ -33,7 +33,7 @@
     const walk = (widgets: Widget[], depth: number) => {
       // Reading order: top to bottom, then left to right.
       const sorted = widgets.toSorted((a, b) => a.props.row - b.props.row || a.props.col - b.props.col);
-      for (const w of sorted) {
+      for (const w of sorted.filter((w) => !w.props.made)) {
         const p = w.props;
         const text = p.name ?? (p.caption ? tr(preview, p.caption) : null) ?? p.bind ?? "";
         out.push({ id: w.span.start, key: String(w.span.start), depth, kind: widgetInfo(preview, p.kind).name, text, removable: true });

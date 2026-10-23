@@ -551,7 +551,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 
 | Part | Holds | Own properties | Events |
 |---|---|---|---|
-| `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded` | `submit` |
+| `form` | parts, on its own grid; binds to one record: `bind customer` | `foldable`, `foldable folded`, `labels 3` | `submit` |
 | `panel` | parts, on its own grid, in a frame with the caption | `foldable`, `foldable folded` | none |
 | `tabs` | `tab @key` blocks, each with parts | none | `change` |
 | `steps` | `step @key` blocks, each with parts: a wizard | none | `next`, `finish` |
@@ -668,7 +668,7 @@ button @allCustomersCaption name allCustomers at 1,12 span 3 on click -> Custome
 
 ### Containers
 
-A container has its own grid, as many columns wide as its `span`. Its parts are indented below it, and their positions count from its own top-left cell:
+A container has its own grid, as many columns wide as its `span`, with the column lines of the grid around it: its frame sits in the space between columns, so a label and an input inside a panel line up with those outside it. Its parts are indented below it, and their positions count from its own top-left cell:
 
 ```clarity
 tabs at 1,5 span 12 rows 7
@@ -685,6 +685,14 @@ splitter at 1,1 span 12 rows 10 vertical
 ```
 
 `tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks.
+
+A form with `labels 3` has a label column: each input in it gets a label in the form's first 3 columns of its row, showing its field's label (the `label` of the field, a key such as `customerNameLabel`), so its inputs start at column 4. The label is a part named after its input, `nameBoxLabel` for `nameBox`, which code hides or disables as any part. A checkbox, a switch and a toggle label themselves; a label written `for` an input the form labels is an error.
+
+```clarity
+form name customerForm at 1,1 span 12 rows 4 bind customer labels 3
+    textbox name nameBox at 4,1 span 9 bind customer.name
+    textbox name cityBox at 4,2 span 9 bind customer.city
+```
 
 A wizard is a `steps` part: its `step` blocks show one at a time, with the titles of all steps above and Clarity's own Back, Next and Finish below (the words `back`, `next` and `finish` in the language files). It needs at least two steps.
 

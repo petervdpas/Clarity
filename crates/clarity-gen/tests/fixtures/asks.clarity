@@ -41,6 +41,9 @@ page Albums: window
             text name titleText at 1,1 span 6 bind album.title
         section "Site"
             text name siteText at 1,1 span 6 bind album.site
+    form name albumForm at 1,9 span 12 rows 2 bind album labels 3
+        textbox name albumTitleBox at 4,1 span 9 bind album.title
+        number name albumCopiesBox at 4,2 span 3 bind album.copies
     scroll name moreScroll at 7,5 span 6 rows 2
         textbox name titleBox at 1,1 span 6 bind album.title
         number name copiesBox at 1,4 span 3 bind album.copies
@@ -105,6 +108,7 @@ code Albums
         rightToggle.checked = not leftToggle.checked
         if notesAccordion.open == 0
             notesAccordion.open = 2
+        albumCopiesBoxLabel.visible = leftToggle.checked
 
     handler newClicked
         ask NewAlbum then added

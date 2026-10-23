@@ -1438,6 +1438,8 @@ fn parse_widget_props(
         to: None,
         max: None,
         split: false,
+        labels: None,
+        made: false,
         style: None,
         readonly: false,
         foldable: false,
@@ -1690,6 +1692,10 @@ fn parse_widget_props(
                 props.placeholder = Some(cursor.expect_text("a placeholder text")?);
             }
             "tooltip" => props.tooltip = Some(cursor.expect_text("a tooltip text")?),
+            "labels" => {
+                applies(WidgetProperty::Labels)?;
+                props.labels = Some(cursor.expect_number("the columns of its label column, as in labels 3")?);
+            }
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;

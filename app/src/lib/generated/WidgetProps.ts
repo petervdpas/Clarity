@@ -104,6 +104,15 @@ max: string | null,
  */
 split: boolean, 
 /**
+ * A form's label column: `labels 3` gives each input in it a label in its first 3 columns.
+ */
+labels: number | null, 
+/**
+ * Made by Clarity, not written: a label of a form's label column. The
+ * designer leaves it alone and it is never written back.
+ */
+made: boolean, 
+/**
  * A named style of the project's theme: `style primary`.
  */
 style: string | null, 

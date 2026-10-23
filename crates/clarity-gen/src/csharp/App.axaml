@@ -89,6 +89,20 @@
       <Setter Property="CornerRadius" Value="{DynamicResource ClarityRadiusPanel}" />
       <Setter Property="Padding" Value="8" />
     </Style>
+    <!-- A panel's frame sits out between the columns (3 pixels each side), so its grid has the
+         window's column lines; a foldable panel or form (an Expander) likewise. A form without
+         a fold has no frame, so its grid already has them. -->
+    <Style Selector="TabControl.tabs">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.panel">
+      <Setter Property="Margin" Value="-3,0" />
+      <Setter Property="Padding" Value="{DynamicResource ClarityFramePadding}" />
+    </Style>
+    <Style Selector="Expander.panel, Expander.form">
+      <Setter Property="Margin" Value="-3,0" />
+      <Setter Property="Padding" Value="{DynamicResource ClarityFramePadding}" />
+    </Style>
     <Style Selector="Border.form">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />

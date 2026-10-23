@@ -35,6 +35,9 @@ struct Merged {
     styles: BTreeMap<String, ResolvedLook>,
 }
 
+/// How far a framed container's frame sits out into the space between columns, each side.
+const FRAME_OUT: u32 = 3;
+
 const RADIUS_KINDS: [&str; 3] = ["input", "button", "panel"];
 
 fn merged(theme: &ThemeDecl, system_dark: bool) -> Merged {
@@ -375,6 +378,10 @@ fn shared(m: &Merged) -> String {
     for key in ["ClarityBorderWidth", "ButtonBorderThemeThickness", "TextControlBorderThemeThickness"] {
         let _ = writeln!(out, "  <Thickness x:Key=\"{key}\">{b}</Thickness>");
     }
+    // A framed container's border and padding sit out in the space between
+    // columns, 3 pixels each side of its span (Border.panel's Margin), so its
+    // grid has the window's column lines, as on the web.
+    let _ = writeln!(out, "  <Thickness x:Key=\"ClarityFramePadding\">{side},{v},{side},{v}</Thickness>", side = FRAME_OUT.saturating_sub(b), v = p * 2);
     let _ = writeln!(out, "  <BoxShadows x:Key=\"ClarityShadow\">{}</BoxShadows>", shadow(m.shadow));
     out
 }

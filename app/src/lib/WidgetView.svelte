@@ -354,7 +354,8 @@
   }
 
   function pressMove(e: PointerEvent) {
-    if (!design) return;
+    // A label of a form's label column is the form's: the designer leaves it alone.
+    if (!design || p.made) return;
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     const cellWidth = (rect.width - GAP * (p.width - 1)) / p.width;
@@ -391,7 +392,7 @@
 <div
   class="widget {p.kind}"
   class:design
-  class:selected={design && pageDesigner.selected === offset}
+  class:selected={design && pageDesigner.selected === offset && !p.made}
   class:lifted={pageDesigner.drag?.kind === "move" && pageDesigner.drag.item === offset}
   class:hidden
   class:disabled
@@ -404,7 +405,7 @@
   style:grid-row="{p.row} / span {p.height}"
   onpointerdown={pressMove}
   ondblclick={(e) => {
-    if (!design) return;
+    if (!design || p.made) return;
     e.stopPropagation();
     pageDesigner.openPartCode(offset);
   }}
@@ -793,7 +794,7 @@
 
   {#if design}
     <span class="tag">{info.name}</span>
-    {#if pageDesigner.selected === offset}
+    {#if pageDesigner.selected === offset && !p.made}
       <div class="resize" onpointerdown={pressResize} role="presentation" title="Drag to resize"></div>
     {/if}
   {/if}
@@ -968,6 +969,7 @@
      and without one its grid lines up with the grid around it. */
   fieldset.form.bare {
     border: none;
+    margin: 0;
     padding: 0;
   }
 
@@ -1043,13 +1045,17 @@
     outline: 2px solid var(--error);
   }
 
+  /* A framed container's border and padding sit out in the space between
+     columns (GAP 8px: 3px each side, leaving 2px between frames side by
+     side), so its own grid is exactly as wide as its span and its column
+     lines are the window's. */
   fieldset {
     flex: 1;
     min-width: 0;
-    margin: 0;
+    margin: 0 -3px;
     border: var(--border-width) solid var(--border-strong);
     border-radius: var(--radius-panel);
-    padding: calc(var(--padding) * 2);
+    padding: calc(var(--padding) * 2) calc(3px - var(--border-width));
   }
 
   legend {
@@ -1101,6 +1107,8 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    /* The tab page's frame sits out between the columns, as a panel's does. */
+    margin: 0 -3px;
   }
 
   .tab-strip {
@@ -1163,11 +1171,15 @@
     overflow: hidden;
   }
 
+  /* The scroll bar stands in the space between columns, so the parts keep the window's column lines. */
   .scroll-box {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    margin-right: -8px;
+    padding-right: 8px;
+    scrollbar-width: thin;
   }
 
   .split {
@@ -1360,7 +1372,7 @@
     border: var(--border-width) solid var(--border-strong);
     border-top: none;
     border-radius: 0 0 var(--radius-panel) var(--radius-panel);
-    padding: calc(var(--padding) * 2);
+    padding: calc(var(--padding) * 2) calc(3px - var(--border-width));
     overflow: hidden;
   }
 

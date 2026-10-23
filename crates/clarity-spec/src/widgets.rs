@@ -247,6 +247,8 @@ pub enum WidgetProperty {
     Max,
     /// `split`: a button whose `menu` opens from an arrow beside it.
     Split,
+    /// `labels 3`: a form's label column, its inputs' labels in its first columns.
+    Labels,
 }
 
 /// The narrowest and widest a table column can be written, in pixels.
@@ -469,7 +471,7 @@ const ENTRIES: &[Entry] = &[
         container: Some(ContainerKind::Plain),
         clickable: false,
         events: &[Event::Submit],
-        properties: &[WidgetProperty::Foldable],
+        properties: &[WidgetProperty::Foldable, WidgetProperty::Labels],
     },
     Entry {
         kind: WidgetKind::Panel,
@@ -884,6 +886,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         to: None,
         max: None,
         split: false,
+        labels: None,
+        made: false,
         style: None,
         readonly: false,
         foldable: false,
@@ -958,6 +962,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(max) = &props.max {
         parts.push(format!("max {max}"));
+    }
+    if let Some(labels) = props.labels {
+        parts.push(format!("labels {labels}"));
     }
     if let Some(digits) = props.digits {
         parts.push(format!("digits {digits}"));
@@ -1149,6 +1156,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::To, props.to.is_some(), "to"),
         (WidgetProperty::Max, props.max.is_some(), "max"),
         (WidgetProperty::Split, props.split, "split"),
+        (WidgetProperty::Labels, props.labels.is_some(), "labels"),
     ];
     for (property, present, what) in checks {
         if present && !has_property(props.kind, property) {

@@ -822,6 +822,30 @@ impl<'a> Checker<'a> {
     fn check_small_part(&mut self, file: usize, widget: &Widget) {
         let p = &widget.props;
         match p.kind {
+            WidgetKind::Form if p.labels.is_some() => {
+                let columns = p.labels.unwrap_or_default();
+                if columns == 0 || columns >= p.width {
+                    self.error(
+                        file,
+                        format!("a form's label column leaves room for its inputs: 'labels' is 1 to {} here", p.width.saturating_sub(1)),
+                        widget.span,
+                    );
+                }
+                let labelled: Vec<&str> = widget.children.iter().filter(|w| w.props.made).filter_map(|w| w.props.for_part.as_deref()).collect();
+                for inner in widget.children.iter().filter(|w| !w.props.made) {
+                    let q = &inner.props;
+                    if let Some(name) = q.name.as_deref().filter(|n| labelled.contains(n))
+                        && q.col <= columns
+                    {
+                        self.error(file, format!("'{name}' starts at column {} or later: its label takes the columns before", columns + 1), inner.span);
+                    }
+                    if q.kind == WidgetKind::Label
+                        && let Some(target) = q.for_part.as_deref().filter(|t| labelled.contains(t))
+                    {
+                        self.error(file, format!("the form labels '{target}' itself; remove this label"), inner.span);
+                    }
+                }
+            }
             WidgetKind::Buttons => {
                 for inner in &widget.children {
                     if !matches!(inner.props.kind, WidgetKind::Button | WidgetKind::Toggle) {

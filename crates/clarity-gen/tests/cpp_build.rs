@@ -47,6 +47,10 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     // The program's own code builds without a warning.
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    // A program with native parts has them built beside it.
+    if !clarity_gen::parts::native_parts(&project).is_empty() {
+        assert!(out.join("build/debug/libclarity_parts.so").exists(), "the parts library is not beside {name}");
+    }
     let said = run(&out, &out.join("build/debug").join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // A project with records has its database; one without needs none.
@@ -66,6 +70,14 @@ fn the_shop_example_builds_and_runs_in_cpp() {
 #[ignore]
 fn the_records_example_builds_and_runs_in_cpp() {
     builds_and_runs_in_cpp("records", "Records");
+}
+
+/// The game whose field of orbs a native library draws with SFML (a custom
+/// part, DESIGN 5.19): the program builds with its parts library beside it.
+#[test]
+#[ignore]
+fn the_orbs_example_builds_and_runs_in_cpp() {
+    builds_and_runs_in_cpp("orbs", "Orbs");
 }
 
 /// The third example: tasks edited in their table, and the people who finish them.

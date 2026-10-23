@@ -1,0 +1,54 @@
+module orbs
+
+// One round of the game: who played, how many orbs they caught, and when.
+entity Score
+    player: text(40), required, label @scorePlayerLabel
+    points: integer, label @scorePointsLabel
+    played: datetime, label @scorePlayedLabel
+
+// A field of orbs, drawn with SFML: each orb is caught by clicking it
+// before it shrinks away. A round lasts thirty seconds.
+part OrbField
+    native "parts/OrbField"
+    speed: integer, min 1, max 10, default 3
+    tells caught(points: integer)
+    tells finished(points: integer)
+    hears restart
+    size 8 x 10
+
+page Play: window
+    title @playTitle
+    size 980 x 640
+    data scores: list<Score>
+    data player: text, default @defaultPlayer
+    data caught: integer
+    data speed: integer, default 3
+    OrbField name orbField at 1,1 span 8 rows 12 speed 3 on caught: orbCaught on finished: roundOver
+    label @playerLabel name playerLabel for playerBox at 9,1 span 4
+    textbox name playerBox at 9,2 span 4 bind player
+    label @speedLabel name speedLabel for speedSlider at 9,3 span 4
+    slider name speedSlider at 9,4 span 4 bind speed min 1 max 10 on change: speedChanged
+    label @caughtLabel name caughtLabel at 9,5 span 4
+    display name caughtShown at 9,6 span 4 rows 2 bind caught digits 4
+    button @againCaption name again at 9,8 span 4 on click: againClicked
+    table name best at 9,9 span 4 rows 4 bind scores columns player, points order by points desc
+
+code Play
+    handler orbCaught(points: integer)
+        caught = points
+
+    handler roundOver(points: integer)
+        let score = new Score
+        score.player = player
+        score.points = points
+        score.played = now()
+        save score
+        reload scores
+        message @roundOver(points = points)
+
+    handler speedChanged
+        orbField.speed = speed
+
+    handler againClicked
+        caught = 0
+        orbField.restart()

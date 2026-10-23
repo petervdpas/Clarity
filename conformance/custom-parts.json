@@ -1,0 +1,21 @@
+{
+  "about": "Custom parts (DESIGN 5.19 and 6.5), as the runtimes of the web stacks (Rust, Go, C, C++) carry them; on Avalonia the view model holds them as typed properties. A custom part's properties are part state held by name, as the renderer sends them back with each event: `read` gives what reading one gives (null when the state has none, and the generated code then takes the value written in the window or the declared default), `set` what setting one leaves in the part's state. A hear (`arena.restart(2)`) goes out with the reply, in the order the handler gave them: `hear` gives the hears given and the reply's `hears`, left out when there are none.",
+  "read": [
+    { "part": { "values": { "speed": 7 } }, "name": "speed", "value": 7 },
+    { "part": { "values": { "title": "Level two" } }, "name": "title", "value": "Level two" },
+    { "part": { "values": { "running": false } }, "name": "running", "value": false },
+    { "part": {}, "name": "speed", "value": null },
+    { "part": { "values": { "speed": 7 } }, "name": "title", "value": null }
+  ],
+  "set": [
+    { "sets": [["speed", 8]], "part": { "values": { "speed": 8 } } },
+    { "sets": [["speed", 8], ["title", "Level two"]], "part": { "values": { "speed": 8, "title": "Level two" } } },
+    { "sets": [["speed", 8], ["speed", 9]], "part": { "values": { "speed": 9 } } },
+    { "sets": [["running", true]], "part": { "values": { "running": true } } }
+  ],
+  "hear": [
+    { "hears": [], "reply": null },
+    { "hears": [["arena", "restart", [2]]], "reply": [{ "part": "arena", "hear": "restart", "values": [2] }] },
+    { "hears": [["arena", "pause", []], ["arena", "say", ["Well done", true]]], "reply": [{ "part": "arena", "hear": "pause", "values": [] }, { "part": "arena", "hear": "say", "values": ["Well done", true] }] }
+  ]
+}

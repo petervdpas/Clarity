@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -100,12 +102,15 @@ type Service struct {
 	next  int
 	// openURL opens a link in the person's browser.
 	openURL func(address string) error
+	// partWindows is the desktop window an open window's custom parts are
+	// in, by the open window's number (DESIGN 6.5).
+	partWindows map[uint64]string
 }
 
 func New(options Options) *Service {
 	// Text code makes is translated from the model's translations.
 	clarity.LoadTranslations(options.Model)
-	return &Service{options: options, apart: map[string]apart{}, openURL: func(address string) error {
+	return &Service{options: options, apart: map[string]apart{}, partWindows: map[uint64]string{}, openURL: func(address string) error {
 		return application.Get().Browser.OpenURL(address)
 	}}
 }
@@ -186,6 +191,14 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Settings map[string]any      `json:"settings"`
 		Name     string              `json:"name"`
 		Data     string              `json:"data"`
+		Instance uint64              `json:"instance"`
+		Part     string              `json:"part"`
+		Kind     string              `json:"kind"`
+		Hear     string              `json:"hear"`
+		X        int                 `json:"x"`
+		Y        int                 `json:"y"`
+		Shown    bool                `json:"shown"`
+		Value    json.RawMessage     `json:"value"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -309,6 +322,33 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 			return Answer{}
 		}
 		return Answer{Value: map[string]any{"window": start.window, "with": start.with}}
+	// Custom parts (DESIGN 6.5): where each is and what it is given, for the part host.
+	case "place_part":
+		var parent uintptr
+		if window := caller(ctx); window != nil {
+			c.partWindows[a.Instance] = window.Name()
+			application.InvokeSync(func() { parent = partParent(window.NativeWindow()) })
+		}
+		placePart(a.Instance, a.Part, a.Kind, parent, a.X, a.Y, a.Width, a.Height, a.Shown)
+		return Answer{}
+	case "set_part":
+		value := string(a.Value)
+		if value == "" {
+			value = "null"
+		}
+		setPart(a.Instance, a.Part, a.Name, value)
+		return Answer{}
+	case "hear_part":
+		values, _ := json.Marshal(a.Values)
+		if a.Values == nil {
+			values = []byte("[]")
+		}
+		hearPart(a.Instance, a.Part, a.Hear, string(values))
+		return Answer{}
+	case "close_parts":
+		closeParts(a.Instance)
+		delete(c.partWindows, a.Instance)
+		return Answer{}
 	case "close_apart":
 		if window := caller(ctx); window != nil {
 			window.Close()
@@ -372,6 +412,11 @@ func Run(options Options, bind func(*Service) application.Service) error {
 	if runtime.GOOS == "linux" && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
 		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
+	// Custom parts draw in X11 child windows: under Wayland the toolkit runs on XWayland.
+	parts := partsLibrary()
+	if parts != "" && runtime.GOOS == "linux" && os.Getenv("GDK_BACKEND") == "" {
+		_ = os.Setenv("GDK_BACKEND", "x11")
+	}
 	service := New(options)
 	service.app = application.New(application.Options{
 		Name:     options.Name,
@@ -380,5 +425,43 @@ func Run(options Options, bind func(*Service) application.Service) error {
 		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 	})
 	service.window("main", options.Width, options.Height)
+	if parts != "" {
+		// A part tells on its own thread; the renderer of its window hears it.
+		err := startParts(parts, func(window uint64, part, tell, values string) {
+			service.mu.Lock()
+			name, ok := service.partWindows[window]
+			service.mu.Unlock()
+			if !ok {
+				return
+			}
+			if desktop, found := service.app.Window.GetByName(name); found {
+				desktop.ExecJS("window.clarityTold && window.clarityTold(" + strconv.FormatUint(window, 10) + ", " + quoted(part) + ", " + quoted(tell) + ", " + values + ")")
+			}
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		defer stopParts()
+	}
 	return service.app.Run()
+}
+
+// partsLibrary is libclarity_parts beside the program, which holds its
+// custom parts; empty when it has none.
+func partsLibrary() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(filepath.Dir(exe), "libclarity_parts.so")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+// quoted is text as a JavaScript string.
+func quoted(text string) string {
+	out, _ := json.Marshal(text)
+	return string(out)
 }

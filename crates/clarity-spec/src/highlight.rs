@@ -58,9 +58,11 @@ const KEYWORDS: &[&str] = &[
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit",
+    // Custom parts (DESIGN 5.19).
+    "native", "nuget", "dll", "binds", "tells", "hears", "preview",
     // Parts and the frame.
     "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
-    "switch", "show", "surface", "renderer", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
+    "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
     "large", "group", "tab", "step", "section", "pane", "width", "resizable", "collapsible", "collapsed", "maximizable", "foldable",
     "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives", "to", "max", "split", "labels",
 ];
@@ -205,7 +207,8 @@ fn text_pieces(written: &str, from: usize, column: &dyn Fn(usize) -> u32, line: 
 /// own, the parts of the catalog and their events, sorted, each once.
 pub fn keywords() -> Vec<String> {
     let mut words: Vec<String> = KEYWORDS.iter().map(|w| w.to_string()).collect();
-    words.extend(crate::widgets::catalog().into_iter().map(|w| w.keyword));
+    // A custom part is written by its own name, never by the catalog's word for its kind.
+    words.extend(crate::widgets::catalog().into_iter().filter(|w| w.kind != crate::widgets::WidgetKind::Custom).map(|w| w.keyword));
     words.extend(crate::widgets::ALL_EVENTS.iter().map(|e| e.keyword().to_string()));
     words.sort();
     words.dedup();

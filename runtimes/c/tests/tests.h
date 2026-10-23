@@ -19,6 +19,7 @@
     X(a_ribbons_open_tab_is_as_every_runtime_says)               \
     X(a_wizards_step_is_as_every_runtime_says)                   \
     X(an_accordions_open_section_is_as_every_runtime_says)       \
+    X(a_custom_parts_values_and_hears_are_as_every_runtime_says) \
     X(dates_and_times_read_and_write_as_text)                     \
     X(the_settings_file_is_where_every_runtime_puts_it)           \
     X(settings_kept_are_read_back)                               \

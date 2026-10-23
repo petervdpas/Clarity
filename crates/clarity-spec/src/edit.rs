@@ -57,6 +57,12 @@ pub enum Edit {
         /// Overrides the catalog caption.
         caption: Option<String>,
         bind: Option<String>,
+        /// A custom part (DESIGN 5.19): the name it is declared by, with `kind` custom.
+        #[serde(default)]
+        part: Option<String>,
+        /// Overrides the catalog height, as a custom part's declared size does.
+        #[serde(default)]
+        height: Option<u32>,
     },
     /// Several edits applied together: one write, one check, all or nothing.
     /// Offsets in later edits refer to the original text.
@@ -174,6 +180,9 @@ pub enum Edit {
     /// Add an empty handler to the code behind of a window or the app,
     /// unless it is there already. Sent with the edit that wires an event.
     AddHandler { owner: String, name: String },
+    /// As `AddHandler`, with the values it takes: the handler of a custom
+    /// part's tell takes the tell's values (`points: integer`).
+    AddHandlerWith { owner: String, name: String, params: String },
     /// Replace the top-level declaration that starts at `item` (a window,
     /// the app, an entity, an enum, a function, an action or a code block)
     /// with `text`, which must be one declaration.
@@ -255,7 +264,7 @@ pub fn apply_in(project: &Project, source: &str, edit: &Edit) -> EditResult<Edit
 fn is_text_edit(edit: &Edit) -> bool {
     matches!(
         edit,
-        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames
+        Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames
     )
 }
 
@@ -280,6 +289,7 @@ fn apply_with(source: &str, edit: &Edit, project: Option<&Project>) -> EditResul
         text = match edit {
             Edit::SetCode { owner, text: code } => crate::code::edit::set_code(&text, owner, code)?,
             Edit::AddHandler { owner, name } => crate::code::edit::add_handler(&text, owner, name)?,
+            Edit::AddHandlerWith { owner, name, params } => crate::code::edit::add_handler_with(&text, owner, name, params)?,
             Edit::ReplaceDecl { item, text: decl } => {
                 focus = Some(*item);
                 crate::source::replace_decl(&text, *item, decl)?
@@ -465,14 +475,15 @@ impl Kind {
 }
 
 fn widget_kind(node: &LNode) -> Kind {
-    match node
-        .tokens
-        .first()
-        .and_then(|t| widgets::by_keyword(&t.text))
-    {
+    match node.tokens.first().and_then(|t| widgets::by_keyword(&t.text).or_else(|| custom_word(t))) {
         Some(kind) => Kind::Widget(widgets::container(kind)),
         None => Kind::Other,
     }
+}
+
+/// A word in capitals starting a part's line: a custom part's declared name (DESIGN 5.19).
+fn custom_word(token: &Token) -> Option<WidgetKind> {
+    (token.kind == TokenKind::Ident && token.text.starts_with(|c: char| c.is_ascii_uppercase())).then_some(WidgetKind::Custom)
 }
 
 fn child_kind(parent: Kind, node: &LNode) -> Kind {
@@ -814,11 +825,17 @@ impl Doc {
                 width,
                 caption,
                 bind,
+                part,
+                height,
             } => {
                 let mut props = new_props(*kind, *col, *row);
                 if let Some(width) = width {
                     props.width = *width;
                 }
+                if let Some(height) = height {
+                    props.height = *height;
+                }
+                props.part = part.clone();
                 if caption.is_some() {
                     props.caption = caption.clone();
                 }
@@ -878,7 +895,7 @@ impl Doc {
             } => self.add_frame_item(*parent, *item, caption.clone()),
             Edit::UpdateCommand { item, props } => self.update_command(*item, props),
             Edit::MoveSibling { item, delta } => self.move_sibling(*item, *delta),
-            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames => {
+            Edit::SetCode { .. } | Edit::AddHandler { .. } | Edit::AddHandlerWith { .. } | Edit::ReplaceDecl { .. } | Edit::AppendDecl { .. } | Edit::CamelNames => {
                 fail("text edits cannot be nested in a batch inside a batch")
             }
         }
@@ -1135,12 +1152,17 @@ impl Doc {
     /// or its code goes by the number.
     fn better_name(&self, top: usize, props: &WidgetProps) -> Option<String> {
         let name = props.name.as_deref()?;
-        let kind = widgets::keyword(props.kind);
-        let numbered = name.strip_prefix(kind).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+        let kind = widgets::name_base(props);
+        let numbered = name.strip_prefix(kind.as_str()).is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
         if !numbered || self.mentions(top, name) {
             return None;
         }
-        crate::names::suggested_name(props).map(|base| self.free(top, &base))
+        // A name already numbered from what it would be named after stays.
+        let base = crate::names::suggested_name(props)?;
+        if name.strip_prefix(base.as_str()).is_some_and(|n| n.chars().all(|c| c.is_ascii_digit())) {
+            return None;
+        }
+        Some(self.free(top, &base))
     }
 
     /// Whether anything in the block `top`, or in the code block of the same
@@ -1221,7 +1243,7 @@ impl Doc {
         if props.name.is_none() {
             props.name = Some(match crate::names::suggested_name(&props) {
                 Some(base) => self.free(path[0], &base),
-                None => self.free_name(path[0], widgets::keyword(props.kind)),
+                None => self.free_name(path[0], &widgets::name_base(&props)),
             });
         }
         let node = self.widget_node(&props);
@@ -1242,7 +1264,7 @@ impl Doc {
         let named;
         let props = if props.name.is_none() {
             let mut with = props.clone();
-            with.name = Some(self.free_name(path[0], widgets::keyword(props.kind)));
+            with.name = Some(self.free_name(path[0], &widgets::name_base(props)));
             named = with;
             &named
         } else if let Some(better) = self.better_name(path[0], props) {
@@ -1255,10 +1277,10 @@ impl Doc {
             props
         };
         let current = self.node(&path).tokens[0].text.clone();
-        if current != widgets::keyword(props.kind) {
+        if current != widgets::written_word(props) {
             return fail(format!(
                 "a {current} cannot be turned into a {}",
-                widgets::keyword(props.kind)
+                widgets::written_word(props)
             ));
         }
         let parent = self.node(&path[..path.len() - 1]).id;
@@ -2148,8 +2170,12 @@ fn set_line_keeping_comment(node: &mut LNode, line: String) {
 /// What a part's line says of its purpose, enough to name it: its kind,
 /// caption, `for`, `bind` and `source`.
 fn props_of_line(tokens: &[Token]) -> Option<WidgetProps> {
-    let kind = widgets::by_keyword(&tokens.first()?.text)?;
+    let first = tokens.first()?;
+    let kind = widgets::by_keyword(&first.text).or_else(|| custom_word(first))?;
     let mut props = widgets::new_props(kind, 1, 1);
+    if kind == WidgetKind::Custom {
+        props.part = Some(first.text.clone());
+    }
     props.caption = match tokens.get(1) {
         Some(t) if t.kind == TokenKind::Str => Some(t.text.clone()),
         Some(t) if t.kind == TokenKind::Key => Some(format!("@{}", t.text.trim_start_matches('@'))),

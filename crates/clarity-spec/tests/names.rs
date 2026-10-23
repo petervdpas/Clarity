@@ -256,7 +256,7 @@ fn a_placed_part_is_named_after_what_it_shows() {
     use clarity_spec::edit::{Edit, apply};
     use clarity_spec::widgets::WidgetKind;
     let page = FORM.find("page Card").unwrap() as u32;
-    let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from) };
+    let create = |kind, bind: Option<&str>| Edit::CreateWidget { container: page, kind, col: 1, row: 5, width: None, caption: None, bind: bind.map(String::from), part: None, height: None };
     let text = apply(FORM, &create(WidgetKind::Table, Some("orders"))).unwrap().text;
     assert!(part_line(&text, "table").contains("name ordersTable "), "{text}");
     let text = apply(FORM, &create(WidgetKind::Button, None)).unwrap().text;

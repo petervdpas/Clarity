@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Colors the words of custom parts: `part` with `native`, `nuget`, `dll`, `binds`, `tells`, `hears` and `preview`. A canvas no longer has `renderer`.
+
 ## 0.1.6
 
 - Colors the words of command-line programs: `cli`, `command`, `option`, `print` and `exit`.

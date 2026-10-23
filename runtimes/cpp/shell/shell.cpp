@@ -1,5 +1,6 @@
 #include "shell/shell.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 
 #if defined(_WIN32)
@@ -11,7 +12,12 @@ extern char** environ;
 #endif
 
 #include "clarity/settings.hpp"
+#include "shell/parts.hpp"
 #include "webview/webview.h"
+
+#if defined(__linux__)
+#include <gdk/gdkx.h>
+#endif
 
 namespace clarity::shell {
 
@@ -152,6 +158,28 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             if (found == apart_.end()) return value(nullptr);
             return value({{"window", found->second.window}, {"with", found->second.with}});
         }
+        // Custom parts (DESIGN 6.5): where each is and what it is given, for the part host.
+        if (command == "place_part") {
+            uint64_t instance = args.value("instance", uint64_t(0));
+            if (caller) parts_windows_[instance] = caller->name();
+            parts::place(instance, text_of(args, "part"), text_of(args, "kind"), caller ? caller->part_parent() : 0, args.value("x", 0), args.value("y", 0),
+                         args.value("width", 0), args.value("height", 0), args.value("shown", false));
+            return value(nullptr);
+        }
+        if (command == "set_part") {
+            parts::set(args.value("instance", uint64_t(0)), text_of(args, "part"), text_of(args, "name"), args.contains("value") ? args["value"].dump() : "null");
+            return value(nullptr);
+        }
+        if (command == "hear_part") {
+            parts::hear(args.value("instance", uint64_t(0)), text_of(args, "part"), text_of(args, "hear"), args.contains("values") ? args["values"].dump() : "[]");
+            return value(nullptr);
+        }
+        if (command == "close_parts") {
+            uint64_t instance = args.value("instance", uint64_t(0));
+            parts::close(instance);
+            parts_windows_.erase(instance);
+            return value(nullptr);
+        }
         if (command == "close_apart") {
             if (caller) caller->close();
             return value(nullptr);
@@ -165,6 +193,13 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
 Size window_size(Size size) {
     if (size.width <= 0 || size.height <= 0) return {1100, 760};
     return size;
+}
+
+std::optional<std::string> Service::parts_window(uint64_t instance) {
+    std::lock_guard lock(mutex_);
+    auto found = parts_windows_.find(instance);
+    if (found == parts_windows_.end()) return std::nullopt;
+    return found->second;
 }
 
 std::optional<std::string> Service::closed(const std::string& name) {
@@ -201,6 +236,19 @@ public:
 #endif
     }
 
+    uintptr_t part_parent() override {
+#if defined(__linux__)
+        auto widget = view_.widget();
+        if (!widget.ok()) return 0;
+        GdkWindow* window = gtk_widget_get_window(GTK_WIDGET(widget.value()));
+        if (!window || !GDK_IS_X11_WINDOW(window)) return 0;
+        gdk_window_ensure_native(window);
+        return static_cast<uintptr_t>(GDK_WINDOW_XID(window));
+#else
+        return 0;
+#endif
+    }
+
     void eval(const std::string& js) { view_.eval(js); }
     webview::webview& view() { return view_; }
 
@@ -216,6 +264,8 @@ int run(const Options& options) {
     // WebKitGTK 2.52 paints parts of a new window black through its DMABUF
     // renderer; it must be off before the web process starts.
     setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", 0);
+    // Custom parts draw in X11 child windows: under Wayland the toolkit runs on XWayland.
+    if (parts::present()) setenv("GDK_BACKEND", "x11", 0);
 #endif
     Service service(options);
     std::map<std::string, std::unique_ptr<Window>> windows;
@@ -242,7 +292,19 @@ int run(const Options& options) {
         }
 #endif
     };
+    // A part tells on its own thread: the renderer of its window hears it on the window's.
+    if (parts::present()) {
+        std::string problem = parts::start([&](uint64_t window, const std::string& part, const std::string& tell, const std::string& values) {
+            std::string js = "window.clarityTold && window.clarityTold(" + std::to_string(window) + ", " + json(part).dump() + ", " + json(tell).dump() + ", " + values + ")";
+            windows["main"]->view().dispatch([&, window, js] {
+                auto name = service.parts_window(window);
+                if (name && windows.contains(*name)) windows.at(*name)->eval(js);
+            });
+        });
+        if (!problem.empty()) fprintf(stderr, "%s\n", problem.c_str());
+    }
     windows["main"]->view().run();
+    parts::stop();
     return 0;
 }
 

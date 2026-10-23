@@ -185,7 +185,7 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                 stmts(body, name, found);
             }
             StmtKind::Call { call } => expr(call, name, found),
-            StmtKind::Draw { args, .. } => {
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => {
                 for arg in args {
                     expr(arg, name, found);
                 }

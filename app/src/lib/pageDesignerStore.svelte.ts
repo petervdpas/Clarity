@@ -13,7 +13,7 @@ import { GAP, rowAt } from "./pages";
 
 
 export type PageDragSource =
-  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string }
+  | { kind: "new"; widget: WidgetKind; width: number; height: number; label: string; part?: string }
   | { kind: "field"; widget: WidgetKind; bind: string; caption: string; width: number; height: number; label: string }
   | { kind: "move"; item: number; from: number; props: WidgetProps; grab: { dc: number; dr: number }; label: string }
   | { kind: "resize"; item: number; props: WidgetProps; label: string }

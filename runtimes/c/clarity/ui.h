@@ -44,6 +44,9 @@ typedef struct {
     /// and whatever else the screen tells about the pointer, kept as it came
     /// (NULL: no click yet).
     cJSON* pointer;
+    /// A custom part's properties by name, as code set them: an object (NULL:
+    /// none set; conformance/custom-parts.json).
+    cJSON* values;
 } ClarityPart;
 
 /// The selected row of a table or list.
@@ -126,6 +129,9 @@ typedef struct {
     size_t ask_count;
     /// What a dialog closes with (`close with value`), or NULL.
     cJSON* result;
+    /// The hears given to custom parts, in order: an array of {part, hear,
+    /// values} (NULL: none).
+    cJSON* hears;
 } ClarityReply;
 
 /// What a handler can do to the screen.
@@ -175,6 +181,12 @@ void clarity_ui_set_collapsed(ClarityUi* ui, const char* part, bool value);
 /// Whether a maximizable sidebar fills the window.
 bool clarity_ui_maximized(const ClarityUi* ui, const char* part);
 void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value);
+/// A property of a custom part as code set it, or NULL when it was not set.
+const cJSON* clarity_ui_part_value(const ClarityUi* ui, const char* part, const char* name);
+/// Sets a property of a custom part; it takes `value`.
+void clarity_ui_set_part_value(ClarityUi* ui, const char* part, const char* name, cJSON* value);
+/// Gives a custom part a hear with its values (an array, which it takes), sent with the reply.
+void clarity_ui_hear(ClarityUi* ui, const char* part, const char* hear, cJSON* values);
 /// The open tab of a ribbon, counted from 1.
 int64_t clarity_ui_tab(const ClarityUi* ui, const char* part);
 void clarity_ui_set_tab(ClarityUi* ui, const char* part, int64_t value);

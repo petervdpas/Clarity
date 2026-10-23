@@ -213,7 +213,7 @@ fn a_menu_item_can_switch_the_language() {
 #[test]
 fn every_example_is_complete_in_every_language() {
     let examples = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples"));
-    for name in ["calculator", "dial", "ledger", "noughts", "records", "shop", "stock", "todo"] {
+    for name in ["calculator", "dial", "ledger", "noughts", "orbs", "records", "shop", "stock", "todo"] {
         let project = clarity_spec::load_dir(&examples.join(name)).unwrap();
         let problems: Vec<String> = project.diagnostics.iter().map(|d| format!("{}: {}", d.path, d.message)).collect();
         assert!(problems.is_empty(), "{name}: {problems:#?}");

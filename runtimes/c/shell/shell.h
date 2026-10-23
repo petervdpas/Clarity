@@ -59,10 +59,17 @@ struct ClarityDesktop {
     char name[32];
     void (*set_title)(ClarityDesktop* desktop, const char* title);
     void (*close)(ClarityDesktop* desktop);
+    /// The native window custom parts draw in (DESIGN 6.5): on Linux the X11
+    /// window of the webview; NULL or 0 where there is none.
+    uintptr_t (*part_parent)(ClarityDesktop* desktop);
 };
 
 /// Answers the renderer's commands.
 typedef struct ClarityService ClarityService;
+
+/// The desktop window an open window's custom parts are in, by the open
+/// window's number; NULL when none of its parts was placed.
+const char* clarity_service_parts_window(ClarityService* service, uint64_t instance);
 
 ClarityService* clarity_service_new(const ClarityShellOptions* options);
 void clarity_service_free(ClarityService* service);

@@ -655,7 +655,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu`; `renderer Name` | `draw`, `click`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `pointer`, `key` |
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
@@ -866,6 +866,57 @@ table name grid at 1,1 span 12 rows 6 bind albums columns title
 ```
 
 Next runs the handler of `on next` on the step the person is on, then moves one step on. A `refuse` in it keeps the person on the step and says why; a handler that sets `wizard.step` itself decides where the wizard goes. Without `on next`, Next just moves on. Back goes one step back and runs nothing, so what was entered stays. Finish, on the last step, runs `on finish`, which saves, closes the dialog with its value (`close with order`), or does what the wizard is for.
+
+### Custom parts
+
+A custom part is a part an outside library draws: a game scene drawn with SFML, a map, a code editor. It is declared in a module, so the checker, code and the designer treat it as a built-in part, and placed in a window by its name. DESIGN 5.19 and 6.5 have the whole design; the `orbs` example has one drawn with SFML.
+
+```clarity
+part Arena
+    native "parts/Arena"
+    binds integer
+    speed: integer, min 1, max 10, default 3
+    title: text
+    tells scored(points: integer)
+    hears restart(level: integer)
+    size 8 x 6
+    preview "arena.png"
+```
+
+| Line | What it says |
+|---|---|
+| `native "folder"` | A shared library built from that folder with its `CMakeLists.txt`, written in C or C++ (or anything that exports C functions) and speaking the C header Clarity writes for it. Every stack links it. |
+| `nuget "Package" version` | An Avalonia control from a NuGet package, with a C# adapter beside it. The C# stack only. |
+| `dll "file"` | An Avalonia control from a .NET assembly in the project. The C# stack only. |
+| `binds type` | The type of value it shows and edits, which `bind` gives it. Without it the part binds nothing. |
+| `name: type, default v, min a, max b` | A property, set in the window and in code. Text, a number, a date, a duration, an enum or bool. |
+| `tells name(values)` | One of its events, with typed values. |
+| `hears name(values)` | Something code tells it to do. |
+| `size n x n` | The span and rows the Parts palette drops it with. |
+| `preview "file"` | Its picture on the design canvas, from the resources; without it a box with its name. |
+
+A part's name starts with a capital, which no built-in part does. Its properties cannot be named after a word every part has: `at`, `span`, `rows`, `bind`, `name`, `on`, `tooltip`, `taborder`, `visible`, `enabled` or `value`.
+
+```clarity
+page Game: window
+    data player: Player
+    Arena name arena at 1,1 span 8 rows 6 bind player.best speed 5 title @levelOne on change: bestChanged on scored: arenaScored
+
+code Game
+    handler arenaScored(points: integer)
+        message @scored(points = points)
+        arena.speed = arena.speed + 1
+        arena.restart(2)
+```
+
+- A property is set on the part's line (`speed 5`) and read and set in code (`arena.speed`). A text property's text is shown, so it is a key like a caption.
+- `on change` runs when the person changed the value it binds; `on scored` runs when the part tells it, and the handler takes the tell's values.
+- `arena.restart(2)` gives the part a hear with its values.
+- `visible` and `enabled` are every part's: code hides and disables a custom part as any other.
+
+**A native library** is built from its folder (`native "parts/Arena"`), which holds its `CMakeLists.txt` and its sources. Clarity writes `parts/Arena/clarity/Arena.h`, the C functions the library implements and the tells it calls, typed from the declaration, and writes it again when the declaration changes; declaring a part writes a starter that builds without other libraries. Build and Run write both (`clarity parts shop.clarity` does it from the command line), build the library with CMake into `libclarity_parts` beside the program, and every stack loads it. The library draws in a native child window at the part's place; it runs on Linux with X11 (a program with such a part starts under XWayland on a Wayland desktop), and its functions are called on a thread of their own, `Arena_frame` about 60 times a second. While a Clarity dialog, popover, menu or open list lies over the part, the part steps aside. `CLARITY_PARTS_TRACE=1` prints where each part is placed.
+
+**A .NET library** (`nuget` or `dll`, the C# stack only) is shown through an adapter in `parts/Notes/Notes.cs`, half of a partial class: it holds the library's control and writes `ShowValue`, a `Show<Property>` per property and an `On<Hear>` per hear, which the half Clarity generates calls; it calls a tell by its name (`CaretMoved(3)`) and `Changed(value)` when the person changed the value. Declaring the part writes a starter adapter; one that no longer fits the declaration does not compile.
 
 ## 7. The app and its frame
 
@@ -1644,7 +1695,7 @@ module-file   = "module" name
                 ("use" name)*
                 ["source" name]
                 declaration*
-declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command
+declaration   = enum | entity | settings | page | app | theme | code | function | action | engine | cli | command | custom-part
 
 enum          = "enum" Name
                     (Value ["label" String])+
@@ -1661,12 +1712,18 @@ page          = "page" Name ":" ("window" | "dialog" ["gives" type] | "view")
 page-setting  = "title" String | "size" n "x" n
               | "data" name ":" (Entity | "list" "<" Entity ">" | type-ref ["," "default" value])
               | "grid" n "columns" | "on" ("open" | "close" | "return") ":" handler
+custom-part   = "part" Name
+                    ("native" String | "nuget" String version | "dll" String)
+                    ["binds" type-ref] ["size" n "x" n] ["preview" String]
+                    (name ":" type-ref ("," ("default" | "min" | "max") value)*)*
+                    (("tells" | "hears") name ["(" params ")"])*
 part          = kind [String] property*
+              | Name property* (name value)* ("on" name ":" handler)*   // a custom part
                     (part | "tab" String | "pane")*        // containers only
 property      = "name" name | "at" col "," row | "span" n | "rows" n | "bind" path
               | "for" name | "placeholder" String | "tooltip" String | "style" name | "readonly" | "taborder" n
               | "key" String | "default" | "cancel" | "horizontal" | "vertical"
-              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word | "renderer" Name
+              | "columns" name [Number] ("," name [Number])* | "resizable" | "sortable" | "order" "by" name ["desc"] | "edit" name ["as" "switch"] ("," name ["as" "switch"])* | "show" names | "source" String | "surface" word
               | "on" event ":" handler ["(" [value ("," value)*] ")"] | "on" "click" "->" Target ["in" "new" "window"]
 
 app           = "app" Name

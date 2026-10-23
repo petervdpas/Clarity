@@ -47,6 +47,16 @@ type PartState struct {
 	// Pointer is where a canvas was last clicked, in its units: x and y, and
 	// whatever else the screen tells about the pointer, kept as it came.
 	Pointer map[string]any `json:"pointer,omitempty"`
+	// Values are a custom part's properties by name, as code set them
+	// (conformance/custom-parts.json).
+	Values map[string]any `json:"values,omitempty"`
+}
+
+// Hear is a hear a handler gave a custom part: arena.restart(2).
+type Hear struct {
+	Part   string `json:"part"`
+	Hear   string `json:"hear"`
+	Values []any  `json:"values"`
 }
 
 // WindowState is one open window: its data by name, its parts' properties
@@ -141,6 +151,8 @@ type Reply struct {
 	Asks []Ask `json:"asks,omitempty"`
 	// Result is what a dialog closes with, for the handler that asked for it.
 	Result json.RawMessage `json:"result,omitempty"`
+	// Hears are the hears given to custom parts, in order.
+	Hears []Hear `json:"hears,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -161,6 +173,7 @@ type Ui struct {
 	open     []OpenRequest
 	asks     []Ask
 	result   json.RawMessage
+	hears    []Hear
 	close    bool
 	err      error
 }
@@ -428,7 +441,51 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		Close:    u.close,
 		Asks:     u.asks,
 		Result:   u.result,
+		Hears:    u.hears,
 	}, nil
+}
+
+// PartValue is a property of a custom part as code set it; false when it was not set.
+func (u *Ui) PartValue(part, name string) (any, bool) {
+	value, ok := u.parts[part].Values[name]
+	return value, ok
+}
+
+func (u *Ui) SetPartValue(part, name string, value any) {
+	u.part(part, func(p *PartState) {
+		values := map[string]any{}
+		for k, v := range p.Values {
+			values[k] = v
+		}
+		values[name] = value
+		p.Values = values
+	})
+}
+
+// PartValueAs is a property of a custom part as type T: as code set it,
+// else fallback, the value written in the window or declared, as JSON.
+func PartValueAs[T any](u *Ui, part, name, fallback string) (T, error) {
+	var out T
+	text := []byte(fallback)
+	if value, ok := u.PartValue(part, name); ok {
+		given, err := json.Marshal(value)
+		if err != nil {
+			return out, &InvalidError{err.Error()}
+		}
+		text = given
+	}
+	if err := json.Unmarshal(text, &out); err != nil {
+		return out, &InvalidError{fmt.Sprintf("%s.%s: %v", part, name, err)}
+	}
+	return out, nil
+}
+
+// Hear gives a custom part a hear, sent with the reply.
+func (u *Ui) Hear(part, hear string, values ...any) {
+	if values == nil {
+		values = []any{}
+	}
+	u.hears = append(u.hears, Hear{Part: part, Hear: hear, Values: values})
 }
 
 // Opened is the state of window when it opens: its loaded data with with

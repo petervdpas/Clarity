@@ -129,7 +129,7 @@
   onblur={leave}
 />
 {#if place && items.length}
-  <ul id={listId} class="offered" role="listbox" aria-label={label} style:left="{place.left}px" style:top="{place.top}px" style:min-width="{place.width}px">
+  <ul id={listId} class="offered clarity-overlay" role="listbox" aria-label={label} style:left="{place.left}px" style:top="{place.top}px" style:min-width="{place.width}px">
     {#each items as item, i (item.key)}
       <!-- The keys move through the list from the box, which keeps the focus. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->

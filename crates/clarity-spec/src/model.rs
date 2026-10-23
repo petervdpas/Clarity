@@ -45,6 +45,8 @@ pub struct SpecFile {
     pub clis: Vec<crate::code::CliDecl>,
     /// Its commands, for the command-line program (DESIGN 5.20).
     pub commands: Vec<crate::code::CommandDecl>,
+    /// Its custom parts, drawn by outside libraries (DESIGN 5.19).
+    pub parts: Vec<crate::code::PartDecl>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -523,7 +525,6 @@ pub struct WidgetProps {
     pub search: bool,
     pub orientation: Option<Orientation>,
     pub surface: Option<Surface>,
-    pub renderer: Option<String>,
     pub source: Option<String>,
     /// The input a label or help text belongs to, by part name.
     #[serde(rename = "for")]
@@ -577,6 +578,23 @@ pub struct WidgetProps {
     pub default_button: bool,
     /// The button Escape clicks.
     pub cancel: bool,
+    /// A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
+    #[serde(default)]
+    pub part: Option<String>,
+    /// A custom part's properties set in the window: `speed 5`.
+    #[serde(default)]
+    pub values: std::collections::BTreeMap<String, Literal>,
+    /// A custom part's tells wired to handlers: `on scored: arenaScored`.
+    #[serde(default)]
+    pub tells: Vec<TellHandler>,
+}
+
+/// `on scored: arenaScored`: the handler a custom part's tell runs, given its values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TellHandler {
+    pub tell: String,
+    pub handler: String,
 }
 
 /// `on change: name_changed`: the handler in the code behind that runs
@@ -850,6 +868,11 @@ pub struct Project {
     #[serde(skip)]
     #[ts(skip)]
     pub engines: Option<Vec<crate::engines::EngineFile>>,
+    /// The files of the folders of the project's native custom parts
+    /// (DESIGN 5.19). None when the project was loaded without its folder.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub part_files: Option<Vec<crate::native::PartFile>>,
     /// The file stores of the project settings, by name. None when the
     /// project was loaded without its settings.
     #[serde(skip)]

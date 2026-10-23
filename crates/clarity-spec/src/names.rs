@@ -183,6 +183,10 @@ pub fn command_name(caption: Option<&str>, keyword: &str) -> String {
 /// part's kind: `saveButton`.
 pub fn suggested_name(props: &crate::model::WidgetProps) -> Option<String> {
     use crate::widgets::WidgetKind as K;
+    // A custom part is named after what it is: `orbField`.
+    if let (K::Custom, Some(part)) = (props.kind, props.part.as_deref()) {
+        return Some(camel_case(part));
+    }
     let kind = crate::widgets::keyword(props.kind);
     let suffix = |base: &str, word: &str| format!("{base}{}{}", word[..1].to_uppercase(), &word[1..]);
     let base = if let Some(target) = props.for_part.as_deref().filter(|_| matches!(props.kind, K::Label | K::Help)) {

@@ -43,6 +43,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         engines: Vec::new(),
         clis: Vec::new(),
         commands: Vec::new(),
+        parts: Vec::new(),
     };
 
     for (index, node) in tree.iter().enumerate() {
@@ -373,6 +374,9 @@ fn parse_top_level(
         Some("command") => {
             file.commands.push(crate::code::parse::parse_command(node, diagnostics)?);
         }
+        Some("part") => {
+            file.parts.push(crate::code::parse::parse_part(node, diagnostics)?);
+        }
         Some("theme") => {
             cursor.next();
             let name = cursor.expect_ident("a theme name")?;
@@ -387,7 +391,7 @@ fn parse_top_level(
         }
         _ => {
             return Err(cursor.error_here(
-                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli' or 'command'",
+                "expected 'module', 'use', 'source', 'enum', 'entity', 'page', 'app', 'theme', 'code', 'function', 'action', 'engine', 'settings', 'cli', 'command' or 'part'",
             ));
         }
     }
@@ -1376,13 +1380,18 @@ fn parse_widgets(nodes: &[Node], diagnostics: &mut Vec<Diagnostic>) -> Vec<Widge
 fn parse_widget(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Widget> {
     let mut cursor = Cursor::new(node.line);
     let keyword = cursor.expect_ident("a widget")?;
-    let Some(kind) = widgets::by_keyword(&keyword.name) else {
+    // A word in capitals is a custom part, by the name it is declared by (DESIGN 5.19).
+    let custom = keyword.name.starts_with(|c: char| c.is_ascii_uppercase());
+    let Some(kind) = widgets::by_keyword(&keyword.name).or(custom.then_some(WidgetKind::Custom)) else {
         return Err(Diagnostic::error(
             format!("unknown widget '{}'", keyword.name),
             keyword.span,
         ));
     };
-    let props = parse_widget_props(&mut cursor, kind, node.line.span)?;
+    let mut props = parse_widget_props(&mut cursor, kind, node.line.span)?;
+    if custom {
+        props.part = Some(keyword.name.clone());
+    }
 
     let mut widget = Widget {
         props,
@@ -1500,7 +1509,6 @@ fn parse_widget_props(
         show: Vec::new(),
         orientation: None,
         surface: None,
-        renderer: None,
         source: None,
         for_part: None,
         placeholder: None,
@@ -1530,6 +1538,9 @@ fn parse_widget_props(
         shortcut: None,
         default_button: false,
         cancel: false,
+        part: None,
+        values: Default::default(),
+        tells: Vec::new(),
     };
     // A chart's first word is its kind; an icon part's the icon it shows, no text people read.
     if kind == WidgetKind::Chart {
@@ -1574,6 +1585,21 @@ fn parse_widget_props(
             }
         };
 
+        // A custom part's own property, or a tell wired to a handler: its
+        // declaration says which there are, and the checker holds it to them.
+        if kind == WidgetKind::Custom && !widgets::CUSTOM_PART_WORDS.contains(&word) {
+            // A text is shown, so it may be a key: `title @levelOne`.
+            let value = if cursor.peek_is_text() { Literal::Str(cursor.expect_text("a text")?) } else { parse_literal(cursor)? };
+            props.values.insert(word.to_string(), value);
+            continue;
+        }
+        if kind == WidgetKind::Custom && word == "on" && Event::by_keyword(event_word) != Some(Event::Change) {
+            let tell = cursor.expect_ident("a tell of the part")?.name;
+            cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on scored: arenaScored'")?;
+            let handler = cursor.expect_ident("a handler name")?.name;
+            props.tells.push(crate::model::TellHandler { tell, handler });
+            continue;
+        }
         match word {
             "at" if kind == WidgetKind::Popover => {
                 return Err(Diagnostic::error("a popover has no 'at': it opens next to the part named in 'for'", clause.span));
@@ -1738,9 +1764,9 @@ fn parse_widget_props(
                     }
                 });
             }
+            // Graphics an outside library draws are a custom part now (DESIGN 5.19).
             "renderer" => {
-                applies(WidgetProperty::Renderer)?;
-                props.renderer = Some(cursor.expect_ident("a renderer name")?.name);
+                return Err(Diagnostic::error("a canvas is drawn by its draw handler; graphics an outside library draws are a custom part (part Name with native \"folder\")", clause.span));
             }
             "source" => {
                 applies(WidgetProperty::Source)?;

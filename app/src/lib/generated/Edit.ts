@@ -19,7 +19,15 @@ width: number | null,
 /**
  * Overrides the catalog caption.
  */
-caption: string | null, bind: string | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addMenu", item: number, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
+caption: string | null, bind: string | null, 
+/**
+ * A custom part (DESIGN 5.19): the name it is declared by, with `kind` custom.
+ */
+part: string | null, 
+/**
+ * Overrides the catalog height, as a custom part's declared size does.
+ */
+height: number | null, } | { "op": "batch", edits: Array<Edit>, } | { "op": "updateWidget", item: number, container: number | null, props: WidgetProps, } | { "op": "addTab", item: number, title: string, } | { "op": "addMenu", item: number, } | { "op": "addData", page: number, name: string, entity: string, list: boolean, } | { "op": "setGrid", page: number, columns: number, } | { "op": "setSize", page: number, width: number | null, height: number | null, } | { "op": "addPage", name: string, kind: PageKind, } | { "op": "addWindow", name: string, template: PageTemplate, } | { "op": "placeField", container: number, col: number, row: number, room: number, 
 /**
  * `data.field`
  */
@@ -27,4 +35,4 @@ bind: string, } | { "op": "addEntity", name: string, } | { "op": "addEnum", name
 /**
  * Sidebars only.
  */
-side: Side | null, } | { "op": "updateSidebar", item: number, props: SidebarProps, } | { "op": "updateRibbon", item: number, name: string | null, collapsible: boolean, collapsed: boolean, } | { "op": "setName", item: number, name: string, } | { "op": "updateSidebars" } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, } | { "op": "setCode", owner: string, text: string, } | { "op": "addHandler", owner: string, name: string, } | { "op": "replaceDecl", item: number, text: string, } | { "op": "appendDecl", text: string, };
+side: Side | null, } | { "op": "updateSidebar", item: number, props: SidebarProps, } | { "op": "updateRibbon", item: number, name: string | null, collapsible: boolean, collapsed: boolean, } | { "op": "setName", item: number, name: string, } | { "op": "updateSidebars" } | { "op": "addFrameItem", parent: number, item: FrameItem, caption: string | null, } | { "op": "updateCommand", item: number, props: CommandProps, } | { "op": "moveSibling", item: number, delta: number, } | { "op": "setCode", owner: string, text: string, } | { "op": "addHandler", owner: string, name: string, } | { "op": "addHandlerWith", owner: string, name: string, params: string, } | { "op": "replaceDecl", item: number, text: string, } | { "op": "appendDecl", text: string, };

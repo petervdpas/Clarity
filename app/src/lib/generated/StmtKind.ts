@@ -8,7 +8,7 @@ import type { MessageLevel } from "./MessageLevel";
 import type { Stmt } from "./Stmt";
 import type { TypeRef } from "./TypeRef";
 
-export type StmtKind = { "kind": "let", name: Ident, ty: TypeRef | null, value: Expr, } | { "kind": "assign", target: Expr, value: Expr, } | { "kind": "if", branches: Array<Branch>, otherwise: Array<Stmt> | null, } | { "kind": "return", value: Expr | null, } | { "kind": "for", var: Ident, list: Expr, body: Array<Stmt>, } | { "kind": "call", call: Expr, } | { "kind": "draw", canvas: Ident, shape: Ident, args: Array<Expr>, } | { "kind": "message", level: MessageLevel, text: Expr, } | { "kind": "ask", 
+export type StmtKind = { "kind": "let", name: Ident, ty: TypeRef | null, value: Expr, } | { "kind": "assign", target: Expr, value: Expr, } | { "kind": "if", branches: Array<Branch>, otherwise: Array<Stmt> | null, } | { "kind": "return", value: Expr | null, } | { "kind": "for", var: Ident, list: Expr, body: Array<Stmt>, } | { "kind": "call", call: Expr, } | { "kind": "draw", canvas: Ident, shape: Ident, args: Array<Expr>, } | { "kind": "hear", part: Ident, hear: Ident, args: Array<Expr>, } | { "kind": "message", level: MessageLevel, text: Expr, } | { "kind": "ask", 
 /**
  * None when a dialog window asks: its own title and parts say what.
  */

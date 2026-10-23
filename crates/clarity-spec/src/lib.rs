@@ -21,6 +21,7 @@ pub mod lexer;
 pub mod migrate;
 pub mod model;
 pub mod names;
+pub mod native;
 pub mod parser;
 pub mod rename;
 pub mod sample;
@@ -63,6 +64,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
     resolve_data(&mut files);
     give_settings(&mut files);
     make_form_labels(&mut files);
+    make_hears(&mut files);
     diagnostics.extend(check::check(&files));
     diagnostics.extend(files.iter().flat_map(themes::check_decls));
     Project {
@@ -76,6 +78,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         diagrams: Vec::new(),
         resource_keys: Default::default(),
         engines: None,
+        part_files: None,
         stores: None,
         translations: BTreeMap::new(),
     }
@@ -128,6 +131,61 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
     for file in files.iter_mut() {
         for page in &mut file.pages {
             walk(&mut page.widgets, &page.data, &entities);
+        }
+    }
+}
+
+/// `arena.restart(2)` reads as a shape drawn on a canvas; where `arena` is
+/// a custom part of the window, it is a hear of that part (DESIGN 5.19).
+fn make_hears(files: &mut [model::SpecFile]) {
+    use code::{Stmt, StmtKind};
+    fn custom_parts(widgets: &[model::Widget], found: &mut Vec<String>) {
+        for widget in widgets {
+            if widget.props.kind == widgets::WidgetKind::Custom
+                && let Some(name) = &widget.props.name
+            {
+                found.push(name.clone());
+            }
+            custom_parts(&widget.children, found);
+            for page in &widget.pages {
+                custom_parts(&page.children, found);
+            }
+        }
+    }
+    fn walk(body: &mut [Stmt], parts: &[String]) {
+        for stmt in body.iter_mut() {
+            match &mut stmt.kind {
+                StmtKind::Draw { canvas, shape, args } if parts.contains(&canvas.name) => {
+                    stmt.kind = StmtKind::Hear { part: canvas.clone(), hear: shape.clone(), args: std::mem::take(args) };
+                }
+                StmtKind::If { branches, otherwise } => {
+                    for branch in branches {
+                        walk(&mut branch.body, parts);
+                    }
+                    if let Some(body) = otherwise {
+                        walk(body, parts);
+                    }
+                }
+                StmtKind::For { body, .. } => walk(body, parts),
+                _ => {}
+            }
+        }
+    }
+    for file in files.iter_mut() {
+        for block in &mut file.code {
+            let mut parts = Vec::new();
+            for page in file.pages.iter().filter(|p| p.name.name == block.name.name) {
+                custom_parts(&page.widgets, &mut parts);
+                for sidebar in &page.frame.sidebars {
+                    custom_parts(&sidebar.widgets, &mut parts);
+                }
+            }
+            if parts.is_empty() {
+                continue;
+            }
+            for handler in &mut block.handlers {
+                walk(&mut handler.body, &parts);
+            }
         }
     }
 }
@@ -361,6 +419,9 @@ pub fn load_dir_with_files_in(dir: &Path, replaced: &[(&Path, &str)], sources: &
     resources::attach(&mut project, resources::resource_files(dir)?.unwrap_or_default());
     // A declared engine needs its file, so the folder is read even when it is missing.
     engines::attach(&mut project, engines::engine_files(dir)?.unwrap_or_default());
+    // A declared native part needs its folder, so a missing one is reported.
+    let part_files = native::native_files(dir, &project)?;
+    native::attach(&mut project, part_files);
     project.diagrams = diagrams::diagram_files(dir)?;
     Ok(project)
 }

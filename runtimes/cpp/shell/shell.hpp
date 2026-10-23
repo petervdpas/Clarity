@@ -78,6 +78,9 @@ public:
     virtual std::string name() const = 0;
     virtual void set_title(const std::string& title) = 0;
     virtual void close() = 0;
+    /// The native window custom parts draw in (DESIGN 6.5): on Linux the
+    /// X11 window of the webview; 0 where there is none.
+    virtual uintptr_t part_parent() { return 0; }
 };
 
 /// Opens a link in the person's browser; whether it could.
@@ -102,6 +105,8 @@ public:
     std::function<void(Desktop& opener, const std::string& name, Size size)> open_desktop;
     /// A desktop window of its own closed: its opener is told, so it can reload its data.
     std::optional<std::string> closed(const std::string& name);
+    /// The desktop window an open window's custom parts are in, by the open window's number.
+    std::optional<std::string> parts_window(uint64_t instance);
 
 private:
     struct Apart {
@@ -112,6 +117,7 @@ private:
     Options options_;
     std::mutex mutex_;
     std::map<std::string, Apart> apart_;
+    std::map<uint64_t, std::string> parts_windows_;
     int next_ = 0;
 
     Reply on_event(const WindowState& state, const std::string& event);

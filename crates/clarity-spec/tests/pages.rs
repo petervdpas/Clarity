@@ -98,7 +98,7 @@ page P: dialog
         pane
             label \"Left\" name label1 at 1,1
         pane
-            canvas name canvas1 at 1,1 surface gpu renderer Game
+            canvas name canvas1 at 1,1 surface gpu
 ",
         "p.clarity",
     );
@@ -122,10 +122,7 @@ page P: dialog
 
     let splitter = &page.widgets[2];
     assert_eq!(splitter.pages.len(), 2);
-    assert_eq!(
-        splitter.pages[1].children[0].props.renderer.as_deref(),
-        Some("Game")
-    );
+    assert_eq!(splitter.pages[1].children[0].props.surface, Some(clarity_spec::model::Surface::Gpu));
 }
 
 #[test]

@@ -156,7 +156,12 @@ pub fn stack_tools() -> Vec<StackTools> {
 /// (with `release`) a release program.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
     let dir = clarity_project::module_dir(file);
-    let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    let mut project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    // Each native part's header follows its declaration, and a new part gets a starter (DESIGN 5.19).
+    let written = clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;
+    if !written.is_empty() {
+        project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+    }
     let loaded = clarity_project::load(file);
     let shown = file.file_name().unwrap_or_default().to_string_lossy().to_string();
     let settings = match (loaded.settings, loaded.problems.first()) {
@@ -214,12 +219,17 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     // Generating works without the stack's tools; building needs them.
     let found = generate_out(&file, release, command_line.is_some()).and_then(|(out, toolchain, stack)| {
         let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
+        // Native parts are built with CMake and a C++ compiler, whatever the stack.
+        let parts = out.join(clarity_gen::parts::FOLDER).join("CMakeLists.txt").exists();
+        let tools_missing = parts && ["cmake", "c++"].iter().any(|tool| clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).is_none());
         match cannot_build(&tools, &out) {
             Some(why) => Err(why),
-            None => Ok((out, toolchain)),
+            None if tools_missing => Err(format!("the project is generated in {}; its custom parts need CMake and a C++ compiler", out.display())),
+            // The native parts are built first, where the stack's own build does not build them.
+            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), out, toolchain)),
         }
     });
-    let (out, toolchain) = match found {
+    let (before, out, toolchain) = match found {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -233,13 +243,46 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     std::thread::spawn(move || {
         // The engines whose source changed first, so the application has them as written.
         let done = match crate::engines::build_changed(&app, &dir) {
-            Ok(()) => build(&app, &out, &toolchain, run, command_line.as_deref()),
+            Ok(()) => match before.iter().find_map(|step| run_step(&app, &out, step).err()) {
+                Some(message) => BuildDone { ok: false, message, binary: None },
+                None => build(&app, &out, &toolchain, run, command_line.as_deref()),
+            },
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
         send_done(&app, done);
     });
     Ok(())
+}
+
+/// Runs one step before the build, such as building the native parts with
+/// CMake, its output in the Output panel.
+fn run_step(app: &AppHandle, out: &Path, step: &[String]) -> Result<(), String> {
+    let Some((tool, args)) = step.split_first() else { return Ok(()) };
+    send_line(app, format!("{tool} {} (in {})", args.join(" "), out.display()));
+    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
+        .args(args)
+        .env("PATH", clarity_gen::tools::tool_path())
+        .current_dir(out)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| format!("cannot start {tool}: {err}; is CMake installed?"))?;
+    let stdout = child.stdout.take().map(|stdout| {
+        let app = app.clone();
+        std::thread::spawn(move || send_lines(&app, stdout))
+    });
+    if let Some(stderr) = child.stderr.take() {
+        send_lines(app, stderr);
+    }
+    if let Some(reader) = stdout {
+        let _ = reader.join();
+    }
+    match child.wait() {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err("the custom parts did not build; see the output".to_string()),
+    }
 }
 
 fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool, command_line: Option<&str>) -> BuildDone {

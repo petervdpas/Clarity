@@ -100,7 +100,7 @@
 
 {#if open}
   <div
-    class="popover"
+    class="popover clarity-overlay"
     class:design
     class:selected={design && pageDesigner.selected === widget.span.start}
     role="dialog"

@@ -302,6 +302,18 @@ pub struct PartState {
     /// whatever else the screen tells about the pointer, kept as it came.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pointer: Option<Map<String, Value>>,
+    /// A custom part's properties by name, as code set them
+    /// (conformance/custom-parts.json).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<Map<String, Value>>,
+}
+
+/// A hear a handler gave a custom part: `arena.restart(2)`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Hear {
+    pub part: String,
+    pub hear: String,
+    pub values: Vec<Value>,
 }
 
 /// One open window: its data by name, its parts' properties and the
@@ -426,6 +438,9 @@ pub struct Reply {
     /// What a dialog closes with (`close with value`), for the handler that asked for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
+    /// The hears given to custom parts, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hears: Vec<Hear>,
 }
 
 /// What a handler can do to the screen.
@@ -439,6 +454,7 @@ pub struct Ui {
     open: Vec<OpenRequest>,
     asks: Vec<Ask>,
     result: Option<Value>,
+    hears: Vec<Hear>,
     pub close: bool,
 }
 
@@ -658,7 +674,22 @@ impl Ui {
             close: self.close,
             asks: self.asks,
             result: self.result,
+            hears: self.hears,
         }
+    }
+
+    /// A property of a custom part as code set it; none when it was not set.
+    pub fn part_value(&self, part: &str, name: &str) -> Option<Value> {
+        self.parts.get(part).and_then(|p| p.values.as_ref()).and_then(|v| v.get(name)).cloned()
+    }
+
+    pub fn set_part_value(&mut self, part: &str, name: &str, value: Value) {
+        self.parts.entry(part.to_string()).or_default().values.get_or_insert_with(Map::new).insert(name.to_string(), value);
+    }
+
+    /// Gives a custom part a hear, sent with the reply.
+    pub fn hear(&mut self, part: &str, hear: &str, values: Vec<Value>) {
+        self.hears.push(Hear { part: part.to_string(), hear: hear.to_string(), values });
     }
 }
 

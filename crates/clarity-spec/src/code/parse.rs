@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, CliDecl, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, CliDecl, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -766,6 +766,122 @@ fn parse_option(cursor: &mut Cursor, span: Span) -> ParseResult<CommandOption> {
         *slot = Some(parse_expr(cursor)?);
     }
     Ok(option)
+}
+
+/// `part Arena` with its library, `binds`, properties, `tells`, `hears`,
+/// `size` and `preview` lines (DESIGN 5.19).
+pub(crate) fn parse_part(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<PartDecl> {
+    let mut cursor = Cursor::new(node.line);
+    cursor.next();
+    let name = cursor.expect_ident("the part's name, as in 'part Arena'")?;
+    cursor.expect_end()?;
+    if !name.name.starts_with(|c: char| c.is_ascii_uppercase()) {
+        diagnostics.push(Diagnostic::error(format!("a part's name starts with a capital, as in 'part {}'", capitalized(&name.name)), name.span));
+    }
+    let mut part = PartDecl {
+        name,
+        library: None,
+        binds: None,
+        properties: Vec::new(),
+        tells: Vec::new(),
+        hears: Vec::new(),
+        size: None,
+        preview: None,
+        span: node.span(),
+    };
+    for child in &node.children {
+        let parsed = (|| {
+            no_children(child)?;
+            let mut line = Cursor::new(child.line);
+            let word = line.peek().map(|t| t.text.clone()).unwrap_or_default();
+            let library = |part: &PartDecl, line: &Cursor| {
+                if part.library.is_some() {
+                    return Err(line.error_here("a part has one library"));
+                }
+                Ok(())
+            };
+            match word.as_str() {
+                "native" => {
+                    library(&part, &line)?;
+                    line.next();
+                    part.library = Some(PartLibrary::Native { folder: line.expect_string("the library's folder, as in native \"parts/Arena\"")? });
+                }
+                "nuget" => {
+                    library(&part, &line)?;
+                    line.next();
+                    let package = line.expect_string("the package, as in nuget \"AvaloniaEdit\" 11.1.0")?;
+                    // The version is read as written: `11.1.0` is several tokens.
+                    let mut version = String::new();
+                    while let Some(token) = line.next() {
+                        version.push_str(&token.text);
+                    }
+                    if version.is_empty() {
+                        return Err(line.error_here("expected the package's version, as in nuget \"AvaloniaEdit\" 11.1.0"));
+                    }
+                    part.library = Some(PartLibrary::Nuget { package, version });
+                }
+                "dll" => {
+                    library(&part, &line)?;
+                    line.next();
+                    part.library = Some(PartLibrary::Dll { file: line.expect_string("the assembly, as in dll \"libs/Plot.dll\"")? });
+                }
+                "binds" => {
+                    line.next();
+                    part.binds = Some(parse_type_ref(&mut line)?);
+                }
+                "tells" | "hears" => {
+                    line.next();
+                    let name = line.expect_ident(if word == "tells" { "a tell's name, as in tells scored(points: integer)" } else { "a hear's name, as in hears restart(level: integer)" })?;
+                    let params = if line.eat(TokenKind::LParen) { parse_params(&mut line)? } else { Vec::new() };
+                    let message = PartMessage { name, params, span: child.span() };
+                    if word == "tells" { part.tells.push(message) } else { part.hears.push(message) }
+                }
+                "size" => {
+                    line.next();
+                    let span = line.expect_number("the columns it spans, as in size 8 x 6")?;
+                    if !line.eat_keyword("x") {
+                        return Err(line.error_here("expected 'x' and its rows, as in size 8 x 6"));
+                    }
+                    let rows = line.expect_number("its rows, as in size 8 x 6")?;
+                    part.size = Some((span, rows));
+                }
+                "preview" => {
+                    line.next();
+                    part.preview = Some(line.expect_string("a picture of the resources, as in preview \"arena.png\"")?);
+                }
+                _ => {
+                    let name = line.expect_ident("a property, as in speed: integer, or native, nuget, dll, binds, tells, hears, size or preview")?;
+                    line.expect(TokenKind::Colon, "':' and a type, as in speed: integer")?;
+                    let ty = parse_type_ref(&mut line)?;
+                    let mut property = PartProperty { name, ty, default: None, min: None, max: None, span: child.span() };
+                    while line.eat(TokenKind::Comma) {
+                        let word = line.expect_ident("'default', 'min' or 'max'")?;
+                        let slot = match word.name.as_str() {
+                            "default" => &mut property.default,
+                            "min" => &mut property.min,
+                            "max" => &mut property.max,
+                            other => return Err(Diagnostic::error(format!("unknown '{other}'; a property has a default, min and max"), word.span)),
+                        };
+                        if slot.is_some() {
+                            return Err(Diagnostic::error(format!("'{}' is written twice", word.name), word.span));
+                        }
+                        *slot = Some(parse_expr(&mut line)?);
+                    }
+                    part.properties.push(property);
+                }
+            }
+            line.expect_end()
+        })();
+        if let Err(diag) = parsed {
+            diagnostics.push(diag);
+        }
+    }
+    Ok(part)
+}
+
+fn capitalized(name: &str) -> String {
+    let mut chars = name.chars();
+    chars.next().map(|c| c.to_ascii_uppercase().to_string() + chars.as_str()).unwrap_or_default()
 }
 
 /// A name or a member path: what an assignment can set.

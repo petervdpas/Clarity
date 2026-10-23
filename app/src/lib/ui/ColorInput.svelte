@@ -106,7 +106,7 @@
 </span>
 
 {#if open}
-  <div class="palette" role="listbox" aria-label={label} style:left="{open.left}px" style:top="{open.top}px">
+  <div class="palette clarity-overlay" role="listbox" aria-label={label} style:left="{open.left}px" style:top="{open.top}px">
     {#each PALETTE as row, r (r)}
       {#each row as color (color)}
         <button

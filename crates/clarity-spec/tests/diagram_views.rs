@@ -70,7 +70,7 @@ fn example(name: &str) -> Project {
 
 #[test]
 fn every_examples_data_model_reads_back_as_the_project() {
-    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock"] {
+    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs"] {
         let project = example(name);
         let view = views::data_model(&project);
         let (diagram, problems) = diagrams::parse(&view.text);
@@ -102,7 +102,7 @@ fn the_data_model_keeps_the_places_of_its_boxes_for_the_entities_it_draws() {
 
 #[test]
 fn every_examples_class_diagram_reads_back_as_the_project() {
-    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock"] {
+    for name in ["shop", "records", "todo", "noughts", "calculator", "dial", "ledger", "stock", "orbs"] {
         let project = example(name);
         let text = diagrams::class_model::write(&views::classes_of(&project, None));
         let (diagram, problems) = diagrams::parse(&text);

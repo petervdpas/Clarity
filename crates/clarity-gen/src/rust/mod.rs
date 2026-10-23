@@ -60,7 +60,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let mut files = vec![
-        text("Cargo.toml", cargo_toml(&crate_name, &features)),
+        text("Cargo.toml", cargo_toml(&crate_name, &features, !crate::parts::native_parts(project).is_empty())),
         text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
         text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))),
         text("src/model.json", crate::web::model_json(project)),
@@ -105,6 +105,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     files.push(text("src/modules.rs", format!("{HEADER}\n{declared}")));
     files.push(text("src/schema.rs", schema_rs(project, &owned)?));
     files.extend(crate::engine_files(project, "engines"));
+    // The native parts, built before the program and copied beside it in either build.
+    files.extend(crate::parts::out_files(project, &["../target/debug", "../target/release"]));
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
     }
@@ -171,8 +173,10 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, features: &[&str]) -> String {
+fn cargo_toml(name: &str, features: &[&str], parts: bool) -> String {
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
+    // The webview's GTK window, which custom parts draw in, as Tauri's own GTK crates give it.
+    let parts = if parts { "\n[target.'cfg(target_os = \"linux\")'.dependencies]\ngtk = \"0.18\"\ngdkx11 = \"0.18\"\n" } else { "" };
     format!(
         r#"[package]
 name = "{name}"
@@ -185,6 +189,7 @@ serde = {{ version = "1", features = ["derive"] }}
 serde_json = "1"
 tauri = {{ version = "2", features = [] }}
 
+{parts}
 [build-dependencies]
 tauri-build = {{ version = "2", features = [] }}
 
@@ -246,6 +251,13 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     }
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
+    // Custom parts drawn by native libraries (DESIGN 6.5): the shell's side of the part host.
+    let native = !crate::parts::native_parts(project).is_empty();
+    let (parts_code, parts_manage, parts_commands, parts_start) = if native {
+        (PARTS, "\n        .manage(PartWindows::default())\n        .setup(|app| {\n            start_parts(app.handle().clone());\n            Ok(())\n        })", "\n            place_part,\n            set_part,\n            hear_part,\n            close_parts,", PARTS_X11)
+    } else {
+        ("", "", "", "")
+    };
     let (apart_code, apart_manage, apart_events, apart_commands) = if apart {
         (APART.replace("{title}", &format!("{title:?}")).replace("{width}", &clarity_spec::layout::WINDOW_WIDTH.to_string()).replace("{height}", &clarity_spec::layout::WINDOW_HEIGHT.to_string()), "\n        .manage(Apart::default())", APART_EVENTS, "\n            open_apart,\n            apart_start,\n            close_apart,")
     } else {
@@ -698,8 +710,9 @@ fn set_language(language: Option<String>) {{
 fn set_title(window: tauri::WebviewWindow, title: String) {{
     let _ = window.set_title(&title);
 }}
-{apart_code}
+{apart_code}{parts_code}
 fn main() {{
+{parts_start}
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
     let mut db = Db::connect(DATABASES).expect("cannot open the databases");
@@ -710,7 +723,7 @@ fn main() {{
         db.add_store(name, at).expect("cannot open a file store");
     }}
     tauri::Builder::default()
-        .manage(App(Mutex::new(db))){apart_manage}{apart_events}
+        .manage(App(Mutex::new(db))){apart_manage}{apart_events}{parts_manage}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -725,7 +738,7 @@ fn main() {{
             file_data,
             open_file,
             save_file,
-            store_file,{apart_commands}
+            store_file,{apart_commands}{parts_commands}
             read_settings,
             keep_settings,
             set_language,
@@ -796,6 +809,94 @@ fn apart_closed(window: &tauri::Window) {
         let _ = opener.eval("window.dispatchEvent(new Event('clarity-return'))");
     }
 }
+"#;
+
+/// The commands of custom parts (DESIGN 6.5): where each is and what it is
+/// given, for the part host; and its tells, to the renderer of their window.
+const PARTS: &str = r#"
+/// Which desktop window an open window's custom parts are in, by the open window's number.
+#[derive(Default)]
+struct PartWindows(Mutex<std::collections::HashMap<u64, String>>);
+
+/// The native window custom parts draw in: on Linux the X11 window of the webview.
+#[cfg(target_os = "linux")]
+fn part_parent(window: &tauri::WebviewWindow) -> usize {
+    let (sent, got) = std::sync::mpsc::channel();
+    let _ = window.with_webview(move |webview| {
+        use gtk::prelude::*;
+        let parent = webview
+            .inner()
+            .window()
+            .map(|w| {
+                w.ensure_native();
+                w
+            })
+            .and_then(|w| w.downcast::<gdkx11::X11Window>().ok())
+            .map_or(0, |w| w.xid() as usize);
+        let _ = sent.send(parent);
+    });
+    got.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or(0)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn part_parent(_window: &tauri::WebviewWindow) -> usize {
+    0
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn place_part(window: tauri::WebviewWindow, windows: tauri::State<'_, PartWindows>, instance: u64, part: String, kind: String, x: i32, y: i32, width: i32, height: i32, shown: bool) -> std::result::Result<(), String> {
+    if let Ok(mut known) = windows.0.lock() {
+        known.insert(instance, window.label().to_string());
+    }
+    let parent = part_parent(&window);
+    clarity_runtime::parts::place(instance, &part, &kind, parent, x, y, width, height, shown);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_part(instance: u64, part: String, name: String, value: Value) {
+    clarity_runtime::parts::set(instance, &part, &name, &value.to_string());
+}
+
+#[tauri::command]
+fn hear_part(instance: u64, part: String, hear: String, values: Vec<Value>) {
+    clarity_runtime::parts::hear(instance, &part, &hear, &Value::from(values).to_string());
+}
+
+#[tauri::command]
+fn close_parts(windows: tauri::State<PartWindows>, instance: u64) {
+    clarity_runtime::parts::close(instance);
+    if let Ok(mut known) = windows.0.lock() {
+        known.remove(&instance);
+    }
+}
+
+/// Starts the part host; a part tells on its own thread, and the renderer of its window hears it.
+fn start_parts(handle: tauri::AppHandle) {
+    if !clarity_runtime::parts::present() {
+        return;
+    }
+    let told = handle.clone();
+    let started = clarity_runtime::parts::start(Box::new(move |window, part, tell, values| {
+        use tauri::Manager;
+        let label = told.state::<PartWindows>().0.lock().ok().and_then(|known| known.get(&window).cloned());
+        if let Some(webview) = label.and_then(|label| told.get_webview_window(&label)) {
+            let script = format!("window.clarityTold && window.clarityTold({window}, {}, {}, {values})", Value::from(part), Value::from(tell));
+            let _ = webview.eval(&script);
+        }
+    }));
+    if let Err(problem) = started {
+        eprintln!("{problem}");
+    }
+}
+"#;
+
+/// Under Wayland the toolkit runs on XWayland, so custom parts can draw in X11 child windows.
+const PARTS_X11: &str = r#"    if clarity_runtime::parts::present() && std::env::var_os("GDK_BACKEND").is_none() {
+        // Set before any thread starts.
+        unsafe { std::env::set_var("GDK_BACKEND", "x11") };
+    }
 "#;
 
 const APART_EVENTS: &str = r#"

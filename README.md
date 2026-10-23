@@ -34,10 +34,11 @@ examples/                example projects, each a project file with a folder of 
   noughts                noughts and crosses against an engine written in Clarity that keeps each window's game
   ledger                 a command-line program alone: accounts and what is booked on them, in C#
   stock                  a stock list with a window and a command line over the same items, in Go
+  orbs                   a game whose field of orbs a native library draws with SFML (a custom part), in C++
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 
-Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Runtime`, `Clarity.Avalonia`). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`).
+Generated applications get their runtime as a package: Rust from crates.io (`clarity-runtime`), Go as a module (`github.com/petervdpas/Clarity/runtimes/go`), C# from NuGet (`Clarity.Runtime`, `Clarity.Avalonia`). The C and C++ runtimes are copied into every application, so it builds on its own. Their tests sit where the language keeps them: `runtimes/rust/tests`, `runtimes/csharp/*.Tests`, the `_test.go` files next to the Go code, and `runtimes/c/tests` and `runtimes/cpp/tests` (built with CMake, run with `ctest`). `runtimes/parts` is the part host that runs custom parts drawn by native libraries, built into every program that has one, with its tests in `runtimes/parts/tests`.
 
 ## Requirements
 

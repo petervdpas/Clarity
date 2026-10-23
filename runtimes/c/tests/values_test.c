@@ -400,3 +400,44 @@ void what_an_engine_keeps_outlives_the_scratch_arena(void) {
     CHECK_INT(words.count, 0);
     clarity_integers_drop(&kept);
 }
+
+void a_custom_parts_values_and_hears_are_as_every_runtime_says(void) {
+    cJSON* file = conformance("custom-parts.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "read")) {
+        cJSON* in = cJSON_CreateObject();
+        cJSON_AddStringToObject(in, "window", "Main");
+        cJSON_AddItemToObject(in, "parts", cJSON_CreateObject());
+        cJSON_AddItemToObject(cJSON_GetObjectItemCaseSensitive(in, "parts"), "arena", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(c, "part"), true));
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(in, &state));
+        const cJSON* read = clarity_ui_part_value(clarity_ui(&state), "arena", cJSON_GetObjectItemCaseSensitive(c, "name")->valuestring);
+        cJSON* got = read ? cJSON_Duplicate(read, true) : cJSON_CreateNull();
+        CHECK_JSON(got, cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "value")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "set")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        const cJSON* set;
+        cJSON_ArrayForEach(set, cJSON_GetObjectItemCaseSensitive(c, "sets")) {
+            clarity_ui_set_part_value(ui, "arena", cJSON_GetArrayItem(set, 0)->valuestring, cJSON_Duplicate(cJSON_GetArrayItem(set, 1), true));
+        }
+        cJSON* back = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+        CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(back, "parts"), "arena"),
+                   cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "part")));
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "hear")) {
+        ClarityWindowState state;
+        REQUIRE_OK(clarity_window_state_from_json(cJSON_Parse("{\"window\":\"Main\",\"data\":{}}"), &state));
+        ClarityUi* ui = clarity_ui(&state);
+        const cJSON* hear;
+        cJSON_ArrayForEach(hear, cJSON_GetObjectItemCaseSensitive(c, "hears")) {
+            clarity_ui_hear(ui, cJSON_GetArrayItem(hear, 0)->valuestring, cJSON_GetArrayItem(hear, 1)->valuestring, cJSON_Duplicate(cJSON_GetArrayItem(hear, 2), true));
+        }
+        cJSON* reply = clarity_reply_json(clarity_ui_reply(ui, "Main", cJSON_CreateObject()));
+        const cJSON* hears = cJSON_GetObjectItemCaseSensitive(reply, "hears");
+        CHECK_JSON(hears ? cJSON_Duplicate(hears, true) : cJSON_CreateNull(), cJSON_PrintUnformatted(cJSON_GetObjectItemCaseSensitive(c, "reply")));
+    }
+    cJSON_Delete(file);
+}

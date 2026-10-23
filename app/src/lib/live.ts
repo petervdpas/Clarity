@@ -9,6 +9,8 @@ import type { Shape } from "./drawing";
 import { getContext, setContext } from "svelte";
 import type { Event as PartEvent } from "./generated/Event";
 import type { ShownText } from "./format";
+import type { Place } from "./customParts";
+import type { JsonValue } from "./generated/serde_json/JsonValue";
 
 const LIVE = Symbol("clarity-live");
 
@@ -47,6 +49,8 @@ export type PartState = {
   step?: number | null;
   /** The open section of an accordion, counted from 1, 0 for none (conformance/accordions.json). */
   open?: number | null;
+  /** A custom part's properties as code set them, by name (conformance/custom-parts.json). */
+  values?: Record<string, JsonValue> | null;
 };
 
 export interface Live {
@@ -75,6 +79,10 @@ export interface Live {
   setOpen(part: string, open: number): void;
   /** Keeps whether a part shows: a popover the person opened or closed, sent with the next event. */
   setVisible(part: string, visible: boolean): void;
+  /** Where a custom part is in the webview and whether it shows: the shell keeps its native window there (DESIGN 6.5). */
+  placePart(part: string, kind: string, place: Place, shown: boolean): void;
+  /** Gives a custom part one of its values: a property, `value` for what it binds, or `enabled`. */
+  setPartValue(part: string, name: string, value: JsonValue): void;
   /** The person changed a setting (DESIGN 5.17) through an input bound to it: the shell keeps it. */
   keepSettings(): void;
   /** The records a reference field can point at, as id and display text, with the fields a search dropdown shows. */

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, CommandDecl, EngineBody, EngineState,
+use super::{AskForm, CommandDecl, EngineBody, EngineState, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -66,6 +66,203 @@ fn check_command_lines(files: &[SpecFile]) -> Vec<Diagnostic> {
 
 /// A command's arguments and options (plain values, each name once, with
 /// defaults that fit), its help, and its statements.
+/// `(points: integer)`, for messages.
+fn signature(env: &Env, params: &[Param]) -> String {
+    let each: Vec<String> = params
+        .iter()
+        .map(|p| format!("{}: {}", p.name.name, env.type_ref(&p.ty).map_or_else(|_| "?".into(), |t| t.name())))
+        .collect();
+    format!("({})", each.join(", "))
+}
+
+/// Whether a type is one a custom part's property or value can be:
+/// plain values, which every library takes as a number or as text.
+fn plain_for_part(ty: &Ty) -> bool {
+    matches!(ty, Ty::Text | Ty::Integer | Ty::Decimal | Ty::Money | Ty::Bool | Ty::Date | Ty::DateTime | Ty::Duration | Ty::Enum(_) | Ty::Unknown)
+}
+
+const PART_TYPES: &str = "a property is text, a number, a date, a duration, an enum or bool";
+
+/// A number as written in Clarity (`10`, `-3`), for a bound.
+fn written_number(expr: &Expr) -> Option<f64> {
+    match &expr.kind {
+        ExprKind::Number { value } => value.parse().ok(),
+        ExprKind::Unary { op: UnaryOp::Neg, operand } => written_number(operand).map(|n| -n),
+        _ => None,
+    }
+}
+
+/// A custom part's declaration (DESIGN 5.19): its library, one name per
+/// property, tell and hear, none of them a word every part has, plain types
+/// and defaults and bounds that fit.
+fn check_parts(env: &Env, file: &SpecFile, out: &mut Output) {
+    for part in &file.parts {
+        let name = &part.name.name;
+        if part.library.is_none() {
+            out.push(Diagnostic::error(format!("part {name} needs its library: native \"folder\", nuget \"Package\" version or dll \"file\""), part.name.span));
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        let names = part.properties.iter().map(|p| &p.name).chain(part.tells.iter().map(|t| &t.name)).chain(part.hears.iter().map(|h| &h.name));
+        for own in names {
+            if seen.contains(&own.name.as_str()) {
+                out.push(Diagnostic::error(format!("part {name} has two properties, tells or hears named '{}'", own.name), own.span));
+            }
+            seen.push(&own.name);
+        }
+        if let Some(binds) = &part.binds {
+            match env.type_ref(binds) {
+                Ok(ty) if !plain_for_part(&ty) => out.push(Diagnostic::error(format!("a part binds text, a number, a date, a duration, an enum or bool, not {}", ty.name()), binds.span)),
+                Ok(_) => {}
+                Err(message) => out.push(Diagnostic::error(message, binds.span)),
+            }
+        }
+        for message in part.tells.iter().chain(&part.hears) {
+            for param in &message.params {
+                match env.type_ref(&param.ty) {
+                    Ok(ty) if !plain_for_part(&ty) => out.push(Diagnostic::error(format!("a value of a tell or hear is text, a number, a date, a duration, an enum or bool, not {}", ty.name()), param.ty.span)),
+                    Ok(_) => {}
+                    Err(problem) => out.push(Diagnostic::error(problem, param.ty.span)),
+                }
+            }
+        }
+        if let Some((span, rows)) = part.size
+            && (span == 0 || rows == 0)
+        {
+            out.push(Diagnostic::error("a part spans at least 1 column and 1 row", part.span));
+        }
+        let mut checker = BodyChecker {
+            env,
+            owner: None,
+            handlers: &[],
+            decl: None,
+            handler: None,
+            event: None,
+            returns: None,
+            scopes: vec![HashMap::new()],
+            saves_reported: false,
+            engine: None,
+            command: None,
+            out: &mut *out,
+        };
+        for property in &part.properties {
+            let own = &property.name.name;
+            if widgets::CUSTOM_PART_WORDS.contains(&own.as_str()) {
+                checker.error(format!("'{own}' is a word every part has; name the property otherwise"), property.name.span);
+            }
+            let ty = match env.type_ref(&property.ty) {
+                Ok(ty) => ty,
+                Err(message) => {
+                    checker.error(message, property.ty.span);
+                    continue;
+                }
+            };
+            if !plain_for_part(&ty) {
+                checker.error(format!("{PART_TYPES}, not {}", ty.name()), property.ty.span);
+                continue;
+            }
+            if let Some(default) = &property.default {
+                let given = checker.expr(default, Some(ty));
+                if !given.is_unknown() && !ty.accepts(&given) {
+                    checker.error(format!("the default of {own} is {}, but {own} is {}", given.name(), ty.name()), default.span);
+                }
+            }
+            let bounds: Vec<&Expr> = property.min.iter().chain(&property.max).collect();
+            if !bounds.is_empty() && !ty.is_numeric() {
+                checker.error(format!("'min' and 'max' bound a number; {own} is {}", ty.name()), bounds[0].span);
+            } else if bounds.iter().any(|b| written_number(b).is_none()) {
+                checker.error(format!("'min' and 'max' of {own} are numbers, as in min 1"), bounds[0].span);
+            }
+        }
+    }
+}
+
+/// A custom part placed in a window: declared, its values declared and
+/// fitting, its tells declared, and what it binds of its type.
+fn check_placed_parts(env: &Env, file: &SpecFile, out: &mut Output) {
+    fn walk<'w>(widgets: &'w [Widget], found: &mut Vec<&'w Widget>) {
+        for widget in widgets {
+            if widget.props.kind == WidgetKind::Custom {
+                found.push(widget);
+            }
+            walk(&widget.children, found);
+            for page in &widget.pages {
+                walk(&page.children, found);
+            }
+        }
+    }
+    for page in &file.pages {
+        let mut placed = Vec::new();
+        walk(&page.widgets, &mut placed);
+        for sidebar in &page.frame.sidebars {
+            walk(&sidebar.widgets, &mut placed);
+        }
+        for widget in placed {
+            let props = &widget.props;
+            let written = props.part.as_deref().unwrap_or_default();
+            let Some(decl) = env.part_decl(written) else {
+                out.push(Diagnostic::error(format!("unknown part '{written}'"), widget.span));
+                continue;
+            };
+            let name = &decl.name.name;
+            for (own, value) in &props.values {
+                let Some(property) = decl.properties.iter().find(|p| p.name.name == *own) else {
+                    out.push(Diagnostic::error(format!("part {name} has no property '{own}'"), widget.span));
+                    continue;
+                };
+                let Ok(ty) = env.type_ref(&property.ty) else { continue };
+                if let Some(problem) = misfit(value, &ty, own) {
+                    out.push(Diagnostic::error(format!("{name}: {problem}"), widget.span));
+                    continue;
+                }
+                let Literal::Number(written) = value else { continue };
+                let Ok(number) = written.parse::<f64>() else { continue };
+                if let Some(min) = property.min.as_ref().and_then(written_number)
+                    && number < min
+                {
+                    out.push(Diagnostic::error(format!("{own} is at least {}", trimmed(min)), widget.span));
+                }
+                if let Some(max) = property.max.as_ref().and_then(written_number)
+                    && number > max
+                {
+                    out.push(Diagnostic::error(format!("{own} is at most {}", trimmed(max)), widget.span));
+                }
+            }
+            for tell in &props.tells {
+                if !decl.tells.iter().any(|t| t.name.name == tell.tell) {
+                    out.push(Diagnostic::error(format!("part {name} tells no '{}'", tell.tell), widget.span));
+                }
+            }
+            let Some(bind) = &props.bind else { continue };
+            let Some(binds) = &decl.binds else {
+                out.push(Diagnostic::error(format!("part {name} binds nothing; leave out 'bind'"), widget.span));
+                continue;
+            };
+            let Ok(wanted) = env.type_ref(binds) else { continue };
+            let (data, field) = match bind.split_once('.') {
+                Some((d, f)) => (d, Some(f)),
+                None => (bind.as_str(), None),
+            };
+            let Some(decl_data) = page.data.iter().find(|d| d.name.name == data) else { continue };
+            let bound = match (env.data_type(decl_data), field) {
+                (Ty::Record(entity), Some(field)) => match entity.field(field) {
+                    Some(f) => env.field_type(&f.ty),
+                    None => continue,
+                },
+                (ty, None) => ty,
+                _ => continue,
+            };
+            if !bound.is_unknown() && !wanted.accepts(&bound) {
+                out.push(Diagnostic::error(format!("part {name} binds {}; '{bind}' is {}", wanted.name(), bound.name()), widget.span));
+            }
+        }
+    }
+}
+
+/// `10` for 10.0, as a bound is written.
+fn trimmed(n: f64) -> String {
+    if n.fract() == 0.0 { format!("{}", n as i64) } else { n.to_string() }
+}
+
 fn check_command(env: &Env, command: &CommandDecl, out: &mut Output) {
     let line = command.line();
     let mut names: Vec<String> = Vec::new();
@@ -385,6 +582,11 @@ impl<'a> Env<'a> {
         self.visible.iter().flat_map(|f| &f.pages).find(|p| p.name.name == name)
     }
 
+    /// A custom part declared in a visible module (DESIGN 5.19).
+    fn part_decl(&self, name: &str) -> Option<&'a PartDecl> {
+        self.visible.iter().flat_map(|f| &f.parts).find(|p| p.name.name == name)
+    }
+
     fn engine(&self, name: &str) -> Option<&'a EngineDecl> {
         self.visible.iter().flat_map(|f| &f.engines).find(|e| e.name.name == name)
     }
@@ -628,8 +830,10 @@ struct Wired<'a> {
     /// The values it is run with.
     args: &'a [Literal],
     /// The event's word, like `click`; a window's own events give no values.
-    event: &'static str,
+    event: &'a str,
     own_event: bool,
+    /// A custom part's tell: the part's declared name. The tell gives the handler its values.
+    tell_of: Option<&'a str>,
     span: Span,
 }
 
@@ -639,7 +843,10 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
             owner.parts.insert(name, Part::Widget(&widget.props));
         }
         for handler in &widget.props.handlers {
-            owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, span: widget.span });
+            owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, tell_of: None, span: widget.span });
+        }
+        for tell in &widget.props.tells {
+            owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: widget.props.part.as_deref(), span: widget.span });
         }
         // Its context menu: the menu and its items are parts, their clicks run handlers.
         if let Some(menu) = &widget.menu {
@@ -661,7 +868,7 @@ fn collect_commands<'a>(commands: &'a [Command], owner: &mut Owner<'a>) {
             owner.parts.insert(name, Part::Command(&command.props));
         }
         if let Some(handler) = &command.props.handler {
-            owner.wired.push(Wired { handler, args: &[], event: "click", own_event: false, span: command.span });
+            owner.wired.push(Wired { handler, args: &[], event: "click", own_event: false, tell_of: None, span: command.span });
         }
         collect_commands(&command.items, owner);
     }
@@ -717,7 +924,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
-        owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, span: page.span }));
+        owner.wired.extend(page.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: page.span }));
         collect_widgets(&page.widgets, &mut owner);
         collect_frame(&page.frame, &mut owner);
         owners.push(owner);
@@ -730,7 +937,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
             parts: HashMap::new(),
             wired: Vec::new(),
         };
-        owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, span: app.span }));
+        owner.wired.extend(app.handlers.iter().map(|h| Wired { handler: &h.handler, args: &h.args, event: h.event.keyword(), own_event: true, tell_of: None, span: app.span }));
         collect_frame(&app.frame, &mut owner);
         owners.push(owner);
     }
@@ -743,6 +950,8 @@ fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
         check_command(env, command, out);
     }
     check_engines(env, file, out);
+    check_parts(env, file, out);
+    check_placed_parts(env, file, out);
     let owners = owners(file);
     for owner in &owners {
         check_defaults(env, owner, out);
@@ -812,6 +1021,22 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
             args: wired.args.to_vec(),
         })
     );
+    // A tell gives its values: the handler takes them, each of its type.
+    if let Some(part) = wired.tell_of {
+        let Some(message) = env.part_decl(part).and_then(|p| p.tells.iter().find(|t| t.name.name == wired.event)) else { return };
+        let fits = message.params.len() == decl.params.len()
+            && message.params.iter().zip(&decl.params).all(|(given, taken)| match (env.type_ref(&given.ty), env.type_ref(&taken.ty)) {
+                (Ok(given), Ok(taken)) => taken.accepts(&given),
+                _ => true,
+            });
+        if !fits {
+            out.push(Diagnostic::error(
+                format!("tell {} of part {part} gives {}; handler {} takes {}", wired.event, signature(env, &message.params), wired.handler, params()),
+                wired.span,
+            ));
+        }
+        return;
+    }
     if wired.own_event {
         if !decl.params.is_empty() {
             out.push(Diagnostic::error(
@@ -1329,6 +1554,38 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// A shape on a canvas, in the canvas's own draw handler or one it runs.
+    /// `arena.restart(2)`: a hear of a custom part, with values of its types.
+    fn hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
+        let decl = match self.part(&part.name) {
+            Some((_, Part::Widget(p))) => p.part.as_deref().and_then(|name| self.env.part_decl(name)),
+            _ => None,
+        };
+        let message = decl.and_then(|d| d.hears.iter().find(|h| h.name.name == hear.name));
+        let Some(message) = message else {
+            if let Some(decl) = decl {
+                self.error(format!("part {} hears no '{}'", decl.name.name, hear.name), hear.span);
+            }
+            for arg in args {
+                self.expr(arg, None);
+            }
+            return;
+        };
+        let called = format!("{}.{}", part.name, hear.name);
+        if args.len() != message.params.len() {
+            let n = message.params.len();
+            self.error(format!("{called} takes {n} value{}, not {}", if n == 1 { "" } else { "s" }, args.len()), hear.span);
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let expected = message.params.get(i).and_then(|p| self.env.type_ref(&p.ty).ok());
+            let ty = self.expr(arg, expected);
+            if let (Some(expected), Some(param)) = (expected, message.params.get(i))
+                && !expected.accepts(&ty)
+            {
+                self.error(format!("value '{}' of {called} is {}, not {}", param.name.name, expected.name(), ty.name()), arg.span);
+            }
+        }
+    }
+
     fn draw(&mut self, canvas: &Ident, shape: &Ident, args: &[Expr]) {
         match self.part(&canvas.name) {
             Some((_, Part::Widget(p))) if p.kind == crate::widgets::WidgetKind::Canvas => {
@@ -1508,6 +1765,7 @@ impl<'a> BodyChecker<'_, 'a> {
             }
             StmtKind::Return { value } => self.check_return(value.as_ref(), stmt.span),
             StmtKind::Draw { canvas, shape, args } => self.draw(canvas, shape, args),
+            StmtKind::Hear { part, hear, args } => self.hear(part, hear, args),
             StmtKind::Call { call } => {
                 self.call(call, true);
             }
@@ -2120,6 +2378,13 @@ impl<'a> BodyChecker<'_, 'a> {
 
     fn property(&self, part: Part<'a>, name: &str, property: &str) -> Option<Place<'a>> {
         let value = |ty| Some(Place::Value { ty, writable: Ok(()) });
+        // A custom part's own properties, as its declaration types them.
+        if let Part::Widget(props) = part
+            && let Some(decl) = props.part.as_deref().and_then(|p| self.env.part_decl(p))
+            && let Some(own) = decl.properties.iter().find(|p| p.name.name == property)
+        {
+            return value(self.env.type_ref(&own.ty).unwrap_or(Ty::Unknown));
+        }
         match property {
             "visible" | "enabled" => value(Ty::Bool),
             "caption" if part.has_caption() => value(Ty::Text),
@@ -3228,7 +3493,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_stmt_expr(body, found);
             }
             StmtKind::Call { call } => each_expr(call, found),
-            StmtKind::Draw { args, .. } => {
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => {
                 for arg in args {
                     each_expr(arg, found);
                 }

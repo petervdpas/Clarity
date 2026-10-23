@@ -184,6 +184,9 @@
       <rect x="8" y="3" width="32" height="22" rx="1" />
       <path d="M10 23 l9 -10 l6 6 l4 -4 l9 8 z" class="fill" />
       <circle cx="32" cy="9" r="2.5" class="fill" />
+    {:else if kind === "custom"}
+      <rect x="6" y="3" width="36" height="22" rx="1" class="dashed" />
+      <path d="M17 9 l-5 5 l5 5 M31 9 l5 5 l-5 5" class="line" />
     {:else if kind === "canvas"}
       <rect x="6" y="3" width="36" height="22" rx="1" class="dashed" />
       <path d="M11 20 C16 6, 22 24, 28 12 S36 8, 38 16" class="line" />

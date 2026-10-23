@@ -77,6 +77,9 @@ pub enum WidgetKind {
     Image,
     Display,
     Canvas,
+    /// A part an outside library draws, placed by the name it is declared by
+    /// (`Arena`, DESIGN 5.19); `props.part` names its declaration.
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -236,7 +239,6 @@ pub enum WidgetProperty {
     Show,
     Orientation,
     Surface,
-    Renderer,
     Source,
     For,
     Placeholder,
@@ -844,12 +846,33 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        // Drawn by its draw handler (`on draw`), or by a hand-written renderer;
+        // Drawn by its draw handler (`on draw`);
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`.
         events: &[Event::Draw, Event::Click, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Surface, WidgetProperty::Renderer],
+        properties: &[WidgetProperty::Units, WidgetProperty::Surface],
+    },
+    // A custom part is written by its declared name; its keyword is two
+    // words, so it is never typed and reads well in messages. The Parts
+    // palette lists the declared parts in its place.
+    Entry {
+        kind: WidgetKind::Custom,
+        keyword: "custom part",
+        name: "Custom part",
+        category: Category::Graphics,
+        size: (4, 3),
+        caption: None,
+        bind: BindTarget::Field,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Change],
+        properties: &[WidgetProperty::TabOrder],
     },
 ];
+
+/// The words every placed custom part may have, which its own properties cannot be named.
+pub const CUSTOM_PART_WORDS: [&str; 11] = ["at", "span", "rows", "bind", "name", "on", "tooltip", "taborder", "visible", "enabled", "value"];
 
 fn entry(kind: WidgetKind) -> &'static Entry {
     ENTRIES
@@ -893,6 +916,24 @@ pub fn by_keyword(keyword: &str) -> Option<WidgetKind> {
 
 pub fn keyword(kind: WidgetKind) -> &'static str {
     entry(kind).keyword
+}
+
+/// The word a part's line starts with: a custom part's declared name
+/// (`Arena`), else its kind's keyword.
+pub fn written_word(props: &WidgetProps) -> String {
+    match (&props.part, props.kind) {
+        (Some(part), WidgetKind::Custom) => part.clone(),
+        _ => keyword(props.kind).to_string(),
+    }
+}
+
+/// What a part's name starts from when it has nothing better: `orbField` for
+/// a custom part `OrbField`, else its kind's keyword, as in `button3`.
+pub fn name_base(props: &WidgetProps) -> String {
+    match (&props.part, props.kind) {
+        (Some(part), WidgetKind::Custom) => crate::names::camel_case(part),
+        _ => keyword(props.kind).to_string(),
+    }
 }
 
 pub fn default_size(kind: WidgetKind) -> (u32, u32) {
@@ -1034,7 +1075,6 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         orientation: (has_property(kind, WidgetProperty::Orientation) && kind != WidgetKind::Separator)
             .then_some(Orientation::Horizontal),
         surface: has_property(kind, WidgetProperty::Surface).then_some(Surface::Svg),
-        renderer: None,
         source: None,
         for_part: None,
         placeholder: None,
@@ -1064,6 +1104,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         shortcut: None,
         default_button: false,
         cancel: false,
+        part: None,
+        values: Default::default(),
+        tells: Vec::new(),
     }
 }
 
@@ -1088,7 +1131,11 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 }
 
 pub fn widget_line(props: &WidgetProps) -> String {
-    let mut parts = vec![keyword(props.kind).to_string()];
+    let first = match (&props.part, props.kind) {
+        (Some(part), WidgetKind::Custom) => part.clone(),
+        _ => keyword(props.kind).to_string(),
+    };
+    let mut parts = vec![first];
     // A chart's first word is its kind.
     if let Some(chart) = props.chart.filter(|_| props.kind == WidgetKind::Chart) {
         parts.push(chart.word().to_string());
@@ -1131,6 +1178,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(bind) = &props.bind {
         parts.push(format!("bind {bind}"));
+    }
+    for (name, value) in &props.values {
+        parts.push(format!("{name} {}", literal_text(value)));
     }
     if let Some(children) = &props.children {
         parts.push(format!("children {children}"));
@@ -1202,9 +1252,6 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(surface) = props.surface {
         parts.push(format!("surface {}", surface_keyword(surface)));
     }
-    if let Some(renderer) = &props.renderer {
-        parts.push(format!("renderer {renderer}"));
-    }
     if let Some(source) = &props.source {
         parts.push(format!("source {}", quote(source)));
     }
@@ -1240,6 +1287,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     for h in &props.handlers {
         parts.push(format!("on {}: {}", h.event.keyword(), handler_call(h)));
+    }
+    for t in &props.tells {
+        parts.push(format!("on {}: {}", t.tell, t.handler));
     }
     if let Some(target) = &props.on_click {
         parts.push(format!("on click -> {target}"));
@@ -1339,11 +1389,6 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
             "orientation",
         ),
         (WidgetProperty::Surface, props.surface.is_some(), "surface"),
-        (
-            WidgetProperty::Renderer,
-            props.renderer.is_some(),
-            "renderer",
-        ),
         (WidgetProperty::Source, props.source.is_some(), "source"),
         (WidgetProperty::For, props.for_part.is_some(), "for"),
         (
@@ -1405,9 +1450,6 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
     }
     if let Some(order) = &props.order {
         identifier("field name", &order.field)?;
-    }
-    if let Some(renderer) = &props.renderer {
-        identifier("renderer name", renderer)?;
     }
     if let Some(target) = &props.for_part {
         identifier("part name", target)?;

@@ -93,7 +93,7 @@
   {/each}
 {/snippet}
 
-<div class="part-menu" role="menu" tabindex="-1" bind:this={menu} style:left="{left}px" style:top="{top}px" oncontextmenu={(e) => e.preventDefault()}>
+<div class="part-menu clarity-overlay" role="menu" tabindex="-1" bind:this={menu} style:left="{left}px" style:top="{top}px" oncontextmenu={(e) => e.preventDefault()}>
   {@render entries(items)}
 </div>
 

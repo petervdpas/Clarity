@@ -4,6 +4,7 @@
 // errors and help are kept by their keys and shown in the person's language,
 // their slots in the person's format (Locale).
 
+using System.Text.Json;
 using Clarity.Runtime;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -142,4 +143,60 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
 
     /// <summary>What the help text under an input shows: its error, or its help.</summary>
     public string Shown => HasError ? Error : Help;
+
+    // -- A custom part (DESIGN 5.19) ------------------------------------------
+
+    /// <summary>A custom part's properties, as written in the window and set by code.</summary>
+    public IReadOnlyDictionary<string, object?> Values => values;
+    readonly Dictionary<string, object?> values = [];
+    readonly List<(string Hear, object?[] Values)> waiting = [];
+    Action<string, object?>? valueSet;
+    Action<string, object?[]>? heard;
+
+    /// <summary>A value written on the part's line, as the window starts.</summary>
+    public PartState With(string name, object? value)
+    {
+        values[name] = value;
+        return this;
+    }
+
+    /// <summary>A property of a custom part as code sets it: <c>arena.speed = 7</c>.</summary>
+    public void SetValue(string name, object? value)
+    {
+        values[name] = value;
+        valueSet?.Invoke(name, value);
+    }
+
+    /// <summary>A property of a custom part as type <typeparamref name="T"/>: as written or set,
+    /// else <paramref name="fallback"/>, its declared default as JSON.</summary>
+    public T ValueAs<T>(string name, string fallback) =>
+        values.TryGetValue(name, out var value) && value is T typed ? typed : JsonSerializer.Deserialize<T>(fallback, NativePart.Options)!;
+
+    /// <summary>Gives a custom part a hear: <c>arena.restart(2)</c>. One given before the part
+    /// shows waits for it.</summary>
+    public void Hear(string hear, params object?[] given)
+    {
+        if (heard is null)
+            waiting.Add((hear, given));
+        else
+            heard(hear, given);
+    }
+
+    /// <summary>The part that shows this state hears what is set and told from now on, after
+    /// the hears that waited for it.</summary>
+    public void Listen(Action<string, object?> onSet, Action<string, object?[]> onHear)
+    {
+        valueSet = onSet;
+        heard = onHear;
+        foreach (var (hear, given) in waiting)
+            onHear(hear, given);
+        waiting.Clear();
+    }
+
+    /// <summary>The part no longer shows this state.</summary>
+    public void StopListening()
+    {
+        valueSet = null;
+        heard = null;
+    }
 }

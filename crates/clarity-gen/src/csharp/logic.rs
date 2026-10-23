@@ -178,6 +178,8 @@ fn emit_engine(project: &Project, types: &FileTypes, engine: &EngineDecl, body: 
 pub struct PartInfo {
     /// The data a table or list shows, for its selected row.
     pub bind: Option<String>,
+    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
 /// The window or app a handler belongs to.
@@ -371,6 +373,11 @@ impl<'a> Emitter<'a> {
                 out.push_str(&format!("{pad}{ty} {} = {value};\n", camel(&name.name)));
             }
             StmtKind::Assign { target, value } => {
+                if let Some((part, property, _, _)) = self.custom_property(target) {
+                    let value = self.value(value);
+                    out.push_str(&format!("{pad}{part}.SetValue({}, {value});\n", string(&property)));
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     // A caption or error is kept as written with its slots, and shown in the language and format of the person.
                     if matches!(property, "Caption" | "Error") {
@@ -479,6 +486,12 @@ impl<'a> Emitter<'a> {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas: the runtime's Shape (conformance/drawing.json).
+            // `generate` refuses a project with custom parts until CP1 builds them.
+            // A hear of a custom part (DESIGN 5.19), which the part hears when it shows.
+            StmtKind::Hear { part, hear, args } => {
+                let values: String = args.iter().map(|a| format!(", {}", self.value(a))).collect();
+                out.push_str(&format!("{pad}{}.Hear({}{values});\n", member(&part.name), string(&hear.name)));
+            }
             StmtKind::Draw { canvas, shape, args } => {
                 use clarity_spec::code::check::ShapeValue;
                 let record = match shape.name.as_str() {
@@ -795,6 +808,27 @@ impl<'a> Emitter<'a> {
         Some((member(name), part_property(&prop.name)?))
     }
 
+    /// A custom part's own property (DESIGN 5.19): the part's `PartState`,
+    /// the property, the part's kind and the values written on its line.
+    fn custom_property(&self, expr: &Expr) -> Option<(String, String, String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
+        let ExprKind::Member { object, member: prop } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        let (kind, written) = self.window?.parts.get(name)?.custom.clone()?;
+        let declared = crate::parts::declaration(self.project, &kind)?;
+        declared.properties.iter().any(|p| p.name.name == prop.name).then(|| (member(name), prop.name.clone(), kind, written))
+    }
+
+    /// Reading a custom part's property: as written or set, else as declared.
+    fn read_custom(&mut self, expr: &Expr) -> String {
+        let (part, property, kind, written) = self.custom_property(expr).unwrap_or_default();
+        let fallback = crate::parts::fallback_json(self.project, &kind, &written, &property);
+        let ty = value_type(&self.types.type_of(expr));
+        format!("{part}.ValueAs<{ty}>({}, {})", string(&property), string(&fallback))
+    }
+
     /// Reading a part property in a handler; the selected row is a record.
     fn read_part(&mut self, expr: &Expr) -> String {
         let (part, property) = self.part_property(expr).unwrap_or_default();
@@ -835,6 +869,7 @@ impl<'a> Emitter<'a> {
                 }
             },
             // A part property inside a path: `grid.selected` in `grid.selected.number`.
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
             ExprKind::Member { object, member: field } => {
                 if let Some(NameKind::EnumValue(e)) = self.types.name_of(expr) {
@@ -902,6 +937,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Key { .. } => format!("Locale.Show({})", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "null".to_string(),
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => self.read_part(expr),
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),

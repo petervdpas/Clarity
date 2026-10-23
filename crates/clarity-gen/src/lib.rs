@@ -5,6 +5,7 @@
 
 pub mod tools;
 mod c;
+pub mod parts;
 mod commands;
 mod csharp;
 mod ddl;
@@ -166,6 +167,21 @@ pub(crate) fn ask_type(project: &Project, ty: &clarity_spec::code::TypeRef) -> (
 
 /// The handlers of a window the answer to one of its questions runs: the
 /// handlers after `then`, each once.
+/// The handlers that run with values given from outside the code: the
+/// handler an answer goes to (DESIGN 5.14), and a handler wired to a custom
+/// part's tell (DESIGN 5.19).
+pub(crate) fn given_values_handlers<'a>(page: Option<&clarity_spec::model::Page>, handlers: &[&'a clarity_spec::code::HandlerDecl]) -> Vec<&'a clarity_spec::code::HandlerDecl> {
+    let mut found = answering_handlers(handlers);
+    for name in parts::told_handlers(page) {
+        if let Some(handler) = handlers.iter().find(|h| h.name.name == name)
+            && !found.iter().any(|f| f.name.name == name)
+        {
+            found.push(handler);
+        }
+    }
+    found
+}
+
 pub(crate) fn answering_handlers<'a>(handlers: &[&'a clarity_spec::code::HandlerDecl]) -> Vec<&'a clarity_spec::code::HandlerDecl> {
     use clarity_spec::code::{Stmt, StmtKind};
     fn targets(body: &[Stmt], found: &mut Vec<String>) {
@@ -388,6 +404,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
     }
     check_stores(project, settings)?;
+    // Custom parts (DESIGN 5.19) are generated stack by stack as CP1 is built.
+    // A part from a .NET library is an Avalonia control, which only the C# stack holds (DESIGN 5.19).
+    let dotnet: Vec<&str> = project
+        .files
+        .iter()
+        .flat_map(|f| &f.parts)
+        .filter(|p| matches!(p.library, Some(clarity_spec::code::PartLibrary::Nuget { .. } | clarity_spec::code::PartLibrary::Dll { .. })))
+        .map(|p| p.name.name.as_str())
+        .collect();
+    if !dotnet.is_empty() && settings.stack.backend != Backend::Csharp {
+        return Err(vec![format!("part {} is drawn by a .NET library, which only the C# stack shows", dotnet.join(", "))]);
+    }
     let project = &with_resource_texts(project);
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,

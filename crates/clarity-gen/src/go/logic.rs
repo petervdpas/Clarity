@@ -242,6 +242,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
 /// The window or app a handler belongs to.
@@ -260,7 +262,8 @@ impl WindowCtx {
     fn widgets(&mut self, widgets: &[Widget]) {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false };
+                let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -464,7 +467,7 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
         }
         let draws = page.map(crate::canvas_draws).unwrap_or_default().into_iter().map(|(canvas, handler)| (canvas, local(&handler))).collect();
         let written: Vec<&clarity_spec::code::HandlerDecl> = file.code.iter().filter(|b| b.name.name == *name).flat_map(|b| &b.handlers).collect();
-        let answers = crate::answering_handlers(&written)
+        let answers = crate::given_values_handlers(page, &written)
             .into_iter()
             .map(|h| {
                 let values = h
@@ -666,6 +669,14 @@ impl<'a> Emitter<'a> {
                 }
             }
             StmtKind::Assign { target, value } => {
+                if let Some((part, property)) = self.part_property(target)
+                    && self.custom_property(&part, &property)
+                {
+                    let code = bare(self.value(value, &mut pre));
+                    out.push_str(&pre);
+                    out.push_str(&format!("ui.SetPartValue({}, {}, {code})\n", string(&part), string(&property)));
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let method = match property.as_str() {
                         "caption" => "SetCaption",
@@ -852,6 +863,13 @@ impl<'a> Emitter<'a> {
                 self.errors.push("messages, windows and window data belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
+            // `generate` refuses a project with custom parts until CP1 builds them.
+            // A hear of a custom part (DESIGN 5.19), sent with the reply.
+            StmtKind::Hear { part, hear, args } => {
+                let values: String = args.iter().map(|a| format!(", {}", bare(self.value(a, &mut pre)))).collect();
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Hear({}, {}{values})\n", string(&part.name), string(&hear.name)));
+            }
             StmtKind::Draw { canvas, shape, args } => {
                 use clarity_spec::code::check::ShapeValue;
                 let mut fields = vec![format!("\"op\": {}", string(&shape.name))];
@@ -1261,11 +1279,27 @@ impl<'a> Emitter<'a> {
         (self.types.name_of(object) == Some(&NameKind::Part)).then(|| (name.clone(), member.name.clone()))
     }
 
+    /// Whether `property` is a custom part's own (DESIGN 5.19).
+    fn custom_property(&self, part: &str, property: &str) -> bool {
+        let info = self.window.and_then(|w| w.parts.get(part));
+        info.and_then(|i| i.custom.as_ref())
+            .and_then(|(kind, _)| crate::parts::declaration(self.project, kind))
+            .is_some_and(|d| d.properties.iter().any(|p| p.name.name == property))
+    }
+
     /// Reading a part property in a handler; the selected row is a record.
     fn read_part(&mut self, expr: &Expr, pre: &mut String) -> String {
         let (part, property) = self.part_property(expr).unwrap_or_default();
         let info = self.window.and_then(|w| w.parts.get(&part)).cloned().unwrap_or_default();
         let quoted = string(&part);
+        // A custom part's own property: as a handler set it, else as written or declared.
+        if self.custom_property(&part, &property)
+            && let Some((kind, written)) = &info.custom
+        {
+            let fallback = crate::parts::fallback_json(self.project, kind, written, &property);
+            let ty = value_type(&self.types.type_of(expr));
+            return self.lift(format!("clarity.PartValueAs[{ty}](ui, {quoted}, {}, {})", string(&property), string(&fallback)), pre);
+        }
         match property.as_str() {
             "visible" => format!("ui.Visible({quoted})"),
             "enabled" => format!("ui.Enabled({quoted})"),

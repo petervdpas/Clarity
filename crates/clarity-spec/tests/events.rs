@@ -111,6 +111,8 @@ fn new_parts_get_the_first_free_name() {
         width: None,
         caption: None,
         bind: None,
+        part: None,
+        height: None,
     };
     let text = apply(PAGE, &edit).unwrap().text;
     // `button1` is taken, so the new button is `button2`.

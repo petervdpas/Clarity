@@ -170,3 +170,33 @@ fn a_ribbons_open_tab_is_as_every_runtime_says() {
         assert_eq!(serde_json::to_value(&reply.state.parts["mainRibbon"]).unwrap(), case["part"], "{case}");
     }
 }
+
+const CUSTOM_PARTS: &str = include_str!("../../../conformance/custom-parts.json");
+
+#[test]
+fn a_custom_parts_values_and_hears_are_as_every_runtime_says() {
+    use clarity_runtime::ui::{PartState, Ui, WindowState};
+    let file: serde_json::Value = serde_json::from_str(CUSTOM_PARTS).unwrap();
+    for case in file["read"].as_array().unwrap() {
+        let mut state = WindowState::default();
+        state.parts.insert("arena".into(), serde_json::from_value::<PartState>(case["part"].clone()).unwrap());
+        let read = Ui::from_state(&state).part_value("arena", case["name"].as_str().unwrap());
+        assert_eq!(read.unwrap_or(serde_json::Value::Null), case["value"], "{case}");
+    }
+    for case in file["set"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        for set in case["sets"].as_array().unwrap() {
+            ui.set_part_value("arena", set[0].as_str().unwrap(), set[1].clone());
+        }
+        let reply = ui.reply("Main", serde_json::Map::new());
+        assert_eq!(serde_json::to_value(&reply.state.parts["arena"]).unwrap(), case["part"], "{case}");
+    }
+    for case in file["hear"].as_array().unwrap() {
+        let mut ui = Ui::from_state(&WindowState::default());
+        for hear in case["hears"].as_array().unwrap() {
+            ui.hear(hear[0].as_str().unwrap(), hear[1].as_str().unwrap(), hear[2].as_array().unwrap().clone());
+        }
+        let reply = serde_json::to_value(ui.reply("Main", serde_json::Map::new())).unwrap();
+        assert_eq!(reply.get("hears").cloned().unwrap_or(serde_json::Value::Null), case["reply"], "{case}");
+    }
+}

@@ -22,6 +22,7 @@
   import TextInput from "./ui/TextInput.svelte";
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
   import CanvasView from "./ui/CanvasView.svelte";
+  import CustomPartView from "./CustomPartView.svelte";
   import MarkdownView from "./ui/MarkdownView.svelte";
   import PartMenu from "./ui/PartMenu.svelte";
   import Icon from "./ui/Icon.svelte";
@@ -1028,10 +1029,19 @@
             }
           : null}
       />
+    {:else if p.kind === "custom"}
+      <CustomPartView
+        {p}
+        live={design ? undefined : live}
+        value={bound ? (value as JsonValue) : undefined}
+        {hidden}
+        {disabled}
+        preview={preview.project.files.flatMap((f) => f.parts).find((d) => d.name.name === p.part)?.preview ?? null}
+        words={(text) => tr(preview, text)}
+      />
     {:else if p.kind === "canvas"}
       <div class="placeholder canvas">
         <span>Canvas ({p.surface ?? "svg"})</span>
-        <code>{p.renderer ?? "no renderer"}</code>
       </div>
     {/if}
   </div>

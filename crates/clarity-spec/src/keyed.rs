@@ -295,6 +295,15 @@ impl Maker {
                 let part = name.clone().unwrap_or_else(|| "icon".to_string());
                 self.at(following(tokens, "tooltip"), &format!("{part}Tooltip"), edits);
             }
+            // A custom part (DESIGN 5.19): each text property's text is named after it.
+            _ if first.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                let part = name.clone().unwrap_or_else(|| crate::names::camel_case(first));
+                for pair in tokens.windows(2) {
+                    if pair[1].kind == TokenKind::Str && pair[0].kind == TokenKind::Ident {
+                        self.at(Some(&pair[1]), &format!("{part}{}", upper(&pair[0].text)), edits);
+                    }
+                }
+            }
             _ => {
                 let Some(kind) = crate::widgets::by_keyword(first).map(|_| first.clone()).or_else(|| (first == "button").then(|| first.clone())) else {
                     return;

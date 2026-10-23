@@ -429,6 +429,8 @@ fn creates_widgets_with_catalog_defaults() {
             width: Some(5),
             caption: None,
             bind: Some("c.email".into()),
+            part: None,
+            height: None,
         },
     );
     assert!(
@@ -454,6 +456,8 @@ fn applies_a_batch_as_one_edit() {
                     width: Some(2),
                     caption: Some("E-mail".into()),
                     bind: None,
+                    part: None,
+                    height: None,
                 },
                 Edit::CreateWidget {
                     container: page,
@@ -463,6 +467,8 @@ fn applies_a_batch_as_one_edit() {
                     width: None,
                     caption: None,
                     bind: Some("c.email".into()),
+                    part: None,
+                    height: None,
                 },
             ],
         },
@@ -486,6 +492,8 @@ fn applies_a_batch_as_one_edit() {
                 width: None,
                 caption: None,
                 bind: None,
+                part: None,
+                height: None,
             },
             Edit::Remove { item: 9999 },
         ],

@@ -50,6 +50,15 @@ struct PartState {
     /// Where a canvas was last clicked, in its units: x and y, and whatever
     /// else the screen tells about the pointer, kept as it came.
     std::optional<nlohmann::json> pointer;
+    /// A custom part's properties by name, as code set them (conformance/custom-parts.json).
+    std::optional<nlohmann::json> values;
+};
+
+/// A hear a handler gave a custom part: `arena.restart(2)`.
+struct Hear {
+    std::string part;
+    std::string hear;
+    nlohmann::json values = nlohmann::json::array();
 };
 
 /// One open window: its data by name, its parts' properties and the
@@ -122,6 +131,8 @@ struct Reply {
     std::vector<Ask> asks;
     /// What a dialog closes with (`close with value`), for the handler that asked for it.
     std::optional<nlohmann::json> result;
+    /// The hears given to custom parts, in order.
+    std::vector<Hear> hears;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -220,6 +231,18 @@ public:
         asks_.push_back({std::move(question), std::move(form), std::move(handler), std::move(values)});
     }
 
+    /// A property of a custom part as code set it; none when it was not set.
+    std::optional<nlohmann::json> part_value(const std::string& part, const std::string& name) const;
+    void set_part_value(const std::string& part, const std::string& name, nlohmann::json value) {
+        auto& values = parts_[part].values;
+        if (!values) values = nlohmann::json::object();
+        (*values)[name] = std::move(value);
+    }
+    /// Gives a custom part a hear with its values, sent with the reply.
+    void hear(std::string part, std::string hear, nlohmann::json values) {
+        hears_.push_back({std::move(part), std::move(hear), std::move(values)});
+    }
+
     /// The reply for `window`, with its data after the handler.
     Reply reply(const std::string& window, nlohmann::json data) const;
 
@@ -227,6 +250,7 @@ private:
     int64_t pointer(const std::string& part, const char* key) const;
     std::optional<nlohmann::json> result_;
     std::vector<Ask> asks_;
+    std::vector<Hear> hears_;
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;

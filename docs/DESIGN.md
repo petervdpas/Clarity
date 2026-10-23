@@ -452,7 +452,7 @@ The catalog so far (U1 in the roadmap adds to it in steps):
 | Basic input | `textbox`, `memo`, `password`, `number`, `checkbox`, `switch`, `dropdown`, `radio` (an enum as radio buttons), `date`, `button` |
 | Containers | `form` (bound to one record), `panel`, `tabs`, `splitter` |
 | Data | `table` (bound to a list, with `columns`), `list` (bound to a list, with `show`) |
-| Graphics | `image` (`source "file"`), `canvas` (`surface` and `renderer`, see 5.7) |
+| Graphics | `image` (`source "file"`), `canvas` (`surface`, see 5.7) |
 
 The checker reports widgets outside the grid, overlapping widgets, bindings to unknown data or fields, bindings whose field type does not fit the widget (a checkbox needs a `bool`), and click targets that do not exist.
 
@@ -1114,44 +1114,79 @@ The thresholds (12 inputs, the target size) are settings of the rule, with these
 
 **Every stack.** The rules look at the spec, so they are the same on every stack and need no runtime release. Only `small-target` and `contrast` depend on how a renderer draws; they use the sizes in `clarity_spec::layout` and the theme's colors, which both renderers share.
 
-### 5.19 Custom parts (2026-10-23, a design)
+### 5.19 Custom parts (2026-10-23, decided)
 
-Raised by the user on 2026-10-23: a developer should be able to add a part of their own that uses an outside library, such as a map, a code editor, a rich chart or a PDF viewer. Every part is Clarity's own today; the early sketch of custom widgets (`widget ColorPicker`, from before the designer) was never built and is replaced by this.
+Raised by the user on 2026-10-23: a developer should be able to put a part in a window that an outside library draws, such as a game scene drawn with SFML, a map or a code editor. A custom part is a link to that library. Every part is Clarity's own today; the early sketch of custom widgets (`widget ColorPicker`, from before the designer) was never built and is replaced by this.
 
-**One implementation, in the project's own toolkit.** A project has one UI: the web renderer or Avalonia. A built-in part must work on both (section 1.6), but a custom part is written once, for the UI its project uses, with that toolkit's libraries: an npm package on the web (Leaflet, Monaco, ECharts), a NuGet package on Avalonia (Mapsui, AvaloniaEdit, ScottPlot). A project that changes its UI gets a problem for every custom part that has no implementation for the new one.
+**Two kinds of library.** A part's library is one of these:
+
+- **Native**, a shared library written in C or C++ (or anything that exports C functions), using whatever it likes inside: SFML, SDL, raylib, OpenGL. It speaks a small C interface Clarity writes for it, and draws into a native child window the host gives it at the part's place. All five stacks link it, each in its own way (section 6.5), so a project keeps its part when it changes stack.
+- **.NET**, an Avalonia control from a NuGet package or a DLL (Mapsui, AvaloniaEdit, ScottPlot). Only the C# stack can hold it; a project on another stack gets a problem at the part.
 
 **The declaration is Clarity.** What the rest of the project sees is declared in a module, so the checker, code, the Parts palette and the properties panel treat the part as they treat a built-in one, without knowing what is inside it. The words are the ones engines already use for talking with the screen (section 5.12):
 
 ```clarity
-part MapView
+part Arena
+    native "parts/Arena"
+    binds integer
+    speed: integer, min 1, max 10, default 3
+    tells scored(points: integer)
+    hears restart(level: integer)
+    size 8 x 6
+
+part Notes
+    nuget "AvaloniaEdit" 11.1.0
     binds text
-    zoom: integer, min 1, max 20, default 10
-    tells moved(lat: decimal, lon: decimal)
-    hears flyTo(lat: decimal, lon: decimal)
+    tells caretMoved(line: integer)
     size 6 x 4
 
-page Delivery: window
-    data order: Order
-    MapView name map at 1,1 span 8 rows 6 bind order.address zoom 12 on moved: mapMoved
+page Game: window
+    data player: Player
+    Arena name arena at 1,1 span 8 rows 6 bind player.best speed 5 on scored: arenaScored
 ```
 
-- **`binds`** names the type of value the part shows and edits (any field type, a list or none). The part reports a change by the person as a built-in input does, so `on change` and saving work as they do for a text box.
-- **Properties** are written as settings are (`name: type` with `default`, `min`, `max`), of the plain types. Each is set in the window (`zoom 12`), shown in the properties panel, and read and set in code (`map.zoom = 14`). `visible`, `enabled`, `readonly`, `tooltip` and `style` come for free, held by the renderer around the part.
-- **`tells`** are the part's own events with typed values: a handler is wired to one (`on moved: mapMoved`) and receives them as its parameters, as with an engine's tells.
-- **`hears`** are commands code gives the part: `map.flyTo(52.1, 5.1)` in a handler, carried by the reply to the renderer, which calls it on the part.
+- **The library line** says where the library is: `native "folder"` (built by Clarity, below) or `nuget "Package" version`, `dll "file"` for .NET.
+- **`binds`** names the type of value the part shows and edits (any field type, or none). The part reports a change by the person as a built-in input does, so `on change` and saving work as they do for a text box.
+- **Properties** are written as settings are (`name: type` with `default`, `min`, `max`), of the plain types. Each is set in the window (`speed 5`), shown in the properties panel, and read and set in code (`arena.speed = 7`). `visible` and `enabled` come for free, held by the host around the part; a native part is told when `enabled` changes.
+- **`tells`** are the part's own events with typed values: a handler is wired to one (`on scored: arenaScored`) and receives them as its parameters, as with an engine's tells.
+- **`hears`** are commands code gives the part: `arena.restart(2)` in a handler, carried to the part, which runs it.
 - **`size`** is the span and rows the Parts palette drops it with.
-- A part is placed by its name, written as declared (`MapView ...`), so it never clashes with a built-in keyword, which is always lower case.
+- A part is placed by its name, written as declared (`Arena ...`), so it never clashes with a built-in keyword, which is always lower case.
 
-**The implementation is the developer's.** It lives in `parts/<Name>/` next to `engines/` in the project's folder, in one of two subfolders, and Clarity never writes over a file there after the first. Declaring a part makes a working starter in the project's UI, as declaring an engine makes its stubs. Section 6.5 has how each stack carries it.
+**A native part's interface.** Clarity writes `parts/Arena/clarity/Arena.h`, a C header with the part's functions typed from the declaration, and writes it again whenever the declaration changes. The library implements them; a function that no longer fits the declaration fails its build.
 
-- **Web: a custom element.** The renderer ships prebuilt in every web application (`ui/runtime.js`, built once from `app/`), so a part cannot be compiled into it. A part is an ES module that defines a custom element (a Web Component), which any library or framework can make: plain JavaScript, Lit, or Svelte compiled to a custom element. The renderer loads it, sets `value` and each property on the element, calls a method for each `hears`, and listens for a `change` event (`detail` is the new value) and an event per `tells` (`detail` holds its values in the declared order). The theme reaches it through the CSS variables, which pass into a shadow root too. Clarity writes a `MapView.d.ts` beside the module with this contract typed, for the developer's editor.
-- **Avalonia: a UserControl.** `parts/MapView/avalonia/` holds `MapView.axaml` and `MapView.axaml.cs`, the developer's half of a partial class. The generated half holds a styled property per declared property and `Value`, a method per `tells` that raises it, and a partial method per `hears` that the developer must write, so the C# compiler reports a part that no longer fits its declaration. It implements `IInput` from Clarity.Avalonia, so a change is reported as every input reports it.
+```c
+ArenaPart *Arena_create(void *parent, int width, int height, ArenaHost *host);
+void Arena_resize(ArenaPart *part, int width, int height);
+void Arena_frame(ArenaPart *part);
+void Arena_destroy(ArenaPart *part);
+void Arena_set_value(ArenaPart *part, int64_t value);
+void Arena_set_enabled(ArenaPart *part, bool enabled);
+void Arena_set_speed(ArenaPart *part, int64_t speed);
+void Arena_restart(ArenaPart *part, int64_t level);
+/* Given by the header, called by the library: */
+void Arena_changed(ArenaHost *host, int64_t value);
+void Arena_scored(ArenaHost *host, int64_t points);
+```
 
-**On the design canvas.** For a web project the designer loads the built module and shows the live part, with its default value: the designer is a web page too. For an Avalonia project it shows a box with the part's name and size, or a picture of it (`preview "mapview.png"` in the declaration, from the resources). Preview and Run show the real part on both.
+- `parent` is the native child window the part draws into: an X11 window on Linux, an `HWND` on Windows, an `NSView` on macOS. SFML takes it as `sf::RenderWindow(handle)`.
+- An integer is `int64_t`, a bool `bool`; every other value (text, decimal, money, date, an enum) is a `const char *` in its plain form, as the command line prints it (section 5.20).
+- The host calls everything on the UI thread. `Arena_frame` comes about 60 times a second while the part is shown, for a part that animates; a still part leaves it empty. The child window gets the mouse and keyboard itself, so the library reads them as it would in its own window.
+- A tell or change the library reports is queued and goes to the backend as an event, after the call it came in.
 
-**Checked.** A part's declaration is checked like an entity's; a window that sets an undeclared property, wires an undeclared tell or calls an undeclared hear gets an error; a missing implementation or one whose build fails is a problem at the declaration; the usability rules (section 5.18) apply to its properties as to a built-in part's.
+**Built by Clarity.** `parts/Arena/` holds a `CMakeLists.txt` that makes a shared library named after the part; Clarity runs CMake on it before Build and Run when the folder changed, as it rebuilds a Rust engine, and shows its errors as problems. A folder may instead hold the library already built, under `lib/<platform>/`. Declaring a part writes a starter that builds without other libraries (it keeps its values and draws nothing), with the lines for SFML ready to switch on. Clarity never writes over a file in `parts/` after the first, except under `clarity/`, which is Clarity's.
 
-**Not a sandbox.** An engine is a pure computation the host can stop; a custom part is the developer's code running with the renderer's rights, as the owned files of RT1 are. Logic that only computes still belongs in an engine. A part receives data and tells; it does not call the backend or the shell, and the renderer gives it no way to.
+**A .NET part's adapter.** The control in the package is not Clarity's, so a small C# class sits between them: `parts/Notes/Notes.cs`, the developer's half of a partial class, holding the control and passing values to it and from it. The generated half (on Clarity.Avalonia's `DotNetPart`) calls a partial method the adapter must write for the value (`ShowValue`), each property (`Show<Property>`) and each hear (`On<Hear>`), so the C# compiler reports an adapter that no longer fits its declaration, and gives the adapter a method per tell and `Changed(value)` to call. Declaring the part writes a starter adapter.
+
+**Above the page.** A native child window lies over the window's own drawing, so nothing of the window can show on top of it. While a Clarity dialog, popover, menu or open dropdown overlaps the part, the host hides the part, and shows it again when that closes. A .NET part is a real Avalonia control and has no such limit.
+
+**On the design canvas** a part is a box with its name and size, or a picture of it (`preview "arena.png"` in the declaration, from the resources). Preview in the IDE shows the box too: the library is loaded only by the built program. Run shows the real part.
+
+**On Linux** a native part needs X11 for its child window, as SFML does. A program that holds one starts under X11 (XWayland on a Wayland desktop); Avalonia already does.
+
+**Checked.** A part's declaration is checked like an entity's; a window that sets an undeclared property, wires an undeclared tell or calls an undeclared hear gets an error; a missing library, one whose build fails or a .NET part on another stack is a problem at the declaration; the usability rules (section 5.18) apply to its properties as to a built-in part's.
+
+**Not a sandbox.** An engine is a pure computation the host can stop; a custom part is the developer's library running in the program with its rights, as the owned files of RT1 are. Logic that only computes still belongs in an engine. A part receives data and tells; it does not call the backend, and the host gives it no way to.
 
 **The canvas's `renderer Name`**, parsed and shown in the properties panel but generated by no stack, goes: a canvas is drawn by its draw handler or `runs` an engine (N5), and graphics drawn by an outside library are a custom part.
 
@@ -1301,14 +1336,16 @@ impl ApproveOrder for Actions {
 - `effects` are checked through the effects rule (section 11.1). The context object passed in only exposes the capabilities the action declared (database, file system, network), so in typed languages an undeclared effect usually does not even compile.
 - On first generation, Clarity creates an implementation stub in the hand-written directory, with a failing test. After that the file belongs to the developer and is never overwritten. This puts the action straight into the TDD `red` state.
 
-### 6.5 Custom parts in the output (2026-10-23, a design)
+### 6.5 Custom parts in the output (2026-10-23, decided)
 
 How each stack carries a custom part (section 5.19). The frontend still holds no business logic: a part receives data and tells, and validation stays generated from the dictionary and repeated on the backend.
 
-- **Web stacks.** `parts/MapView/web/` holds either a built module, `MapView.js`, self-contained, which Clarity checks and leaves be (as a `.wasm` engine from any language), or a `package.json` whose `build` script writes `dist/MapView.js` with its npm packages bundled in. With a `package.json`, Clarity runs `npm install` and `npm run build` before Build and Run when the folder changed, as it rebuilds a Rust engine, and shows build errors as problems; Node and npm join the tools P3 checks, only for a project that has such a part. The generator copies the module to `ui/parts/MapView.js`, and the model names it, so the renderer imports it before it shows a window that holds the part and defines the element once.
-- **Avalonia.** The generator copies `parts/MapView/avalonia/` into the generated project's `Parts/` folder, writes the generated half (`Parts/MapView.g.cs`) and places `<parts:MapView>` in the window's AXAML, bound to the view model like a built-in part. The part's NuGet packages are its own MSBuild file, `parts/MapView/avalonia/MapView.props`, with its `PackageReference` items, which the generated `.csproj` imports; the stack's toolchain restores them as it restores Clarity.Avalonia. The base the generated half builds on (property changes, tells, hears through the view model) is in Clarity.Avalonia, so it needs a package version.
-- **Backends.** A part's properties are part state as `visible` is, and its hears go out in the reply as part changes do, so every backend handles them as it handles a built-in part's, with no code per custom part. A tell comes in as an event with values, as an engine's tell does.
-- **Owned, never written over.** The files in `parts/` are the developer's. The generated project lists them in its `AGENTS.md` and `CLAUDE.md` as owned (RT1), so another AI edits those and not the copies.
+- **Clarity's part host, written once.** `clarity_parts` is a small C runtime (in `runtimes/parts/`) that every stack links: it makes a native child window for each part (an X11 window on Linux, a child `HWND` on Windows, an `NSView` on macOS), places and hides it, calls the library's `frame` about 60 times a second, and passes values, hears and tells. It runs the parts on a thread of its own, so it needs nothing of the host's main loop or threads, and the stacks call it alike.
+- **Generated glue.** For each project the generator writes a C file that turns the part host's plain calls (create a part of a kind, set a property by name, a hear with its values) into the typed functions of each part's header, and the typed tells back into one call to the host. CMake builds the glue, the part host and every native part into one shared library, `clarity_parts`, copied next to the program (`$ORIGIN` and `@loader_path` on Linux and macOS). CMake and a C++ compiler join the tools P3 checks, only for a project that has a native part.
+- **Web stacks (Rust, Go, C, C++).** The renderer draws a placeholder where the part sits and tells the shell its rectangle (in the webview's pixels) whenever it moves, resizes, shows or hides, or a dialog, popover, menu or open dropdown covers it. It sets each property and the bound value on the part when the window opens and when a reply changes them, and gives it the hears a reply carries. A tell comes back from the shell as a renderer event and runs its handler as a click does, with the tell's values. The shell's part is small: it gives the part host the webview's native window (on Linux the WebKitGTK view's X11 window) and passes the renderer's calls on, through the shell's own commands; each stack links the library its own way (C and C++ in CMake, Rust through `extern "C"` and `build.rs`, Go through cgo).
+- **Avalonia.** A native part is a generated control on `NativeControlHost` (Clarity.Avalonia's `NativePart`), which makes the child window, gives it to the part host through `DllImport`, and posts tells to the UI thread; Avalonia moves and hides it with the layout. A .NET part's package is a `PackageReference` in the generated `.csproj` (a DLL a `Reference` with its path), and its adapter and generated half go into the generated project's `parts/<Name>/` folder, as in the project. Both are placed in the window's AXAML and bound to the view model like a built-in part. The bases they build on are in Clarity.Avalonia, so it needs a package version.
+- **Backends.** A custom part's properties are part state as `visible` is, held by name, and its hears go out with the part changes of the reply, so every runtime carries them with no code per custom part (`conformance/custom-parts.json`). A tell comes in as an event with values.
+- **Owned, never written over.** The files in `parts/` are the developer's, except `clarity/`. The generated project lists them in its `AGENTS.md` and `CLAUDE.md` as owned (RT1), so another AI edits those and not the copies.
 
 ### 6.6 Regeneration
 
@@ -1812,7 +1849,7 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 | U1g | Settings (section 5.17, decided 2026-10-23): one `settings` block of typed values kept per person on their machine, with Clarity's own `language` and `theme`; every window binds `settings` and code reads and sets it; the pickers change the same values; a "Settings window" template | done 2026-10-23: the spec reads the block as the record type `Settings` (`Entity.settings`, `FieldType::Language` and `Theme`, `DataDecl.made`, `Project::stored_entities`), conformance/settings.json (which kept values fit, where the file is), the web renderer holds them (lib/settings.ts, Runtime.svelte) with the shell commands `read_settings` and `keep_settings` (Rust `clarity_runtime::settings`, Go `clarity.ReadSettings`, C `clarity/settings.c`, C++ `clarity/settings.cpp`), Avalonia `KeptSettings` and a generated `Settings.Current`; the Settings window template. Releases: clarity-runtime 0.15.0, Go v0.17.0, NuGet 0.22.0 |
 | U1h | Full-text search (decided 2026-10-23, after the U1c batch): a `search` modifier on text fields and list fields, whose JSON column is text to a full-text index like any other, and `where a matches x` in queries; each database's own index (SQLite FTS5 kept by triggers a migration writes, PostgreSQL GIN on to_tsvector, MySQL FULLTEXT, SQL Server's full-text catalog where it is installed, else LIKE). Words match, not whole items; `contains` stays the exact test, and the index narrows it | done 2026-10-23 (user chose: every word, each as the start of a word; `matches` looks in the query's own record; SQLite FTS5 with triggers (`table__search`, unicode61, accents count), PostgreSQL GIN on to_tsvector('simple'), MySQL FULLTEXT without stopwords plus REGEXP for words under 3 characters, SQL Server LIKE at word starts without an index; a step that changes an entity builds its index again; migration steps `add search` and `remove search`; conformance/queries.json; tested on real SQLite, PostgreSQL and MySQL, SQL Server by its SQL only; the IDE's entity editor has a Search column) |
 | UX1 | Usability rules (section 5.18, a design): a named rule set from published guidance (Nielsen, WCAG 2.2, the platform guides), checked on the spec as warnings; the agent's instructions read the same table; the designer shows them on the canvas with a fix where one is clear; a rule turned off for a part, window or project with a reason. First slice: `confirm-delete`, `label-every-input`, `default-and-cancel` and `long-list`, then the rest of the table | |
-| CP1 | Custom parts (sections 5.19 and 6.5, a design): `part Name` declared in Clarity with `binds`, typed properties, `tells`, `hears` and `size`, placed by its name, checked and set in the designer like a built-in part; the implementation in `parts/<Name>/` in the project's UI only: a custom element for the web stacks (a built module, or a `package.json` Clarity builds with npm), a UserControl with a generated partial half and its own `MapView.props` for Avalonia; live on the design canvas for web projects, a box or a picture for Avalonia; the canvas's unused `renderer Name` removed. Needs a Clarity.Avalonia version | |
+| CP1 | Custom parts (sections 5.19 and 6.5, decided 2026-10-23): `part Name` declared in Clarity with its library (`native "folder"`, `nuget`, `dll`), `binds`, typed properties, `tells`, `hears` and `size`, placed by its name, checked and set in the designer like a built-in part. A native library speaks a generated C header, is built with CMake and draws in a native child window the host keeps at the part's place, on all five stacks; a .NET library is an Avalonia control with a C# adapter, on the C# stack only. A box or a picture on the design canvas; the canvas's unused `renderer Name` removed. Needs a Clarity.Avalonia version | native parts done 2026-10-23 on all five stacks: the language and checker, `clarity parts` writing the header and a starter, the part host `runtimes/parts` (Linux, X11; other systems say so), the shells' part commands, the renderer placing parts and hiding them under Clarity's overlays, Avalonia's `NativePart`, `conformance/custom-parts.json`; a test part tells, hears and is set on every stack in Xvfb; the orbs example (C++, SFML); the designer's palette and properties panel; the canvas's `renderer` removed; .NET parts (`nuget`, `dll`) on the C# stack with a generated half (`DotNetPart`) and the developer's adapter. Open: Windows and macOS child windows; the IDE's own build of these changes untried; Clarity.Avalonia 0.26.0 |
 | UX2 | Usability from use (section 5.18): a running application notes, with the person's consent and only on their machine, where they struggle (clicks that do nothing, repeated clicks, errors shown again, forms given up), and the designer shows it as suggestions on the parts | idea, not decided |
 | I1a | Formats (section 1.5): dates, times, numbers and money shown and entered in the locale of the person using the application; `language` and `currency` in the project file; named formats for `format`; money with its currency's decimals | done for the web renderer (LANGUAGE.md section 4, Formats): `language "tag"` and `currency CODE` checked and on the Project tab, `format` a name checked per type (catalog in `clarity_spec::formats`, a Format column in the entity editor), the renderer formats and reads values with `Intl` (`app/src/lib/format.ts`), the shared cases in `conformance/formats.json` (`npm test`); Avalonia meets the same cases with G2; open: date inputs follow the system's locale through the browser's own date picker |
 | I1b | Text with slots (section 1.5): `"Saved {customer.name}"` in messages, refusals and captions, slots checked as expressions and shown in the locale's format | done for the web renderer (LANGUAGE.md section 10, Text with slots): slots are paths checked like expressions, `{{` and `}}` braces, text with slots allowed in `message`, `refuse`, `caption` and `error` and a warning for shown text joined with `+`; the runtime's `Text` and `Slot` carry the text as written and typed values with the field's format and scale (plain text stays a string on the wire), refusals reach the screen with their slots, and the renderer fills them (`fillText`, cases in `conformance/formats.json` under `fills`); Avalonia meets the same cases with G2 |
@@ -1881,4 +1918,4 @@ The first goal was a visible slice: the spec language, a live preview and the vi
 9. **Monorepos** with several `clarity.toml` files: nested projects or one root config.
 10. **Mutation testing cost.** Running it on every CI build may be too slow for large changes; possibly sample or limit to changed functions.
 11. **Turning a usability rule off** (section 5.18). A comment directive beside the part (`# ux off long-form: a data entry screen for experts`), a property on the part or window, or a list in the project file; and whether an agent may turn a rule off by itself or only propose it.
-12. **Custom parts** (section 5.19). Whether a custom part should carry conformance cases of its own (`parts/<Name>/cases.json`, run against the real control as section 1.6 runs Clarity's parts), or only the checks of its declaration; and whether Clarity's agent may write a part's JavaScript or C#, or only its declaration (today it writes only Clarity and the Markdown of resources).
+12. **Custom parts** (section 5.19). Whether Clarity's agent may write a native part's C or C++ and a .NET part's adapter, or only the declaration (today it writes only Clarity and the Markdown of resources); and how a part shows on the design canvas beyond a box or a picture.

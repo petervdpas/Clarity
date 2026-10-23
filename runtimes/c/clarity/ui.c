@@ -16,6 +16,7 @@ struct ClarityUi {
     ClarityAsk* asks;
     size_t ask_count, ask_room;
     cJSON* result;
+    cJSON* hears;
     bool close;
 };
 
@@ -186,6 +187,30 @@ int64_t clarity_ui_step(const ClarityUi* ui, const char* part) {
     return p && p->has_step ? p->step : 1;
 }
 
+const cJSON* clarity_ui_part_value(const ClarityUi* ui, const char* part, const char* name) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->values ? cJSON_GetObjectItemCaseSensitive(p->values, name) : NULL;
+}
+
+void clarity_ui_set_part_value(ClarityUi* ui, const char* part, const char* name, cJSON* value) {
+    ClarityPart* p = part_of(ui, part);
+    if (!p->values) p->values = cJSON_CreateObject();
+    if (cJSON_GetObjectItemCaseSensitive(p->values, name)) {
+        cJSON_ReplaceItemInObjectCaseSensitive(p->values, name, value);
+    } else {
+        cJSON_AddItemToObject(p->values, name, value);
+    }
+}
+
+void clarity_ui_hear(ClarityUi* ui, const char* part, const char* hear, cJSON* values) {
+    if (!ui->hears) ui->hears = cJSON_CreateArray();
+    cJSON* h = cJSON_CreateObject();
+    cJSON_AddStringToObject(h, "part", part);
+    cJSON_AddStringToObject(h, "hear", hear);
+    cJSON_AddItemToObject(h, "values", values ? values : cJSON_CreateArray());
+    cJSON_AddItemToArray(ui->hears, h);
+}
+
 void clarity_ui_set_step(ClarityUi* ui, const char* part, int64_t value) {
     ClarityPart* p = part_of(ui, part);
     p->has_step = true;
@@ -322,6 +347,7 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->asks = ui->asks;
     r->ask_count = ui->ask_count;
     r->result = ui->result;
+    r->hears = ui->hears;
     return r;
 }
 
@@ -358,6 +384,7 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_checked) cJSON_AddBoolToObject(out, "checked", p->checked);
     if (p->drawing) cJSON_AddItemToObject(out, "drawing", cJSON_Duplicate(p->drawing, true));
     if (p->pointer) cJSON_AddItemToObject(out, "pointer", cJSON_Duplicate(p->pointer, true));
+    if (p->values) cJSON_AddItemToObject(out, "values", cJSON_Duplicate(p->values, true));
     return out;
 }
 
@@ -377,6 +404,7 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "text"))) p->text = clarity_copy(v->valuestring);
     if (cJSON_IsArray(v = cJSON_GetObjectItemCaseSensitive(in, "drawing"))) p->drawing = cJSON_Duplicate(v, true);
     if (cJSON_IsObject(v = cJSON_GetObjectItemCaseSensitive(in, "pointer"))) p->pointer = cJSON_Duplicate(v, true);
+    if (cJSON_IsObject(v = cJSON_GetObjectItemCaseSensitive(in, "values"))) p->values = cJSON_Duplicate(v, true);
     ClarityText* text;
     v = cJSON_GetObjectItemCaseSensitive(in, "caption");
     if (v && !cJSON_IsNull(v)) {
@@ -460,6 +488,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     }
     cJSON_AddBoolToObject(out, "close", r->close);
     if (r->result) cJSON_AddItemToObject(out, "result", cJSON_Duplicate(r->result, true));
+    if (r->hears) cJSON_AddItemToObject(out, "hears", cJSON_Duplicate(r->hears, true));
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

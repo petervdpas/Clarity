@@ -7,6 +7,7 @@
 #include "clarity/db_internal.h"
 #include "clarity/record_file.h"
 #include "clarity/settings.h"
+#include "shell/parts.h"
 #include "webview/webview.h"
 
 #if defined(__linux__)
@@ -31,8 +32,16 @@ typedef struct {
     bool closed;
 } Apart;
 
+/// Which desktop window an open window's custom parts are in.
+typedef struct {
+    uint64_t instance;
+    char window[32];
+} PartsWindow;
+
 struct ClarityService {
     ClarityShellOptions options;
+    PartsWindow* parts_windows;
+    size_t parts_window_count;
     Apart* apart;
     size_t apart_count;
     int next;
@@ -60,6 +69,7 @@ void clarity_service_free(ClarityService* service) {
         free(service->apart[i].opener);
     }
     free(service->apart);
+    free(service->parts_windows);
     free(service);
 }
 
@@ -292,11 +302,57 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         }
         return value(NULL);
     }
+    // Custom parts (DESIGN 6.5): where each is and what it is given, for the part host.
+    if (strcmp(command, "place_part") == 0) {
+        const cJSON* instance = cJSON_GetObjectItemCaseSensitive(args, "instance");
+        uint64_t window = cJSON_IsNumber(instance) ? (uint64_t)instance->valuedouble : 0;
+        if (caller) {
+            size_t i = 0;
+            while (i < s->parts_window_count && s->parts_windows[i].instance != window) ++i;
+            if (i == s->parts_window_count) {
+                PartsWindow* grown = realloc(s->parts_windows, (s->parts_window_count + 1) * sizeof *grown);
+                if (grown) {
+                    s->parts_windows = grown;
+                    s->parts_windows[s->parts_window_count++].instance = window;
+                }
+            }
+            if (i < s->parts_window_count) snprintf(s->parts_windows[i].window, sizeof s->parts_windows[i].window, "%s", caller->name);
+        }
+        const cJSON* n;
+        int x = cJSON_IsNumber(n = cJSON_GetObjectItemCaseSensitive(args, "x")) ? n->valueint : 0;
+        int y = cJSON_IsNumber(n = cJSON_GetObjectItemCaseSensitive(args, "y")) ? n->valueint : 0;
+        int width = cJSON_IsNumber(n = cJSON_GetObjectItemCaseSensitive(args, "width")) ? n->valueint : 0;
+        int height = cJSON_IsNumber(n = cJSON_GetObjectItemCaseSensitive(args, "height")) ? n->valueint : 0;
+        uintptr_t parent = caller && caller->part_parent ? caller->part_parent(caller) : 0;
+        clarity_shell_parts_place(window, text_of(args, "part"), text_of(args, "kind"), parent, x, y, width, height, cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(args, "shown")));
+        return value(NULL);
+    }
+    if (strcmp(command, "set_part") == 0 || strcmp(command, "hear_part") == 0 || strcmp(command, "close_parts") == 0) {
+        const cJSON* instance = cJSON_GetObjectItemCaseSensitive(args, "instance");
+        uint64_t window = cJSON_IsNumber(instance) ? (uint64_t)instance->valuedouble : 0;
+        if (command[0] == 's') {
+            const cJSON* given = cJSON_GetObjectItemCaseSensitive(args, "value");
+            clarity_shell_parts_set(window, text_of(args, "part"), text_of(args, "name"), given ? cJSON_PrintUnformatted(given) : "null");
+        } else if (command[0] == 'h') {
+            const cJSON* given = cJSON_GetObjectItemCaseSensitive(args, "values");
+            clarity_shell_parts_hear(window, text_of(args, "part"), text_of(args, "hear"), given ? cJSON_PrintUnformatted(given) : "[]");
+        } else {
+            clarity_shell_parts_close(window);
+        }
+        return value(NULL);
+    }
     if (strcmp(command, "close_apart") == 0) {
         if (caller) caller->close(caller);
         return value(NULL);
     }
     return error_text(clarity_format("there is no command %s", command));
+}
+
+const char* clarity_service_parts_window(ClarityService* s, uint64_t instance) {
+    for (size_t i = 0; i < s->parts_window_count; ++i) {
+        if (s->parts_windows[i].instance == instance) return s->parts_windows[i].window;
+    }
+    return NULL;
 }
 
 const char* clarity_service_closed(ClarityService* s, const char* name) {
@@ -348,12 +404,22 @@ static void on_invoke(const char* id, const char* request, void* arg) {
     clarity_scratch_reset();
 }
 
+#if defined(__linux__)
+// The X11 window of the webview, which custom parts draw in.
+static uintptr_t part_parent(ClarityDesktop* desktop) {
+    return clarity_shell_parts_parent(webview_get_native_handle(((Window*)desktop)->view, WEBVIEW_NATIVE_HANDLE_KIND_UI_WIDGET));
+}
+#endif
+
 static Window* open_window(Desktop* desktop, const char* name, int width, int height) {
     Window* w = calloc(1, sizeof *w);
     if (!w) return NULL;
     snprintf(w->desktop.name, sizeof w->desktop.name, "%s", name);
     w->desktop.set_title = set_title;
     w->desktop.close = close_window;
+#if defined(__linux__)
+    w->desktop.part_parent = part_parent;
+#endif
     w->service = desktop->service;
     w->view = webview_create(0, NULL);
     webview_set_title(w->view, desktop->options->title);
@@ -406,11 +472,73 @@ static void open_desktop(void* context, ClarityDesktop* opener, const char* name
 #endif
 }
 
+/// A tell, carried from the part host's thread to the window's: the
+/// renderer of the part's window hears it.
+typedef struct {
+    Desktop* desktop;
+    uint64_t window;
+    char* js;
+} Telling;
+
+static void tell_on_window(webview_t view, void* arg) {
+    (void)view;
+    Telling* t = arg;
+    const char* name = clarity_service_parts_window(t->desktop->service, t->window);
+    for (Window* w = t->desktop->windows; name && w; w = w->next) {
+        if (strcmp(w->desktop.name, name) == 0) webview_eval(w->view, t->js);
+    }
+    free(t->js);
+    free(t);
+}
+
+/// `text` as a JSON string, in plain memory: the part host's thread does not
+/// use the scratch arena of the commands.
+static char* json_string(const char* text) {
+    size_t room = strlen(text) * 6 + 3;
+    char* out = malloc(room);
+    if (!out) return NULL;
+    char* at = out;
+    *at++ = '"';
+    for (const unsigned char* c = (const unsigned char*)text; *c; ++c) {
+        if (*c == '"' || *c == '\\') {
+            *at++ = '\\';
+            *at++ = (char)*c;
+        } else if (*c < 0x20) {
+            at += sprintf(at, "\\u%04x", *c);
+        } else {
+            *at++ = (char)*c;
+        }
+    }
+    *at++ = '"';
+    *at = '\0';
+    return out;
+}
+
+static void on_told(uint64_t window, const char* part, const char* tell, const char* values, void* context) {
+    Desktop* desktop = context;
+    Telling* t = calloc(1, sizeof *t);
+    char* quoted_part = json_string(part);
+    char* quoted_tell = json_string(tell);
+    size_t room = (quoted_part ? strlen(quoted_part) : 0) + (quoted_tell ? strlen(quoted_tell) : 0) + strlen(values) + 96;
+    if (t && quoted_part && quoted_tell && (t->js = malloc(room))) {
+        snprintf(t->js, room, "window.clarityTold && window.clarityTold(%llu, %s, %s, %s)", (unsigned long long)window, quoted_part, quoted_tell, values);
+        t->desktop = desktop;
+        t->window = window;
+        webview_dispatch(main_window(desktop)->view, tell_on_window, t);
+    } else {
+        free(t);
+    }
+    free(quoted_part);
+    free(quoted_tell);
+}
+
 int clarity_shell_run(const ClarityShellOptions* options) {
 #if defined(__linux__)
     // WebKitGTK 2.52 paints parts of a new window black through its DMABUF
     // renderer; it must be off before the web process starts.
     setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", 0);
+    // Custom parts draw in X11 child windows: under Wayland the toolkit runs on XWayland.
+    if (clarity_shell_parts_present()) setenv("GDK_BACKEND", "x11", 0);
 #endif
     Desktop desktop = {clarity_service_new(options), options, NULL};
     if (!desktop.service) return 1;
@@ -419,7 +547,12 @@ int clarity_shell_run(const ClarityShellOptions* options) {
     clarity_window_size(&width, &height);
     Window* first = open_window(&desktop, "main", width, height);
     if (!first) return 1;
+    if (clarity_shell_parts_present()) {
+        const char* problem = clarity_shell_parts_start(on_told, &desktop);
+        if (problem) fprintf(stderr, "%s\n", problem);
+    }
     webview_run(first->view);
+    clarity_shell_parts_stop();
     for (Window* w = desktop.windows; w;) {
         Window* next = w->next;
         webview_destroy(w->view);

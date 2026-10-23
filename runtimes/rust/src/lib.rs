@@ -12,6 +12,7 @@ pub mod files;
 pub mod i18n;
 pub mod picture;
 pub mod query;
+pub mod parts;
 pub mod record_file;
 pub mod settings;
 pub mod sql;

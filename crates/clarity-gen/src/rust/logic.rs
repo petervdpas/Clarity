@@ -264,6 +264,11 @@ impl<'a> Emitter<'a> {
             StmtKind::Assign { target, value } => {
                 let to = self.types.type_of(target);
                 let from = self.types.type_of(value);
+                if let Some((part, property, _, _)) = self.custom_property(target) {
+                    let value = self.value(value);
+                    out.push_str(&format!("{pad}ui.set_part_value({part:?}, {property:?}, to_value(&{value})?);\n"));
+                    return;
+                }
                 if let Some((part, property)) = self.part_property(target) {
                     let value = if matches!(property, "caption" | "error") { self.shown(value) } else { coerce(self.value(value), &from, &to) };
                     out.push_str(&format!("{pad}ui.set_{property}({part:?}, {value});\n"));
@@ -401,6 +406,11 @@ impl<'a> Emitter<'a> {
                 self.errors.push("messages and windows belong in handlers".into());
             }
             // A shape on a canvas, as conformance/drawing.json sends it.
+            // A hear of a custom part (DESIGN 5.19), sent with the reply.
+            StmtKind::Hear { part, hear, args } => {
+                let values: Vec<String> = args.iter().map(|a| format!("to_value(&{})?", self.value(a))).collect();
+                out.push_str(&format!("{pad}ui.hear({:?}, {:?}, vec![{}]);\n", part.name, hear.name, values.join(", ")));
+            }
             StmtKind::Draw { canvas, shape, args } => {
                 use clarity_spec::code::check::ShapeValue;
                 let mut fields = vec![format!("\"op\": {:?}", shape.name)];
@@ -615,6 +625,29 @@ impl<'a> Emitter<'a> {
         Some((name.clone(), property))
     }
 
+    /// A custom part's own property (DESIGN 5.19): the part, the property,
+    /// the part's kind and the values written on its line.
+    fn custom_property(&self, expr: &Expr) -> Option<(String, String, String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let ExprKind::Name { name } = &object.kind else { return None };
+        if self.types.name_of(object) != Some(&NameKind::Part) {
+            return None;
+        }
+        let (kind, written) = self.window.as_ref()?.parts.get(name)?.custom.clone()?;
+        let declared = crate::parts::declaration(self.project, &kind)?;
+        declared.properties.iter().any(|p| p.name.name == member.name).then(|| (name.clone(), member.name.clone(), kind, written))
+    }
+
+    /// Reading a custom part's property: as a handler set it, else as written or declared.
+    fn read_custom(&mut self, expr: &Expr) -> String {
+        let (part, property, kind, written) = self.custom_property(expr).unwrap_or_default();
+        let fallback = crate::parts::fallback_json(self.project, &kind, &written, &property);
+        let ty = value_type(&self.types.type_of(expr));
+        format!(
+            "serde_json::from_value::<{ty}>(ui.part_value({part:?}, {property:?}).unwrap_or_else(|| serde_json::from_str({fallback:?}).unwrap_or_default())).map_err(|e| clarity_runtime::Error::Invalid(e.to_string()))?"
+        )
+    }
+
     /// Reading a part property in a handler.
     fn read_part(&mut self, part: &str, property: &str) -> String {
         let info = self.window.as_ref().and_then(|w| w.parts.get(part).cloned());
@@ -679,6 +712,7 @@ impl<'a> Emitter<'a> {
                     format!("(*clarity_runtime::at(&{list}[..], {at})?)")
                 }
             }
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
             // A part property inside a path: `grid.selected` in `grid.selected.number`.
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
                 let (part, property) = self.part_property(expr).unwrap_or_default();
@@ -747,6 +781,7 @@ impl<'a> Emitter<'a> {
             ExprKind::Text { .. } | ExprKind::Key { .. } => format!("{}.show()", self.shown(expr)),
             ExprKind::Bool { value } => value.to_string(),
             ExprKind::Empty => "None".to_string(),
+            ExprKind::Member { .. } if self.custom_property(expr).is_some() => self.read_custom(expr),
             ExprKind::Member { .. } if self.part_property(expr).is_some() => {
                 let (part, property) = self.part_property(expr).unwrap_or_default();
                 self.read_part(&part, property)
@@ -1311,6 +1346,8 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A custom part (DESIGN 5.19): its kind and the values written on its line.
+    pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
 
 /// The parts of the window or app a handler belongs to, by name.
@@ -1340,6 +1377,7 @@ impl WindowCtx {
                         readonly: widget.props.readonly,
                         folded: widget.props.folded,
                         collapsed: false,
+                        custom: widget.props.part.clone().map(|kind| (kind, widget.props.values.clone())),
                     },
                 );
             }
@@ -1361,6 +1399,7 @@ impl WindowCtx {
                         readonly: false,
                         folded: false,
                         collapsed: false,
+                        custom: None,
                     },
                 );
             }
@@ -1558,7 +1597,7 @@ impl {struct_name} {{
             .into_iter()
             .map(|(canvas, handler)| (canvas, format!("{}__{}", super::names::snake(name), super::names::snake(&handler))))
             .collect();
-        let answers = crate::answering_handlers(&written)
+        let answers = crate::given_values_handlers(page, &written)
             .into_iter()
             .map(|h| {
                 let records = h.params.iter().map(|p| matches!(type_ref_info(project, &p.ty), TypeInfo::Record(_))).collect();

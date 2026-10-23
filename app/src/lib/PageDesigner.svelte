@@ -13,6 +13,7 @@
   import { portal } from "./portal";
   import { applyEdit } from "./applyEdit";
   import type { Category } from "./generated/Category";
+  import type { PartDecl } from "./generated/PartDecl";
   import type { App } from "./generated/App";
   import type { Dock } from "./generated/Dock";
   import type { Edit } from "./generated/Edit";
@@ -229,9 +230,12 @@
           kind: source.widget,
           col: at.col,
           row: at.row,
-          width: at.width === source.width ? null : at.width,
+          width: at.width === source.width && !source.part ? null : at.width,
           caption: null,
           bind: null,
+          // A custom part arrives at its declared size (DESIGN 5.19).
+          part: source.part ?? null,
+          height: source.part ? at.height : null,
         });
         break;
       case "field": {
@@ -250,6 +254,8 @@
             width: Math.min(source.width, room),
             caption: null,
             bind: source.bind,
+            part: null,
+            height: null,
           });
         } else {
           await apply({ op: "placeField", container: at.container, col: at.col, row: at.row, room, bind: source.bind });
@@ -283,6 +289,14 @@
 
   function pressPalette(e: PointerEvent, info: WidgetInfo) {
     pageDesigner.press(e, { kind: "new", widget: info.kind, width: info.width, height: info.height, label: info.name });
+  }
+
+  // The custom parts the project declares (DESIGN 5.19), dropped at their declared size.
+  const customParts = $derived(preview.project.files.flatMap((f) => f.parts));
+
+  function pressCustom(e: PointerEvent, part: PartDecl) {
+    const [width, height] = part.size ?? [4, 3];
+    pageDesigner.press(e, { kind: "new", widget: "custom", width, height, label: part.name.name, part: part.name.name });
   }
 
   /** A plain value arrives as one part bound to it. */
@@ -381,10 +395,18 @@
       {/each}
     </div>
   {/if}
+  {#if customParts.length > 0}
+    <h4>Custom parts</h4>
+    <div class="tiles">
+      {#each customParts as part (part.name.name)}
+        <PartTile kind="custom" name={part.name.name} title="Drawn by its library; drag onto the window." onpointerdown={(e) => pressCustom(e, part)} />
+      {/each}
+    </div>
+  {/if}
   {#each CATEGORIES as c (c.key)}
     <h4>{c.name}</h4>
     <div class="tiles">
-      {#each preview.catalog.filter((w) => w.category === c.key) as info (info.kind)}
+      {#each preview.catalog.filter((w) => w.category === c.key && w.kind !== "custom") as info (info.kind)}
         <PartTile kind={info.kind} name={info.name} onpointerdown={(e) => pressPalette(e, info)} />
       {/each}
     </div>

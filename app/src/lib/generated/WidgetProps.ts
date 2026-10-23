@@ -3,9 +3,11 @@ import type { CanvasUnits } from "./CanvasUnits";
 import type { ChartKind } from "./ChartKind";
 import type { ChartMeasure } from "./ChartMeasure";
 import type { Handler } from "./Handler";
+import type { Literal } from "./Literal";
 import type { Orientation } from "./Orientation";
 import type { Surface } from "./Surface";
 import type { TableOrder } from "./TableOrder";
+import type { TellHandler } from "./TellHandler";
 import type { WidgetKind } from "./WidgetKind";
 
 /**
@@ -99,7 +101,7 @@ typed: boolean,
  * `search`: a dropdown of a reference whose records filter as it is
  * typed, each showing the fields of `show` (U1c).
  */
-search: boolean, orientation: Orientation | null, surface: Surface | null, renderer: string | null, source: string | null, 
+search: boolean, orientation: Orientation | null, surface: Surface | null, source: string | null, 
 /**
  * The input a label or help text belongs to, by part name.
  */
@@ -187,4 +189,16 @@ default: boolean,
 /**
  * The button Escape clicks.
  */
-cancel: boolean, };
+cancel: boolean, 
+/**
+ * A custom part (DESIGN 5.19): the name it is declared by, as in `Arena`.
+ */
+part: string | null, 
+/**
+ * A custom part's properties set in the window: `speed 5`.
+ */
+values: { [key in string]: Literal }, 
+/**
+ * A custom part's tells wired to handlers: `on scored: arenaScored`.
+ */
+tells: Array<TellHandler>, };

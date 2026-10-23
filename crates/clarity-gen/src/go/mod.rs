@@ -132,6 +132,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.extend(crate::engine_files(project, "engines"));
         files.push(text("engines.go", engines_go(project)));
     }
+    // The native parts, built before the program and copied beside it.
+    files.extend(crate::parts::out_files(project, &["../bin"]));
     files.push(text("main.go", main_go(project, settings, &module, &databases, &servers, &owners, &main_window)));
     // The modules the code imports itself, which go.mod lists as direct.
     let mut direct = vec![RUNTIME_MODULE, "github.com/wailsapp/wails/v3"];

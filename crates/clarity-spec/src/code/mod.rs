@@ -166,6 +166,13 @@ pub enum StmtKind {
         shape: Ident,
         args: Vec<Expr>,
     },
+    /// A hear of a custom part (DESIGN 5.19): `arena.restart(2)`. Read as a
+    /// `Draw` and made a hear when loading, where the window's parts are known.
+    Hear {
+        part: Ident,
+        hear: Ident,
+        args: Vec<Expr>,
+    },
     Message {
         level: MessageLevel,
         text: Expr,
@@ -499,6 +506,63 @@ pub struct Param {
     pub ty: TypeRef,
 }
 
+/// `part Arena` (DESIGN 5.19): a part an outside library draws, with what
+/// the rest of the project sees of it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PartDecl {
+    pub name: Ident,
+    /// Where the library is; none written is an error the checker reports.
+    pub library: Option<PartLibrary>,
+    /// `binds integer`: the type of value it shows and edits.
+    pub binds: Option<TypeRef>,
+    /// `speed: integer, min 1, max 10, default 3`.
+    pub properties: Vec<PartProperty>,
+    /// `tells scored(points: integer)`: its own events, with their values.
+    pub tells: Vec<PartMessage>,
+    /// `hears restart(level: integer)`: what code tells it to do.
+    pub hears: Vec<PartMessage>,
+    /// `size 8 x 6`: the span and rows the Parts palette drops it with.
+    pub size: Option<(u32, u32)>,
+    /// `preview "arena.png"`: its picture on the design canvas, from the resources.
+    pub preview: Option<String>,
+    pub span: Span,
+}
+
+/// The library that draws a custom part.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum PartLibrary {
+    /// `native "parts/Arena"`: a shared library built from that folder, speaking Clarity's C header.
+    Native { folder: String },
+    /// `nuget "AvaloniaEdit" 11.1.0`: an Avalonia control from a NuGet package.
+    Nuget { package: String, version: String },
+    /// `dll "libs/Plot.dll"`: an Avalonia control from a .NET assembly.
+    Dll { file: String },
+}
+
+/// A property of a custom part, written as a setting is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PartProperty {
+    pub name: Ident,
+    pub ty: TypeRef,
+    pub default: Option<Expr>,
+    pub min: Option<Expr>,
+    pub max: Option<Expr>,
+    pub span: Span,
+}
+
+/// A tell or a hear of a custom part: its name and its values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PartMessage {
+    pub name: Ident,
+    pub params: Vec<Param>,
+    pub span: Span,
+}
+
 /// The `cli Shop` block (DESIGN 5.20): the command-line program of a
 /// project with the `cli` target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -746,7 +810,7 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr_in(body, found);
             }
             StmtKind::Call { call } => each_expr(call, found),
-            StmtKind::Draw { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {

@@ -65,6 +65,7 @@ enum DeclKind {
     Entity,
     Page,
     App,
+    Part,
 }
 
 impl DeclKind {
@@ -74,6 +75,7 @@ impl DeclKind {
             Self::Entity => "entity",
             Self::Page => "page",
             Self::App => "app",
+            Self::Part => "part",
         }
     }
 }
@@ -179,7 +181,8 @@ impl<'a> Checker<'a> {
                         .iter()
                         .enumerate()
                         .map(|(i, a)| (DeclKind::App, i, &a.name)),
-                );
+                )
+                .chain(file.parts.iter().enumerate().map(|(i, p)| (DeclKind::Part, i, &p.name)));
             for (kind, index, name) in names {
                 let existing = self.decls.entry(&name.name).or_default();
                 if existing.iter().any(|d| d.module == module) {
@@ -1066,7 +1069,7 @@ impl<'a> Checker<'a> {
             }
 
             let draws = p.handlers.iter().any(|h| h.event == widgets::Event::Draw);
-            if p.kind == WidgetKind::Canvas && p.renderer.is_none() && !draws {
+            if p.kind == WidgetKind::Canvas && !draws {
                 self.warning(
                     file,
                     format!("canvas at {},{} draws nothing yet; wire 'on draw: handler'", p.col, p.row),

@@ -169,6 +169,25 @@ TEST(a_wizards_step_is_as_every_runtime_says) {
     }
 }
 
+TEST(a_custom_parts_values_and_hears_are_as_every_runtime_says) {
+    auto file = conformance("custom-parts.json");
+    for (const auto& c : file["read"]) {
+        Ui ui(json{{"window", "Main"}, {"data", json::object()}, {"parts", {{"arena", c["part"]}}}}.get<WindowState>());
+        CHECK_EQ(ui.part_value("arena", c["name"].get<std::string>()).value_or(json(nullptr)), c["value"]);
+    }
+    for (const auto& c : file["set"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        for (const auto& set : c["sets"]) ui.set_part_value("arena", set[0].get<std::string>(), set[1]);
+        CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["arena"], c["part"]);
+    }
+    for (const auto& c : file["hear"]) {
+        Ui ui(WindowState{"Main", json::object(), {}, {}});
+        for (const auto& hear : c["hears"]) ui.hear(hear[0].get<std::string>(), hear[1].get<std::string>(), hear[2]);
+        json reply = ui.reply("Main", json::object());
+        CHECK_EQ(reply.contains("hears") ? reply["hears"] : json(nullptr), c["reply"]);
+    }
+}
+
 TEST(an_accordions_open_section_is_as_every_runtime_says) {
     auto file = conformance("accordions.json");
     for (const auto& c : file["open"]) {

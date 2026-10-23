@@ -26,6 +26,12 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Write each native custom part's header from its declaration, and a
+    /// starter into a part's folder that has none (DESIGN 5.19).
+    Parts {
+        /// The project file, like shop.clarity.
+        project: PathBuf,
+    },
     /// Write the changes in the data dictionary that no migration covers
     /// yet as the next step in the project's migrations folder.
     Migrate {
@@ -122,6 +128,7 @@ fn main() -> ExitCode {
             SpecCommand::Keys { dir } => keys(&dir),
         },
         Command::Gen { project, out } => generate(&project, out.as_deref()),
+        Command::Parts { project } => parts(&project),
         Command::Migrate {
             project,
             check,
@@ -144,6 +151,29 @@ fn main() -> ExitCode {
     }
 }
 
+
+fn parts(project_file: &std::path::Path) -> ExitCode {
+    let project = match load(project_file) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let dir = if project_file.is_file() { clarity_project::module_dir(project_file) } else { project_file.to_path_buf() };
+    match clarity_gen::parts::write_part_folders(&dir, &project) {
+        Ok(written) => {
+            for path in &written {
+                eprintln!("wrote {}", path.display());
+            }
+            if written.is_empty() {
+                eprintln!("every part's folder is up to date");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("clarity: cannot write the parts' folders: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
 
 fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> ExitCode {
     if !project_file.is_file() {

@@ -9,6 +9,7 @@ import type { EnumDecl } from "./EnumDecl";
 import type { FunctionDecl } from "./FunctionDecl";
 import type { Ident } from "./Ident";
 import type { Page } from "./Page";
+import type { PartDecl } from "./PartDecl";
 import type { ThemeDecl } from "./ThemeDecl";
 
 export type SpecFile = { path: string, 
@@ -45,4 +46,8 @@ clis: Array<CliDecl>,
 /**
  * Its commands, for the command-line program (DESIGN 5.20).
  */
-commands: Array<CommandDecl>, };
+commands: Array<CommandDecl>, 
+/**
+ * Its custom parts, drawn by outside libraries (DESIGN 5.19).
+ */
+parts: Array<PartDecl>, };

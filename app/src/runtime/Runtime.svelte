@@ -17,7 +17,9 @@
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import type { ShownText } from "../lib/format";
-  import { findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
+  import { allParts, findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
+  import { handlerCall } from "../lib/calls";
+  import type { Place } from "../lib/customParts";
   import { dataEntity, isList, translatedDefaults } from "../lib/windowData";
   import { findApp } from "../lib/frame";
   import { Navigator } from "../lib/navigator";
@@ -46,6 +48,8 @@
     close: boolean;
     /** The questions its handler asked, asked when it has finished (DESIGN 5.14). */
     asks?: Ask[];
+    /** The hears its handler gave custom parts, in order (DESIGN 5.19). */
+    hears?: { part: string; hear: string; values: JsonValue[] }[];
   };
 
   /**
@@ -147,6 +151,10 @@
   function received(reply: Reply, start = false): Reply {
     // A handler may have set the settings; the app's start has only their defaults.
     if (!start) adopt(reply.state.data[SETTINGS]);
+    // The hears go to the custom parts of the window the handler ran on.
+    for (const h of reply.hears ?? []) {
+      invoke("hear_part", { instance: reply.state.instance ?? 0, part: h.part, hear: h.hear, values: h.values }).catch(() => {});
+    }
     if (!model || !reply.shown) return reply;
     const data = { ...reply.state.data };
     for (const [name, text] of Object.entries(reply.shown)) data[name] = shownText(model, text);
@@ -222,6 +230,11 @@
     {
       get: () => stack,
       set: (next) => {
+        // A window that closed ends its custom parts.
+        const open = new Set(next.map((s) => s.instance));
+        for (const gone of stack.filter((s) => s.instance !== undefined && !open.has(s.instance))) {
+          invoke("close_parts", { instance: gone.instance }).catch(() => {});
+        }
         stack = next;
         // Data may have changed: reference lists and values load again when needed.
         options = {};
@@ -280,6 +293,43 @@
     } catch (err) {
       say({ level: "error", text: errorText(err) });
       return false;
+    } finally {
+      busy = false;
+    }
+  }
+
+  // A custom part told something (DESIGN 5.19): the shell calls this with the
+  // window's number, the part, the tell and its values. `change` is the value
+  // the person changed, which goes into what the part binds and runs `on
+  // change`; another tell runs the handler wired to it with its values. One
+  // at a time, after what runs now.
+  let telling: Promise<void> = Promise.resolve();
+  (globalThis as unknown as { clarityTold: (instance: number, part: string, tell: string, values: JsonValue[]) => void }).clarityTold = (instance, part, tell, values) => {
+    telling = telling.then(() => told(instance, part, tell, values)).catch((err) => say({ level: "error", text: errorText(err) }));
+  };
+
+  async function told(instance: number, part: string, tell: string, values: JsonValue[]) {
+    while (busy) await new Promise((done) => setTimeout(done, 5));
+    const index = stack.findIndex((s) => s.instance === instance);
+    const state = stack[index];
+    const target = model && state ? findPage(model, state.window) : undefined;
+    const widget = target ? allParts(target).find((w) => w.props.name === part) : undefined;
+    if (!state || !widget) return;
+    if (tell === "change") {
+      const [data, field] = (widget.props.bind ?? "").split(".");
+      const record = state.data[data] as Record<string, unknown> | undefined;
+      if (field && record && typeof record === "object") record[field] = values[0];
+      else if (data && !field) state.data[data] = values[0];
+      const wired = widget.props.handlers.find((h) => h.event === "change");
+      if (wired && index === stack.length - 1) await run(handlerCall(wired));
+      return;
+    }
+    const wired = widget.props.tells.find((t) => t.tell === tell);
+    if (!wired) return;
+    busy = true;
+    try {
+      const reply = received(await invoke<Reply>("answer_event", { state: $state.snapshot(state), handler: wired.handler, values }));
+      await nav.apply(index, reply);
     } finally {
       busy = false;
     }
@@ -344,6 +394,14 @@
     },
     keepSettings() {
       if (current) adopt($state.snapshot(current.data[SETTINGS]));
+    },
+    placePart(part: string, kind: string, place: Place, shown: boolean) {
+      if (current?.instance === undefined) return;
+      invoke("place_part", { instance: current.instance, part, kind, ...place, shown }).catch(() => {});
+    },
+    setPartValue(part: string, name: string, value: JsonValue) {
+      if (current?.instance === undefined) return;
+      invoke("set_part", { instance: current.instance, part, name, value }).catch(() => {});
     },
     fieldValues(entity: string, field: string) {
       const at = `${entity}.${field}`;

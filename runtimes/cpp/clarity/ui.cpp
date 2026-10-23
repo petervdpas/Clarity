@@ -57,7 +57,15 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_, hears_};
+}
+
+std::optional<nlohmann::json> Ui::part_value(const std::string& part, const std::string& name) const {
+    auto found = parts_.find(part);
+    if (found == parts_.end() || !found->second.values) return std::nullopt;
+    auto at = found->second.values->find(name);
+    if (at == found->second.values->end()) return std::nullopt;
+    return *at;
 }
 
 namespace {
@@ -111,6 +119,7 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.checked) out["checked"] = *p.checked;
     if (p.drawing) out["drawing"] = *p.drawing;
     if (p.pointer) out["pointer"] = *p.pointer;
+    if (p.values) out["values"] = *p.values;
 }
 
 void from_json(const nlohmann::json& in, PartState& p) {
@@ -132,6 +141,7 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("checked", p.checked);
     if (in.contains("drawing") && in["drawing"].is_array()) p.drawing = in["drawing"];
     if (in.contains("pointer") && in["pointer"].is_object()) p.pointer = in["pointer"];
+    if (in.contains("values") && in["values"].is_object()) p.values = in["values"];
 }
 
 void to_json(nlohmann::json& out, const WindowState& s) {
@@ -162,6 +172,11 @@ void to_json(nlohmann::json& out, const Reply& r) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});
         out["asks"] = asks;
+    }
+    if (!r.hears.empty()) {
+        nlohmann::json hears = nlohmann::json::array();
+        for (const auto& h : r.hears) hears.push_back({{"part", h.part}, {"hear", h.hear}, {"values", h.values}});
+        out["hears"] = hears;
     }
 }
 

@@ -88,6 +88,11 @@ pub fn set_code(source: &str, owner: &str, text: &str) -> EditResult<String> {
 /// Adds an empty `handler name` at the end of `owner`'s code, unless it is
 /// there already.
 pub fn add_handler(source: &str, owner: &str, name: &str) -> EditResult<String> {
+    add_handler_with(source, owner, name, "")
+}
+
+/// Adds an empty handler that takes `params` (`points: integer`, or none).
+pub fn add_handler_with(source: &str, owner: &str, name: &str, params: &str) -> EditResult<String> {
     if !crate::widgets::is_identifier(name) {
         return fail(format!("'{name}' is not a valid handler name"));
     }
@@ -102,10 +107,11 @@ pub fn add_handler(source: &str, owner: &str, name: &str) -> EditResult<String> 
         return Ok(source.to_string());
     }
     let current = code_text(source, owner);
+    let head = if params.trim().is_empty() { name.to_string() } else { format!("{name}({})", params.trim()) };
     let text = if current.trim().is_empty() {
-        format!("handler {name}\n")
+        format!("handler {head}\n")
     } else {
-        format!("{}\n\nhandler {name}\n", current.trim_end())
+        format!("{}\n\nhandler {head}\n", current.trim_end())
     };
     set_code(source, owner, &text)
 }

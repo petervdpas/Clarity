@@ -10,7 +10,7 @@
 
 <svelte:window onkeydown={(e) => e.key === "Escape" && onclose()} />
 
-<div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
+<div class="backdrop clarity-overlay" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
   <div class="panel" role="dialog" aria-modal="true" aria-label={label}>
     {@render children()}
   </div>

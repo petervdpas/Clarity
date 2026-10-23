@@ -173,6 +173,12 @@ impl Shown {
             self.some(&p.caption, widget.span);
             self.some(&p.placeholder, widget.span);
             self.some(&p.tooltip, widget.span);
+            // A custom part's text properties are shown by its library.
+            for value in p.values.values() {
+                if let crate::model::Literal::Str(text) = value {
+                    self.text(text, widget.span);
+                }
+            }
             if let Some(menu) = &widget.menu {
                 self.commands(&menu.items);
             }

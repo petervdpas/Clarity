@@ -3,6 +3,8 @@
   import FrameProperties from "./FrameProperties.svelte";
   import TextField from "./TextField.svelte";
   import type { App } from "./generated/App";
+  import type { Literal } from "./generated/Literal";
+  import { literalShown, paramsText, writtenValue } from "./customParts";
   import type { Edit } from "./generated/Edit";
   import type { Event as PartEvent } from "./generated/Event";
   import { eventHandler, freePartName, wireEvent } from "./codeParts";
@@ -179,6 +181,32 @@
     if (handler) pageDesigner.showCode(handler);
   }
 
+  // A custom part's declaration (DESIGN 5.19), when the part picked is one.
+  const declared = $derived(p?.kind === "custom" ? preview.project.files.flatMap((f) => f.parts).find((d) => d.name.name === p.part) : undefined);
+
+  /** Writes a property's value on the part's line, or leaves it out with `null`. */
+  function setPartValue(name: string, value: Literal | null) {
+    if (!p) return;
+    const values = { ...p.values };
+    if (value) values[name] = value;
+    else delete values[name];
+    update({ values });
+  }
+
+  /** Wires a handler, taking `params`, to a tell; `null` unwires it. */
+  function setTell(tell: string, handler: string | null, params: string) {
+    if (!p || !location) return;
+    const tells = p.tells.filter((t) => t.tell !== tell);
+    if (handler) tells.push({ tell, handler });
+    const edit: Edit = { op: "updateWidget", item: location.widget.span.start, container: null, props: withProps(p, { tells, name: partName }) };
+    if (handler === null) {
+      onedit(edit);
+      return;
+    }
+    onedit({ op: "batch", edits: [edit, { op: "addHandlerWith", owner, name: handler, params }] });
+    pageDesigner.showCode(handler);
+  }
+
   function textOf(e: Event): string | null {
     const value = (e.currentTarget as HTMLInputElement).value.trim();
     return value === "" ? null : value;
@@ -217,7 +245,7 @@
 <section>
   <!-- What is selected: a part, a tab or pane, a menu item, or else the window itself. -->
   {#if location && p && info}
-    <div class="kind">{info.name}</div>
+    <div class="kind">{p.kind === "custom" ? p.part : info.name}</div>
 
     <label class="prop">
       <span>Name</span>
@@ -643,6 +671,61 @@
       </fieldset>
     {/if}
 
+    <!-- A custom part (DESIGN 5.19): its declared properties, and its tells wired like events. -->
+    {#if p.kind === "custom" && declared}
+      {#if declared.properties.length > 0}
+        <fieldset class="checks">
+          <legend>Properties</legend>
+          {#each declared.properties as property (property.name.name)}
+            {@const name = property.name.name}
+            {#if property.ty.kind.kind === "bool"}
+              <label
+                ><input
+                  type="checkbox"
+                  checked={p.values[name]?.kind === "bool" && p.values[name]?.value === true}
+                  onchange={(e) => setPartValue(name, e.currentTarget.checked ? { kind: "bool", value: true } : null)}
+                />
+                {name}</label
+              >
+            {:else}
+              <label class="prop">
+                <span>{name}</span>
+                <input
+                  value={literalShown(p.values[name])}
+                  placeholder={property.default ? "as declared" : ""}
+                  onchange={(e) => setPartValue(name, writtenValue(property.ty.kind, e.currentTarget.value))}
+                />
+              </label>
+            {/if}
+          {/each}
+          <p class="hint">Code reads and sets them as <code>{partName}.{declared.properties[0].name.name}</code>.</p>
+        </fieldset>
+      {/if}
+      {#if declared.tells.length > 0}
+        <fieldset class="checks">
+          <legend>Tells</legend>
+          {#each declared.tells as tell (tell.name.name)}
+            {@const handler = p.tells.find((t) => t.tell === tell.name.name)?.handler ?? ""}
+            <div class="event-row">
+              <span class="event-name">{tell.name.name}</span>
+              <input value={handler} placeholder="handler" onchange={(e) => setTell(tell.name.name, textOf(e), paramsText(tell.params))} />
+              {#if handler}
+                <span class="event-buttons">
+                  <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+                  <button class="small" title="Unwire" onclick={() => setTell(tell.name.name, null, "")}>&times;</button>
+                </span>
+              {:else}
+                <button class="small" title="Wire a handler named after the part and the tell" onclick={() => setTell(tell.name.name, partName + tell.name.name[0].toUpperCase() + tell.name.name.slice(1), paramsText(tell.params))}
+                  >Wire</button
+                >
+              {/if}
+            </div>
+          {/each}
+          <p class="hint">A handler wired to a tell takes the tell's values.</p>
+        </fieldset>
+      {/if}
+    {/if}
+
     {#if info.properties.includes("orientation")}
       <label class="prop">
         <span>Orientation</span>
@@ -660,12 +743,6 @@
           <option value="bitmap">Bitmap</option>
           <option value="gpu">GPU</option>
         </select>
-      </label>
-    {/if}
-    {#if info.properties.includes("renderer")}
-      <label class="prop">
-        <span>Renderer</span>
-        <input value={p.renderer ?? ""} placeholder="name of the hand-written renderer" onchange={(e) => update({ renderer: textOf(e) })} />
       </label>
     {/if}
     {#if info.properties.includes("source")}

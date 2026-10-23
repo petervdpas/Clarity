@@ -1,5 +1,6 @@
 //! A top-level declaration as text: a window, the app, an entity, an enum,
-//! a function, an action, a code block, a theme or an engine. The code panels show one
+//! a function, an action, a code block, a theme, an engine, a custom part or
+//! a library. The code panels show one
 //! declaration, check it while it is typed and write it back, keeping the
 //! rest of the file exactly as it was.
 
@@ -8,7 +9,7 @@ use crate::edit::{EditError, EditResult};
 use crate::lexer::lex;
 
 /// The words a declaration that can be edited as text starts with.
-const DECL_WORDS: [&str; 9] = ["page", "app", "entity", "enum", "function", "action", "code", "theme", "engine"];
+const DECL_WORDS: [&str; 11] = ["page", "app", "entity", "enum", "function", "action", "code", "theme", "engine", "part", "library"];
 
 fn fail<T>(message: impl Into<String>) -> EditResult<T> {
     Err(EditError(message.into()))

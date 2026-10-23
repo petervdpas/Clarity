@@ -36,6 +36,7 @@
     errorsBlockSave = true,
     language = "clarity",
     readonly = false,
+    bare = false,
     ondirty = () => {},
     ontext = () => {},
     onclose = () => {},
@@ -58,6 +59,8 @@
     language?: "clarity" | "rust" | "plain";
     /** Shown to read, not to change: no Save, Revert or problems. */
     readonly?: boolean;
+    /** Without its Save and Revert bar: the view around it saves and reverts. Its problems stay. */
+    bare?: boolean;
     ondirty?: (dirty: boolean) => void;
     /** The text as it is typed, saved or not, for a view that follows it. */
     ontext?: (text: string) => void;
@@ -215,6 +218,11 @@
     return !dirty;
   }
 
+  /** Puts back the saved text. */
+  export function revertText() {
+    revert();
+  }
+
   function revert() {
     show(saved);
     error = null;
@@ -329,7 +337,7 @@
 </script>
 
 <div class="source">
-  {#if !readonly}
+  {#if !readonly && !bare}
   <div class="bar">
     {#if jumps.length > 0}
       <nav class="jumps">

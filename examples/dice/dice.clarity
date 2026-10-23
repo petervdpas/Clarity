@@ -1,0 +1,48 @@
+module dice
+
+// One roll: how many dice were thrown, what they showed, and when.
+entity Roll
+    dice: integer, label @rollDiceLabel
+    total: integer, label @rollTotalLabel
+    faces: text(40), label @rollFacesLabel
+    rolled: datetime, label @rollRolledLabel
+
+// Dice on a felt table, drawn in 3D with Bevy: told to roll, they tumble,
+// bounce and land, then tell what they show.
+part Dice
+    crate "parts/Dice"
+    count: integer, min 1, max 6, default 2
+    tells landed(total: integer, faces: text)
+    hears roll
+    size 8 x 10
+
+page Table: window
+    title @tableTitle
+    size 980 x 640
+    data rolls: list<Roll>
+    data count: integer, default 2
+    data shown: integer
+    Dice name board at 1,1 span 8 rows 12 count 2 on landed: diceLanded
+    label @countLabel name countLabel for countSlider at 9,1 span 4
+    slider name countSlider at 9,2 span 4 bind count min 1 max 6 on change: countChanged
+    label @shownLabel name shownLabel at 9,3 span 4
+    display name shownBox at 9,4 span 4 rows 2 bind shown digits 2
+    button @rollCaption name rollButton at 9,6 span 4 on click: rollClicked
+    table name history at 9,7 span 4 rows 6 bind rolls columns rolled, faces, total order by rolled desc
+
+code Table
+    handler diceLanded(total: integer, faces: text)
+        shown = total
+        let roll = new Roll
+        roll.dice = count
+        roll.total = total
+        roll.faces = faces
+        roll.rolled = now()
+        save roll
+        reload rolls
+
+    handler countChanged
+        board.count = count
+
+    handler rollClicked
+        board.roll()

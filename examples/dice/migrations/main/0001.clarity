@@ -1,0 +1,8 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Rolls"
+    add entity Roll
+        dice: integer
+        total: integer
+        faces: text(40)
+        rolled: datetime

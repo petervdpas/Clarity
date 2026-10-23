@@ -26,8 +26,8 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Write each native custom part's header from its declaration, and a
-    /// starter into a part's folder that has none (DESIGN 5.19).
+    /// Write the file each custom part and library follows from its
+    /// declaration, and a starter into a folder that has none (DESIGN 5.19, 5.21).
     Parts {
         /// The project file, like shop.clarity.
         project: PathBuf,

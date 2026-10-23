@@ -869,7 +869,7 @@ Next runs the handler of `on next` on the step the person is on, then moves one 
 
 ### Custom parts
 
-A custom part is a part an outside library draws: a game scene drawn with SFML, a map, a code editor. It is declared in a module, so the checker, code and the designer treat it as a built-in part, and placed in a window by its name. DESIGN 5.19 and 6.5 have the whole design; the `orbs` example has one drawn with SFML.
+A custom part is a part an outside library draws: a game scene drawn with SFML, a map, a code editor. It is declared in a module, so the checker, code and the designer treat it as a built-in part, and placed in a window by its name. DESIGN 5.19 and 6.5 have the whole design; the `orbs` example has one drawn with SFML in C++, the `dice` example one drawn with Bevy in Rust.
 
 ```clarity
 part Arena

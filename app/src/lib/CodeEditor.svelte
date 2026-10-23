@@ -25,6 +25,8 @@
     reloadKey,
     language,
     readonly = false,
+    bare = false,
+    ondirty = () => {},
     onclose,
   }: {
     load: () => Promise<string>;
@@ -35,6 +37,9 @@
     language: CodeLanguage;
     /** Shown to read, not to change. */
     readonly?: boolean;
+    /** Without its own bar: the view around it saves and reverts. */
+    bare?: boolean;
+    ondirty?: (dirty: boolean) => void;
     onclose?: () => void;
   } = $props();
 
@@ -64,6 +69,18 @@
       default:
         return [];
     }
+  }
+
+  $effect(() => ondirty(dirty));
+
+  /** Saves unsaved changes. */
+  export function saveFile() {
+    return store();
+  }
+
+  /** Loads the file again, dropping unsaved changes. */
+  export function revertFile() {
+    return revert();
   }
 
   async function store() {
@@ -135,7 +152,8 @@
   onDestroy(() => view?.destroy());
 </script>
 
-<div class="code-editor">
+<div class="code-editor" class:bare>
+  {#if !bare}
   <div class="bar">
     <span class="state">
       {#if readonly}<span class="muted">read only</span>{:else if dirty}<span class="dirty">unsaved</span>{/if}
@@ -148,6 +166,7 @@
       {#if onclose}<button onclick={onclose} title="Close the file">&times;</button>{/if}
     </span>
   </div>
+  {/if}
   {#if error}<p class="refused" role="alert">{error}</p>{/if}
   <div class="host" bind:this={host}></div>
 </div>
@@ -159,6 +178,9 @@
     flex-direction: column;
     min-height: 0;
     border: 1px solid var(--border);
+  }
+  .bare {
+    border: none;
   }
   .bar {
     display: flex;

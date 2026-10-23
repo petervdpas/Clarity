@@ -200,6 +200,59 @@ pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Optio
     })
 }
 
+/// Builds a custom part or a library on its own, in its folder, its output
+/// in the Output panel: what Build in the part's view does. `steps` run in
+/// order, with `env`; the first to fail ends it.
+pub fn start_part(app: AppHandle, name: String, folder: PathBuf, steps: Vec<Vec<String>>, env: Vec<(String, String)>) -> Result<(), String> {
+    let state = app.state::<BuildState>();
+    if state.busy.swap(true, Ordering::SeqCst) {
+        return Err("a build is already running".to_string());
+    }
+    begin_output(&app);
+    std::thread::spawn(move || {
+        let mut done = BuildDone { ok: true, message: format!("{name} built"), binary: None };
+        for step in &steps {
+            if let Err(message) = run_tool(&app, &folder, step, &env) {
+                done = BuildDone { ok: false, message: format!("{name} did not build: {message}"), binary: None };
+                break;
+            }
+        }
+        app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
+        send_done(&app, done);
+    });
+    Ok(())
+}
+
+/// Runs one tool in `dir`, its output in the Output panel.
+fn run_tool(app: &AppHandle, dir: &Path, step: &[String], env: &[(String, String)]) -> Result<(), String> {
+    let Some((tool, args)) = step.split_first() else { return Ok(()) };
+    send_line(app, format!("{tool} {} (in {})", args.join(" "), dir.display()));
+    let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
+        .args(args)
+        .env("PATH", clarity_gen::tools::tool_path())
+        .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| format!("cannot start {tool}: {err}; is it installed?"))?;
+    let stdout = child.stdout.take().map(|stdout| {
+        let app = app.clone();
+        std::thread::spawn(move || send_lines(&app, stdout))
+    });
+    if let Some(stderr) = child.stderr.take() {
+        send_lines(app, stderr);
+    }
+    if let Some(reader) = stdout {
+        let _ = reader.join();
+    }
+    match child.wait() {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err(format!("{tool} failed; see the output")),
+    }
+}
+
 fn send_lines(app: &AppHandle, from: impl std::io::Read) {
     for line in BufReader::new(from).lines().map_while(Result::ok) {
         send_line(app, line);

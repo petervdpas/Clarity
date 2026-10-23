@@ -93,3 +93,12 @@ fn are_edits() {
     assert!(added.text.ends_with("function one() -> integer\n    return 1\n"));
     assert_eq!(added.focus, Some(offset(&added.text, "function one")));
 }
+
+#[test]
+fn parts_and_libraries_are_declarations_too() {
+    let file = "module m\n\npart Arena\n    native \"parts/Arena\"\n    hears restart\n\nlibrary Words\n    nuget \"Humanizer.Core\" 2.14.1\n    function spell(n: integer) -> text\n";
+    assert_eq!(decl_text(file, offset(file, "part Arena")).unwrap(), "part Arena\n    native \"parts/Arena\"\n    hears restart\n");
+    assert_eq!(decl_text(file, offset(file, "library Words")).unwrap(), "library Words\n    nuget \"Humanizer.Core\" 2.14.1\n    function spell(n: integer) -> text\n");
+    let replaced = replace_decl(file, offset(file, "part Arena"), "part Arena\n    native \"parts/Arena\"\n").unwrap();
+    assert!(replaced.contains("part Arena\n    native \"parts/Arena\"\n\nlibrary Words"), "{replaced}");
+}

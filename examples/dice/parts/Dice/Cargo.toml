@@ -1,0 +1,21 @@
+# The crate that draws custom part Dice with Bevy. Clarity builds it into the program.
+[package]
+name = "dice_part"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# The window's raw handle, which Bevy takes.
+raw-window-handle = "0.6"
+# Bevy's 3D renderer only: no window loop of its own (Clarity's part host gives
+# the window and calls frame), no audio, no UI.
+bevy = { version = "0.20", default-features = false, features = [
+    "std",
+    "bevy_asset",
+    "bevy_window",
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "tonemapping_luts",
+    "zstd_rust",
+] }

@@ -1,13 +1,10 @@
 <script lang="ts">
-  // A custom part (DESIGN 5.19): what it is declared as, where its library
-  // is, and the library's files, opened and edited here. Its declaration is
-  // Clarity, edited as text; the header in a native part's `clarity` folder
-  // is Clarity's, written from the declaration, and shown to read.
+  // A custom part (DESIGN 5.19): what it is declared as, and its folder as a
+  // file tree with tabs. Its declaration is Clarity, edited as text in the
+  // first tab; the file Clarity writes from it is shown to read.
 
   import { invoke } from "./backend";
-  import SourceEditor from "./SourceEditor.svelte";
-  import CodeEditor from "./CodeEditor.svelte";
-  import { languageOfFile } from "./codeLanguages";
+  import FolderEditor from "./FolderEditor.svelte";
   import { paramsText } from "./customParts";
   import type { CodeView } from "./generated/CodeView";
   import type { DeclTrial } from "./generated/DeclTrial";
@@ -26,8 +23,6 @@
     onapply: (edit: Edit) => Promise<void>;
   } = $props();
 
-  type PartFile = { path: string; own: boolean };
-
   const name = $derived(decl.name.name);
   const item = $derived(decl.span.start);
   const library = $derived.by(() => {
@@ -40,34 +35,14 @@
     return `${l.file}, through its adapter in parts/${name}`;
   });
 
-  let files = $state<PartFile[]>([]);
-  let open = $state<PartFile | null>(null);
-  let note = $state<string | null>(null);
-
-  async function list() {
-    try {
-      files = await invoke<PartFile[]>("part_files", { name });
-      if (open && !files.some((f) => f.path === open?.path)) open = null;
-    } catch (err) {
-      files = [];
-      note = String(err);
-    }
-  }
-
-  $effect(() => {
-    void name;
-    void file.version;
-    void list();
+  const declaration = $derived({
+    load: () => invoke<CodeView>("decl_text", { path: file.path, item }),
+    check: async (text: string) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems,
+    save: (text: string) => onapply({ op: "replaceDecl", item, text }),
+    reloadKey: file.path + "\n" + item + "\n" + file.version,
   });
-
-  async function writeFolders() {
-    const written = await invoke<string[]>("write_part_folders").catch((err) => {
-      note = String(err);
-      return null;
-    });
-    if (written) note = written.length > 0 ? `Wrote ${written.join(", ")}` : "The header and the library's files are up to date.";
-    await list();
-  }
+  /** C, C++ (CMake), Rust and Go build on their own; .NET and C libraries only with the program. */
+  const buildable = $derived(['native', 'crate', 'go'].includes(decl.library?.kind ?? ""));
 </script>
 
 <div class="part">
@@ -76,8 +51,15 @@
     <span class="muted">custom part in module {file.module?.name ?? ""}, drawn by {library}</span>
   </header>
 
-  <div class="panes">
-    <aside>
+  <FolderEditor
+    {name}
+    version={file.version}
+    declarationLabel="part {name}"
+    {declaration}
+    buildable={buildable}
+    buildTitle={buildable ? "Builds it on its own in its folder, the output in the Output panel" : "It is built with the program: use Build in the toolbar"}
+    writeLabel="Write interface and starter" writeTitle="Writes the file that follows the declaration, and a starter where the folder has none">
+    {#snippet summary()}
       <section>
         <h3>What the window sees</h3>
         <dl>
@@ -91,49 +73,8 @@
           <dd>{decl.hears.map((h) => `${h.name.name}(${paramsText(h.params)})`).join(", ") || "none"}</dd>
         </dl>
       </section>
-
-      <section>
-        <h3>Its library</h3>
-        <ul class="files">
-          {#each files as f (f.path)}
-            <li>
-              <button class:active={open?.path === f.path} onclick={() => (open = f)}>
-                <code>{f.path}</code>
-                {#if f.own}<span class="muted">Clarity's</span>{/if}
-              </button>
-            </li>
-          {:else}
-            <li class="muted">No files yet.</li>
-          {/each}
-        </ul>
-        <button onclick={writeFolders} title="Writes the header from the declaration, and a starter where the folder has none">Write header and starter</button>
-        {#if note}<p class="muted">{note}</p>{/if}
-      </section>
-    </aside>
-
-    <section class="code">
-      {#if open}
-        {@const shown = open}
-        <div class="tab"><code>{shown.path}</code>{#if shown.own}<span class="muted"> written from the declaration</span>{/if}</div>
-        <CodeEditor
-          load={() => invoke<string>("part_file_text", { name, path: shown.path })}
-          save={(text) => invoke<void>("save_part_file", { name, path: shown.path, text })}
-          reloadKey={name + "\n" + shown.path + "\n" + file.version}
-          language={languageOfFile(shown.path)}
-          readonly={shown.own}
-          onclose={() => (open = null)}
-        />
-      {:else}
-        <div class="tab"><code>part {name}</code></div>
-        <SourceEditor
-          load={() => invoke<CodeView>("decl_text", { path: file.path, item })}
-          check={async (text) => (await invoke<DeclTrial>("try_decl", { path: file.path, item, text })).problems}
-          save={(text) => onapply({ op: "replaceDecl", item, text })}
-          reloadKey={file.path + "\n" + item + "\n" + file.version}
-        />
-      {/if}
-    </section>
-  </div>
+    {/snippet}
+  </FolderEditor>
 </div>
 
 <style>
@@ -154,17 +95,6 @@
   .muted {
     opacity: 0.7;
   }
-  .panes {
-    display: flex;
-    gap: 16px;
-    flex: 1;
-    min-height: 0;
-  }
-  aside {
-    width: 300px;
-    flex: none;
-    overflow: auto;
-  }
   h3 {
     font-size: 0.85em;
     text-transform: uppercase;
@@ -182,30 +112,5 @@
   }
   dd {
     margin: 0;
-  }
-  .files {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 8px;
-  }
-  .files button {
-    width: 100%;
-    text-align: left;
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .files button.active {
-    font-weight: bold;
-  }
-  .code {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .tab {
-    padding: 4px 0;
   }
 </style>

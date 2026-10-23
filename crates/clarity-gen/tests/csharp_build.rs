@@ -84,7 +84,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // The database the project file names, with every step applied.
     // A project with records has its database; one without needs none.
-    if project.entities().next().is_some() {
+    if project.stored_entities().next().is_some() {
         assert!(out.join(format!("data/{name}.db")).exists());
     }
     // The translated texts as a satellite assembly, as .NET looks for them.

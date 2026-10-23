@@ -38,3 +38,7 @@ translation nl
     moveNumberLabel "Zetnummer"
     moveSquareLabel "Vakje"
     moveMarkLabel "Teken"
+    preferencesItem "Voorkeuren"
+    preferencesTitle "Voorkeuren"
+    closeButtonCaption "Sluiten"
+    languagePicker "Taal"

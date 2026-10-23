@@ -18,6 +18,7 @@ app Records
         item @collectionItem name collectionItem
             item @artistsItem name artistsItem on click -> ArtistBrowse
             item @genresItem name genresItem on click -> GenreBrowse
+            item @overviewItem name overviewItem on click -> CollectionOverview
         item @loansItem name loansItem
             item @onLoanItem name onLoanItem on click -> LoanBrowse
             item @friendsItem name friendsItem on click -> FriendBrowse

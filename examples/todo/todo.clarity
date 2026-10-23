@@ -2,6 +2,7 @@ module todo
 
 entity Person
     name: text(80), required, unique, label @personNameLabel
+    color: color, default "#3b82f6", label @personColorLabel
 
 entity Task
     title: text(120), required, label @taskTitleLabel
@@ -70,15 +71,17 @@ page Users: window
                 button @languageButtonCaption name usersLanguageButton icon "languages" large on click -> language
                 button @themeButtonCaption name usersThemeButton large on click -> theme
 
-    table name peopleGrid at 1,1 span 12 rows 6 bind people columns name resizable on select: personSelected
-    form name personForm at 1,7 span 12 rows 1 bind person
+    table name peopleGrid at 1,1 span 12 rows 6 bind people columns name, color resizable sortable on select: personSelected
+    form name personForm at 1,7 span 12 rows 2 bind person
         label @nameLabel name nameLabel at 1,1 span 2 for name
         textbox name name at 3,1 span 8 bind person.name placeholder @namePlaceholder
         help name nameHelp at 11,1 span 2 for name
-    button @newButtonCaption name newButton at 5,9 span 2 on click: newClicked
-    button @saveButtonCaption name saveButton at 7,9 span 2 key "Ctrl+S" default on click: saveClicked
-    button @deletePersonButtonCaption name deletePersonButton at 9,9 span 2 on click: deletePersonClicked
-    button @closeButtonCaption name closeButton at 11,9 span 2 cancel on click: closeClicked
+        label @colorLabel name colorLabel at 1,2 span 2 for colorBox
+        color name colorBox at 3,2 span 3 bind person.color
+    button @newButtonCaption name newButton at 5,10 span 2 on click: newClicked
+    button @saveButtonCaption name saveButton at 7,10 span 2 key "Ctrl+S" default on click: saveClicked
+    button @deletePersonButtonCaption name deletePersonButton at 9,10 span 2 on click: deletePersonClicked
+    button @closeButtonCaption name closeButton at 11,10 span 2 cancel on click: closeClicked
 
 page Preferences: dialog
     title @preferencesTitle

@@ -36,7 +36,7 @@ page LoanBrowse: window
 
     heading @loansHeadingCaption name loansHeading at 1,1 span 6
     checkbox @showReturnedCaption name showReturned at 9,1 span 4 on change: windowReturned
-    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lent_on, returned_on on open: openClicked
+    table name loanGrid at 1,2 span 12 rows 8 bind loans columns album, friend, lent_on, returned_on sortable on open: openClicked
     button @friendsCaption name friends at 1,10 span 2 on click -> FriendBrowse
     button @lendCaption name lend at 7,10 span 2 on click -> LoanDialog
     button @backButtonCaption name backButton at 9,10 span 2 on click: backClicked
@@ -48,9 +48,9 @@ page LoanDialog: dialog
     on open: dialogOpened
 
     label @albumLabel name albumLabel at 1,1 span 3 for album
-    dropdown name album at 4,1 span 9 bind loan.album
+    dropdown name album at 4,1 span 9 bind loan.album search show title, year
     label @friendLabel name friendLabel at 1,2 span 3 for friend
-    dropdown name friend at 4,2 span 9 bind loan.friend
+    dropdown name friend at 4,2 span 9 bind loan.friend search show name, phone
     label @lentOnLabel name lentOnLabel at 1,3 span 3 for lentOn
     date name lentOn at 4,3 span 4 bind loan.lent_on
     label @returnedOnLabel name returnedOnLabel at 1,4 span 3 for returnedOn

@@ -12,11 +12,13 @@ app Dial
 
 page Main: window
     title @mainTitle
-    size 360 x 360
+    size 360 x 400
     data speed: integer, default 80
     canvas name dial at 1,1 span 12 rows 7 on draw: drawDial
     button @slowerCaption name slower at 1,8 span 6 key "-" on click: change(-10)
     button @fasterCaption name faster at 7,8 span 6 key "+" on click: change(10)
+    // Or the speed set at once, in steps of 10.
+    slider name speedSlider at 1,9 span 12 bind speed min 0 max 200 step 10 on change: speedSet
 
 code Main
     // The needle turns from 210 degrees at 0 km/h to -30 at 200, and
@@ -31,6 +33,11 @@ code Main
         dial.line(50, 50, 50 + 34 * cos(angle), 50 - 34 * sin(angle), Gauge.zone(speed), 3)
         dial.circle(50, 50, 4, Gauge.zone(speed))
         dial.text(50, 72, "{speed} km/h", "text", 9)
+
+    // The dial draws again after every handler.
+    handler speedSet
+        if speed > 200
+            speed = 200
 
     handler change(by: integer)
         if speed + by >= 0 and speed + by <= 200

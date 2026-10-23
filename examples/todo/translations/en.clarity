@@ -45,3 +45,5 @@ translation en
     dismiss "Dismiss"
     languagePicker "Language"
     themePicker "Theme"
+    personColorLabel "Color"
+    colorLabel "Color"

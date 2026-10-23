@@ -12,6 +12,7 @@ enum Format
 entity Genre
     name: text(40), required, unique, label @genreNameLabel
     parent: ref Genre, help @genreParentHelp, label @genreParentLabel
+    children: list<Genre>, label @genreChildrenLabel
 
 entity Artist
     name: text(80), required, unique, label @artistNameLabel
@@ -32,6 +33,8 @@ entity Album
     rating: integer, min 0, max 5, help @albumRatingHelp, label @albumRatingLabel
     cover: image, help @albumCoverHelp, label @albumCoverLabel
     notes: text, label @albumNotesLabel
+    tags: list<text>, label @albumTagsLabel
+    booklet: file, label @albumBookletLabel
 
 // A track of an album; the album form lists them in order.
 entity Track
@@ -95,7 +98,7 @@ page AlbumBrowse: window
     image name collectionLogo at 12,1 span 1 rows 1 source "logo.png" tooltip @collectionLogoTooltip
     label @titleFilterLabel name titleFilterLabel at 1,2 span 2 for titleFilter
     textbox name titleFilter at 3,2 span 10 placeholder @titleFilterPlaceholder on change: filterChanged
-    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price resizable on open: openClicked
+    table name grid at 1,3 span 12 rows 8 bind albums columns title, artist, year, format, rating, price, tags resizable sortable page 25 on open: openClicked
     button @exportListCaption name exportList at 1,11 span 2 on click: exportClicked
     button @newAlbumCaption name newAlbum at 9,11 span 2 on click -> AlbumForm
     button @openCaption name openAlbum at 11,11 span 2 on click: openClicked
@@ -113,7 +116,7 @@ page AlbumForm: window
                 label @titleLabel name titleLabel at 1,1 span 3 for title
                 textbox name title at 4,1 span 9 bind album.title
                 label @artistLabel name artistLabel at 1,2 span 3 for artist
-                dropdown name artist at 4,2 span 9 bind album.artist
+                dropdown name artist at 4,2 span 9 bind album.artist search show name, country
                 label @genreLabel name genreLabel at 1,3 span 3 for genre
                 dropdown name genre at 4,3 span 9 bind album.genre
                 label @yearLabel name yearLabel at 1,4 span 3 for year
@@ -121,7 +124,9 @@ page AlbumForm: window
                 label @formatLabel name formatLabel at 1,5 span 3 for format
                 radio name format at 4,5 span 9 bind album.format vertical rows 3
                 label @recordLabelLabel name recordLabelLabel at 1,8 span 3 for recordLabel
-                textbox name recordLabel at 4,8 span 9 bind album.record_label
+                dropdown name recordLabel at 4,8 span 9 bind album.record_label typed
+                label @tagsLabel name tagsLabel at 1,9 span 3 for tags
+                tags name tags at 4,9 span 9 bind album.tags
         pane
             tabs name albumTabs at 1,1 span 12 rows 9
                 tab @albumFormTracksTab
@@ -134,8 +139,10 @@ page AlbumForm: window
                     label @priceLabel name priceLabel at 1,2 span 3 for price
                     number name price at 4,2 span 4 bind album.price
                     label @ratingLabel name ratingLabel at 1,3 span 3 for rating
-                    number name rating at 4,3 span 2 bind album.rating
-                    help name ratingHelp at 6,3 span 7 for rating
+                    slider name rating at 4,3 span 5 bind album.rating
+                    help name ratingHelp at 9,3 span 4 for rating
+                    label @bookletLabel name bookletLabel at 1,4 span 3 for booklet
+                    file name booklet at 4,4 span 9 bind album.booklet
                 tab @albumFormCoverTab
                     image name cover at 1,1 span 12 rows 6 bind album.cover
                     help name coverHelp at 1,7 span 12 for cover
@@ -182,7 +189,7 @@ page ArtistForm: window
         label @nameLabel name nameLabel at 1,1 span 3 for name
         textbox name name at 4,1 span 6 bind artist.name
         label @countryLabel name countryLabel at 1,2 span 3 for country
-        textbox name country at 4,2 span 6 bind artist.country
+        dropdown name country at 4,2 span 6 bind artist.country typed
         label @formedLabel name formedLabel at 1,3 span 3 for formed
         number name formed at 4,3 span 2 bind artist.formed
         label @websiteLabel name websiteLabel at 1,4 span 3 for website
@@ -195,9 +202,23 @@ page GenreBrowse: window
     data genres: list<Genre>
     on return: windowReturned
 
-    table name genreGrid at 1,1 span 10 rows 8 bind genres columns name, parent on open: openClicked
+    treetable name genreTree at 1,1 span 10 rows 8 bind genres children children columns name on open: openClicked
     button @newGenreCaption name newGenre at 11,1 span 2 on click -> GenreDialog
     button @openCaption name openGenre at 11,2 span 2 on click: openClicked
+
+// The collection at a glance: what it is on, when it is from, where the money went.
+page CollectionOverview: window
+    title @collectionOverviewTitle
+    data albums: list<Album>
+    on open: overviewOpened
+    on return: overviewOpened
+
+    heading @albumsPerFormatHeading name albumsPerFormatHeading at 1,1 span 6
+    heading @albumsPerYearHeading name albumsPerYearHeading at 7,1 span 6
+    chart bar name formatChart at 1,2 span 6 rows 6 bind albums by format count
+    chart line name yearChart at 7,2 span 6 rows 6 bind albums by year count
+    heading @spentPerGenreHeading name spentPerGenreHeading at 1,8 span 12
+    chart pie name genreChart at 1,9 span 12 rows 6 bind albums by genre sum price
 
 page GenreDialog: dialog
     title @genreDialogTitle
@@ -298,7 +319,11 @@ code GenreBrowse
         reload genres
 
     handler openClicked
-        open GenreDialog with genre = genreGrid.selected
+        open GenreDialog with genre = genreTree.selected
+
+code CollectionOverview
+    handler overviewOpened
+        albums = find a in Album
 
 code GenreDialog
     handler saveClicked

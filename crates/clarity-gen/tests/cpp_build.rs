@@ -50,7 +50,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     let said = run(&out, &out.join("build/debug").join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // A project with records has its database; one without needs none.
-    if project.entities().next().is_some() {
+    if project.stored_entities().next().is_some() {
         assert!(out.join("data/app.db").exists());
     }
     std::fs::remove_dir_all(&out).unwrap();

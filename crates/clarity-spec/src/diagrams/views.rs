@@ -143,7 +143,8 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
             let mut b = class_box(&entity.name.name, ClassBoxKind::Entity, module.clone());
             for field in &entity.fields {
                 match &field.ty {
-                    FieldType::List { item } if shown(&item.name) => design.relations.push(ClassRelation {
+                    // A list of the entity's own kind (a tree's `children`) stays a field; its parent reference is the line.
+                    FieldType::List { item } if shown(&item.name) && item.name != entity.name.name => design.relations.push(ClassRelation {
                         left: entity.name.name.clone(),
                         right: item.name.clone(),
                         link: if field.modifiers.owned { ClassLink::Composition } else { ClassLink::Aggregation },
@@ -152,7 +153,7 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                         label: Some(field.name.name.clone()),
                     }),
                     FieldType::Ref { entity: other } if shown(&other.name) => {
-                        if !listed(&entities, &other.name, &entity.name.name) {
+                        if other.name == entity.name.name || !listed(&entities, &other.name, &entity.name.name) {
                             design.relations.push(ClassRelation {
                                 left: entity.name.name.clone(),
                                 right: other.name.clone(),
@@ -301,6 +302,7 @@ fn attribute(field: &Field) -> String {
         }
         FieldType::Ref { entity } => (entity.name.clone(), Some("FK")),
         FieldType::List { item } => (format!("{}[]", item.name), None),
+        FieldType::Values { item } => (format!("{}[]", item.word()), None),
         _ => (field.type_text.clone(), None),
     };
     let key = key.or(m.unique.then_some("UK"));

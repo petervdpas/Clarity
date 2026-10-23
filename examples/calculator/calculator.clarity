@@ -3,6 +3,18 @@ module calculator
 app Calculator
     title @calculatorTitle
     main Main
+    menu name mainMenu
+        item @calculatorItem name calculatorItem
+            item @preferencesItem name preferencesItem on click -> Preferences
+            separator
+            item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+
+// What each person sets for themselves, kept on their machine: the
+// language, the look, and the decimals a result is rounded to.
+settings
+    language
+    theme
+    decimals: integer, min 0, max 8, default 4, label @settingsDecimalsLabel
 
 theme Calculator
     title @calculatorTheme
@@ -35,7 +47,7 @@ function calculate(a: decimal, op: Operation, b: decimal) -> decimal
 
 page Main: window
     title @mainTitle
-    size 320 x 340
+    size 320 x 370
     data shown: decimal
     data entry: decimal
     data total: decimal
@@ -65,6 +77,17 @@ page Main: window
     button "0" name digit0 at 1,7 span 2 key "0" on click: digit(0)
     button "." name pointKey at 3,7 span 1 key "." on click: point
     button "=" name equalsKey at 4,7 span 1 style equals key "=" default on click: equals
+
+page Preferences: dialog
+    title @preferencesTitle
+    size 320 x 200
+    grid 4 columns
+
+    form name settingsForm at 1,1 span 4 rows 3 bind settings labels 2
+        dropdown name languageBox at 3,1 span 2 bind settings.language
+        dropdown name themeBox at 3,2 span 2 bind settings.theme
+        spinbox name decimalsBox at 3,3 span 2 bind settings.decimals
+    button @closeButtonCaption name closeButton at 3,5 span 2 cancel on click -> close
 
 code Main
     handler digit(d: integer)
@@ -101,7 +124,7 @@ code Main
             total = entry
         else if not fresh
             total = calculate(total, pending, entry)
-        shown = total
+        shown = round(total, settings.decimals)
         pending = op
         fresh = true
 
@@ -109,7 +132,7 @@ code Main
         if pending != Nothing
             entry = calculate(total, pending, entry)
             total = entry
-            shown = entry
+            shown = round(entry, settings.decimals)
             pending = Nothing
         fresh = true
 

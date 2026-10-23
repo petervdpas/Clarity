@@ -59,7 +59,7 @@ fn a_form_has_a_label_and_input_per_field() {
     let page = &text[text.find("page FreshWindow").unwrap()..];
     assert!(page.contains("    data customer: Customer\n"), "{page}");
     assert!(
-        page.contains("\n    form name customerForm at 1,1 span 12 rows 10 bind customer\n"),
+        page.contains("\n    form name customerForm at 1,1 span 12 rows 12 bind customer\n"),
         "{page}"
     );
     assert!(
@@ -79,8 +79,8 @@ fn a_form_has_a_label_and_input_per_field() {
         page.contains("        memo name notes at 4,8 span 6 rows 3 bind customer.notes\n        help name notesHelp at 10,8 span 3 for notes\n"),
         "{page}"
     );
-    assert!(page.contains("    button @saveCaption name save at 9,12 span 2 default\n"), "{page}");
-    assert!(page.contains("    button @closeCaption name close at 11,12 span 2 cancel"), "{page}");
+    assert!(page.contains("    button @saveCaption name save at 9,14 span 2 default\n"), "{page}");
+    assert!(page.contains("    button @closeCaption name close at 11,14 span 2 cancel"), "{page}");
 }
 
 #[test]

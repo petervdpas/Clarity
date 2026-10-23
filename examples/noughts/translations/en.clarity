@@ -37,3 +37,7 @@ translation en
     moveNumberLabel "Move number"
     moveSquareLabel "Square"
     moveMarkLabel "Mark"
+    preferencesItem "Preferences"
+    preferencesTitle "Preferences"
+    closeButtonCaption "Close"
+    languagePicker "Language"

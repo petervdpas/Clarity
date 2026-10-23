@@ -13,6 +13,8 @@ entity Customer
     active: bool, default true, label @customerActiveLabel
     since: date, label @customerSinceLabel
     notes: text, help @customerNotesHelp, label @customerNotesLabel
+    tags: list<text>, label @customerTagsLabel
+    contract: file, label @customerContractLabel
 
 page CustomerBrowse: window
     title @customerBrowseTitle
@@ -23,7 +25,7 @@ page CustomerBrowse: window
     textbox name nameFilter at 3,1 span 4 placeholder @nameFilterPlaceholder on change: filterChanged
     label @emailFilterLabel name emailFilterLabel at 7,1 span 2 for emailFilter
     textbox name emailFilter at 9,1 span 4 on change: filterChanged
-    table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active on open: openClicked
+    table name grid at 1,2 span 12 rows 8 bind customers columns name, email, kind, credit_limit, active, tags sortable page 20 on open: openClicked
     button @newCaption name newCustomer at 9,10 span 2 on click -> CustomerForm
     button @openButtonCaption name openButton at 11,10 span 2 on click: openClicked
 
@@ -31,10 +33,10 @@ page CustomerForm: window
     title @customerFormTitle
     data customer: Customer
 
-    form name customerForm at 1,1 span 12 rows 7 bind customer
-        tabs name customerTabs at 1,1 span 12 rows 7
+    form name customerForm at 1,1 span 12 rows 8 bind customer
+        tabs name customerTabs at 1,1 span 12 rows 8
             tab @customerFormGeneralTab
-                panel @identityPanelCaption name identityPanel at 1,1 span 12 rows 6
+                panel @identityPanelCaption name identityPanel at 1,1 span 12 rows 7
                     label @nameLabel name nameLabel at 1,1 span 3 for name
                     textbox name name at 4,1 span 6 bind customer.name placeholder @namePlaceholder
                     help name nameHelp at 10,1 span 3 for name
@@ -46,6 +48,8 @@ page CustomerForm: window
                     date name since at 4,4 span 3 bind customer.since
                     label @activeLabel name activeLabel at 1,5 span 3 for active
                     switch name active at 4,5 span 3 bind customer.active
+                    label @tagsLabel name tagsLabel at 1,6 span 3 for tags
+                    tags name tags at 4,6 span 9 bind customer.tags
             tab @customerFormFinanceTab
                 panel @creditPanelCaption name creditPanel at 1,1 span 12 rows 3 foldable
                     label @creditLimitLabel name creditLimitLabel at 1,1 span 3 for creditLimit
@@ -53,12 +57,14 @@ page CustomerForm: window
                     label @vatNumberLabel name vatNumberLabel at 1,2 span 3 for vatNumber
                     textbox name vatNumber at 4,2 span 4 bind customer.vat_number
                     help name vatNumberHelp at 8,2 span 5 for vatNumber
+                label @contractLabel name contractLabel at 1,5 span 3 for contract
+                file name contract at 4,5 span 9 bind customer.contract
             tab @customerFormNotesTab
                 label @notesLabel name notesLabel at 1,1 span 3 for notes
                 memo name notes at 4,1 span 9 rows 4 bind customer.notes
                 help name notesHelp at 4,5 span 9 for notes
-    button @saveCaption name save at 9,9 span 2 tooltip @saveTooltip style primary key "Ctrl+S" default on click: saveClicked
-    button @closeFormCaption name closeForm at 11,9 span 2 cancel on click: closeClicked
+    button @saveCaption name save at 9,10 span 2 tooltip @saveTooltip style primary key "Ctrl+S" default on click: saveClicked
+    button @closeFormCaption name closeForm at 11,10 span 2 cancel on click: closeClicked
 
 code CustomerBrowse
     handler windowReturned

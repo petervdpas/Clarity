@@ -45,3 +45,5 @@ translation nl
     dismiss "Sluiten"
     languagePicker "Taal"
     themePicker "Thema"
+    personColorLabel "Kleur"
+    colorLabel "Kleur"

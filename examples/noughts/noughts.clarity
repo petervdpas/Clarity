@@ -99,8 +99,21 @@ app Noughts
     menu name mainMenu
         item @gameItem name gameItem
             item @anotherWindowItem name anotherWindowItem on click -> Game in new window
+            item @preferencesItem name preferencesItem on click -> Preferences
             separator
             item @quitItem name quitItem key "Ctrl+Q" on click -> quit
+
+// What each person sets for themselves, kept on their machine.
+settings
+    language
+
+page Preferences: dialog
+    title @preferencesTitle
+    size 360 x 160
+
+    form name settingsForm at 1,1 span 12 rows 1 bind settings labels 4
+        dropdown name languageBox at 5,1 span 8 bind settings.language
+    button @closeButtonCaption name closeButton at 9,3 span 4 cancel on click -> close
 
 page Game: window
     title @gameTitle

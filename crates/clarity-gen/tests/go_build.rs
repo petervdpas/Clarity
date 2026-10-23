@@ -101,7 +101,7 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     let said = run(&out, &out.join(name).display().to_string(), &["--check"]);
     assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
     // A project with records has its database; one without needs none.
-    if project.entities().next().is_some() {
+    if project.stored_entities().next().is_some() {
         assert!(out.join("data/app.db").exists());
     }
     std::fs::remove_dir_all(&out).unwrap();
@@ -366,6 +366,13 @@ fn functions_named_like_types_build_in_go() {
 #[ignore]
 fn the_dial_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("dial", "Dial", Runtime::Local);
+}
+
+/// The calculator example: keys, a display and the person's settings.
+#[test]
+#[ignore]
+fn the_calculator_example_builds_and_runs_in_go() {
+    builds_and_runs_in_go("calculator", "Calculator", Runtime::Local);
 }
 
 /// The fifth example: noughts and crosses, each window's game kept by an engine.

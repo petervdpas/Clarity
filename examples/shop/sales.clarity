@@ -34,7 +34,7 @@ page OrderBrowse: window
 
     label @numberFilterLabel name numberFilterLabel at 1,1 span 2 for numberFilter
     textbox name numberFilter at 3,1 span 4 placeholder @numberFilterPlaceholder on change: filterChanged
-    table name ordersTable at 1,2 span 12 rows 8 bind orders columns number, customer, ordered_on, status, total
+    table name ordersTable at 1,2 span 12 rows 8 bind orders columns number, customer, ordered_on, status, total sortable order by ordered_on desc page 20
     button @newCaption name newOrder at 9,10 span 2 on click -> OrderForm
     button @openCaption name openOrder at 11,10 span 2 on click -> OrderForm
 
@@ -50,7 +50,7 @@ page OrderForm: window
         label @orderOrderedOnLabel name orderedOnLabel at 7,1 span 2
         date name orderedOn at 9,1 span 3 bind order.ordered_on
         label @orderCustomerLabel name customerLabel at 1,2 span 3
-        dropdown name orderCustomer at 4,2 span 4 bind order.customer
+        dropdown name orderCustomer at 4,2 span 8 bind order.customer search show name, email
         label @orderStatusLabel name statusLabel at 1,3 span 3
         dropdown name orderStatus at 4,3 span 4 bind order.status
     table name linesGrid at 1,5 span 12 rows 4 bind lines columns product, quantity, price edit product, quantity, price on change: lineChanged
@@ -62,6 +62,20 @@ page OrderForm: window
     button @approveButtonCaption name approveButton at 7,11 span 2 on click: approveClicked
     button @saveCaption name saveOrder at 9,11 span 2
     button @closeCaption name closeOrder at 11,11 span 2
+
+// How sales go: orders by status, money per day, and who spends it.
+page SalesDashboard: window
+    title @salesDashboardTitle
+    data orders: list<Order>
+    on open: dashboardOpened
+    on return: dashboardOpened
+
+    heading @ordersByStatusHeading name ordersByStatusHeading at 1,1 span 6
+    heading @salesPerDayHeading name salesPerDayHeading at 7,1 span 6
+    chart bar name statusChart at 1,2 span 6 rows 6 bind orders by status count
+    chart line name salesChart at 7,2 span 6 rows 6 bind orders by ordered_on sum total
+    heading @salesPerCustomerHeading name salesPerCustomerHeading at 1,8 span 12
+    chart pie name customerChart at 1,9 span 12 rows 6 bind orders by customer sum total
 
 function within_credit(order: Order) -> bool
     return order.total <= order.customer.credit_limit
@@ -86,6 +100,10 @@ code OrderBrowse
 
     handler filterChanged
         orders = find o in Order where o.number contains numberFilter.text order by o.number
+
+code SalesDashboard
+    handler dashboardOpened
+        orders = find o in Order where o.status != Cancelled
 
 code OrderForm
     handler orderOpened

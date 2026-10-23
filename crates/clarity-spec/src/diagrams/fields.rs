@@ -49,9 +49,13 @@ pub(super) fn field_type(written: &str, foreign_key: bool) -> Result<String, Str
         return Err(format!("'{written}' refers to an entity by its name, as ref Customer"));
     }
     if let Some(item) = list_item(written) {
-        return match field_type(item, false)? {
-            entity if entity.starts_with(|c: char| c.is_uppercase()) => Ok(format!("list<{entity}>")),
-            _ => Err(format!("'{written}' lists values; a field lists the records of an entity, as Order[]")),
+        // A list of values (`text[]`, `Format[]`) or of an entity's records (`Order[]`).
+        if let Some(value) = known(item).and_then(crate::model::ListItem::of_word) {
+            return Ok(format!("list<{}>", value.word()));
+        }
+        return match field_type(item, false) {
+            Ok(named) if named.starts_with(|c: char| c.is_uppercase()) => Ok(format!("list<{named}>")),
+            _ => Err(format!("'{written}' lists text, integers, decimals, dates, an enum's values or an entity's records, as text[] or Order[]")),
         };
     }
     let (word, size) = match written.split_once('(') {

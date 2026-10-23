@@ -20,9 +20,11 @@ app Shop
             item @newCustomerItem name newCustomerItem on click -> CustomerForm in new window
         item @ordersItem name ordersItem
             item @allOrdersItem name allOrdersItem on click -> OrderBrowse
+            item @salesDashboardItem name salesDashboardItem on click -> SalesDashboard
     toolbar name mainToolbar
         button @customers2Caption name customers2 icon "users" on click -> CustomerBrowse
         button @orders2Caption name orders2 icon "shopping-cart" on click -> OrderBrowse
+        button @dashboard2Caption name dashboard2 icon "chart-column" on click -> SalesDashboard
         separator
         button @cardButtonCaption name cardButton icon "credit-card" on click -> CustomerCard
     footer

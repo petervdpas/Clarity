@@ -45,3 +45,5 @@ translation de
     dismiss "Schließen"
     languagePicker "Sprache"
     themePicker "Design"
+    personColorLabel "Farbe"
+    colorLabel "Farbe"

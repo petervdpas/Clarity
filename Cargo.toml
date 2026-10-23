@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "crates/clarity-gen", "crates/clarity-cli", "app/src-tauri"]
+# The examples' crates (custom parts, libraries, generated programs) are projects of their own.
+exclude = ["examples"]
 
 [workspace.package]
 edition = "2024"

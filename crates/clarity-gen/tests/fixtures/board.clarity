@@ -1,0 +1,8 @@
+// A test project, not an example: the Board engine of the noughts example
+// with the window that plays it, so every stack builds an engine written in
+// Clarity while each example builds only on its own stack. The tests set
+// the stack.
+project Noughts
+    stack rust web desktop
+    output "out"
+    datasource main sqlite "data/noughts.db"

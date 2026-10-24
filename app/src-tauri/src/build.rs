@@ -502,30 +502,37 @@ pub fn stop(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    /// A copy of the example, its stack line replaced by `stack`.
-    fn example(name: &str, stack: &str) -> PathBuf {
-        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
-        let dir = std::env::temp_dir().join(format!("clarity-run-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let text = std::fs::read_to_string(examples.join("shop.clarity")).unwrap();
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("shop.clarity"), text.replace("stack rust web desktop", stack)).unwrap();
-        // The modules, the migration steps, the translations, the engines and the resources.
-        for folder in ["shop", "shop/migrations/main", "shop/translations", "shop/engines", "shop/resources"] {
-            std::fs::create_dir_all(dir.join(folder)).unwrap();
-            for entry in std::fs::read_dir(examples.join(folder)).unwrap() {
+    /// A copy of the example `name`, on the stack its project file names:
+    /// an example is generated for its own stack only.
+    fn example(name: &str) -> PathBuf {
+        fn copy(from: &Path, to: &Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for entry in std::fs::read_dir(from).unwrap() {
                 let path = entry.unwrap().path();
-                if path.is_file() {
-                    std::fs::copy(&path, dir.join(folder).join(path.file_name().unwrap())).unwrap();
+                let file = path.file_name().unwrap();
+                if path.is_dir() {
+                    // What a run left behind is not the example's.
+                    if file != "out" && file != "data" {
+                        copy(&path, &to.join(file));
+                    }
+                } else {
+                    std::fs::copy(&path, to.join(file)).unwrap();
                 }
             }
         }
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let dir = std::env::temp_dir().join(format!("clarity-run-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let project = format!("{name}.clarity");
+        std::fs::copy(examples.join(&project), dir.join(&project)).unwrap();
+        copy(&examples.join(name), &dir.join(name));
         dir
     }
 
     #[test]
     fn generates_the_example_into_out() {
-        let dir = example("rust", "stack rust web desktop");
+        let dir = example("shop");
         let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), true, false).unwrap();
         // The desktop program, in its own folder of the output (DESIGN 5.20).
         assert_eq!(out, dir.join("shop/out/desktop"));
@@ -585,9 +592,9 @@ mod tests {
 
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
-        let dir = example("csharp", "stack csharp avalonia desktop");
-        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), false, false).unwrap();
-        assert!(out.join("Shop.csproj").exists());
+        let dir = example("todo");
+        let (out, toolchain, _) = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
+        assert!(out.join("Todo.csproj").exists());
         assert!(!out.join("Cargo.toml").exists());
         assert_eq!(toolchain.tool, "dotnet");
         assert!(toolchain.program.starts_with("bin/Debug"), "{}", toolchain.program.display());

@@ -91,6 +91,14 @@ type win32 struct{ instance win.Handle }
 
 var partClass = win.StringToUTF16Ptr("ClarityPart")
 
+// The callbacks Windows calls back into Go, each made once: Go keeps every
+// callback it makes for the life of the program and allows about 2000, so a
+// callback made per part window would run out in a long-running program.
+var (
+	windowProcCallback   = win.NewCallback(windowProc)
+	clipSiblingsCallback = win.NewCallback(clipSiblings)
+)
+
 // windowProc lets every message take its usual course: the part draws the
 // window itself.
 func windowProc(window win.Handle, what uint32, w, l uintptr) uintptr {
@@ -125,7 +133,7 @@ func openPlatform() (windows, error) {
 	cursor, _, _ := procLoadCursorW.Call(0, uintptr(idcArrow))
 	brush, _, _ := procGetStockObject.Call(uintptr(blackBrush))
 	class := wndClassW{
-		wndProc:    win.NewCallback(windowProc),
+		wndProc:    windowProcCallback,
 		instance:   win.Handle(instance),
 		cursor:     win.Handle(cursor),
 		background: win.Handle(brush),
@@ -149,7 +157,7 @@ func (w *win32) child(parent uint64, x, y, width, height int) uint64 {
 	if child == 0 {
 		return 0
 	}
-	procEnumChildWins.Call(uintptr(parent), win.NewCallback(clipSiblings), uintptr(parent))
+	procEnumChildWins.Call(uintptr(parent), clipSiblingsCallback, uintptr(parent))
 	// Above the webview, which fills the same parent.
 	procSetWindowPos.Call(child, hwndTop, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoActivate)
 	return uint64(child)

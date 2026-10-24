@@ -1,4 +1,5 @@
-//! Generates the examples as Go and checks the module as a Go developer
+//! Generates the Go examples on their own stack, and the test projects of
+//! tests/fixtures and conformance as Go, and checks the module as a Go developer
 //! would: gofmt has nothing to change, go mod tidy has no requirement to
 //! add or drop, go vet finds nothing, go build builds it, and the program runs with
 //! `--check` (it opens its database, applies the migration steps and stops). Slow (the Go toolchain and the
@@ -88,8 +89,8 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = Backend::Go;
-    settings.stack.ui = Ui::Web;
+    // An example builds on the stack its project file names, and no other.
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Go, Ui::Web), "{name} is not a Go example");
     let out = scratch().join(format!("clarity-gen-go-{name}-{}", std::process::id()));
     // The database in the scratch folder, not in the example.
     settings.datasources[0].url = "data/app.db".into();
@@ -107,19 +108,13 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
+/// The records example on the published runtime module, at the version the
+/// generator requires, with its recorded sums: what a module outside this
+/// repository builds on.
 #[test]
 #[ignore]
-fn the_shop_example_builds_and_runs_in_go() {
-    builds_and_runs_in_go("shop", "Shop", Runtime::Local);
-}
-
-/// The shop on the published runtime module, at the version the generator
-/// requires, with its recorded sums: what a module outside this repository
-/// builds on.
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_runs_on_the_published_runtime() {
-    builds_and_runs_in_go("shop", "Shop", Runtime::Published);
+fn the_records_example_builds_and_runs_on_the_published_runtime() {
+    builds_and_runs_in_go("records", "Records", Runtime::Published);
 }
 
 /// The sums of the published runtime version, as the Go checksum database
@@ -161,21 +156,14 @@ fn the_records_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("records", "Records", Runtime::Local);
 }
 
-/// The third example: tasks edited in their table, and the people who finish them.
+/// The records example on each server database: the module has only that
+/// driver and its modules, and where a scratch database is named (the
+/// variables of tests/servers.rs) the program migrates it with `--check`, twice.
 #[test]
 #[ignore]
-fn the_todo_example_builds_and_runs_in_go() {
-    builds_and_runs_in_go("todo", "Todo", Runtime::Local);
-}
-
-/// The shop on each server database: the module has only that driver and
-/// its modules, and where a scratch database is named (the variables of
-/// tests/servers.rs) the program migrates it with `--check`, twice.
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_migrates_on_every_server_database_in_go() {
+fn the_records_example_builds_and_migrates_on_every_server_database_in_go() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/shop.clarity");
+    let file = root.join("examples/records.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let tables: Vec<String> = project.entities().map(|e| e.table_name()).collect();
     for (kind, dialect, variable) in [
@@ -184,24 +172,23 @@ fn the_shop_example_builds_and_migrates_on_every_server_database_in_go() {
         (SourceKind::Mssql, clarity_runtime::Dialect::Mssql, "CLARITY_TEST_MSSQL"),
     ] {
         let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-        settings.stack.backend = Backend::Go;
-        settings.stack.ui = Ui::Web;
+        assert_eq!(settings.stack.backend, Backend::Go, "records is a Go example");
         settings.datasources[0].kind = kind;
-        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        settings.datasources[0].url = "env:RECORDS_DATABASE".into();
         let files = clarity_gen::generate(&project, &settings).unwrap();
 
         let out = scratch().join(format!("clarity-gen-go-{variable}-{}", std::process::id()));
         write(&out, &files, Runtime::Local);
         checks(&out, Runtime::Local);
-        run(&out, "go", &["build", "-o", "shop", "."]);
+        run(&out, "go", &["build", "-o", "records", "."]);
 
         if let Ok(at) = std::env::var(variable) {
             empty(&at, dialect, &tables);
             for _ in 0..2 {
-                let ran = Command::new(out.join("shop")).arg("--check").current_dir(&out).env("SHOP_DATABASE", &at).output().unwrap();
+                let ran = Command::new(out.join("records")).arg("--check").current_dir(&out).env("RECORDS_DATABASE", &at).output().unwrap();
                 let said = String::from_utf8_lossy(&ran.stdout);
                 assert!(ran.status.success(), "{variable}: {said}{}", String::from_utf8_lossy(&ran.stderr));
-                assert!(said.contains("Shop: the databases are ready."), "{said}");
+                assert!(said.contains("Records: the databases are ready."), "{said}");
             }
             let db = clarity_runtime::Db::connect(&[("main", dialect, &at)]).unwrap();
             let steps = project.migrations.as_ref().map_or(0, |m| m.get("main").map_or(0, Vec::len));
@@ -375,13 +362,6 @@ fn the_calculator_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("calculator", "Calculator", Runtime::Local);
 }
 
-/// The fifth example: noughts and crosses, each window's game kept by an engine.
-#[test]
-#[ignore]
-fn the_noughts_example_builds_and_runs_in_go() {
-    builds_and_runs_in_go("noughts", "Noughts", Runtime::Local);
-}
-
 /// The noughts example's Board engine, written in Clarity, as the Go it
 /// becomes, played from a test of its own.
 const BOARD_TEST: &str = r#"package main
@@ -445,9 +425,9 @@ func TestEachWindowPlaysAGameOfItsOwn(t *testing.T) {
 #[test]
 #[ignore]
 fn an_engine_written_in_clarity_runs_in_go() {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/board.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Go;
     settings.stack.ui = Ui::Web;
     settings.datasources[0].url = "data/app.db".into();

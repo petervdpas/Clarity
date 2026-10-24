@@ -501,7 +501,7 @@ impl ProjectTools {
             collect_generated(&out, &out, &skipped, &mut files);
             files.sort();
             // One shape of path on every system, as the agent is asked to give it back.
-            let list: Vec<String> = files.iter().take(500).map(|f| format!("- {}", f.display().to_string().replace('\\', "/"))).collect();
+            let list: Vec<String> = files.iter().take(500).map(|f| format!("- {}", clarity_project::slashed(f))).collect();
             return Ok(format!("The generated project in {} ({} files; read one by its path):\n{}", out.display(), files.len(), list.join("\n")));
         }
         let relative = Path::new(path);

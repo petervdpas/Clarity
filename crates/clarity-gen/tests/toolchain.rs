@@ -2,13 +2,14 @@
 //! in Clarity run the command `toolchain` gives and start the program it
 //! names.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clarity_project::{Backend, Ui};
 
+/// A project named shop on `backend`: a new project's settings, not the
+/// shop example, which is generated for its own stack only.
 fn shop(backend: Backend, ui: Ui) -> clarity_project::Settings {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/shop.clarity");
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::starter("Shop", "shop");
     settings.stack.backend = backend;
     settings.stack.ui = ui;
     settings

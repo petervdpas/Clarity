@@ -1,4 +1,4 @@
-//! Engines written in Clarity (the noughts example's Board) in every
+//! Engines written in Clarity (the Board of tests/fixtures/board.clarity, the
 //! stack's output: a store of what each instance keeps, and per function an
 //! entry point that works on it, called from handlers as any engine's.
 
@@ -7,10 +7,10 @@ use clarity_project::{Backend, Ui};
 
 fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/noughts.clarity");
+    let file = root.join("crates/clarity-gen/tests/fixtures/board.clarity");
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = backend;
     settings.stack.ui = ui;
     generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))

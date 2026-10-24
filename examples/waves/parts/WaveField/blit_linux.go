@@ -8,6 +8,7 @@ package wavefield
 /*
 #cgo LDFLAGS: -lX11
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <stdlib.h>
 
 static GC clarity_gc(Display* d, unsigned long window) {

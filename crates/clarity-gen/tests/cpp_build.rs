@@ -1,4 +1,6 @@
-//! Generates the examples as C++ and builds them as a C++ developer would:
+//! Generates the C++ examples on their own stack, and the test projects of
+//! tests/fixtures and conformance as C++, and builds them as a C++ developer
+//! would:
 //! `cmake --workflow --preset debug` configures and builds without a
 //! warning from the program's own code, and the program runs with `--check`
 //! (it opens its database, applies the migration steps and stops). Slow
@@ -30,8 +32,8 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = Backend::Cpp;
-    settings.stack.ui = Ui::Web;
+    // An example builds on the stack its project file names, and no other.
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Cpp, Ui::Web), "{name} is not a C++ example");
     let out = scratch().join(format!("clarity-gen-cpp-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
@@ -60,31 +62,12 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_runs_in_cpp() {
-    builds_and_runs_in_cpp("shop", "Shop");
-}
-
-#[test]
-#[ignore]
-fn the_records_example_builds_and_runs_in_cpp() {
-    builds_and_runs_in_cpp("records", "Records");
-}
-
 /// The game whose field of orbs a native library draws with SFML (a custom
 /// part, DESIGN 5.19): the program builds with its parts library beside it.
 #[test]
 #[ignore]
 fn the_orbs_example_builds_and_runs_in_cpp() {
     builds_and_runs_in_cpp("orbs", "Orbs");
-}
-
-/// The third example: tasks edited in their table, and the people who finish them.
-#[test]
-#[ignore]
-fn the_todo_example_builds_and_runs_in_cpp() {
-    builds_and_runs_in_cpp("todo", "Todo");
 }
 
 /// The test engine of conformance/engines.json in a generated application:
@@ -188,20 +171,6 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The fourth example: a dial drawn by code, its needle placed by an engine.
-#[test]
-#[ignore]
-fn the_dial_example_builds_and_runs_in_cpp() {
-    builds_and_runs_in_cpp("dial", "Dial");
-}
-
-/// The fifth example: noughts and crosses, each window's game kept by an engine.
-#[test]
-#[ignore]
-fn the_noughts_example_builds_and_runs_in_cpp() {
-    builds_and_runs_in_cpp("noughts", "Noughts");
-}
-
 /// The noughts example's Board engine, written in Clarity, as the C++ it
 /// becomes, played from a program of its own.
 const BOARD_CHECK: &str = r#"#include <iostream>
@@ -257,9 +226,9 @@ int main() {
 #[test]
 #[ignore]
 fn an_engine_written_in_clarity_runs_in_cpp() {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/board.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Cpp;
     settings.stack.ui = Ui::Web;
     settings.datasources[0].url = "data/app.db".into();

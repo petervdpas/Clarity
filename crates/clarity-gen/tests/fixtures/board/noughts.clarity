@@ -1,0 +1,149 @@
+module noughts
+
+// A game of noughts and crosses, one board for each open window, written
+// in Clarity: the noughts example's engine, as a test project.
+engine Board
+    uses random
+    state per window
+    // Squares 1 to 9: 0 is empty, 1 your cross, 2 the computer's nought.
+    keep squares: list<integer> = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // The rows, columns and diagonals that win, three squares each.
+    keep lines: list<integer> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 4, 7, 2, 5, 8, 3, 6, 9, 1, 5, 9, 3, 5, 7]
+
+    // Your cross on square 1 to 9, the computer's answer, and how the game stands.
+    function play(square: integer) -> text
+        if winner() != 0 or taken() == 9
+            refuse @gameIsOver
+        if square < 1 or square > 9
+            refuse @thereAreNineSquares
+        if squares[square] != 0
+            refuse @thatSquareIsTaken
+        squares[square] = 1
+        if winner() == 0
+            let answer = reply()
+            if answer != 0
+                squares[answer] = 2
+        return status()
+
+    // What is on square 1 to 9: 0, 1 for a cross or 2 for a nought.
+    function mark(square: integer) -> integer
+        if square < 1 or square > 9
+            refuse @thereAreNineSquares
+        return squares[square]
+
+    // An empty board.
+    function restart() -> text
+        squares = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return @yourMove
+
+    // How the game stands.
+    function status() -> text
+        let won = winner()
+        if won == 1
+            return @youWin
+        if won == 2
+            return @iWin
+        if taken() == 9
+            return @aDraw
+        return @yourMove
+
+    // Who has three in a line: 1 for you, 2 for the computer, 0 for no one yet.
+    function winner() -> integer
+        for line in [1, 2, 3, 4, 5, 6, 7, 8]
+            let first = squares[lines[line * 3 - 2]]
+            if first != 0 and first == squares[lines[line * 3 - 1]] and first == squares[lines[line * 3]]
+                return first
+        return 0
+
+    // How many squares are taken.
+    function taken() -> integer
+        let count = 0
+        for square in squares
+            if square != 0
+                count = count + 1
+        return count
+
+    // The square that completes a line for `who`, 0 if there is none.
+    function completing(who: integer) -> integer
+        for line in [1, 2, 3, 4, 5, 6, 7, 8]
+            let count = 0
+            let free = 0
+            for at in [line * 3 - 2, line * 3 - 1, line * 3]
+                if squares[lines[at]] == who
+                    count = count + 1
+                else if squares[lines[at]] == 0
+                    free = lines[at]
+            if count == 2 and free != 0
+                return free
+        return 0
+
+    // The computer's move: win, else block, else the centre, else any free square.
+    function reply() -> integer
+        let square = completing(2)
+        if square == 0
+            square = completing(1)
+        if square == 0 and squares[5] == 0
+            square = 5
+        if square == 0 and taken() < 9
+            let pick = random(9 - taken())
+            for at in [1, 2, 3, 4, 5, 6, 7, 8, 9]
+                if squares[at] == 0
+                    pick = pick - 1
+                    if pick == 0
+                        square = at
+        return square
+
+app Noughts
+    title @noughtsTitle
+    main Game
+
+page Game: window
+    title @gameTitle
+    size 405 x 510
+    data status: text, default @gameStatus
+    canvas name board at 1,1 span 12 rows 8 units 300 x 300 on draw: drawBoard on click: boardClicked
+    text name statusText at 1,9 span 12 bind status
+    button @newGameCaption name newGame at 1,10 span 12 on click: restartClicked
+
+code Game
+    // A click on a square plays it: three columns and three rows of 100.
+    handler boardClicked
+        let square = 1
+        if board.x >= 200
+            square = 3
+        else if board.x >= 100
+            square = 2
+        if board.y >= 200
+            square = square + 6
+        else if board.y >= 100
+            square = square + 3
+        status = Board.play(square)
+
+    handler restartClicked
+        status = Board.restart()
+
+    // The grid, and on each square its mark.
+    handler drawBoard
+        board.clear("panel")
+        board.line(100, 15, 100, 285, "border", 4)
+        board.line(200, 15, 200, 285, "border", 4)
+        board.line(15, 100, 285, 100, "border", 4)
+        board.line(15, 200, 285, 200, "border", 4)
+        drawMark(1, 0, 0)
+        drawMark(2, 100, 0)
+        drawMark(3, 200, 0)
+        drawMark(4, 0, 100)
+        drawMark(5, 100, 100)
+        drawMark(6, 200, 100)
+        drawMark(7, 0, 200)
+        drawMark(8, 100, 200)
+        drawMark(9, 200, 200)
+
+    // A cross is two lines, a nought a ring, in the square from left, top.
+    handler drawMark(square: integer, left: integer, top: integer)
+        let mark = Board.mark(square)
+        if mark == 1
+            board.line(left + 25, top + 25, left + 75, top + 75, "accent", 8)
+            board.line(left + 75, top + 25, left + 25, top + 75, "accent", 8)
+        else if mark == 2
+            board.ring(left + 50, top + 50, 27, "text", 8)

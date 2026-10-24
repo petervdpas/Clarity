@@ -1,4 +1,6 @@
-//! Generates the examples as C and builds them as a C developer would:
+//! Generates the test projects of tests/fixtures and conformance as C and
+//! builds them as a C developer would (no example is written in C, and each
+//! example builds only on the stack its project file names):
 //! `cmake --workflow --preset debug` configures and builds without a
 //! warning from the program's own code, and the program runs with `--check`
 //! (it opens its database, applies the migration steps and stops). Slow
@@ -23,56 +25,6 @@ fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{tool} {args:?} failed in {}:\n{said}", dir.display());
     said
-}
-
-fn builds_and_runs_in_c(name: &str, program: &str) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join(format!("examples/{name}.clarity"));
-    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = Backend::C;
-    settings.stack.ui = Ui::Web;
-    let out = scratch().join(format!("clarity-gen-c-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&out);
-    std::fs::create_dir_all(&out).unwrap();
-    // The database and stores in the scratch folder, not in the example.
-    settings.datasources[0].url = "data/app.db".into();
-    for store in &mut settings.filestores {
-        store.location = format!("data/{}", store.name);
-    }
-    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
-
-    let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
-    // The program's own code builds without a warning.
-    let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
-    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
-    let said = run(&out, &out.join("build/debug").join(name).display().to_string(), &["--check"]);
-    assert!(said.contains(&format!("{program}: the databases are ready.")), "{said}");
-    // A project with records has its database; one without needs none.
-    if project.stored_entities().next().is_some() {
-        assert!(out.join("data/app.db").exists());
-    }
-    std::fs::remove_dir_all(&out).unwrap();
-}
-
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_runs_in_c() {
-    builds_and_runs_in_c("shop", "Shop");
-}
-
-#[test]
-#[ignore]
-fn the_records_example_builds_and_runs_in_c() {
-    builds_and_runs_in_c("records", "Records");
-}
-
-/// The third example: tasks edited in their table, and the people who finish them.
-#[test]
-#[ignore]
-fn the_todo_example_builds_and_runs_in_c() {
-    builds_and_runs_in_c("todo", "Todo");
 }
 
 /// The test engine of conformance/engines.json in a generated application:
@@ -169,20 +121,6 @@ fn an_engine_answers_in_the_generated_application_in_c() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The fourth example: a dial drawn by code, its needle placed by an engine.
-#[test]
-#[ignore]
-fn the_dial_example_builds_and_runs_in_c() {
-    builds_and_runs_in_c("dial", "Dial");
-}
-
-/// The fifth example: noughts and crosses, each window's game kept by an engine.
-#[test]
-#[ignore]
-fn the_noughts_example_builds_and_runs_in_c() {
-    builds_and_runs_in_c("noughts", "Noughts");
-}
-
 /// The noughts example's Board engine, written in Clarity, as the C it
 /// becomes, played from a program of its own; each call is a command of its
 /// own, as the shell runs them, so what the board keeps outlives the
@@ -237,9 +175,9 @@ int main(void) {
 #[test]
 #[ignore]
 fn an_engine_written_in_clarity_runs_in_c() {
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/board.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::C;
     settings.stack.ui = Ui::Web;
     settings.datasources[0].url = "data/app.db".into();

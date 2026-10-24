@@ -289,7 +289,7 @@ pub fn build_command(source: &EngineSource, library: Option<&Path>) -> BuildComm
     let mut args: Vec<String> = ["build", "--release", "--target", TARGET, "--message-format", "short"].iter().map(|s| s.to_string()).collect();
     if let Some(library) = library {
         args.push("--config".into());
-        args.push(format!("patch.crates-io.clarity-engine.path=\"{}\"", library.display()));
+        args.push(format!("patch.crates-io.clarity-engine.path=\"{}\"", crate::slashed(library)));
     }
     let artifact = source.folder.join("target").join(TARGET).join("release").join(format!("{}.wasm", source.crate_name.replace('-', "_")));
     BuildCommand { tool: "cargo", args, dir: source.folder.clone(), artifact }

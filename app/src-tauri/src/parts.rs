@@ -289,7 +289,7 @@ pub fn write_part_folders(state: State<WatchState>) -> Result<Vec<String>, Strin
     let dir = crate::open_dir_of(&state)?;
     let project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let written = clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| err.to_string())?;
-    Ok(written.iter().map(|p| p.strip_prefix(&dir).unwrap_or(p).display().to_string()).collect())
+    Ok(written.iter().map(|p| clarity_project::slashed(p.strip_prefix(&dir).unwrap_or(p))).collect())
 }
 
 #[cfg(test)]

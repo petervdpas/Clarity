@@ -46,10 +46,10 @@ fn dotnet(out: &Path, args: &[&str], runtime: Runtime) -> Command {
     command
 }
 
-/// Generates the example `name` (examples/<name>.clarity) as C# with
-/// Avalonia, builds it with warnings as errors and runs `--check`.
-/// Builds the example `name` and runs it; with `translated`, it has a
-/// translation into that language, whose satellite assembly the build makes.
+/// Generates the C# example `name` (examples/<name>.clarity) on its own
+/// stack, builds it with warnings as errors and runs `--check`; with
+/// `translated`, it has a translation into that language, whose satellite
+/// assembly the build makes.
 fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
@@ -57,9 +57,9 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     // Its translations, whose satellite assembly the build must make.
     assert_eq!(!project.translations.is_empty(), translated.is_some(), "the example's translations");
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    // An example builds on the stack its project file names, and no other.
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "{name} is not a C# example");
     let files = clarity_gen::generate(&project, &settings).unwrap();
     if let Some(translated) = translated {
         assert!(files.iter().any(|f| f.path == format!("Texts.{translated}.resx")));
@@ -94,25 +94,12 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
     std::fs::remove_dir_all(&out).unwrap();
 }
 
+/// The todo example on the runtime's packages from nuget.org, at the version
+/// the generator names: what a project outside this repository builds on.
 #[test]
 #[ignore]
-fn the_shop_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("shop", "Shop", Some("nl"), Runtime::Local);
-}
-
-/// The shop on the runtime's packages from nuget.org, at the version the
-/// generator names: what a project outside this repository builds on.
-#[test]
-#[ignore]
-fn the_shop_example_builds_and_runs_on_the_published_packages() {
-    builds_and_runs_in_csharp("shop", "Shop", Some("nl"), Runtime::Packages);
-}
-
-/// The second example: master and detail, dialogs, a tree of genres, loans.
-#[test]
-#[ignore]
-fn the_records_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("records", "Records", Some("de"), Runtime::Local);
+fn the_todo_example_builds_and_runs_on_the_published_packages() {
+    builds_and_runs_in_csharp("todo", "Todo", Some("nl"), Runtime::Packages);
 }
 
 /// The third example: tasks edited in their table, and the people who finish them.
@@ -122,14 +109,14 @@ fn the_todo_example_builds_and_runs_in_csharp() {
     builds_and_runs_in_csharp("todo", "Todo", Some("nl"), Runtime::Local);
 }
 
-/// The shop on each server database: the project builds with only that
-/// driver, and where a scratch database is named (the variables of
+/// The todo example on each server database: the project builds with only
+/// that driver, and where a scratch database is named (the variables of
 /// tests/servers.rs) the program migrates it with `--check`, twice.
 #[test]
 #[ignore]
-fn the_shop_example_builds_and_migrates_on_every_server_database() {
+fn the_todo_example_builds_and_migrates_on_every_server_database() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/shop.clarity");
+    let file = root.join("examples/todo.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let tables: Vec<String> = project.entities().map(|e| e.table_name()).collect();
     for (kind, dialect, variable) in [
@@ -138,10 +125,9 @@ fn the_shop_example_builds_and_migrates_on_every_server_database() {
         (SourceKind::Mssql, clarity_runtime::Dialect::Mssql, "CLARITY_TEST_MSSQL"),
     ] {
         let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-        settings.stack.backend = Backend::Csharp;
-        settings.stack.ui = Ui::Avalonia;
+        assert_eq!(settings.stack.backend, Backend::Csharp, "todo is a C# example");
         settings.datasources[0].kind = kind;
-        settings.datasources[0].url = "env:SHOP_DATABASE".into();
+        settings.datasources[0].url = "env:TODO_DATABASE".into();
         let files = clarity_gen::generate(&project, &settings).unwrap();
 
         let out = scratch().join(format!("clarity-gen-csharp-{variable}-{}", std::process::id()));
@@ -155,12 +141,12 @@ fn the_shop_example_builds_and_migrates_on_every_server_database() {
             empty(&at, dialect, &tables);
             for _ in 0..2 {
                 let ran = dotnet(&out, &["run", "--no-build", "--", "--check"], Runtime::Local)
-                    .env("SHOP_DATABASE", &at)
+                    .env("TODO_DATABASE", &at)
                     .output()
                     .unwrap();
                 let said = String::from_utf8_lossy(&ran.stdout);
                 assert!(ran.status.success(), "{variable}: {said}{}", String::from_utf8_lossy(&ran.stderr));
-                assert!(said.contains("Shop: the databases are ready."), "{said}");
+                assert!(said.contains("Todo: the databases are ready."), "{said}");
             }
             let db = clarity_runtime::Db::connect(&[("main", dialect, &at)]).unwrap();
             let steps = project.migrations.as_ref().map_or(0, |m| m.get("main").map_or(0, Vec::len));
@@ -276,13 +262,6 @@ fn functions_named_like_types_build_in_csharp() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The fourth example: a dial drawn by code, its needle placed by an engine.
-#[test]
-#[ignore]
-fn the_dial_example_builds_and_runs_in_csharp() {
-    builds_and_runs_in_csharp("dial", "Dial", Some("nl"), Runtime::Local);
-}
-
 /// The fifth example: noughts and crosses, each window's game kept by an engine.
 #[test]
 #[ignore]
@@ -344,9 +323,8 @@ Console.WriteLine("the board played");
 fn an_engine_written_in_clarity_runs_in_csharp() {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = Backend::Csharp;
-    settings.stack.ui = Ui::Avalonia;
+    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "noughts is a C# example");
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     let root = scratch().join(format!("clarity-gen-csharp-board-{}", std::process::id()));
     let (out, check) = (root.join("Noughts"), root.join("Check"));

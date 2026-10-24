@@ -687,3 +687,20 @@ fn a_local_from_a_number_is_an_int64() {
     let code = file(&files, "sales_module.go");
     assert!(code.contains("var step int64 = 1\n"), "{code}");
 }
+
+/// A step with no statement for a database (SQL Server keeps no search
+/// index, so `add search` writes nothing there) is an empty list on one
+/// line, as gofmt writes it.
+#[test]
+fn a_step_without_statements_is_written_as_gofmt_writes_it() {
+    let module = "module music\n\nentity Album\n    title: text(80), search\n\napp Music\n    main Albums\n\npage Albums: window\n    size 400 x 300\n";
+    let first = "migration \"Albums\"\n    add entity Album\n        title: text(80)\n";
+    let second = "migration \"Search albums\"\n    add search Album.title\n";
+    let project = clarity_spec::load_with_migrations([("music.clarity", module)], [("0001.clarity", first), ("0002.clarity", second)]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = settings();
+    settings.datasources[0].kind = SourceKind::Mssql;
+    settings.datasources[0].url = "env:MUSIC_DATABASE".into();
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    has(file(&files, "schema.go"), "\t\t// 2: Search albums\n\t\t{},\n");
+}

@@ -141,6 +141,6 @@ pub fn search_path(env: &Environment, path: &OsStr) -> OsString {
 pub fn compilers(env: &Environment) -> Vec<(String, String)> {
     [("CC", "cc"), ("CXX", "c++")]
         .into_iter()
-        .filter_map(|(variable, program)| env.chosen(program).map(|p| (variable.to_string(), p.display().to_string())))
+        .filter_map(|(variable, program)| env.chosen(program).map(|p| (variable.to_string(), clarity_project::slashed(p))))
         .collect()
 }

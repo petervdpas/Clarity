@@ -56,6 +56,23 @@ fn shop() -> Settings {
     }
 }
 
+/// A path Clarity writes for another tool to read (generated code, a cargo
+/// `--config`, CC and CXX) is spelled with `/` on every system: Windows takes
+/// it everywhere, and a backslash is an escape in TOML, C, Go and C#.
+#[test]
+fn a_path_written_for_a_tool_has_forward_slashes() {
+    let path = Path::new("C:/").join("Users").join("me").join("shop.db");
+    assert_eq!(clarity_project::slashed(&path), "C:/Users/me/shop.db");
+    // The settings a program is built with carry their folders that way.
+    let mut settings = shop();
+    settings.filestores = vec![clarity_project::FileStore { name: "photos".into(), location: "data/photos".into() }];
+    let dir = std::path::absolute("/projects/shop").unwrap();
+    let built = clarity_project::build_settings(&dir, &settings);
+    assert_eq!(built.filestores[0].location, clarity_project::slashed(&dir.join("data").join("photos")));
+    assert!(!built.filestores[0].location.contains(std::path::MAIN_SEPARATOR) || std::path::MAIN_SEPARATOR == '/');
+    assert!(!built.datasources[0].url.contains(std::path::MAIN_SEPARATOR) || std::path::MAIN_SEPARATOR == '/');
+}
+
 /// Windows answers `canonicalize` with a verbatim path; `plain` takes the
 /// prefix off where the path does not need it, so messages and build tools
 /// see an ordinary one. Every other system hands the path back as it is.

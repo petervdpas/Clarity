@@ -578,7 +578,7 @@ pub fn write_out(dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std
 fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
-        let relative = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+        let relative = clarity_project::slashed(path.strip_prefix(root).unwrap_or(&path));
         if dir == root && keep.contains(&relative.as_str()) {
             continue;
         }

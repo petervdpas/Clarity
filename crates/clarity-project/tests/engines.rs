@@ -133,6 +133,10 @@ fn an_engine_builds_with_cargo_for_webassembly() {
     assert_eq!(build.artifact, source.folder.join("target/wasm32-unknown-unknown/release/board.wasm"));
     let local = engines::build_command(&source, Some(Path::new("/repo/runtimes/rust-engine")));
     assert_eq!(&local.args[6..], ["--config", "patch.crates-io.clarity-engine.path=\"/repo/runtimes/rust-engine\""]);
+    // The folder in TOML with `/`: a backslash would be an escape there.
+    let joined = Path::new("C:/").join("Clarity").join("runtimes").join("rust-engine");
+    let windows = engines::build_command(&source, Some(&joined));
+    assert_eq!(windows.args[7], "patch.crates-io.clarity-engine.path=\"C:/Clarity/runtimes/rust-engine\"");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

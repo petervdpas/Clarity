@@ -392,7 +392,14 @@ fn schema_go(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec
         };
         body.push_str(&format!("\t{{{}, [][]string{{\n", string(source)));
         for (i, (title, statements)) in steps.iter().enumerate() {
-            body.push_str(&format!("\t\t// {}: {title}\n\t\t{{\n", i + 1));
+            body.push_str(&format!("\t\t// {}: {title}\n", i + 1));
+            // A step with nothing to do on this database (SQL Server keeps
+            // no search index) closes on the line it opens, as gofmt writes it.
+            if statements.is_empty() {
+                body.push_str("\t\t{},\n");
+                continue;
+            }
+            body.push_str("\t\t{\n");
             for statement in statements {
                 body.push_str(&format!("\t\t\t{},\n", raw(statement)));
             }

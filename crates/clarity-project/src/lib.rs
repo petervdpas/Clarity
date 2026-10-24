@@ -253,6 +253,17 @@ pub fn plain(path: PathBuf) -> PathBuf {
     path
 }
 
+/// A path as Clarity writes it for another tool to read: in generated code,
+/// in a cargo `--config`, in `CC` and `CXX`, in a list the agent reads back.
+/// It is plain (see `plain`) and its folders are parted by `/` on every
+/// system. Windows takes `/` everywhere a path goes, and a backslash would
+/// be an escape in TOML, C, Go and C# strings. Only the system's own
+/// separator changes: on Linux a backslash is part of a name and stays.
+pub fn slashed(path: &Path) -> String {
+    let text = plain(path.to_path_buf()).to_string_lossy().into_owned();
+    if std::path::MAIN_SEPARATOR == '/' { text } else { text.replace(std::path::MAIN_SEPARATOR, "/") }
+}
+
 pub fn starter(name: &str, module: &str) -> Settings {
     Settings {
         name: name.to_string(),
@@ -803,12 +814,12 @@ fn check_external(dir: &Path, project: &mut clarity_spec::Project) {
 pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     let mut built = settings.clone();
     for source in built.datasources.iter_mut().filter(|s| s.kind == SourceKind::Sqlite) {
-        source.url = sqlite_path(dir, source).display().to_string();
+        source.url = slashed(&sqlite_path(dir, source));
     }
     for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:")) {
         let path = Path::new(&store.location);
         let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
-        store.location = std::path::absolute(&joined).unwrap_or(joined).display().to_string();
+        store.location = slashed(&std::path::absolute(&joined).unwrap_or(joined));
     }
     built
 }

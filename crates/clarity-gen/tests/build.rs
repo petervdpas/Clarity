@@ -1,4 +1,5 @@
-//! Generates the shop example and builds it with cargo. Slow (it
+//! Generates the Rust examples on their own stack, and the test projects of
+//! tests/fixtures and conformance as Rust, and builds them with cargo. Slow (it
 //! compiles SQLite and Tauri the first time), so it only runs when asked,
 //! one at a time:
 //! `cargo test -p clarity-gen --test build -- --ignored --test-threads=1 --exact <name>`.
@@ -45,9 +46,9 @@ fn builds_with_cargo(name: &str, runtime: Runtime) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
-    settings.stack.backend = clarity_project::Backend::Rust;
-    settings.stack.ui = clarity_project::Ui::Web;
+    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    // An example builds on the stack its project file names, and no other.
+    assert_eq!((settings.stack.backend, settings.stack.ui), (clarity_project::Backend::Rust, clarity_project::Ui::Web), "{name} is not a Rust example");
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
     // The runtime is part of the name: the same example is built on both,
@@ -89,20 +90,6 @@ fn the_shop_example_builds() {
 #[ignore]
 fn the_shop_example_builds_on_the_published_crate() {
     builds_with_cargo("shop", Runtime::Published);
-}
-
-/// The second example, whose project file names C#: on Rust it builds too.
-#[test]
-#[ignore]
-fn the_records_example_builds() {
-    builds_with_cargo("records", Runtime::Local);
-}
-
-/// The third example: tasks edited in their table, and the people who finish them.
-#[test]
-#[ignore]
-fn the_todo_example_builds() {
-    builds_with_cargo("todo", Runtime::Local);
 }
 
 /// The shop example on each server database: the generated project turns
@@ -481,20 +468,6 @@ fn an_engine_answers_in_the_generated_application() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
-/// The fourth example: a dial drawn by code, its needle placed by an engine.
-#[test]
-#[ignore]
-fn the_dial_example_builds() {
-    builds_with_cargo("dial", Runtime::Local);
-}
-
-/// The fifth example: noughts and crosses, each window's game kept by an engine.
-#[test]
-#[ignore]
-fn the_noughts_example_builds() {
-    builds_with_cargo("noughts", Runtime::Local);
-}
-
 /// The noughts example's Board engine, written in Clarity, as the Rust it
 /// becomes: its module built on the runtime alone and played.
 const BOARD_TEST: &str = r#"
@@ -538,9 +511,9 @@ fn each_window_plays_a_game_of_its_own() {
 #[ignore]
 fn an_engine_written_in_clarity_runs() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let file = root.join("examples/noughts.clarity");
+    let file = root.join("crates/clarity-gen/tests/fixtures/board.clarity");
     let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
-    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = clarity_project::Backend::Rust;
     settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));

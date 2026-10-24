@@ -119,7 +119,7 @@ fn actions_declare_their_effects() {
     assert_eq!(
         errors(&SALES.replace("effects db.write", "effects db.wrte")),
         [
-            "unknown effect 'db.wrte'; the effects are db.read, db.write, files.read and files.write",
+            "unknown effect 'db.wrte'; the effects are db.read, db.write, files.read, files.write and net",
             "action 'approve' saves but does not declare 'effects db.write'"
         ]
     );

@@ -314,6 +314,8 @@ const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; Wi
 /// The webview draws with WebView2 on Windows, whose SDK headers the shell
 /// builds against; MSYS2 does not package them.
 const WEBVIEW2: &str = "the WebView2 SDK, from https://developer.microsoft.com/microsoft-edge/webview2 (the Microsoft.Web.WebView2 NuGet package); the runtime itself ships with Windows 11";
+/// HTTP calls from C and C++ code (DESIGN 5.23) go through libcurl.
+pub const LIBCURL: &str = "the libcurl development files, as the code calls web APIs (Debian and Ubuntu: libcurl4-openssl-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-curl; macOS brings it)";
 /// The webview of a C program is one C++ file.
 const WEBVIEW_CXX: &str = "a C++ compiler for the webview's one C++ file: GCC (g++) or Clang (clang++)";
 

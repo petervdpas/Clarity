@@ -45,6 +45,7 @@ A project with an [engine](code.engines.md) also gets the engine host and wasm3,
 - make or Ninja, to build what CMake writes
 - The SQLite development files (Debian and Ubuntu: `libsqlite3-dev`)
 - On Linux, the WebKitGTK and GTK 3 development files and pkg-config (Debian and Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev`)
+- For a project whose code calls web APIs, the libcurl development files (Debian and Ubuntu: `libcurl4-openssl-dev`)
 
 CMake finds SQLite itself and the WebKitGTK libraries through pkg-config. Clarity checks for all of these: run `clarity tools`, or look at Build tools on the Project tab.
 

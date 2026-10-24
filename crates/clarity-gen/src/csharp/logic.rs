@@ -884,6 +884,11 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object);
                     return format!("{object}.LongLength");
                 }
+                // A reply's Status, Ok and Text.
+                if self.types.type_of(object) == TypeInfo::HttpReply {
+                    let object = self.place(object);
+                    return format!("{object}.{}", pascal(&field.name));
+                }
                 // A record's file: its name, and the extension of its name.
                 if self.types.type_of(object) == TypeInfo::RecordFile {
                     let object = self.place(object);
@@ -968,6 +973,17 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadBytes { file } => {
                 let db = self.db;
                 format!("{db}.ReadBytes({})", self.value(file))
+            }
+            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            ExprKind::Http { method, url, body, headers } => {
+                let url = self.value(url);
+                let items: Vec<String> = headers.iter().map(|h| format!("({}, {})", string(&h.name.name), self.value(&h.value))).collect();
+                let headers = format!("[{}]", items.join(", "));
+                let call = pascal(method.word());
+                match body {
+                    Some(body) => format!("Http.{call}({url}, {}, {headers})", self.value(body)),
+                    None => format!("Http.{call}({url}, {headers})"),
+                }
             }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args)

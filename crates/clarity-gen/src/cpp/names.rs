@@ -91,6 +91,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::File => "clarity::FileEntry".into(),
         TypeInfo::Files => "std::vector<clarity::FileEntry>".into(),
         TypeInfo::Bytes => "clarity::Bytes".into(),
+        TypeInfo::HttpReply => "clarity::HttpReply".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("std::vector<{item}>"),
         TypeInfo::Values(item) => format!("std::vector<{}>", value_type(&item.info())),

@@ -58,6 +58,8 @@ const KEYWORDS: &[&str] = &[
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit",
+    // HTTP calls (DESIGN 5.23).
+    "http", "get", "post", "put", "header",
     // Custom parts (DESIGN 5.19).
     "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "library", "cmake",
     // Parts and the frame.

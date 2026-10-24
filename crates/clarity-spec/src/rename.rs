@@ -245,6 +245,11 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => expr(file, name, found),
+        ExprKind::Http { url, body, headers, .. } => {
+            for e in crate::code::http_exprs(url, body.as_deref(), headers) {
+                expr(e, name, found);
+            }
+        }
         ExprKind::Ask { question, form } => {
             expr(question, name, found);
             for e in crate::code::ask_exprs(form) {

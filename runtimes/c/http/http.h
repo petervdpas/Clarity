@@ -1,0 +1,53 @@
+// HTTP calls from code (DESIGN 5.23): `http get url` and the others, through
+// libcurl. A call never fails: when no answer comes, the reply has status 0
+// and says why, so the handler decides what that means. Every runtime gives
+// the same replies (conformance/http.json). Only a project whose code calls
+// out has this folder, so only it links libcurl.
+
+#pragma once
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// The kind of call.
+typedef enum {
+    CLARITY_HTTP_GET,
+    CLARITY_HTTP_POST,
+    CLARITY_HTTP_PUT,
+    CLARITY_HTTP_DELETE,
+} ClarityHttpMethod;
+
+/// A header a call sends.
+typedef struct {
+    const char* name;
+    const char* value;
+} ClarityHttpHeader;
+
+/// What a web API answered: its status (0 when no answer came), whether it
+/// is ok (200 to 299), and its text, or why no answer came. The text is in
+/// the scratch arena.
+typedef struct {
+    int64_t status;
+    bool ok;
+    const char* text;
+} ClarityHttpReply;
+
+/// How many seconds a call waits for its whole answer.
+#define CLARITY_HTTP_TIMEOUT 30L
+
+/// Calls `url` with `method`, sending `body` with post and put (NULL sends
+/// nothing) and the `count` headers of `headers`, and gives the reply.
+ClarityHttpReply clarity_http_call(ClarityHttpMethod method, const char* url, const char* body, const ClarityHttpHeader* headers, size_t count);
+
+/// The host a url names, without the scheme, a login, the port and the
+/// path, in the scratch arena.
+const char* clarity_http_host(const char* url);
+
+#ifdef __cplusplus
+}
+#endif

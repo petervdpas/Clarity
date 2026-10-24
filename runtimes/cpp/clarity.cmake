@@ -51,6 +51,18 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.cpp)
   endif()
 endif()
 
+# HTTP calls from code (DESIGN 5.23), through libcurl: only in a project
+# whose runtime copy has them, that is, one whose code calls out.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.cpp)
+  find_package(CURL REQUIRED)
+  add_library(clarity_http STATIC ${CMAKE_CURRENT_LIST_DIR}/http/http.cpp)
+  target_include_directories(clarity_http PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(clarity_http PUBLIC clarity CURL::libcurl)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(clarity_http PRIVATE -Wall -Wextra)
+  endif()
+endif()
+
 # Engines (DESIGN 5.11), hosted by wasm3: only in a project whose runtime
 # copy has them, that is, one that declares an engine. wasm3 is C; the
 # runtime's own build takes it from the C runtime beside it.

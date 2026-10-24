@@ -127,6 +127,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::File => "clarity.FileEntry".into(),
         TypeInfo::Files => "[]clarity.FileEntry".into(),
         TypeInfo::Bytes => "[]byte".into(),
+        TypeInfo::HttpReply => "clarity.HttpReply".into(),
         TypeInfo::Enum(name) => name.clone(),
         TypeInfo::Record(name) => format!("*{name}"),
         TypeInfo::List(name) => format!("[]{name}"),
@@ -143,6 +144,7 @@ pub fn zero(ty: &TypeInfo) -> String {
         TypeInfo::Decimal | TypeInfo::Money => "decimal.Zero".into(),
         TypeInfo::Bool => "false".into(),
         TypeInfo::File => "clarity.FileEntry{}".into(),
+        TypeInfo::HttpReply => "clarity.HttpReply{}".into(),
         _ => "nil".into(),
     }
 }

@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, HttpHeader, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -1262,6 +1262,12 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "files" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_files(cursor);
         }
+        // `http get url`: a call to a web API (DESIGN 5.23).
+        TokenKind::Ident
+            if token.text == "http" && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident && !RESERVED.contains(&t.text.as_str())) =>
+        {
+            return parse_http(cursor);
+        }
         TokenKind::Ident
             if token.text == "read" && cursor.peek_at(1).is_some_and(|t| t.text == "text") && cursor.peek_at(2).is_some_and(|t| t.text == "of") =>
         {
@@ -1353,6 +1359,34 @@ fn parse_files(cursor: &mut Cursor) -> ParseResult<Expr> {
         span: join(start, end),
         kind: ExprKind::Files { var, store, filter, order },
     })
+}
+
+/// `http get url`, `http post url with body`, each with any number of
+/// `header "Name": value`.
+fn parse_http(cursor: &mut Cursor) -> ParseResult<Expr> {
+    let start = cursor.next().map(|t| t.span).unwrap_or_else(|| cursor.end_span());
+    let word = cursor.expect_ident("get, post, put or delete")?;
+    let Some(method) = HttpMethod::ALL.into_iter().find(|m| m.word() == word.name) else {
+        return Err(Diagnostic::error(format!("an http call is get, post, put or delete, not '{}'", word.name), word.span));
+    };
+    let url = parse_expr(cursor)?;
+    let mut end = url.span;
+    let body = if cursor.eat_keyword("with") {
+        let body = parse_expr(cursor)?;
+        end = body.span;
+        Some(Box::new(body))
+    } else {
+        None
+    };
+    let mut headers = Vec::new();
+    while cursor.eat_keyword("header") {
+        let name = cursor.expect(TokenKind::Str, "the header's name as a text, as in header \"Accept\": \"text/plain\"")?;
+        cursor.expect(TokenKind::Colon, "':' and the header's value")?;
+        let value = parse_expr(cursor)?;
+        end = value.span;
+        headers.push(HttpHeader { name: Ident { name: name.text.clone(), span: name.span }, value });
+    }
+    Ok(Expr { span: join(start, end), kind: ExprKind::Http { method, url: Box::new(url), body, headers } })
 }
 
 /// `order by c.field [desc], ...`, if it is there; `end` moves past it.

@@ -62,7 +62,9 @@
     X(the_command_line_words_are_the_shared_ones)                 \
     X(command_lines_are_read_as_every_runtime_reads_them)         \
     X(a_printed_table_lines_up_as_every_runtime_does)             \
-    X(a_command_asks_on_a_terminal_as_every_runtime_does)
+    X(a_command_asks_on_a_terminal_as_every_runtime_does)        \
+    X(every_http_call_gives_the_reply_the_cases_name)            \
+    X(a_url_names_its_host)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

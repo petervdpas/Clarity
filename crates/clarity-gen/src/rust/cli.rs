@@ -73,6 +73,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         features.push("engines");
     }
+    // HTTP calls from code (DESIGN 5.23): the runtime's client.
+    if project.calls_out() {
+        features.push("http");
+    }
     features.sort();
     features.dedup();
     let types = check::types(&project.files);

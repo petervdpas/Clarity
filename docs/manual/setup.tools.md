@@ -42,7 +42,8 @@ MSYS2 carries every C and C++ tool and library in one place.
 pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-sqlite3 mingw-w64-ucrt-x86_64-nlohmann-json
 ```
 
-3. In **Clarity settings**, **Environment**, point the C compiler, the C++ compiler, CMake and Ninja at the copies in `C:\msys64\ucrt64\bin`.
+3. A project whose code calls web APIs also needs libcurl: `pacman -S --needed mingw-w64-ucrt-x86_64-curl`.
+4. In **Clarity settings**, **Environment**, point the C compiler, the C++ compiler, CMake and Ninja at the copies in `C:\msys64\ucrt64\bin`.
 
 Take every C and C++ tool from that one folder, never a mix: two compilers of different versions in one project do not link. A custom part drawn by a native library needs that library from the same shell too, such as `mingw-w64-ucrt-x86_64-sfml` for SFML.
 
@@ -90,6 +91,8 @@ The compiler, CMake, Ninja and every library a C or C++ program builds with:
 sudo apt install build-essential cmake ninja-build pkg-config libsqlite3-dev libwebkit2gtk-4.1-dev libgtk-3-dev nlohmann-json3-dev
 ```
 
+A project whose code calls web APIs also needs libcurl: `sudo apt install libcurl4-openssl-dev`.
+
 ## macOS
 
 ### Rust on macOS
@@ -111,6 +114,8 @@ Install the Xcode Command Line Tools with `xcode-select --install`, then CMake, 
 ```
 brew install cmake ninja pkg-config sqlite nlohmann-json
 ```
+
+macOS brings libcurl, which a project whose code calls web APIs links.
 
 ## Engines
 

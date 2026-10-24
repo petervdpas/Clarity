@@ -18,7 +18,7 @@ use std::fmt::Write as _;
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
 use clarity_spec::code::check::ValueItem;
-use clarity_spec::code::{
+use clarity_spec::code::{HttpMethod, 
     AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef, UnaryOp, path_text,
     template,
 };
@@ -1505,6 +1505,11 @@ impl<'a> Emitter<'a> {
                     let object = self.place(object, pre);
                     return format!("((int64_t)({object}).size)");
                 }
+                // A reply's status, ok and text, as the runtime names them.
+                if self.types.type_of(object) == TypeInfo::HttpReply {
+                    let object = self.place(object, pre);
+                    return format!("({object}).{}", member.name);
+                }
                 // A record's file: its name, and the extension of its name.
                 if self.types.type_of(object) == TypeInfo::RecordFile {
                     let object = self.place(object, pre);
@@ -1718,6 +1723,27 @@ impl<'a> Emitter<'a> {
             ExprKind::ReadBytes { file } => {
                 let file = bare(self.value(file, pre));
                 self.lift("ClarityBytes", &format!("clarity_read_bytes(db, {file}, {{out}})"), pre)
+            }
+            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            ExprKind::Http { method, url, body, headers } => {
+                let url = bare(self.value(url, pre));
+                let body = match body {
+                    Some(body) => bare(self.value(body, pre)),
+                    None => "NULL".to_string(),
+                };
+                let headers = if headers.is_empty() {
+                    "NULL, 0".to_string()
+                } else {
+                    let items: Vec<String> = headers.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
+                    format!("(ClarityHttpHeader[]){{{}}}, {}", items.join(", "), headers.len())
+                };
+                let method = match method {
+                    HttpMethod::Get => "CLARITY_HTTP_GET",
+                    HttpMethod::Post => "CLARITY_HTTP_POST",
+                    HttpMethod::Put => "CLARITY_HTTP_PUT",
+                    HttpMethod::Delete => "CLARITY_HTTP_DELETE",
+                };
+                format!("clarity_http_call({method}, {url}, {body}, {headers})")
             }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args, pre)

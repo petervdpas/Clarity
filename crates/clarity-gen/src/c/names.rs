@@ -142,6 +142,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::File => "ClarityFile".into(),
         TypeInfo::Files => "ClarityFileList".into(),
         TypeInfo::Bytes => "ClarityBytes".into(),
+        TypeInfo::HttpReply => "ClarityHttpReply".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => list_type(item),
         TypeInfo::Values(item) => values_type(item),

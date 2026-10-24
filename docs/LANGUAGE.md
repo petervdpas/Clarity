@@ -1336,7 +1336,7 @@ action approve(order: Order)
 
 - **The signature** is `name(param: type, ...)`, optionally followed by `-> type` for the result. The types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum, and `list<Entity>`.
 - **`require expr`** checks the arguments before the body runs. **`ensure expr`** checks the result after it, as `result`. Both must be bool, and both come before the statements.
-- **`effects`** lists what an action does to data: `db.read`, `db.write`, `files.read` and `files.write`, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`; one that lists or reads files declares `files.read`, and one that writes a file `files.write`. A function cannot reach files at all; handlers can, as they can save.
+- **`effects`** lists what an action does to data and the world: `db.read`, `db.write`, `files.read`, `files.write` and `net`, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`; one that lists or reads files declares `files.read`, one that writes a file `files.write`, and one that calls a web API `net`. A function cannot reach files or the network at all; handlers can, as they can save.
 - **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
 - **An action** can change data. Neither functions nor actions talk to the screen: `message`, `open`, `close` and part properties belong in handlers.
 - A function or action with a result returns a value on every path; the checker reports a path that does not.
@@ -1623,6 +1623,29 @@ action export_collection()
 - `read bytes of f` gives the contents of a file as they are, of type `bytes`: a picture, a PDF, anything that is no text. `write b to exports "copies/cover.png"` writes bytes as they are. `b.size` is how many bytes there are. Bytes are no window data: the screen has nothing to show of them, so code keeps them while it works and hands them to engines and functions.
 - A file becomes a record's picture with `photo.picture = f`. In the field's own store (`store photos`) it is the file itself: the column holds its path, nothing is copied, as a catalog of photos wants. Kept anywhere else, the picture is a copy of the file. A file that is no picture is refused.
 - Listing, reading and writing are effects, `files.read` and `files.write`, which an action declares; a function cannot reach files.
+
+### Calling web APIs
+
+Code calls a web API with `http`, and gets its reply.
+
+```clarity
+action send_order(order: Order, token: text)
+    effects net
+    let reply = http post "https://api.example.com/orders" with order.summary header "Authorization": "Bearer {token}"
+    if not reply.ok
+        refuse @orderNotSent(status = reply.status)
+
+code Status
+    handler refreshClicked
+        let reply = http get "https://status.example.com/api/now"
+        statusText = reply.text
+```
+
+- `http get url`, `http delete url`, `http post url with body` and `http put url with body`. The url and the body are text; only post and put send a body. `header "Name": value` adds a header, as many as needed.
+- The reply has `status` (200, 404, and 0 when no answer came), `ok` (true for a status from 200 to 299) and `text` (what the service answered, or why no answer came). Its type is `http reply`; its details are read, not set.
+- A call does not stop the code: a server that is not there, a wrong name or a timeout of 30 seconds is a reply with status 0, so the code decides what a failure means. Only `http` and `https` addresses are called; redirects are followed.
+- Calling out is the effect `net`, which an action declares. Handlers and commands call out as they are; a function, an engine and a data event cannot.
+- A key does not belong in the code: a header named `Authorization`, or one that holds `key`, `token` or `secret`, with a plain text as its value is a warning. Keep the key in a setting and put it in with a slot.
 
 ### Types
 

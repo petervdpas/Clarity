@@ -423,7 +423,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     files.push(OutFile {
         path: "README.md".to_string(),
-        text: readme::readme(settings),
+        text: readme::readme(settings, project.calls_out()),
         bytes: None,
     });
     // The icons the application shows are Lucide's, whose license travels with them.

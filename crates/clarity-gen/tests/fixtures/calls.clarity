@@ -1,0 +1,32 @@
+// A test project, not an example: a command-line program that calls a web
+// API (DESIGN 5.23), which tests/http_build.rs builds on every stack and
+// runs against a small server of its own.
+module calls
+
+cli Calls
+    help "Calls a web API"
+
+action post_to(url: text, body: text) -> integer
+    effects net
+    let reply = http post url with body header "Content-Type": "text/plain"
+    return reply.status
+
+command fetch(url: text)
+    help "Gets a page and prints its status, whether it is ok, and its text"
+    let reply = http get url header "X-Test": "blue"
+    print "{reply.status} {reply.ok} {reply.text}"
+
+command send(url: text, body: text)
+    help "Posts a text and prints the status"
+    let status = post_to(url, body)
+    print "{status}"
+
+command replace(url: text, body: text)
+    help "Puts a text and prints the answer"
+    let reply = http put url with body
+    print reply.text
+
+command remove(url: text)
+    help "Deletes and prints the answer"
+    let reply = http delete url
+    print reply.text

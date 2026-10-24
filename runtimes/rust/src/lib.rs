@@ -9,6 +9,8 @@ pub mod dialect;
 #[cfg(feature = "engines")]
 pub mod engine;
 pub mod files;
+#[cfg(feature = "http")]
+pub mod http;
 pub mod i18n;
 pub mod picture;
 pub mod query;

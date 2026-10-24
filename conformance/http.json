@@ -1,0 +1,23 @@
+{
+  "about": "HTTP calls from code (DESIGN 5.23): every runtime starts the test server below on a free port of 127.0.0.1, makes each call against it, and gives the reply the case names. A path is called on that server; a url is called as it is. The reply's status is 0 when no answer came, ok is true for a status from 200 to 299, and text is what the server answered, or why no answer came. A case with text_starts checks only the start of the text, which goes on with the system's own reason.",
+  "server": {
+    "about": "Answers with status and text as each route says, as text/plain in UTF-8.",
+    "routes": [
+      { "path": "/hello", "status": 200, "text": "hello" },
+      { "path": "/missing", "status": 404, "text": "no such page" },
+      { "path": "/echo", "status": 200, "text": "the request's method, a space and its body" },
+      { "path": "/header", "status": 200, "text": "the value of the request's header X-Test" }
+    ]
+  },
+  "cases": [
+    { "name": "a page", "method": "GET", "path": "/hello", "status": 200, "ok": true, "text": "hello" },
+    { "name": "a missing page", "method": "GET", "path": "/missing", "status": 404, "ok": false, "text": "no such page" },
+    { "name": "post sends its body", "method": "POST", "path": "/echo", "body": "done", "status": 200, "ok": true, "text": "POST done" },
+    { "name": "put sends its body", "method": "PUT", "path": "/echo", "body": "twice", "status": 200, "ok": true, "text": "PUT twice" },
+    { "name": "delete sends none", "method": "DELETE", "path": "/echo", "status": 200, "ok": true, "text": "DELETE " },
+    { "name": "a body in UTF-8", "method": "POST", "path": "/echo", "body": "naïve 10 €", "status": 200, "ok": true, "text": "POST naïve 10 €" },
+    { "name": "a header is sent", "method": "GET", "path": "/header", "headers": { "X-Test": "blue" }, "status": 200, "ok": true, "text": "blue" },
+    { "name": "no server answers", "method": "GET", "url": "http://127.0.0.1:1/", "status": 0, "ok": false, "text_starts": "cannot reach 127.0.0.1: " },
+    { "name": "only http and https", "method": "GET", "url": "ftp://example.com/file", "status": 0, "ok": false, "text": "only http and https addresses are called, not ftp://example.com/file" }
+  ]
+}

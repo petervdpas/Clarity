@@ -925,6 +925,24 @@ impl Project {
         self.entities().filter(|e| !e.settings)
     }
 
+    /// Whether any code of the project calls a web API (DESIGN 5.23): a
+    /// stack then brings its HTTP client along.
+    pub fn calls_out(&self) -> bool {
+        let mut found = false;
+        let mut look = |body: &[crate::code::Stmt]| {
+            crate::code::each_expr_in(body, &mut |e| found |= matches!(e.kind, crate::code::ExprKind::Http { .. }));
+        };
+        for file in &self.files {
+            for block in &file.code {
+                block.handlers.iter().for_each(|h| look(&h.body));
+                block.events.iter().for_each(|e| look(&e.body));
+            }
+            file.functions.iter().for_each(|f| look(&f.body));
+            file.commands.iter().for_each(|c| look(&c.body));
+        }
+        found
+    }
+
     pub fn enums(&self) -> impl Iterator<Item = &EnumDecl> {
         self.files.iter().flat_map(|f| f.enums.iter())
     }

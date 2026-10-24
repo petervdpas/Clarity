@@ -173,6 +173,7 @@ pub fn value_type(ty: &TypeInfo) -> String {
         TypeInfo::File => "FileEntry".into(),
         TypeInfo::Files => "List<FileEntry>".into(),
         TypeInfo::Bytes => "byte[]".into(),
+        TypeInfo::HttpReply => "HttpReply".into(),
         TypeInfo::Enum(name) | TypeInfo::Record(name) => name.clone(),
         TypeInfo::List(item) => format!("List<{item}>"),
         TypeInfo::Values(item) => format!("List<{}>", value_type(&item.info())),

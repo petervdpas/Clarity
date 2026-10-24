@@ -30,6 +30,7 @@ How to make applications with Clarity, one topic per page. Start with [What Clar
 - [Queries](code.queries.md): How to read records with `find`, and how code lists, reads and writes files in a file store.
 - [Data events](code.data-events.md): How to run code whenever a record is saved or deleted, from any window or action, and how a refusal stops it.
 - [Libraries](code.libraries.md): How code calls a package of your project's own language, such as a NuGet package or a Rust crate, through a library you declare.
+- [Calling web APIs](code.web-apis.md): How code calls a web API with `http get` and the others, what a reply holds, and where keys go.
 - [Engines](code.engines.md): How to make, edit and build a processing engine compiled to WebAssembly in Clarity, call it from code, or bring one written in another language.
 
 ## Data

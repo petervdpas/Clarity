@@ -380,6 +380,69 @@ pub enum ExprKind {
     ListOf { items: Vec<Expr> },
     /// The value at a position of a list, from 1: `squares[3]`.
     Index { list: Box<Expr>, index: Box<Expr> },
+    /// `http post url with body header "Accept": "text/plain"`: a call to a
+    /// web API, giving its reply (DESIGN 5.23). Only post and put send a body.
+    Http {
+        method: HttpMethod,
+        url: Box<Expr>,
+        body: Option<Box<Expr>>,
+        headers: Vec<HttpHeader>,
+    },
+}
+
+/// The kind of an HTTP call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+}
+
+impl HttpMethod {
+    /// Every method, as code writes it.
+    pub const ALL: [HttpMethod; 4] = [HttpMethod::Get, HttpMethod::Post, HttpMethod::Put, HttpMethod::Delete];
+
+    /// As code writes it: `get`.
+    pub fn word(self) -> &'static str {
+        match self {
+            HttpMethod::Get => "get",
+            HttpMethod::Post => "post",
+            HttpMethod::Put => "put",
+            HttpMethod::Delete => "delete",
+        }
+    }
+
+    /// As HTTP names it: `GET`.
+    pub fn verb(self) -> &'static str {
+        match self {
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
+            HttpMethod::Put => "PUT",
+            HttpMethod::Delete => "DELETE",
+        }
+    }
+
+    /// Whether the call sends a body: post and put do.
+    pub fn sends_body(self) -> bool {
+        matches!(self, HttpMethod::Post | HttpMethod::Put)
+    }
+}
+
+/// The expressions of an HTTP call: its url, its body and its headers' values.
+pub fn http_exprs<'e>(url: &'e Expr, body: Option<&'e Expr>, headers: &'e [HttpHeader]) -> Vec<&'e Expr> {
+    std::iter::once(url).chain(body).chain(headers.iter().map(|h| &h.value)).collect()
+}
+
+/// `header "Accept": "text/plain"` of an HTTP call: the name as written, and
+/// its value, a text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct HttpHeader {
+    pub name: Ident,
+    pub value: Expr,
 }
 
 /// `c.name` or `c.name desc` in `order by`.
@@ -780,7 +843,7 @@ pub struct EngineFunction {
 }
 
 /// The effects an action can declare.
-pub const EFFECTS: [&str; 4] = ["db.read", "db.write", "files.read", "files.write"];
+pub const EFFECTS: [&str; 5] = ["db.read", "db.write", "files.read", "files.write", "net"];
 
 /// A piece of a text with slots.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -908,6 +971,13 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         ExprKind::Index { list, index } => {
             each_expr(list, found);
             each_expr(index, found);
+        }
+        ExprKind::Http { url, body, headers, .. } => {
+            each_expr(url, found);
+            if let Some(body) = body {
+                each_expr(body, found);
+            }
+            headers.iter().for_each(|h| each_expr(&h.value, found));
         }
         ExprKind::Text { parts } => {
             for part in parts {

@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{
+use clarity_spec::code::{HttpMethod, 
     AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -1030,6 +1030,10 @@ impl<'a> Emitter<'a> {
                 if self.types.type_of(object) == TypeInfo::Bytes {
                     return format!("static_cast<int64_t>({}.size())", self.place(object));
                 }
+                // A reply's status, ok and text have the same names in the runtime.
+                if self.types.type_of(object) == TypeInfo::HttpReply {
+                    return format!("{}.{}", self.place(object), member.name);
+                }
                 // A record's file: its name, and the extension of its name.
                 if self.types.type_of(object) == TypeInfo::RecordFile {
                     let read = if member.name == "extension" { "record_file_extension" } else { "record_file_name" };
@@ -1144,6 +1148,22 @@ impl<'a> Emitter<'a> {
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
+            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            ExprKind::Http { method, url, body, headers } => {
+                let url = self.value(url);
+                let body = match body {
+                    Some(body) => self.value(body),
+                    None => "std::string()".to_string(),
+                };
+                let items: Vec<String> = headers.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), self.value(&h.value))).collect();
+                let method = match method {
+                    HttpMethod::Get => "Get",
+                    HttpMethod::Post => "Post",
+                    HttpMethod::Put => "Put",
+                    HttpMethod::Delete => "Delete",
+                };
+                format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {{{}}})", items.join(", "))
+            }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args)
             }

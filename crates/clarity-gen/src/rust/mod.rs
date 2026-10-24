@@ -63,6 +63,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !rust_parts.is_empty() {
         features.push("parts");
     }
+    // HTTP calls from code (DESIGN 5.23): the runtime's client.
+    if project.calls_out() {
+        features.push("http");
+    }
     features.sort();
     features.dedup();
     let Some(main_window) = main_window(project) else {

@@ -29,6 +29,16 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
+        ExprKind::Http { method, url, body, headers } => {
+            let mut text = format!("http {} {}", method.word(), expr(url));
+            if let Some(body) = body {
+                text.push_str(&format!(" with {}", expr(body)));
+            }
+            for header in headers {
+                text.push_str(&format!(" header {:?}: {}", header.name.name, expr(&header.value)));
+            }
+            text
+        }
         ExprKind::New { entity } => format!("new {}", entity.name),
         ExprKind::Ask { question, .. } => format!("ask {}", expr(question)),
         ExprKind::Key { key, args } if args.is_empty() => format!("@{}", key.name),

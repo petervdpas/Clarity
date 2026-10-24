@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use clarity_spec::Project;
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo};
-use clarity_spec::code::{
+use clarity_spec::code::{HttpMethod, 
     AskForm, BinaryOp, EngineBody, EngineDecl, EngineState, Expr, ExprKind, FunctionDecl, FunctionKind, MessageLevel, OrderKey, Stmt, StmtKind, TextPart, TypeRef,
     UnaryOp, path_text, template,
 };
@@ -127,7 +127,10 @@ pub(crate) use crate::type_ref_info;
 
 /// Values of these types are copied; the others are cloned when read.
 fn is_copy(ty: &TypeInfo) -> bool {
-    !matches!(ty, TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::RecordFile | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes)
+    !matches!(
+        ty,
+        TypeInfo::Text | TypeInfo::Record(_) | TypeInfo::List(_) | TypeInfo::Values(_) | TypeInfo::Image | TypeInfo::RecordFile | TypeInfo::File | TypeInfo::Files | TypeInfo::Bytes | TypeInfo::HttpReply
+    )
 }
 
 fn is_decimal(ty: &TypeInfo) -> bool {
@@ -739,6 +742,12 @@ impl<'a> Emitter<'a> {
                     let object = self.object(object);
                     return format!("({object}.len() as i64)");
                 }
+                // A reply's status, ok and text have the same names in the runtime.
+                if self.types.type_of(object) == TypeInfo::HttpReply {
+                    let object = self.object(object);
+                    let clone = if member.name == "text" { ".clone()" } else { "" };
+                    return format!("{object}.{}{clone}", member.name);
+                }
                 let TypeInfo::Record(entity) = self.types.type_of(object) else {
                     self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
                     return String::new();
@@ -883,6 +892,22 @@ impl<'a> Emitter<'a> {
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text(&{})?", self.object(file)),
+            // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
+            ExprKind::Http { method, url, body, headers } => {
+                let url = self.value(url);
+                let body = match body {
+                    Some(body) => format!("Some(({}).as_str())", self.value(body)),
+                    None => "None".to_string(),
+                };
+                let headers: Vec<String> = headers.iter().map(|h| format!("({:?}, ({}).as_str())", h.name.name, self.value(&h.value))).collect();
+                let method = match method {
+                    HttpMethod::Get => "Get",
+                    HttpMethod::Post => "Post",
+                    HttpMethod::Put => "Put",
+                    HttpMethod::Delete => "Delete",
+                };
+                format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, &[{}])", headers.join(", "))
+            }
             ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
             ExprKind::New { entity } => format!("{}::default()", entity.name),
         }

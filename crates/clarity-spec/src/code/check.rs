@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
+use super::{AskForm, HttpHeader, HttpMethod, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -394,6 +394,8 @@ pub enum TypeInfo {
     Files,
     /// The contents of a file as they are.
     Bytes,
+    /// What a web API answered (DESIGN 5.23): status, ok and text.
+    HttpReply,
     Enum(String),
     Record(String),
     List(String),
@@ -708,6 +710,7 @@ enum Ty<'a> {
     File,
     Files,
     Bytes,
+    HttpReply,
     Enum(&'a EnumDecl),
     Record(&'a Entity),
     List(&'a Entity),
@@ -733,6 +736,7 @@ impl Ty<'_> {
             Ty::File => TypeInfo::File,
             Ty::Bytes => TypeInfo::Bytes,
             Ty::Files => TypeInfo::Files,
+            Ty::HttpReply => TypeInfo::HttpReply,
             Ty::Enum(e) => TypeInfo::Enum(e.name.name.clone()),
             Ty::Record(e) => TypeInfo::Record(e.name.name.clone()),
             Ty::List(e) => TypeInfo::List(e.name.name.clone()),
@@ -756,6 +760,7 @@ impl Ty<'_> {
             Ty::File => "file".into(),
             Ty::Bytes => "bytes".into(),
             Ty::Files => "list<file>".into(),
+            Ty::HttpReply => "http reply".into(),
             Ty::Enum(e) => e.name.name.clone(),
             Ty::Record(e) => e.name.name.clone(),
             Ty::List(e) => format!("list<{}>", e.name.name),
@@ -774,7 +779,7 @@ impl Ty<'_> {
 
     /// A single value that can be shown as text.
     fn is_value(&self) -> bool {
-        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Image | Ty::RecordFile | Ty::File | Ty::Files | Ty::Bytes)
+        !matches!(self, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Image | Ty::RecordFile | Ty::File | Ty::Files | Ty::Bytes | Ty::HttpReply)
     }
 
     fn same(&self, other: &Ty) -> bool {
@@ -1545,6 +1550,16 @@ fn and_list(words: &[&str]) -> String {
 /// dot (`jpg`), its size in bytes and when it was last changed.
 pub const FILE_MEMBERS: [&str; 5] = ["name", "path", "extension", "size", "modified"];
 
+/// What the reply of an HTTP call has: its status (0 when no answer came),
+/// whether it is ok (a status from 200 to 299), and its text.
+pub const REPLY_MEMBERS: [&str; 3] = ["status", "ok", "text"];
+
+/// Whether a header carries a key, which belongs in a setting, not the code.
+fn secret_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "authorization" || ["key", "token", "secret"].iter().any(|w| name.contains(w))
+}
+
 enum Place<'a> {
     Value { ty: Ty<'a>, writable: Result<(), String> },
     Part(Part<'a>, &'a str),
@@ -2207,6 +2222,61 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+    /// An HTTP call: in handlers and commands, and in actions with `effects
+    /// net`; never in a function, an engine or a data event.
+    fn check_net(&mut self, span: Span) {
+        if let Some(engine) = self.engine {
+            self.error(format!("an engine cannot call out: engine {} keeps to itself, and a handler or an action hands it what a call gives", engine.name.name), span);
+            return;
+        }
+        let Some(decl) = self.decl else { return };
+        match decl.kind {
+            FunctionKind::Function => self.error(format!("function '{}' cannot call out; an action can, with 'effects net'", decl.name.name), span),
+            FunctionKind::Event => self.error("a data event cannot call out: it runs inside the save's transaction, which must not wait on the network", span),
+            FunctionKind::Action => {
+                if !decl.effects.iter().any(|e| e.name == "net") {
+                    self.error(format!("action '{}' calls out, which needs 'effects net'", decl.name.name), span);
+                }
+            }
+        }
+    }
+
+    /// `http get url ...`: the url, the body and the headers are text; only
+    /// post and put send a body.
+    fn http(&mut self, method: HttpMethod, url: &Expr, body: Option<&Expr>, headers: &[HttpHeader], span: Span) -> Ty<'a> {
+        self.check_net(span);
+        let ty = self.expr(url, Some(Ty::Text));
+        if !matches!(ty, Ty::Text | Ty::Unknown) {
+            self.error(format!("the url of an http call is text, not {}", ty.name()), url.span);
+        }
+        match (method.sends_body(), body) {
+            (true, Some(body)) => {
+                let ty = self.expr(body, Some(Ty::Text));
+                if !matches!(ty, Ty::Text | Ty::Unknown) {
+                    self.error(format!("the body of an http call is text, not {}", ty.name()), body.span);
+                }
+            }
+            (true, None) => self.error(format!("http {} sends a body: write 'with' and the text", method.word()), span),
+            (false, Some(body)) => {
+                self.expr(body, None);
+                self.error(format!("http {} sends no body; post and put do", method.word()), body.span);
+            }
+            (false, None) => {}
+        }
+        for header in headers {
+            let ty = self.expr(&header.value, Some(Ty::Text));
+            if !matches!(ty, Ty::Text | Ty::Unknown) {
+                self.error(format!("the header '{}' is text, not {}", header.name.name, ty.name()), header.value.span);
+            } else if secret_header(&header.name.name) && matches!(header.value.kind, ExprKind::Str { .. }) {
+                self.out.push(Diagnostic::warning(
+                    format!("the header '{}' holds a key written in the code; keep it in a setting and put it in with a slot", header.name.name),
+                    header.value.span,
+                ));
+            }
+        }
+        Ty::HttpReply
+    }
+
     /// `save` and `delete`: not in functions; in actions only with
     /// `effects db.write`.
     fn check_write(&mut self, word: &str, span: Span) {
@@ -2543,6 +2613,18 @@ impl<'a> BodyChecker<'_, 'a> {
                     None
                 }
             },
+            Ty::HttpReply => {
+                let ty = match member {
+                    "status" => Ty::Integer,
+                    "ok" => Ty::Bool,
+                    "text" => Ty::Text,
+                    _ => {
+                        self.error(format!("an http reply has {}, not '{member}'", and_list(&REPLY_MEMBERS)), span);
+                        return None;
+                    }
+                };
+                Some(Place::Value { ty, writable: Err("a reply is read, not set".into()) })
+            }
             Ty::Bytes => match member {
                 "size" => Some(Place::Value { ty: Ty::Integer, writable: Err("the size of bytes is read, not set".into()) }),
                 _ => {
@@ -2725,6 +2807,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
                 Ty::Text
             }
+            ExprKind::Http { method, url, body, headers } => self.http(*method, url, body.as_deref(), headers, expr.span),
             ExprKind::ReadBytes { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -3391,6 +3474,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
+        ExprKind::Http { url, body, headers, .. } => crate::code::http_exprs(url, body.as_deref(), headers).iter().any(|e| mentions(e, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
@@ -3680,6 +3764,11 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
+        ExprKind::Http { url, body, headers, .. } => {
+            for e in super::http_exprs(url, body.as_deref(), headers) {
+                each_expr(e, found);
+            }
+        }
         ExprKind::Ask { question, form } => {
             each_expr(question, found);
             for e in super::ask_exprs(form) {

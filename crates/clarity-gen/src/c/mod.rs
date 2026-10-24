@@ -79,6 +79,13 @@ const RUNTIME_FILES: [(&str, &str); 46] = [
 
 /// Engines (DESIGN 5.11): the host, copied with wasm3 only into an
 /// application that declares an engine.
+/// HTTP calls (DESIGN 5.23): the client on libcurl, copied only into an
+/// application whose code calls out.
+pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
+    ("http/http.c", include_str!("../../../../runtimes/c/http/http.c")),
+    ("http/http.h", include_str!("../../../../runtimes/c/http/http.h")),
+];
+
 const ENGINE_FILES: [(&str, &str); 2] = [
     ("engine/engine.c", include_str!("../../../../runtimes/c/engine/engine.c")),
     ("engine/engine.h", include_str!("../../../../runtimes/c/engine/engine.h")),
@@ -156,17 +163,20 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(vec!["the project has no window to start with".to_string()]);
     };
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty()) + &crate::libraries::cmake_lines(project, &program)), text("CMakePresets.json", PRESETS.to_string())];
+    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out()) + &crate::libraries::cmake_lines(project, &program)), text("CMakePresets.json", PRESETS.to_string())];
     files.extend(crate::parts::out_files(project, &[]));
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
-    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files) {
+    let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
+    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files).chain(http_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
     let (records_h, records_c) = model::emit(project);
     // Each library's header, so every module calls it (DESIGN 5.21).
     let library_includes: String = crate::libraries::libraries(project).iter().map(|l| format!("#include \"clarity/{}.h\"\n", l.name.name)).collect();
-    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
+    // The HTTP client, for code that calls out (DESIGN 5.23).
+    let http_include = if project.calls_out() { "#include \"http/http.h\"\n" } else { "" };
+    files.push(text("src/records.h", format!("{HEADER}\n#pragma once\n\n#include <stddef.h>\n\n#include \"clarity/code.h\"\n#include \"clarity/list_fields.h\"\n{http_include}{library_includes}\n{}", records_h.trim_end().to_string() + "\n")));
     for library in crate::libraries::libraries(project) {
         let n = &library.name.name;
         let own = crate::libraries::own_file(library, false);
@@ -333,8 +343,9 @@ fn engines_c(project: &Project) -> (String, String) {
     (header, source)
 }
 
-fn cmake_lists(program: &str, engines: bool, parts: bool) -> String {
+fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool) -> String {
     let engine = if engines { " clarity_engine" } else { "" };
+    let http = if http { " clarity_http" } else { "" };
     // The native custom parts (DESIGN 6.5), built beside the program, which loads them.
     let parts = if parts { "\n# The custom parts drawn by native libraries, which the program loads.\nadd_subdirectory(parts)\n" } else { "" };
     format!(
@@ -356,7 +367,7 @@ include(clarity-runtime/clarity.cmake)
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.c src/modules/*.c)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
-target_link_libraries({program} PRIVATE clarity clarity_shell{engine})
+target_link_libraries({program} PRIVATE clarity clarity_shell{engine}{http})
 {parts}"
     )
 }

@@ -35,7 +35,9 @@ fn commands(settings: &Settings) -> (String, String) {
     }
 }
 
-pub fn readme(settings: &Settings) -> String {
+/// `calls_out`: the project's code calls web APIs, which a C or C++ build
+/// links libcurl for.
+pub fn readme(settings: &Settings, calls_out: bool) -> String {
     let backend = settings.stack.backend;
     let stack = tools::stack_name(backend, settings.stack.ui);
     let mut out = format!(
@@ -47,6 +49,9 @@ pub fn readme(settings: &Settings) -> String {
     out.push_str("\n## What you need\n\n");
     for need in tools::requirements(backend) {
         out.push_str(&format!("- {need}\n"));
+    }
+    if calls_out && matches!(backend, Backend::C | Backend::Cpp) {
+        out.push_str(&format!("- {}\n", tools::LIBCURL));
     }
     out.push_str("\nClarity looks for these itself (`clarity tools`, and Build tools on the Project tab); this list is for building the project without it.\n");
     if backend == Backend::Csharp {

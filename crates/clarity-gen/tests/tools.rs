@@ -181,6 +181,10 @@ fn every_stack_of_the_catalog_is_checked_and_reported() {
     assert!(report.contains("C# with Avalonia: ready (.NET SDK 10.0.402)\n"), "{report}");
     assert!(report.contains("Rust with the web renderer: missing Rust with cargo, from https://rustup.rs"), "{report}");
     assert!(report.contains("Go with the web renderer: missing Go, from https://go.dev/dl"), "{report}");
+    // Where to read how, once something is missing.
+    assert!(report.ends_with("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n"), "{report}");
+    let ready = clarity_gen::tools::report(&all.into_iter().filter(|s| s.missing.is_empty()).collect::<Vec<_>>());
+    assert!(!ready.contains("How to install"), "{ready}");
 }
 
 /// Building an engine from its Rust source needs cargo and Rust's
@@ -291,4 +295,34 @@ fn mingw_s_make_counts_as_make() {
     let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(machine));
     assert!(cpp.found.contains(&"GNU Make 4.4.1".to_string()), "{:?}", cpp.found);
     assert!(!cpp.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", cpp.missing);
+}
+
+/// A heading's anchor as the manual's window makes it (app/src/lib/markdown.ts):
+/// lower case, without marks, words joined by hyphens.
+fn anchor(heading: &str) -> String {
+    let kept: String = heading.to_lowercase().chars().filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == ' ' || *c == '-').collect();
+    kept.split_whitespace().collect::<Vec<_>>().join("-")
+}
+
+/// Each missing tool points at the part of the manual's setup page that
+/// tells how to install it on this system, and every part the check can
+/// point at, on any system, is a heading of that page.
+#[test]
+fn every_missing_tool_points_at_the_manual() {
+    use clarity_gen::tools::{SETUP_TOPIC, guide_headings};
+    assert_eq!(SETUP_TOPIC, "setup.tools");
+    let page = include_str!("../../../docs/manual/setup.tools.md");
+    let anchors: Vec<String> = page.lines().filter_map(|l| l.strip_prefix("### ").or_else(|| l.strip_prefix("## "))).map(anchor).collect();
+    for heading in guide_headings() {
+        assert!(anchors.iter().any(|a| a == heading), "the setup page has no heading #{heading}: {anchors:?}");
+    }
+    // A machine without anything misses every tool, each with its part of the page.
+    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Csharp, Ui::Avalonia), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web)] {
+        let bare = check(backend, ui, &Machine::default());
+        assert_eq!(bare.missing.len(), bare.guides.len(), "{backend:?}: {:?} {:?}", bare.missing, bare.guides);
+        assert!(bare.guides.iter().all(|g| guide_headings().contains(g)), "{:?}", bare.guides);
+    }
+    let rust = check(Backend::Rust, Ui::Web, &Machine::default());
+    let expected = if cfg!(windows) { "rust-on-windows" } else if cfg!(target_os = "macos") { "rust-on-macos" } else { "rust-on-linux" };
+    assert_eq!(rust.guides[0], expected);
 }

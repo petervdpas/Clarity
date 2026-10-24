@@ -50,6 +50,8 @@ Clarity keeps `go.work` when it writes the module again. Remove it to build on t
 
 Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab. A first build compiles WebKit's bindings and can take several minutes.
 
+Step by step, with the commands for Windows, Linux and macOS: [Setting up the build tools](setup.tools.md).
+
 ## Build and run
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:

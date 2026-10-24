@@ -14,3 +14,11 @@ export function checkTools(again = false) {
     .catch(() => (stackTools.all = null))
     .finally(() => (stackTools.checking = false));
 }
+
+/** The manual's page on installing the build tools (clarity_gen::tools::SETUP_TOPIC). */
+export const SETUP_TOPIC = "setup.tools";
+
+/** Opens the manual at the heading of the setup page that tells how to install something. */
+export function openSetupGuide(anchor: string | null) {
+  invoke("open_manual", { topic: SETUP_TOPIC, anchor }).catch(() => {});
+}

@@ -5,6 +5,7 @@
   // page you were on. F1 and the Manual button in Clarity open it on the page
   // about what you are doing.
   import { invoke } from "@tauri-apps/api/core";
+  import { openLink } from "./lib/backend";
   import { listen } from "@tauri-apps/api/event";
   import { onMount, tick } from "svelte";
   import Splitter from "./lib/Splitter.svelte";
@@ -24,7 +25,8 @@
   }
 
   let topics = $state<ManualEntry[]>([]);
-  let current = $state(new URLSearchParams(location.search).get("topic") || remembered() || "start.overview");
+  const asked = new URLSearchParams(location.search);
+  let current = $state(asked.get("topic") || remembered() || "start.overview");
   let text = $state("");
   let problem = $state<string | null>(null);
   let filter = $state("");
@@ -67,8 +69,15 @@
     show(previous, null, false);
   }
 
-  /** A link on the page: another page, the reference, or a heading here. */
+  /** A link on the page: another page, the reference, or a heading here;
+   *  a web link opens in the browser. */
   function follow(e: MouseEvent) {
+    const web = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[data-web]");
+    if (web) {
+      e.preventDefault();
+      openLink(web.dataset.web ?? "");
+      return;
+    }
     const link = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[data-link]");
     if (!link) return;
     e.preventDefault();
@@ -87,9 +96,10 @@
 
   onMount(() => {
     invoke<ManualEntry[]>("manual_topics").then((list) => (topics = list));
-    show(current, null, false);
+    // At the heading Clarity asked for, such as how to install a missing tool.
+    show(current, asked.get("anchor"), false);
     // Clarity asks for another page while this window is open.
-    const stop = listen<string>("manual-show", (e) => show(e.payload));
+    const stop = listen<{ topic: string; anchor: string | null }>("manual-show", (e) => show(e.payload.topic, e.payload.anchor));
     return () => {
       stop.then((unlisten) => unlisten());
     };

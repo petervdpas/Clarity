@@ -7,7 +7,7 @@
   import { invoke } from "./backend";
   import type { EnvironmentView } from "./generated/EnvironmentView";
   import type { ToolView } from "./generated/ToolView";
-  import { checkTools } from "./tools.svelte";
+  import { checkTools, openSetupGuide } from "./tools.svelte";
 
   let view = $state<EnvironmentView | null>(null);
   let scanning = $state(false);
@@ -66,7 +66,14 @@
               <span class="muted">{s.found.join(", ")}</span>
             {:else}
               <span class="state missing">Missing</span>
-              <span class="muted">{s.missing.join("; ")}</span>
+              <ul class="needs">
+                {#each s.missing as need (need.what)}
+                  <li>
+                    <span class="muted">{need.what}</span>
+                    <button type="button" onclick={() => openSetupGuide(need.guide)} title="Opens the manual where it tells how to install this">How to install</button>
+                  </li>
+                {/each}
+              </ul>
             {/if}
           </li>
         {/each}
@@ -159,6 +166,22 @@
     grid-template-columns: 200px auto 1fr;
     gap: 10px;
     align-items: baseline;
+  }
+  .needs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .needs li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .needs .muted {
+    flex: 1;
   }
   .state {
     font-size: 11px;

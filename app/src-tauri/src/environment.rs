@@ -36,6 +36,15 @@ pub struct ToolView {
     pub copies: Vec<ToolCopy>,
 }
 
+/// Something a stack misses: what to install, and the heading of the
+/// manual's setup page (`clarity_gen::tools::SETUP_TOPIC`) that tells how.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct MissingTool {
+    pub what: String,
+    pub guide: String,
+}
+
 /// A stack: whether it can build here, with what, and what is missing.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -43,7 +52,7 @@ pub struct StackView {
     pub name: String,
     pub ready: bool,
     pub found: Vec<String>,
-    pub missing: Vec<String>,
+    pub missing: Vec<MissingTool>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -101,7 +110,12 @@ pub fn view() -> EnvironmentView {
     let stacks = tools::check_all(&System)
         .into_iter()
         .filter(|s| s.generated)
-        .map(|s| StackView { name: tools::stack_name(s.backend, s.ui), ready: s.missing.is_empty(), found: s.found, missing: s.missing })
+        .map(|s| StackView {
+            name: tools::stack_name(s.backend, s.ui),
+            ready: s.missing.is_empty(),
+            found: s.found,
+            missing: s.missing.into_iter().zip(s.guides).map(|(what, guide)| MissingTool { what, guide: guide.to_string() }).collect(),
+        })
         .collect();
     EnvironmentView { file: environment::file().display().to_string(), stacks, tools }
 }

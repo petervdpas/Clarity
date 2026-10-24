@@ -133,6 +133,9 @@ pub struct StackTools {
     pub found: Vec<String>,
     /// What to install, with where to get it.
     pub missing: Vec<String>,
+    /// The heading of the manual's setup page (`clarity_gen::tools::SETUP_TOPIC`)
+    /// that tells how to install the first of `missing`.
+    pub guide: Option<String>,
 }
 
 /// Looks for the build tools of every stack the catalog offers.
@@ -145,6 +148,7 @@ pub fn stack_tools() -> Vec<StackTools> {
             ui: t.ui,
             generated: t.generated,
             found: t.found,
+            guide: t.guides.first().map(|g| g.to_string()),
             missing: t.missing,
         })
         .collect()
@@ -192,7 +196,7 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, c
 pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Option<String> {
     (!tools.missing.is_empty()).then(|| {
         format!(
-            "the project is generated in {}; to build {} here, install {}",
+            "the project is generated in {}; to build {} here, install {} (the manual's page Setting up the build tools says how)",
             out.display(),
             clarity_gen::tools::stack_name(tools.backend, tools.ui),
             tools.missing.join(", and ")
@@ -553,15 +557,16 @@ mod tests {
             generated: true,
             found: vec![],
             missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
+            guides: vec!["net-on-linux"],
         };
         assert_eq!(
             cannot_build(&check, Path::new("/p/shop/out")),
             Some(
-                "the project is generated in /p/shop/out; to build C# with Avalonia here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download"
+                "the project is generated in /p/shop/out; to build C# with Avalonia here, install the .NET 10 SDK, from https://dotnet.microsoft.com/download (the manual's page Setting up the build tools says how)"
                     .to_string()
             )
         );
-        let ready = clarity_gen::tools::StackTools { missing: vec![], found: vec![".NET SDK 10.0.402".into()], ..check };
+        let ready = clarity_gen::tools::StackTools { missing: vec![], guides: vec![], found: vec![".NET SDK 10.0.402".into()], ..check };
         assert_eq!(cannot_build(&ready, Path::new("/p/shop/out")), None);
     }
 

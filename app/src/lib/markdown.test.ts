@@ -42,7 +42,9 @@ test("a page has real headings with anchors, links to follow, and flowing paragr
   assert.equal(markdown("# Queries\n\n## Text with slots", { page: true }), '<h1 id="queries">Queries</h1><h2 id="text-with-slots">Text with slots</h2>');
   // A link keeps where it goes for the page to follow; the text is escaped.
   assert.equal(markdown("See [the <b>reference</b>](../LANGUAGE.md#queries).", { page: true }), '<p>See <a href="#" data-link="../LANGUAGE.md#queries">the &lt;b&gt;reference&lt;/b&gt;</a>.</p>');
-  // A link that leaves for elsewhere is never followed in the window.
-  assert.equal(markdown("[x](https://example.com)", { page: true }), "<p>x</p>");
+  // A web link is never followed in the window: it opens in the browser, on a click.
+  assert.equal(markdown("[x](https://example.com/a?b=1&c=2)", { page: true }), '<p><a href="#" data-web="https://example.com/a?b=1&amp;c=2">x</a></p>');
+  // Anything else that leaves the manual is plain text.
+  assert.equal(markdown("[x](http://example.com) [y](file:///etc/passwd)", { page: true }), "<p>x y</p>");
   assert.equal(markdown("one\ntwo", { page: true }), "<p>one two</p>");
 });

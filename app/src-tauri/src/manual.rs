@@ -7,11 +7,12 @@
 
 /// Every topic, in the order of the manual. A topic file that is not listed
 /// here fails the tests, and so does a listed one that the index leaves out.
-const TOPICS: [(&str, &str); 32] = [
+const TOPICS: [(&str, &str); 33] = [
     ("start.overview", include_str!("../../../docs/manual/start.overview.md")),
     ("start.first-project", include_str!("../../../docs/manual/start.first-project.md")),
     ("project.file", include_str!("../../../docs/manual/project.file.md")),
     ("project.run-build", include_str!("../../../docs/manual/project.run-build.md")),
+    ("setup.tools", include_str!("../../../docs/manual/setup.tools.md")),
     ("design.windows", include_str!("../../../docs/manual/design.windows.md")),
     ("design.parts", include_str!("../../../docs/manual/design.parts.md")),
     ("design.frame", include_str!("../../../docs/manual/design.frame.md")),
@@ -108,19 +109,35 @@ pub fn manual_page(id: String) -> Result<String, String> {
     page(&id)
 }
 
-/// Opens the manual's window on `topic`, or brings it forward and turns it
-/// to that page. It is a window of its own beside Clarity's, so a page stays
-/// in view while you work; it closes with Clarity.
+/// Which page the manual's window shows, and the heading on it, if any.
+#[derive(Debug, Clone, serde::Serialize)]
+struct Shown {
+    topic: String,
+    anchor: Option<String>,
+}
+
+/// A topic id or a heading's anchor as it may go into the window's address:
+/// letters, digits, dots and hyphens.
+fn plain_id(id: &str) -> String {
+    id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-').collect()
+}
+
+/// Opens the manual's window on `topic`, at the heading `anchor` when one is
+/// given, or brings it forward and turns it there. It is a window of its own
+/// beside Clarity's, so a page stays in view while you work; it closes with
+/// Clarity.
 #[tauri::command]
-pub async fn open_manual(app: tauri::AppHandle, topic: String) -> Result<(), String> {
+pub async fn open_manual(app: tauri::AppHandle, topic: String, anchor: Option<String>) -> Result<(), String> {
     use tauri::{Emitter, Manager};
+    let shown = Shown { topic: plain_id(&topic), anchor: anchor.as_deref().map(plain_id).filter(|a| !a.is_empty()) };
     if let Some(window) = app.get_webview_window("manual") {
         window.unminimize().ok();
         window.show().map_err(|err| err.to_string())?;
         window.set_focus().map_err(|err| err.to_string())?;
-        return window.emit("manual-show", topic).map_err(|err| err.to_string());
+        return window.emit("manual-show", shown).map_err(|err| err.to_string());
     }
-    let url = format!("index.html?window=manual&topic={}", topic.replace(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '-'), ""));
+    let at = shown.anchor.as_ref().map(|a| format!("&anchor={a}")).unwrap_or_default();
+    let url = format!("index.html?window=manual&topic={}{at}", shown.topic);
     tauri::WebviewWindowBuilder::new(&app, "manual", tauri::WebviewUrl::App(url.into()))
         .title("Clarity manual")
         .inner_size(860.0, 720.0)
@@ -193,6 +210,13 @@ mod tests {
                 assert!(folder().join(file).exists(), "{}: the link {target} leads nowhere", t.id);
             }
         }
+    }
+
+    /// Ids reach the window's address as letters, digits, dots and hyphens.
+    #[test]
+    fn ids_stay_plain() {
+        assert_eq!(plain_id("setup.tools"), "setup.tools");
+        assert_eq!(plain_id("c-and-c-on-windows&x=<y>"), "c-and-c-on-windowsxy");
     }
 
     #[test]

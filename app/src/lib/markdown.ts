@@ -13,6 +13,9 @@ const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;
 /** A link a page may follow: another page of the manual, or a heading. */
 const FOLLOWED = /^(\.\.\/)?[A-Za-z0-9._-]+\.md(#[A-Za-z0-9-]+)?$|^#[A-Za-z0-9-]+$/;
 
+/** A web link of a page, which opens in the browser: an https address. */
+const WEB = /^https:\/\/[^\s"<>]+$/;
+
 /** A heading's anchor, as Markdown links write it: lower case, without
  *  marks, words joined by hyphens. */
 export const anchor = (heading: string) =>
@@ -25,9 +28,13 @@ export const anchor = (heading: string) =>
 /** Bold, italics, code and links within a line. */
 function inline(text: string, page = false): string {
   return escape(text)
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label: string, href: string) =>
-      page && FOLLOWED.test(href.replace(/&amp;/g, "&")) ? `<a href="#" data-link="${href}">${label}</a>` : label,
-    )
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label: string, href: string) => {
+      if (!page) return label;
+      if (FOLLOWED.test(href.replace(/&amp;/g, "&"))) return `<a href="#" data-link="${href}">${label}</a>`;
+      // A web link opens in the browser when it is clicked; the window never goes there.
+      if (WEB.test(href)) return `<a href="#" data-web="${href.replace(/"/g, "&quot;")}">${label}</a>`;
+      return label;
+    })
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>");

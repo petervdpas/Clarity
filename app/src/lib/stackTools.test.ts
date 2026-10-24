@@ -6,13 +6,13 @@ import { toolsNote } from "./stackTools.ts";
 import type { StackTools } from "./generated/StackTools";
 
 const all: StackTools[] = [
-  { backend: "rust", ui: "web", generated: true, ready: true, found: ["cargo 1.96.0"], missing: [] },
-  { backend: "csharp", ui: "avalonia", generated: true, ready: false, found: [], missing: ["the .NET 10 SDK, from https://dotnet.microsoft.com/download"] },
-  { backend: "go", ui: "web", generated: false, ready: false, found: ["go version go1.25.7"], missing: [] },
+  { backend: "rust", ui: "web", generated: true, ready: true, found: ["cargo 1.96.0"], missing: [], guide: null },
+  { backend: "csharp", ui: "avalonia", generated: true, ready: false, found: [], missing: ["the .NET 10 SDK, from https://dotnet.microsoft.com/download"], guide: "net-on-linux" },
+  { backend: "go", ui: "web", generated: false, ready: false, found: ["go version go1.25.7"], missing: [], guide: null },
 ];
 
 test("a ready stack names its tools", () => {
-  assert.deepEqual(toolsNote(all, "rust", "web"), { level: "ok", text: "Ready to build: cargo 1.96.0" });
+  assert.deepEqual(toolsNote(all, "rust", "web"), { level: "ok", text: "Ready to build: cargo 1.96.0", guide: null });
 });
 
 test("a stack without its tools says what to install, and that the rest works", () => {
@@ -20,10 +20,12 @@ test("a stack without its tools says what to install, and that the rest works", 
   assert.equal(note?.level, "warning");
   assert.match(note!.text, /^Install the \.NET 10 SDK, from https:\/\/dotnet\.microsoft\.com\/download to build and run here\./);
   assert.match(note!.text, /Designing, previewing and generating work without it; the generated project's README\.md says how to build it\./);
+  // Where the manual's setup page tells how to install it.
+  assert.equal(note?.guide, "net-on-linux");
 });
 
 test("a stack Clarity does not generate yet says so", () => {
-  assert.deepEqual(toolsNote(all, "go", "web"), { level: "warning", text: "Clarity does not generate this stack yet." });
+  assert.deepEqual(toolsNote(all, "go", "web"), { level: "warning", text: "Clarity does not generate this stack yet.", guide: null });
 });
 
 test("nothing is said before the tools are known", () => {

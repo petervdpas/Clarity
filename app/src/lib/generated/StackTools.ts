@@ -22,4 +22,9 @@ found: Array<string>,
 /**
  * What to install, with where to get it.
  */
-missing: Array<string>, };
+missing: Array<string>, 
+/**
+ * The heading of the manual's setup page (`clarity_gen::tools::SETUP_TOPIC`)
+ * that tells how to install the first of `missing`.
+ */
+guide: string | null, };

@@ -48,6 +48,8 @@ A project with an [engine](code.engines.md) also turns on the crate's `engines` 
 
 Clarity checks for these itself: run `clarity tools`, or look at Build tools on the Project tab.
 
+Step by step, with the commands for Windows, Linux and macOS: [Setting up the build tools](setup.tools.md).
+
 ## Build and run
 
 **Run** on the Preview tab builds a debug program and starts it; **Build** makes a release program. Without Clarity, in the output folder:

@@ -51,15 +51,9 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 - On Windows, for C and C++ applications: the WebView2 SDK, which the webview builds against (the `Microsoft.Web.WebView2` NuGet package; the runtime itself ships with Windows 11)
 
-### The toolbelt on Windows
+### Setting up the tools
 
-Rust, Node and the .NET SDK come from their own installers, and Go from https://go.dev/dl. For C and C++, MSYS2 carries every tool and library in one place. Install it from https://www.msys2.org, open its **UCRT64** shell, and:
-
-```sh
-pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-sqlite3 mingw-w64-ucrt-x86_64-nlohmann-json
-```
-
-Take every C and C++ tool from that one prefix, never a mix: two compilers of different versions in one project do not link. **Clarity settings**, **Environment** shows each copy a scan found, so point the C compiler, the C++ compiler, CMake and Ninja at `C:\msys64\ucrt64\bin`. An example whose custom part is drawn by a native library needs that library too, such as `mingw-w64-ucrt-x86_64-sfml` for `orbs`.
+What to install on Windows, Linux and macOS, step by step with the commands, is in the manual: [Setting up the build tools](docs/manual/setup.tools.md). Clarity opens that page itself, at the right part, from **How to install** beside a missing tool (Clarity settings, Environment, and Build tools in the project settings). On Windows, C and C++ come from MSYS2's UCRT64 shell, every tool from that one prefix.
 
 ## Commands
 

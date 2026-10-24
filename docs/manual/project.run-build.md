@@ -38,11 +38,11 @@ Clarity uses the tools of each stack and does not bring them along. What it look
 - Go: `go`; on Linux, also the WebKitGTK development files.
 - C and C++: a compiler, CMake, and make or Ninja; on Linux, also the SQLite and WebKitGTK development files, and nlohmann-json for C++. C also needs a C++ compiler for the webview.
 
-The **Build tools** row, in the New project dialog and in the project settings under Stack, says what was found or what to install, with where to get it. **Environment...** beside it opens Clarity settings at Environment, where the tools are scanned and chosen; the row follows when you come back.
+The **Build tools** row, in the New project dialog and in the project settings under Stack, says what was found or what to install, with where to get it. **How to install** beside it opens [Setting up the build tools](setup.tools.md) at the part about the first missing tool, for the system you are on. **Environment...** beside it opens Clarity settings at Environment, where the tools are scanned and chosen; the row follows when you come back.
 
 ### Where Clarity finds them
 
-Clarity looks on the PATH and in the folders the official installers use. **Clarity settings**, **Environment** shows every stack (ready, or what is missing) and every tool with each copy a scan found and its version. Pick the copy builds use, or type a program's path when it is somewhere else (on Windows, a compiler of Visual Studio's, say); "The first one found" leaves it to Clarity. **Scan again** looks once more after you install something.
+Clarity looks on the PATH and in the folders the official installers use. **Clarity settings**, **Environment** shows every stack (ready, or what is missing) and every tool with each copy a scan found and its version. Pick the copy builds use, or type a program's path when it is somewhere else (on Windows, a compiler of Visual Studio's, say); "The first one found" leaves it to Clarity. Each missing tool there has **How to install**, which opens [Setting up the build tools](setup.tools.md) at its part. **Scan again** looks once more after you install something.
 
 The choices hold for every project on this computer and for the `clarity` command too: they are kept in `environment.json` in Clarity's own folder (`~/.clarity`, or the folder `CLARITY_HOME` names). A chosen tool's folder comes first for every build, so the tools it starts are its own, and chosen C and C++ compilers reach CMake as `CC` and `CXX`.
 

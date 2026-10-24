@@ -216,6 +216,9 @@ pub struct StackTools {
     pub found: Vec<String>,
     /// What to install, with where to get it.
     pub missing: Vec<String>,
+    /// For each of `missing`, in the same order, the heading of the manual's
+    /// page `SETUP_TOPIC` that tells how to install it on this system.
+    pub guides: Vec<&'static str>,
 }
 
 impl StackTools {
@@ -258,6 +261,44 @@ fn compiler(probe: &dyn Probe, compilers: &[&str]) -> Option<String> {
     compilers.iter().find_map(|c| probe.run(c, &["--version"]).map(|v| first_line(&v))).or_else(|| {
         probe.says("cl", &[]).map(|v| first_line(&v)).filter(|v| v.contains("Microsoft"))
     })
+}
+
+/// The manual's page on installing the build tools (docs/manual/setup.tools.md).
+pub const SETUP_TOPIC: &str = "setup.tools";
+
+/// Where that page tells how to install something: a heading's anchor per
+/// system, as the manual's window makes them.
+#[derive(Clone, Copy)]
+struct Guide {
+    windows: &'static str,
+    linux: &'static str,
+    macos: &'static str,
+}
+
+impl Guide {
+    /// The heading for the system Clarity runs on.
+    fn here(self) -> &'static str {
+        if cfg!(windows) {
+            self.windows
+        } else if cfg!(target_os = "macos") {
+            self.macos
+        } else {
+            self.linux
+        }
+    }
+}
+
+const RUST_GUIDE: Guide = Guide { windows: "rust-on-windows", linux: "rust-on-linux", macos: "rust-on-macos" };
+const DOTNET_GUIDE: Guide = Guide { windows: "net-on-windows", linux: "net-on-linux", macos: "net-on-macos" };
+const GO_GUIDE: Guide = Guide { windows: "go-on-windows", linux: "go-on-linux", macos: "go-on-macos" };
+/// The compilers, CMake, make or Ninja, and the C and C++ libraries.
+const NATIVE_GUIDE: Guide = Guide { windows: "c-and-c-on-windows", linux: "c-and-c-on-linux", macos: "c-and-c-on-macos" };
+/// WebKitGTK is Linux's alone.
+const WEBKIT_GUIDE: Guide = Guide { windows: "webview2-on-windows", linux: "webkitgtk-on-linux", macos: "webkitgtk-on-linux" };
+
+/// Every heading of the setup page the check can point at, on any system.
+pub fn guide_headings() -> Vec<&'static str> {
+    [RUST_GUIDE, DOTNET_GUIDE, GO_GUIDE, NATIVE_GUIDE, WEBKIT_GUIDE].iter().flat_map(|g| [g.windows, g.linux, g.macos]).collect()
 }
 
 /// What to install for each tool, with where to get it: the words of
@@ -317,67 +358,68 @@ pub fn requirements(backend: Backend) -> Vec<String> {
 /// Looks for the tools `backend` with `ui` builds with.
 pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
     let mut found = Vec::new();
-    let mut missing = Vec::new();
+    // What to install, each with where the manual tells how.
+    let mut missing: Vec<(String, Guide)> = Vec::new();
     match backend {
         Backend::Rust => {
             match probe.run("cargo", &["--version"]) {
                 Some(version) => found.push(first_line(&version)),
-                None => missing.push(RUST.to_string()),
+                None => missing.push((RUST.to_string(), RUST_GUIDE)),
             }
             // Tauri draws with WebKitGTK on Linux, and builds against its development files.
             if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
-                missing.push(WEBKIT.to_string());
+                missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
             }
         }
         Backend::Csharp => {
             match probe.run("dotnet", &["--list-sdks"]).and_then(|listed| dotnet_sdk(&listed, dotnet_major())) {
                 Some(version) => found.push(format!(".NET SDK {version}")),
-                None => missing.push(dotnet()),
+                None => missing.push((dotnet(), DOTNET_GUIDE)),
             }
         }
         Backend::Go => {
             match probe.run("go", &["version"]) {
                 Some(version) => found.push(first_line(&version)),
-                None => missing.push(GO.to_string()),
+                None => missing.push((GO.to_string(), GO_GUIDE)),
             }
             // Wails draws with WebKitGTK on Linux too, through cgo.
             if cfg!(target_os = "linux") && probe.run("pkg-config", &["--exists", "webkit2gtk-4.1"]).is_none() {
-                missing.push(WEBKIT.to_string());
+                missing.push((WEBKIT.to_string(), WEBKIT_GUIDE));
             }
         }
         Backend::C | Backend::Cpp => {
             let compilers = if backend == Backend::C { ["cc", "gcc", "clang"] } else { ["c++", "g++", "clang++"] };
             match compiler(probe, &compilers) {
                 Some(version) => found.push(version),
-                None => missing.push(compiler_needed(backend)),
+                None => missing.push((compiler_needed(backend), NATIVE_GUIDE)),
             }
             if backend == Backend::C {
                 match compiler(probe, &["c++", "g++", "clang++"]) {
                     Some(version) => found.push(version),
-                    None => missing.push(WEBVIEW_CXX.to_string()),
+                    None => missing.push((WEBVIEW_CXX.to_string(), NATIVE_GUIDE)),
                 }
             }
             // The generated project is a CMake project (CMakeLists.txt), built with make or Ninja.
             match probe.run("cmake", &["--version"]) {
                 Some(version) => found.push(first_line(&version)),
-                None => missing.push(CMAKE.to_string()),
+                None => missing.push((CMAKE.to_string(), NATIVE_GUIDE)),
             }
             if let Some(version) = probe.run("make", &["--version"]).or_else(|| probe.run("mingw32-make", &["--version"])) {
                 found.push(first_line(&version));
             } else if let Some(version) = probe.run("ninja", &["--version"]) {
                 found.push(format!("ninja {}", first_line(&version)));
             } else {
-                missing.push(MAKE.to_string());
+                missing.push((MAKE.to_string(), NATIVE_GUIDE));
             }
             // The libraries CMake finds, through pkg-config on Linux.
             if cfg!(target_os = "linux") {
-                let mut libraries = vec![("sqlite3", SQLITE), ("webkit2gtk-4.1", WEBKIT_GTK)];
+                let mut libraries = vec![("sqlite3", SQLITE, NATIVE_GUIDE), ("webkit2gtk-4.1", WEBKIT_GTK, WEBKIT_GUIDE)];
                 if backend == Backend::Cpp {
-                    libraries.push(("nlohmann_json", NLOHMANN));
+                    libraries.push(("nlohmann_json", NLOHMANN, NATIVE_GUIDE));
                 }
-                for (package, install) in libraries {
+                for (package, install, guide) in libraries {
                     if probe.run("pkg-config", &["--exists", package]).is_none() {
-                        missing.push(install.to_string());
+                        missing.push((install.to_string(), guide));
                     }
                 }
             }
@@ -388,7 +430,8 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
         ui,
         generated: generates(backend, ui),
         found,
-        missing,
+        guides: missing.iter().map(|(_, guide)| guide.here()).collect(),
+        missing: missing.into_iter().map(|(what, _)| what).collect(),
     }
 }
 
@@ -450,6 +493,9 @@ pub fn report(stacks: &[StackTools]) -> String {
             said.push(format!("missing {}", s.missing.join("; and ")));
         }
         out.push_str(&format!("{}: {}\n", stack_name(s.backend, s.ui), said.join("; ")));
+    }
+    if stacks.iter().any(|s| !s.missing.is_empty()) {
+        out.push_str("How to install each: the manual's page Setting up the build tools (Manual in Clarity, or docs/manual/setup.tools.md).\n");
     }
     out
 }

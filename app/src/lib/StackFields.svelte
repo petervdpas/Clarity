@@ -10,7 +10,7 @@
   import type { Ui } from "./generated/Ui";
   import { programs } from "./commandLine";
   import { toolsNote } from "./stackTools";
-  import { checkTools, stackTools } from "./tools.svelte";
+  import { checkTools, openSetupGuide, stackTools } from "./tools.svelte";
 
   let {
     catalog,
@@ -76,6 +76,9 @@
     <span class="note {note.level}">{note.text}</span>
   {:else}
     <span class="note">{stackTools.checking ? "Looking for the build tools..." : "Not checked"}</span>
+  {/if}
+  {#if note?.guide}
+    <button type="button" onclick={() => openSetupGuide(note.guide)} title="Opens the manual where it tells how to install what is missing">How to install</button>
   {/if}
   {#if onenvironment}
     <button type="button" onclick={onenvironment} title="Where the build tools of every stack are on this computer, in Clarity settings">Environment...</button>

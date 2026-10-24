@@ -204,9 +204,7 @@ fn check_project(state: State<WatchState>) -> Result<Preview, String> {
 
 /// The project file at `path`, with the folder of its modules.
 fn project_paths(path: &str) -> Result<(PathBuf, PathBuf), String> {
-    let file = PathBuf::from(path)
-        .canonicalize()
-        .map_err(|err| format!("cannot open {path}: {err}"))?;
+    let file = clarity_project::plain(PathBuf::from(path).canonicalize().map_err(|err| format!("cannot open {path}: {err}"))?);
     if file.is_dir() || !is_spec_file(&file) {
         return Err(format!(
             "{} is not a project file; open the .clarity file next to the project's folder",
@@ -394,9 +392,7 @@ fn stop_app(app: AppHandle) {
 /// The open directory and the canonical path of one of its spec files.
 fn spec_file_of(state: &WatchState, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let dir = open_dir_of(state)?;
-    let file = PathBuf::from(path)
-        .canonicalize()
-        .map_err(|err| format!("cannot open {path}: {err}"))?;
+    let file = clarity_project::plain(PathBuf::from(path).canonicalize().map_err(|err| format!("cannot open {path}: {err}"))?);
     if file.parent() != Some(dir.as_path()) || !is_spec_file(&file) {
         return Err(format!("{path} is not a spec file of the open directory"));
     }
@@ -952,7 +948,9 @@ mod tests {
         std::fs::create_dir_all(&base).unwrap();
         let file = write_new_project(&base.join("shop.clarity"), csharp()).unwrap();
         let (found, dir) = project_paths(&file.display().to_string()).unwrap();
-        assert_eq!((found, dir), (file.canonicalize().unwrap(), base.canonicalize().unwrap().join("shop")));
+        // The canonical path, without the prefix Windows answers with.
+        let canonical = |path: &Path| clarity_project::plain(path.canonicalize().unwrap());
+        assert_eq!((found, dir), (canonical(&file), canonical(&base).join("shop")));
         assert!(project_paths(&base.join("shop").display().to_string()).unwrap_err().contains("not a project file"));
         std::fs::remove_dir_all(base.join("shop")).unwrap();
         assert!(project_paths(&file.display().to_string()).unwrap_err().contains("is missing"));

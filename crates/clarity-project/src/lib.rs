@@ -230,6 +230,29 @@ pub fn clarity_home() -> PathBuf {
     home.join(".clarity")
 }
 
+/// A path as people read it and as build tools take it. Windows answers
+/// `canonicalize` with a verbatim path, which carries a prefix of its own
+/// (`\\?\C:\...`); that prefix then stands in every message Clarity shows,
+/// in every folder it hands a build tool, and in the project references it
+/// writes, and MSBuild refuses it. It goes where the path does not need it:
+/// a drive path no longer than the limit the prefix is there to lift.
+/// Elsewhere, and on every other system, the path is its own answer.
+pub fn plain(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        const VERBATIM: &str = r"\\?\";
+        const LONGEST: usize = 260;
+        let text = path.to_string_lossy();
+        if let Some(rest) = text.strip_prefix(VERBATIM)
+            && rest.len() < LONGEST
+            && matches!(rest.as_bytes(), [drive, b':', b'\\', ..] if drive.is_ascii_alphabetic())
+        {
+            return PathBuf::from(rest);
+        }
+    }
+    path
+}
+
 pub fn starter(name: &str, module: &str) -> Settings {
     Settings {
         name: name.to_string(),

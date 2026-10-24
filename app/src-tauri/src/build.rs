@@ -218,6 +218,10 @@ pub fn start_part(app: AppHandle, name: String, folder: PathBuf, steps: Vec<Vec<
             }
         }
         app.state::<BuildState>().busy.store(false, Ordering::SeqCst);
+        // A tool that says nothing when it is happy (`go build`) would leave
+        // the panel showing the command alone, which reads as a build that
+        // never ended, so how it went is a line of the output as well.
+        send_line(&app, done.message.clone());
         send_done(&app, done);
     });
     Ok(())

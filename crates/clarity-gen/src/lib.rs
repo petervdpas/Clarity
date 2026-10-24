@@ -640,7 +640,11 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
             })
         }
         Backend::Go => {
-            let program = format!("bin/{}", go::module_name(settings));
+            // `go build -o` writes the name it is given and adds nothing of
+            // its own, so the name it builds under is the name Run starts,
+            // `.exe` on Windows and all.
+            let program = exe(format!("bin/{}", go::module_name(settings)));
+            let built = program.to_string_lossy().into_owned();
             // -v names each package as it is built: a first build compiles
             // WebKit's bindings for minutes, and is silent otherwise.
             let mut args = vec!["build".to_string(), "-v".to_string()];
@@ -648,12 +652,12 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
                 // Wails' production build, without debug information.
                 args.extend(["-tags", "production", "-trimpath", "-ldflags=-s -w"].map(String::from));
             }
-            args.extend(["-o".to_string(), program.clone(), ".".to_string()]);
+            args.extend(["-o".to_string(), built, ".".to_string()]);
             Some(Toolchain {
                 tool: "go",
                 args,
                 env: vec![],
-                program: exe(program),
+                program,
                 missing: "is Go installed?",
             })
         }
@@ -719,14 +723,16 @@ pub fn cli_toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
     match settings.stack.backend {
         Backend::Rust => toolchain.program = exe(format!("target/{}/{program}", if release { "release" } else { "debug" })),
         Backend::Go => {
-            let built = format!("bin/{program}");
+            // The name it builds under is the name Run starts; see `toolchain`.
+            let into = exe(format!("bin/{program}"));
+            let built = into.to_string_lossy().into_owned();
             let mut args = vec!["build".to_string(), "-v".to_string()];
             if release {
                 args.extend(["-trimpath", "-ldflags=-s -w"].map(String::from));
             }
-            args.extend(["-o".to_string(), built.clone(), ".".to_string()]);
+            args.extend(["-o".to_string(), built, ".".to_string()]);
             toolchain.args = args;
-            toolchain.program = exe(built);
+            toolchain.program = into;
         }
         Backend::C | Backend::Cpp => toolchain.program = exe(format!("build/{}/{program}", if release { "release" } else { "debug" })),
         Backend::Csharp => {}

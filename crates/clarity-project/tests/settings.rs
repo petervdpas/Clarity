@@ -56,6 +56,21 @@ fn shop() -> Settings {
     }
 }
 
+/// Windows answers `canonicalize` with a verbatim path; `plain` takes the
+/// prefix off where the path does not need it, so messages and build tools
+/// see an ordinary one. Every other system hands the path back as it is.
+#[test]
+fn a_canonical_path_is_plain_again() {
+    let here = std::env::current_dir().unwrap().canonicalize().unwrap();
+    let plain = clarity_project::plain(here.clone());
+    assert!(!plain.to_string_lossy().starts_with(r"\\?\"), "{}", plain.display());
+    // It is still the same folder, whatever its spelling.
+    assert_eq!(plain.canonicalize().unwrap(), here);
+    // A path that is not verbatim is its own answer.
+    let ordinary = std::path::PathBuf::from("shop/out");
+    assert_eq!(clarity_project::plain(ordinary.clone()), ordinary);
+}
+
 #[test]
 fn reads_a_project_file() {
     assert_eq!(parse(SHOP).unwrap(), shop());

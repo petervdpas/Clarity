@@ -244,6 +244,11 @@ public:
         if (!window || !GDK_IS_X11_WINDOW(window)) return 0;
         gdk_window_ensure_native(window);
         return static_cast<uintptr_t>(GDK_WINDOW_XID(window));
+#elif defined(_WIN32)
+        // The window itself: the part's window is a child beside the webview's.
+        auto window = view_.window();
+        if (!window.ok()) return 0;
+        return reinterpret_cast<uintptr_t>(window.value());
 #else
         return 0;
 #endif

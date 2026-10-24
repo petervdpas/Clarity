@@ -98,8 +98,9 @@ pub fn interface(part: &PartDecl) -> String {
 use std::ffi::c_void;
 
 /// The native window the part draws in: on Linux an X11 window, on the
-/// part host's own X11 connection. Its raw handle is what wgpu, Bevy and
-/// softbuffer take.
+/// part host's own X11 connection; on Windows a Win32 child window of the
+/// webview's. Its raw handle is what wgpu, Bevy and softbuffer take.
+#[cfg(not(windows))]
 #[derive(Debug, Clone, Copy)]
 pub struct Window {{
     pub xid: u64,
@@ -107,6 +108,16 @@ pub struct Window {{
     pub screen: i32,
 }}
 
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy)]
+pub struct Window {{
+    /// The child window (an HWND).
+    pub hwnd: *mut c_void,
+    /// The module its window class belongs to (an HINSTANCE).
+    pub hinstance: *mut c_void,
+}}
+
+#[cfg(not(windows))]
 impl raw_window_handle::HasWindowHandle for Window {{
     fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {{
         let handle = raw_window_handle::XlibWindowHandle::new(self.xid as std::ffi::c_ulong);
@@ -115,9 +126,29 @@ impl raw_window_handle::HasWindowHandle for Window {{
     }}
 }}
 
+#[cfg(not(windows))]
 impl raw_window_handle::HasDisplayHandle for Window {{
     fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {{
         let handle = raw_window_handle::XlibDisplayHandle::new(std::ptr::NonNull::new(self.display), self.screen);
+        Ok(unsafe {{ raw_window_handle::DisplayHandle::borrow_raw(handle.into()) }})
+    }}
+}}
+
+#[cfg(windows)]
+impl raw_window_handle::HasWindowHandle for Window {{
+    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {{
+        let window = std::num::NonZeroIsize::new(self.hwnd as isize).ok_or(raw_window_handle::HandleError::Unavailable)?;
+        let mut handle = raw_window_handle::Win32WindowHandle::new(window);
+        handle.hinstance = std::num::NonZeroIsize::new(self.hinstance as isize);
+        // The window lives as long as the part: the host ends the part first.
+        Ok(unsafe {{ raw_window_handle::WindowHandle::borrow_raw(handle.into()) }})
+    }}
+}}
+
+#[cfg(windows)]
+impl raw_window_handle::HasDisplayHandle for Window {{
+    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {{
+        let handle = raw_window_handle::WindowsDisplayHandle::new();
         Ok(unsafe {{ raw_window_handle::DisplayHandle::borrow_raw(handle.into()) }})
     }}
 }}
@@ -328,7 +359,10 @@ mod {package}_glue {{
     }}
 
     pub fn make(window: parts::Window, width: u32, height: u32, host: Host) -> Box<dyn Part> {{
+        #[cfg(not(windows))]
         let window = {package}::Window {{ xid: window.xid, display: window.display, screen: window.screen }};
+        #[cfg(windows)]
+        let window = {package}::Window {{ hwnd: window.hwnd, hinstance: window.hinstance }};
         let tell = {n}Host::new(Box::new(move |tell, values| host.tell(tell, values.into_iter().map(told_json).collect())));
         Box::new({glue}(<{n} as {n}Part>::create(window, width, height, tell)))
     }}

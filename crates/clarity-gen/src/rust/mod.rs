@@ -864,7 +864,8 @@ const PARTS: &str = r#"
 #[derive(Default)]
 struct PartWindows(Mutex<std::collections::HashMap<u64, String>>);
 
-/// The native window custom parts draw in: on Linux the X11 window of the webview.
+/// The native window custom parts draw in: on Linux the X11 window of the
+/// webview, on Windows its HWND.
 #[cfg(target_os = "linux")]
 fn part_parent(window: &tauri::WebviewWindow) -> usize {
     let (sent, got) = std::sync::mpsc::channel();
@@ -884,7 +885,14 @@ fn part_parent(window: &tauri::WebviewWindow) -> usize {
     got.recv_timeout(std::time::Duration::from_secs(2)).unwrap_or(0)
 }
 
-#[cfg(not(target_os = "linux"))]
+/// On Windows the webview's own window, which the part host makes its
+/// child windows in.
+#[cfg(target_os = "windows")]
+fn part_parent(window: &tauri::WebviewWindow) -> usize {
+    window.hwnd().map_or(0, |hwnd| hwnd.0 as usize)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn part_parent(_window: &tauri::WebviewWindow) -> usize {
     0
 }

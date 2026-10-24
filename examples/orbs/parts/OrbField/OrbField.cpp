@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -107,7 +108,11 @@ struct OrbFieldPart {
         for (const auto& orb : orbs) {
             float r = radius(orb);
             sf::CircleShape circle(r);
+#if SFML_VERSION_MAJOR >= 3
+            circle.setOrigin({r, r});
+#else
             circle.setOrigin(r, r);
+#endif
             circle.setPosition(orb.at);
             circle.setFillColor(enabled ? orb.color : sf::Color(120, 120, 120));
             window.draw(circle);
@@ -117,23 +122,43 @@ struct OrbFieldPart {
 };
 
 OrbFieldPart* OrbField_create(void* parent, int width, int height, OrbFieldHost* host) {
-    auto* part = new OrbFieldPart{host, sf::RenderWindow(static_cast<sf::WindowHandle>(reinterpret_cast<uintptr_t>(parent)))};
+    // The window Clarity gives: an HWND on Windows, an X11 window on Linux
+    // (clarity/OrbField.h says which per system).
+#if defined(_WIN32)
+    auto handle = static_cast<sf::WindowHandle>(parent);
+#else
+    auto handle = static_cast<sf::WindowHandle>(reinterpret_cast<uintptr_t>(parent));
+#endif
+    auto* part = new OrbFieldPart{host, sf::RenderWindow(handle)};
     OrbField_resize(part, width, height);
     part->restart();
     return part;
 }
 
 void OrbField_resize(OrbFieldPart* part, int width, int height) {
+#if SFML_VERSION_MAJOR >= 3
+    part->window.setView(sf::View(sf::FloatRect({0.f, 0.f}, {static_cast<float>(width), static_cast<float>(height)})));
+#else
     part->window.setView(sf::View(sf::FloatRect(0.f, 0.f, static_cast<float>(width), static_cast<float>(height))));
+#endif
 }
 
 void OrbField_frame(OrbFieldPart* part) {
+#if SFML_VERSION_MAJOR >= 3
+    // SFML 3 gives an event of its own type, or nothing.
+    while (const std::optional event = part->window.pollEvent()) {
+        if (const auto* pressed = event->getIf<sf::Event::MouseButtonPressed>(); pressed && pressed->button == sf::Mouse::Button::Left) {
+            part->click(part->window.mapPixelToCoords(pressed->position));
+        }
+    }
+#else
     sf::Event event;
     while (part->window.pollEvent(event)) {
         if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
             part->click(part->window.mapPixelToCoords({event.mouseButton.x, event.mouseButton.y}));
         }
     }
+#endif
     part->step(std::min(part->clock.restart().asSeconds(), 0.1f));
     part->draw();
 }

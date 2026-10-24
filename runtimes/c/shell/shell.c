@@ -404,10 +404,16 @@ static void on_invoke(const char* id, const char* request, void* arg) {
     clarity_scratch_reset();
 }
 
-#if defined(__linux__)
-// The X11 window of the webview, which custom parts draw in.
+#if defined(__linux__) || defined(_WIN32)
+// The native window of the webview, which custom parts draw in: its X11
+// window on Linux, the window itself on Windows, where the part's window is
+// a child beside the webview's.
 static uintptr_t part_parent(ClarityDesktop* desktop) {
+#if defined(_WIN32)
+    return clarity_shell_parts_parent(webview_get_native_handle(((Window*)desktop)->view, WEBVIEW_NATIVE_HANDLE_KIND_UI_WINDOW));
+#else
     return clarity_shell_parts_parent(webview_get_native_handle(((Window*)desktop)->view, WEBVIEW_NATIVE_HANDLE_KIND_UI_WIDGET));
+#endif
 }
 #endif
 
@@ -417,7 +423,7 @@ static Window* open_window(Desktop* desktop, const char* name, int width, int he
     snprintf(w->desktop.name, sizeof w->desktop.name, "%s", name);
     w->desktop.set_title = set_title;
     w->desktop.close = close_window;
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
     w->desktop.part_parent = part_parent;
 #endif
     w->service = desktop->service;

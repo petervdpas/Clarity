@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -717,6 +717,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "wasmi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

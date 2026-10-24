@@ -12,11 +12,12 @@ use clarity_spec::{Project, native};
 use crate::OutFile;
 
 /// The part host's sources, copied into every program with native parts.
-const HOST: [(&str, &str); 6] = [
+const HOST: [(&str, &str); 7] = [
     ("clarity_parts.h", include_str!("../../../runtimes/parts/clarity_parts.h")),
     ("clarity_parts.c", include_str!("../../../runtimes/parts/clarity_parts.c")),
     ("platform.h", include_str!("../../../runtimes/parts/platform.h")),
     ("platform_x11.c", include_str!("../../../runtimes/parts/platform_x11.c")),
+    ("platform_win32.c", include_str!("../../../runtimes/parts/platform_win32.c")),
     ("platform_none.c", include_str!("../../../runtimes/parts/platform_none.c")),
     ("cJSON.c", include_str!("../../../runtimes/c/third_party/cjson/cJSON.c")),
 ];
@@ -210,10 +211,10 @@ pub fn cmake(parts: &[&PartDecl], beside: &[&str]) -> String {
     for part in parts {
         let _ = writeln!(out, "add_subdirectory({})", part.name.name);
     }
-    out.push_str("\nif(UNIX AND NOT APPLE)\n    find_package(X11 REQUIRED)\n    set(CLARITY_PLATFORM host/platform_x11.c)\nelse()\n    set(CLARITY_PLATFORM host/platform_none.c)\nendif()\n\nadd_library(clarity_parts SHARED host/clarity_parts.c ${CLARITY_PLATFORM} host/cJSON.c glue.c)\ntarget_include_directories(clarity_parts PRIVATE host ${CMAKE_CURRENT_SOURCE_DIR})\n");
+    out.push_str("\nif(UNIX AND NOT APPLE)\n    find_package(X11 REQUIRED)\n    set(CLARITY_PLATFORM host/platform_x11.c)\nelseif(WIN32)\n    set(CLARITY_PLATFORM host/platform_win32.c)\nelse()\n    set(CLARITY_PLATFORM host/platform_none.c)\nendif()\n\nadd_library(clarity_parts SHARED host/clarity_parts.c ${CLARITY_PLATFORM} host/cJSON.c glue.c)\ntarget_include_directories(clarity_parts PRIVATE host ${CMAKE_CURRENT_SOURCE_DIR})\n");
     let names: Vec<&str> = parts.iter().map(|p| p.name.name.as_str()).collect();
     let _ = writeln!(out, "target_link_libraries(clarity_parts PRIVATE {} Threads::Threads)", names.join(" "));
-    out.push_str("if(UNIX AND NOT APPLE)\n    target_link_libraries(clarity_parts PRIVATE X11::X11)\nendif()\n# Beside the program when a program's own CMake project builds this folder.\nset_target_properties(clarity_parts PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR} RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})\n");
+    out.push_str("if(UNIX AND NOT APPLE)\n    target_link_libraries(clarity_parts PRIVATE X11::X11)\nendif()\n# Beside the program when a program's own CMake project builds this folder.\nset_target_properties(clarity_parts PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR} RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})\n# The shells load it by one name on every system; MinGW would call it libclarity_parts.dll.\nif(WIN32)\n    set_target_properties(clarity_parts PROPERTIES PREFIX \"\")\nendif()\n");
     for dir in beside {
         let _ = writeln!(
             out,

@@ -29,6 +29,27 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.c)
   elseif(APPLE)
     target_link_libraries(clarity_shell PUBLIC "-framework WebKit")
   elseif(WIN32)
+    # The webview draws with WebView2, and builds against Microsoft's SDK
+    # headers, which are not packaged for MinGW or MSYS2. CMake fetches the
+    # SDK once into the build folder and keeps it there; the loader itself is
+    # built into webview.h, so no import library is needed, and the WebView2
+    # runtime ships with Windows 11.
+    set(WEBVIEW2_VERSION 1.0.2903.40)
+    set(WEBVIEW2_DIR ${CMAKE_BINARY_DIR}/webview2)
+    if(NOT EXISTS ${WEBVIEW2_DIR}/build/native/include/WebView2.h)
+      message(STATUS "Fetching the WebView2 SDK ${WEBVIEW2_VERSION}")
+      file(DOWNLOAD
+        https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/${WEBVIEW2_VERSION}
+        ${CMAKE_BINARY_DIR}/webview2.nupkg
+        STATUS WEBVIEW2_FETCHED)
+      list(GET WEBVIEW2_FETCHED 0 WEBVIEW2_FAILED)
+      if(WEBVIEW2_FAILED)
+        list(GET WEBVIEW2_FETCHED 1 WEBVIEW2_WHY)
+        message(FATAL_ERROR "the WebView2 SDK could not be fetched (${WEBVIEW2_WHY}); download Microsoft.Web.WebView2 and point WEBVIEW2_DIR at it")
+      endif()
+      file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/webview2.nupkg DESTINATION ${WEBVIEW2_DIR})
+    endif()
+    target_include_directories(clarity_shell PUBLIC ${WEBVIEW2_DIR}/build/native/include)
     target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 version)
   endif()
 endif()

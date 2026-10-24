@@ -8,6 +8,10 @@
 #include <unistd.h>
 #endif
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 namespace clarity::shell::parts {
 
 namespace {
@@ -42,8 +46,27 @@ std::string beside_program() {
     if (n <= 0) return {};
     std::string exe(path, static_cast<size_t>(n));
     return exe.substr(0, exe.find_last_of('/') + 1) + "libclarity_parts.so";
+#elif defined(_WIN32)
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return {};
+    std::string exe(path, n);
+    size_t at = exe.find_last_of("\\/");
+    return exe.substr(0, at == std::string::npos ? 0 : at + 1) + "clarity_parts.dll";
 #else
     return {};
+#endif
+}
+
+/// A function of the loaded part library, by name.
+void* find_in(void* handle, const char* name) {
+#if defined(_WIN32)
+    return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(handle), name));
+#elif defined(__linux__) || defined(__APPLE__)
+    return dlsym(handle, name);
+#else
+    (void)handle, (void)name;
+    return nullptr;
 #endif
 }
 
@@ -57,17 +80,28 @@ bool present() {
 #if defined(__linux__) || defined(__APPLE__)
     std::string path = beside_program();
     return !path.empty() && access(path.c_str(), R_OK) == 0;
+#elif defined(_WIN32)
+    std::string path = beside_program();
+    return !path.empty() && GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
     return false;
 #endif
 }
 
 std::string start(Told told) {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
     if (started) return {};
-    void* handle = dlopen(beside_program().c_str(), RTLD_NOW | RTLD_LOCAL);
+    std::string path = beside_program();
+    if (path.empty()) return "the program's custom parts cannot be found";
+#if defined(_WIN32)
+    // Windows loads what is beside the program; Linux and macOS dlopen it.
+    void* handle = reinterpret_cast<void*>(LoadLibraryA(path.c_str()));
+    if (!handle) return "the program's custom parts cannot load: " + path;
+#else
+    void* handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (!handle) return std::string("the program's custom parts cannot load: ") + dlerror();
-    auto find = [&](const char* name) { return dlsym(handle, name); };
+#endif
+    auto find = [&](const char* name) { return find_in(handle, name); };
     library.start = reinterpret_cast<StartFn>(find("clarity_parts_start"));
     library.problem = reinterpret_cast<ProblemFn>(find("clarity_parts_problem"));
     library.stop = reinterpret_cast<StopFn>(find("clarity_parts_stop"));

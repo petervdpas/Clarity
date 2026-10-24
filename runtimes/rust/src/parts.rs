@@ -42,6 +42,7 @@ pub trait Part {
 pub type Make = fn(Window, u32, u32, Host) -> Box<dyn Part>;
 
 /// The native window a part draws in: on Linux an X11 window.
+#[cfg(not(windows))]
 #[derive(Debug, Clone, Copy)]
 pub struct Window {
     /// The X11 window.
@@ -49,6 +50,17 @@ pub struct Window {
     /// The X11 connection the window is on, which a graphics library may share.
     pub display: *mut std::ffi::c_void,
     pub screen: i32,
+}
+
+/// The native window a part draws in: on Windows a Win32 child window of
+/// the webview's, which the host's thread owns.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy)]
+pub struct Window {
+    /// The child window (an HWND).
+    pub hwnd: *mut std::ffi::c_void,
+    /// The module its window class belongs to (an HINSTANCE).
+    pub hinstance: *mut std::ffi::c_void,
 }
 
 /// Where a part tells what happened.
@@ -359,7 +371,149 @@ mod platform {
     }
 }
 
-#[cfg(any(not(target_os = "linux"), test))]
+/// The native windows of the host: Win32 child windows on Windows, of the
+/// webview's own window. A window belongs to the thread that made it, so
+/// they are made, moved and ended on the host's thread, which pumps their
+/// messages between frames.
+#[cfg(all(windows, not(test)))]
+mod platform {
+    use std::ffi::c_void;
+
+    use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::Graphics::Gdi::{BLACK_BRUSH, GetStockObject, HBRUSH};
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EnumChildWindows, GWL_STYLE, GetParent, GetWindowLongW, HWND_TOP,
+        IDC_ARROW, LoadCursorW, MSG, PM_REMOVE, PeekMessageW, RegisterClassW, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_NOZORDER, SW_HIDE, SW_SHOWNA, SetWindowLongW, SetWindowPos, ShowWindow, TranslateMessage, WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN,
+        WS_CLIPSIBLINGS,
+    };
+
+    /// The window class of every part's window, "ClarityPart".
+    const CLASS: [u16; 12] = [b'C' as u16, b'l' as u16, b'a' as u16, b'r' as u16, b'i' as u16, b't' as u16, b'y' as u16, b'P' as u16, b'a' as u16, b'r' as u16, b't' as u16, 0];
+
+    /// Makes a window of the parent's own children clip its siblings. A
+    /// window without this style paints over whatever shares its place,
+    /// however the two are ordered, and the webview of every shell is such
+    /// a window: without this the part is drawn and then painted over.
+    unsafe extern "system" fn clip_siblings(window: HWND, parent: LPARAM) -> i32 {
+        unsafe {
+            if GetParent(window) as isize != parent {
+                return 1;
+            }
+            let style = GetWindowLongW(window, GWL_STYLE);
+            if style != 0 && (style as u32) & WS_CLIPSIBLINGS == 0 {
+                SetWindowLongW(window, GWL_STYLE, style | WS_CLIPSIBLINGS as i32);
+                SetWindowPos(window, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            }
+        }
+        1
+    }
+
+    /// The part draws the window itself, so its messages take their usual course.
+    unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+        unsafe { DefWindowProcW(window, message, w, l) }
+    }
+
+    pub struct Windows {
+        instance: HINSTANCE,
+    }
+
+    // The windows are made and used on the host's thread only.
+    unsafe impl Send for Windows {}
+
+    impl Windows {
+        pub fn open() -> Result<Windows, String> {
+            let instance = unsafe { GetModuleHandleW(std::ptr::null()) };
+            if instance.is_null() {
+                return Err("custom parts need the program's own module, which Windows did not give".into());
+            }
+            let class = WNDCLASSW {
+                style: 0,
+                lpfnWndProc: Some(window_proc),
+                cbClsExtra: 0,
+                cbWndExtra: 0,
+                hInstance: instance,
+                hIcon: std::ptr::null_mut(),
+                hCursor: unsafe { LoadCursorW(std::ptr::null_mut(), IDC_ARROW) },
+                hbrBackground: unsafe { GetStockObject(BLACK_BRUSH) } as HBRUSH,
+                lpszMenuName: std::ptr::null(),
+                lpszClassName: CLASS.as_ptr(),
+            };
+            // The class is registered once; a second program window finds it there.
+            unsafe { RegisterClassW(&class) };
+            Ok(Windows { instance })
+        }
+
+        pub fn child(&mut self, parent: u64, x: i32, y: i32, width: i32, height: i32) -> u64 {
+            let child = unsafe {
+                CreateWindowExW(
+                    0,
+                    CLASS.as_ptr(),
+                    std::ptr::null(),
+                    WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+                    x,
+                    y,
+                    width.max(1),
+                    height.max(1),
+                    parent as HWND,
+                    std::ptr::null_mut(),
+                    self.instance,
+                    std::ptr::null(),
+                )
+            };
+            if child.is_null() {
+                return 0;
+            }
+            // Above the webview, which fills the same parent, and which is
+            // made to leave the part's place alone.
+            unsafe {
+                EnumChildWindows(parent as HWND, Some(clip_siblings), parent as LPARAM);
+                SetWindowPos(child, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            child as u64
+        }
+
+        pub fn window(&self, child: u64) -> super::Window {
+            super::Window { hwnd: child as *mut c_void, hinstance: self.instance }
+        }
+
+        pub fn move_to(&mut self, child: u64, x: i32, y: i32, width: i32, height: i32) {
+            unsafe { SetWindowPos(child as HWND, HWND_TOP, x, y, width.max(1), height.max(1), SWP_NOACTIVATE) };
+        }
+
+        pub fn show(&mut self, child: u64, shown: bool) {
+            // SW_SHOWNA: shown without taking the keyboard from the window.
+            unsafe { ShowWindow(child as HWND, if shown { SW_SHOWNA } else { SW_HIDE }) };
+        }
+
+        pub fn destroy(&mut self, child: u64) {
+            unsafe { DestroyWindow(child as HWND) };
+        }
+
+        /// The messages of the part windows, which belong to this thread.
+        /// The host asks for this between frames, so they are answered about
+        /// sixty times a second and the parent is never kept waiting.
+        pub fn flush(&mut self) {
+            let mut message = MSG {
+                hwnd: std::ptr::null_mut(),
+                message: 0,
+                wParam: 0,
+                lParam: 0,
+                time: 0,
+                pt: windows_sys::Win32::Foundation::POINT { x: 0, y: 0 },
+            };
+            while unsafe { PeekMessageW(&mut message, std::ptr::null_mut(), 0, 0, PM_REMOVE) } != 0 {
+                unsafe {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(any(all(not(target_os = "linux"), not(windows)), test))]
 mod platform {
     pub struct Windows {
         next: u64,
@@ -381,8 +535,14 @@ mod platform {
             self.next
         }
 
+        #[cfg(not(windows))]
         pub fn window(&self, child: u64) -> super::Window {
             super::Window { xid: child, display: std::ptr::null_mut(), screen: 0 }
+        }
+
+        #[cfg(windows)]
+        pub fn window(&self, child: u64) -> super::Window {
+            super::Window { hwnd: child as *mut std::ffi::c_void, hinstance: std::ptr::null_mut() }
         }
 
         pub fn move_to(&mut self, _child: u64, _x: i32, _y: i32, _width: i32, _height: i32) {}

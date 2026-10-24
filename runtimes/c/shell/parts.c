@@ -9,6 +9,10 @@
 #include <unistd.h>
 #endif
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #if defined(__linux__)
 #include <gdk/gdkx.h>
 #include <gtk/gtk.h>
@@ -43,9 +47,29 @@ static bool beside_program(char* path, size_t room) {
     if (!slash || (size_t)(slash - path) + 20 >= room) return false;
     strcpy(slash + 1, "libclarity_parts.so");
     return true;
+#elif defined(_WIN32)
+    DWORD n = GetModuleFileNameA(NULL, path, (DWORD)room);
+    if (n == 0 || n >= room) return false;
+    char* slash = strrchr(path, '\\');
+    if (!slash) slash = strrchr(path, '/');
+    if (!slash || (size_t)(slash - path) + 20 >= room) return false;
+    strcpy(slash + 1, "clarity_parts.dll");
+    return true;
 #else
     (void)path, (void)room;
     return false;
+#endif
+}
+
+/// A function of the loaded part library, by name.
+static void* find_in(void* handle, const char* name) {
+#if defined(_WIN32)
+    return (void*)(uintptr_t)GetProcAddress((HMODULE)handle, name);
+#elif defined(__linux__) || defined(__APPLE__)
+    return dlsym(handle, name);
+#else
+    (void)handle, (void)name;
+    return NULL;
 #endif
 }
 
@@ -53,29 +77,45 @@ bool clarity_shell_parts_present(void) {
 #if defined(__linux__) || defined(__APPLE__)
     char path[PATH_MAX];
     return beside_program(path, sizeof path) && access(path, R_OK) == 0;
+#elif defined(_WIN32)
+    char path[MAX_PATH];
+    return beside_program(path, sizeof path) && GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
 #else
     return false;
 #endif
 }
 
 const char* clarity_shell_parts_start(ClarityPartsTold told, void* context) {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
     static char problem[512];
     if (started) return NULL;
+#if defined(_WIN32)
+    char path[MAX_PATH];
+#else
     char path[PATH_MAX];
+#endif
     if (!beside_program(path, sizeof path)) return "the program's custom parts cannot be found";
+#if defined(_WIN32)
+    // Windows loads what is beside the program; Linux and macOS dlopen it.
+    void* handle = (void*)LoadLibraryA(path);
+    if (!handle) {
+        snprintf(problem, sizeof problem, "the program's custom parts cannot load: %s", path);
+        return problem;
+    }
+#else
     void* handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
     if (!handle) {
         snprintf(problem, sizeof problem, "the program's custom parts cannot load: %s", dlerror());
         return problem;
     }
-    *(void**)&library.start = dlsym(handle, "clarity_parts_start");
-    *(void**)&library.problem = dlsym(handle, "clarity_parts_problem");
-    *(void**)&library.stop = dlsym(handle, "clarity_parts_stop");
-    *(void**)&library.place = dlsym(handle, "clarity_parts_place");
-    *(void**)&library.set = dlsym(handle, "clarity_parts_set");
-    *(void**)&library.hear = dlsym(handle, "clarity_parts_hear");
-    *(void**)&library.close = dlsym(handle, "clarity_parts_close");
+#endif
+    *(void**)&library.start = find_in(handle, "clarity_parts_start");
+    *(void**)&library.problem = find_in(handle, "clarity_parts_problem");
+    *(void**)&library.stop = find_in(handle, "clarity_parts_stop");
+    *(void**)&library.place = find_in(handle, "clarity_parts_place");
+    *(void**)&library.set = find_in(handle, "clarity_parts_set");
+    *(void**)&library.hear = find_in(handle, "clarity_parts_hear");
+    *(void**)&library.close = find_in(handle, "clarity_parts_close");
     if (!library.start || !library.problem || !library.stop || !library.place || !library.set || !library.hear || !library.close) {
         return "the program's custom parts library is not Clarity's";
     }
@@ -113,6 +153,9 @@ uintptr_t clarity_shell_parts_parent(void* widget) {
     if (!window || !GDK_IS_X11_WINDOW(window)) return 0;
     gdk_window_ensure_native(window);
     return (uintptr_t)GDK_WINDOW_XID(window);
+#elif defined(_WIN32)
+    // webview gives the window itself; the part's window is a child of it.
+    return (uintptr_t)widget;
 #else
     (void)widget;
     return 0;

@@ -17,6 +17,11 @@ pub trait Probe {
     fn find(&self, program: &str) -> Option<PathBuf>;
     /// What `program args` prints, when it runs and succeeds.
     fn run(&self, program: &str, args: &[&str]) -> Option<String>;
+    /// What `program args` says, on its output or its error output, however
+    /// it ends: Visual Studio's `cl` names itself only that way.
+    fn says(&self, program: &str, args: &[&str]) -> Option<String> {
+        self.run(program, args)
+    }
 }
 
 /// The machine Clarity runs on.
@@ -31,6 +36,14 @@ impl Probe for System {
         let path = self.find(program)?;
         let out = Command::new(path).args(args).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
         out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    fn says(&self, program: &str, args: &[&str]) -> Option<String> {
+        let path = self.find(program)?;
+        let out = Command::new(path).args(args).stdin(Stdio::null()).output().ok()?;
+        let text = if out.stdout.iter().all(u8::is_ascii_whitespace) { out.stderr } else { out.stdout };
+        let text = String::from_utf8_lossy(&text).into_owned();
+        (!text.trim().is_empty()).then_some(text)
     }
 }
 
@@ -71,11 +84,10 @@ pub fn search_path(path: Option<&OsStr>, home: Option<&Path>) -> OsString {
         }
     }
     if cfg!(windows) {
-        for variable in ["ProgramFiles", "ProgramFiles(x86)"] {
-            if let Some(dir) = std::env::var_os(variable) {
-                let dir = PathBuf::from(dir);
-                extra.extend([dir.join("Go").join("bin"), dir.join("dotnet"), dir.join("CMake").join("bin")]);
-            }
+        extra.extend(windows_folders(&|name| std::env::var_os(name), home));
+        // Visual Studio installed somewhere else, as its own locator knows.
+        for installation in vswhere_installations() {
+            extra.extend(visual_studio_folders(&installation));
         }
     } else {
         extra.extend(
@@ -90,6 +102,87 @@ pub fn search_path(path: Option<&OsStr>, home: Option<&Path>) -> OsString {
         }
     }
     std::env::join_paths(folders).unwrap_or_default()
+}
+
+/// The folders the usual Windows installers put build tools in, by the
+/// environment variables `var` gives: Go, .NET, CMake and LLVM in Program
+/// Files; Visual Studio's compiler, CMake and Ninja; MSYS2's MinGW and
+/// Clang; Scoop's, Chocolatey's and WinGet's links.
+pub fn windows_folders(var: &dyn Fn(&str) -> Option<OsString>, home: Option<&Path>) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let program_files: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)"].iter().filter_map(|v| var(v)).map(PathBuf::from).collect();
+    for dir in &program_files {
+        out.extend([dir.join("Go").join("bin"), dir.join("dotnet"), dir.join("CMake").join("bin"), dir.join("LLVM").join("bin")]);
+    }
+    for installation in visual_studio_installations(&program_files) {
+        out.extend(visual_studio_folders(&installation));
+    }
+    let drive = var("SystemDrive").map(|d| d.to_string_lossy().into_owned()).unwrap_or_else(|| "C:".into());
+    let msys = PathBuf::from(format!("{drive}{}", std::path::MAIN_SEPARATOR)).join("msys64");
+    for shell in ["ucrt64", "mingw64", "clang64", "usr"] {
+        out.push(msys.join(shell).join("bin"));
+    }
+    if let Some(home) = home {
+        out.push(home.join("scoop").join("shims"));
+    }
+    let chocolatey = var("ChocolateyInstall").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{drive}{}", std::path::MAIN_SEPARATOR)).join("ProgramData").join("chocolatey"));
+    out.push(chocolatey.join("bin"));
+    if let Some(local) = var("LOCALAPPDATA") {
+        out.push(PathBuf::from(local).join("Microsoft").join("WinGet").join("Links"));
+    }
+    out
+}
+
+/// The Visual Studio installations with a C and C++ compiler under the
+/// Program Files folders `roots`: `Microsoft Visual Studio/<year>/<edition>`, newest year first.
+pub fn visual_studio_installations(roots: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for root in roots {
+        let Ok(years) = std::fs::read_dir(root.join("Microsoft Visual Studio")) else { continue };
+        let mut years: Vec<PathBuf> = years.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+        years.sort();
+        years.reverse();
+        for year in years {
+            let Ok(editions) = std::fs::read_dir(&year) else { continue };
+            let mut editions: Vec<PathBuf> = editions.flatten().map(|e| e.path()).filter(|p| p.join("VC").join("Tools").join("MSVC").is_dir()).collect();
+            editions.sort();
+            found.extend(editions);
+        }
+    }
+    found
+}
+
+/// The folders of a Visual Studio installation with its build tools: the
+/// 64-bit compiler (`cl`) of its default tool version, else the newest, and
+/// the CMake and Ninja it brings.
+pub fn visual_studio_folders(installation: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let msvc = installation.join("VC").join("Tools").join("MSVC");
+    let default = std::fs::read_to_string(installation.join("VC").join("Auxiliary").join("Build").join("Microsoft.VCToolsVersion.default.txt"))
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| msvc.join(v).is_dir());
+    let newest = || {
+        let mut versions: Vec<String> = std::fs::read_dir(&msvc).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        versions.sort_by_key(|v| v.split('.').map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>());
+        versions.pop()
+    };
+    if let Some(version) = default.or_else(newest) {
+        out.push(msvc.join(version).join("bin").join("Hostx64").join("x64"));
+    }
+    let bundled = installation.join("Common7").join("IDE").join("CommonExtensions").join("Microsoft").join("CMake");
+    out.extend([bundled.join("CMake").join("bin"), bundled.join("Ninja")]);
+    out
+}
+
+/// The Visual Studio installations Microsoft's own locator (`vswhere`) knows, on Windows.
+fn vswhere_installations() -> Vec<PathBuf> {
+    let Some(x86) = std::env::var_os("ProgramFiles(x86)") else { return Vec::new() };
+    let vswhere = PathBuf::from(x86).join("Microsoft Visual Studio").join("Installer").join("vswhere.exe");
+    let Ok(out) = Command::new(vswhere).args(["-all", "-products", "*", "-property", "installationPath"]).stdin(Stdio::null()).stderr(Stdio::null()).output() else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout).lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
 }
 
 /// The file of `program` in the folders of `path` (a PATH value), with
@@ -159,9 +252,12 @@ fn dotnet_major() -> u32 {
     crate::csharp::TARGET_FRAMEWORK.trim_start_matches("net").split('.').next().and_then(|m| m.parse().ok()).unwrap_or(10)
 }
 
-/// The first of `compilers` that answers `--version`.
+/// The first of `compilers` that answers `--version`, or Visual Studio's
+/// `cl`, which names itself when run alone.
 fn compiler(probe: &dyn Probe, compilers: &[&str]) -> Option<String> {
-    compilers.iter().find_map(|c| probe.run(c, &["--version"]).map(|v| first_line(&v)))
+    compilers.iter().find_map(|c| probe.run(c, &["--version"]).map(|v| first_line(&v))).or_else(|| {
+        probe.says("cl", &[]).map(|v| first_line(&v)).filter(|v| v.contains("Microsoft"))
+    })
 }
 
 /// What to install for each tool, with where to get it: the words of
@@ -183,7 +279,7 @@ fn dotnet() -> String {
 
 fn compiler_needed(backend: Backend) -> String {
     let language = if backend == Backend::C { "C" } else { "C++" };
-    format!("a {language} compiler: GCC or Clang (on Windows, Visual Studio's Build Tools)")
+    format!("a {language} compiler: GCC or Clang (on Windows, Visual Studio's Build Tools, or MinGW from MSYS2)")
 }
 
 /// Everything `backend` builds with, on any system: what a README lists.
@@ -259,7 +355,7 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
                 Some(version) => found.push(first_line(&version)),
                 None => missing.push(CMAKE.to_string()),
             }
-            if let Some(version) = probe.run("make", &["--version"]) {
+            if let Some(version) = probe.run("make", &["--version"]).or_else(|| probe.run("mingw32-make", &["--version"])) {
                 found.push(first_line(&version));
             } else if let Some(version) = probe.run("ninja", &["--version"]) {
                 found.push(format!("ninja {}", first_line(&version)));

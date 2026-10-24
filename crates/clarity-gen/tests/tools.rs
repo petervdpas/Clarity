@@ -198,3 +198,97 @@ fn engines_need_cargo_and_the_webassembly_target() {
         .with("rustup", "target list --installed", "x86_64-unknown-linux-gnu\nwasm32-unknown-unknown\n");
     assert!(engine_tools(&with).is_empty());
 }
+
+/// A folder tree under the test's own temporary folder, with these files.
+fn tree(name: &str, files: &[&str]) -> PathBuf {
+    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("tools-{name}"));
+    let _ = std::fs::remove_dir_all(&root);
+    for file in files {
+        let path = root.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+    root
+}
+
+#[test]
+fn visual_studio_s_compiler_cmake_and_ninja_are_found_in_its_installation() {
+    let vs = tree(
+        "visual-studio",
+        &[
+            "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt",
+            "VC/Tools/MSVC/14.38.33130/bin/Hostx64/x64/cl.exe",
+            "VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64/cl.exe",
+            "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe",
+        ],
+    );
+    // The version Visual Studio names as its default wins; without it, the newest.
+    std::fs::write(vs.join("VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"), "14.38.33130\r\n").unwrap();
+    let folders = clarity_gen::tools::visual_studio_folders(&vs);
+    assert_eq!(folders[0], vs.join("VC/Tools/MSVC/14.38.33130/bin/Hostx64/x64"));
+    assert!(folders.contains(&vs.join("Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin")));
+    assert!(folders.contains(&vs.join("Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja")));
+    std::fs::remove_file(vs.join("VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt")).unwrap();
+    assert_eq!(clarity_gen::tools::visual_studio_folders(&vs)[0], vs.join("VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64"));
+}
+
+#[test]
+fn visual_studio_installations_are_found_in_program_files() {
+    let root = tree(
+        "program-files",
+        &["Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.40.33807/bin/Hostx64/x64/cl.exe", "Microsoft Visual Studio/2019/BuildTools/VC/Tools/MSVC/14.29.30133/bin/Hostx64/x64/cl.exe", "Microsoft Visual Studio/Installer/vswhere.exe"],
+    );
+    let found = clarity_gen::tools::visual_studio_installations(std::slice::from_ref(&root));
+    assert_eq!(found, [root.join("Microsoft Visual Studio/2022/Community"), root.join("Microsoft Visual Studio/2019/BuildTools")]);
+}
+
+#[test]
+fn windows_folders_cover_the_usual_installers() {
+    let vars: HashMap<&str, &str> = [
+        ("ProgramFiles", "C:\\Program Files"),
+        ("SystemDrive", "C:"),
+        ("LOCALAPPDATA", "C:\\Users\\me\\AppData\\Local"),
+        ("ChocolateyInstall", "C:\\ProgramData\\chocolatey"),
+    ]
+    .into_iter()
+    .collect();
+    let folders: Vec<String> = clarity_gen::tools::windows_folders(&|name| vars.get(name).map(std::ffi::OsString::from), Some(std::path::Path::new("C:\\Users\\me")))
+        .iter()
+        .map(|f| f.to_string_lossy().replace('\\', "/"))
+        .collect();
+    for wanted in [
+        "C:/Program Files/Go/bin",
+        "C:/Program Files/dotnet",
+        "C:/Program Files/CMake/bin",
+        "C:/Program Files/LLVM/bin",
+        "C:/msys64/ucrt64/bin",
+        "C:/msys64/mingw64/bin",
+        "C:/msys64/clang64/bin",
+        "C:/Users/me/scoop/shims",
+        "C:/ProgramData/chocolatey/bin",
+        "C:/Users/me/AppData/Local/Microsoft/WinGet/Links",
+    ] {
+        assert!(folders.iter().any(|f| f == wanted), "{wanted} in {folders:?}");
+    }
+}
+
+#[test]
+fn visual_studio_s_cl_counts_as_a_c_and_cpp_compiler() {
+    // cl has no --version: it says who it is when run alone, on its error output.
+    let machine = Machine::default()
+        .with("cl", "", "Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64\n")
+        .with("cmake", "--version", "cmake version 3.29.5\n")
+        .with("ninja", "--version", "1.11.1\n");
+    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(machine));
+    assert!(cpp.found.contains(&"Microsoft (R) C/C++ Optimizing Compiler Version 19.40.33811 for x64".to_string()), "{:?}", cpp.found);
+    assert!(!cpp.missing.iter().any(|m| m.contains("compiler")), "{:?}", cpp.missing);
+}
+
+#[test]
+fn mingw_s_make_counts_as_make() {
+    let machine = Machine::default().with("g++", "--version", "g++ (Rev2, Built by MSYS2 project) 14.2.0\n").with("cmake", "--version", "cmake version 3.31.6\n").with("mingw32-make", "--version", "GNU Make 4.4.1\n");
+    let cpp = check(Backend::Cpp, Ui::Web, &with_libraries(machine));
+    assert!(cpp.found.contains(&"GNU Make 4.4.1".to_string()), "{:?}", cpp.found);
+    assert!(!cpp.missing.iter().any(|m| m.contains("make or Ninja")), "{:?}", cpp.missing);
+}

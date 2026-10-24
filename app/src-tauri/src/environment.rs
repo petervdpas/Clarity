@@ -57,7 +57,15 @@ pub struct EnvironmentView {
 
 /// What a copy says it is: the first line it prints for its version.
 fn version_of(path: &Path, program: &str) -> Option<String> {
-    let args: &[&str] = if program == "go" { &["version"] } else { &["--version"] };
+    // Visual Studio's cl has no --version: run alone, it names itself.
+    let cl = path.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("cl"));
+    let args: &[&str] = if cl {
+        &[]
+    } else if program == "go" {
+        &["version"]
+    } else {
+        &["--version"]
+    };
     let out = Command::new(path).args(args).stdin(Stdio::null()).output().ok()?;
     // Some tools (Visual Studio's cl) say who they are on stderr.
     let text = if out.stdout.is_empty() { out.stderr } else { out.stdout };

@@ -5,3 +5,9 @@ node_modules/
 # Build output of the C# runtime and its tests.
 bin/
 obj/
+
+# What Clarity generates and builds for the examples.
+/examples/*/out/
+
+# What Clarity generates and builds for the examples.
+/examples/*/out/

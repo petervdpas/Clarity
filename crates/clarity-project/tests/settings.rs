@@ -444,9 +444,11 @@ fn a_file_store_is_found_from_the_project_folder() {
         FileStore { name: "photos".into(), location: "data/photos".into() },
         FileStore { name: "scans".into(), location: "env:SCAN_FOLDER".into() },
     ];
-    let dir = Path::new("/projects/shop");
-    let built = clarity_project::build_settings(dir, &settings);
-    assert_eq!(built.filestores[0].location, "/projects/shop/data/photos");
+    // A folder this system calls absolute, and paths compared as paths: the
+    // separator between them is the system's own.
+    let dir = std::path::absolute("/projects/shop").unwrap();
+    let built = clarity_project::build_settings(&dir, &settings);
+    assert_eq!(Path::new(&built.filestores[0].location), dir.join("data/photos"));
     assert_eq!(built.filestores[1].location, "env:SCAN_FOLDER");
 }
 

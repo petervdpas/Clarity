@@ -415,6 +415,9 @@ fn each_record_lives_in_its_own_data_source() {
     let db = Db::connect(&[("main", Dialect::Sqlite, main.to_str().unwrap()), ("erp", Dialect::Sqlite, erp.to_str().unwrap())]).unwrap();
     assert_eq!(db.all::<Invoice>().unwrap(), [invoice]);
     assert_eq!(db.load::<Customer>(db.get::<Invoice>(1).unwrap().customer).unwrap().name, "Ada Lovelace");
+    // Both databases are let go before their folder is: Windows keeps an open file.
+    drop(only_main);
+    drop(db);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

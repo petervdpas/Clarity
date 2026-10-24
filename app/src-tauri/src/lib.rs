@@ -993,7 +993,8 @@ mod tests {
     #[test]
     fn relative_paths_start_where_the_command_was_typed() {
         let start = Path::new("/home/me/project");
-        assert_eq!(resolve_dir("examples/shop.clarity", Some(start)), "/home/me/project/examples/shop.clarity");
+        // The system's own separator joins the two, so the answer is joined as well.
+        assert_eq!(resolve_dir("examples/shop.clarity", Some(start)), start.join("examples/shop.clarity").display().to_string());
         assert_eq!(resolve_dir("/tmp/shop.clarity", Some(start)), "/tmp/shop.clarity");
         assert_eq!(resolve_dir("shop.clarity", None), "shop.clarity");
     }

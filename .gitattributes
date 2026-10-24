@@ -1,0 +1,10 @@
+# Clarity bundles its templates and runtimes into the generator with
+# include_str!, so the line endings of a checkout end up in what it writes.
+# Every text file is LF on every system, so a generated project is the same
+# whoever generated it.
+* text=auto eol=lf
+
+# What Windows itself runs needs its own line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

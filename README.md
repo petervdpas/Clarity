@@ -82,7 +82,9 @@ mkdir -p /tmp/try && cp -r examples/shop examples/shop.clarity /tmp/try/   # the
 ./dev.sh /tmp/try/shop.clarity
 ```
 
-A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it. Without a file, `./dev.sh` opens the project used last time. Edit the `.clarity` files in any editor; the preview reloads on every save.
+On Windows, `dev.bat` takes the same arguments: `dev.bat %TEMP%\try\shop.clarity`.
+
+A project is one file, `shop.clarity`, with its modules in the folder `shop/` next to it. Without a file, `./dev.sh` or `dev.bat` opens the project used last time. Edit the `.clarity` files in any editor; the preview reloads on every save.
 
 Clarity has a ribbon with three tabs, and the left sidebar follows the tab:
 

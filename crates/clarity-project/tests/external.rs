@@ -111,8 +111,10 @@ fn taking_ownership_writes_a_baseline_and_drops_external() {
 #[test]
 fn every_sqlite_file_is_found_from_the_project_folder() {
     let settings = clarity_project::parse(PROJECT).unwrap();
-    let dir = std::path::Path::new("/work/shop");
-    let built = clarity_project::build_settings(dir, &settings);
-    assert_eq!(built.datasources[0].url, "/work/shop/data/shop.db");
-    assert_eq!(built.datasources[1].url, "/work/shop/legacy/erp.db");
+    // A folder this system calls absolute, and paths compared as paths: the
+    // separator between them is the system's own.
+    let dir = std::path::absolute("/work/shop").unwrap();
+    let built = clarity_project::build_settings(&dir, &settings);
+    assert_eq!(std::path::Path::new(&built.datasources[0].url), dir.join("data/shop.db"));
+    assert_eq!(std::path::Path::new(&built.datasources[1].url), dir.join("legacy/erp.db"));
 }

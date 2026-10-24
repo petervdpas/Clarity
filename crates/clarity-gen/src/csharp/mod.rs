@@ -157,7 +157,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     files.push(text("AppThemes.cs", themes::app_themes(&offered, &name)));
     files.extend(crate::web::resource_files(project, "resources"));
-    files.push(text("App.axaml", APP_AXAML.replace("{namespace}", &name).replace("    <!-- {styles} -->\n", &themes::style_classes(&styles))));
+    // The template travels in the program as it was checked out, so its
+    // lines end as that checkout's do; the project's own styles take the
+    // place of a line, and every generated file ends its lines with one
+    // newline, whoever generated it.
+    let template = APP_AXAML.replace("\r\n", "\n");
+    files.push(text("App.axaml", template.replace("{namespace}", &name).replace("    <!-- {styles} -->\n", &themes::style_classes(&styles))));
     Ok(files)
 }
 

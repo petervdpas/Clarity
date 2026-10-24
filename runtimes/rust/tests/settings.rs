@@ -17,8 +17,18 @@ fn the_settings_file_is_where_every_runtime_puts_it() {
 #[test]
 fn settings_kept_are_read_back() {
     let folder = std::env::temp_dir().join(format!("clarity-settings-{}", std::process::id()));
+    // The variable this system keeps its settings under, so the test writes
+    // in its own folder and not in the person's: APPDATA on Windows, HOME on
+    // macOS, XDG_CONFIG_HOME elsewhere.
+    let variable = if cfg!(target_os = "windows") {
+        "APPDATA"
+    } else if cfg!(target_os = "macos") {
+        "HOME"
+    } else {
+        "XDG_CONFIG_HOME"
+    };
     // SAFETY: this test alone sets the variable, before it reads it.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", &folder) };
+    unsafe { std::env::set_var(variable, &folder) };
     let program = "clarity-settings-test";
     assert!(clarity_runtime::settings::read(program).is_empty(), "nothing kept yet");
     let values = json!({ "pageSize": 20, "language": "nl" }).as_object().unwrap().clone();

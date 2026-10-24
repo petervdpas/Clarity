@@ -5,6 +5,7 @@
 
 pub mod engines;
 mod file;
+pub mod openapi;
 
 use std::path::{Path, PathBuf};
 
@@ -122,6 +123,16 @@ pub struct DataSource {
     /// Records are read, never saved or deleted.
     #[serde(default)]
     pub readonly: bool,
+    /// A web API's OpenAPI description, a file in the project's `apis`
+    /// folder, which Clarity writes the API's module from (DESIGN 5.23).
+    #[serde(default)]
+    pub openapi: Option<String>,
+    /// The operations of the description the project uses, by their ids.
+    #[serde(default)]
+    pub picks: Vec<String>,
+    /// Schemas the project uses beside those its operations need.
+    #[serde(default)]
+    pub pick_schemas: Vec<String>,
 }
 
 /// The settings of a project, as the Project tab shows them. The first data
@@ -280,6 +291,9 @@ pub fn starter(name: &str, module: &str) -> Settings {
             auth: None,
             external: false,
             readonly: false,
+            openapi: None,
+            picks: Vec::new(),
+            pick_schemas: Vec::new(),
         }],
         language: None,
         currency: None,
@@ -419,6 +433,15 @@ pub fn validate(settings: &Settings) -> Vec<String> {
         }
         if let Some(problem) = source_problem(source) {
             problems.push(format!("data source '{}': {problem}", source.name));
+        }
+        if source.kind != SourceKind::Rest && (source.openapi.is_some() || !source.picks.is_empty() || !source.pick_schemas.is_empty()) {
+            problems.push(format!("data source '{}': only a web API has an openapi description and picks", source.name));
+        }
+        if source.openapi.is_none() && (!source.picks.is_empty() || !source.pick_schemas.is_empty()) {
+            problems.push(format!("data source '{}': 'pick' takes from an openapi description; name it with openapi \"file.yaml\"", source.name));
+        }
+        if let Some(problem) = source.openapi.as_deref().and_then(file::kept_problem) {
+            problems.push(format!("data source '{}': the openapi description is a file of the apis folder: {problem}", source.name));
         }
         if source.kind == SourceKind::Rest && source.external {
             problems.push(format!(
@@ -603,7 +626,7 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
         .datasources
         .iter()
         .map(|s| match s.kind {
-            SourceKind::Rest => clarity_spec::SourceRef::web(&s.name),
+            SourceKind::Rest => clarity_spec::SourceRef::web(&s.name).at(&s.url, s.auth.as_ref().map(|a| (auth_word(a.kind), a.secret.as_str()))),
             _ => clarity_spec::SourceRef {
                 external: s.external,
                 readonly: s.readonly,
@@ -950,4 +973,147 @@ pub fn take_ownership(dir: &Path, source: &str) -> Result<Owned, String> {
         before,
         after,
     })
+}
+
+/// The folder of a project's web API descriptions and the modules Clarity
+/// writes from them (DESIGN 5.23), in the project's module folder.
+pub const APIS_DIR: &str = clarity_spec::APIS_DIR;
+
+/// Writes the module of every web API data source that names an OpenAPI
+/// description (`apis/<source>.clarity`, from `apis/<file>`), for what it
+/// picks, where its text changed: a new revision of a description updates
+/// its entities and actions. Gives what the picks could not take.
+pub fn refresh_apis(project_file: &Path) -> Result<Vec<String>, String> {
+    let settings = load(project_file).settings.ok_or_else(|| format!("{} cannot be read", project_file.display()))?;
+    let dir = module_dir(project_file);
+    let apis = dir.join(APIS_DIR);
+    let mut warnings = Vec::new();
+    for source in settings.datasources.iter().filter(|s| s.kind == SourceKind::Rest) {
+        let Some(file) = &source.openapi else { continue };
+        let text = match std::fs::read_to_string(apis.join(file)) {
+            Ok(text) => text,
+            Err(_) => {
+                warnings.push(format!("data source '{}': its description {APIS_DIR}/{file} is not there", source.name));
+                continue;
+            }
+        };
+        let description = match openapi::read(&text) {
+            Ok(description) => description,
+            Err(why) => {
+                warnings.push(format!("data source '{}': {APIS_DIR}/{file}: {why}", source.name));
+                continue;
+            }
+        };
+        let written = openapi::module(&source.name, file, &description, &source.picks, &source.pick_schemas);
+        warnings.extend(written.warnings);
+        let target = apis.join(format!("{}.{}", source.name, clarity_spec::SPEC_EXTENSION));
+        // Its labels and messages are read by people: keys, with their texts in
+        // the language files, the same keys again for the same texts.
+        let project = load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
+        let default = clarity_spec::translations::default_language(&project);
+        let existing = project.translations.get(&default).cloned().unwrap_or_default();
+        let keyed = clarity_spec::keyed::make_keys_beside(&[(target.to_string_lossy().as_ref(), written.text.as_str())], &[], &default, &existing);
+        let text = keyed.modules[0].1.clone();
+        let keys: Vec<(String, String)> = keyed.order.iter().map(|k| (k.clone(), keyed.languages[&default][k].clone())).collect();
+        if std::fs::read_to_string(&target).ok().as_deref() != Some(text.as_str()) {
+            std::fs::write(&target, &text).map_err(|e| format!("cannot write {}: {e}", target.display()))?;
+        }
+        if !keys.is_empty() {
+            clarity_spec::keyed::add_keys(&dir, &default, &keys).map_err(|err| format!("cannot write the language files: {err}"))?;
+        }
+    }
+    Ok(warnings)
+}
+
+/// An operation of a web API's description, as the picking shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ApiOperation {
+    pub id: String,
+    pub method: String,
+    pub path: String,
+    pub summary: Option<String>,
+    /// The project file picks it.
+    pub picked: bool,
+    /// Clarity calls it: not a patch.
+    pub callable: bool,
+}
+
+/// A schema of a web API's description, as the picking shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ApiSchema {
+    pub name: String,
+    /// The project file picks it on its own.
+    pub picked: bool,
+    /// A picked operation takes or gives it, so it is an entity already.
+    pub needed: bool,
+}
+
+/// What the picking of a web API data source shows (DESIGN 5.23).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ApiListing {
+    /// The description's file in the apis folder, if the source names one.
+    pub file: Option<String>,
+    pub title: String,
+    pub version: String,
+    pub operations: Vec<ApiOperation>,
+    pub schemas: Vec<ApiSchema>,
+}
+
+/// Every operation and schema of the description data source `source`
+/// names, with what the project picks.
+pub fn api_listing(project_file: &Path, source: &str) -> Result<ApiListing, String> {
+    let settings = load(project_file).settings.ok_or_else(|| format!("{} cannot be read", project_file.display()))?;
+    let found = settings.datasources.iter().find(|s| s.name == source).ok_or_else(|| format!("there is no data source '{source}'"))?;
+    let Some(file) = &found.openapi else {
+        return Ok(ApiListing { file: None, title: String::new(), version: String::new(), operations: Vec::new(), schemas: Vec::new() });
+    };
+    let path = module_dir(project_file).join(APIS_DIR).join(file);
+    let text = std::fs::read_to_string(&path).map_err(|_| format!("{APIS_DIR}/{file} is not there"))?;
+    let description = openapi::read(&text)?;
+    let operations: Vec<ApiOperation> = description
+        .operations
+        .iter()
+        .map(|o| ApiOperation {
+            id: o.id.clone(),
+            method: o.method.clone(),
+            path: o.path.clone(),
+            summary: o.summary.clone(),
+            picked: found.picks.contains(&o.id),
+            callable: o.method != "patch",
+        })
+        .collect();
+    let written = openapi::module(source, file, &description, &found.picks, &[]);
+    let schemas = description
+        .schemas
+        .iter()
+        .map(|s| ApiSchema {
+            name: s.name.clone(),
+            picked: found.pick_schemas.contains(&s.name),
+            needed: written.text.contains(&format!("\nentity {}\n", openapi_type(&s.name))),
+        })
+        .collect();
+    Ok(ApiListing { file: Some(file.clone()), title: description.title, version: description.version, operations, schemas })
+}
+
+/// A schema's name as its entity is named.
+fn openapi_type(name: &str) -> String {
+    openapi::entity_name(name)
+}
+
+/// Copies the OpenAPI description at `from` into the project's apis folder,
+/// keeping its name; gives that name. Refuses a file that is no description.
+pub fn add_api_file(project_file: &Path, from: &Path) -> Result<String, String> {
+    let text = std::fs::read_to_string(from).map_err(|err| format!("cannot read {}: {err}", from.display()))?;
+    openapi::read(&text).map_err(|why| format!("{} is no OpenAPI description: {why}", from.display()))?;
+    let name = from.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| format!("{} has no file name", from.display()))?;
+    let apis = module_dir(project_file).join(APIS_DIR);
+    std::fs::create_dir_all(&apis).map_err(|err| format!("cannot make {}: {err}", apis.display()))?;
+    let target = apis.join(&name);
+    if plain(from.canonicalize().unwrap_or(from.to_path_buf())) != plain(target.canonicalize().unwrap_or(target.clone())) {
+        std::fs::write(&target, text).map_err(|err| format!("cannot write {}: {err}", target.display()))?;
+    }
+    Ok(name)
 }

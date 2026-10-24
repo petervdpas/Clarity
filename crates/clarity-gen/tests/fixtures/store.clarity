@@ -1,0 +1,26 @@
+// A test project's second module, not an example: entities in a web API
+// (DESIGN 5.23), which tests/http_build.rs points at its test server, and
+// the actions that read and send them with `http ... from shop`.
+module store
+source shop
+
+entity Item
+    name: text(40)
+    price: money
+
+action items_in(status: text) -> list<Item>
+    effects net
+    let reply = http get "/items" from shop query "status": status
+    if not reply.ok
+        refuse "shop answered {reply.status}: {reply.text}"
+    return read list<Item> from json reply.text at "items"
+
+action asked(status: text) -> text
+    effects net
+    let reply = http get "/query" from shop query "status": status query "page": "2"
+    return reply.text
+
+action signed() -> text
+    effects net
+    let reply = http get "auth" from shop
+    return reply.text

@@ -391,11 +391,15 @@ pub enum ExprKind {
     },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
     /// web API, giving its reply (DESIGN 5.23). Only post and put send a body.
+    /// `from shop` calls a path of that web API data source, at its address
+    /// and with its auth; `query "status": s` adds an encoded query parameter.
     Http {
         method: HttpMethod,
         url: Box<Expr>,
+        from: Option<Ident>,
         body: Option<Box<Expr>>,
-        headers: Vec<HttpHeader>,
+        headers: Vec<HttpPair>,
+        query: Vec<HttpPair>,
     },
 }
 
@@ -440,16 +444,17 @@ impl HttpMethod {
     }
 }
 
-/// The expressions of an HTTP call: its url, its body and its headers' values.
-pub fn http_exprs<'e>(url: &'e Expr, body: Option<&'e Expr>, headers: &'e [HttpHeader]) -> Vec<&'e Expr> {
-    std::iter::once(url).chain(body).chain(headers.iter().map(|h| &h.value)).collect()
+/// The expressions of an HTTP call: its url, its body, and its headers' and
+/// query parameters' values.
+pub fn http_exprs<'e>(url: &'e Expr, body: Option<&'e Expr>, headers: &'e [HttpPair], query: &'e [HttpPair]) -> Vec<&'e Expr> {
+    std::iter::once(url).chain(body).chain(headers.iter().chain(query).map(|h| &h.value)).collect()
 }
 
-/// `header "Accept": "text/plain"` of an HTTP call: the name as written, and
-/// its value, a text.
+/// `header "Accept": "text/plain"` or `query "status": s` of an HTTP call:
+/// the name as written, and its value, a text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
-pub struct HttpHeader {
+pub struct HttpPair {
     pub name: Ident,
     pub value: Expr,
 }
@@ -988,12 +993,10 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(at, found);
             }
         }
-        ExprKind::Http { url, body, headers, .. } => {
-            each_expr(url, found);
-            if let Some(body) = body {
-                each_expr(body, found);
+        ExprKind::Http { url, body, headers, query, .. } => {
+            for e in http_exprs(url, body.as_deref(), headers, query) {
+                each_expr(e, found);
             }
-            headers.iter().for_each(|h| each_expr(&h.value, found));
         }
         ExprKind::Text { parts } => {
             for part in parts {

@@ -60,19 +60,18 @@ fn a_module_names_its_data_source() {
 }
 
 #[test]
-fn the_source_must_be_a_sql_source_of_the_project() {
+fn the_source_must_be_a_source_of_the_project() {
     let unknown = load(&ERP.replace("source erp", "source warehouse"), &[]);
     assert!(
         errors(&unknown).iter().any(|e| e == "unknown data source 'warehouse'; the project has main, erp and payments"),
         "{:#?}",
         unknown.diagnostics
     );
+    // Entities in a web API are allowed (DESIGN 5.23): a service keeps them, so no database stores them.
     let web = load(&ERP.replace("source erp", "source payments"), &[]);
-    assert!(
-        errors(&web).iter().any(|e| e == "'payments' is a web API; entities cannot live in a web API yet"),
-        "{:#?}",
-        web.diagnostics
-    );
+    assert!(errors(&web).iter().all(|e| !e.contains("payments")), "{:#?}", web.diagnostics);
+    assert!(web.in_web_api("Invoice"));
+    assert!(web.stored_entities().all(|e| e.name.name != "Invoice"));
     let twice = load(&ERP.replace("source erp", "source erp\nsource main"), &[]);
     assert!(errors(&twice).iter().any(|e| e.contains("a module has one 'source'")), "{:#?}", twice.diagnostics);
 }

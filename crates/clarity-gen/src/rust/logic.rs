@@ -916,7 +916,7 @@ impl<'a> Emitter<'a> {
                 )
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, body, headers } => {
+            ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
                     Some(body) => format!("Some(({}).as_str())", self.value(body)),
@@ -929,7 +929,23 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Put => "Put",
                     HttpMethod::Delete => "Delete",
                 };
-                format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, &[{}])", headers.join(", "))
+                if from.is_none() && query.is_empty() {
+                    return format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, &[{}])", headers.join(", "));
+                }
+                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
+                let auth = match auth {
+                    Some(("bearer", secret)) => format!("clarity_runtime::http::Auth::Bearer({secret:?})"),
+                    Some(("api-key", secret)) => format!("clarity_runtime::http::Auth::ApiKey({secret:?})"),
+                    Some(("basic", secret)) => format!("clarity_runtime::http::Auth::Basic({secret:?})"),
+                    _ => "clarity_runtime::http::Auth::None".to_string(),
+                };
+                let query: Vec<String> = query.iter().map(|q| format!("({:?}, ({}).as_str())", q.name.name, self.value(&q.value))).collect();
+                format!(
+                    "clarity_runtime::http::call_at(clarity_runtime::http::Method::{method}, {base:?}, &{url}, &[{}], {body}, &[{}], {auth})",
+                    query.join(", "),
+                    headers.join(", ")
+                )
             }
             ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
             ExprKind::New { entity } => format!("{}::default()", entity.name),

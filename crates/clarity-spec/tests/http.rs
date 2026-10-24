@@ -73,7 +73,7 @@ fn parses_the_call_its_body_and_headers() {
     let (file, diagnostics) = parse(API, "api.clarity");
     assert!(diagnostics.is_empty(), "{diagnostics:#?}");
     let StmtKind::Let { value, .. } = &file.functions[0].body[0].kind else { panic!() };
-    let ExprKind::Http { method, url, body, headers } = &value.kind else { panic!("{value:#?}") };
+    let ExprKind::Http { method, url, body, headers, .. } = &value.kind else { panic!("{value:#?}") };
     assert_eq!(*method, HttpMethod::Post);
     assert!(matches!(&url.kind, ExprKind::Str { value } if value == "https://api.example.com/orders"));
     assert!(matches!(body.as_deref().map(|b| &b.kind), Some(ExprKind::Member { .. })));

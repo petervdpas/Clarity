@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 
 #include <curl/curl.h>
 
@@ -85,6 +87,73 @@ HttpReply http_call(HttpMethod method, const std::string& url, const std::string
     curl_easy_cleanup(curl);
     if (done != CURLE_OK) return none("cannot reach " + http_host(url) + ": " + curl_easy_strerror(done));
     return HttpReply{status, status >= 200 && status < 300, std::move(answer)};
+}
+
+std::string url_part(const std::string& text) {
+    std::string out;
+    for (unsigned char c : text) {
+        if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            char hex[4];
+            std::snprintf(hex, sizeof hex, "%%%02X", c);
+            out += hex;
+        }
+    }
+    return out;
+}
+
+namespace {
+
+/// A secret where the project file says it is: `env:NAME` reads that
+/// environment variable; empty when it is not set.
+std::string secret_at(const std::string& location) {
+    if (location.rfind("env:", 0) == 0) {
+        const char* value = std::getenv(location.substr(4).c_str());
+        return value ? value : "";
+    }
+    return location;
+}
+
+std::string base64_of(const std::string& text) {
+    static const char* digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    size_t i = 0;
+    for (; i + 2 < text.size(); i += 3) {
+        uint32_t n = (uint32_t(uint8_t(text[i])) << 16) | (uint32_t(uint8_t(text[i + 1])) << 8) | uint8_t(text[i + 2]);
+        out += {digits[n >> 18], digits[(n >> 12) & 63], digits[(n >> 6) & 63], digits[n & 63]};
+    }
+    if (i + 1 == text.size()) {
+        uint32_t n = uint32_t(uint8_t(text[i])) << 16;
+        out += {digits[n >> 18], digits[(n >> 12) & 63], '=', '='};
+    } else if (i + 2 == text.size()) {
+        uint32_t n = (uint32_t(uint8_t(text[i])) << 16) | (uint32_t(uint8_t(text[i + 1])) << 8);
+        out += {digits[n >> 18], digits[(n >> 12) & 63], digits[(n >> 6) & 63], '='};
+    }
+    return out;
+}
+
+}  // namespace
+
+HttpReply http_call_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                       const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret) {
+    std::string url = path;
+    if (!base.empty() && path.find("://") == std::string::npos) {
+        std::string trimmed = base;
+        while (!trimmed.empty() && trimmed.back() == '/') trimmed.pop_back();
+        url = trimmed + "/" + path.substr(path.find_first_not_of('/') == std::string::npos ? path.size() : path.find_first_not_of('/'));
+    }
+    for (size_t i = 0; i < query.size(); ++i) {
+        url += (i == 0 && url.find('?') == std::string::npos ? "?" : "&") + url_part(query[i].first) + "=" + url_part(query[i].second);
+    }
+    auto all = headers;
+    switch (auth) {
+        case HttpAuth::Bearer: all.emplace_back("Authorization", "Bearer " + secret_at(secret)); break;
+        case HttpAuth::ApiKey: all.emplace_back("X-Api-Key", secret_at(secret)); break;
+        case HttpAuth::Basic: all.emplace_back("Authorization", "Basic " + base64_of(secret_at(secret))); break;
+        case HttpAuth::None: break;
+    }
+    return http_call(method, url, body, all);
 }
 
 }  // namespace clarity

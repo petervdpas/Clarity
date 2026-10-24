@@ -8,6 +8,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import ImportPanel from "./ImportPanel.svelte";
+  import ApiPanel from "./ApiPanel.svelte";
   import MigrationPanel from "./MigrationPanel.svelte";
   import { themeChoice } from "./scheme.svelte";
   import StackFields from "./StackFields.svelte";
@@ -124,6 +125,8 @@
 
   /** The external data source being imported from, if any. */
   let importing = $state<string | null>(null);
+  /** The web API data source whose description and picks are open. */
+  let picking = $state<string | null>(null);
   /** The external data source waiting for the go-ahead to be owned. */
   let owning = $state<string | null>(null);
   let ownError = $state<string | null>(null);
@@ -169,7 +172,7 @@
     e.preventDefault();
     const name = newName.trim();
     if (!name || !project.settings) return;
-    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false };
+    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [] };
     save({ datasources: [...project.settings.datasources, source] });
     newName = "";
   }
@@ -378,6 +381,9 @@
                       {/if}
                     </td>
                     <td class="actions">
+                      {#if source.kind === "rest"}
+                        <button title="The source's OpenAPI description, and what the application picks of it" onclick={() => (picking = source.name)}>API...</button>
+                      {/if}
                       {#if source.external && source.kind === "sqlite"}
                         <button title="Import tables of this database as entities" onclick={() => (importing = source.name)}>Import...</button>
                         <button title="Let Clarity change this database's tables from now on" onclick={() => (owning = source.name)}>Own...</button>
@@ -411,6 +417,12 @@
               <button onclick={() => ((owning = null), (ownError = null))}>Cancel</button>
             </div>
           </div>
+        {/if}
+        {#if picking}
+          {@const at = settings.datasources.findIndex((s) => s.name === picking)}
+          {#if at >= 0}
+            <ApiPanel source={settings.datasources[at]} onsave={(change) => saveSource(at, change)} onclose={() => (picking = null)} />
+          {/if}
         {/if}
         {#if importing}
           <ImportPanel source={importing} {onapplied} onclose={() => (importing = null)} />

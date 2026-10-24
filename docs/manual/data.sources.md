@@ -20,7 +20,7 @@ You can also add, change, reorder and remove sources in the **Data sources** sec
 - `mysql`: a URL, such as `mysql://shop@db.example.com:3306/shop`.
 - `mssql`: an ADO.NET connection string, such as `server=tcp:db.example.com,1433;database=shop;user=shop`.
 
-The same entities and steps work on all four; the program writes each step in that database's own SQL. The C and C++ stacks support SQLite only for now. A `rest` kind for web APIs is accepted in the project file, but entities cannot live in one yet.
+The same entities and steps work on all four; the program writes each step in that database's own SQL. The C and C++ stacks support SQLite only for now. A `rest` source is a web API: its entities live in the service, and its module's actions read and send them; see [Calling web APIs](code.web-apis.md).
 
 ## Passwords stay out of the project
 

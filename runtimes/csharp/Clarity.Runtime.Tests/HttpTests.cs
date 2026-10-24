@@ -49,6 +49,8 @@ public sealed class HttpTests : IDisposable
                 "/hello" => (200, "hello"),
                 "/echo" => (200, $"{request.HttpMethod} {body}"),
                 "/header" => (200, request.Headers["X-Test"] ?? ""),
+                "/query" => (200, request.Url.Query.TrimStart('?')),
+                "/auth" => (200, request.Headers["Authorization"] ?? request.Headers["X-Api-Key"] ?? ""),
                 _ => (404, "no such page"),
             };
             var bytes = Encoding.UTF8.GetBytes(text);
@@ -66,13 +68,21 @@ public sealed class HttpTests : IDisposable
     public void EveryCallGivesTheReplyTheCasesName()
     {
         var file = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "http.json"))).RootElement;
+        foreach (var env in file.GetProperty("env").EnumerateObject())
+            Environment.SetEnvironmentVariable(env.Name, env.Value.GetString());
         foreach (var c in file.GetProperty("cases").EnumerateArray())
         {
             var name = c.GetProperty("name").GetString();
             var url = c.TryGetProperty("url", out var u) ? u.GetString()! : server + c.GetProperty("path").GetString();
             var headers = c.TryGetProperty("headers", out var h) ? h.EnumerateObject().Select(p => (p.Name, p.Value.GetString()!)).ToArray() : [];
             var body = c.TryGetProperty("body", out var b) ? b.GetString()! : null;
-            var reply = c.GetProperty("method").GetString() switch
+            var reply = c.TryGetProperty("base", out var at)
+                ? Http.At(c.GetProperty("method").GetString()!, at.GetString()!.Replace("{server}", server), c.GetProperty("path").GetString()!,
+                    c.TryGetProperty("query", out var q) ? q.EnumerateArray().Select(p => (p[0].GetString()!, p[1].GetString()!)).ToArray() : [],
+                    body, headers,
+                    c.TryGetProperty("auth", out var auth) ? auth.GetProperty("kind").GetString() : null,
+                    c.TryGetProperty("auth", out var auth2) ? auth2.GetProperty("secret").GetString() : null)
+                : c.GetProperty("method").GetString() switch
             {
                 "POST" => Http.Post(url, body!, headers),
                 "PUT" => Http.Put(url, body!, headers),

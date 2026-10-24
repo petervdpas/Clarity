@@ -31,6 +31,20 @@ inline constexpr long HTTP_TIMEOUT = 30;
 /// `headers` (name, value), and gives the reply.
 HttpReply http_call(HttpMethod method, const std::string& url, const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers);
 
+/// How a web API data source signs its calls: the project file's `auth`
+/// line, its secret read from where it says (`env:NAME`).
+enum class HttpAuth { None, Bearer, ApiKey, Basic };
+
+/// Calls `path` of the web API at `base` (a data source's address) with the
+/// query parameters, encoded and in order, and the source's auth, as
+/// `http get "/orders" from shop query "status": s` does.
+HttpReply http_call_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                       const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret);
+
+/// Text as a part of a url: letters, digits and `- . _ ~` as they are, every
+/// other byte of its UTF-8 as `%XX`.
+std::string url_part(const std::string& text);
+
 /// The host a url names, without the scheme, a login, the port and the path.
 std::string http_host(const std::string& url);
 

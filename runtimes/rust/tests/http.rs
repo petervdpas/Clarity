@@ -6,7 +6,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 
-use clarity_runtime::http::{self, Method};
+use clarity_runtime::http::{self, Auth, Method};
 use serde_json::Value;
 
 const CASES: &str = include_str!("../../../conformance/http.json");
@@ -21,8 +21,9 @@ fn serve() -> String {
             let mut line = String::new();
             reader.read_line(&mut line).unwrap();
             let mut words = line.split_whitespace();
-            let (method, path) = (words.next().unwrap_or_default().to_string(), words.next().unwrap_or_default().to_string());
-            let (mut length, mut test) = (0, String::new());
+            let (method, target) = (words.next().unwrap_or_default().to_string(), words.next().unwrap_or_default().to_string());
+            let (path, query) = target.split_once('?').map_or((target.clone(), String::new()), |(p, q)| (p.to_string(), q.to_string()));
+            let (mut length, mut test, mut authorization, mut api_key) = (0, String::new(), String::new(), String::new());
             loop {
                 let mut header = String::new();
                 reader.read_line(&mut header).unwrap();
@@ -34,6 +35,8 @@ fn serve() -> String {
                 match name.to_ascii_lowercase().as_str() {
                     "content-length" => length = value.trim().parse().unwrap_or(0),
                     "x-test" => test = value.trim().to_string(),
+                    "authorization" => authorization = value.trim().to_string(),
+                    "x-api-key" => api_key = value.trim().to_string(),
                     _ => {}
                 }
             }
@@ -43,6 +46,8 @@ fn serve() -> String {
                 "/hello" => (200, "hello".to_string()),
                 "/echo" => (200, format!("{method} {}", String::from_utf8_lossy(&body))),
                 "/header" => (200, test),
+                "/query" => (200, query.clone()),
+                "/auth" => (200, if authorization.is_empty() { api_key.clone() } else { authorization.clone() }),
                 _ => (404, "no such page".to_string()),
             };
             let reason = if status == 200 { "OK" } else { "Not Found" };
@@ -70,6 +75,10 @@ fn method(word: &str) -> Method {
 #[test]
 fn every_call_gives_the_reply_the_cases_name() {
     let cases: Value = serde_json::from_str(CASES).unwrap();
+    for (name, value) in cases["env"].as_object().unwrap() {
+        // SAFETY: this test alone sets the variable, before it reads it.
+        unsafe { std::env::set_var(name, value.as_str().unwrap()) };
+    }
     let server = serve();
     for case in cases["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
@@ -77,7 +86,21 @@ fn every_call_gives_the_reply_the_cases_name() {
         let headers: Vec<(String, String)> =
             case["headers"].as_object().map(|h| h.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect()).unwrap_or_default();
         let headers: Vec<(&str, &str)> = headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
-        let reply = http::call(method(case["method"].as_str().unwrap()), &url, case["body"].as_str(), &headers);
+        let reply = match case["base"].as_str() {
+            Some(base) => {
+                let query: Vec<(&str, &str)> = case["query"].as_array().map(|q| q.iter().map(|p| (p[0].as_str().unwrap(), p[1].as_str().unwrap())).collect()).unwrap_or_default();
+                let secret = case["auth"]["secret"].as_str().unwrap_or_default();
+                let auth = match case["auth"]["kind"].as_str() {
+                    Some("bearer") => Auth::Bearer(secret),
+                    Some("api-key") => Auth::ApiKey(secret),
+                    Some("basic") => Auth::Basic(secret),
+                    _ => Auth::None,
+                };
+                let base = base.replace("{server}", &server);
+                http::call_at(method(case["method"].as_str().unwrap()), &base, case["path"].as_str().unwrap(), &query, case["body"].as_str(), &headers, auth)
+            }
+            None => http::call(method(case["method"].as_str().unwrap()), &url, case["body"].as_str(), &headers),
+        };
         assert_eq!(reply.status, case["status"].as_i64().unwrap(), "{name}: {reply:?}");
         assert_eq!(reply.ok, case["ok"].as_bool().unwrap(), "{name}: {reply:?}");
         if let Some(text) = case["text"].as_str() {

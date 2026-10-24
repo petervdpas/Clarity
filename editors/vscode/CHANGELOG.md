@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.12
+
+- Colors `query` in HTTP calls of a web API data source.
+
 ## 0.1.11
 
 - Colors HTTP calls and JSON: `http get`, `post`, `put` and `delete` with `header`, `json of` and `read ... from json`.

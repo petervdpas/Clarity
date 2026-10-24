@@ -922,7 +922,13 @@ impl Project {
 
     /// The entities whose records a database keeps: all but the settings.
     pub fn stored_entities(&self) -> impl Iterator<Item = &Entity> {
-        self.entities().filter(|e| !e.settings)
+        self.entities().filter(|e| !e.settings && !self.in_web_api(&e.name.name))
+    }
+
+    /// Whether `entity` lives in a web API data source (DESIGN 5.23): a
+    /// service keeps its records, so no database stores them.
+    pub fn in_web_api(&self, entity: &str) -> bool {
+        self.source_of(entity).is_some_and(|source| self.sources.iter().any(|s| s.name == source && !s.sql))
     }
 
     /// Whether any code of the project calls a web API (DESIGN 5.23): a

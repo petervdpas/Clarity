@@ -77,7 +77,7 @@ pub fn project_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "C#")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);
     };

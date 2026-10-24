@@ -255,6 +255,11 @@ pub struct SourceRef {
     pub external: bool,
     /// Records are read, never saved or deleted.
     pub readonly: bool,
+    /// A web API's address, which `http ... from source` calls paths of.
+    pub address: String,
+    /// A web API's auth: its kind as the project file writes it (`bearer`,
+    /// `api-key`, `basic`) and where its secret is (`env:NAME`).
+    pub auth: Option<(String, String)>,
 }
 
 impl SourceRef {
@@ -264,6 +269,8 @@ impl SourceRef {
             sql: true,
             external: false,
             readonly: false,
+            address: String::new(),
+            auth: None,
         }
     }
 
@@ -273,7 +280,16 @@ impl SourceRef {
             sql: false,
             external: true,
             readonly: false,
+            address: String::new(),
+            auth: None,
         }
+    }
+
+    /// A web API at `address`, signed with `auth` (kind, where the secret is).
+    pub fn at(mut self, address: &str, auth: Option<(&str, &str)>) -> SourceRef {
+        self.address = address.to_string();
+        self.auth = auth.map(|(kind, secret)| (kind.to_string(), secret.to_string()));
+        self
     }
 
     pub fn external(mut self) -> SourceRef {
@@ -357,6 +373,7 @@ pub fn load_in<'a>(
     check::check_sources(&mut project);
     code::check::check_readonly(&mut project);
     code::check::check_query_sources(&mut project);
+    code::check::check_web_sources(&mut project);
     migrate::check(&mut project);
     project
 }
@@ -463,12 +480,26 @@ pub fn load_dir_with(dir: &Path, path: &Path, text: &str) -> std::io::Result<Pro
     load_dir_with_in(dir, Some((path, text)), &[])
 }
 
+/// The folder of a project's web API descriptions, beside its modules, and
+/// of the modules Clarity writes from them (DESIGN 5.23).
+pub const APIS_DIR: &str = "apis";
+
+/// The module files of the project folder `dir`: its own, then those Clarity
+/// writes into its `apis` folder.
 pub fn spec_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|entry| entry.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|ext| ext == SPEC_EXTENSION))
-        .collect();
-    paths.sort();
+    let modules = |dir: &Path| -> Vec<PathBuf> {
+        let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| p.is_file() && p.extension().is_some_and(|ext| ext == SPEC_EXTENSION))
+            .collect();
+        paths.sort();
+        paths
+    };
+    std::fs::read_dir(dir)?;
+    let mut paths = modules(dir);
+    paths.extend(modules(&dir.join(APIS_DIR)));
     Ok(paths)
 }
 

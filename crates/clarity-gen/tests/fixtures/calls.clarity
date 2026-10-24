@@ -2,6 +2,7 @@
 // API (DESIGN 5.23), which tests/http_build.rs builds on every stack and
 // runs against a small server of its own.
 module calls
+use store
 
 enum Kind
     Person
@@ -68,3 +69,10 @@ command broken(url: text)
     let reply = http get url
     let o = read Order from json reply.text
     print o.number
+
+command store(status: text)
+    help "Lists the items of the shop's web API, then what it was asked and how it was signed"
+    for item in items_in(status)
+        print "{item.name} {item.price}"
+    print asked(status)
+    print signed()

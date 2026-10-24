@@ -23,6 +23,13 @@ HttpMethod method_of(const std::string& word) {
 TEST(every_http_call_gives_the_reply_the_cases_name) {
     json cases = conformance("http.json");
     std::string server = http_test_start();
+    for (const auto& [name, value] : cases["env"].items()) {
+#ifdef _WIN32
+        _putenv_s(name.c_str(), value.get<std::string>().c_str());
+#else
+        setenv(name.c_str(), value.get<std::string>().c_str(), 1);
+#endif
+    }
     for (const auto& c : cases["cases"]) {
         std::string url = c.contains("url") ? c["url"].get<std::string>() : server + c["path"].get<std::string>();
         std::vector<std::pair<std::string, std::string>> headers;
@@ -31,6 +38,18 @@ TEST(every_http_call_gives_the_reply_the_cases_name) {
         }
         std::string body = c.contains("body") ? c["body"].get<std::string>() : std::string();
         HttpReply reply = http_call(method_of(c["method"].get<std::string>()), url, body, headers);
+        if (c.contains("base")) {
+            std::string base = c["base"].get<std::string>();
+            if (auto mark = base.find("{server}"); mark != std::string::npos) base.replace(mark, 8, server);
+            std::vector<std::pair<std::string, std::string>> query;
+            if (c.contains("query")) {
+                for (const auto& pair : c["query"]) query.emplace_back(pair[0].get<std::string>(), pair[1].get<std::string>());
+            }
+            std::string kind = c.contains("auth") ? c["auth"]["kind"].get<std::string>() : "";
+            HttpAuth auth = kind == "bearer" ? HttpAuth::Bearer : kind == "api-key" ? HttpAuth::ApiKey : kind == "basic" ? HttpAuth::Basic : HttpAuth::None;
+            reply = http_call_at(method_of(c["method"].get<std::string>()), base, c["path"].get<std::string>(), query, body, headers, auth,
+                                 c.contains("auth") ? c["auth"]["secret"].get<std::string>() : std::string());
+        }
         CHECK_EQ(reply.status, c["status"].get<int64_t>());
         CHECK_EQ(reply.ok, c["ok"].get<bool>());
         if (c.contains("text")) CHECK_EQ(reply.text, c["text"].get<std::string>());

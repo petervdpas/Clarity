@@ -25,6 +25,9 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
         auth: None,
         external: false,
         readonly: false,
+        openapi: None,
+        picks: Vec::new(),
+        pick_schemas: Vec::new(),
     }
 }
 

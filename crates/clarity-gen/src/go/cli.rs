@@ -71,7 +71,7 @@ fn typed(p: &ParamSpec, at: usize) -> String {
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "Go")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let module = super::module_name(settings);
     let types = check::types(&project.files);
     let mut errors = Vec::new();

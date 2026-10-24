@@ -30,7 +30,11 @@ func TestEveryCallGivesTheReplyTheCasesName(t *testing.T) {
 			Ok         bool              `json:"ok"`
 			Text       *string           `json:"text"`
 			TextStarts string            `json:"text_starts"`
+			Base       string            `json:"base"`
+			Query      [][2]string       `json:"query"`
+			Auth       HTTPAuth          `json:"auth"`
 		} `json:"cases"`
+		Env map[string]string `json:"env"`
 	}
 	if err := json.Unmarshal(text, &file); err != nil {
 		t.Fatal(err)
@@ -45,12 +49,23 @@ func TestEveryCallGivesTheReplyTheCasesName(t *testing.T) {
 			io.WriteString(w, r.Method+" "+string(body))
 		case "/header":
 			io.WriteString(w, r.Header.Get("X-Test"))
+		case "/query":
+			io.WriteString(w, r.URL.RawQuery)
+		case "/auth":
+			if a := r.Header.Get("Authorization"); a != "" {
+				io.WriteString(w, a)
+			} else {
+				io.WriteString(w, r.Header.Get("X-Api-Key"))
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			io.WriteString(w, "no such page")
 		}
 	}))
 	defer server.Close()
+	for name, value := range file.Env {
+		t.Setenv(name, value)
+	}
 	for _, c := range file.Cases {
 		url := c.URL
 		if url == "" {
@@ -61,6 +76,13 @@ func TestEveryCallGivesTheReplyTheCasesName(t *testing.T) {
 			headers = append(headers, Header{Name: name, Value: value})
 		}
 		reply := HTTP(c.Method, url, c.Body, headers)
+		if c.Base != "" {
+			var query []Header
+			for _, q := range c.Query {
+				query = append(query, Header{Name: q[0], Value: q[1]})
+			}
+			reply = HTTPAt(c.Method, strings.ReplaceAll(c.Base, "{server}", server.URL), c.Path, query, c.Body, headers, c.Auth)
+		}
 		if reply.Status != c.Status || reply.Ok != c.Ok {
 			t.Errorf("%s: status %d ok %v, want %d %v (%s)", c.Name, reply.Status, reply.Ok, c.Status, c.Ok, reply.Text)
 		}

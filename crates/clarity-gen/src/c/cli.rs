@@ -133,7 +133,7 @@ target_link_libraries({target} PRIVATE clarity{engine}{http})
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "C")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     if let Some((name, _, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {
         return Err(vec![format!("data source '{name}' is a server database; the C backend stores records in SQLite for now")]);
     }

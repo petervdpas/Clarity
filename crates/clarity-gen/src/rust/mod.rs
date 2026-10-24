@@ -53,7 +53,7 @@ const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_paren
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let crate_name = crate_name(settings);
-    let (databases, owned) = crate::databases(project, settings, "Rust")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");

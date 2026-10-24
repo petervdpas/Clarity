@@ -68,7 +68,7 @@ fn command(c: &CommandSpec) -> String {
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let name = crate::commands::program_name(settings);
-    let (databases, owned) = crate::databases(project, settings, "Rust")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");

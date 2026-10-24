@@ -16,4 +16,17 @@ external: boolean,
 /**
  * Records are read, never saved or deleted.
  */
-readonly: boolean, };
+readonly: boolean, 
+/**
+ * A web API's OpenAPI description, a file in the project's `apis`
+ * folder, which Clarity writes the API's module from (DESIGN 5.23).
+ */
+openapi: string | null, 
+/**
+ * The operations of the description the project uses, by their ids.
+ */
+picks: Array<string>, 
+/**
+ * Schemas the project uses beside those its operations need.
+ */
+pick_schemas: Array<string>, };

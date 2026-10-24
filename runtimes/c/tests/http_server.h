@@ -69,6 +69,12 @@ static void http_test_answer(http_test_socket client) {
     if (got == 0) return;
     char method[16] = {0}, path[256] = {0};
     sscanf(request, "%15s %255s", method, path);
+    char* question = strchr(path, '?');
+    char query[256] = {0};
+    if (question) {
+        snprintf(query, sizeof query, "%s", question + 1);
+        *question = '\0';
+    }
     const char* end = strstr(request, "\r\n\r\n");
     const char* body = end ? end + 4 : "";
     static char text[65536];
@@ -79,6 +85,11 @@ static void http_test_answer(http_test_socket client) {
         snprintf(text, sizeof text, "%s %s", method, body);
     } else if (strcmp(path, "/header") == 0) {
         http_test_header(request, "X-Test", text, sizeof text);
+    } else if (strcmp(path, "/query") == 0) {
+        snprintf(text, sizeof text, "%s", query);
+    } else if (strcmp(path, "/auth") == 0) {
+        http_test_header(request, "Authorization", text, sizeof text);
+        if (!text[0]) http_test_header(request, "X-Api-Key", text, sizeof text);
     } else {
         status = 404;
         snprintf(text, sizeof text, "no such page");

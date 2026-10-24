@@ -6,9 +6,11 @@ package clarity
 // runtime gives the same replies (conformance/http.json).
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -84,4 +86,63 @@ func HTTP(method, url, body string, headers []Header) HttpReply {
 	}
 	status := int64(response.StatusCode)
 	return HttpReply{Status: status, Ok: status >= 200 && status < 300, Text: strings.ToValidUTF8(string(answer), "�")}
+}
+
+// HTTPAuth is how a web API data source signs its calls: the project
+// file's auth line, its secret read from where it says (env:NAME). Kind is
+// "", "bearer", "api-key" or "basic".
+type HTTPAuth struct {
+	Kind   string `json:"kind"`
+	Secret string `json:"secret"`
+}
+
+// secretAt is a secret where the project file says it is: env:NAME reads
+// that environment variable; empty when it is not set.
+func secretAt(location string) string {
+	if name, found := strings.CutPrefix(location, "env:"); found {
+		return os.Getenv(name)
+	}
+	return location
+}
+
+// URLPart is text as a part of a url: letters, digits and - . _ ~ as they
+// are, every other byte of its UTF-8 as %XX.
+func URLPart(text string) string {
+	var out strings.Builder
+	for _, b := range []byte(text) {
+		switch {
+		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9', b == '-', b == '.', b == '_', b == '~':
+			out.WriteByte(b)
+		default:
+			fmt.Fprintf(&out, "%%%02X", b)
+		}
+	}
+	return out.String()
+}
+
+// HTTPAt calls path of the web API at base (a data source's address) with
+// the query parameters, encoded and in order, and the source's auth, as
+// `http get "/orders" from shop query "status": s` does.
+func HTTPAt(method, base, path string, query []Header, body string, headers []Header, auth HTTPAuth) HttpReply {
+	url := path
+	if base != "" && !strings.Contains(path, "://") {
+		url = strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
+	}
+	for i, q := range query {
+		joint := "&"
+		if i == 0 && !strings.Contains(url, "?") {
+			joint = "?"
+		}
+		url += joint + URLPart(q.Name) + "=" + URLPart(q.Value)
+	}
+	all := append([]Header{}, headers...)
+	switch auth.Kind {
+	case "bearer":
+		all = append(all, Header{Name: "Authorization", Value: "Bearer " + secretAt(auth.Secret)})
+	case "api-key":
+		all = append(all, Header{Name: "X-Api-Key", Value: secretAt(auth.Secret)})
+	case "basic":
+		all = append(all, Header{Name: "Authorization", Value: "Basic " + base64.StdEncoding.EncodeToString([]byte(secretAt(auth.Secret)))})
+	}
+	return HTTP(method, url, body, all)
 }

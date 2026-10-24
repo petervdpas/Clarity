@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, HttpHeader, HttpMethod, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
+use super::{AskForm, HttpPair, HttpMethod, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -2274,7 +2274,13 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// `http get url ...`: the url, the body and the headers are text; only
     /// post and put send a body.
-    fn http(&mut self, method: HttpMethod, url: &Expr, body: Option<&Expr>, headers: &[HttpHeader], span: Span) -> Ty<'a> {
+    fn http(&mut self, method: HttpMethod, url: &Expr, body: Option<&Expr>, headers: &[HttpPair], query: &[HttpPair], span: Span) -> Ty<'a> {
+        for pair in query {
+            let ty = self.expr(&pair.value, Some(Ty::Text));
+            if !matches!(ty, Ty::Text | Ty::Unknown) {
+                self.error(format!("the query parameter '{}' is text, not {}", pair.name.name, ty.name()), pair.value.span);
+            }
+        }
         self.check_net(span);
         let ty = self.expr(url, Some(Ty::Text));
         if !matches!(ty, Ty::Text | Ty::Unknown) {
@@ -2838,7 +2844,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 }
                 Ty::Text
             }
-            ExprKind::Http { method, url, body, headers } => self.http(*method, url, body.as_deref(), headers, expr.span),
+            ExprKind::Http { method, url, body, headers, query, .. } => self.http(*method, url, body.as_deref(), headers, query, expr.span),
             ExprKind::JsonOf { value } => {
                 let ty = self.expr(value, None);
                 if !(ty.is_value() || matches!(ty, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Unknown)) {
@@ -3513,7 +3519,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
-        ExprKind::Http { url, body, headers, .. } => crate::code::http_exprs(url, body.as_deref(), headers).iter().any(|e| mentions(e, var)),
+        ExprKind::Http { url, body, headers, query, .. } => crate::code::http_exprs(url, body.as_deref(), headers, query).iter().any(|e| mentions(e, var)),
         ExprKind::JsonOf { value } => mentions(value, var),
         ExprKind::ReadJson { text, at, .. } => mentions(text, var) || at.as_deref().is_some_and(|a| mentions(a, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
@@ -3571,6 +3577,56 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
                         .in_file(&file.path),
                     );
                 }
+            });
+        }
+    }
+    project.diagnostics.extend(found);
+}
+
+/// Entities in a web API (DESIGN 5.23) are not in a database, so `find`,
+/// `save` and `delete` do not reach them; `http ... from source` names a web
+/// API data source of the project.
+pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
+    let web: Vec<&str> = project.entities().map(|e| e.name.name.as_str()).filter(|e| project.in_web_api(e)).collect();
+    let types = types(&project.files);
+    let mut found = Vec::new();
+    let not_stored = |entity: &str| {
+        let source = project.source_of(entity).unwrap_or_default();
+        format!("{entity} lives in the web API {source}, not in a database: its actions read and send it")
+    };
+    for file in &project.files {
+        let Some(file_types) = types.get(&file.path) else { continue };
+        let bodies: Vec<&Vec<Stmt>> = file
+            .code
+            .iter()
+            .flat_map(|b| b.handlers.iter().map(|h| &h.body).chain(b.events.iter().map(|e| &e.body)))
+            .chain(file.functions.iter().map(|f| &f.body))
+            .chain(file.commands.iter().map(|c| &c.body))
+            .collect();
+        for body in &bodies {
+            writes(body, &mut |stmt, value, _| {
+                if let TypeInfo::Record(entity) = file_types.type_of(value)
+                    && web.contains(&entity.as_str())
+                {
+                    found.push(Diagnostic::error(not_stored(&entity), stmt.span).in_file(&file.path));
+                }
+            });
+            each_stmt_expr(body, &mut |expr: &Expr| match &expr.kind {
+                ExprKind::Find { entity, .. } if web.contains(&entity.name.as_str()) => {
+                    found.push(Diagnostic::error(not_stored(&entity.name), entity.span).in_file(&file.path));
+                }
+                ExprKind::Http { from: Some(source), .. } => {
+                    let message = match project.sources.iter().find(|s| s.name == source.name) {
+                        None => {
+                            let names: Vec<&str> = project.sources.iter().map(|s| s.name.as_str()).collect();
+                            format!("unknown data source '{}'; the project has {}", source.name, crate::check::listed(&names))
+                        }
+                        Some(s) if s.sql => format!("'{}' is no web API: 'from' names a rest data source of the project", source.name),
+                        Some(_) => return,
+                    };
+                    found.push(Diagnostic::error(message, source.span).in_file(&file.path));
+                }
+                _ => {}
             });
         }
     }
@@ -3805,8 +3861,8 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             }
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => each_expr(file, found),
-        ExprKind::Http { url, body, headers, .. } => {
-            for e in super::http_exprs(url, body.as_deref(), headers) {
+        ExprKind::Http { url, body, headers, query, .. } => {
+            for e in super::http_exprs(url, body.as_deref(), headers, query) {
                 each_expr(e, found);
             }
         }

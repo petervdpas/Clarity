@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, HttpHeader, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, HttpPair, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -1399,6 +1399,13 @@ fn parse_http(cursor: &mut Cursor) -> ParseResult<Expr> {
     };
     let url = parse_expr(cursor)?;
     let mut end = url.span;
+    let from = if cursor.eat_keyword("from") {
+        let source = cursor.expect_ident("a web API data source, as in from shop")?;
+        end = source.span;
+        Some(source)
+    } else {
+        None
+    };
     let body = if cursor.eat_keyword("with") {
         let body = parse_expr(cursor)?;
         end = body.span;
@@ -1406,15 +1413,22 @@ fn parse_http(cursor: &mut Cursor) -> ParseResult<Expr> {
     } else {
         None
     };
-    let mut headers = Vec::new();
-    while cursor.eat_keyword("header") {
-        let name = cursor.expect(TokenKind::Str, "the header's name as a text, as in header \"Accept\": \"text/plain\"")?;
-        cursor.expect(TokenKind::Colon, "':' and the header's value")?;
+    let (mut headers, mut query) = (Vec::new(), Vec::new());
+    loop {
+        let into = if cursor.eat_keyword("header") {
+            &mut headers
+        } else if cursor.eat_keyword("query") {
+            &mut query
+        } else {
+            break;
+        };
+        let name = cursor.expect(TokenKind::Str, "the name as a text, as in header \"Accept\": \"text/plain\" or query \"status\": status")?;
+        cursor.expect(TokenKind::Colon, "':' and the value")?;
         let value = parse_expr(cursor)?;
         end = value.span;
-        headers.push(HttpHeader { name: Ident { name: name.text.clone(), span: name.span }, value });
+        into.push(HttpPair { name: Ident { name: name.text.clone(), span: name.span }, value });
     }
-    Ok(Expr { span: join(start, end), kind: ExprKind::Http { method, url: Box::new(url), body, headers } })
+    Ok(Expr { span: join(start, end), kind: ExprKind::Http { method, url: Box::new(url), from, body, headers, query } })
 }
 
 /// `order by c.field [desc], ...`, if it is there; `end` moves past it.

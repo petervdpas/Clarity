@@ -1779,25 +1779,39 @@ impl<'a> Emitter<'a> {
                 }
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, body, headers } => {
+            ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = bare(self.value(url, pre));
                 let body = match body {
                     Some(body) => bare(self.value(body, pre)),
                     None => "NULL".to_string(),
                 };
-                let headers = if headers.is_empty() {
-                    "NULL, 0".to_string()
-                } else {
-                    let items: Vec<String> = headers.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
-                    format!("(ClarityHttpHeader[]){{{}}}, {}", items.join(", "), headers.len())
+                let mut pairs = |pairs: &[clarity_spec::code::HttpPair], pre: &mut String| {
+                    if pairs.is_empty() {
+                        return "NULL, 0".to_string();
+                    }
+                    let items: Vec<String> = pairs.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
+                    format!("(ClarityHttpHeader[]){{{}}}, {}", items.join(", "), pairs.len())
                 };
+                let headers = pairs(headers, pre);
+                let query_pairs = pairs(query, pre);
                 let method = match method {
                     HttpMethod::Get => "CLARITY_HTTP_GET",
                     HttpMethod::Post => "CLARITY_HTTP_POST",
                     HttpMethod::Put => "CLARITY_HTTP_PUT",
                     HttpMethod::Delete => "CLARITY_HTTP_DELETE",
                 };
-                format!("clarity_http_call({method}, {url}, {body}, {headers})")
+                if from.is_none() && query.is_empty() {
+                    return format!("clarity_http_call({method}, {url}, {body}, {headers})");
+                }
+                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
+                let (kind, secret) = match auth {
+                    Some(("bearer", s)) => ("CLARITY_AUTH_BEARER", string(s)),
+                    Some(("api-key", s)) => ("CLARITY_AUTH_API_KEY", string(s)),
+                    Some(("basic", s)) => ("CLARITY_AUTH_BASIC", string(s)),
+                    _ => ("CLARITY_AUTH_NONE", "NULL".to_string()),
+                };
+                format!("clarity_http_call_at({method}, {}, {url}, {query_pairs}, {body}, {headers}, {kind}, {secret})", string(base))
             }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args, pre)

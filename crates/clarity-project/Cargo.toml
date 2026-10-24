@@ -10,6 +10,9 @@ clarity-spec.workspace = true
 clarity-db.workspace = true
 serde.workspace = true
 ts-rs.workspace = true
+# OpenAPI descriptions in YAML or JSON (DESIGN 5.23).
+yaml-rust2 = "0.13"
 
 [dev-dependencies]
+serde_json.workspace = true
 rusqlite = { version = "0.40", features = ["bundled"] }

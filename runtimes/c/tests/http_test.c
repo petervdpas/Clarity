@@ -1,6 +1,8 @@
 // HTTP calls (DESIGN 5.23) against the cases every runtime shares
 // (conformance/http.json), on the test server of http_server.h.
 
+#include <stdlib.h>
+
 #include "check.h"
 #include "http/http.h"
 #include "http_server.h"
@@ -17,6 +19,14 @@ void every_http_call_gives_the_reply_the_cases_name(void) {
     cJSON* cases = conformance("http.json");
     REQUIRE(cases);
     const char* server = http_test_start();
+    const cJSON* env;
+    cJSON_ArrayForEach(env, cJSON_GetObjectItem(cases, "env")) {
+#ifdef _WIN32
+        _putenv_s(env->string, env->valuestring);
+#else
+        setenv(env->string, env->valuestring, 1);
+#endif
+    }
     const cJSON* c;
     cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "cases")) {
         const cJSON* url = cJSON_GetObjectItem(c, "url");
@@ -29,6 +39,23 @@ void every_http_call_gives_the_reply_the_cases_name(void) {
             if (count < 4) headers[count++] = (ClarityHttpHeader){header->string, header->valuestring};
         }
         ClarityHttpReply reply = clarity_http_call(method_of(cJSON_GetObjectItem(c, "method")->valuestring), called, cJSON_IsString(body) ? body->valuestring : NULL, headers, count);
+        const cJSON* base = cJSON_GetObjectItem(c, "base");
+        if (cJSON_IsString(base)) {
+            const char* at = base->valuestring;
+            const char* mark = strstr(at, "{server}");
+            if (mark) at = clarity_format("%.*s%s%s", (int)(mark - at), at, server, mark + 8);
+            ClarityHttpHeader query[4];
+            size_t query_count = 0;
+            const cJSON* pair;
+            cJSON_ArrayForEach(pair, cJSON_GetObjectItem(c, "query")) {
+                if (query_count < 4) query[query_count++] = (ClarityHttpHeader){cJSON_GetArrayItem(pair, 0)->valuestring, cJSON_GetArrayItem(pair, 1)->valuestring};
+            }
+            const cJSON* auth = cJSON_GetObjectItem(c, "auth");
+            const char* kind = auth ? cJSON_GetObjectItem(auth, "kind")->valuestring : "";
+            ClarityAuthKind signed_by = strcmp(kind, "bearer") == 0 ? CLARITY_AUTH_BEARER : strcmp(kind, "api-key") == 0 ? CLARITY_AUTH_API_KEY : strcmp(kind, "basic") == 0 ? CLARITY_AUTH_BASIC : CLARITY_AUTH_NONE;
+            reply = clarity_http_call_at(method_of(cJSON_GetObjectItem(c, "method")->valuestring), at, cJSON_GetObjectItem(c, "path")->valuestring, query, query_count,
+                                         cJSON_IsString(body) ? body->valuestring : NULL, headers, count, signed_by, auth ? cJSON_GetObjectItem(auth, "secret")->valuestring : NULL);
+        }
         CHECK_INT(reply.status, (int64_t)cJSON_GetObjectItem(c, "status")->valuedouble);
         CHECK(reply.ok == cJSON_IsTrue(cJSON_GetObjectItem(c, "ok")));
         const cJSON* text = cJSON_GetObjectItem(c, "text");

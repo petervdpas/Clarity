@@ -1629,7 +1629,7 @@ pub(crate) fn check_sources(project: &mut Project) {
         let Some(source) = &file.source else { continue };
         let message = match project.sources.iter().find(|s| s.name == source.name) {
             None => format!("unknown data source '{}'; the project has {}", source.name, listed(&names)),
-            Some(s) if !s.sql => format!("'{}' is a web API; entities cannot live in a web API yet", source.name),
+            // Entities in a web API (DESIGN 5.23): its actions read and send them.
             Some(_) => continue,
         };
         found.push(Diagnostic::error(message, source.span).in_file(&file.path));

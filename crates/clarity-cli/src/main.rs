@@ -225,6 +225,13 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
 /// Loads the modules of a project, given its project file or its folder.
 fn load(path: &std::path::Path) -> Result<clarity_spec::Project, ExitCode> {
     let dir = if path.is_file() { clarity_project::module_dir(path) } else { path.to_path_buf() };
+    // Each web API's module follows its description and picks (DESIGN 5.23).
+    if path.is_file() {
+        match clarity_project::refresh_apis(path) {
+            Ok(warnings) => warnings.iter().for_each(|w| eprintln!("clarity: {w}")),
+            Err(why) => eprintln!("clarity: {why}"),
+        }
+    }
     clarity_project::load_modules(&dir).map_err(|err| {
         eprintln!("clarity: cannot read {}: {err}", dir.display());
         ExitCode::from(2)

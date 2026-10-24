@@ -68,6 +68,34 @@ code Orders
 - What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of records. The records are new: `save` adds them.
 - JSON that does not fit stops the handler with a message that says where, such as `field 'lines' of Order is an integer, not "three"`, as a refused save does.
 
+## A web API data source
+
+A web API the application works with is a data source of the project, with its address and where its key is:
+
+```
+datasource forms rest "https://forms.example.com/api"
+    auth bearer "env:FORMS_TOKEN"
+```
+
+`http get "/templates" from forms` calls a path of it: at its address, signed with its key. `query "status": status` adds a query parameter, encoded, as many as needed. A module with `source forms` holds the records the service keeps: they are not stored in a database, so no migration covers them, and `find`, `save` and `delete` do not reach them. Its actions read and send them.
+
+## An OpenAPI description
+
+A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it with **API...** beside the data source in the project settings. Then pick what the application uses:
+
+```
+datasource forms rest "https://forms.example.com/api"
+    auth bearer "env:FORMS_TOKEN"
+    openapi "forms.yaml"
+    pick "listTemplates", "getTemplate", "createTemplate"
+```
+
+- Clarity writes the module `apis/forms.clarity` from the description: an action for each picked operation (`list_templates(status: text) -> list<Template>`), and an entity for each schema they take or give. `pick schema "Entry"` makes a schema an entity on its own.
+- Only what is picked is written, so a service with many operations and schemas gives the application just what it uses. **API...** lists them all with a box to pick each.
+- The module is Clarity's: do not edit it. Clarity writes it again when the description or the picks change, so a new revision of the description updates the entities and actions. A pick the new revision no longer has is a warning.
+- Your own modules use it with `use forms`, and call its actions as any others: `templates = list_templates("published")`.
+- Not yet read: optional query parameters, which a comment above the action names, nested objects and lists of them, and patch operations.
+
 ## Where code calls out
 
 - **Handlers** and **commands** call out as they are.

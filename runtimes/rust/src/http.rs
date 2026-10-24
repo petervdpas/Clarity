@@ -79,6 +79,66 @@ pub fn call(method: Method, url: &str, body: Option<&str>, headers: &[(&str, &st
     }
 }
 
+/// How a web API data source signs its calls: the project file's `auth`
+/// line, its secret read from where it says (`env:NAME`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Auth<'a> {
+    None,
+    Bearer(&'a str),
+    ApiKey(&'a str),
+    Basic(&'a str),
+}
+
+/// A secret where the project file says it is: `env:NAME` reads that
+/// environment variable; empty when it is not set.
+fn secret(location: &str) -> String {
+    match location.strip_prefix("env:") {
+        Some(name) => std::env::var(name).unwrap_or_default(),
+        None => location.to_string(),
+    }
+}
+
+/// Text as a part of a url: letters, digits and `- . _ ~` as they are, every
+/// other byte of its UTF-8 as `%XX`.
+pub fn encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') { (b as char).to_string() } else { format!("%{b:02X}") })
+        .collect()
+}
+
+/// `path` at `base`, one slash between them; a whole url stays as it is.
+fn joined(base: &str, path: &str) -> String {
+    if base.is_empty() || path.contains("://") {
+        return path.to_string();
+    }
+    format!("{}/{}", base.trim_end_matches('/'), path.trim_start_matches('/'))
+}
+
+/// Calls `path` of the web API at `base` (a data source's address) with the
+/// query parameters, encoded and in order, and the source's auth, as
+/// `http get "/orders" from shop query "status": s` does.
+pub fn call_at(method: Method, base: &str, path: &str, query: &[(&str, &str)], body: Option<&str>, headers: &[(&str, &str)], auth: Auth) -> Reply {
+    let mut url = joined(base, path);
+    for (i, (name, value)) in query.iter().enumerate() {
+        let joint = if i == 0 && !url.contains('?') { '?' } else { '&' };
+        url.push_str(&format!("{joint}{}={}", encode(name), encode(value)));
+    }
+    let signed = match auth {
+        Auth::None => None,
+        Auth::Bearer(at) => Some(("Authorization", format!("Bearer {}", secret(at)))),
+        Auth::ApiKey(at) => Some(("X-Api-Key", secret(at))),
+        Auth::Basic(at) => {
+            use base64::Engine as _;
+            Some(("Authorization", format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(secret(at)))))
+        }
+    };
+    let mut all: Vec<(&str, &str)> = headers.to_vec();
+    if let Some((name, value)) = &signed {
+        all.push((name, value.as_str()));
+    }
+    call(method, &url, body, &all)
+}
+
 #[cfg(test)]
 mod tests {
     use super::host_of;

@@ -44,6 +44,25 @@ typedef struct {
 /// nothing) and the `count` headers of `headers`, and gives the reply.
 ClarityHttpReply clarity_http_call(ClarityHttpMethod method, const char* url, const char* body, const ClarityHttpHeader* headers, size_t count);
 
+/// How a web API data source signs its calls: the project file's `auth`
+/// line, its secret read from where it says (`env:NAME`).
+typedef enum {
+    CLARITY_AUTH_NONE,
+    CLARITY_AUTH_BEARER,
+    CLARITY_AUTH_API_KEY,
+    CLARITY_AUTH_BASIC,
+} ClarityAuthKind;
+
+/// Calls `path` of the web API at `base` (a data source's address) with the
+/// `query_count` query parameters, encoded and in order, and the source's
+/// auth, as `http get "/orders" from shop query "status": s` does.
+ClarityHttpReply clarity_http_call_at(ClarityHttpMethod method, const char* base, const char* path, const ClarityHttpHeader* query, size_t query_count, const char* body,
+                                      const ClarityHttpHeader* headers, size_t count, ClarityAuthKind auth, const char* secret);
+
+/// Text as a part of a url: letters, digits and `- . _ ~` as they are, every
+/// other byte of its UTF-8 as `%XX`; in the scratch arena.
+const char* clarity_url_part(const char* text);
+
 /// The host a url names, without the scheme, a login, the port and the
 /// path, in the scratch arena.
 const char* clarity_http_host(const char* url);

@@ -1429,19 +1429,31 @@ impl<'a> Emitter<'a> {
                 self.lift(format!("clarity.{read}({text}, {at}, {}, []clarity.JSONField{{{}}}, New{entity}())", string(entity), fields.join(", ")), pre)
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, body, headers } => {
+            ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = bare(self.value(url, pre));
                 let body = match body {
                     Some(body) => bare(self.value(body, pre)),
                     None => "\"\"".to_string(),
                 };
-                let headers = if headers.is_empty() {
-                    "nil".to_string()
-                } else {
-                    let items: Vec<String> = headers.iter().map(|h| format!("{{Name: {}, Value: {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
+                let mut pairs = |pairs: &[clarity_spec::code::HttpPair], pre: &mut String| {
+                    if pairs.is_empty() {
+                        return "nil".to_string();
+                    }
+                    let items: Vec<String> = pairs.iter().map(|h| format!("{{Name: {}, Value: {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
                     format!("[]clarity.Header{{{}}}", items.join(", "))
                 };
-                format!("clarity.HTTP({}, {url}, {body}, {headers})", string(method.verb()))
+                let headers = pairs(headers, pre);
+                if from.is_none() && query.is_empty() {
+                    return format!("clarity.HTTP({}, {url}, {body}, {headers})", string(method.verb()));
+                }
+                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                let query = pairs(query, pre);
+                let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
+                let auth = match auth {
+                    Some((kind, secret)) => format!("clarity.HTTPAuth{{Kind: {}, Secret: {}}}", string(kind), string(secret)),
+                    None => "clarity.HTTPAuth{}".to_string(),
+                };
+                format!("clarity.HTTPAt({}, {}, {url}, {query}, {body}, {headers}, {auth})", string(method.verb()), string(base))
             }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args, pre)

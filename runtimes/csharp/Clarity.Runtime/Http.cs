@@ -46,6 +46,55 @@ public static class Http
         return port >= 0 ? rest[..port] : rest;
     }
 
+    /// <summary>Text as a part of a url: letters, digits and - . _ ~ as they are, every other byte of its UTF-8 as %XX.</summary>
+    public static string Part(string text)
+    {
+        var out_ = new StringBuilder();
+        foreach (var b in Encoding.UTF8.GetBytes(text))
+        {
+            if (b is >= (byte)'a' and <= (byte)'z' or >= (byte)'A' and <= (byte)'Z' or >= (byte)'0' and <= (byte)'9' or (byte)'-' or (byte)'.' or (byte)'_' or (byte)'~')
+                out_.Append((char)b);
+            else
+                out_.Append('%').Append(b.ToString("X2"));
+        }
+        return out_.ToString();
+    }
+
+    /// <summary>A secret where the project file says it is: env:NAME reads that environment variable; empty when it is not set.</summary>
+    static string Secret(string location) =>
+        location.StartsWith("env:", StringComparison.Ordinal) ? Environment.GetEnvironmentVariable(location[4..]) ?? "" : location;
+
+    /// <summary>Calls <paramref name="path"/> of the web API at <paramref name="baseAddress"/> (a data source's address) with the
+    /// query parameters, encoded and in order, and the source's auth (<paramref name="authKind"/> bearer, api-key or basic, its
+    /// secret read from <paramref name="secret"/>), as <c>http get "/orders" from shop query "status": s</c> does.</summary>
+    public static HttpReply At(string method, string baseAddress, string path, (string Name, string Value)[] query, string? body, (string Name, string Value)[] headers, string? authKind, string? secret)
+    {
+        var url = baseAddress.Length == 0 || path.Contains("://") ? path : $"{baseAddress.TrimEnd('/')}/{path.TrimStart('/')}";
+        for (var i = 0; i < query.Length; i++)
+            url += (i == 0 && !url.Contains('?') ? "?" : "&") + Part(query[i].Name) + "=" + Part(query[i].Value);
+        var all = headers.ToList();
+        switch (authKind)
+        {
+            case "bearer":
+                all.Add(("Authorization", "Bearer " + Secret(secret ?? "")));
+                break;
+            case "api-key":
+                all.Add(("X-Api-Key", Secret(secret ?? "")));
+                break;
+            case "basic":
+                all.Add(("Authorization", "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes(Secret(secret ?? "")))));
+                break;
+        }
+        var kind = method switch
+        {
+            "POST" => HttpMethod.Post,
+            "PUT" => HttpMethod.Put,
+            "DELETE" => HttpMethod.Delete,
+            _ => HttpMethod.Get,
+        };
+        return Call(kind, url, body, [.. all]);
+    }
+
     static HttpReply None(string why) => new(0, false, why);
 
     static HttpReply Call(HttpMethod method, string url, string? body, (string Name, string Value)[] headers)

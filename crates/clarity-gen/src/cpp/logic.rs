@@ -1166,7 +1166,7 @@ impl<'a> Emitter<'a> {
                 format!("clarity::json_read<{read}>({text}, {at}, {many}, {}, {{{}}}, {entity}{{}})", string(entity), fields.join(", "))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, body, headers } => {
+            ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
                     Some(body) => self.value(body),
@@ -1179,7 +1179,25 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Put => "Put",
                     HttpMethod::Delete => "Delete",
                 };
-                format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {{{}}})", items.join(", "))
+                if from.is_none() && query.is_empty() {
+                    return format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {{{}}})", items.join(", "));
+                }
+                // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
+                let query: Vec<String> = query.iter().map(|q| format!("{{{}, {}}}", string(&q.name.name), self.value(&q.value))).collect();
+                let (kind, secret) = match auth {
+                    Some(("bearer", s)) => ("Bearer", s),
+                    Some(("api-key", s)) => ("ApiKey", s),
+                    Some(("basic", s)) => ("Basic", s),
+                    _ => ("None", ""),
+                };
+                format!(
+                    "clarity::http_call_at(clarity::HttpMethod::{method}, std::string({}), {url}, {{{}}}, {body}, {{{}}}, clarity::HttpAuth::{kind}, std::string({}))",
+                    string(base),
+                    query.join(", "),
+                    items.join(", "),
+                    string(secret)
+                )
             }
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args)

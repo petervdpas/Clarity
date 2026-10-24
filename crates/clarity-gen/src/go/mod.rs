@@ -91,7 +91,7 @@ pub fn module_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "Go")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let module = module_name(settings);
     let types = check::types(&project.files);
     let mut errors = Vec::new();

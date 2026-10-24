@@ -992,10 +992,18 @@ impl<'a> Emitter<'a> {
                 format!("JsonValues.{read}({text}, {at}, {}, [{}], new {entity}())", string(entity), fields.join(", "))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, body, headers } => {
+            ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = self.value(url);
                 let items: Vec<String> = headers.iter().map(|h| format!("({}, {})", string(&h.name.name), self.value(&h.value))).collect();
                 let headers = format!("[{}]", items.join(", "));
+                if from.is_some() || !query.is_empty() {
+                    // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
+                    let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
+                    let query: Vec<String> = query.iter().map(|q| format!("({}, {})", string(&q.name.name), self.value(&q.value))).collect();
+                    let body = body.as_ref().map_or("null".to_string(), |b| self.value(b));
+                    let (kind, secret) = auth.map_or(("null".to_string(), "null".to_string()), |(k, s)| (string(k), string(s)));
+                    return format!("Http.At({}, {}, {url}, [{}], {body}, {headers}, {kind}, {secret})", string(method.verb()), string(base), query.join(", "));
+                }
                 let call = pascal(method.word());
                 match body {
                     Some(body) => format!("Http.{call}({url}, {}, {headers})", self.value(body)),

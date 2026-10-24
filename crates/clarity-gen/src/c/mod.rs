@@ -148,7 +148,7 @@ pub fn program_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "C")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     if let Some((name, sql, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {
         return Err(vec![format!(
             "data source '{name}' is a {} database; the C backend stores records in SQLite for now",

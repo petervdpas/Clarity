@@ -160,6 +160,8 @@ pub fn stack_tools() -> Vec<StackTools> {
 /// (with `release`) a release program.
 pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
     let dir = clarity_project::module_dir(file);
+    // Each web API's module follows its description and picks (DESIGN 5.23).
+    clarity_project::refresh_apis(file)?;
     let mut project = clarity_project::load_modules(&dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     // Each native part's header follows its declaration, and a new part gets a starter (DESIGN 5.19).
     let written = clarity_gen::parts::write_part_folders(&dir, &project).map_err(|err| format!("cannot write the parts' folders: {err}"))?;

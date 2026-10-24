@@ -115,7 +115,7 @@ fn csproj(name: &str, program: &str, servers: &[&Server], engines: bool) -> Stri
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings, "C#")?;
+    let (databases, owned) = crate::databases(project, settings)?;
     let name = super::project_name(settings);
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);

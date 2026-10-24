@@ -12,9 +12,15 @@ use std::process::Command;
 use clarity_project::Backend;
 
 const FIXTURE: &str = include_str!("fixtures/calls.clarity");
+const STORE: &str = include_str!("fixtures/store.clarity");
 
-fn files(backend: Backend) -> Vec<clarity_gen::OutFile> {
-    let project = clarity_spec::load_sources([("calls/calls.clarity", FIXTURE)]);
+/// The program on `backend`, its web API data source `shop` at `server`,
+/// signed with a bearer token from CALLS_TOKEN.
+fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
+    let sources = [clarity_spec::SourceRef::sql("main"), clarity_spec::SourceRef::web("shop").at(server, Some(("bearer", "env:CALLS_TOKEN")))];
+    // Order lives in the database and has its step; Item lives in the web API and needs none.
+    let step = "migration \"Orders\"\n    add entity Order\n        number: text(20)\n        total: money\n        lines: integer\n        paid: bool\n        kind: Kind\n        placed: date\n        tags: list<text>\n";
+    let project = clarity_spec::load_in([("calls/calls.clarity", FIXTURE), ("calls/store.clarity", STORE)], [("migrations/main/0001.clarity", step)], &sources);
     let errors: Vec<String> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.clone()).collect();
     assert!(errors.is_empty(), "{errors:#?}");
     let mut settings = clarity_project::parse("project Calls\n    stack rust cli\n    datasource main sqlite \"data/calls.db\"\n").unwrap();
@@ -46,8 +52,9 @@ fn serve() -> String {
                 continue;
             }
             let mut words = line.split_whitespace();
-            let (method, path) = (words.next().unwrap_or_default().to_string(), words.next().unwrap_or_default().to_string());
-            let (mut length, mut test) = (0, String::new());
+            let (method, target) = (words.next().unwrap_or_default().to_string(), words.next().unwrap_or_default().to_string());
+            let (path, query) = target.split_once('?').map_or((target.clone(), String::new()), |(p, q)| (p.to_string(), q.to_string()));
+            let (mut length, mut test, mut authorization) = (0, String::new(), String::new());
             loop {
                 let mut header = String::new();
                 if reader.read_line(&mut header).is_err() {
@@ -61,6 +68,7 @@ fn serve() -> String {
                 match name.to_ascii_lowercase().as_str() {
                     "content-length" => length = value.trim().parse().unwrap_or(0),
                     "x-test" => test = value.trim().to_string(),
+                    "authorization" => authorization = value.trim().to_string(),
                     _ => {}
                 }
             }
@@ -70,6 +78,9 @@ fn serve() -> String {
                 "/hello" => (200, "hello".to_string()),
                 "/echo" => (200, format!("{method} {}", String::from_utf8_lossy(&body))),
                 "/header" => (200, test),
+                "/query" => (200, query.clone()),
+                "/auth" => (200, authorization.clone()),
+                "/items" => (200, r#"{"items": [{"name": "Pen", "price": 1.5}, {"Name": "Ink", "PRICE": "12"}]}"#.to_string()),
                 // A service's list: its own names, a number for money, a string for an integer.
                 "/orders" => (
                     200,
@@ -92,14 +103,13 @@ fn serve() -> String {
 
 /// What the program printed for `args`.
 fn printed(program: &Path, dir: &Path, args: &[&str]) -> String {
-    let out = Command::new(program).args(args).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).output().unwrap();
+    let out = Command::new(program).args(args).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).env("CALLS_TOKEN", "t0k3n").output().unwrap();
     assert!(out.status.success(), "{args:?}: {}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     String::from_utf8_lossy(&out.stdout).trim_end().to_string()
 }
 
 /// The program's calls, against the server, as the cases of conformance/http.json.
-fn the_calls_come_back(program: &Path, dir: &Path) {
-    let server = serve();
+fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert_eq!(printed(program, dir, &["fetch", &format!("{server}/hello")]), "200 yes hello");
     assert_eq!(printed(program, dir, &["fetch", &format!("{server}/missing")]), "404 no no such page");
     assert_eq!(printed(program, dir, &["fetch", &format!("{server}/header")]), "200 yes blue");
@@ -117,20 +127,23 @@ fn the_calls_come_back(program: &Path, dir: &Path) {
     let broken = Command::new(program).args(["broken", &format!("{server}/missing")]).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).output().unwrap();
     assert!(!broken.status.success());
     assert!(String::from_utf8_lossy(&broken.stderr).contains("the text is no JSON"), "{}", String::from_utf8_lossy(&broken.stderr));
+    // A web API data source (DESIGN 5.23): its entities read from its paths, its query encoded, its calls signed.
+    assert_eq!(printed(program, dir, &["store", "open & paid"]), "Pen 1.5\nInk 12\nstatus=open%20%26%20paid&page=2\nBearer t0k3n");
 }
 
 #[test]
 #[ignore = "builds the Rust program with cargo"]
 fn a_rust_program_calls_out() {
     let out = scratch("http-rust");
-    clarity_gen::write_out(&out, &files(Backend::Rust), &["target", "data", ".cargo"]).unwrap();
+    let server = serve();
+    clarity_gen::write_out(&out, &files(Backend::Rust, &server), &["target", "data", ".cargo"]).unwrap();
     // On the runtime in this repository.
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap();
     std::fs::create_dir_all(out.join(".cargo")).unwrap();
     std::fs::write(out.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", clarity_project::slashed(&runtime))).unwrap();
     let status = Command::new("cargo").args(["build", "--quiet"]).current_dir(&out).env("CARGO_BUILD_JOBS", "2").status().unwrap();
     assert!(status.success());
-    the_calls_come_back(&out.join("target/debug/calls"), &out);
+    the_calls_come_back(&out.join("target/debug/calls"), &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -138,7 +151,8 @@ fn a_rust_program_calls_out() {
 #[ignore = "builds the Go program with go"]
 fn a_go_program_calls_out() {
     let out = scratch("http-go");
-    clarity_gen::write_out(&out, &files(Backend::Go), &["bin", "data", "go.work"]).unwrap();
+    let server = serve();
+    clarity_gen::write_out(&out, &files(Backend::Go, &server), &["bin", "data", "go.work"]).unwrap();
     // On the runtime in this repository, through a workspace.
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap();
     let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
@@ -149,7 +163,7 @@ fn a_go_program_calls_out() {
     assert!(vet.status.success(), "{}", String::from_utf8_lossy(&vet.stderr));
     let build = Command::new("go").args(["build", "-o", "bin/calls", "."]).current_dir(&out).output().unwrap();
     assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
-    the_calls_come_back(&out.join("bin/calls"), &out);
+    the_calls_come_back(&out.join("bin/calls"), &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -157,7 +171,8 @@ fn a_go_program_calls_out() {
 #[ignore = "builds the C# program with dotnet"]
 fn a_csharp_program_calls_out() {
     let out = scratch("http-csharp");
-    clarity_gen::write_out(&out, &files(Backend::Csharp), &["bin", "obj", "data"]).unwrap();
+    let server = serve();
+    clarity_gen::write_out(&out, &files(Backend::Csharp, &server), &["bin", "obj", "data"]).unwrap();
     // On the runtime projects in this repository.
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp").canonicalize().unwrap();
     let build = Command::new("dotnet")
@@ -167,7 +182,7 @@ fn a_csharp_program_calls_out() {
         .output()
         .unwrap();
     assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stdout));
-    the_calls_come_back(&out.join("bin/Debug/net10.0/calls"), &out);
+    the_calls_come_back(&out.join("bin/Debug/net10.0/calls"), &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -184,9 +199,10 @@ fn cmake_build(out: &Path, program: &str) -> PathBuf {
 #[ignore = "builds the C program with CMake"]
 fn a_c_program_calls_out() {
     let out = scratch("http-c");
-    clarity_gen::write_out(&out, &files(Backend::C), &["build", "data"]).unwrap();
+    let server = serve();
+    clarity_gen::write_out(&out, &files(Backend::C, &server), &["build", "data"]).unwrap();
     let program = cmake_build(&out, "calls");
-    the_calls_come_back(&program, &out);
+    the_calls_come_back(&program, &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -194,8 +210,9 @@ fn a_c_program_calls_out() {
 #[ignore = "builds the C++ program with CMake"]
 fn a_cpp_program_calls_out() {
     let out = scratch("http-cpp");
-    clarity_gen::write_out(&out, &files(Backend::Cpp), &["build", "data"]).unwrap();
+    let server = serve();
+    clarity_gen::write_out(&out, &files(Backend::Cpp, &server), &["build", "data"]).unwrap();
     let program = cmake_build(&out, "calls");
-    the_calls_come_back(&program, &out);
+    the_calls_come_back(&program, &out, &server);
     std::fs::remove_dir_all(&out).unwrap();
 }

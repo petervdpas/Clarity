@@ -9,6 +9,7 @@ mod engines;
 mod environment;
 mod parts;
 mod external;
+mod apis;
 mod themes;
 mod translations;
 mod vault;
@@ -126,8 +127,12 @@ fn changes_project(event: &notify::Event, file: &Path, dir: &Path) -> bool {
         let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
         let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
         let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
+        let apis = dir.join(clarity_spec::APIS_DIR);
         p == file
             || (is_spec_file(p) && (folder == Some(dir) || folder == Some(&dir.join(clarity_spec::MIGRATIONS_DIR))))
+            // A web API's description and the module Clarity writes from it (DESIGN 5.23).
+            || *p == apis
+            || folder == Some(&apis)
             || *p == resources
             || folder == Some(&resources)
             || *p == engines
@@ -155,8 +160,9 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
     let resources = dir.join(clarity_spec::resources::RESOURCES_DIR);
     let engines = dir.join(clarity_spec::engines::ENGINES_DIR);
     let diagrams = dir.join(clarity_spec::diagrams::DIAGRAMS_DIR);
+    let apis = dir.join(clarity_spec::APIS_DIR);
     let mut folders = vec![dir, file.parent().unwrap_or(dir)];
-    for extra in [&steps, &resources, &engines, &diagrams] {
+    for extra in [&steps, &resources, &engines, &diagrams, &apis] {
         if extra.is_dir() {
             folders.push(extra);
         }
@@ -172,6 +178,9 @@ fn watch(file: &Path, dir: &Path, app: AppHandle) -> Result<notify::RecommendedW
         // Ends when the watcher (and with it the sender) is dropped.
         while rx.recv().is_ok() {
             while rx.recv_timeout(DEBOUNCE).is_ok() {}
+            // A new revision of a web API's description, or other picks, write its module again;
+            // writing it is a change too, after which nothing differs.
+            let _ = clarity_project::refresh_apis(&file);
             if let Ok(preview) = load(&dir) {
                 let _ = app.emit(PREVIEW_UPDATED, preview);
             }
@@ -220,6 +229,8 @@ fn project_paths(path: &str) -> Result<(PathBuf, PathBuf), String> {
 
 fn open_file(path: &str, app: AppHandle, state: &WatchState, history: &HistoryState) -> Result<Preview, String> {
     let (file, dir) = project_paths(path)?;
+    // The modules of the web APIs, as their descriptions and picks are now (DESIGN 5.23).
+    let _ = clarity_project::refresh_apis(&file);
     let preview = load(&dir)?;
     let watcher = watch(&file, &dir, app)?;
     *state.open.lock().map_err(|_| "watch state is poisoned")? = Some(OpenProject {
@@ -819,6 +830,8 @@ pub fn run() {
             migrations::pending_migration,
             migrations::create_migration,
             external::source_tables,
+            apis::api_listing,
+            apis::add_api_file,
             external::import_tables,
             external::take_ownership,
             translations::translation_table,

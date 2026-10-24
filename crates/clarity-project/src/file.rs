@@ -126,6 +126,29 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         if entry.indent == 0 {
             return Err(format!("line {line}: a project file holds one project; indent its settings"));
         }
+        // `openapi "forms.yaml"`, `pick "listTemplates", ...` and `pick schema
+        // "Entry"` under a web API data source (DESIGN 5.23).
+        if entry.indent > setting_indent && (keyword == "openapi" || keyword == "pick") {
+            let Some(source) = datasources.last_mut() else {
+                return Err(format!("line {line}: '{keyword}' belongs under a datasource line, indented"));
+            };
+            let a = args(entry);
+            if keyword == "openapi" {
+                if a.len() != 1 || source.openapi.is_some() {
+                    return Err(format!("line {line}: write 'openapi \"file.yaml\"' once per data source"));
+                }
+                source.openapi = Some(string(line, a.first(), "the description's file")?);
+                continue;
+            }
+            let schemas = a.first().and_then(|t| word(t)) == Some("schema");
+            let named: Vec<&&Token> = a[usize::from(schemas)..].iter().filter(|t| t.kind != TokenKind::Comma).collect();
+            if named.is_empty() || named.iter().any(|t| t.kind != TokenKind::Str) {
+                return Err(format!("line {line}: write what is picked as texts in quotes, like: pick \"listTemplates\", \"getTemplate\""));
+            }
+            let into = if schemas { &mut source.pick_schemas } else { &mut source.picks };
+            into.extend(named.iter().map(|t| t.text.clone()));
+            continue;
+        }
         if entry.indent > setting_indent {
             if keyword != "auth" {
                 return Err(format!("line {line}: unexpected indented line"));
@@ -272,6 +295,9 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     auth: None,
                     external,
                     readonly,
+                    openapi: None,
+                    picks: Vec::new(),
+                    pick_schemas: Vec::new(),
                 });
             }
             "filestore" => {
@@ -326,6 +352,9 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
         "datasource" => format!("datasource {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "filestore" => format!("filestore {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "auth" => format!("auth {}", current_source.unwrap_or("")),
+        "openapi" => format!("openapi {}", current_source.unwrap_or("")),
+        "pick" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("schema") => format!("pick schema {}", current_source.unwrap_or("")),
+        "pick" => format!("pick {}", current_source.unwrap_or("")),
         // The two kinds of output line: where it is, and what it keeps.
         "output" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("keeps") => "output keeps".to_string(),
         other => other.to_string(),
@@ -421,6 +450,17 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
                 2,
                 format!("auth {} {}", auth_word(auth.kind), quote(&auth.secret)),
             ));
+        }
+        if let Some(openapi) = &source.openapi {
+            lines.push((format!("openapi {}", source.name), 2, format!("openapi {}", quote(openapi))));
+        }
+        if !source.picks.is_empty() {
+            let picks: Vec<String> = source.picks.iter().map(|p| quote(p)).collect();
+            lines.push((format!("pick {}", source.name), 2, format!("pick {}", picks.join(", "))));
+        }
+        if !source.pick_schemas.is_empty() {
+            let picks: Vec<String> = source.pick_schemas.iter().map(|p| quote(p)).collect();
+            lines.push((format!("pick schema {}", source.name), 2, format!("pick schema {}", picks.join(", "))));
         }
     }
     for store in &settings.filestores {

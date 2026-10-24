@@ -3,11 +3,13 @@
 #include "http/http.h"
 
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <curl/curl.h>
 
 #include "clarity/core.h"
+#include "clarity/picture.h"
 
 static size_t keep(char* data, size_t size, size_t count, void* into) {
     clarity_buffer_add_n((ClarityBuffer*)into, data, size * count);
@@ -89,4 +91,62 @@ ClarityHttpReply clarity_http_call(ClarityHttpMethod method, const char* url, co
     if (done != CURLE_OK) return none(clarity_format("cannot reach %s: %s", clarity_http_host(url), curl_easy_strerror(done)));
     ClarityHttpReply reply = {status, status >= 200 && status < 300, clarity_buffer_text(&answer)};
     return reply;
+}
+
+const char* clarity_url_part(const char* text) {
+    ClarityBuffer out = {0};
+    for (const unsigned char* c = (const unsigned char*)(text ? text : ""); *c; c++) {
+        if (isalnum(*c) || *c == '-' || *c == '.' || *c == '_' || *c == '~') clarity_buffer_add_char(&out, (char)*c);
+        else clarity_buffer_addf(&out, "%%%02X", *c);
+    }
+    return clarity_buffer_text(&out);
+}
+
+/// A secret where the project file says it is: `env:NAME` reads that
+/// environment variable; empty when it is not set.
+static const char* secret_at(const char* location) {
+    if (!location) return "";
+    if (strncmp(location, "env:", 4) == 0) {
+        const char* value = getenv(location + 4);
+        return value ? value : "";
+    }
+    return location;
+}
+
+ClarityHttpReply clarity_http_call_at(ClarityHttpMethod method, const char* base, const char* path, const ClarityHttpHeader* query, size_t query_count, const char* body,
+                                      const ClarityHttpHeader* headers, size_t count, ClarityAuthKind auth, const char* secret) {
+    ClarityBuffer url = {0};
+    path = path ? path : "";
+    if (base && *base && !strstr(path, "://")) {
+        size_t length = strlen(base);
+        while (length && base[length - 1] == '/') length--;
+        clarity_buffer_add_n(&url, base, length);
+        clarity_buffer_add_char(&url, '/');
+        while (*path == '/') path++;
+    }
+    clarity_buffer_add(&url, path);
+    for (size_t i = 0; i < query_count; i++) {
+        bool first = i == 0 && !strchr(clarity_buffer_text(&url), '?');
+        clarity_buffer_addf(&url, "%c%s=%s", first ? '?' : '&', clarity_url_part(query[i].name), clarity_url_part(query[i].value));
+    }
+    ClarityHttpHeader* all = CLARITY_NEW(ClarityHttpHeader, count + 1);
+    for (size_t i = 0; i < count; i++) all[i] = headers[i];
+    size_t total = count;
+    const char* key = secret_at(secret);
+    switch (auth) {
+        case CLARITY_AUTH_BEARER:
+            all[total++] = (ClarityHttpHeader){"Authorization", clarity_format("Bearer %s", key)};
+            break;
+        case CLARITY_AUTH_API_KEY:
+            all[total++] = (ClarityHttpHeader){"X-Api-Key", key};
+            break;
+        case CLARITY_AUTH_BASIC: {
+            ClarityBytes bytes = {(const uint8_t*)key, strlen(key)};
+            all[total++] = (ClarityHttpHeader){"Authorization", clarity_format("Basic %s", clarity_base64(bytes))};
+            break;
+        }
+        case CLARITY_AUTH_NONE:
+            break;
+    }
+    return clarity_http_call(method, clarity_buffer_text(&url), body, all, total);
 }

@@ -3,7 +3,7 @@ import type { Expr } from "./Expr";
 import type { Ident } from "./Ident";
 
 /**
- * `header "Accept": "text/plain"` of an HTTP call: the name as written, and
- * its value, a text.
+ * `header "Accept": "text/plain"` or `query "status": s` of an HTTP call:
+ * the name as written, and its value, a text.
  */
-export type HttpHeader = { name: Ident, value: Expr, };
+export type HttpPair = { name: Ident, value: Expr, };

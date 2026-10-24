@@ -64,7 +64,8 @@
     X(a_printed_table_lines_up_as_every_runtime_does)             \
     X(a_command_asks_on_a_terminal_as_every_runtime_does)        \
     X(every_http_call_gives_the_reply_the_cases_name)            \
-    X(a_url_names_its_host)
+    X(a_url_names_its_host)                                      \
+    X(json_is_fitted_as_every_runtime_fits_it)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

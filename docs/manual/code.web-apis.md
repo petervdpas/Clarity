@@ -47,6 +47,27 @@ let reply = http post "https://api.example.com/orders" with order.summary header
 
 A key or a token does not belong in the code, where everyone who reads the project sees it. Keep it in a [setting](../LANGUAGE.md#settings) and put it in with a slot, as above. A header named `Authorization`, or one whose name holds `key`, `token` or `secret`, with a plain text as its value is a warning on its line.
 
+## JSON
+
+Most services answer in JSON, and many want it sent. `json of` writes a record, a list or a value as JSON, and `read ... from json` reads records from it:
+
+```clarity
+action send_order(order: Order) -> integer
+    effects net
+    let reply = http post "https://api.example.com/orders" with json of order header "Content-Type": "application/json"
+    return reply.status
+
+code Orders
+    handler loadClicked
+        let reply = http get "https://api.example.com/orders"
+        orders = read list<Order> from json reply.text at "data"
+```
+
+- `read Order from json text` reads one record, `read list<Order> from json text` a list. `at "data"` starts inside the JSON, at the names given with dots between: `at "result.items"`.
+- A service names its fields its own way, so names match also ignoring case, underscores and hyphens: `creditLimit` fills `credit_limit`. A number fills a money or decimal field, and a string of a number fills an integer. A date and time fills a date with its date. An enum value matches in any case.
+- What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of records. The records are new: `save` adds them.
+- JSON that does not fit stops the handler with a message that says where, such as `field 'lines' of Order is an integer, not "three"`, as a refused save does.
+
 ## Where code calls out
 
 - **Handlers** and **commands** call out as they are.

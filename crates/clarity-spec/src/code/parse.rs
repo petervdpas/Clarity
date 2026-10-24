@@ -1262,6 +1262,34 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if token.text == "files" && cursor.peek_at(2).is_some_and(|t| t.text == "in") => {
             return parse_files(cursor);
         }
+        // `json of value` and `read Order from json text` (DESIGN 5.23).
+        TokenKind::Ident if token.text == "json" && cursor.peek_at(1).is_some_and(|t| t.text == "of") => {
+            cursor.next();
+            cursor.next();
+            let value = parse_postfix(cursor)?;
+            return Ok(Expr { span: join(token.span, value.span), kind: ExprKind::JsonOf { value: Box::new(value) } });
+        }
+        TokenKind::Ident
+            if token.text == "read"
+                && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident && t.text != "text" && t.text != "bytes")
+                && cursor.peek_at(2).is_some_and(|t| t.kind != TokenKind::Dot) =>
+        {
+            cursor.next();
+            let ty = parse_type_ref(cursor)?;
+            if !cursor.eat_keyword("from") || !cursor.eat_keyword("json") {
+                return Err(cursor.error_here("expected 'from json' and the text, as in read Order from json reply.text"));
+            }
+            let text = parse_expr(cursor)?;
+            let mut end = text.span;
+            let at = if cursor.eat_keyword("at") {
+                let at = parse_expr(cursor)?;
+                end = at.span;
+                Some(Box::new(at))
+            } else {
+                None
+            };
+            return Ok(Expr { span: join(token.span, end), kind: ExprKind::ReadJson { ty, text: Box::new(text), at } });
+        }
         // `http get url`: a call to a web API (DESIGN 5.23).
         TokenKind::Ident
             if token.text == "http" && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Ident && !RESERVED.contains(&t.text.as_str())) =>

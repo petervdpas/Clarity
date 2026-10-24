@@ -3,6 +3,19 @@
 // runs against a small server of its own.
 module calls
 
+enum Kind
+    Person
+    Business
+
+entity Order
+    number: text(20)
+    total: money
+    lines: integer
+    paid: bool
+    kind: Kind
+    placed: date
+    tags: list<text>
+
 cli Calls
     help "Calls a web API"
 
@@ -30,3 +43,28 @@ command remove(url: text)
     help "Deletes and prints the answer"
     let reply = http delete url
     print reply.text
+
+command orders(url: text)
+    help "Reads the orders a service lists and prints each"
+    let reply = http get url
+    let found = read list<Order> from json reply.text at "data"
+    for o in found
+        let tags = count(o.tags)
+        print "{o.number} {o.total} {o.lines} {o.paid} {o.kind} {o.placed} {tags}"
+
+command order(url: text)
+    help "Sends an order as JSON and prints what the service read"
+    let o = new Order
+    o.number = "A-9"
+    o.total = 12.5
+    o.lines = 2
+    o.paid = true
+    o.kind = Business
+    let reply = http post url with json of o header "Content-Type": "application/json"
+    print reply.text
+
+command broken(url: text)
+    help "Reads an order from what is no JSON"
+    let reply = http get url
+    let o = read Order from json reply.text
+    print o.number

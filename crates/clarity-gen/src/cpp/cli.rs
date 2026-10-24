@@ -121,7 +121,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
     let (records_h, records_cpp) = model::emit(project);
-    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }), &records_h)));
+    files.push(text("src/records.hpp", namespaced(&space, &format!("#pragma once\n\n#include <optional>\n#include <string>\n#include <vector>\n\n#include <nlohmann/json.hpp>\n\n#include \"clarity/db.hpp\"\n#include \"clarity/sql.hpp\"\n#include \"clarity/json_read.hpp\"\n{}", if project.calls_out() { "#include \"http/http.hpp\"\n" } else { "" }), &records_h)));
     files.push(text("src/records.cpp", namespaced(&space, "#include \"records.hpp\"\n", &records_cpp)));
 
     let mut errors = Vec::new();

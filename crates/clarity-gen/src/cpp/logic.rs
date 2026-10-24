@@ -1148,6 +1148,23 @@ impl<'a> Emitter<'a> {
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
             ExprKind::ReadBytes { file } => format!("db.read_bytes({})", self.value(file)),
+            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
+            ExprKind::JsonOf { value } => format!("clarity::json_of({})", self.value(value)),
+            ExprKind::ReadJson { ty, text, at } => {
+                let Some((entity, many)) = crate::json_fields::target(ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                let Some(decl) = self.project.entity(entity) else { return String::new() };
+                let fields: Vec<String> = crate::json_fields::fields(self.project, decl).iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), cpp_json_kind(kind))).collect();
+                let text = self.value(text);
+                let at = match at {
+                    Some(at) => self.value(at),
+                    None => "std::string()".to_string(),
+                };
+                let read = if many { format!("std::vector<{entity}>") } else { entity.to_string() };
+                format!("clarity::json_read<{read}>({text}, {at}, {many}, {}, {{{}}}, {entity}{{}})", string(entity), fields.join(", "))
+            }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, body, headers } => {
                 let url = self.value(url);
@@ -1548,4 +1565,24 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
 /// in C++'s snake_case: `approveClicked` is `approve_clicked`.
 fn method(handler: &str) -> String {
     ident(&super::names::snake(handler))
+}
+
+/// What a field takes from JSON, as the C++ runtime names it.
+fn cpp_json_kind(kind: &crate::json_fields::Kind) -> String {
+    use crate::json_fields::Kind;
+    let is = |k: &Kind| match k {
+        Kind::Text => "Text",
+        Kind::Integer => "Integer",
+        Kind::Decimal => "Decimal",
+        Kind::Bool => "Bool",
+        Kind::Date => "Date",
+        Kind::DateTime => "DateTime",
+        Kind::Enum(_) => "Enum",
+        Kind::Values(_) => "Values",
+    };
+    match kind {
+        Kind::Enum(values) => format!("clarity::JsonKind{{clarity::JsonKind::Enum, {{{}}}}}", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
+        Kind::Values(item) => format!("clarity::JsonKind{{clarity::JsonKind::Values, {{}}, std::make_shared<clarity::JsonKind>({})}}", cpp_json_kind(item)),
+        other => format!("clarity::JsonKind{{clarity::JsonKind::{}}}", is(other)),
+    }
 }

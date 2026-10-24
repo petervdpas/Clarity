@@ -12,6 +12,7 @@ mod csharp;
 mod ddl;
 pub(crate) mod go;
 mod cpp;
+mod json_fields;
 mod print;
 mod query;
 mod readme;

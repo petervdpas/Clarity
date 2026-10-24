@@ -12,6 +12,7 @@ pub mod files;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod i18n;
+pub mod json;
 pub mod picture;
 pub mod query;
 #[cfg(feature = "parts")]

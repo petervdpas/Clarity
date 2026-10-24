@@ -29,6 +29,16 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
         ExprKind::ReadText { file } => format!("read text of {}", expr(file)),
         ExprKind::ReadBytes { file } => format!("read bytes of {}", expr(file)),
+        ExprKind::JsonOf { value } => format!("json of {}", expr(value)),
+        ExprKind::ReadJson { ty, text, at } => {
+            let read = match &ty.kind {
+                clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
+                clarity_spec::code::TypeRefKind::List { item } => format!("list<{item}>"),
+                _ => "...".to_string(),
+            };
+            let at = at.as_deref().map(|a| format!(" at {}", expr(a))).unwrap_or_default();
+            format!("read {read} from json {}{at}", expr(text))
+        }
         ExprKind::Http { method, url, body, headers } => {
             let mut text = format!("http {} {}", method.word(), expr(url));
             if let Some(body) = body {

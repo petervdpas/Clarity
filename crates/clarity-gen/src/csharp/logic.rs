@@ -974,6 +974,23 @@ impl<'a> Emitter<'a> {
                 let db = self.db;
                 format!("{db}.ReadBytes({})", self.value(file))
             }
+            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
+            ExprKind::JsonOf { value } => format!("JsonValues.Of({})", self.value(value)),
+            ExprKind::ReadJson { ty, text, at } => {
+                let Some((entity, many)) = crate::json_fields::target(ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                let Some(decl) = self.project.entity(entity) else { return String::new() };
+                let fields: Vec<String> = crate::json_fields::fields(self.project, decl).iter().map(|(name, kind)| format!("new JsonField({}, {})", string(name), cs_json_kind(kind))).collect();
+                let text = self.value(text);
+                let at = match at {
+                    Some(at) => self.value(at),
+                    None => "null".to_string(),
+                };
+                let read = if many { "ReadList" } else { "Read" };
+                format!("JsonValues.{read}({text}, {at}, {}, [{}], new {entity}())", string(entity), fields.join(", "))
+            }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, body, headers } => {
                 let url = self.value(url);
@@ -1301,4 +1318,14 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
     hops.iter().rev().fold(cond, |inner, h| {
         format!("Cond.Through({}, {}, {}, {inner})", string(&h.column), string(&h.table), string(&h.key))
     })
+}
+
+/// What a field takes from JSON, as the C# runtime names it.
+fn cs_json_kind(kind: &crate::json_fields::Kind) -> String {
+    use crate::json_fields::Kind;
+    match kind {
+        Kind::Enum(values) => format!("new JsonKind(\"enum\", [{}])", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
+        Kind::Values(item) => format!("new JsonKind(\"values\", null, {})", cs_json_kind(item)),
+        other => format!("new JsonKind(\"{}\")", other.word()),
+    }
 }

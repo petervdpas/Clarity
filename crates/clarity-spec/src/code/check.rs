@@ -2222,6 +2222,37 @@ impl<'a> BodyChecker<'_, 'a> {
         }
     }
 
+    /// `read Order from json text at "path"`: an entity or a list of one,
+    /// from text, starting at a text path. Pure, so functions read JSON
+    /// too; an engine keeps to its own values.
+    fn read_json(&mut self, ty: &TypeRef, text: &Expr, at: Option<&Expr>, span: Span) -> Ty<'a> {
+        if let Some(engine) = self.engine {
+            self.error(format!("an engine does not read JSON: engine {} takes records, and a handler or an action reads them", engine.name.name), span);
+        }
+        let read = match self.env.type_ref(ty) {
+            Ok(found @ (Ty::Record(entity) | Ty::List(entity))) if !entity.settings => found,
+            Ok(other) => {
+                self.error(format!("'read ... from json' reads a record or a list of records, not {}", other.name()), ty.span);
+                Ty::Unknown
+            }
+            Err(why) => {
+                self.error(why, ty.span);
+                Ty::Unknown
+            }
+        };
+        let given = self.expr(text, Some(Ty::Text));
+        if !matches!(given, Ty::Text | Ty::Unknown) {
+            self.error(format!("the JSON to read is text, not {}", given.name()), text.span);
+        }
+        if let Some(at) = at {
+            let given = self.expr(at, Some(Ty::Text));
+            if !matches!(given, Ty::Text | Ty::Unknown) {
+                self.error(format!("where to start in the JSON is text, not {}", given.name()), at.span);
+            }
+        }
+        read
+    }
+
     /// An HTTP call: in handlers and commands, and in actions with `effects
     /// net`; never in a function, an engine or a data event.
     fn check_net(&mut self, span: Span) {
@@ -2808,6 +2839,14 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Text
             }
             ExprKind::Http { method, url, body, headers } => self.http(*method, url, body.as_deref(), headers, expr.span),
+            ExprKind::JsonOf { value } => {
+                let ty = self.expr(value, None);
+                if !(ty.is_value() || matches!(ty, Ty::Record(_) | Ty::List(_) | Ty::Values(_) | Ty::Unknown)) {
+                    self.error(format!("'json of' takes a record, a list or a value, not {}", ty.name()), value.span);
+                }
+                Ty::Text
+            }
+            ExprKind::ReadJson { ty, text, at } => self.read_json(ty, text, at.as_deref(), expr.span),
             ExprKind::ReadBytes { file } => {
                 self.check_files("reads a file", "files.read", expr.span);
                 let ty = self.expr(file, None);
@@ -3475,6 +3514,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         }
         ExprKind::ReadText { file } | ExprKind::ReadBytes { file } => mentions(file, var),
         ExprKind::Http { url, body, headers, .. } => crate::code::http_exprs(url, body.as_deref(), headers).iter().any(|e| mentions(e, var)),
+        ExprKind::JsonOf { value } => mentions(value, var),
+        ExprKind::ReadJson { text, at, .. } => mentions(text, var) || at.as_deref().is_some_and(|a| mentions(a, var)),
         ExprKind::Ask { question, form } => mentions(question, var) || crate::code::ask_exprs(form).iter().any(|e| mentions(e, var)),
         ExprKind::New { .. } => false,
         ExprKind::Text { parts } => parts.iter().any(|p| matches!(p, TextPart::Slot { value } if mentions(value, var))),
@@ -3767,6 +3808,13 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         ExprKind::Http { url, body, headers, .. } => {
             for e in super::http_exprs(url, body.as_deref(), headers) {
                 each_expr(e, found);
+            }
+        }
+        ExprKind::JsonOf { value } => each_expr(value, found),
+        ExprKind::ReadJson { text, at, .. } => {
+            each_expr(text, found);
+            if let Some(at) = at {
+                each_expr(at, found);
             }
         }
         ExprKind::Ask { question, form } => {

@@ -1,0 +1,162 @@
+{
+  "about": "Reading JSON into records (DESIGN 5.23): `read Order from json text` and `read list<Order> from json text`, with `at \"data.items\"` to start inside. Every runtime fits what it reads to the entity before its own decoder reads the record: the text is parsed, `at` walks object names (dots between them), then each object is fitted to the entity's fields. A field is found by its name, else by its name ignoring case, underscores and hyphens (credit_limit, creditLimit and Credit-Limit are one). Fields the JSON leaves out, or gives as null, keep the record's defaults (`base`, a new record as Clarity writes it), and names the entity does not have are ignored; so is `id`, as the record is new. Each kind takes: text a string, a number or a bool (written as JSON writes it); integer a whole number or a string of one; decimal (and money) a number or a string of one, written as exact text; bool true or false; date a string of the date (a date and time keeps its date); datetime a string `YYYY-MM-DDTHH:MM` or with seconds, a fraction of a second and a `Z` left out; enum a string of one of its values, any case; values a list whose items fit `item`; other (a reference, a picture, a file, a list of records) is never read. `fitted` is the record or list that results; `error` the message a reading that does not fit gives, word for word.",
+  "cases": [
+    {
+      "name": "an object fits its fields, by name and by name ignoring case and underscores",
+      "entity": "Order",
+      "fields": [
+        { "name": "number", "kind": "text" },
+        { "name": "credit_limit", "kind": "decimal" },
+        { "name": "lines", "kind": "integer" },
+        { "name": "paid", "kind": "bool" }
+      ],
+      "base": { "id": 0, "number": "", "credit_limit": "0", "lines": 0, "paid": false },
+      "json": "{\"number\": \"A-12\", \"creditLimit\": 1999.5, \"LINES\": 3, \"paid\": true, \"extra\": [1, 2]}",
+      "fitted": { "id": 0, "number": "A-12", "credit_limit": "1999.5", "lines": 3, "paid": true }
+    },
+    {
+      "name": "what the JSON leaves out or gives as null keeps its default, and id is never read",
+      "entity": "Order",
+      "fields": [
+        { "name": "number", "kind": "text" },
+        { "name": "lines", "kind": "integer" }
+      ],
+      "base": { "id": 0, "number": "new", "lines": 1 },
+      "json": "{\"id\": 77, \"lines\": null}",
+      "fitted": { "id": 0, "number": "new", "lines": 1 }
+    },
+    {
+      "name": "numbers and bools become text, strings of numbers become numbers",
+      "entity": "Item",
+      "fields": [
+        { "name": "code", "kind": "text" },
+        { "name": "flag", "kind": "text" },
+        { "name": "count", "kind": "integer" },
+        { "name": "price", "kind": "decimal" }
+      ],
+      "base": { "id": 0, "code": "", "flag": "", "count": 0, "price": "0" },
+      "json": "{\"code\": 42, \"flag\": false, \"count\": \"7\", \"price\": \"12.50\"}",
+      "fitted": { "id": 0, "code": "42", "flag": "false", "count": 7, "price": "12.50" }
+    },
+    {
+      "name": "dates, dates and times and enums",
+      "entity": "Visit",
+      "fields": [
+        { "name": "on", "kind": "date" },
+        { "name": "since", "kind": "date" },
+        { "name": "at", "kind": "datetime" },
+        { "name": "kind", "kind": "enum", "values": ["Person", "Business"] }
+      ],
+      "base": { "id": 0, "on": null, "since": null, "at": null, "kind": "Person" },
+      "json": "{\"on\": \"2026-10-25\", \"since\": \"2026-01-02T08:30:00Z\", \"at\": \"2026-10-25T14:05:09.250Z\", \"kind\": \"business\"}",
+      "fitted": { "id": 0, "on": "2026-10-25", "since": "2026-01-02", "at": "2026-10-25T14:05:09", "kind": "Business" }
+    },
+    {
+      "name": "a list of values fits each item, and what is never read keeps its default",
+      "entity": "Album",
+      "fields": [
+        { "name": "tags", "kind": "values", "item": "text" },
+        { "name": "years", "kind": "values", "item": "integer" },
+        { "name": "artist", "kind": "other" }
+      ],
+      "base": { "id": 0, "tags": [], "years": [], "artist": null },
+      "json": "{\"tags\": [\"jazz\", 1959], \"years\": [1959, \"1960\"], \"artist\": {\"name\": \"Miles\"}}",
+      "fitted": { "id": 0, "tags": ["jazz", "1959"], "years": [1959, 1960], "artist": null }
+    },
+    {
+      "name": "a list of records, from inside the reply",
+      "entity": "Order",
+      "many": true,
+      "at": "data.orders",
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "{\"data\": {\"orders\": [{\"number\": \"A-1\"}, {\"number\": \"A-2\"}], \"count\": 2}}",
+      "fitted": [{ "id": 0, "number": "A-1" }, { "id": 0, "number": "A-2" }]
+    },
+    {
+      "name": "text that is no JSON",
+      "entity": "Order",
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "<html>Not found</html>",
+      "error": "the text is no JSON"
+    },
+    {
+      "name": "a path that is not there",
+      "entity": "Order",
+      "many": true,
+      "at": "data.items",
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "{\"data\": {\"orders\": []}}",
+      "error": "the JSON has no 'data.items'"
+    },
+    {
+      "name": "one record where a list is wanted",
+      "entity": "Order",
+      "many": true,
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "{\"number\": \"A-1\"}",
+      "error": "the JSON is not a list of Order"
+    },
+    {
+      "name": "a list where one record is wanted",
+      "entity": "Order",
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "[{\"number\": \"A-1\"}]",
+      "error": "the JSON is not one Order"
+    },
+    {
+      "name": "an item of a list that is no record",
+      "entity": "Order",
+      "many": true,
+      "fields": [{ "name": "number", "kind": "text" }],
+      "base": { "id": 0, "number": "" },
+      "json": "[{\"number\": \"A-1\"}, \"A-2\"]",
+      "error": "item 2 of the list is not one Order"
+    },
+    {
+      "name": "a value that does not fit its field",
+      "entity": "Order",
+      "fields": [{ "name": "lines", "kind": "integer" }],
+      "base": { "id": 0, "lines": 0 },
+      "json": "{\"lines\": \"three\"}",
+      "error": "field 'lines' of Order is an integer, not \"three\""
+    },
+    {
+      "name": "a value of a list item that does not fit",
+      "entity": "Order",
+      "many": true,
+      "fields": [{ "name": "paid", "kind": "bool" }],
+      "base": { "id": 0, "paid": false },
+      "json": "[{\"paid\": true}, {\"paid\": \"yes\"}]",
+      "error": "item 2: field 'paid' of Order is true or false, not \"yes\""
+    },
+    {
+      "name": "an enum value it does not have",
+      "entity": "Customer",
+      "fields": [{ "name": "kind", "kind": "enum", "values": ["Person", "Business"] }],
+      "base": { "id": 0, "kind": "Person" },
+      "json": "{\"kind\": \"Robot\"}",
+      "error": "field 'kind' of Customer is Person or Business, not \"Robot\""
+    },
+    {
+      "name": "a decimal that is no number",
+      "entity": "Order",
+      "fields": [{ "name": "total", "kind": "decimal" }],
+      "base": { "id": 0, "total": "0" },
+      "json": "{\"total\": \"12,50\"}",
+      "error": "field 'total' of Order is a decimal, not \"12,50\""
+    },
+    {
+      "name": "a date that is no date",
+      "entity": "Visit",
+      "fields": [{ "name": "on", "kind": "date" }],
+      "base": { "id": 0, "on": null },
+      "json": "{\"on\": \"25-10-2026\"}",
+      "error": "field 'on' of Visit is a date, not \"25-10-2026\""
+    }
+  ]
+}

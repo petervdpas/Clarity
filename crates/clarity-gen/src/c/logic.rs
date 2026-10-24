@@ -1724,6 +1724,60 @@ impl<'a> Emitter<'a> {
                 let file = bare(self.value(file, pre));
                 self.lift("ClarityBytes", &format!("clarity_read_bytes(db, {file}, {{out}})"), pre)
             }
+            // JSON (DESIGN 5.23): a value as Clarity's JSON, and records read from a service's.
+            ExprKind::JsonOf { value } => {
+                let ty = self.types.type_of(value);
+                let v = bare(self.value(value, pre));
+                let json = match &ty {
+                    TypeInfo::Record(entity) => format!("{}_json({v})", prefix(entity)),
+                    TypeInfo::List(entity) => format!("{}_list_json(&{v})", prefix(entity)),
+                    TypeInfo::Text => format!("clarity_json_text({v})"),
+                    TypeInfo::Integer | TypeInfo::Duration => format!("clarity_json_integer({v})"),
+                    TypeInfo::Decimal | TypeInfo::Money => format!("clarity_json_decimal({v})"),
+                    TypeInfo::Bool => format!("clarity_json_bool({v})"),
+                    TypeInfo::Date => format!("clarity_json_date({v})"),
+                    TypeInfo::DateTime => format!("clarity_json_date_time({v})"),
+                    TypeInfo::Enum(e) => format!("clarity_json_text({}_name({v}))", prefix(e)),
+                    TypeInfo::Values(ValueItem::Text) => format!("clarity_json_texts({v})"),
+                    TypeInfo::Values(ValueItem::Integer) => format!("clarity_json_integers({v})"),
+                    TypeInfo::Values(ValueItem::Decimal) => format!("clarity_json_decimals({v})"),
+                    TypeInfo::Values(ValueItem::Date) => format!("clarity_json_dates({v})"),
+                    TypeInfo::Values(ValueItem::Enum(e)) => format!("clarity_json_texts({}_values_names({v}))", prefix(e)),
+                    _ => {
+                        self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                        return String::new();
+                    }
+                };
+                format!("clarity_json_of({json})")
+            }
+            ExprKind::ReadJson { ty, text, at } => {
+                let Some((entity, many)) = crate::json_fields::target(ty) else {
+                    self.errors.push(format!("'{}' is not generated yet", print::expr(expr)));
+                    return String::new();
+                };
+                let Some(decl) = self.project.entity(entity) else { return String::new() };
+                let fields = crate::json_fields::fields(self.project, decl);
+                let listed: Vec<String> = fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), c_json_kind(kind))).collect();
+                let text = bare(self.value(text, pre));
+                let at = match at {
+                    Some(at) => bare(self.value(at, pre)),
+                    None => "NULL".to_string(),
+                };
+                let p = prefix(entity);
+                let template = self.temp();
+                let _ = writeln!(pre, "{entity} {template} = {p}_new();");
+                let fields_arg = if listed.is_empty() { "NULL".to_string() } else { format!("(ClarityJsonField[]){{{}}}", listed.join(", ")) };
+                let fitted = self.lift(
+                    "cJSON*",
+                    &format!("clarity_json_fit({text}, {at}, {many}, {}, {fields_arg}, {}, {p}_json(&{template}), {{out}})", string(entity), fields.len()),
+                    pre,
+                );
+                if many {
+                    self.lift(&list_type(entity), &format!("{p}_list_from_json({fitted}, {{out}})"), pre)
+                } else {
+                    self.lift_record(entity, &format!("{p}_from_json({fitted}, {{out}})"), pre)
+                }
+            }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, body, headers } => {
                 let url = bare(self.value(url, pre));
@@ -2255,4 +2309,28 @@ fn mentions(line: &str, name: &str) -> bool {
 /// record: each step a `clarity_through`, the first one outermost.
 fn through(hops: &[crate::query::Hop], cond: String) -> String {
     hops.iter().rev().fold(cond, |inner, h| format!("clarity_through({}, {}, {}, {inner})", string(&h.column), string(&h.table), string(&h.key)))
+}
+
+/// What a field takes from JSON, as the C runtime names it.
+fn c_json_kind(kind: &crate::json_fields::Kind) -> String {
+    use crate::json_fields::Kind;
+    let is = |k: &Kind| match k {
+        Kind::Text => "CLARITY_JSON_TEXT",
+        Kind::Integer => "CLARITY_JSON_INTEGER",
+        Kind::Decimal => "CLARITY_JSON_DECIMAL",
+        Kind::Bool => "CLARITY_JSON_BOOL",
+        Kind::Date => "CLARITY_JSON_DATE",
+        Kind::DateTime => "CLARITY_JSON_DATE_TIME",
+        Kind::Enum(_) => "CLARITY_JSON_ENUM",
+        Kind::Values(_) => "CLARITY_JSON_VALUES",
+    };
+    match kind {
+        Kind::Enum(values) => format!(
+            "{{CLARITY_JSON_ENUM, (const char*[]){{{}}}, {}, NULL}}",
+            values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", "),
+            values.len()
+        ),
+        Kind::Values(item) => format!("{{CLARITY_JSON_VALUES, NULL, 0, &(ClarityJsonKind){}}}", c_json_kind(item)),
+        other => format!("{{{}, NULL, 0, NULL}}", is(other)),
+    }
 }

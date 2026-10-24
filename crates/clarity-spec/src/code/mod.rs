@@ -380,6 +380,15 @@ pub enum ExprKind {
     ListOf { items: Vec<Expr> },
     /// The value at a position of a list, from 1: `squares[3]`.
     Index { list: Box<Expr>, index: Box<Expr> },
+    /// `json of order`: a record, a list or a value as Clarity's JSON (DESIGN 5.23).
+    JsonOf { value: Box<Expr> },
+    /// `read list<Order> from json text at "data.orders"`: records read from
+    /// JSON, fitted to the entity first.
+    ReadJson {
+        ty: TypeRef,
+        text: Box<Expr>,
+        at: Option<Box<Expr>>,
+    },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
     /// web API, giving its reply (DESIGN 5.23). Only post and put send a body.
     Http {
@@ -971,6 +980,13 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         ExprKind::Index { list, index } => {
             each_expr(list, found);
             each_expr(index, found);
+        }
+        ExprKind::JsonOf { value } => each_expr(value, found),
+        ExprKind::ReadJson { text, at, .. } => {
+            each_expr(text, found);
+            if let Some(at) = at {
+                each_expr(at, found);
+            }
         }
         ExprKind::Http { url, body, headers, .. } => {
             each_expr(url, found);

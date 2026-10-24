@@ -70,6 +70,13 @@ fn serve() -> String {
                 "/hello" => (200, "hello".to_string()),
                 "/echo" => (200, format!("{method} {}", String::from_utf8_lossy(&body))),
                 "/header" => (200, test),
+                // A service's list: its own names, a number for money, a string for an integer.
+                "/orders" => (
+                    200,
+                    r#"{"data": [{"number": "A-1", "total": 19.99, "lines": "3", "paid": true, "kind": "person", "placed": "2026-10-25T08:00:00Z", "tags": ["x", "y"], "extra": 1}, {"Number": "A-2", "TOTAL": "5", "kind": "BUSINESS"}]}"#.to_string(),
+                ),
+                // What was sent, as JSON with its names sorted, so every stack's `json of` compares alike.
+                "/json" => (200, serde_json::from_slice::<serde_json::Value>(&body).map(|v| v.to_string()).unwrap_or_else(|e| format!("no JSON: {e}"))),
                 _ => (404, "no such page".to_string()),
             };
             let reason = if status == 200 { "OK" } else { "Not Found" };
@@ -101,6 +108,15 @@ fn the_calls_come_back(program: &Path, dir: &Path) {
     assert_eq!(printed(program, dir, &["remove", &format!("{server}/echo")]), "DELETE");
     let refused = printed(program, dir, &["fetch", "http://127.0.0.1:1/"]);
     assert!(refused.starts_with("0 no cannot reach 127.0.0.1: "), "{refused}");
+    // JSON (DESIGN 5.23): a service's list read into records, a record sent as Clarity's JSON.
+    assert_eq!(printed(program, dir, &["orders", &format!("{server}/orders")]), "A-1 19.99 3 yes Person 2026-10-25 2\nA-2 5 0 no Business  0");
+    assert_eq!(
+        printed(program, dir, &["order", &format!("{server}/json")]),
+        r#"{"id":0,"kind":"Business","lines":2,"number":"A-9","paid":true,"placed":null,"tags":[],"total":"12.5"}"#
+    );
+    let broken = Command::new(program).args(["broken", &format!("{server}/missing")]).current_dir(dir).env("XDG_CONFIG_HOME", dir.join("config")).output().unwrap();
+    assert!(!broken.status.success());
+    assert!(String::from_utf8_lossy(&broken.stderr).contains("the text is no JSON"), "{}", String::from_utf8_lossy(&broken.stderr));
 }
 
 #[test]

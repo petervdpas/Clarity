@@ -154,6 +154,12 @@ pub struct Settings {
     /// Where the application is generated and built: a folder relative to
     /// the project's folder, or an absolute one.
     pub out: String,
+    /// Folders in the output that are the project's own, which Clarity
+    /// leaves where they are and does not read as somebody else's files.
+    /// The folders a stack's own build tools make come with the stack
+    /// (`clarity_gen::build_output`); these are beside them.
+    #[serde(default)]
+    pub keeps: Vec<String>,
 }
 
 /// The output folder when the project file does not name one.
@@ -246,6 +252,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         themes: Vec::new(),
         filestores: Vec::new(),
         out: DEFAULT_OUT.to_string(),
+        keeps: Vec::new(),
     }
 }
 
@@ -349,6 +356,7 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     if out.is_empty() || out == "." {
         problems.push("the output folder must be a folder of its own, like out".to_string());
     }
+    problems.extend(settings.keeps.iter().filter_map(|folder| file::kept_problem(folder)));
     problems.extend(settings.language.as_deref().and_then(language_problem));
     problems.extend(settings.currency.as_deref().and_then(currency_problem));
     let stack = &settings.stack;

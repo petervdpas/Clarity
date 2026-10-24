@@ -490,9 +490,15 @@ impl ProjectTools {
         let path = path.trim();
         if path.is_empty() {
             let (file, _) = self.open()?;
-            let skipped: &[&str] = clarity_project::load(file).settings.map_or(&[], |s| clarity_gen::build_output(s.stack.backend));
+            // The build tools' own folders, and the ones the project keeps.
+            let settings = clarity_project::load(file).settings;
+            let mut skipped: Vec<&str> = Vec::new();
+            if let Some(settings) = &settings {
+                skipped.extend(clarity_gen::build_output(settings.stack.backend).iter().copied());
+                skipped.extend(settings.keeps.iter().map(String::as_str));
+            }
             let mut files = Vec::new();
-            collect_generated(&out, &out, skipped, &mut files);
+            collect_generated(&out, &out, &skipped, &mut files);
             files.sort();
             // One shape of path on every system, as the agent is asked to give it back.
             let list: Vec<String> = files.iter().take(500).map(|f| format!("- {}", f.display().to_string().replace('\\', "/"))).collect();

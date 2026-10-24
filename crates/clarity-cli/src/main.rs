@@ -206,7 +206,7 @@ fn generate(project_file: &std::path::Path, out: Option<&std::path::Path>) -> Ex
             return ExitCode::FAILURE;
         }
     };
-    match clarity_gen::write_programs(out, &programs, settings.stack.backend) {
+    match clarity_gen::write_programs(out, &programs, settings.stack.backend, &settings.keeps) {
         Ok(written) => {
             for program in &programs {
                 let dir = clarity_project::target_dir(out, program.target);

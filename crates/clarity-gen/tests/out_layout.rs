@@ -29,7 +29,7 @@ fn each_target_is_written_into_its_own_folder() {
         Program { target: Target::Desktop, files: vec![file("Cargo.toml", "desktop"), file("src/main.rs", "fn main() {}")] },
         Program { target: Target::Cli, files: vec![file("Cargo.toml", "cli")] },
     ];
-    clarity_gen::write_programs(&out, &programs, Backend::Rust).unwrap();
+    clarity_gen::write_programs(&out, &programs, Backend::Rust, &[]).unwrap();
     assert_eq!(read(&out.join("desktop/Cargo.toml")), "desktop");
     assert_eq!(read(&out.join("desktop/src/main.rs")), "fn main() {}");
     assert_eq!(read(&out.join("cli/Cargo.toml")), "cli");
@@ -37,7 +37,7 @@ fn each_target_is_written_into_its_own_folder() {
 
     // A target no longer generated goes, with its build output.
     std::fs::create_dir_all(out.join("cli/target")).unwrap();
-    clarity_gen::write_programs(&out, &programs[..1], Backend::Rust).unwrap();
+    clarity_gen::write_programs(&out, &programs[..1], Backend::Rust, &[]).unwrap();
     assert!(!out.join("cli").exists());
     assert!(out.join("desktop/Cargo.toml").is_file());
     std::fs::remove_dir_all(&out).unwrap();
@@ -55,7 +55,7 @@ fn output_in_the_old_place_moves_to_the_desktop_folder() {
     std::fs::write(out.join("target/debug/shop"), "built").unwrap();
     std::fs::write(out.join("data/shop.db"), "rows").unwrap();
     let programs = [Program { target: Target::Desktop, files: vec![file("Cargo.toml", "new")] }];
-    clarity_gen::write_programs(&out, &programs, Backend::Rust).unwrap();
+    clarity_gen::write_programs(&out, &programs, Backend::Rust, &[]).unwrap();
     assert_eq!(read(&out.join("desktop/Cargo.toml")), "new");
     assert_eq!(read(&out.join("desktop/target/debug/shop")), "built");
     assert_eq!(read(&out.join("desktop/data/shop.db")), "rows");
@@ -71,7 +71,7 @@ fn a_folder_clarity_did_not_make_is_refused() {
     std::fs::create_dir_all(&out).unwrap();
     std::fs::write(out.join("notes.txt"), "mine").unwrap();
     let programs = [Program { target: Target::Desktop, files: vec![file("Cargo.toml", "new")] }];
-    assert!(clarity_gen::write_programs(&out, &programs, Backend::Rust).is_err());
+    assert!(clarity_gen::write_programs(&out, &programs, Backend::Rust, &[]).is_err());
     assert_eq!(read(&out.join("notes.txt")), "mine");
     std::fs::remove_dir_all(&out).unwrap();
 }

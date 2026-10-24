@@ -265,11 +265,14 @@ fn compiler(probe: &dyn Probe, compilers: &[&str]) -> Option<String> {
 const RUST: &str = "Rust with cargo, from https://rustup.rs";
 const WEBKIT: &str = "the WebKitGTK development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev; see https://tauri.app/start/prerequisites/)";
 const GO: &str = "Go, from https://go.dev/dl";
-const CMAKE: &str = "CMake, from https://cmake.org/download";
-const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org)";
-const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; elsewhere https://sqlite.org/download.html)";
+const CMAKE: &str = "CMake, from https://cmake.org/download (Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-cmake)";
+const MAKE: &str = "make or Ninja, to build what CMake writes (Ninja: https://ninja-build.org; Windows: pacman -S mingw-w64-ucrt-x86_64-ninja)";
+const SQLITE: &str = "the SQLite development files (Debian and Ubuntu: libsqlite3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-sqlite3; elsewhere https://sqlite.org/download.html)";
 const WEBKIT_GTK: &str = "the WebKitGTK and GTK 3 development files and pkg-config (Debian and Ubuntu: libwebkit2gtk-4.1-dev libgtk-3-dev)";
-const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; elsewhere https://github.com/nlohmann/json)";
+const NLOHMANN: &str = "nlohmann-json (Debian and Ubuntu: nlohmann-json3-dev; Windows, in MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-nlohmann-json; elsewhere https://github.com/nlohmann/json)";
+/// The webview draws with WebView2 on Windows, whose SDK headers the shell
+/// builds against; MSYS2 does not package them.
+const WEBVIEW2: &str = "the WebView2 SDK, from https://developer.microsoft.com/microsoft-edge/webview2 (the Microsoft.Web.WebView2 NuGet package); the runtime itself ships with Windows 11";
 /// The webview of a C program is one C++ file.
 const WEBVIEW_CXX: &str = "a C++ compiler for the webview's one C++ file: GCC (g++) or Clang (clang++)";
 
@@ -279,7 +282,9 @@ fn dotnet() -> String {
 
 fn compiler_needed(backend: Backend) -> String {
     let language = if backend == Backend::C { "C" } else { "C++" };
-    format!("a {language} compiler: GCC or Clang (on Windows, Visual Studio's Build Tools, or MinGW from MSYS2)")
+    format!(
+        "a {language} compiler: GCC or Clang (on Windows, MSYS2's UCRT64 shell: pacman -S mingw-w64-ucrt-x86_64-gcc, or Visual Studio's Build Tools; take every C and C++ tool from one of them, never a mix)"
+    )
 }
 
 /// Everything `backend` builds with, on any system: what a README lists.
@@ -295,6 +300,7 @@ pub fn requirements(backend: Backend) -> Vec<String> {
             MAKE.to_string(),
             SQLITE.to_string(),
             format!("on Linux, {WEBKIT_GTK}"),
+            format!("on Windows, {WEBVIEW2}"),
         ],
         Backend::Cpp => vec![
             compiler_needed(backend),
@@ -303,6 +309,7 @@ pub fn requirements(backend: Backend) -> Vec<String> {
             SQLITE.to_string(),
             NLOHMANN.to_string(),
             format!("on Linux, {WEBKIT_GTK}"),
+            format!("on Windows, {WEBVIEW2}"),
         ],
     }
 }

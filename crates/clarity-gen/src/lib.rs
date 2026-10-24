@@ -480,21 +480,34 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
 }
 
+/// Whether `dir` holds anything that is not Clarity's: its marker, the
+/// folders the build tools make, and the ones the project keeps are its
+/// own, so a folder holding only those is Clarity's to write in, as an
+/// empty one is. A folder it cannot read holds nothing it has to spare.
+fn holds_other_files(dir: &std::path::Path, mine: &[&str]) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else { return false };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        name != OUT_MARKER && !mine.contains(&name.as_str())
+    })
+}
+
 /// Writes each program into its folder of `out` (`out/desktop`, `out/cli`),
 /// as `write_out` writes one, and removes the folder of a target no longer
 /// generated. Output from before, with the desktop program in `out` itself,
 /// moves into `out/desktop`: its build tools' folders and data are kept
 /// there, its other files go. Returns how many files changed.
-pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Backend) -> std::io::Result<usize> {
+pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Backend, keeps: &[String]) -> std::io::Result<usize> {
     use clarity_project::{TARGETS, target_dir, target_word};
+    let targets: Vec<&str> = TARGETS.iter().map(|t| target_word(*t)).collect();
+    // The stack's build tools make their own folders; the project names any others it keeps.
+    let kept: Vec<&str> = build_output(backend).iter().copied().chain(keeps.iter().map(String::as_str)).collect();
     let marked = out.join(OUT_MARKER).exists() || out.join("clarity-runtime/src/ui.rs").exists();
-    let empty = std::fs::read_dir(out).map_or(true, |mut entries| entries.next().is_none());
-    if !marked && !empty {
+    let mine: Vec<&str> = targets.iter().copied().chain(kept.iter().copied()).collect();
+    if !marked && holds_other_files(out, &mine) {
         return Err(std::io::Error::other(format!("{} holds files not made by Clarity; choose an empty or new output folder", out.display())));
     }
     std::fs::create_dir_all(out)?;
-    let targets: Vec<&str> = TARGETS.iter().map(|t| target_word(*t)).collect();
-    let kept = build_output(backend);
     for entry in std::fs::read_dir(out)? {
         let path = entry?.path();
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -516,7 +529,7 @@ pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Back
     std::fs::write(out.join(OUT_MARKER), OUT_MARKER_TEXT)?;
     let mut written = 0;
     for program in programs {
-        written += write_out(&target_dir(out, program.target), &program.files, kept)?;
+        written += write_out(&target_dir(out, program.target), &program.files, &kept)?;
     }
     for target in TARGETS {
         let dir = target_dir(out, target);
@@ -537,11 +550,7 @@ pub fn write_out(dir: &std::path::Path, files: &[OutFile], keep: &[&str]) -> std
     // folder that holds anything without the marker.
     // Output from before the marker is recognized by the runtime Clarity copies in.
     let marked = dir.join(OUT_MARKER).exists() || dir.join("clarity-runtime/src/ui.rs").exists();
-    let empty = match std::fs::read_dir(dir) {
-        Ok(mut entries) => entries.next().is_none(),
-        Err(_) => true,
-    };
-    if !marked && !empty {
+    if !marked && holds_other_files(dir, keep) {
         return Err(std::io::Error::other(format!(
             "{} holds files not made by Clarity; choose an empty or new output folder",
             dir.display()

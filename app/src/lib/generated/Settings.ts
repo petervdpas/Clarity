@@ -40,4 +40,11 @@ filestores: Array<FileStore>,
  * Where the application is generated and built: a folder relative to
  * the project's folder, or an absolute one.
  */
-out: string, };
+out: string, 
+/**
+ * Folders in the output that are the project's own, which Clarity
+ * leaves where they are and does not read as somebody else's files.
+ * The folders a stack's own build tools make come with the stack
+ * (`clarity_gen::build_output`); these are beside them.
+ */
+keeps: Array<string>, };

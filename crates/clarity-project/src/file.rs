@@ -6,6 +6,7 @@
 //!     title "The shop"
 //!     stack rust web desktop
 //!     output "out"
+//!     output keeps "vendor"
 //!     datasource main sqlite "data/shop.db"
 //!     datasource payments rest "https://api.example.com/v2"
 //!     datasource erp sqlite "legacy/erp.db" external readonly
@@ -78,6 +79,19 @@ fn args(entry: &Entry) -> Vec<&Token> {
     entry.tokens.iter().skip(1).collect()
 }
 
+/// Why a folder the output keeps cannot be one. It is the name of a folder
+/// beside the generated files, not a path, so Clarity can tell it from what
+/// it writes itself.
+pub fn kept_problem(name: &str) -> Option<String> {
+    if name.trim().is_empty() {
+        return Some("a folder the output keeps needs a name".to_string());
+    }
+    if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+        return Some(format!("'{name}' is a path; name one folder in the output, like \"vendor\""));
+    }
+    None
+}
+
 fn string(line: u32, token: Option<&&Token>, what: &str) -> Result<String, String> {
     match token {
         Some(t) if t.kind == TokenKind::Str => Ok(t.text.clone()),
@@ -99,6 +113,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut title = None;
     let mut stack = None;
     let mut out = None;
+    let mut keeps: Option<Vec<String>> = None;
     let mut language = None;
     let mut currency = None;
     let mut themes: Option<Vec<String>> = None;
@@ -140,6 +155,22 @@ pub fn parse(text: &str) -> Result<Settings, String> {
             "title" => {
                 once(title.is_some())?;
                 title = Some(string(line, a.first(), "the title")?);
+            }
+            // `output keeps "vendor"` names folders in the output that are
+            // the project's own; `output "folder"` says where it is.
+            "output" if a.first().and_then(|t| word(t)) == Some("keeps") => {
+                once(keeps.is_some())?;
+                let named: Vec<&&Token> = a[1..].iter().filter(|t| t.kind != TokenKind::Comma).collect();
+                if named.is_empty() || named.iter().any(|t| t.kind != TokenKind::Str) {
+                    return Err(format!(
+                        "line {line}: write the folders the output keeps as texts in quotes, like: output keeps \"vendor\", \"notes\""
+                    ));
+                }
+                let folders: Vec<String> = named.iter().map(|t| t.text.clone()).collect();
+                if let Some(problem) = folders.iter().find_map(|f| kept_problem(f)) {
+                    return Err(format!("line {line}: {problem}"));
+                }
+                keeps = Some(folders);
             }
             "output" => {
                 once(out.is_some())?;
@@ -273,6 +304,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         themes: themes.unwrap_or_default(),
         filestores,
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
+        keeps: keeps.unwrap_or_default(),
     })
 }
 
@@ -294,6 +326,8 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
         "datasource" => format!("datasource {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "filestore" => format!("filestore {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "auth" => format!("auth {}", current_source.unwrap_or("")),
+        // The two kinds of output line: where it is, and what it keeps.
+        "output" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("keeps") => "output keeps".to_string(),
         other => other.to_string(),
     }
 }
@@ -354,6 +388,10 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     // without growing an output line.
     if existing.is_none() || settings.out != DEFAULT_OUT || kept.contains_key("output") {
         lines.push(("output".into(), 1, format!("output {}", quote(&settings.out))));
+    }
+    if !settings.keeps.is_empty() {
+        let folders: Vec<String> = settings.keeps.iter().map(|f| quote(f)).collect();
+        lines.push(("output keeps".into(), 1, format!("output keeps {}", folders.join(", "))));
     }
     if let Some(language) = &settings.language {
         lines.push(("language".into(), 1, format!("language {}", quote(language))));

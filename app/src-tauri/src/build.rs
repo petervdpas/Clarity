@@ -172,7 +172,7 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, c
     let built = clarity_project::build_settings(&dir, &settings);
     let programs = clarity_gen::programs(&project, &built).map_err(|errors| errors.join("; "))?;
     let out = clarity_project::out_dir(file, &settings);
-    clarity_gen::write_programs(&out, &programs, settings.stack.backend).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
+    clarity_gen::write_programs(&out, &programs, settings.stack.backend, &settings.keeps).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
     // Each program is in its own folder of the output; one without windows has only the command line.
     let cli = cli || !settings.stack.has_ui();
     if cli && !settings.stack.has(clarity_project::Target::Cli) {

@@ -219,7 +219,7 @@ fn the_ledger_example_runs_on_its_own_stack() {
     assert_eq!(settings.stack.backend, Backend::Csharp);
     assert_eq!(programs.iter().map(|p| p.target).collect::<Vec<_>>(), [Target::Cli]);
     let out = scratch("example-ledger");
-    clarity_gen::write_programs(&out, &programs, Backend::Csharp).unwrap();
+    clarity_gen::write_programs(&out, &programs, Backend::Csharp, &[]).unwrap();
     let cli = out.join("cli");
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp").canonicalize().unwrap();
     let build = Command::new("dotnet").args(["build", "--nologo", "-tl:off", "-v", "quiet", &format!("-p:ClarityRuntime={}", runtime.display())]).current_dir(&cli).output().unwrap();
@@ -240,7 +240,7 @@ fn the_stock_example_runs_on_its_own_stack() {
     assert_eq!(settings.stack.backend, Backend::Go);
     assert_eq!(programs.iter().map(|p| p.target).collect::<Vec<_>>(), [Target::Desktop, Target::Cli]);
     let out = scratch("example-stock");
-    clarity_gen::write_programs(&out, &programs, Backend::Go).unwrap();
+    clarity_gen::write_programs(&out, &programs, Backend::Go, &[]).unwrap();
     let runtime = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap();
     let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
     for target in ["desktop", "cli"] {

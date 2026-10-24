@@ -103,6 +103,7 @@ fn writes_a_complete_cargo_project() {
             "Cargo.toml",
             "README.md",
             "build.rs",
+            "icons/icon.ico",
             "icons/icon.png",
             "src/main.rs",
             "src/model.json",

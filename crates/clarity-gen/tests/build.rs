@@ -50,7 +50,10 @@ fn builds_with_cargo(name: &str, runtime: Runtime) {
     settings.stack.ui = clarity_project::Ui::Web;
     let files = clarity_gen::generate(&project, &settings).unwrap();
 
-    let out = scratch().join(format!("clarity-gen-build-{name}-{}", std::process::id()));
+    // The runtime is part of the name: the same example is built on both,
+    // by two tests that run beside each other and may not share a folder.
+    let on = if runtime == Runtime::Local { "local" } else { "published" };
+    let out = scratch().join(format!("clarity-gen-build-{name}-{on}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     clarity_gen::write_out(&out, &files, &["target"]).unwrap();
@@ -69,7 +72,8 @@ fn builds_with_cargo(name: &str, runtime: Runtime) {
     assert!(status.success(), "the generated project does not build; it is in {}", out.display());
 
     // The application opens a window, so it is built here, not started.
-    assert!(target.join(format!("debug/{name}")).exists());
+    let program = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    assert!(target.join("debug").join(&program).exists(), "no {program}");
     std::fs::remove_dir_all(&out).unwrap();
 }
 
@@ -341,6 +345,35 @@ fn write_out_never_writes_into_a_folder_with_other_work() {
     assert!(empty.join(clarity_gen::OUT_MARKER).exists());
     clarity_gen::write_out(&empty, &files, &[]).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A build leaves its tools' folders behind. Finding only those, without
+/// the marker, Clarity writes: they are its build's, not somebody else's.
+#[test]
+fn write_out_writes_where_only_the_build_tools_left_something() {
+    let dir = scratch().join(format!("clarity-leftover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("target/debug")).unwrap();
+    std::fs::write(dir.join("target/debug/shop"), "a program from before").unwrap();
+    let files = [clarity_gen::OutFile {
+        path: "Cargo.toml".into(),
+        text: "[package]".into(),
+        bytes: None,
+    }];
+    clarity_gen::write_out(&dir, &files, &["target"]).unwrap();
+    assert!(dir.join("Cargo.toml").exists());
+    // What the build tools made is still there.
+    assert_eq!(std::fs::read_to_string(dir.join("target/debug/shop")).unwrap(), "a program from before");
+    // A folder the project keeps counts the same way.
+    let own = scratch().join(format!("clarity-keeps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&own);
+    std::fs::create_dir_all(own.join("vendor")).unwrap();
+    let err = clarity_gen::write_out(&own, &files, &[]).unwrap_err();
+    assert!(err.to_string().contains("not made by Clarity"), "{err}");
+    clarity_gen::write_out(&own, &files, &["vendor"]).unwrap();
+    assert!(own.join("vendor").is_dir());
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&own).unwrap();
 }
 
 /// The output folder holds one stack's project: switching a project from

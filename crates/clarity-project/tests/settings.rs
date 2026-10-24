@@ -52,12 +52,34 @@ fn shop() -> Settings {
         themes: Vec::new(),
         filestores: Vec::new(),
         out: "out".into(),
+        keeps: Vec::new(),
     }
 }
 
 #[test]
 fn reads_a_project_file() {
     assert_eq!(parse(SHOP).unwrap(), shop());
+}
+
+/// The folders the output keeps are the project's own, beside the ones the
+/// stack's build tools make; they are read, written back and checked.
+#[test]
+fn the_output_keeps_the_folders_the_project_names() {
+    let text = SHOP.replace("    stack csharp avalonia desktop", "    stack csharp avalonia desktop\n    output keeps \"vendor\", \"notes\"");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.keeps, ["vendor", "notes"]);
+    assert!(validate(&settings).is_empty(), "{:?}", validate(&settings));
+    // It is written back as it was read, so a round trip changes nothing.
+    let written = write(Some(&text), &settings).unwrap();
+    assert!(written.contains("    output keeps \"vendor\", \"notes\"\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    // A project that keeps nothing grows no line.
+    let plain = parse(SHOP).unwrap();
+    assert!(plain.keeps.is_empty());
+    assert!(!write(Some(SHOP), &plain).unwrap().contains("output keeps"));
+    // A path is not the name of a folder in the output.
+    let bad = SHOP.replace("    stack csharp avalonia desktop", "    stack csharp avalonia desktop\n    output keeps \"a/b\"");
+    assert!(parse(&bad).unwrap_err().contains("is a path"), "{}", parse(&bad).unwrap_err());
 }
 
 #[test]

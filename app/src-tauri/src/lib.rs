@@ -6,6 +6,7 @@ mod links;
 mod diagrams;
 mod resources;
 mod engines;
+mod environment;
 mod parts;
 mod external;
 mod themes;
@@ -811,6 +812,8 @@ pub fn run() {
             parts::rename_part_file,
             parts::delete_part_file,
             parts::build_part,
+            environment::environment_view,
+            environment::choose_tool,
             parts::write_part_folders,
             engines::save_engine_source,
             engines::new_engine_source,

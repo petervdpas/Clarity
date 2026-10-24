@@ -16,10 +16,13 @@
     catalog,
     stack,
     onchange,
+    onenvironment,
   }: {
     catalog: Catalog;
     stack: Stack;
     onchange: (stack: Stack) => void;
+    /** Opens Clarity settings at Environment, where the build tools are chosen; without it the row says where they are. */
+    onenvironment?: () => void;
   } = $props();
 
   const uis = $derived(catalog.backends.find((b) => b.id === stack.backend)?.uis ?? []);
@@ -74,8 +77,14 @@
   {:else}
     <span class="note">{stackTools.checking ? "Looking for the build tools..." : "Not checked"}</span>
   {/if}
-  <button type="button" disabled={stackTools.checking} onclick={() => checkTools(true)}>Check again</button>
+  {#if onenvironment}
+    <button type="button" onclick={onenvironment} title="Where the build tools of every stack are on this computer, in Clarity settings">Environment...</button>
+  {/if}
 </div>
+{#if !onenvironment}
+  <span></span>
+  <span class="hint">The tools are chosen and scanned in Clarity settings, Environment.</span>
+{/if}
 
 <style>
   .tools {
@@ -89,6 +98,11 @@
     font-size: 12px;
     color: var(--text-muted);
     user-select: text;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   .note.warning {

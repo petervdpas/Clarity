@@ -154,6 +154,8 @@ fn build(app: &AppHandle, folder: &Path, engine: &EngineDecl, source: &EngineSou
     let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, command.tool).unwrap_or_else(|| command.tool.into()))
         .args(&command.args)
         .env("PATH", clarity_gen::tools::tool_path())
+        // The C and C++ compilers chosen in the Environment settings, for CMake.
+        .envs(clarity_gen::tools::tool_env())
         .current_dir(&command.dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

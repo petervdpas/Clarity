@@ -1,24 +1,29 @@
 <script lang="ts">
   // Clarity's own settings, kept for the person rather than in a project: a
   // view in the main window with its sections in a sidebar, Display (the
-  // theme) and Agent (what it may run). A choice shows at once.
+  // theme), Environment (where each stack's build tools are) and Agent (what
+  // it may run). A choice shows at once.
 
   import { RUNS_CHOICES } from "./agent";
+  import EnvironmentSettings from "./EnvironmentSettings.svelte";
+  import { appSettings, type AppSettingsSection } from "./appSettings.svelte";
   import { agent } from "./agentStore.svelte";
   import { IDE_THEMES, type IdeTheme } from "./ideTheme";
   import { ideTheme, setIdeTheme } from "./ideTheme.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
-  type Section = "display" | "agent";
+  type Section = AppSettingsSection;
 
   /** The sections, in the sidebar's order. */
   const SECTIONS: { key: Section; name: string; note: string }[] = [
     { key: "display", name: "Display", note: "Clarity's theme and its colors" },
+    { key: "environment", name: "Environment", note: "Where each stack's build tools are" },
     { key: "agent", name: "Agent", note: "What the agent may run" },
   ];
 
-  let section = $state<Section>("display");
+  // The section shown, kept while Clarity runs, so the settings open where they were left.
+  const section = $derived(appSettings.section);
 
   /** A strip of each theme's colors: its binding, its pages and its accent. */
   const SWATCHES: Record<IdeTheme, string[]> = {
@@ -38,7 +43,7 @@
     <ul>
       {#each SECTIONS as s (s.key)}
         <li>
-          <button class:active={section === s.key} aria-current={section === s.key ? "page" : undefined} onclick={() => (section = s.key)}>
+          <button class:active={section === s.key} aria-current={section === s.key ? "page" : undefined} onclick={() => (appSettings.section = s.key)}>
             <strong>{s.name}</strong>
             <span class="muted">{s.note}</span>
           </button>
@@ -69,6 +74,8 @@
           </label>
         {/each}
       </fieldset>
+    {:else if section === "environment"}
+      <EnvironmentSettings />
     {:else}
       <fieldset>
         <legend>Running and building</legend>

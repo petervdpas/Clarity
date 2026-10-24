@@ -20,11 +20,7 @@ const AUTO_LOCK: Duration = Duration::from_secs(15 * 60);
 /// Where Clarity keeps its own vault and connections: `~/.clarity`, or
 /// the folder the environment variable CLARITY_HOME names.
 pub fn clarity_folder() -> PathBuf {
-    if let Some(folder) = std::env::var_os("CLARITY_HOME").filter(|f| !f.is_empty()) {
-        return PathBuf::from(folder);
-    }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
-    home.join(".clarity")
+    clarity_project::clarity_home()
 }
 
 /// The vault as the screen shows it.

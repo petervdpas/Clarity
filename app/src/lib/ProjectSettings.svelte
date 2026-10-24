@@ -3,6 +3,7 @@
   // Every change is saved at once; the Rust backend checks it and refuses
   // settings with problems, with the reason.
 
+  import { openAppSettings } from "./appSettings.svelte";
   import { resizableColumns } from "./columnWidths";
   import { invoke } from "@tauri-apps/api/core";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
@@ -236,7 +237,7 @@
         <h2>Stack</h2>
         <p class="intro">What the project is transpiled into.</p>
         <div class="form-grid">
-          <StackFields {catalog} stack={settings.stack} onchange={(stack) => save({ stack })} />
+          <StackFields {catalog} stack={settings.stack} onchange={(stack) => save({ stack })} onenvironment={() => openAppSettings("environment")} />
         </div>
       </section>
 

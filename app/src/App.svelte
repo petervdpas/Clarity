@@ -69,6 +69,7 @@
   import { firstCommand, programs, stackLabel } from "./lib/commandLine";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
+  import { appSettings, closeAppSettings } from "./lib/appSettings.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import type { CodeView } from "./lib/generated/CodeView";
   import { themeArea, themeOf, tr } from "./lib/model";
@@ -498,7 +499,6 @@
   /** Whether the dialog for a new language is open, and what went wrong adding it. */
   let newLanguageOpen = $state(false);
   /** Clarity's own settings, open in their dialog. */
-  let appSettingsOpen = $state(false);
   let newLanguageError = $state<string | null>(null);
 
   function startNewLanguage() {
@@ -1052,10 +1052,10 @@
     <div class="ribbon-tabs" role="tablist">
       <div class="brand"><img class="logo" src={logo} alt="" /> Clarity IDE</div>
       {#each TABS as t (t.key)}
-        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), (appSettingsOpen = false))}>{t.name}</button>
+        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), appSettings.open && closeAppSettings())}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
-      <button class="corner settings-button" class:active={appSettingsOpen} aria-pressed={appSettingsOpen} onclick={() => (appSettingsOpen = !appSettingsOpen)} title="Clarity's own settings: its display and what the agent may run">Clarity settings</button>
+      <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title="Clarity's own settings: its display, where the build tools are, and what the agent may run">Clarity settings</button>
       <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
@@ -1202,10 +1202,10 @@
   </header>
 
   <!-- Clarity's settings take the place of the work below the ribbon; the work stays as it was. -->
-  {#if appSettingsOpen}
-    <AppSettingsView onclose={() => (appSettingsOpen = false)} />
+  {#if appSettings.open}
+    <AppSettingsView onclose={closeAppSettings} />
   {/if}
-  <div class="shell" class:hidden={appSettingsOpen} style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
+  <div class="shell" class:hidden={appSettings.open} style:grid-template-columns="{layout.sizes.sidebar}px auto minmax(0, 1fr){agent.open ? ` auto ${layout.sizes.agent}px` : ''}">
     <aside>
       {#if tab === "design" && designing}
         <div class="side-tabs" role="tablist">

@@ -230,6 +230,8 @@ fn run_tool(app: &AppHandle, dir: &Path, step: &[String], env: &[(String, String
     let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
         .args(args)
         .env("PATH", clarity_gen::tools::tool_path())
+        // The C and C++ compilers chosen in the Environment settings, for CMake.
+        .envs(clarity_gen::tools::tool_env())
         .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .current_dir(dir)
         .stdin(Stdio::null())
@@ -316,6 +318,8 @@ fn run_step(app: &AppHandle, out: &Path, step: &[String]) -> Result<(), String> 
     let mut child = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).unwrap_or_else(|| tool.into()))
         .args(args)
         .env("PATH", clarity_gen::tools::tool_path())
+        // The C and C++ compilers chosen in the Environment settings, for CMake.
+        .envs(clarity_gen::tools::tool_env())
         .current_dir(out)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -349,6 +353,8 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
         .args(&toolchain.args)
         // The tool starts others (go runs gcc and pkg-config): they look where Clarity looks.
         .env("PATH", clarity_gen::tools::tool_path())
+        // The C and C++ compilers chosen in the Environment settings, for CMake.
+        .envs(clarity_gen::tools::tool_env())
         .envs(toolchain.env.iter().copied())
         .current_dir(out)
         .stdin(Stdio::null())

@@ -10,6 +10,8 @@ use std::process::{Command, Stdio};
 
 use clarity_project::{Backend, Ui};
 
+pub mod environment;
+
 /// How Clarity looks at the machine: where a program is, and what it says.
 pub trait Probe {
     fn find(&self, program: &str) -> Option<PathBuf>;
@@ -22,7 +24,7 @@ pub struct System;
 
 impl Probe for System {
     fn find(&self, program: &str) -> Option<PathBuf> {
-        find_on_path(program, &tool_path())
+        environment::find(program, &environment::Environment::current(), &tool_path())
     }
 
     fn run(&self, program: &str, args: &[&str]) -> Option<String> {
@@ -36,8 +38,18 @@ impl Probe for System {
 /// folders the official installers use. Build commands run with it as
 /// their PATH, so the tools they start themselves are found too.
 pub fn tool_path() -> OsString {
+    environment::search_path(&environment::Environment::current(), &installers_path())
+}
+
+/// The PATH and the installers' folders, without the person's choices: where a scan looks.
+pub fn installers_path() -> OsString {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
     search_path(std::env::var_os("PATH").as_deref(), home.as_deref())
+}
+
+/// The variables a build gets from the person's choices: the chosen C and C++ compilers for CMake.
+pub fn tool_env() -> Vec<(String, String)> {
+    environment::compilers(&environment::Environment::current())
 }
 
 /// `path` (a PATH value), followed by the installers' folders it lacks. A
@@ -87,7 +99,7 @@ pub fn find_on_path(program: &str, path: &OsStr) -> Option<PathBuf> {
     std::env::split_paths(path).map(|dir| dir.join(&name)).find(|file| is_program(file))
 }
 
-fn is_program(file: &std::path::Path) -> bool {
+pub(crate) fn is_program(file: &std::path::Path) -> bool {
     let Ok(meta) = std::fs::metadata(file) else { return false };
     #[cfg(unix)]
     {

@@ -213,6 +213,17 @@ pub fn auth_word(kind: AuthKind) -> &'static str {
 
 /// The settings of a new project: Rust with the web renderer on the
 /// desktop, and one SQLite database.
+/// Clarity's own folder on this computer, for every project: the vault, the
+/// connections and the environment. `~/.clarity`, or the folder the
+/// environment variable CLARITY_HOME names.
+pub fn clarity_home() -> PathBuf {
+    if let Some(folder) = std::env::var_os("CLARITY_HOME").filter(|f| !f.is_empty()) {
+        return PathBuf::from(folder);
+    }
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
+    home.join(".clarity")
+}
+
 pub fn starter(name: &str, module: &str) -> Settings {
     Settings {
         name: name.to_string(),

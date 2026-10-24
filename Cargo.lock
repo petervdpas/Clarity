@@ -665,6 +665,7 @@ dependencies = [
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
+ "serde",
  "serde_json",
 ]
 

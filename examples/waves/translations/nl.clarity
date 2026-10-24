@@ -1,0 +1,13 @@
+translation nl
+    swellHeightLabel "Hoogte"
+    swellSeenLabel "Gezien"
+    waterTitle "Golven"
+    speedLabel "Snelheid"
+    sourcesLabel "Bronnen"
+    highestLabel "Hoogste golf"
+    calmCaption "Kalmeer het water"
+    yes "Ja"
+    no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

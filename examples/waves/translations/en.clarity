@@ -1,0 +1,13 @@
+translation en
+    swellHeightLabel "Height"
+    swellSeenLabel "Seen"
+    waterTitle "Waves"
+    speedLabel "Speed"
+    sourcesLabel "Sources"
+    highestLabel "Highest swell"
+    calmCaption "Calm the water"
+    yes "Yes"
+    no "No"
+    ok "OK"
+    cancel "Cancel"
+    dismiss "Dismiss"

@@ -12,7 +12,7 @@ import (
 type fake struct{ next uint64 }
 
 func (f *fake) child(uint64, int, int, int, int) uint64 { f.next++; return f.next }
-func (f *fake) window(child uint64) Window              { return Window{XID: child} }
+func (f *fake) window(child uint64) Window              { return Window{Handle: uintptr(child)} }
 func (f *fake) move(uint64, int, int, int, int)         {}
 func (f *fake) show(uint64, bool)                       {}
 func (f *fake) destroy(uint64)                          {}

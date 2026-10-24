@@ -1,0 +1,53 @@
+module waves
+
+// A swell worth keeping: how high the water stood and when it was seen.
+entity Swell
+    height: integer, label @swellHeightLabel
+    seen: datetime, label @swellSeenLabel
+
+// Water drawn by a Go package: waves run out from a few sources and meet,
+// and the part colours every pixel by how high the water stands there. The
+// part draws into a buffer of its own and the system puts it on the screen.
+part WaveField
+    go "parts/WaveField"
+    speed: integer, min 1, max 10, default 4
+    sources: integer, min 1, max 5, default 3
+    tells swelled(height: integer)
+    hears calm
+    size 8 x 10
+
+page Water: window
+    title @waterTitle
+    size 980 x 640
+    data swells: list<Swell>
+    data speed: integer, default 4
+    data sources: integer, default 3
+    data highest: integer
+    WaveField name waveField at 1,1 span 8 rows 12 speed 4 sources 3 on swelled: waterSwelled
+    label @speedLabel name speedLabel for speedSlider at 9,1 span 4
+    slider name speedSlider at 9,2 span 4 bind speed min 1 max 10 on change: speedChanged
+    label @sourcesLabel name sourcesLabel for sourcesSlider at 9,3 span 4
+    slider name sourcesSlider at 9,4 span 4 bind sources min 1 max 5 on change: sourcesChanged
+    label @highestLabel name highestLabel at 9,5 span 4
+    display name highestShown at 9,6 span 4 rows 2 bind highest digits 3
+    button @calmCaption name calm at 9,8 span 4 on click: calmClicked
+    table name kept at 9,9 span 4 rows 4 bind swells columns height, seen order by height desc
+
+code Water
+    handler waterSwelled(height: integer)
+        highest = height
+        let swell = new Swell
+        swell.height = height
+        swell.seen = now()
+        save swell
+        reload swells
+
+    handler speedChanged
+        waveField.speed = speed
+
+    handler sourcesChanged
+        waveField.sources = sources
+
+    handler calmClicked
+        highest = 0
+        waveField.calm()

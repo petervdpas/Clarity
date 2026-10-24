@@ -1,0 +1,6 @@
+project Waves
+    title "Waves"
+    stack go web desktop
+    output "out"
+    language "en"
+    datasource main sqlite "data/waves.db"

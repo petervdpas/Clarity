@@ -21,9 +21,11 @@ import (
 const frame = time.Second / 60
 
 // Window is the native window a part draws in: on Linux an X11 window, on
-// the host's own X11 connection.
+// the host's own X11 connection; on Windows a Win32 child window of the
+// shell's. Handle is the one every system has; Display and Screen are X11's.
 type Window struct {
-	XID     uint64
+	// The X11 window on Linux, the HWND on Windows.
+	Handle  uintptr
 	Display unsafe.Pointer
 	Screen  int
 }

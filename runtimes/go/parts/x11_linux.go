@@ -37,7 +37,7 @@ func (x *x11) child(parent uint64, px, py, width, height int) uint64 {
 }
 
 func (x *x11) window(child uint64) Window {
-	return Window{XID: child, Display: unsafe.Pointer(x.display), Screen: int(C.clarity_screen(x.display))}
+	return Window{Handle: uintptr(child), Display: unsafe.Pointer(x.display), Screen: int(C.clarity_screen(x.display))}
 }
 
 func (x *x11) move(child uint64, px, py, width, height int) {

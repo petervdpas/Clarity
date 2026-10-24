@@ -1,9 +1,9 @@
-//go:build !linux || !cgo
+//go:build (!linux || !cgo) && !windows
 
 package parts
 
 import "errors"
 
 func openPlatform() (windows, error) {
-	return nil, errors.New("custom parts run on Linux for now")
+	return nil, errors.New("custom parts drawn by a native library run on Linux and Windows")
 }

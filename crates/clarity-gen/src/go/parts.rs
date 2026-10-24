@@ -82,9 +82,11 @@ package {pkg}
 import \"unsafe\"
 
 // Window is the native window the part draws in: on Linux an X11 window, on
-// the part host's own X11 connection.
+// the part host's own X11 connection; on Windows a Win32 child window of the
+// shell's. Handle is the one every system has; Display and Screen are X11's.
 type Window struct {{
-\tXID     uint64
+\t// The X11 window on Linux, the HWND on Windows.
+\tHandle  uintptr
 \tDisplay unsafe.Pointer
 \tScreen  int
 }}
@@ -265,7 +267,7 @@ func (g {glue}) Hear(name string, values []json.RawMessage) {{
         );
         let _ = write!(
             registers,
-            "\tparts.Register({n:?}, func(window parts.Window, width, height int, host parts.Host) parts.Part {{\n\t\tw := {alias}.Window{{XID: window.XID, Display: window.Display, Screen: window.Screen}}\n\t\treturn {glue}{{{alias}.New(w, width, height, {alias}.NewHost(func(tell string, values []any) {{ host.Tell(tell, values...) }}))}}\n\t}})\n"
+            "\tparts.Register({n:?}, func(window parts.Window, width, height int, host parts.Host) parts.Part {{\n\t\tw := {alias}.Window{{Handle: window.Handle, Display: window.Display, Screen: window.Screen}}\n\t\treturn {glue}{{{alias}.New(w, width, height, {alias}.NewHost(func(tell string, values []any) {{ host.Tell(tell, values...) }}))}}\n\t}})\n"
         );
     }
     format!(

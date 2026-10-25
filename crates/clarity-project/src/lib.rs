@@ -174,6 +174,10 @@ pub struct Settings {
     /// (`clarity_gen::build_output`); these are beside them.
     #[serde(default)]
     pub keeps: Vec<String>,
+    /// Whether the people using the application set its shortcut keys
+    /// themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
+    #[serde(default)]
+    pub keys_editable: bool,
 }
 
 /// The output folder when the project file does not name one.
@@ -304,6 +308,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         filestores: Vec::new(),
         out: DEFAULT_OUT.to_string(),
         keeps: Vec::new(),
+        keys_editable: false,
     }
 }
 
@@ -705,6 +710,7 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
         project.diagnostics.extend(found);
     }
     if let Some(settings) = settings {
+        project.keys_editable = settings.keys_editable;
         project.locale = clarity_spec::model::Locale {
             language: settings.language,
             currency: settings.currency,
@@ -730,6 +736,12 @@ pub fn target_problems(settings: &Settings, project: &clarity_spec::Project, fil
     use clarity_spec::Diagnostic;
     let mut found = Vec::new();
     let cli = settings.stack.has(Target::Cli);
+    // The keys window opens where the project file allows it (DESIGN 5.28).
+    if !settings.keys_editable
+        && let Some(name) = clarity_spec::frame::first_click_to(project, "keys")
+    {
+        found.push(Diagnostic::error(format!("{name} clicks to keys, the keys window, which opens when the project file says keys editable"), clarity_spec::Span::default()).in_file(file));
+    }
     let block = project.files.iter().find_map(|f| f.clis.first().map(|c| (f, c)));
     match block {
         None if cli => found.push(

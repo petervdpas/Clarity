@@ -1,13 +1,13 @@
-// Shortcut keys of the IDE (DESIGN 5.28), the pilot of keys in the language:
-// every command once, with its name, the layers it is active in and its
-// keys. What is active answers a key, the innermost layer first; the part
+// Shortcut keys (DESIGN 5.28), the IDE's and an application's alike: every
+// command once, with its name, the layers it is active in and its keys. What is active answers a key, the innermost layer first; the part
 // with the focus keeps its own keys before that. The person sets the keys,
 // kept as what differs from these, and a key taken in the same layer swaps.
 
 /** Where a command is active: everywhere, or one of the views (the ribbon's tabs) and the vault's two lists. */
 export type Layer = "global" | "project" | "design" | "preview" | "vault" | "vault.secrets" | "vault.connections";
 
-export type Command = { id: string; name: string; layers: Layer[]; keys: string[] };
+/** A command: its id, its name as shown, the layers it is active in (the IDE's, or an application's places) and its keys. */
+export type Command = { id: string; name: string; layers: string[]; keys: string[] };
 
 /** The layers in the order the keys window shows them, with their names. */
 export const LAYERS: { layer: Layer; name: string }[] = [
@@ -107,7 +107,7 @@ function parts(key: string): [string[], string] {
 }
 
 /** The command `key` runs among the active layers, innermost first; null when none has it. */
-export function commandFor(key: string, active: Layer[], commands: Command[], choices: KeyChoices): string | null {
+export function commandFor(key: string, active: string[], commands: Command[], choices: KeyChoices): string | null {
   for (const layer of active) {
     const found = commands.find((c) => c.layers.includes(layer) && keysOf(c, choices).includes(key));
     if (found) return found.id;
@@ -116,9 +116,9 @@ export function commandFor(key: string, active: Layer[], commands: Command[], ch
 }
 
 /** Keys given twice within one layer: the layer, the key and the commands. */
-export function clashes(commands: Command[], choices: KeyChoices): [Layer, string, string[]][] {
-  const found: [Layer, string, string[]][] = [];
-  for (const { layer } of LAYERS) {
+export function clashes(commands: Command[], choices: KeyChoices): [string, string, string[]][] {
+  const found: [string, string, string[]][] = [];
+  for (const layer of new Set(commands.flatMap((c) => c.layers))) {
     const seen = new Map<string, string[]>();
     for (const c of commands.filter((c) => c.layers.includes(layer))) {
       for (const key of keysOf(c, choices)) seen.set(key, [...(seen.get(key) ?? []), c.id]);

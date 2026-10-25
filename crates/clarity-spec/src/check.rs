@@ -370,6 +370,7 @@ impl<'a> Checker<'a> {
         }
         self.check_frame(file, &context, &page.frame);
         self.check_names(file, &page.widgets, &page.frame);
+        self.check_page_keys(file, page);
         self.check_commands_and_data(file, page);
         self.check_forms(file, &page.widgets, None);
         for sidebar in &page.frame.sidebars {
@@ -513,6 +514,66 @@ impl<'a> Checker<'a> {
         let context = self.data_context(file, &app.data);
         self.check_frame(file, &context, &app.frame);
         self.check_names(file, &[], &app.frame);
+        let mut keyed = Vec::new();
+        frame_keys(file, &app.frame.menu, &app.frame.toolbar, &app.frame.ribbon, &mut keyed);
+        self.key_clashes(keyed, "the app's frame");
+    }
+
+    /// One key runs one command where it is active (DESIGN 5.28): in the
+    /// window's frame, when it has regions of its own (the app's alone are
+    /// checked with the app), and among the window's own buttons, which may
+    /// take a frame's key, since what is innermost goes first.
+    fn check_page_keys(&mut self, file: usize, page: &'a Page) {
+        let place = format!("{} {}", page_kind_word(page.kind), page.name.name);
+        let own = page.frame.menu.is_some() || page.frame.toolbar.is_some() || page.frame.ribbon.is_some();
+        if own && page.kind != PageKind::Dialog {
+            let found = self.files.iter().enumerate().find_map(|(i, f)| f.apps.first().map(|a| (i, a)));
+            let mut keyed = Vec::new();
+            let pick = |mine: bool| if mine { file } else { found.map_or(file, |(i, _)| i) };
+            let app_frame = found.map(|(_, a)| &a.frame);
+            let menu = if page.frame.menu.is_some() { (&page.frame.menu, pick(true)) } else { (app_frame.map_or(&page.frame.menu, |f| &f.menu), pick(false)) };
+            let toolbar = if page.frame.toolbar.is_some() { (&page.frame.toolbar, pick(true)) } else { (app_frame.map_or(&page.frame.toolbar, |f| &f.toolbar), pick(false)) };
+            let ribbon = if page.frame.ribbon.is_some() { (&page.frame.ribbon, pick(true)) } else { (app_frame.map_or(&page.frame.ribbon, |f| &f.ribbon), pick(false)) };
+            frame_keys(menu.1, menu.0, &None, &None, &mut keyed);
+            frame_keys(toolbar.1, &None, toolbar.0, &None, &mut keyed);
+            frame_keys(ribbon.1, &None, &None, ribbon.0, &mut keyed);
+            self.key_clashes(keyed, &format!("{place}'s frame"));
+        }
+        fn buttons<'w>(file: usize, widgets: &'w [Widget], out: &mut Vec<Keyed<'w>>) {
+            for w in widgets {
+                if let Some(key) = &w.props.shortcut {
+                    let click = w.props.handlers.iter().find(|h| h.event == crate::widgets::Event::Click);
+                    let does = match (&w.props.on_click, click) {
+                        (Some(target), _) => Does::Open(target, w.props.new_window),
+                        (None, Some(h)) => Does::Run(&h.handler, &h.args),
+                        (None, None) => Does::Only(w.span),
+                    };
+                    out.push(Keyed { key, name: w.props.name.clone().unwrap_or_else(|| widgets::keyword(w.props.kind).to_string()), does, file, span: w.span });
+                }
+                buttons(file, &w.children, out);
+                for p in &w.pages {
+                    buttons(file, &p.children, out);
+                }
+            }
+        }
+        let mut keyed = Vec::new();
+        buttons(file, &page.widgets, &mut keyed);
+        for sidebar in &page.frame.sidebars {
+            buttons(file, &sidebar.widgets, &mut keyed);
+        }
+        if let Some(footer) = &page.frame.footer {
+            buttons(file, &footer.widgets, &mut keyed);
+        }
+        self.key_clashes(keyed, &place);
+    }
+
+    /// Reports a key that runs two different commands in one place.
+    fn key_clashes(&mut self, keyed: Vec<Keyed<'_>>, place: &str) {
+        for (i, later) in keyed.iter().enumerate() {
+            if let Some(first) = keyed[..i].iter().find(|k| k.key == later.key && k.does != later.does) {
+                self.error(later.file, format!("key '{}' runs both {} and {} in {place}; give one of them another key", later.key, first.name, later.name), later.span);
+            }
+        }
     }
 
     /// The main window is a page of kind window.
@@ -1754,4 +1815,61 @@ pub(crate) fn listed(names: &[&str]) -> String {
 /// Whether a link's `to` is a whole address: a scheme and what follows it.
 fn is_address(to: &str) -> bool {
     ["https://", "http://", "mailto:", "tel:"].iter().any(|scheme| to.starts_with(scheme) && to.len() > scheme.len())
+}
+
+/// What a command with a key does: a menu item and a button that open the
+/// same window or run the same handler are one command (DESIGN 5.28).
+#[derive(PartialEq)]
+enum Does<'a> {
+    Open(&'a str, bool),
+    Run(&'a str, &'a [crate::model::Literal]),
+    /// Nothing yet: only itself.
+    Only(Span),
+}
+
+/// A command with a key, where it is written.
+struct Keyed<'a> {
+    key: &'a str,
+    name: String,
+    does: Does<'a>,
+    file: usize,
+    span: Span,
+}
+
+/// The keys of a frame's menu items and toolbar and ribbon buttons.
+fn frame_keys<'a>(file: usize, menu: &'a Option<crate::model::Menu>, toolbar: &'a Option<crate::model::Toolbar>, ribbon: &'a Option<crate::model::Ribbon>, out: &mut Vec<Keyed<'a>>) {
+    fn commands<'a>(file: usize, items: &'a [Command], out: &mut Vec<Keyed<'a>>) {
+        for c in items {
+            if let Some(key) = &c.props.shortcut {
+                let does = match (&c.props.on_click, &c.props.handler) {
+                    (Some(target), _) => Does::Open(target, c.props.new_window),
+                    (None, Some(handler)) => Does::Run(handler, &[]),
+                    (None, None) => Does::Only(c.span),
+                };
+                let name = c.props.name.clone().or_else(|| c.props.caption.clone()).unwrap_or_else(|| frame::command_keyword(c.props.kind).to_string());
+                out.push(Keyed { key, name, does, file, span: c.span });
+            }
+            commands(file, &c.items, out);
+        }
+    }
+    if let Some(menu) = menu {
+        commands(file, &menu.items, out);
+    }
+    if let Some(toolbar) = toolbar {
+        commands(file, &toolbar.items, out);
+    }
+    if let Some(ribbon) = ribbon {
+        for group in ribbon.tabs.iter().flat_map(|t| &t.groups) {
+            commands(file, &group.items, out);
+        }
+    }
+}
+
+/// How a page's kind reads in a message: `window Card`, `dialog Ask`.
+fn page_kind_word(kind: PageKind) -> &'static str {
+    match kind {
+        PageKind::Window => "window",
+        PageKind::Dialog => "dialog",
+        PageKind::View => "view",
+    }
 }

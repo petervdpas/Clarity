@@ -109,7 +109,7 @@
       <span>Icon</span>
       <IconField {preview} icon={p.icon} onwrite={(icon) => update(p, { icon })} />
     </label>
-    {#if p.kind === "item"}
+    {#if p.kind === "item" || p.kind === "button"}
       <label class="prop">
         <span>Shortcut</span>
         <input value={p.shortcut ?? ""} placeholder="Ctrl+N" onchange={(e) => update(p, { shortcut: textOf(e) })} />

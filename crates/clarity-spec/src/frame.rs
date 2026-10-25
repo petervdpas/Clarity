@@ -184,7 +184,7 @@ pub fn new_sidebar(side: Side, name: Option<String>) -> crate::model::SidebarPro
 }
 
 /// Click targets that are not windows.
-pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme"];
+pub const BUILT_IN_COMMANDS: &[&str] = &["quit", "close", "language", "theme", "keys"];
 
 /// The built-in click targets a button in a window can have too; picking
 /// the language or theme is for menus and toolbars.
@@ -281,8 +281,8 @@ pub fn validate_command(props: &CommandProps) -> Result<(), String> {
             if props.caption.is_none() && props.icon.is_none() {
                 return Err("a button needs a caption or an icon".to_string());
             }
-            if props.shortcut.is_some() {
-                return Err("'key' applies to menu items".to_string());
+            if let Some(shortcut) = &props.shortcut {
+                crate::widgets::check_shortcut(shortcut)?;
             }
         }
     }
@@ -390,6 +390,18 @@ pub fn opens_new_windows(project: &crate::model::Project) -> bool {
 pub fn clicks_to(project: &crate::model::Project, target: &str) -> bool {
     let to = |on_click: &Option<String>| on_click.as_deref() == Some(target);
     any_click(project, &|w| to(&w.on_click), &|c| to(&c.on_click))
+}
+
+/// The name of the first part or command that clicks to `target`, as it is
+/// written; "a part" for one without a name.
+pub fn first_click_to(project: &crate::model::Project, target: &str) -> Option<String> {
+    let found = std::cell::RefCell::new(None);
+    let note = |name: &Option<String>| {
+        found.borrow_mut().get_or_insert_with(|| name.clone().unwrap_or_else(|| "a part".to_string()));
+        true
+    };
+    any_click(project, &|w| w.on_click.as_deref() == Some(target) && note(&w.name), &|c| c.on_click.as_deref() == Some(target) && note(&c.name));
+    found.into_inner()
 }
 
 /// Whether any part (`part`) or command (`command`) of the project's windows and frames answers yes.

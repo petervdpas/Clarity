@@ -1,0 +1,34 @@
+{
+  "about": "Keys set by the person (DESIGN 5.28), alike on every renderer. `commands` are the commands of an application with the places they are active in (\"\" is the app's frame, a window by its name) and the keys the design gives them. `choices` are the person's keys by command, only where they differ from the design's ([] for none). `assign` gives a command a key: a command that has it in a place they share gets the keys this one had (`swapped`); a key of another place is no swap, and `also` names the commands that have it there. `reset` puts a command's keys back, swapping back what a swap gave away. `refused` says why a key cannot be a command's: typing (a key without Ctrl, Alt or Meta), tab, enter, escape; null where it can.",
+  "commands": [
+    { "id": "newItem", "layers": [""], "keys": ["Ctrl+N"] },
+    { "id": "quitItem", "layers": [""], "keys": ["Ctrl+Q"] },
+    { "id": "keysItem", "layers": [""], "keys": [] },
+    { "id": "Card.saveButton", "layers": ["Card"], "keys": ["Ctrl+S"] },
+    { "id": "Card.printButton", "layers": ["Card"], "keys": [] }
+  ],
+  "assign": [
+    { "name": "a free key", "choices": {}, "id": "Card.printButton", "key": "Ctrl+P", "expect": { "choices": { "Card.printButton": ["Ctrl+P"] }, "swapped": null, "also": [] } },
+    { "name": "the design's key again keeps nothing", "choices": { "quitItem": ["Ctrl+K"] }, "id": "quitItem", "key": "Ctrl+Q", "expect": { "choices": {}, "swapped": null, "also": [] } },
+    { "name": "a key taken in the same place swaps", "choices": {}, "id": "keysItem", "key": "Ctrl+Q", "expect": { "choices": { "keysItem": ["Ctrl+Q"], "quitItem": [] }, "swapped": "quitItem", "also": [] } },
+    { "name": "a key of another place is allowed", "choices": {}, "id": "Card.printButton", "key": "Ctrl+N", "expect": { "choices": { "Card.printButton": ["Ctrl+N"] }, "swapped": null, "also": ["newItem"] } }
+  ],
+  "reset": [
+    { "name": "back to the design's", "choices": { "Card.saveButton": ["Ctrl+K"] }, "id": "Card.saveButton", "expect": {} },
+    { "name": "a swap is undone", "choices": { "keysItem": ["Ctrl+Q"], "quitItem": [] }, "id": "quitItem", "expect": {} },
+    { "name": "a command without a key in the design has none again", "choices": { "keysItem": ["Ctrl+J"] }, "id": "keysItem", "expect": {} }
+  ],
+  "refused": [
+    ["Tab", "tab"],
+    ["Enter", "enter"],
+    ["Escape", "escape"],
+    ["A", "typing"],
+    ["Shift+A", "typing"],
+    ["Space", "typing"],
+    ["Ctrl+A", null],
+    ["Alt+Left", null],
+    ["F2", null],
+    ["Delete", null],
+    ["Shift+F5", null]
+  ]
+}

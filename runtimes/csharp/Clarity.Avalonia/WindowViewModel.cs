@@ -186,6 +186,14 @@ public abstract class WindowViewModel(Db db) : ObservableObject
             desktop.Shutdown();
     }
 
+    /// <summary>Opens Clarity's keys window over the window the person works in: the built-in <c>keys</c> (DESIGN 5.28).</summary>
+    protected static void ShowKeys()
+    {
+        if (global::Avalonia.Application.Current?.ApplicationLifetime is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            && (desktop.Windows.FirstOrDefault(w => w.IsActive) ?? desktop.MainWindow) is { } owner)
+            KeysWindow.Show(owner);
+    }
+
     /// <summary>The window has opened with its data.</summary>
     public void Opened() => Handle(OnOpen);
 

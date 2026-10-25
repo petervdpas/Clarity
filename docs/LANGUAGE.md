@@ -76,6 +76,7 @@ project Shop
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |
 | `currency CODE` | no | The currency of `money` fields, as its ISO 4217 code: `EUR`, `USD`. Without it, amounts show without a currency sign. |
+| `keys editable` | no | The people using the application set its shortcut keys themselves: a menu item or button with `on click -> keys` opens Clarity's keys window, and each person's keys are kept in their settings file. Without it, the keys are the design's, and `-> keys` is an error. |
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine. |
@@ -1100,9 +1101,9 @@ Menu items and toolbar and ribbon buttons are commands. Their properties:
 | `"caption"` | all | The text, right after the kind. A menu item needs one; a button needs a caption or an icon. |
 | `name n` | all | The command's name, for handlers. |
 | `icon "name"` | all | An icon, by its name among Clarity's icons. |
-| `key "Ctrl+N"` | menu items | The key for it, shown in the menu. |
+| `key "Ctrl+N"` | all | The key that runs it: shown in the menu, or in the button's tooltip. A ribbon button's works whichever tab is open. One key runs one command in a frame; the window's own buttons go first. |
 | `large` | ribbon buttons | A large button. |
-| `on click -> Target` | all | Opens a window, or `close`, `quit`, `language` or `theme`. |
+| `on click -> Target` | all | Opens a window, or `close`, `quit`, `language`, `theme` or `keys` (the keys window, where the project file says `keys editable`). |
 | `on click: handler` | all | Runs a handler. |
 
 An item with a submenu opens the submenu, so it has no `on click` of its own.

@@ -85,6 +85,12 @@ export interface Live {
   setPartValue(part: string, name: string, value: JsonValue): void;
   /** The person changed a setting (DESIGN 5.17) through an input bound to it: the shell keeps it. */
   keepSettings(): void;
+  /**
+   * The keys a command answers (DESIGN 5.28): the person's where the project
+   * lets them set keys, else the design's. A command of the app's frame is
+   * known by its name, a window's own by the window's name and its name.
+   */
+  keysOf(part: string | null, designed: string | null, appFrame: boolean): string[];
   /** The records a reference field can point at, as id and display text, with the fields a search dropdown shows. */
   refOptions(entity: string): RefOption[];
   /** The values a text field already has, which a typed dropdown offers (U1c). */

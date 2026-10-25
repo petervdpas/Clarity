@@ -143,15 +143,22 @@
     return target instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"].includes(target.type);
   }
 
+  /** The keys a button answers: the person's where the project lets them set keys (DESIGN 5.28). */
+  function buttonKeys(): string[] {
+    if (live && !design) return live.keysOf(p.name, p.shortcut, false);
+    return p.shortcut ? [p.shortcut] : [];
+  }
+
   // A button's shortcut, and Enter and Escape for the default and cancel
-  // buttons, work anywhere in the running window.
+  // buttons, work anywhere in the running window. Heard on the document,
+  // before the frame's keys on the window: the innermost goes first (DESIGN 5.28).
   function windowKey(e: KeyboardEvent) {
     if (design || !live || p.kind !== "button" || hidden || disabled || e.defaultPrevented) return;
     const plain = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
     const inTextArea = e.target instanceof HTMLTextAreaElement;
     const onButton = e.target instanceof HTMLButtonElement;
     const hit =
-      (p.shortcut !== null && matchesShortcut(e, p.shortcut, typingIn(e.target))) ||
+      buttonKeys().some((k) => matchesShortcut(e, k, typingIn(e.target))) ||
       (p.default && plain && e.key === "Enter" && !inTextArea && !onButton) ||
       (p.cancel && plain && e.key === "Escape");
     if (!hit) return;
@@ -423,7 +430,7 @@
 
 </script>
 
-<svelte:window onkeydown={windowKey} />
+<svelte:document onkeydown={windowKey} />
 
 <div
   class="widget {p.kind}"
@@ -761,14 +768,14 @@
       {#if p.split}
         <!-- A split button: its click, and an arrow that opens its menu below it. -->
         <span class="split">
-          <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+          <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={buttonKeys().join(" ") || undefined} onclick={click}
             >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
           ><button type="button" class="push arrow {partClass ?? ''}" {disabled} aria-label="More" aria-haspopup="menu" onclick={openSplit}
             ><Icon paths={{ down: "M 6 9 l 6 6 l 6 -6" }} name="down" /></button
           >
         </span>
       {:else}
-        <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={p.shortcut ?? undefined} onclick={click}
+        <button {id} class="push {partClass ?? ''}" class:default={p.default} {disabled} tabindex={p.tabOrder ?? undefined} aria-keyshortcuts={buttonKeys().join(" ") || undefined} onclick={click}
           >{#if p.icon}<Icon paths={preview.icons} name={p.icon} />{/if}{caption ?? ""}</button
         >
       {/if}

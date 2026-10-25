@@ -20,6 +20,8 @@
   import type { PageData } from "./pages";
   import { tr } from "./model";
   import { useLive } from "./live";
+  import { keyedCommands } from "./frameKeys";
+  import { matchesShortcut } from "./shortcut";
   import Splitter from "./Splitter.svelte";
   import type { Side } from "./generated/Side";
 
@@ -144,13 +146,39 @@
     return id !== null && (command.span.start === id || command.items.some(containsPicked));
   }
 
+  /** The keys a command answers now: the person's where the project lets them set keys (DESIGN 5.28). */
+  const keysNow = (c: Command, appFrame: boolean): string[] => (live && !design ? live.keysOf(c.props.name, c.props.shortcut, appFrame) : c.props.shortcut ? [c.props.shortcut] : []);
+
+  /** Whether a command is the app's, for its keys: the region it is in came from the app. */
+  function fromApp(c: Command): boolean {
+    const inside = (items: Command[]): boolean => items.some((i) => i === c || inside(i.items));
+    if (frame.menu && inside(frame.menu.value.items)) return frame.menu.inherited;
+    if (frame.toolbar && inside(frame.toolbar.value.items)) return frame.toolbar.inherited;
+    return frame.ribbon?.inherited ?? false;
+  }
+
+  // The frame's keys answer what the window's own buttons left (they hear a
+  // key first, on the document): the innermost goes first (DESIGN 5.28).
+  function onwindowkeydown(e: KeyboardEvent) {
+    if (design || !live || e.defaultPrevented) return;
+    const t = e.target;
+    const typing =
+      t instanceof HTMLTextAreaElement ||
+      (t instanceof HTMLElement && t.isContentEditable) ||
+      (t instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"].includes(t.type));
+    const hit = keyedCommands(frame, shows, takesClicks, keysNow).find((f) => f.keys.some((k) => matchesShortcut(e, k, typing)));
+    if (!hit) return;
+    e.preventDefault();
+    run(e, hit.command, false);
+  }
+
   function onwindowpointerdown(e: PointerEvent) {
     if (openMenu === null) return;
     if (!(e.target instanceof Element) || !e.target.closest(".menubar")) openMenu = null;
   }
 </script>
 
-<svelte:window onpointerdown={onwindowpointerdown} />
+<svelte:window onpointerdown={onwindowpointerdown} onkeydown={onwindowkeydown} />
 
 {#snippet entries(items: Command[], editable: boolean)}
   <!-- A named item hidden by code is left out, and a disabled one greyed, as every part. -->
@@ -174,7 +202,7 @@
         >
           {#if item.props.icon}<Icon paths={preview.icons} name={item.props.icon} />{/if}
           <span>{item.props.caption ? tr(preview, item.props.caption) : ""}</span>
-          {#if item.props.shortcut}<kbd>{item.props.shortcut}</kbd>{/if}
+          {#each keysNow(item, fromApp(item)).slice(0, 1) as key (key)}<kbd>{key}</kbd>{/each}
           {#if item.items.length > 0}<span class="arrow">&rsaquo;</span>{/if}
         </button>
         {#if item.items.length > 0}
@@ -198,7 +226,8 @@
       class="tool"
       class:large={large && item.props.large}
       class:picked={design && pageDesigner.selected === item.span.start}
-      title={design && !editable ? "From the app: double-click to edit it in the app" : item.props.onClick ? `Opens ${item.props.onClick}` : undefined}
+      title={design && !editable ? "From the app: double-click to edit it in the app" : keysNow(item, fromApp(item)).join(", ") || undefined}
+      aria-keyshortcuts={keysNow(item, fromApp(item)).join(" ") || undefined}
       onpointerdown={(e) => design && run(e, item, editable)}
       onclick={(e) => !design && run(e, item, editable)}
       ondblclick={(e) => codeOf(e, item, editable)}

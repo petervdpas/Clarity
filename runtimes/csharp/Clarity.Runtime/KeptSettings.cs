@@ -59,7 +59,8 @@ public static partial class KeptSettings
         var file = File(program) ?? throw new InvalidOperationException("this system names no folder for application settings");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var written = file + ".new";
-        System.IO.File.WriteAllText(written, values.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        // Plain text, as the other runtimes write it: a key's `Ctrl+K` stays as typed.
+        System.IO.File.WriteAllText(written, values.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         System.IO.File.Move(written, file, overwrite: true);
     }
 

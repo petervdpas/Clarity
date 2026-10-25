@@ -56,6 +56,7 @@ fn shop() -> Settings {
         filestores: Vec::new(),
         out: "out".into(),
         keeps: Vec::new(),
+        keys_editable: false,
     }
 }
 
@@ -580,4 +581,36 @@ fn a_database_connects_with_a_secret_setting() {
         s
     });
     assert_eq!(refs[0].address, "setting:shopDb");
+}
+
+/// Whether the people using the application set its keys themselves
+/// (DESIGN 5.28): `keys editable`, off without the line.
+#[test]
+fn the_project_says_whether_people_set_the_keys() {
+    let text = format!("{SHOP}    keys editable\n");
+    let settings = parse(&text).unwrap();
+    assert!(settings.keys_editable);
+    assert!(!parse(SHOP).unwrap().keys_editable);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    keys editable\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    // Off again, the line goes.
+    let off = write(Some(&written), &Settings { keys_editable: false, ..settings }).unwrap();
+    assert!(!off.contains("keys"), "{off}");
+    assert_eq!(parse(&format!("{SHOP}    keys mine\n")).unwrap_err(), "line 11: write 'keys editable' to let the people using the application set the keys");
+}
+
+/// `-> keys` opens the keys window, which the project file allows (DESIGN 5.28).
+#[test]
+fn the_keys_window_opens_where_the_project_allows_it() {
+    let module = "module shop\n\napp Shop\n    main Card\n    menu name mainMenu\n        item \"Keys\" name keysItem on click -> keys\n\npage Card: window\n    title \"Card\"\n";
+    let project = clarity_spec::load_sources([("shop.clarity", module)]);
+    // A built-in target: no warning about an unknown window.
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let problems = |editable: bool| -> Vec<String> {
+        let settings = Settings { keys_editable: editable, ..parse(SHOP).unwrap() };
+        clarity_project::target_problems(&settings, &project, "shop.clarity").into_iter().map(|d| d.message).collect()
+    };
+    assert_eq!(problems(true), Vec::<String>::new());
+    assert_eq!(problems(false), ["keysItem clicks to keys, the keys window, which opens when the project file says keys editable"]);
 }

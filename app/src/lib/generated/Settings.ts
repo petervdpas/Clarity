@@ -47,4 +47,9 @@ out: string,
  * The folders a stack's own build tools make come with the stack
  * (`clarity_gen::build_output`); these are beside them.
  */
-keeps: Array<string>, };
+keeps: Array<string>, 
+/**
+ * Whether the people using the application set its shortcut keys
+ * themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
+ */
+keys_editable: boolean, };

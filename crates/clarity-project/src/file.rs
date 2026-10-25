@@ -116,6 +116,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut keeps: Option<Vec<String>> = None;
     let mut language = None;
     let mut currency = None;
+    let mut keys_editable = None;
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let mut filestores: Vec<FileStore> = Vec::new();
@@ -206,6 +207,13 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: {problem}"));
                 }
                 language = Some(tag);
+            }
+            "keys" => {
+                once(keys_editable.is_some())?;
+                if a.len() != 1 || a.first().and_then(|t| word(t)) != Some("editable") {
+                    return Err(format!("line {line}: write 'keys editable' to let the people using the application set the keys"));
+                }
+                keys_editable = Some(true);
             }
             "currency" => {
                 once(currency.is_some())?;
@@ -331,6 +339,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         filestores,
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
         keeps: keeps.unwrap_or_default(),
+        keys_editable: keys_editable.unwrap_or(false),
     })
 }
 
@@ -430,6 +439,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if !settings.themes.is_empty() {
         lines.push(("theme".into(), 1, format!("theme {}", settings.themes.join(" "))));
+    }
+    if settings.keys_editable {
+        lines.push(("keys".into(), 1, "keys editable".to_string()));
     }
     for source in &settings.datasources {
         lines.push((

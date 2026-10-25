@@ -31,6 +31,7 @@ Only `stack` is required. Each setting appears once, except `datasource` and `fi
 - `language "tag"`: the language the project's texts are written in, such as `"en"` or `"nl-NL"`. See [Languages](languages.md).
 - `currency CODE`: the currency of `money` fields, as its ISO code: `EUR`, `USD`. Without it, amounts show without a currency sign.
 - `theme Name...`: the themes the application offers; the first is the one it starts with. Without any, the application looks as Clarity does. See [Themes](themes.md).
+- `keys editable`: the people using the application set its shortcut keys themselves, in Clarity's keys window (`on click -> keys`). In Project settings it is the switch "People set the shortcut keys themselves". See [The app and its frame](design.frame.md).
 - `filestore name "folder"`: a folder that keeps pictures and files. See [Pictures and files](data.pictures-files.md).
 
 ## Data sources

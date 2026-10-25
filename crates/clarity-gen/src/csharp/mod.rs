@@ -154,7 +154,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         }
         files.push(text(&format!("parts/{n}/{n}.g.cs"), parts::generated_half(project, part)));
     }
-    files.push(text("App.axaml.cs", app_cs(project, &name, &main_window)));
+    files.push(text("App.axaml.cs", app_cs(project, &name, &main_window, &project_name(settings))));
+    // The keys window's commands (DESIGN 5.28), where the person sets the keys.
+    if project.keys_editable {
+        files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));
+    }
     files.push(text("Views.cs", views_cs(project, &name)));
     files.push(text("Shown.cs", shown_cs(project, &name)));
     if !clarity_spec::icons::used(project).is_empty() {
@@ -407,7 +411,37 @@ public static class Program
 
 /// The application: it starts in the language and theme kept from the last
 /// run (or the system's), opens the databases and shows the main window.
-fn app_cs(project: &Project, name: &str, main_window: &str) -> String {
+/// The commands the keys window lists, by place (DESIGN 5.28).
+fn keys_catalog(project: &Project, name: &str) -> String {
+    let text = |written: &Option<String>, name: &str| match written.as_deref() {
+        Some(t) => match t.strip_prefix('@') {
+            Some(key) => format!("Text.Of({})", string(key)),
+            None => format!("Text.Plain({})", string(t)),
+        },
+        None => format!("Text.Plain({})", string(name)),
+    };
+    let layers: Vec<String> = clarity_spec::shortcuts::catalog(project)
+        .iter()
+        .map(|layer| {
+            let commands: Vec<String> = layer
+                .commands
+                .iter()
+                .map(|c| {
+                    let keys: Vec<String> = c.keys.iter().map(|k| string(k)).collect();
+                    format!("new KeyCommandInfo({}, {}, [{}])", string(&c.id), text(&c.caption, &c.name), keys.join(", "))
+                })
+                .collect();
+            let title = if layer.id.is_empty() { "null".to_string() } else { text(&layer.title, &layer.id) };
+            format!("        new KeyLayerInfo({}, {title}, [{}]),\n", string(&layer.id), commands.join(", "))
+        })
+        .collect();
+    format!(
+        "{HEADER}\nusing Clarity.Avalonia;\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The commands a person gives keys in the keys window, by place (DESIGN 5.28).</summary>\npublic static class KeysCatalog\n{{\n    public static readonly KeyLayerInfo[] Layers =\n    [\n{}    ];\n}}\n",
+        layers.concat()
+    )
+}
+
+fn app_cs(project: &Project, name: &str, main_window: &str, program: &str) -> String {
     // Engines ask for the language the person picked.
     let engines_language = if !crate::engines(project).is_empty() {
         "            Clarity.Runtime.Engine.Language = () => Locale.Language?.Name;\n"
@@ -418,6 +452,12 @@ fn app_cs(project: &Project, name: &str, main_window: &str) -> String {
     let application = string(name);
     // The person's settings, after the language and theme they may name (DESIGN 5.17).
     let settings_start = if project.entities().any(|e| e.settings) { "            Settings.Start();\n" } else { "" };
+    // The person's keys and the keys window's commands (DESIGN 5.28).
+    let keys_start = if project.keys_editable {
+        format!("            PersonKeys.Start({});\n            KeysWindow.Catalog = KeysCatalog.Layers;\n", string(program))
+    } else {
+        String::new()
+    };
     let runtime_using = if crate::unconnected(project).is_some() { "using Clarity.Runtime;\n" } else { "" };
     let start_main = match crate::unconnected(project) {
         None => format!("            var db = Program.OpenDatabases();\n            desktop.Exit += (_, _) => db.Dispose();\n            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n            desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));\n"),
@@ -455,7 +495,7 @@ public partial class App : Application
             Remembered.Use({application});
             Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
 {engines_language}            Themes.Start(AppThemes.Offered);
-{settings_start}{start_main}        }}
+{settings_start}{keys_start}{start_main}        }}
         base.OnFrameworkInitializationCompleted();
     }}
 }}

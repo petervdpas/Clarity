@@ -488,11 +488,18 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     check_stores(project, settings)?;
     check_web_secrets(project)?;
     // A custom part is written in the project's own language (DESIGN 5.19).
-    let misfits: Vec<String> = clarity_project::target_problems(settings, project, "").into_iter().map(|d| d.message).filter(|m| m.starts_with("part ") || m.starts_with("library ")).collect();
+    let misfits: Vec<String> = clarity_project::target_problems(settings, project, "")
+        .into_iter()
+        .map(|d| d.message)
+        .filter(|m| m.starts_with("part ") || m.starts_with("library ") || m.contains(" clicks to keys,"))
+        .collect();
     if !misfits.is_empty() {
         return Err(misfits);
     }
-    let project = &with_resource_texts(&calls::filled(project));
+    let mut project = with_resource_texts(&calls::filled(project));
+    // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
+    project.keys_editable = settings.keys_editable;
+    let project = &project;
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,

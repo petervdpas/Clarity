@@ -217,11 +217,13 @@ public sealed partial class {name} : ObservableObject
     /// <summary>The settings as they are kept.</summary>
     public JsonObject ToJson() => new()
     {{
-{json}    }};
+{json}{keys_json}    }};
 }}
 
 ",
-        program = string(program)
+        program = string(program),
+        // The person's keys are kept beside the settings (DESIGN 5.28).
+        keys_json = if project.keys_editable { "        [\"keys\"] = PersonKeys.Json(),\n" } else { "" }
     )
 }
 

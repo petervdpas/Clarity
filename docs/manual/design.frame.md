@@ -105,11 +105,18 @@ An item with a submenu opens the submenu and has no click of its own.
 - `close` closes the current window and goes back to the one below.
 - `language` lets the person pick the language the application shows, from the project's translations. See [Languages](languages.md).
 - `theme` lets the person pick one of the themes the project offers. See [Themes](themes.md).
+- `keys` opens Clarity's keys window, where the person sets the application's shortcut keys for themselves. It needs `keys editable` in the project file (the switch in Project settings).
 
 The application remembers the chosen language and theme for its next start. A button on a window can use `quit` and `close` too; `language` and `theme` are for menus and toolbars.
 
 ## Keys
 
-A menu item can have a key, written as modifiers and one key joined by `+`: `key "Ctrl+N"`, `"Ctrl+Shift+F2"`. The menu shows it next to the caption. A button on a window takes a key in the same way (Shortcut in the properties), and works anywhere in the window. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. See [the language reference](../LANGUAGE.md) for the keys you can name.
+A menu item, a toolbar button and a ribbon button can have a key, written as modifiers and one key joined by `+`: `key "Ctrl+N"`, `"Ctrl+Shift+F2"`. The menu shows it next to the caption, and a button's tooltip shows it. A ribbon button's key works whichever tab is open, and a menu item's while the menu is shut. A button on a window takes a key in the same way (Shortcut in the properties), and works anywhere in the window. The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta`. See [the language reference](../LANGUAGE.md) for the keys you can name.
 
-On C# with Avalonia, a menu item's key also works when pressed. On the stacks with the web renderer, the menu shows the key but pressing it does nothing yet.
+What is innermost goes first: a key of the window's own buttons wins over the same key in the frame, so a window can take a frame's key for itself. Within one place, one key runs one command: two different commands with the same key in the frame, or among a window's buttons, is an error. A menu item and a button that open the same window or run the same handler are one command, and may share a key. What code hid or disabled does not answer its key.
+
+Keys work alike on every stack.
+
+### The keys window
+
+With `keys editable` in the project file, each person can change the keys for themselves. A menu item or button with `on click -> keys` opens the keys window. It lists every named command that does something, Everywhere (the app's frame) first and then each window's own commands and buttons, also those without a key in the design. Pick Change and press the new key: a key another command has in the same place offers to swap the two, and a key another place has is allowed, the window saying which command goes first where. Letters without Ctrl or Alt, Tab, Enter and Escape cannot be used. Reset puts a key back to the design's, Reset all every one. The keys are kept in the person's settings file, beside their other settings, as only what differs from the design, so a key you change in a new version still reaches whoever left it as it was. The window speaks in Clarity's own words, which the project translates (see [Languages](languages.md)).

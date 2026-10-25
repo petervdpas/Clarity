@@ -213,7 +213,9 @@ fn a_radio_group_picks_an_enum_value() {
 fn the_frame_comes_from_the_app() {
     let files = files();
     let window = file(&files, "Windows/OrderFormView.axaml");
-    has(window, "<MenuItem Header=\"{x:Static local:Texts.OrdersItem}\" InputGesture=\"Ctrl+O\" HotKey=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" IsEnabled=\"{Binding OrdersItem.IsEnabled}\" IsVisible=\"{Binding OrdersItem.IsVisible}\" />");
+    has(window, "<MenuItem Header=\"{x:Static local:Texts.OrdersItem}\" InputGesture=\"Ctrl+O\" c:Keys.Frame=\"Ctrl+O\" Command=\"{Binding Open_OrderFormCommand}\" IsEnabled=\"{Binding OrdersItem.IsEnabled}\" IsVisible=\"{Binding OrdersItem.IsVisible}\" />");
+    // The frame answers its keys after the window's own buttons, a ribbon's on every tab (DESIGN 5.28).
+    has(window, "<DockPanel c:Keys.FrameRoot=\"True\">");
     has(window, "<Separator />");
     has(window, "<MenuItem Header=\"{x:Static local:Texts.QuitItem}\" Command=\"{Binding Quit_Command}\" IsEnabled=\"{Binding QuitItem.IsEnabled}\" IsVisible=\"{Binding QuitItem.IsVisible}\" />");
     // A window opens in a desktop window of its own only where the design says so.

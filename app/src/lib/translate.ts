@@ -47,6 +47,22 @@ export function translate(text: string, texts: Texts): string {
 const OWN_TEXTS: Record<string, string> = {
   unconnectedNotKept: "The database connection is not set yet",
   unconnectedFailed: "The database did not open: {problem}",
+  // The keys window (translations KEYS_WINDOW_KEYS).
+  keysTitle: "Keys",
+  keysEverywhere: "Everywhere",
+  keysChange: "Change",
+  keysReset: "Reset",
+  keysResetAll: "Reset all",
+  keysClose: "Close",
+  keysPress: "Press the new key; Escape stops",
+  keysNone: "None",
+  keysTaken: "{key} is the key of {command}. Swap them?",
+  keysSwap: "Swap",
+  keysAlso: "{key} is also the key of {command}, elsewhere; here {mine} goes first",
+  keysTyping: "{key} cannot be used: a key without Ctrl or Alt is typing",
+  keysTab: "{key} cannot be used: Tab moves between fields",
+  keysEnter: "{key} cannot be used: Enter confirms",
+  keysEscape: "{key} cannot be used: Escape cancels",
 };
 
 /** Text from the backend: a key takes its value, keeping its slot values;

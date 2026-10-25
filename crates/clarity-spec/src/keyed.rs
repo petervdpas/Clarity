@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{CLI_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{CLI_KEYS, KEYS_WINDOW_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -89,7 +89,8 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
-        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] });
+        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
+        .chain(if clicks_to("keys") { KEYS_WINDOW_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }

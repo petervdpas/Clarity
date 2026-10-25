@@ -26,6 +26,7 @@ pub mod native;
 pub mod parser;
 pub mod rename;
 pub mod sample;
+pub mod shortcuts;
 pub mod source;
 pub mod span;
 pub mod templates;
@@ -78,6 +79,7 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
         resources: None,
         diagrams: Vec::new(),
         resource_keys: Default::default(),
+        keys_editable: false,
         engines: None,
         part_files: None,
         stores: None,
@@ -553,6 +555,9 @@ pub struct Preview {
     pub base_theme: model::ThemeDecl,
     /// The icons the project shows, by name, each an SVG path in a 24 by 24 box.
     pub icons: BTreeMap<String, String>,
+    /// The commands a person gives keys in the keys window, where the
+    /// project lets them (DESIGN 5.28); empty where it does not.
+    pub keys: Vec<shortcuts::KeyLayer>,
     /// Every icon's name, for the designer to offer.
     #[serde(rename = "iconNames")]
     #[ts(rename = "iconNames")]
@@ -564,8 +569,10 @@ impl Preview {
         let samples = sample::sample_data(&project);
         let displays = sample::display_values(&project);
         let icons = icons::used(&project);
+        let keys = if project.keys_editable { shortcuts::catalog(&project) } else { Vec::new() };
         Self {
             icons,
+            keys,
             icon_names: icons::names().map(str::to_string).collect(),
             project,
             samples,

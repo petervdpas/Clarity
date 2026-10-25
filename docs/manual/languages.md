@@ -59,6 +59,7 @@ translation nl
 - A text people read that is written in quotes is an error that asks for a key. A text without letters, such as a calculator's `"7"` or `"+"`, reads the same in every language and stays as it is.
 - `yes` and `no` are how the screen shows a bool; an image part bound to a picture has `noPicture`, `loadPicture` and `removePicture`. Every project gives them their texts.
 - `showSecret`, `hideSecret` and `copySecret` name the eye and the copy button of a password input.
+- `keysTitle`, `keysEverywhere`, `keysChange`, `keysReset`, `keysResetAll`, `keysClose`, `keysPress`, `keysNone`, `keysTaken`, `keysSwap`, `keysAlso`, `keysTyping`, `keysTab`, `keysEnter` and `keysEscape` are the words of the keys window, in a project that opens it (`on click -> keys`).
 - `unconnectedNotKept` and `unconnectedFailed` say why the databases did not open: the connection is not set yet, or it did not work, with the database's own message in `{problem}`. A project whose database connects with a secret setting, or that handles `on unconnected`, has them.
 
 ## Slots

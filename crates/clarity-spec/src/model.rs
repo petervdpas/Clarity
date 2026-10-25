@@ -889,6 +889,11 @@ pub struct Project {
     /// The keys whose value in a language is a file of the resources folder
     /// (`gameRules resource "rules-nl.md"`), per language: the file's name.
     pub resource_keys: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    /// Whether the people using the application set its keys themselves,
+    /// as the project file says (`keys editable`, DESIGN 5.28).
+    #[serde(rename = "keysEditable")]
+    #[ts(rename = "keysEditable")]
+    pub keys_editable: bool,
     /// The themes the application offers, the first being the one it starts
     /// with; empty when the project file names none (design section 1.5, T1).
     pub themes: Vec<String>,

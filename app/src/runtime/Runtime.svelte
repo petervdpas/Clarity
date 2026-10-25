@@ -13,6 +13,9 @@
   import { provideLive, type PartState, type Pointer } from "../lib/live";
   import { languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
+  import KeysWindow from "../lib/KeysWindow.svelte";
+  import { keysOfCommand, personKeys } from "../lib/appKeys";
+  import type { KeyChoices } from "../lib/keys";
   import { themeChoice } from "../lib/scheme.svelte";
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
@@ -261,10 +264,14 @@
 
   /** The settings when the application starts: what was kept and still fits, over the defaults. */
   async function startSettings(preview: Preview) {
-    if (!settingsEntity(preview)) return;
+    // The person's keys are kept with the settings, also where there are no others (DESIGN 5.28).
+    const keysEditable = preview.keys.length > 0;
+    if (!settingsEntity(preview) && !keysEditable) return;
     // The secret settings come from the system's protected store, never the file (DESIGN 5.27).
-    secrets = secretSettings(preview);
+    secrets = settingsEntity(preview) ? secretSettings(preview) : [];
     const kept = await invoke<Record<string, unknown> | null>("read_settings", { secrets }).catch(() => null);
+    if (keysEditable) personChoices = personKeys(kept?.keys);
+    if (!settingsEntity(preview)) return;
     const themes = offeredThemes(preview).map((t) => t.name.name);
     const language = languageChoice.language ?? base;
     const theme = themeOf(preview)?.name.name ?? themes[0] ?? "";
@@ -284,9 +291,24 @@
     if (sameSettings(values, settings)) return;
     settings = { ...values };
     for (const state of stack) if (SETTINGS in state.data) state.data[SETTINGS] = { ...settings };
-    const { id: _id, ...kept } = settings;
-    keeping = invoke("keep_settings", { settings: kept, secrets }).catch((err) => say({ level: "error", text: errorText(err) }));
+    keepAll();
     apply(settings);
+  }
+
+  /** The person's keys, by command, where they differ from the design's (DESIGN 5.28). */
+  let personChoices = $state<KeyChoices>({});
+
+  /** Keeps the settings and the person's keys, as they are now. */
+  function keepAll() {
+    const { id: _id, ...kept } = settings ?? {};
+    const keys = model && model.keys.length > 0 ? { keys: $state.snapshot(personChoices) } : {};
+    keeping = invoke("keep_settings", { settings: { ...kept, ...keys }, secrets }).catch((err) => say({ level: "error", text: errorText(err) }));
+  }
+
+  /** The person set their keys in the keys window. */
+  function setPersonKeys(next: KeyChoices) {
+    personChoices = next;
+    keepAll();
   }
 
   /** Shows the language and theme the settings name, when they have them. */
@@ -491,6 +513,7 @@
     else if (target === "quit") invoke("quit_app");
     else if (target === "language") choosing = "language";
     else if (target === "theme") choosing = "theme";
+    else if (target === "keys" && model && model.keys.length > 0) choosing = "keys";
     else nav.target(target, newWindow);
   }
 
@@ -542,6 +565,10 @@
     },
     keepSettings() {
       if (current) adopt($state.snapshot(current.data[SETTINGS]));
+    },
+    keysOf(part: string | null, designed: string | null, appFrame: boolean) {
+      if (!part) return designed ? [designed] : [];
+      return keysOfCommand(appFrame ? part : `${current?.window ?? ""}.${part}`, designed, personChoices);
     },
     placePart(part: string, kind: string, place: Place, shown: boolean) {
       if (current?.instance === undefined) return;
@@ -627,7 +654,7 @@
   // click targets, kept for the next start.
   const LANGUAGE_KEY = "clarity-language";
   const THEME_KEY = "clarity-theme";
-  let choosing = $state<"language" | "theme" | null>(null);
+  let choosing = $state<"language" | "theme" | "keys" | null>(null);
   const base = $derived(model?.project.locale.language ?? "en");
   const languages = $derived(model ? languagesOf(base, Object.keys(model.project.translations)) : []);
   // The theme shown, on the whole application.
@@ -737,6 +764,8 @@
       onchoose={chooseTheme}
       onclose={() => (choosing = null)}
     />
+  {:else if choosing === "keys" && model}
+    <KeysWindow preview={model} choices={personChoices} onchange={setPersonKeys} onclose={() => (choosing = null)} />
   {/if}
 
   <div class="messages" aria-live="polite">

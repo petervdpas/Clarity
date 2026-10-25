@@ -26,6 +26,11 @@ translations: { [key in string]: { [key in string]: string } },
  */
 resource_keys: { [key in string]: { [key in string]: string } }, 
 /**
+ * Whether the people using the application set its keys themselves,
+ * as the project file says (`keys editable`, DESIGN 5.28).
+ */
+keysEditable: boolean, 
+/**
  * The themes the application offers, the first being the one it starts
  * with; empty when the project file names none (design section 1.5, T1).
  */

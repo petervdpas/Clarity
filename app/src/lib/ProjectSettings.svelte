@@ -267,6 +267,9 @@
             onchange={(e) => save({ currency: e.currentTarget.value.trim().toUpperCase() || null })}
           />
           <p class="form-help">The currency of money fields, as its code: EUR, USD, GBP. Empty shows amounts without a currency sign.</p>
+          <span class="form-label">Keys</span>
+          <label><input type="checkbox" checked={settings.keys_editable} onchange={(e) => save({ keys_editable: e.currentTarget.checked })} /> People set the shortcut keys themselves</label>
+          <p class="form-help">On, a menu item or button that clicks to <code>keys</code> opens the keys window, where each person changes the keys of the application's commands for themselves.</p>
           <span class="form-label">Themes</span>
           <div class="themes">
             {#each themes as theme (theme)}

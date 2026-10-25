@@ -284,3 +284,46 @@ page CustomerCard: window
     let quit = "module shop\nuse p\n\napp Shop\n    menu name mainMenu\n        item \"Quit\" name quitItem on click -> quit in new window\n";
     assert!(errors(quit).iter().any(|e| e == "only a window opens in a new window"), "{:?}", errors(quit));
 }
+
+/// Ribbon and toolbar buttons have keys too (DESIGN 5.28), as menu items do.
+#[test]
+fn ribbon_and_toolbar_buttons_have_keys() {
+    let app = APP
+        .replace("button \"New\" name newButton icon \"plus\" on click -> CustomerCard", "button \"New\" name newButton icon \"plus\" key \"Ctrl+N\" on click -> CustomerCard")
+        .replace("button \"New\" name newRibbon icon \"plus\" large on click -> CustomerCard", "button \"New\" name newRibbon icon \"plus\" large key \"Ctrl+Shift+N\" on click -> CustomerCard");
+    assert_eq!(errors(&app), Vec::<String>::new());
+    let (file, _) = parse(&app, "shop.clarity");
+    let frame = &file.apps[0].frame;
+    assert_eq!(frame.toolbar.as_ref().unwrap().items[0].props.shortcut.as_deref(), Some("Ctrl+N"));
+    assert_eq!(frame.ribbon.as_ref().unwrap().tabs[0].groups[0].items[0].props.shortcut.as_deref(), Some("Ctrl+Shift+N"));
+}
+
+/// One key runs one command where it is active (DESIGN 5.28): in a window's
+/// frame, and among its own buttons. The same target on a menu item and a
+/// toolbar button is one command; a window's own button may reuse a frame's
+/// key on purpose, since what is innermost goes first.
+#[test]
+fn one_key_runs_one_command_where_it_is_active() {
+    // Ctrl+N on the menu item and the toolbar button, both opening CustomerCard: one command.
+    let same = APP.replace("button \"New\" name newButton icon \"plus\" on click -> CustomerCard", "button \"New\" name newButton icon \"plus\" key \"Ctrl+N\" on click -> CustomerCard");
+    assert_eq!(errors(&same), Vec::<String>::new());
+    // Ctrl+N opening Overview from the toolbar: two commands.
+    let two = APP.replace("button \"New\" name newButton icon \"plus\" on click -> CustomerCard", "button \"New\" name newButton icon \"plus\" key \"Ctrl+N\" on click -> Overview");
+    assert!(
+        errors(&two).iter().any(|e| e == "key 'Ctrl+N' runs both newCustomerItem and newButton in the app's frame; give one of them another key"),
+        "{:#?}",
+        errors(&two)
+    );
+    // A window's own button may take the frame's key; two of its buttons may not share one.
+    let pages = PAGES.replace(
+        "page CustomerCard: window\n    title \"Card\"\n",
+        "page CustomerCard: window\n    title \"Card\"\n    button \"Save\" name saveButton at 1,1 span 2 key \"Ctrl+N\" on click: saveClicked\n    button \"Keep\" name keepButton at 3,1 span 2 key \"Ctrl+N\" on click: keepClicked\n",
+    );
+    let found: Vec<String> = load_sources([("p.clarity", pages.as_str()), ("shop.clarity", APP)])
+        .diagnostics
+        .into_iter()
+        .filter(|d| d.severity == Severity::Error)
+        .map(|d| d.message)
+        .collect();
+    assert_eq!(found, ["key 'Ctrl+N' runs both saveButton and keepButton in window CustomerCard; give one of them another key"]);
+}

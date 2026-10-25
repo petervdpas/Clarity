@@ -91,6 +91,26 @@ pub const CLI_KEYS: [(&str, &str); 20] = [
 /// typed, hide it again, and copy it.
 pub const SECRET_KEYS: [(&str, &str); 3] = [("showSecret", "Show"), ("hideSecret", "Hide"), ("copySecret", "Copy")];
 
+/// Clarity's words of the keys window (DESIGN 5.28), where a person sets
+/// the keys of the application's commands. The runtimes fill the slots.
+pub const KEYS_WINDOW_KEYS: [(&str, &str); 15] = [
+    ("keysTitle", "Keys"),
+    ("keysEverywhere", "Everywhere"),
+    ("keysChange", "Change"),
+    ("keysReset", "Reset"),
+    ("keysResetAll", "Reset all"),
+    ("keysClose", "Close"),
+    ("keysPress", "Press the new key; Escape stops"),
+    ("keysNone", "None"),
+    ("keysTaken", "{key} is the key of {command}. Swap them?"),
+    ("keysSwap", "Swap"),
+    ("keysAlso", "{key} is also the key of {command}, elsewhere; here {mine} goes first"),
+    ("keysTyping", "{key} cannot be used: a key without Ctrl or Alt is typing"),
+    ("keysTab", "{key} cannot be used: Tab moves between fields"),
+    ("keysEnter", "{key} cannot be used: Enter confirms"),
+    ("keysEscape", "{key} cannot be used: Escape cancels"),
+];
+
 /// Clarity's words for why the databases did not open (DESIGN 5.27): the
 /// window that keeps the connection says it, and the app's `on unconnected`
 /// gets it. The runtimes fill the slot with their own message.
@@ -111,6 +131,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&CLI_KEYS)
         .chain(&UNCONNECTED_KEYS)
         .chain(&SECRET_KEYS)
+        .chain(&KEYS_WINDOW_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -453,6 +474,7 @@ fn shown(project: &Project) -> Shown {
     let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
     let commands = project.files.iter().any(|f| !f.commands.is_empty());
     let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
+    let keys_window = crate::frame::clicks_to(project, "keys");
     let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let own = RENDERER_KEYS
         .iter()
@@ -466,7 +488,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
-        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] });
+        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
+        .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

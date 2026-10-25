@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.14
+
+- Colors the `trend` and `timer` parts.
+
 ## 0.1.13
 
 - Colors `when`, which leaves a header or query pair out of an HTTP call when its condition does not hold.

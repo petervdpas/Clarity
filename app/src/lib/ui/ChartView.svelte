@@ -13,6 +13,7 @@
     groups,
     tick = String,
     label = undefined,
+    top = null,
   }: {
     kind: "bar" | "line" | "pie";
     /** The groups in order: what each is called, its number, and that number as people read it. */
@@ -20,6 +21,8 @@
     /** A number of the axis as people read it. */
     tick?: (value: number) => string;
     label?: string;
+    /** The top of the axis, `max 100` (DESIGN 5.26); else the axis takes in the largest number. */
+    top?: number | null;
   } = $props();
 
   let width = $state(0);
@@ -31,7 +34,9 @@
   const RIGHT = 8;
 
   const values = $derived(groups.map((g) => g.value));
-  const scale = $derived(scaleOf(Math.min(0, ...values), Math.max(0, ...values)));
+  const scale = $derived(scaleOf(Math.min(0, ...values), top ?? Math.max(0, ...values)));
+  /** Many points draw as a line alone, without a dot each (DESIGN 5.26). */
+  const dots = $derived(groups.length <= 30);
   const ticks = $derived.by(() => {
     const out: number[] = [];
     for (let v = scale.bottom; v <= scale.top + scale.step / 1e6; v += scale.step) out.push(Math.round(v * 1e12) / 1e12);
@@ -89,7 +94,7 @@
         <text x={LEFT - 6} y={y(t) + 4} class="tick">{tick(t)}</text>
       {/each}
       {#each groups as g, i (i)}
-        <text x={x(i)} y={TOP + plotH + 16} class="group">{g.label}</text>
+        {#if g.label}<text x={x(i)} y={TOP + plotH + 16} class="group">{g.label}</text>{/if}
       {/each}
       {#if kind === "bar"}
         {#each groups as g, i (i)}
@@ -99,9 +104,11 @@
         {/each}
       {:else}
         <polyline points={groups.map((g, i) => `${x(i)},${y(g.value)}`).join(" ")} class="line" />
-        {#each groups as g, i (i)}
-          <circle cx={x(i)} cy={y(g.value)} r="3.5" class="point"><title>{g.label}: {g.text}</title></circle>
-        {/each}
+        {#if dots}
+          {#each groups as g, i (i)}
+            <circle cx={x(i)} cy={y(g.value)} r="3.5" class="point"><title>{g.label ? `${g.label}: ${g.text}` : g.text}</title></circle>
+          {/each}
+        {/if}
       {/if}
     {/if}
   </svg>

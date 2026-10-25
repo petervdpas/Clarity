@@ -4,6 +4,8 @@
 // axis in steps of 1, 2, 2.5 or 5 times a power of ten, or as the slices of
 // a pie in the palette's colors. Each bar, point and slice tells its group
 // and number when pointed at. It draws again when its rows or size change.
+// Given Numbers instead (DESIGN 5.26), it draws a list of numbers as they
+// are, the last Points of them, on an axis up to Max when it has one.
 
 using System.Collections;
 using System.Collections.Specialized;
@@ -25,6 +27,17 @@ public class ChartView : UserControl
 
     /// <summary>The rows: records of the list the chart binds.</summary>
     public IEnumerable? ItemsSource { get => GetValue(ItemsSourceProperty); set => SetValue(ItemsSourceProperty, value); }
+
+    public static readonly StyledProperty<IEnumerable?> NumbersProperty = AvaloniaProperty.Register<ChartView, IEnumerable?>(nameof(Numbers));
+
+    /// <summary>A list of numbers drawn as they are (DESIGN 5.26), in place of grouped rows.</summary>
+    public IEnumerable? Numbers { get => GetValue(NumbersProperty); set => SetValue(NumbersProperty, value); }
+
+    /// <summary>How many of the last numbers it shows; 0 shows them all.</summary>
+    public int Points { get; set; }
+
+    /// <summary>The top of the axis, `max 100`; NaN lets the axis take in the largest number.</summary>
+    public double Max { get; set; } = double.NaN;
 
     public ChartShape Shape { get; set; }
 
@@ -70,11 +83,11 @@ public class ChartView : UserControl
         base.OnPropertyChanged(change);
         if (change.Property == ByChoicesProperty)
             Draw();
-        if (change.Property != ItemsSourceProperty)
+        if (change.Property != ItemsSourceProperty && change.Property != NumbersProperty)
             return;
         if (watched is not null)
             watched.CollectionChanged -= RowsChanged;
-        watched = ItemsSource as INotifyCollectionChanged;
+        watched = (Numbers ?? ItemsSource) as INotifyCollectionChanged;
         if (watched is not null)
             watched.CollectionChanged += RowsChanged;
         Draw();
@@ -87,9 +100,23 @@ public class ChartView : UserControl
     static string Text(IValueConverter? converter, object? value) =>
         converter?.Convert(value, typeof(string), null, CultureInfo.CurrentCulture) as string ?? Convert.ToString(value, CultureInfo.CurrentCulture) ?? "";
 
+    /// <summary>The numbers of a list as the chart shows them: its last Points, decimals as their text.</summary>
+    public static List<ChartShown> NumbersShown(IEnumerable numbers, int points)
+    {
+        var values = numbers.Cast<object?>()
+            .Select(v => v is null ? (double?)null : double.TryParse(Convert.ToString(v, CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null)
+            .OfType<double>()
+            .ToList();
+        if (points > 0 && values.Count > points)
+            values = values[^points..];
+        return [.. values.Select(v => new ChartShown("", v, v.ToString(CultureInfo.CurrentCulture)))];
+    }
+
     /// <summary>The groups of the rows, as the chart shows them.</summary>
     public List<ChartShown> Groups()
     {
+        if (Numbers is { } numbers)
+            return NumbersShown(numbers, Points);
         var rows = ItemsSource?.Cast<object>() ?? [];
         // A reference groups, and orders, by the text of the record it names.
         string? Named(object? id) => ByChoices?.FirstOrDefault(c => Equals(c.Value, id))?.Label;
@@ -141,7 +168,7 @@ public class ChartView : UserControl
     void DrawAxis(double width, double height)
     {
         var values = shown.Select(g => g.Value).ToList();
-        var scale = Charts.Scale(Math.Min(0, values.DefaultIfEmpty(0).Min()), Math.Max(0, values.DefaultIfEmpty(0).Max()));
+        var scale = Charts.Scale(Math.Min(0, values.DefaultIfEmpty(0).Min()), double.IsNaN(Max) ? Math.Max(0, values.DefaultIfEmpty(0).Max()) : Max);
         var plotW = Math.Max(0, width - Left - Right);
         var plotH = Math.Max(0, height - Top - Bottom);
         double Y(double v) => Top + plotH * (1 - (v - scale.Bottom) / (scale.Top - scale.Bottom));
@@ -153,7 +180,8 @@ public class ChartView : UserControl
             Label(t.ToString(CultureInfo.CurrentCulture), 0, Y(t) - 8, Left - 6, TextAlignment.Right);
         }
         for (var i = 0; i < shown.Count; i++)
-            Label(shown[i].Label, X(i) - band / 2, Top + plotH + 4, band, TextAlignment.Center);
+            if (shown[i].Label.Length > 0)
+                Label(shown[i].Label, X(i) - band / 2, Top + plotH + 4, band, TextAlignment.Center);
         if (Shape == ChartShape.Bar)
         {
             for (var i = 0; i < shown.Count; i++)
@@ -167,13 +195,16 @@ public class ChartView : UserControl
             return;
         }
         Add(new Polyline { Points = [.. shown.Select((g, i) => new Point(X(i), Y(g.Value)))], Stroke = Accent, StrokeThickness = 2 });
+        // Many points draw as a line alone, without a dot each (DESIGN 5.26).
+        if (shown.Count > 30)
+            return;
         for (var i = 0; i < shown.Count; i++)
         {
             var g = shown[i];
             var point = new Ellipse { Width = 7, Height = 7, Fill = Accent, Classes = { "point" } };
             Canvas.SetLeft(point, X(i) - 3.5);
             Canvas.SetTop(point, Y(g.Value) - 3.5);
-            Add(point, $"{g.Label}: {g.Text}");
+            Add(point, g.Label.Length > 0 ? $"{g.Label}: {g.Text}" : g.Text);
         }
     }
 

@@ -38,6 +38,12 @@ For every part, its own properties, events and binding rules are in [the languag
 
 - `table`: binds to a list (`bind orders`) and shows `columns`. Columns named in `edit` are inputs in the cells. A column can have a width, set by dragging its header edge on the canvas or in the properties; `resizable` lets the person resize the columns (remembered for them), `sortable` sorts by a click on a header, and `order by` gives the order the rows show in first. Events: `select` (another row is chosen), `open` (double-click or Enter), `change` (a cell was edited).
 - `list`: binds to a list and shows the fields in `show`. Events: `select`, `open`.
+- `chart`: bars, a line or a pie of a list's rows grouped by a field; or, bound to a list of numbers (`data readings: list<decimal>`), the numbers as they are, as bars or a line. **Points** shows a list's last numbers and **Top** fixes the top of the axis.
+- `trend`: one number's last values as a line, taken every so many seconds while the window is open: `trend name cpuTrend at 1,1 span 6 rows 4 bind cpu points 60 max 100`. **Points** is how many it keeps (60 without it), **Every (s)** the seconds between them (1 without it), **Top** the top of the axis. The designer shows a still sample line.
+
+## Time
+
+- `timer`: runs its `on tick` handler every so many seconds while its window is open: `timer name clock every 1 on tick: sampled`. It has no place in the window, so the designer keeps it in the tray under the window, with the sounds; pick it there to set **Every (s)** and its handler. `clock.enabled = false` in code stops it, and setting it back to true starts it again. A tick that comes while a handler still runs is left out. A list of numbers grows with `+`, as in `readings = readings + [cpu]`, for a chart to draw; see [The language reference](../LANGUAGE.md#live-graphs).
 
 ## Graphics
 

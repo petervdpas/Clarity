@@ -966,6 +966,10 @@ impl<'a> Emitter<'a> {
             ExprKind::Name { .. } | ExprKind::Member { .. } => self.place(expr),
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
+            // A list of values grows by a list of its items (DESIGN 5.26).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+                format!("System.Linq.Enumerable.ToList(System.Linq.Enumerable.Concat({}, {}))", self.value(left), self.value(right))
+            }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);

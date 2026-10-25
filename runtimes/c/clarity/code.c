@@ -72,6 +72,12 @@ bool clarity_outside(int64_t position, size_t count) {
         if (position < 1 || (uint64_t)position > list.count) return clarity_outside(position, list.count); \
         list.items[position - 1] = value;                                                 \
         return true;                                                                      \
+    }                                                                                     \
+    List clarity_##name##_join(List a, List b) {                                          \
+        List list = {CLARITY_NEW(Item, a.count + b.count ? a.count + b.count : 1), a.count + b.count}; \
+        if (a.count) memcpy(list.items, a.items, sizeof(Item) * a.count);                 \
+        if (b.count) memcpy(list.items + a.count, b.items, sizeof(Item) * b.count);       \
+        return list;                                                                      \
     }
 
 CLARITY_VALUES(ClarityIntegers, int64_t, integers)
@@ -108,6 +114,13 @@ bool clarity_dates_holds(ClarityDates list, ClarityDate item) {
 ClarityTexts clarity_texts(size_t count, const char* const* items) {
     ClarityTexts list = {CLARITY_NEW(const char*, count ? count : 1), count};
     if (count) memcpy(list.items, items, sizeof(const char*) * count);
+    return list;
+}
+
+ClarityTexts clarity_texts_join(ClarityTexts a, ClarityTexts b) {
+    ClarityTexts list = {CLARITY_NEW(const char*, a.count + b.count ? a.count + b.count : 1), a.count + b.count};
+    if (a.count) memcpy(list.items, a.items, sizeof(const char*) * a.count);
+    if (b.count) memcpy(list.items + a.count, b.items, sizeof(const char*) * b.count);
     return list;
 }
 

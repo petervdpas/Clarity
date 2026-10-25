@@ -1245,6 +1245,34 @@ impl<'a> Window<'a> {
                 let _ = writeln!(out, "{pad}  </c:ClarityTable.Columns>\n{pad}</c:ClarityTable>");
             }
             // A chart (U1c): Clarity's ChartView groups the rows it is given itself, as the web does.
+            // A chart of a list of numbers (DESIGN 5.26): drawn as they are.
+            WidgetKind::Chart
+                if p.bind.as_deref().is_some_and(|b| match b.split_once('.') {
+                    Some(_) => self.bound_field(b).is_some_and(|(_, f)| matches!(f.ty, FieldType::Values { .. })),
+                    None => self.entity_of(b).is_none(),
+                }) =>
+            {
+                let shape = if p.chart == Some(clarity_spec::model::ChartKind::Line) { "Line" } else { "Bar" };
+                let numbers = bound.as_deref().map(|b| format!(" Numbers=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let points = p.points.map(|n| format!(" Points=\"{n}\"")).unwrap_or_default();
+                let max = p.max.as_deref().map(|m| format!(" Max=\"{m}\"")).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:ChartView {at} Shape=\"{shape}\"{numbers}{points}{max}{plain_state}{extra} />");
+            }
+            // One number's last values, taken every so many seconds (DESIGN 5.26).
+            WidgetKind::Trend => {
+                let value = bound.as_deref().map(|b| format!(" Value=\"{{Binding {b}}}\"")).unwrap_or_default();
+                let points = p.points.map(|n| format!(" Points=\"{n}\"")).unwrap_or_default();
+                let max = p.max.as_deref().map(|m| format!(" Max=\"{m}\"")).unwrap_or_default();
+                let every = p.every.as_deref().map(|e| format!(" Every=\"{e}\"")).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:TrendView {at}{value}{points}{max}{every}{plain_state}{extra} />");
+            }
+            // Runs its tick handler every so many seconds while it is enabled (DESIGN 5.26).
+            WidgetKind::Timer => {
+                let every = p.every.as_deref().unwrap_or("1");
+                let command = Self::handler(widget, Event::Tick).map(|h| format!(" Command=\"{{Binding {}Command}}\"", self.command(h))).unwrap_or_default();
+                let enabled = named.map(|n| format!(" IsEnabled=\"{{Binding {}.IsEnabled}}\"", member(n))).unwrap_or_default();
+                let _ = writeln!(out, "{pad}<c:Timer Every=\"{every}\"{command}{enabled} />");
+            }
             WidgetKind::Chart => {
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let items = bound.as_deref().map(|b| format!(" ItemsSource=\"{{Binding {b}}}\"")).unwrap_or_default();
@@ -1565,6 +1593,8 @@ public partial class {name}View : UserControl
                 (Some(Literal::Str(text)), _) => self.texts.code(text),
                 (Some(value), _) => logic::literal(self.project, ty, value),
                 (None, clarity_spec::code::check::TypeInfo::Text) => "\"\"".into(),
+                // A list of values starts empty (DESIGN 5.26).
+                (None, clarity_spec::code::check::TypeInfo::Values(_)) => "[]".into(),
                 (None, _) => "default".into(),
             };
             let (prop, field) = (member(&d.name.name), backing(&d.name.name));

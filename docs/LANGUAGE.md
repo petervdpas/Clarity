@@ -536,7 +536,7 @@ An application has one desktop window, on every stack. `open` shows a window in 
 | `size W x H` | The size its desktop window opens at, in pixels, like `size 320 x 460`: 200 to 3840 wide and 150 to 2160 high. Without it a window opens at 1100 x 760. A desktop window takes the size of the window it shows first; a window opened in place keeps the desktop window's size. The designer shows a window at its size. |
 | `data name: Entity` | One record the window works on. |
 | `data name: list<Entity>` | A list of records the window works on. |
-| `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration` or an enum. It is no record and is never stored; it lives as long as the window. |
+| `data name: type` | A plain value the window holds: `data shown: decimal`, `data pending: Operation`, `data readings: list<decimal>`. The type is `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, `duration`, an enum, or a list of text, integers, decimals or dates, which starts empty. It is no record and is never stored; it lives as long as the window. |
 | `data name: type, default value` | A plain value that starts at `value`: `data fresh: bool, default true`. Without a default it starts empty: 0, empty text, false, no date, or the enum's first value. |
 | `grid N columns` | The number of grid columns, 1 to 24. The default is 12. |
 | `on open: handler` | Runs when the window has opened and its data is loaded. |
@@ -651,7 +651,8 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
 | `tree` | a list: `bind folders children children` | `children field`; `show field, ...` | `select`, `open` |
 | `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable` | `select`, `open` |
-| `chart` | a list: `chart bar ... bind orders by status count` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field` | |
+| `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
+| `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
 
 **Graphics**
 
@@ -666,6 +667,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
 | `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | none |
+| `timer` | nothing; it has no place in the window: no `at`, `span` or `rows` | `every n`, seconds between its ticks, 0.1 to 86400; see [Live graphs](#live-graphs) | `tick` |
 
 `select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
 
@@ -722,6 +724,29 @@ page Dashboard: window
 - The groups come in the order of their values: numbers and dates low to high, text ignoring case, an enum's values as it declares them, no before yes, a reference by the text of the record it names. Each shows as people read it: an enum by its label, a date in their format.
 - A bar or line chart has an axis in steps of 1, 2, 2.5 or 5 times a power of ten that always takes in 0. A pie's slices take the colors of the palette's fourth row, in order; a group of 0 or less has no slice. Each bar, point and slice tells its group and number when pointed at.
 - The chart draws again when its rows change. Every renderer groups and draws alike (`conformance/charts.json`).
+- Bound to a list of numbers (`data readings: list<decimal>`, or such a field of a record), a bar or line chart draws the numbers as they are, in order, without groups: `chart line name history at 1,1 span 6 rows 4 bind readings points 30 max 100`. `points n` shows the list's last n numbers, `max n` fixes the top of the axis. A line of more than 30 points has no dot at each. See [Live graphs](#live-graphs).
+
+### Live graphs
+
+A window shows numbers as they change with a `timer`, which runs a handler every so many seconds, and a `trend` or a chart of a list of numbers, which draw them (DESIGN 5.26):
+
+```clarity
+page Monitor: window
+    data cpu: decimal
+    data readings: list<decimal>
+    timer name clock every 1 on tick: sampled
+    trend name cpuTrend at 1,1 span 6 rows 4 bind cpu points 60 max 100
+    chart line name history at 1,5 span 6 rows 4 bind readings points 30 max 100
+
+code Monitor
+    handler sampled
+        cpu = load()
+        readings = readings + [cpu]
+```
+
+- **A timer** has no place in the window; the designer keeps it in the tray under the window, with the sounds. While its window is open it runs its `on tick` handler every `every n` seconds (0.1 to 86400). A tick that comes while a handler still runs is left out, not saved up. `clock.enabled = false` stops it until code sets it back to true.
+- **A trend** follows one number: every `every n` seconds (1 without it) it takes the value its number has, and keeps the last `points n` (60 without it), the newest at the right. It does not wait for code: what code last set is what it takes. `max n` fixes the top of its axis, which otherwise takes in its largest value.
+- **A list of numbers** grows with `+`: `readings + [cpu]` is a new list with the item after the others; both sides are lists of the same kind of item. A chart of the list draws its last `points n` numbers.
 
 ### Trees
 
@@ -1493,7 +1518,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `@savedName(name = customer.name)` | a text by its key, its slots filled by name; see [Texts by key](#texts-by-key) |
 | `"{album.title}.txt"` | text with slots, filled plainly; see [Text with slots](#text-with-slots) |
 | `customer`, `customer.name`, `grid.selected.total` | names and paths |
-| `[1, 2, 3]`, `["a", "b"]` | a list of values of one type; an empty one needs its type, as in `let squares: list<integer> = []` |
+| `[1, 2, 3]`, `["a", "b"]` | a list of values of one type; an empty one needs its type, as in `let squares: list<integer> = []`; `readings + [value]` is a new list with the items of both |
 | `squares[3]` | an item of a list, counted from 1; a position outside the list is an error |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |

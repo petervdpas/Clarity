@@ -577,6 +577,14 @@ pub struct WidgetProps {
     /// `repeat`: a sound plays its source over and over until it is stopped.
     #[serde(default)]
     pub repeat: bool,
+    /// How many values a trend keeps, or a chart of numbers shows: `points 60`
+    /// (DESIGN 5.26); a trend keeps 60 without it, a chart shows all.
+    #[serde(default)]
+    pub points: Option<u32>,
+    /// Seconds between a timer's ticks, or a trend's values, as written:
+    /// `every 1`, `every 0.5`; a trend takes one a second without it.
+    #[serde(default)]
+    pub every: Option<String>,
     /// Made by Clarity, not written: a label of a form's label column. The
     /// designer leaves it alone and it is never written back.
     pub made: bool,

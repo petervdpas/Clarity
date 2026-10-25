@@ -506,6 +506,16 @@ pub fn emit_windows(project: &Project, file: &SpecFile, types: &FileTypes) -> Re
                     TypeInfo::Date => ("clarity_json_date(w->{m})".into(), "date"),
                     TypeInfo::DateTime => ("clarity_json_date_time(w->{m})".into(), "date_time"),
                     TypeInfo::Enum(e) => (format!("clarity_json_text({}_name(w->{{m}}))", prefix(e)), "enum"),
+                    // A list of values (DESIGN 5.26), as a list field's.
+                    TypeInfo::Values(item) if !matches!(item, clarity_spec::code::check::ValueItem::Bool | clarity_spec::code::check::ValueItem::Enum(_)) => {
+                        let word = match item {
+                            clarity_spec::code::check::ValueItem::Integer => "integers",
+                            clarity_spec::code::check::ValueItem::Decimal => "decimals",
+                            clarity_spec::code::check::ValueItem::Date => "dates",
+                            _ => "texts",
+                        };
+                        (format!("clarity_json_{word}(w->{{m}})"), word)
+                    }
                     other => {
                         errors.push(format!("data '{}' of {name}: a plain value of {other:?} is not generated yet for C", d.name.name));
                         continue;
@@ -1720,6 +1730,12 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } if is_decimal(&ty) => format!("clarity_decimal_neg({})", bare(self.value(operand, pre))),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand, pre)),
+            // A list of values grows by a list of its items (DESIGN 5.26).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+                let TypeInfo::Values(item) = &ty else { unreachable!() };
+                let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
+                format!("{}_join({left}, {right})", values_prefix(item))
+            }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty, pre),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);

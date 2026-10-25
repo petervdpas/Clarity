@@ -906,8 +906,15 @@ fn parse_data(cursor: &mut Cursor, span: Span) -> ParseResult<DataDecl> {
         None
     };
     let of = match ty.kind {
-        TypeRefKind::List { item } if crate::code::parse::is_type_word(&item) => {
-            return Err(Diagnostic::error("a list holds records, as in 'list<Order>'", ty.span));
+        // A list of values is a plain value of the window, starting empty (DESIGN 5.26).
+        TypeRefKind::List { ref item } if crate::code::parse::is_type_word(item) => {
+            if crate::model::ListItem::of_word(item).is_none() {
+                return Err(Diagnostic::error("a list of values holds text, integer, decimal or date, as in 'list<decimal>'; a list of records 'list<Order>'", ty.span));
+            }
+            if default.is_some() {
+                return Err(Diagnostic::error(format!("'{}' is a list, which starts empty; it has no default", name.name), ty.span));
+            }
+            DataKind::Value { ty, default: None }
         }
         TypeRefKind::List { .. } if default.is_some() => {
             return Err(Diagnostic::error(
@@ -1535,6 +1542,8 @@ fn parse_widget_props(
         labels: None,
         volume: None,
         repeat: false,
+        points: None,
+        every: None,
         made: false,
         style: None,
         readonly: false,
@@ -1609,6 +1618,9 @@ fn parse_widget_props(
         match word {
             "at" | "span" | "rows" if kind == WidgetKind::Sound => {
                 return Err(Diagnostic::error("a sound has no place in the window: it is heard, not seen, so it has no 'at', 'span' or 'rows'", clause.span));
+            }
+            "at" | "span" | "rows" if kind == WidgetKind::Timer => {
+                return Err(Diagnostic::error("a timer has no place in the window: it keeps time, not seen, so it has no 'at', 'span' or 'rows'", clause.span));
             }
             "at" if kind == WidgetKind::Popover => {
                 return Err(Diagnostic::error("a popover has no 'at': it opens next to the part named in 'for'", clause.span));
@@ -1829,6 +1841,14 @@ fn parse_widget_props(
                 applies(WidgetProperty::Repeat)?;
                 props.repeat = true;
             }
+            "points" => {
+                applies(WidgetProperty::Points)?;
+                props.points = Some(cursor.expect_number("how many values it shows, as in points 60")?);
+            }
+            "every" => {
+                applies(WidgetProperty::Every)?;
+                props.every = Some(cursor.expect(TokenKind::Number, "a number of seconds, as in every 1")?.text.clone());
+            }
             "split" => {
                 applies(WidgetProperty::Split)?;
                 props.split = true;
@@ -1940,7 +1960,7 @@ fn parse_widget_props(
 
     // A popover stands outside the window's grid, on a grid of its own; a
     // sound has no place at all.
-    if matches!(kind, WidgetKind::Popover | WidgetKind::Sound) {
+    if matches!(kind, WidgetKind::Popover | WidgetKind::Sound | WidgetKind::Timer) {
         props.col = 1;
         props.row = 1;
         placed = true;

@@ -817,6 +817,10 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand)),
+            // A list of values grows by a list of its items (DESIGN 5.26).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+                format!("{{ let mut joined = {}; joined.extend({}); joined }}", self.value(left), self.value(right))
+            }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);

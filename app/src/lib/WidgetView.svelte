@@ -14,6 +14,8 @@
   import TagsInput from "./ui/TagsInput.svelte";
   import TypeAheadInput from "./ui/TypeAheadInput.svelte";
   import ChartView from "./ui/ChartView.svelte";
+  import TrendView from "./ui/TrendView.svelte";
+  import { numbersOf } from "./ui/trend";
   import { groupsOf, type ByKind } from "./ui/charts";
   import { searched, suggestions, type RefOption } from "./dropdownOptions";
   import type { Item, ItemKind } from "./listFields";
@@ -937,6 +939,17 @@
         onopen={() => fire("open")}
         onedit={() => fire("change")}
       />
+    {:else if p.kind === "chart" && p.chart && bound?.field.type.kind === "values"}
+      <!-- A chart of a list of numbers (DESIGN 5.26): drawn as they are, the last points of them. -->
+      <ChartView
+        kind={p.chart === "bar" ? "bar" : "line"}
+        label={p.name ?? undefined}
+        top={p.max ? Number(p.max) : null}
+        groups={numbersOf(value, p.points).map((v) => ({ label: "", value: v, text: String(v) }))}
+      />
+    {:else if p.kind === "trend"}
+      <!-- A trend (DESIGN 5.26): the bound number's last values, taken while the window runs. -->
+      <TrendView value={value} points={p.points} every={p.every} top={p.max ? Number(p.max) : null} running={!!live && !design} label={p.name ?? undefined} />
     {:else if p.kind === "chart" && p.chart}
       <!-- A chart (U1c): the list's rows grouped by a field, each group's number drawn. -->
       {@const own = collection?.entity}

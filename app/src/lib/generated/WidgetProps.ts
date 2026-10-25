@@ -160,6 +160,16 @@ volume: number | null,
  */
 repeat: boolean, 
 /**
+ * How many values a trend keeps, or a chart of numbers shows: `points 60`
+ * (DESIGN 5.26); a trend keeps 60 without it, a chart shows all.
+ */
+points: number | null, 
+/**
+ * Seconds between a timer's ticks, or a trend's values, as written:
+ * `every 1`, `every 0.5`; a trend takes one a second without it.
+ */
+every: string | null, 
+/**
  * Made by Clarity, not written: a label of a form's label column. The
  * designer leaves it alone and it is never written back.
  */

@@ -274,8 +274,8 @@
       </label>
     {/if}
 
-    <!-- A sound has no place in the grid (DESIGN 5.22). -->
-    {#if p.kind !== "sound"}
+    <!-- A sound and a timer have no place in the grid (DESIGN 5.22, 5.26). -->
+    {#if p.kind !== "sound" && p.kind !== "timer"}
     <div class="position">
       <label><span>Column</span><input type="number" min="1" value={p.col} onchange={(e) => update({ col: numberOf(e) })} /></label>
       <label><span>Row</span><input type="number" min="1" value={p.row} onchange={(e) => update({ row: numberOf(e) })} /></label>
@@ -575,8 +575,8 @@
     {/if}
     {#if info.properties.includes("max")}
       <label class="prop">
-        <span>{p.kind === "progress" ? "Full at" : "Highest"}</span>
-        <input value={p.max ?? ""} placeholder={p.kind === "progress" ? "100" : (shownRange.max ?? "none")} inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />
+        <span>{p.kind === "progress" ? "Full at" : p.kind === "trend" || p.kind === "chart" ? "Top" : "Highest"}</span>
+        <input value={p.max ?? ""} placeholder={p.kind === "progress" ? "100" : p.kind === "trend" || p.kind === "chart" ? "follows" : (shownRange.max ?? "none")} inputmode="decimal" onchange={(e) => update({ max: textOf(e) })} />
       </label>
     {/if}
     {#if info.properties.includes("step")}
@@ -761,6 +761,18 @@
       </label>
     {/if}
 
+    {#if info.properties.includes("every")}
+      <label class="prop" title={p.kind === "timer" ? "Seconds between its ticks, from 0.1 to 86400" : "Seconds between the values it takes; 1 without it"}>
+        <span>Every (s)</span>
+        <input value={p.every ?? ""} placeholder={p.kind === "timer" ? "1" : "1"} inputmode="decimal" onchange={(e) => update({ every: textOf(e) })} />
+      </label>
+    {/if}
+    {#if info.properties.includes("points")}
+      <label class="prop" title={p.kind === "trend" ? "How many values it keeps, from 2 to 1000" : "How many of the list's last numbers it shows; all without it"}>
+        <span>Points</span>
+        <input type="number" min="2" max="1000" value={p.points ?? ""} placeholder={p.kind === "trend" ? "60" : "all"} onchange={(e) => update({ points: textOf(e) === null ? null : numberOf(e) })} />
+      </label>
+    {/if}
     {#if info.properties.includes("volume")}
       <label class="prop" title="How loud it plays, from 0 to 100">
         <span>Volume</span>

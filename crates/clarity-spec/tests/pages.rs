@@ -319,7 +319,10 @@ fn a_window_holds_plain_values() {
     assert_has(&errors("page P: window\n    data pending: Kind, default C\n"), "Kind has no value C");
     assert_has(&errors("page P: window\n    data customer: Customer, default 1\n"), "'customer' is a record, which starts new; only a plain value has a default");
     assert_has(&errors("page P: window\n    data x: Teleport\n"), "unknown entity or enum 'Teleport'");
-    assert_has(&errors("page P: window\n    data x: list<decimal>\n"), "a list holds records, as in 'list<Order>'");
+    // A list of values is a plain value too, starting empty (DESIGN 5.26).
+    assert!(errors("page P: window\n    data x: list<decimal>\n").is_empty());
+    assert_has(&errors("page P: window\n    data x: list<bool>\n"), "a list of values holds text, integer, decimal or date");
+    assert_has(&errors("page P: window\n    data x: list<decimal>, default 1\n"), "'x' is a list, which starts empty; it has no default");
 }
 
 /// A part binds a plain value by its name, when it shows that type.

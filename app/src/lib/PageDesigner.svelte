@@ -66,6 +66,7 @@
     { key: "data", name: "Data" },
     { key: "graphics", name: "Graphics" },
     { key: "media", name: "Media" },
+    { key: "time", name: "Time" },
   ];
 
   let canvas: HTMLElement | undefined = $state();
@@ -498,8 +499,8 @@
       </div>
     </ShownWindow>
     {#if !app}
-      <!-- Parts heard, not seen, have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22). -->
-      {@const unplaced = page.widgets.filter((w) => w.props.kind === "sound")}
+      <!-- Parts not seen (sounds, timers) have no place in the window: they wait here, as on C++ Builder's forms (DESIGN 5.22, 5.26). -->
+      {@const unplaced = page.widgets.filter((w) => w.props.kind === "sound" || w.props.kind === "timer")}
       {#if unplaced.length > 0}
         <div class="tray" role="listbox" aria-label="Parts without a place in the window">
           {#each unplaced as w (w.span.start)}
@@ -507,7 +508,7 @@
               <PartTile
                 kind={w.props.kind}
                 name={w.props.name ?? w.props.kind}
-                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}. Pick it to set it in the inspector."
+                title="{w.props.kind}{w.props.source ? ', plays ' + w.props.source : ''}{w.props.every ? ', every ' + w.props.every + ' s' : ''}. Pick it to set it in the inspector."
                 onpointerdown={(e) => {
                   e.stopPropagation();
                   pageDesigner.selected = w.span.start;

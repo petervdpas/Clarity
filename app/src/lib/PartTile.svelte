@@ -180,6 +180,12 @@
       <line x1="12" y1="9" x2="34" y2="9" />
       <line x1="12" y1="14" x2="30" y2="14" />
       <line x1="12" y1="19" x2="32" y2="19" />
+    {:else if kind === "timer"}
+      <circle cx="24" cy="15" r="10" />
+      <path d="M24 9 v6 l4 3" class="line" />
+    {:else if kind === "trend"}
+      <rect x="6" y="3" width="36" height="22" rx="1" />
+      <path d="M9 20 l6 -4 l5 3 l6 -8 l5 4 l8 -7" class="line" />
     {:else if kind === "sound"}
       <path d="M12 11 h6 l7 -6 v18 l-7 -6 h-6 z" class="fill" />
       <path d="M29 9 q4 5 0 10 M33 6 q7 8 0 16" class="line" />

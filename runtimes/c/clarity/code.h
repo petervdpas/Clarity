@@ -73,6 +73,13 @@ ClarityBools clarity_bools(size_t count, const bool* items);
 ClarityTexts clarity_texts(size_t count, const char* const* items);
 ClarityDates clarity_dates(size_t count, const ClarityDate* items);
 
+/// `xs + ys` in code (DESIGN 5.26): a new list of the items of both, in order.
+ClarityIntegers clarity_integers_join(ClarityIntegers a, ClarityIntegers b);
+ClarityDecimals clarity_decimals_join(ClarityDecimals a, ClarityDecimals b);
+ClarityBools clarity_bools_join(ClarityBools a, ClarityBools b);
+ClarityTexts clarity_texts_join(ClarityTexts a, ClarityTexts b);
+ClarityDates clarity_dates_join(ClarityDates a, ClarityDates b);
+
 /// `xs[i]` in code: item i, counted from 1. False, with an error of
 /// CLARITY_VALUE, when the position is outside the list.
 bool clarity_integers_at(ClarityIntegers list, int64_t position, int64_t* out);

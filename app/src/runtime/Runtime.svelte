@@ -325,6 +325,58 @@
     }
   }
 
+  // Timers (DESIGN 5.26): each open window's timers run their tick handler
+  // every so many seconds, on the window they are in. A tick that comes
+  // while a handler runs is left out, not queued; a timer code disabled
+  // (`clock.enabled = false`) is quiet until it is enabled again. Closing the
+  // window stops them.
+  const timers = new Map<string, ReturnType<typeof setInterval>>();
+  $effect(() => {
+    const wanted = new Set<string>();
+    if (model) {
+      for (const state of stack) {
+        const target = findPage(model, state.window);
+        if (!target) continue;
+        for (const widget of allParts(target).filter((w) => w.props.kind === "timer" && w.props.name)) {
+          const key = `${state.instance ?? 0}:${widget.props.name}`;
+          wanted.add(key);
+          if (timers.has(key)) continue;
+          const seconds = Math.max(0.1, Number(widget.props.every ?? "1"));
+          timers.set(key, setInterval(() => tick(state.instance ?? 0, widget.props.name!), seconds * 1000));
+        }
+      }
+    }
+    for (const [key, timer] of timers) {
+      if (!wanted.has(key)) {
+        clearInterval(timer);
+        timers.delete(key);
+      }
+    }
+  });
+
+  async function tick(instance: number, part: string) {
+    if (busy) return;
+    const index = stack.findIndex((s) => (s.instance ?? 0) === instance);
+    const state = stack[index];
+    const target = model && state ? findPage(model, state.window) : undefined;
+    const widget = target ? allParts(target).find((w) => w.props.name === part) : undefined;
+    const wired = widget?.props.handlers.find((h) => h.event === "tick");
+    if (!state || !wired || state.parts?.[part]?.enabled === false) return;
+    if (index === stack.length - 1) {
+      await run(handlerCall(wired));
+      return;
+    }
+    busy = true;
+    try {
+      const reply = received(await invoke<Reply>("answer_event", { state: $state.snapshot(state), handler: wired.handler, values: [] }));
+      await nav.apply(index, reply);
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+    } finally {
+      busy = false;
+    }
+  }
+
   // A custom part told something (DESIGN 5.19): the shell calls this with the
   // window's number, the part, the tell and its values. `change` is the value
   // the person changed, which goes into what the part binds and runs `on

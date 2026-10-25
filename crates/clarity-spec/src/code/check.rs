@@ -3527,6 +3527,20 @@ impl<'a> BodyChecker<'_, 'a> {
                 if l.is_unknown() || r.is_unknown() {
                     return Ty::Unknown;
                 }
+                // A list of values grows by a list of its items: `readings + [value]` (DESIGN 5.26).
+                if matches!(l, Ty::Values(_)) || matches!(r, Ty::Values(_)) {
+                    let named = crate::code::path_text(left);
+                    let named = if named.is_empty() { "list".to_string() } else { named };
+                    if op != BinaryOp::Add || !matches!(r, Ty::Values(_)) {
+                        self.error(format!("a list grows by a list of its items, as in {named} + [value]"), join(left.span, right.span));
+                        return Ty::Unknown;
+                    }
+                    if !l.accepts(&r) {
+                        self.error(format!("cannot add {} to {}", r.name(), l.name()), join(left.span, right.span));
+                        return Ty::Unknown;
+                    }
+                    return l;
+                }
                 // `+` joins text with any single value.
                 if op == BinaryOp::Add && (matches!(l, Ty::Text) || matches!(r, Ty::Text)) {
                     if l.is_value() && r.is_value() {

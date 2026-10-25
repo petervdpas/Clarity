@@ -48,7 +48,9 @@ fn shown_as(ty: &crate::code::TypeRefKind) -> Option<FieldType> {
         T::DateTime => FieldType::DateTime,
         T::Duration => FieldType::Duration,
         T::Named { name } => FieldType::Enum { name: Ident { name: name.clone(), span: crate::span::Span::default() } },
-        T::File | T::Bytes | T::List { .. } => return None,
+        // A list of values (DESIGN 5.26); a list of records is not a plain value.
+        T::List { item } => FieldType::Values { item: crate::model::ListItem::of_word(item)? },
+        T::File | T::Bytes => return None,
     })
 }
 
@@ -969,11 +971,13 @@ impl<'a> Checker<'a> {
                 match nested.props.kind {
                     WidgetKind::Popover => self.error(file, "a popover stands on the window, not in another part", nested.span),
                     WidgetKind::Sound => self.error(file, "a sound stands on the window, not in another part", nested.span),
+                    WidgetKind::Timer => self.error(file, "a timer stands on the window, not in another part", nested.span),
                     _ => {}
                 }
             }
-            // A sound has no place at all (DESIGN 5.22).
-            let popover = popover || p.kind == WidgetKind::Sound;
+            // A sound and a timer have no place at all (DESIGN 5.22, 5.26).
+            let popover = popover || matches!(p.kind, WidgetKind::Sound | WidgetKind::Timer);
+            self.check_time(file, widget);
             if let Some(menu) = &widget.menu {
                 // A context menu is named only when code hides or disables it as a whole.
                 if let Some(menu_name) = menu.name.as_deref().filter(|n| !crate::names::is_camel_case(n)) {
@@ -1003,7 +1007,7 @@ impl<'a> Checker<'a> {
                     widget.span,
                 );
             }
-            for other in widgets[..index].iter().filter(|o| !popover && !matches!(o.props.kind, WidgetKind::Popover | WidgetKind::Sound)) {
+            for other in widgets[..index].iter().filter(|o| !popover && !matches!(o.props.kind, WidgetKind::Popover | WidgetKind::Sound | WidgetKind::Timer)) {
                 if overlaps(&other.props, p) {
                     self.error(
                         file,
@@ -1166,6 +1170,11 @@ impl<'a> Checker<'a> {
             Held::Record(entity) => (entity, false),
             Held::List(entity) => (entity, true),
             Held::Value(shown) => {
+                // A chart of a list of numbers draws them as they are (DESIGN 5.26).
+                if p.kind == WidgetKind::Chart && field_name.is_none() && matches!(shown, FieldType::Values { .. }) {
+                    self.check_number_chart(file, &at, widget, &shown);
+                    return;
+                }
                 let problem = match info.bind {
                     _ if field_name.is_some() => Some(format!("'{data_name}' is a plain value; bind it as '{data_name}'")),
                     BindTarget::Nothing => None,
@@ -1234,6 +1243,16 @@ impl<'a> Checker<'a> {
                     Some(field) if p.kind == WidgetKind::Dropdown => self.check_dropdown(file, &at, widget, &field.ty),
                     Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
+            }
+            // A chart of a record's list of numbers (DESIGN 5.26).
+            BindTarget::Collection
+                if p.kind == WidgetKind::Chart
+                    && !list
+                    && let Some(field) = field_name.and_then(|f| entity.field(f))
+                    && matches!(field.ty, FieldType::Values { .. }) =>
+            {
+                let ty = field.ty.clone();
+                self.check_number_chart(file, &at, widget, &ty);
             }
             BindTarget::Collection => {
                 if !list || field_name.is_some() {
@@ -1316,6 +1335,40 @@ impl<'a> Checker<'a> {
 
     /// A chart groups its rows by a field and gives each group a number:
     /// its rows counted, or a number field summed or averaged.
+    /// A chart of a list of numbers (DESIGN 5.26): drawn as they are, as
+    /// bars or a line, never grouped.
+    fn check_number_chart(&mut self, file: usize, at: &str, widget: &Widget, ty: &FieldType) {
+        let p = &widget.props;
+        if !matches!(ty, FieldType::Values { item: crate::model::ListItem::Integer | crate::model::ListItem::Decimal }) {
+            self.error(file, format!("{at}: a chart of a list of values draws numbers: list<integer> or list<decimal>"), widget.span);
+        }
+        if p.by.is_some() {
+            self.error(file, format!("{at}: a chart of numbers draws them as they are; 'by' groups the rows of a list of records"), widget.span);
+        }
+        if p.chart == Some(crate::model::ChartKind::Pie) {
+            self.error(file, format!("{at}: a pie shares out groups; a list of numbers is drawn as a bar or a line"), widget.span);
+        }
+    }
+
+    /// What keeps time (DESIGN 5.26): a timer's ticks and a trend's values
+    /// come every 0.1 to 86400 seconds, and a trend or chart shows 2 to 1000 points.
+    fn check_time(&mut self, file: usize, widget: &Widget) {
+        let p = &widget.props;
+        if p.kind == WidgetKind::Timer && p.every.is_none() {
+            let name = p.name.as_deref().unwrap_or("timer");
+            self.error(file, format!("timer {name} runs every so many seconds: write every 1, or every 0.5"), widget.span);
+        }
+        if let Some(every) = &p.every
+            && !every.parse::<f64>().is_ok_and(|s| (0.1..=86400.0).contains(&s))
+        {
+            let what = if p.kind == WidgetKind::Timer { "a timer runs" } else { "a trend takes a value" };
+            self.error(file, format!("{what} every 0.1 to 86400 seconds, not {every}"), widget.span);
+        }
+        if p.points.is_some_and(|n| !(2..=1000).contains(&n)) {
+            self.error(file, "a trend or chart shows 2 to 1000 points", widget.span);
+        }
+    }
+
     fn check_chart(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
         let p = &widget.props;
         let name = &entity.name.name;

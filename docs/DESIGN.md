@@ -1386,6 +1386,16 @@ Asked 2026-10-25 for the nested objects of an OpenAPI description; decided with 
 - **The IDE.** In a module with a `source`, the entity editor offers the module's other entities as types; ER and class diagrams draw a held record as one to one.
 - **Built (2026-10-24):** the language (`ExprKind::Http`, the type `http reply`, the effect `net`, where a call may be, the key warning, `Project::calls_out`), the five clients (`clarity_runtime::http` behind the feature `http`, Go `clarity.HTTP`, C# `Http.Get` and the others in Clarity.Runtime, `runtimes/c/http` and `runtimes/cpp/http` on libcurl as the library `clarity_http`) each passing conformance/http.json, the five generators, and `tests/http_build.rs`, which builds the command-line program of `tests/fixtures/calls.clarity` on every stack and runs its calls against a test server. Next: a reply's JSON read into records, then web APIs as data sources (D2); background work (N5, P) so a slow call does not hold the window.
 
+### 5.26 Live graphs: a chart of numbers, the trend and the timer (2026-10-25, built)
+
+Asked 2026-10-25: the IDE's System graphs as a generic part. The user chose both forms: the chart's line of a list of numbers and a part of its own.
+
+- **A chart of a list of numbers.** `chart line|bar ... bind readings` on a plain value `list<integer|decimal>` (or such a field) draws the numbers as they are, without groups; `points n` shows the last n, `max n` fixes the top of the axis; a pie or `by` is refused for it (`check_number_chart`). A line of more than 30 points has no dots.
+- **The trend** (`WidgetKind::Trend`, palette Data) binds one number and takes its value every `every n` seconds (1), keeping the last `points n` (60): its own clock, so its axis is time, whatever code does. Web `ui/TrendView.svelte` on `ui/trend.ts` (sampled, numbersOf), Avalonia `TrendView`, both on the chart's drawing; the designer shows a still sample.
+- **The timer** (`WidgetKind::Timer`, palette Time, `Event::Tick`) has no place, like the sound, and sits in the designer's tray. While its window is open and it is enabled (`clock.enabled`), it runs `on tick` every `every n` seconds (0.1 to 86400); a tick while a handler runs is left out. Web: Runtime.svelte keeps an interval per open window's timer and runs the handler on that window; Avalonia: `Clarity.Avalonia.Timer` on a DispatcherTimer with the tick command.
+- **Lists of values in code and windows.** A window's data may be a list of text, integers, decimals or dates, starting empty; `list + [item]` is a new list (the checker wants lists of one kind on both sides). Each stack joins its way: Rust extends a clone, Go appends to `slices.Clone`, C# `Enumerable.Concat`, C `clarity_<kind>_join` (runtime, copied), C++ a lambda that inserts.
+- Tests: `clarity-spec/tests/live_charts.rs`, `clarity-gen/tests/live_charts.rs` (a monitor window on every stack; ignored tests build it with cargo/Tauri, go vet, dotnet with warnings as errors, CMake for C and C++: all pass), `Clarity.Avalonia.Tests/LiveChartTests.cs`, `app/src/lib/trend.test.ts`. Clarity.Avalonia gets new controls: NuGet 0.33.0.
+
 ## 6. Generation
 
 ### 6.1 Shape and behavior

@@ -36,8 +36,8 @@
 
   // While a part is dragged, the designer offers rows below the content to drop on.
   const dragging = $derived(design && pageDesigner.drag !== null);
-  // A sound has no place in the grid (DESIGN 5.22): the designer shows it in a tray.
-  const placed = $derived(widgets.filter((w) => w.props.kind !== "sound"));
+  // A sound and a timer have no place in the grid (DESIGN 5.22, 5.26): the designer shows them in a tray.
+  const placed = $derived(widgets.filter((w) => w.props.kind !== "sound" && w.props.kind !== "timer"));
   const rows = $derived(fixedRows ?? gridRows(placed, dragging ? 3 : 0, dragging ? 4 : 1));
 
   // Fluid, in the designer as when the window runs: columns always share the

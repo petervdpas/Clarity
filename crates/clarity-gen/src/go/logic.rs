@@ -1414,6 +1414,13 @@ impl<'a> Emitter<'a> {
             ExprKind::Unary { op: UnaryOp::Not, operand } => format!("!{}", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } if is_decimal(&ty) => format!("{}.Neg()", self.value(operand, pre)),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", self.value(operand, pre)),
+            // A list of values grows by a list of its items (DESIGN 5.26).
+            ExprKind::Binary { op: BinaryOp::Add, left, right } if matches!(ty, TypeInfo::Values(_)) => {
+                let (left, right) = (bare(self.value(left, pre)), bare(self.value(right, pre)));
+                // A copy first, so the list it grows from stays as it was.
+                let copy = if left.starts_with("slices.Clone(") { left } else { format!("slices.Clone({left})") };
+                format!("append({copy}, {right}...)")
+            }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty, pre),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);

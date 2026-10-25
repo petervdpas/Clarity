@@ -72,14 +72,21 @@ pub enum WidgetKind {
     Tree,
     /// A table whose rows are a tree, its first column indented.
     TreeTable,
-    /// Bars, a line or a pie of a list's rows grouped by a field.
+    /// Bars, a line or a pie of a list's rows grouped by a field, or of a
+    /// list of numbers as they are (DESIGN 5.26).
     Chart,
+    /// The last values of one number, taken every so many seconds, as a
+    /// line (DESIGN 5.26).
+    Trend,
     Image,
     Display,
     Canvas,
     /// Sound files of the resources, tones and melodies, which code tells
     /// it to play; it shows nothing and has no place in the grid (DESIGN 5.22).
     Sound,
+    /// Runs its `tick` handler every so many seconds while its window is
+    /// open; it shows nothing and has no place in the grid (DESIGN 5.26).
+    Timer,
     /// A part an outside library draws, placed by the name it is declared by
     /// (`Arena`, DESIGN 5.19); `props.part` names its declaration.
     Custom,
@@ -96,6 +103,8 @@ pub enum Category {
     Graphics,
     /// Sound: parts that are heard, not seen.
     Media,
+    /// Timers: parts that keep time, not seen.
+    Time,
 }
 
 /// Something that happens to a part, which a handler in the code behind
@@ -132,11 +141,13 @@ pub enum Event {
     Next,
     /// Finish is pressed on a wizard's last step.
     Finish,
+    /// A timer's time has come round again (DESIGN 5.26).
+    Tick,
 }
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 15] = [
+pub const ALL_EVENTS: [Event; 16] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -152,6 +163,7 @@ pub const ALL_EVENTS: [Event; 15] = [
     Event::Draw,
     Event::Next,
     Event::Finish,
+    Event::Tick,
 ];
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
@@ -177,6 +189,7 @@ impl Event {
             Event::Draw => "draw",
             Event::Next => "next",
             Event::Finish => "finish",
+            Event::Tick => "tick",
         }
     }
 
@@ -197,6 +210,7 @@ impl Event {
             "draw" => Some(Event::Draw),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
+            "tick" => Some(Event::Tick),
             _ => None,
         }
     }
@@ -292,6 +306,10 @@ pub enum WidgetProperty {
     By,
     /// `count`, `sum total`, `average total`: each group's number in a chart.
     Measure,
+    /// `points 60`: how many values a trend keeps, or a chart of numbers shows.
+    Points,
+    /// `every 1`: how many seconds between a timer's ticks, or a trend's values.
+    Every,
 }
 
 /// The fewest and most rows a table's page holds.
@@ -761,7 +779,23 @@ const ENTRIES: &[Entry] = &[
         container: None,
         clickable: false,
         events: &[],
-        properties: &[WidgetProperty::By, WidgetProperty::Measure],
+        properties: &[WidgetProperty::By, WidgetProperty::Measure, WidgetProperty::Points, WidgetProperty::Max],
+    },
+    // One number's last values as a line, taken every so many seconds (DESIGN 5.26).
+    Entry {
+        kind: WidgetKind::Trend,
+        keyword: "trend",
+        name: "Trend",
+        category: Category::Data,
+        size: (6, 4),
+        caption: None,
+        bind: BindTarget::Field,
+        field_types: &["integer", "decimal", "money", "duration"],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[],
+        properties: &[WidgetProperty::Points, WidgetProperty::Max, WidgetProperty::Every],
     },
     Entry {
         kind: WidgetKind::List,
@@ -878,6 +912,22 @@ const ENTRIES: &[Entry] = &[
         clickable: false,
         events: &[],
         properties: &[WidgetProperty::Source, WidgetProperty::Volume, WidgetProperty::Repeat],
+    },
+    Entry {
+        kind: WidgetKind::Timer,
+        keyword: "timer",
+        name: "Timer",
+        category: Category::Time,
+        // Never in the grid: the designer keeps it in the tray under the window, with the sounds.
+        size: (1, 1),
+        caption: None,
+        bind: BindTarget::Nothing,
+        field_types: &[],
+        input: false,
+        container: None,
+        clickable: false,
+        events: &[Event::Tick],
+        properties: &[WidgetProperty::Every],
     },
     Entry {
         kind: WidgetKind::Custom,
@@ -1123,6 +1173,8 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         labels: None,
         volume: None,
         repeat: false,
+        points: None,
+        every: None,
         made: false,
         style: None,
         readonly: false,
@@ -1159,6 +1211,20 @@ pub fn literal_text(value: &crate::model::Literal) -> String {
 }
 
 pub fn widget_line(props: &WidgetProps) -> String {
+    // A timer has no place: its name, how often it ticks, its handler (DESIGN 5.26).
+    if props.kind == WidgetKind::Timer {
+        let mut parts = vec![keyword(props.kind).to_string()];
+        if let Some(name) = &props.name {
+            parts.push(format!("name {name}"));
+        }
+        if let Some(every) = &props.every {
+            parts.push(format!("every {every}"));
+        }
+        for h in &props.handlers {
+            parts.push(format!("on {}: {}", h.event.keyword(), handler_call(h)));
+        }
+        return parts.join(" ");
+    }
     // A sound has no place: its name, its source, its volume, whether it repeats (DESIGN 5.22).
     if props.kind == WidgetKind::Sound {
         let mut parts = vec![keyword(props.kind).to_string()];
@@ -1239,8 +1305,14 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(min) = &props.min {
         parts.push(format!("min {min}"));
     }
+    if let Some(points) = props.points {
+        parts.push(format!("points {points}"));
+    }
     if let Some(max) = &props.max {
         parts.push(format!("max {max}"));
+    }
+    if let Some(every) = &props.every {
+        parts.push(format!("every {every}"));
     }
     if let Some(step) = &props.step {
         parts.push(format!("step {step}"));
@@ -1455,6 +1527,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
         (WidgetProperty::To, props.to.is_some(), "to"),
         (WidgetProperty::Max, props.max.is_some(), "max"),
+        (WidgetProperty::Points, props.points.is_some(), "points"),
+        (WidgetProperty::Every, props.every.is_some(), "every"),
         (WidgetProperty::Min, props.min.is_some(), "min"),
         (WidgetProperty::Step, props.step.is_some(), "step"),
         (WidgetProperty::Split, props.split, "split"),

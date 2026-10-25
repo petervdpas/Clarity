@@ -135,9 +135,9 @@ target_link_libraries({target} PRIVATE clarity{engine}{http})
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let project = &crate::with_secret_settings(project, &crate::commands::program_name(settings));
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &crate::commands::program_name(settings));
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     if let Some((name, _, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {
         return Err(vec![format!("data source '{name}' is a server database; the C backend stores records in SQLite for now")]);
     }
@@ -293,7 +293,7 @@ static const ClaritySource databases[] = {{
 }};
 
 ",
-        program = string(&super::program_name(settings)),
+        program = string(&crate::settings_program(settings)),
         sources = sources.join("\n"),
     );
     out.push_str(&long_text("texts", &crate::commands::texts_json(project)));

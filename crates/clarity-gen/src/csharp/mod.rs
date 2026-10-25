@@ -77,9 +77,9 @@ pub fn project_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let project = &crate::with_secret_settings(project, &project_name(settings));
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &project_name(settings));
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);
     };
@@ -96,7 +96,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         // The settings read and keep JSON, numbers and dates written the same everywhere.
         let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\nusing Avalonia.Threading;\n" } else { "" };
         let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Avalonia;\nusing Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
-        code.push_str(&model::emit(project, file, &name, &texts, false));
+        code.push_str(&model::emit(project, file, &name, &crate::settings_program(settings), &texts, false));
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
             Err(mut problems) => errors.append(&mut problems),
@@ -154,7 +154,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         }
         files.push(text(&format!("parts/{n}/{n}.g.cs"), parts::generated_half(project, part)));
     }
-    files.push(text("App.axaml.cs", app_cs(project, &name, &main_window, &project_name(settings))));
+    files.push(text("App.axaml.cs", app_cs(project, &name, &main_window, &crate::settings_program(settings))));
     // The keys window's commands (DESIGN 5.28), where the person sets the keys.
     if project.keys_editable {
         files.push(text("KeysCatalog.cs", keys_catalog(project, &name)));

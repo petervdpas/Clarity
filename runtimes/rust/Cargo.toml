@@ -30,12 +30,13 @@ engines = ["dep:wasmi"]
 parts = ["dep:windows-sys"]
 # HTTP calls from code (DESIGN 5.23), through ureq with rustls.
 http = ["dep:ureq"]
-# Secret settings (DESIGN 5.27): the system's protected store, through
-# keyring: Credential Manager, Keychain, the Secret Service over D-Bus.
-secrets = ["dep:keyring"]
+# Secret settings (DESIGN 5.27): the system's protected store. The
+# Credential Manager through Win32 itself, written as every stack writes it
+# (conformance/secret-store.json); the Keychain and the Secret Service over
+# D-Bus through keyring.
+secrets = ["dep:keyring", "dep:windows-sys", "windows-sys?/Win32_Security_Credentials"]
 
 [dependencies]
-keyring = { version = "3.6.3", optional = true, default-features = false, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
 rust_decimal = { version = "1", features = ["serde-with-str"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
 serde = { version = "1", features = ["derive"] }
@@ -52,7 +53,12 @@ tokio-util = { version = "0.7", features = ["compat"], optional = true }
 wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable"], optional = true }
 ureq = { version = "3", optional = true }
 
-# The part host's child windows on Windows; on Linux it calls X11 directly.
+# The protected store of macOS and the other systems; Windows has its own (secrets.rs).
+[target.'cfg(not(windows))'.dependencies]
+keyring = { version = "3.6.3", optional = true, default-features = false, features = ["apple-native", "async-secret-service", "async-io", "crypto-rust"] }
+
+# The part host's child windows on Windows, and the Credential Manager of the
+# secrets; on Linux the part host calls X11 directly.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", optional = true, features = [
     "Win32_Foundation",
@@ -60,3 +66,7 @@ windows-sys = { version = "0.61", optional = true, features = [
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+# The secrets test reads a credential back through Win32, to see how it was kept.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }

@@ -43,7 +43,7 @@ fn avalonia_has_the_keys_window_and_the_persons_keys() {
     assert!(catalog.contains("new KeyLayerInfo(\"\", null, [new KeyCommandInfo(\"keysItem\", Text.Of(\"keysItem\"), []), new KeyCommandInfo(\"quitItem\", Text.Of(\"quitItem\"), [\"Ctrl+Q\"])])"), "{catalog}");
     assert!(catalog.contains("new KeyLayerInfo(\"Card\", Text.Of(\"cardTitle\"), [new KeyCommandInfo(\"Card.saveButton\", Text.Of(\"saveCaption\"), [\"Ctrl+S\"])])"), "{catalog}");
     let app = file(&files, "App.axaml.cs");
-    assert!(app.contains("PersonKeys.Start(\"Shop\");"), "{app}");
+    assert!(app.contains("PersonKeys.Start(\"shop\");"), "{app}");
     assert!(app.contains("KeysWindow.Catalog = KeysCatalog.Layers;"), "{app}");
     let view = file(&files, "Windows/CardView.axaml");
     assert!(view.contains("c:Keys.Id=\"keysItem\""), "{view}");

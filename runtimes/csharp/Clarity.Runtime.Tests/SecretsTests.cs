@@ -70,16 +70,26 @@ public sealed class SecretsTests
         if (!StoreWorks())
             return;
         var home = Path.Combine(AppContext.BaseDirectory, "secret-settings");
+        // Windows keeps settings under APPDATA, the others under XDG_CONFIG_HOME.
+        var was = Environment.GetEnvironmentVariable("APPDATA");
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", home);
-        var program = "clarity-runtime-test-settings";
-        KeptSettings.Keep(program, new JsonObject { ["pageSize"] = 20, ["apiToken"] = "t0k3n" }, ["apiToken"]);
-        var file = File.ReadAllText(Path.Combine(home, program, "settings.json"));
-        Assert.DoesNotContain("t0k3n", file);
-        Assert.DoesNotContain("apiToken", file);
-        var read = KeptSettings.Read(program, ["apiToken"]);
-        Assert.Equal("t0k3n", read["apiToken"]!.GetValue<string>());
-        Assert.Equal(20, read["pageSize"]!.GetValue<int>());
-        Secrets.Set(program, "apiToken", "");
+        Environment.SetEnvironmentVariable("APPDATA", home);
+        try
+        {
+            var program = "clarity-runtime-test-settings";
+            KeptSettings.Keep(program, new JsonObject { ["pageSize"] = 20, ["apiToken"] = "t0k3n" }, ["apiToken"]);
+            var file = File.ReadAllText(Path.Combine(home, program, "settings.json"));
+            Assert.DoesNotContain("t0k3n", file);
+            Assert.DoesNotContain("apiToken", file);
+            var read = KeptSettings.Read(program, ["apiToken"]);
+            Assert.Equal("t0k3n", read["apiToken"]!.GetValue<string>());
+            Assert.Equal(20, read["pageSize"]!.GetValue<int>());
+            Secrets.Set(program, "apiToken", "");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("APPDATA", was);
+        }
     }
 
     /// <summary>A database connects with a secret setting (DESIGN 5.27): its connection, password and all, kept in the protected store.</summary>

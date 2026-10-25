@@ -107,9 +107,9 @@ pub fn program_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let project = &crate::with_secret_settings(project, &program_name(settings));
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &program_name(settings));
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     if let Some((name, sql, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {
         return Err(vec![format!(
             "data source '{name}' is a {} database; the C++ backend stores records in SQLite for now",
@@ -619,7 +619,7 @@ public:
 "#,
         sources = sources.join(", "),
         stores = stores.join(", "),
-        name = string(program),
+        name = string(&crate::settings_program(settings)),
         main = string(main_window),
         // The desktop window opens at the main window's size.
         width = crate::window_size(project, main_window).0,

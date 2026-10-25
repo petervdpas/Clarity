@@ -53,9 +53,9 @@ const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_paren
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let crate_name = crate_name(settings);
-    let project = &crate::with_secret_settings(project, &crate_name);
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &crate_name);
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");
@@ -288,7 +288,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
-    let program = crate_name(settings);
+    let program = crate::settings_program(settings);
     // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
     let secret_names = crate::secret_names(project);
     let secrets_const = if secret_names.is_empty() {

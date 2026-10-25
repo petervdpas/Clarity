@@ -411,6 +411,17 @@ pub(crate) fn holding_order(project: &Project) -> Vec<&clarity_spec::model::Enti
     out
 }
 
+/// The name a program keeps the person's things under: the folder of its
+/// settings, and its secrets in the system's protected store (DESIGN 5.17,
+/// 5.27). The project's name in snake case (`ShopDesk` is `shop_desk`), the
+/// same on every stack and for its command-line program too, so an
+/// application built on another stack finds what this one kept
+/// (conformance/secret-store.json). The executable, crate, module and
+/// namespace keep their own names.
+pub fn settings_program(settings: &Settings) -> String {
+    clarity_spec::model::snake_case(&settings.name)
+}
+
 /// `project` with each web API that signs with a secret setting naming it as
 /// `setting:<program>/<name>` (DESIGN 5.27): where the runtime finds it in
 /// the system's protected store, under the program's own name, which each

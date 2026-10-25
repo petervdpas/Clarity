@@ -38,7 +38,12 @@ fn settings_keep_their_secrets_out_of_the_file() {
     let home = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("secret-settings");
     let _ = std::fs::remove_dir_all(&home);
     // SAFETY: this test alone reads the settings folder of this process.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", &home) };
+    // Windows keeps settings under APPDATA, the others under XDG_CONFIG_HOME.
+    let was = std::env::var_os("APPDATA");
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", &home);
+        std::env::set_var("APPDATA", &home);
+    }
     let program = "clarity-runtime-test-settings";
     let mut values = Map::new();
     values.insert("pageSize".into(), json!(20));
@@ -50,6 +55,13 @@ fn settings_keep_their_secrets_out_of_the_file() {
     assert_eq!(read.get("apiToken"), Some(&Value::from("t0k3n")));
     assert_eq!(read.get("pageSize"), Some(&json!(20)));
     secrets::set(program, "apiToken", "").unwrap();
+    // SAFETY: as above.
+    unsafe {
+        match was {
+            Some(was) => std::env::set_var("APPDATA", was),
+            None => std::env::remove_var("APPDATA"),
+        }
+    }
 }
 
 /// A database connects with a secret setting (DESIGN 5.27): its connection,
@@ -80,5 +92,38 @@ fn the_credential_manager_shape_is_every_stack_s() {
         let hex: String = blob.iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(hex, text("blob"));
         assert_eq!(secrets::from_windows_blob(&blob).as_deref(), Some(text("value").as_str()));
+        assert_eq!(secrets::WINDOWS_PERSIST, text("persist"));
     }
+}
+
+/// On Windows a kept secret is a generic credential for this machine, its
+/// user the setting's name and its blob the UTF-8 bytes, as every stack keeps
+/// it (conformance/secret-store.json); not enterprise persistence, which
+/// roams with the person's account.
+#[cfg(windows)]
+#[test]
+fn the_credential_manager_keeps_it_for_this_machine() {
+    use windows_sys::Win32::Security::Credentials::{CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredFree, CredReadW};
+    if !store_works() {
+        return;
+    }
+    secrets::set(PROGRAM, "kept", "Password=pä€").unwrap();
+    let target: Vec<u16> = secrets::windows_target(PROGRAM, "kept").encode_utf16().chain([0]).collect();
+    let mut found: *mut CREDENTIALW = std::ptr::null_mut();
+    // SAFETY: a NUL-terminated target; the credential Windows gives is read, then freed.
+    let (persist, user, blob) = unsafe {
+        assert_ne!(CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut found), 0, "the credential is kept");
+        let c = &*found;
+        let user_len = (0..).take_while(|&i| *c.UserName.add(i) != 0).count();
+        let user = String::from_utf16_lossy(std::slice::from_raw_parts(c.UserName, user_len));
+        let blob = std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize).to_vec();
+        let persist = c.Persist;
+        CredFree(found as *const _);
+        (persist, user, blob)
+    };
+    secrets::set(PROGRAM, "kept", "").unwrap();
+    assert_eq!(persist, CRED_PERSIST_LOCAL_MACHINE);
+    assert_eq!(user, "kept");
+    assert_eq!(blob, "Password=pä€".as_bytes());
+    assert_eq!(secrets::get(PROGRAM, "kept"), None, "forgotten");
 }

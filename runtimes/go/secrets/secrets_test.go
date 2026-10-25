@@ -53,6 +53,8 @@ func TestSettingsKeepTheirSecretsOutOfTheFile(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
+	// Windows keeps settings under APPDATA, the others under XDG_CONFIG_HOME.
+	t.Setenv("APPDATA", home)
 	clarity.Secrets = System{}
 	defer func() { clarity.Secrets = nil }()
 	name := "clarity-runtime-test-settings"

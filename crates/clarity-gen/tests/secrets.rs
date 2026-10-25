@@ -203,3 +203,45 @@ fn an_unconnected_app_builds_in_c_and_cpp() {
         std::fs::remove_dir_all(&out).unwrap();
     }
 }
+
+/// Every stack keeps the settings and the secrets under one name, the
+/// project's in snake case (conformance/secret-store.json): the desktop
+/// program and the command-line program alike, so what one kept another finds.
+#[test]
+fn every_stack_keeps_under_the_one_program_name() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/secret-store.json")).unwrap();
+    for case in cases["programs"].as_array().unwrap() {
+        let (name, program) = (case["project"].as_str().unwrap(), case["program"].as_str().unwrap());
+        for (backend, ui) in STACKS {
+            for cli in [false, true] {
+                let mut settings: Settings = starter(name, "shop");
+                settings.stack.backend = backend;
+                settings.stack.ui = ui;
+                // A server database connects with the secret where the stack has one.
+                let server = !matches!(backend, Backend::C | Backend::Cpp);
+                if server {
+                    settings.datasources[0].kind = SourceKind::Postgres;
+                    settings.datasources[0].url = "setting:shopDb".into();
+                }
+                let source = if server && !cli { format!("{SHOP}{HANDLED}").replace("app Shop", &format!("app {name}")).replace("code Shop", &format!("code {name}")) } else { SHOP.to_string() };
+                let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+                let files = if cli { clarity_gen::generate_cli(&project, &settings) } else { generate(&project, &settings) }.unwrap_or_else(|e| panic!("{name} {backend:?} cli={cli}: {e:#?}"));
+                let code: String = files.iter().map(|f| f.text.clone()).collect();
+                let kept_as = match (backend, cli) {
+                    (Backend::Rust, _) => format!("const PROGRAM: &str = \"{program}\";"),
+                    (Backend::Go, false) => format!("shell.Options{{Name: \"{program}\","),
+                    (Backend::Go, true) => format!("const program = \"{program}\""),
+                    (Backend::Csharp, _) => format!("const string ProgramName = \"{program}\";"),
+                    (Backend::C, false) => format!("ClarityShellOptions options = {{\"{program}\","),
+                    (Backend::C, true) => format!("#define PROGRAM \"{program}\""),
+                    (Backend::Cpp, false) => format!("clarity::shell::Options options{{\"{program}\","),
+                    (Backend::Cpp, true) => format!("const std::string PROGRAM = \"{program}\";"),
+                };
+                assert!(code.contains(&kept_as), "{name} on {backend:?} (cli: {cli}) keeps its settings as {program}: wanted {kept_as}");
+                if server {
+                    assert!(code.contains(&format!("setting:{program}/shopDb")), "{name} on {backend:?} (cli: {cli}) finds its secret as {program}");
+                }
+            }
+        }
+    }
+}

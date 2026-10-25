@@ -39,7 +39,10 @@ func TestTheSettingsFileIsWhereEveryRuntimePutsIt(t *testing.T) {
 }
 
 func TestSettingsKeptAreReadBack(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// Windows keeps settings under APPDATA, the others under XDG_CONFIG_HOME.
+	t.Setenv("APPDATA", dir)
 	program := "clarity-settings-test"
 	if len(ReadSettings(program)) != 0 {
 		t.Fatal("nothing kept yet")

@@ -95,9 +95,9 @@ pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let module = module_name(settings);
-    let project = &crate::with_secret_settings(project, &module);
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &module);
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let Some(main_window) = main_window(project) else {
@@ -162,7 +162,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !go_parts.is_empty() {
         files.push(text("parts.go", parts::glue(project)));
     }
-    files.push(text("main.go", main_go(project, settings, &module, &databases, &servers, &owners, &main_window)));
+    files.push(text("main.go", main_go(project, settings, &databases, &servers, &owners, &main_window)));
     // The modules the code imports itself, which go.mod lists as direct.
     let mut direct = vec![RUNTIME_MODULE, "github.com/wailsapp/wails/v3"];
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
@@ -426,7 +426,7 @@ fn schema_go(project: &Project, sources: &[(String, Sql)]) -> Result<String, Vec
 /// Clarity's own up to date, and shows the main window in the shell; the
 /// shell asks the program's `windows` for their data and handlers.
 /// `--check` stops after the databases.
-fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(String, Sql, String)], servers: &[&Server], owners: &[logic::Owner], main_window: &str) -> String {
+fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, String)], servers: &[&Server], owners: &[logic::Owner], main_window: &str) -> String {
     // The program's custom parts, for the part host (DESIGN 5.19).
     let register_parts = if parts::go_parts(project).is_empty() { "" } else { "\tregisterParts()\n" };
     // The runtime's packages and Wails, by path as gofmt keeps them; a server
@@ -628,7 +628,8 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
     // The desktop window opens at the main window's size.
     let (width, height) = crate::window_size(project, main_window);
     let main_window = string(main_window);
-    let module_text = string(module);
+    // The settings and secrets are kept under the program's own name, alike on every stack.
+    let program_text = string(&crate::settings_program(settings));
     // Without a handler anywhere, Dispatch has no use for the screen.
     let new_ui = if dispatch.is_empty() && app_dispatch.is_empty() { "" } else { "\tui := clarity.NewUi(state)\n" };
     format!(
@@ -779,7 +780,7 @@ func main() {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-{register_parts}\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}, bind); err != nil {{
+{register_parts}\tif err := shell.Run(shell.Options{{Name: {program_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}, bind); err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}

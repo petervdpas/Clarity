@@ -68,9 +68,9 @@ fn command(c: &CommandSpec) -> String {
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let name = crate::commands::program_name(settings);
-    let project = &crate::with_secret_settings(project, &name);
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &name);
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");
@@ -258,7 +258,7 @@ fn main() -> std::process::ExitCode {{
 {keep}    code
 }}
 "#,
-        program = super::crate_name(settings),
+        program = crate::settings_program(settings),
         name = crate::commands::program_name(settings),
         help = said(&crate::commands::program_help(project)),
         languages = languages.join(", "),

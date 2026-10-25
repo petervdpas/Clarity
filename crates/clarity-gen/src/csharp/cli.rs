@@ -115,9 +115,9 @@ fn csproj(name: &str, program: &str, servers: &[&Server], engines: bool) -> Stri
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let project = &crate::with_secret_settings(project, &super::project_name(settings));
+    let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
-    let databases = crate::with_secret_locations(databases, &super::project_name(settings));
+    let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let name = super::project_name(settings);
     let program = crate::commands::program_name(settings);
     let types = check::types(&project.files);
@@ -131,7 +131,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
         let settings_usings = if file.entities.iter().any(|e| e.settings) { "using System.Globalization;\nusing System.Text.Json.Nodes;\n" } else { "" };
         let mut code = format!("{HEADER}\n{settings_usings}using Clarity.Runtime;\nusing CommunityToolkit.Mvvm.ComponentModel;\n\nnamespace {name};\n\n");
-        code.push_str(&model::emit(project, file, &name, &texts, true));
+        code.push_str(&model::emit(project, file, &name, &crate::settings_program(settings), &texts, true));
         match logic::emit(project, file, &file_types) {
             Ok(methods) => code.push_str(&methods),
             Err(mut problems) => errors.append(&mut problems),

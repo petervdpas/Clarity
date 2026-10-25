@@ -9,15 +9,16 @@ use clarity_spec::code::check::ValueItem;
 use super::texts::Texts;
 
 /// The enums and records of `file`, in the application's `namespace`; for
-/// the command-line program (`cli`) without what only windows use.
-pub fn emit(project: &Project, file: &SpecFile, namespace: &str, texts: &Texts, cli: bool) -> String {
+/// the command-line program (`cli`) without what only windows use. The
+/// settings are kept under `program` (`crate::settings_program`).
+pub fn emit(project: &Project, file: &SpecFile, namespace: &str, program: &str, texts: &Texts, cli: bool) -> String {
     let mut out = String::new();
     for decl in &file.enums {
         out.push_str(&enum_decl(decl, namespace, texts, cli));
     }
     for entity in &file.entities {
         if entity.settings {
-            out.push_str(&settings_class(project, entity, namespace, cli));
+            out.push_str(&settings_class(project, entity, program, cli));
         } else {
             out.push_str(&record(project, entity));
         }

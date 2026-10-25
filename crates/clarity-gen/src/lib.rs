@@ -115,9 +115,10 @@ pub(crate) fn type_ref_info(project: &Project, ty: &clarity_spec::code::TypeRef)
     }
 }
 
-/// The engines loaded from WebAssembly files (`engine X from x.wasm`).
+/// The engines the backend loads from WebAssembly files (`engine X from
+/// x.wasm`). An engine beside the screen is not one: the renderer runs it.
 pub(crate) fn engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
-    project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none()).collect()
+    project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none() && !e.beside).collect()
 }
 
 /// The engines written in Clarity, each with the file that declares it:
@@ -140,6 +141,22 @@ pub(crate) fn engine<'a>(project: &'a Project, name: &str) -> Option<&'a clarity
 pub(crate) fn engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
     let found = project.engines.as_deref().unwrap_or_default();
     engines(project)
+        .into_iter()
+        .filter_map(|e| found.iter().find(|f| f.name == e.file))
+        .map(|f| OutFile { path: format!("{folder}/{}", f.name), text: String::new(), bytes: Some(std::borrow::Cow::Owned(f.bytes.clone())) })
+        .collect()
+}
+
+/// The engines beside the screen (DESIGN 5.12), which the renderer runs:
+/// the web stacks carry them in the model, Avalonia in the application.
+pub(crate) fn screen_engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl> {
+    project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none() && e.beside).collect()
+}
+
+/// The files of the engines beside the screen, in `folder` of the output.
+pub(crate) fn screen_engine_files(project: &Project, folder: &str) -> Vec<OutFile> {
+    let found = project.engines.as_deref().unwrap_or_default();
+    screen_engines(project)
         .into_iter()
         .filter_map(|e| found.iter().find(|f| f.name == e.file))
         .map(|f| OutFile { path: format!("{folder}/{}", f.name), text: String::new(), bytes: Some(std::borrow::Cow::Owned(f.bytes.clone())) })

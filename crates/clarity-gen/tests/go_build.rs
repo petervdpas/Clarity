@@ -455,3 +455,26 @@ fn questions_and_their_answers_build_in_go() {
     run(&out, "go", &["build", "-o", "music", "."]);
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
+/// the backend loads no engine, the model carries it for the renderer. With
+/// CLARITY_KEEP set the built application stays, to run it.
+#[test]
+#[ignore]
+fn an_engine_beside_the_screen_builds_in_go() {
+    let mut project = clarity_spec::load_sources([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
+    let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Play", "play");
+    settings.stack.backend = clarity_project::Backend::Go;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join("clarity-gen-go-play");
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    run(&out, "go", &["build", "-o", "play", "."]);
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+}

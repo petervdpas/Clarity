@@ -806,6 +806,10 @@ pub struct EngineDecl {
     pub state: EngineState,
     /// `on open`: the engine's `clarity_open` runs on every new instance.
     pub opens: bool,
+    /// `beside the screen` (DESIGN 5.12): it runs in the renderer, where the
+    /// canvas that `runs` it is drawn, one instance per canvas; the backend
+    /// never runs it.
+    pub beside: bool,
     /// `limit 2 seconds, 64 MB`: how long one call may run; none written
     /// keeps the default (`engines::DEFAULT_SECONDS`).
     pub seconds: Option<u32>,

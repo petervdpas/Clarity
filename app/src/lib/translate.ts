@@ -47,6 +47,8 @@ export function translate(text: string, texts: Texts): string {
 const OWN_TEXTS: Record<string, string> = {
   unconnectedNotKept: "The database connection is not set yet",
   unconnectedFailed: "The database did not open: {problem}",
+  // Why an engine beside the screen stopped (translations SCREEN_ENGINE_KEYS).
+  screenEngineFailed: "The engine stopped: {problem}",
   // The keys window (translations KEYS_WINDOW_KEYS).
   keysTitle: "Keys",
   keysEverywhere: "Everywhere",

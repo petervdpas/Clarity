@@ -4,6 +4,7 @@ import type { FormatInfo } from "./FormatInfo";
 import type { KeyLayer } from "./KeyLayer";
 import type { Project } from "./Project";
 import type { RegionInfo } from "./RegionInfo";
+import type { ScreenEngine } from "./ScreenEngine";
 import type { ThemeDecl } from "./ThemeDecl";
 import type { WidgetInfo } from "./WidgetInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -42,6 +43,10 @@ icons: { [key in string]: string },
  * project lets them (DESIGN 5.28); empty where it does not.
  */
 keys: Array<KeyLayer>, 
+/**
+ * The engines beside the screen (DESIGN 5.12), which the renderer runs itself.
+ */
+screenEngines: Array<ScreenEngine>, 
 /**
  * Every icon's name, for the designer to offer.
  */

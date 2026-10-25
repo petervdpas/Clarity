@@ -63,3 +63,6 @@ public static class Contracts
 /// <summary>A value in code that does not fit where it is used: a position
 /// outside its list, a highest number below 1 (conformance/lists.json).</summary>
 public sealed class ValueException(string what) : ClarityException(what);
+
+/// An engine that could not load, or that failed while it ran (DESIGN 5.11, 5.12).
+public sealed class EngineException(string what) : ClarityException(what);

@@ -32,6 +32,12 @@ state: EngineState,
  */
 opens: boolean, 
 /**
+ * `beside the screen` (DESIGN 5.12): it runs in the renderer, where the
+ * canvas that `runs` it is drawn, one instance per canvas; the backend
+ * never runs it.
+ */
+beside: boolean, 
+/**
  * `limit 2 seconds, 64 MB`: how long one call may run; none written
  * keeps the default (`engines::DEFAULT_SECONDS`).
  */

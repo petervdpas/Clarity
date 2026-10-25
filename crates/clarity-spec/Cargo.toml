@@ -9,3 +9,5 @@ license.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ts-rs.workspace = true
+# The files of the engines beside the screen, carried in the model for the renderer.
+base64 = "0.22"

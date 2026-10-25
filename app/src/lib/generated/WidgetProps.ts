@@ -119,6 +119,11 @@ digits: number | null,
  */
 units: CanvasUnits | null, 
 /**
+ * `runs Screen`: the engine beside the screen that draws the canvas
+ * (DESIGN 5.12), in place of a draw handler.
+ */
+runs: string | null, 
+/**
  * Text shown when the pointer rests on the part.
  */
 tooltip: string | null, 

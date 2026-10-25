@@ -24,6 +24,7 @@
   import TextInput from "./ui/TextInput.svelte";
   import SegmentDisplay from "./ui/SegmentDisplay.svelte";
   import CanvasView from "./ui/CanvasView.svelte";
+  import EngineCanvas from "./ui/EngineCanvas.svelte";
   import CustomPartView from "./CustomPartView.svelte";
   import MarkdownView from "./ui/MarkdownView.svelte";
   import PartMenu from "./ui/PartMenu.svelte";
@@ -41,7 +42,7 @@
   import type { Preview } from "./generated/Preview";
   import type { Widget } from "./generated/Widget";
   import type { JsonValue } from "./generated/serde_json/JsonValue";
-  import { displayValue, fieldFormat, findEntity, findEnum, findField, formatsOf, isNumeric, itemText, keyFile, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
+  import { displayValue, fieldFormat, findEntity, findEnum, findField, formatsOf, isNumeric, itemText, keyFile, languageOf, markdownOf, offeredThemes, ownWord, shownText, themeOf, tr } from "./model";
   import { styleClass } from "./theme";
   import { languageName, languagesOf } from "./translate";
   import { numberEditing } from "./format";
@@ -1036,6 +1037,15 @@
           <code>{named ?? "no source"}</code>
         </div>
       {/if}
+    {:else if p.kind === "canvas" && p.runs && !design && preview.screenEngines.some((e) => e.name === p.runs)}
+      <!-- An engine beside the screen draws it, frame by frame. -->
+      <EngineCanvas
+        {id}
+        engine={preview.screenEngines.find((e) => e.name === p.runs)!}
+        units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
+        shown={(text) => shownText(preview, text)}
+        language={() => languageOf(preview) ?? ""}
+      />
     {:else if p.kind === "canvas" && partState?.drawing}
       <CanvasView
         {id}

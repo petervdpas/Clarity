@@ -89,7 +89,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let texts = texts::Texts::of(project);
     let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines, parts::references(project) + &library_references(project)))];
+    // Engines beside the screen run in the application's process too, through the same package.
+    let screen_engines = !crate::screen_engines(project).is_empty();
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -138,6 +140,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
+    }
+    if screen_engines {
+        files.extend(crate::screen_engine_files(project, "Engines"));
+        files.push(text("ScreenEngines.cs", screen_engines_cs(project, &name)));
     }
     // The libraries: each adapter, and the half generated from its declaration (DESIGN 5.21).
     for library in crate::libraries::libraries(project) {
@@ -345,6 +351,29 @@ fn engines_cs(project: &Project, name: &str) -> String {
     }
     format!(
         "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines of the application: each loaded once from its file, every one checked when the application starts.</summary>\npublic static class Engines\n{{\n{members}    /// <summary>Loads every engine, so one whose file does not fit stops the application at start.</summary>\n    public static void Check()\n    {{\n{checks}    }}\n\n    static byte[] Read(string file)\n    {{\n        using var stream = typeof(Engines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
+    )
+}
+
+/// The engines beside the screen (DESIGN 5.12): for each, what makes a new
+/// instance for a canvas that runs it, from its embedded file.
+fn screen_engines_cs(project: &Project, name: &str) -> String {
+    let mut members = String::new();
+    for engine in crate::screen_engines(project) {
+        members.push_str(&format!(
+            "    /// <summary>Engine {engine_name} beside the screen, from {file}: a new instance for each canvas that runs it.</summary>\n    public static readonly Func<IFrames> {member} = () => ScreenEngine.Load({}, Read({}), [{}], {}, new EngineLimits({}, {}));\n\n",
+            string(&engine.name.name),
+            string(&engine.file),
+            engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+            engine.opens,
+            engine.seconds(),
+            engine.megabytes(),
+            engine_name = engine.name.name,
+            file = engine.file,
+            member = pascal(&engine.name.name),
+        ));
+    }
+    format!(
+        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines beside the screen, which the canvases that run them draw with.</summary>\npublic static class ScreenEngines\n{{\n{members}    static byte[] Read(string file)\n    {{\n        using var stream = typeof(ScreenEngines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
     )
 }
 

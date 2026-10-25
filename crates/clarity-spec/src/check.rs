@@ -114,11 +114,27 @@ pub fn check(files: &[SpecFile]) -> Vec<Diagnostic> {
     for (file_index, file) in files.iter().enumerate() {
         checker.check_file(file_index, file);
     }
+    checker.check_screen_engines_run();
     checker.diagnostics.extend(crate::code::check::check(files));
     checker.diagnostics
 }
 
 impl<'a> Checker<'a> {
+    /// An engine beside the screen that no canvas runs never runs.
+    fn check_screen_engines_run(&mut self) {
+        let mut run: Vec<String> = Vec::new();
+        for file in self.files {
+            for page in &file.pages {
+                crate::resources::each_widget(&page.widgets, &mut |w| run.extend(w.props.runs.clone()));
+            }
+        }
+        for (index, file) in self.files.iter().enumerate() {
+            for engine in file.engines.iter().filter(|e| e.beside && !run.contains(&e.name.name)) {
+                self.warning(index, format!("engine {} runs beside the screen, but no canvas runs it", engine.name.name), engine.span);
+            }
+        }
+    }
+
     fn error(&mut self, file: usize, message: impl Into<String>, span: Span) {
         let path = &self.files[file].path;
         self.diagnostics
@@ -1158,7 +1174,19 @@ impl<'a> Checker<'a> {
             }
 
             let draws = p.handlers.iter().any(|h| h.event == widgets::Event::Draw);
-            if p.kind == WidgetKind::Canvas && !draws {
+            if let Some(engine) = &p.runs {
+                let canvas = p.name.clone().unwrap_or_else(|| format!("at {},{}", p.col, p.row));
+                match self.files.iter().flat_map(|f| &f.engines).find(|e| &e.name.name == engine) {
+                    None => self.error(file, format!("canvas {canvas} runs {engine}, which is no engine"), widget.span),
+                    Some(e) if !e.beside => self.error(
+                        file,
+                        format!("canvas {canvas} runs {engine}, which runs on the backend; a canvas runs an engine declared 'beside the screen'"),
+                        widget.span,
+                    ),
+                    Some(_) if draws => self.error(file, format!("canvas {canvas} is drawn by engine {engine}, so it has no draw handler"), widget.span),
+                    Some(_) => {}
+                }
+            } else if p.kind == WidgetKind::Canvas && !draws {
                 self.warning(
                     file,
                     format!("canvas at {},{} draws nothing yet; wire 'on draw: handler'", p.col, p.row),

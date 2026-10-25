@@ -557,6 +557,9 @@ pub struct WidgetProps {
     pub digits: Option<u32>,
     /// The units a canvas draws in: `units 200 x 100`.
     pub units: Option<CanvasUnits>,
+    /// `runs Screen`: the engine beside the screen that draws the canvas
+    /// (DESIGN 5.12), in place of a draw handler.
+    pub runs: Option<String>,
     /// Text shown when the pointer rests on the part.
     pub tooltip: Option<String>,
     /// The icon a button shows beside its caption, or the icon an `icon` part is: `icon "save"`.

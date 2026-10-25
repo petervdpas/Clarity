@@ -1526,6 +1526,7 @@ fn parse_widget_props(
         placeholder: None,
         digits: None,
         units: None,
+        runs: None,
         tooltip: None,
         icon: None,
         to: None,
@@ -1797,6 +1798,10 @@ fn parse_widget_props(
             "for" => {
                 applies(WidgetProperty::For)?;
                 props.for_part = Some(cursor.expect_ident("a part name")?.name);
+            }
+            "runs" => {
+                applies(WidgetProperty::Runs)?;
+                props.runs = Some(cursor.expect_ident("the engine beside the screen that draws it, as in 'runs Screen'")?.name);
             }
             "units" => {
                 applies(WidgetProperty::Units)?;

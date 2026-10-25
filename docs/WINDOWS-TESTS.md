@@ -10,6 +10,7 @@ These were never built on Windows.
   - 2026-10-25: the generated C and C++ apps build (with MSYS2 UCRT64 first on PATH and `CMAKE_PREFIX_PATH=C:/msys64/ucrt64`; Strawberry's MinGW has no SQLite). The C and C++ runtimes' own tests pass, without warnings, after fixes for Windows: the tests clear folders and set file times without `rm`, `timegm` or `utimes`; the settings test keeps its settings in a temp folder, not the user's `%APPDATA%`; the C++ file-store tests close a file before removing it; and the C runtime uses MinGW's C99 printf (`__USE_MINGW_ANSI_STDIO`), so `%zu` prints and checks.
 - [x] Every stack's application with `on unconnected`: `cargo test -p clarity-gen --test secrets -- --ignored`. Rust, Go and C# build on a Postgres connection kept as a secret setting.
 - [ ] Not asked, seen 2026-10-25: `dotnet test Clarity.Runtime.Tests` fails 7 of 91 on Windows, every one in EngineTests with "it ran longer than 1 second" (the WASM engine's limit), also run alone. The rest pass.
+  - They pass on Linux. A lead: in `Engine.CallIn` (runtimes/csharp/Clarity.Runtime.Engines/Engine.cs) the one-second timer starts before `Instance()`, so making the instance (and its `on open`) counts toward the call's second. If that is slow on Windows, the call stops at its first check. To see: time `Instance()` and `Invoke` apart in one failing test; if the instance is the slow part, start the clock after it (and give `on open` its own second).
 
 ## 2. When the databases do not open (DESIGN 5.27)
 
@@ -63,6 +64,14 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 - [x] `%APPDATA%\Program\settings.json` keeps only what differs, as `keys`. Only tried in a project with a `settings` block (the secret).
 - [x] On Avalonia the same, and the file shows `Ctrl+K` as written.
 - [x] A toolbar or ribbon button's tooltip shows its key (it used to say "Opens Window"): Print showed "Ctrl+P" on Go, Rust and Avalonia.
+
+## 5b. An engine beside the screen (N5a, 2026-10-26)
+
+Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --ignored --exact an_engine_beside_the_screen_builds_in_go` and `--test csharp_build ... an_engine_beside_the_screen_builds_in_csharp`, with `CLARITY_KEEP=1` to keep the app in `target/generated/clarity-gen-go-play` and `clarity-gen-csharp-play`.
+
+- [ ] Go (WebView2, a Web Worker from a `blob:` URL): the dot moves across the canvas and the time under it counts up.
+- [ ] Avalonia (Wasmtime): the same. Its first frame makes the instance and runs `on open` within the one-second limit, which is where the engine tests fail on Windows (section 1): if the canvas says "The engine stopped: ... it ran longer than 1 second" at once, it is that.
+- [ ] Closing the window ends the engine (no leftover process).
 
 ## 6. Not done, so not to be tested
 

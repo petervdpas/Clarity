@@ -1250,6 +1250,18 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
             out.push(Diagnostic::error(format!("there is already an engine {}", engine.name.name), engine.name.span));
         }
         seen.push(&engine.name.name);
+        if engine.beside {
+            let name = &engine.name.name;
+            if engine.body.is_some() {
+                out.push(Diagnostic::error(format!("engine {name} beside the screen is brought along for now: give it its file, as in 'engine {name} from \"screen.wasm\"'"), engine.span));
+            }
+            if engine.state != crate::code::EngineState::None {
+                out.push(Diagnostic::error(format!("engine {name} runs beside the screen, one instance per canvas, so it has no state line"), engine.span));
+            }
+            if let Some(function) = engine.functions.first() {
+                out.push(Diagnostic::error(format!("engine {name} runs beside the screen, so code does not call it; it has no functions"), function.span));
+            }
+        }
         if let Some(body) = &engine.body {
             check_engine_body(env, engine, body, out);
         } else if !engine.file.ends_with(".wasm") {

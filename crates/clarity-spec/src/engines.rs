@@ -28,6 +28,51 @@ pub const MAX_MEGABYTES: u32 = 4096;
 /// What an engine exports besides its functions: the engine interface.
 pub const INTERFACE: [&str; 2] = ["clarity_alloc", "clarity_free"];
 
+/// What an engine beside the screen exports besides the engine interface:
+/// its frame loop (DESIGN 5.12, conformance/screen-engines.json).
+pub const SCREEN_INTERFACE: [&str; 2] = ["clarity_tick", "clarity_draw"];
+
+/// An engine beside the screen as the renderer runs it (DESIGN 5.12): its
+/// file, the services it uses and its limits per frame.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ScreenEngine {
+    pub name: String,
+    /// The engine's WebAssembly file, in base64.
+    pub wasm: String,
+    pub uses: Vec<String>,
+    /// `on open`: `clarity_open` runs once, before the first frame.
+    pub opens: bool,
+    /// How long one frame may run.
+    pub seconds: u32,
+    /// How much memory the engine may grow to.
+    pub megabytes: u32,
+}
+
+/// The engines beside the screen of `project`, with their files; one whose
+/// file is missing is left out (the checker says so).
+pub fn screen_engines(project: &Project) -> Vec<ScreenEngine> {
+    use base64::Engine as _;
+    let files = project.engines.as_deref().unwrap_or_default();
+    project
+        .files
+        .iter()
+        .flat_map(|f| &f.engines)
+        .filter(|e| e.beside)
+        .filter_map(|e| {
+            let file = files.iter().find(|f| f.name == e.file)?;
+            Some(ScreenEngine {
+                name: e.name.name.clone(),
+                wasm: base64::engine::general_purpose::STANDARD.encode(&file.bytes),
+                uses: e.uses.iter().map(|u| u.name.clone()).collect(),
+                opens: e.opens,
+                seconds: e.seconds.unwrap_or(DEFAULT_SECONDS),
+                megabytes: e.megabytes.unwrap_or(DEFAULT_MEGABYTES),
+            })
+        })
+        .collect()
+}
+
 /// A file of the engines folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineFile {
@@ -167,6 +212,11 @@ pub fn attach(project: &mut Project, files: Vec<EngineFile>) {
                         found.push(at(format!("lacks {missing} of the engine interface")));
                     } else if !module.memory {
                         found.push(at("lacks the memory of the engine interface".into()));
+                    }
+                    for needed in SCREEN_INTERFACE.iter().filter(|_| engine.beside) {
+                        if !module.functions.iter().any(|f| f == needed) {
+                            found.push(at(format!("lacks {needed}, which an engine beside the screen needs")));
+                        }
                     }
                     if engine.opens && !module.functions.iter().any(|f| f == "clarity_open") {
                         found.push(at("lacks clarity_open, which its on open needs".into()));

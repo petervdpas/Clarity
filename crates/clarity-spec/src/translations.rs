@@ -116,6 +116,10 @@ pub const KEYS_WINDOW_KEYS: [(&str, &str); 15] = [
 /// gets it. The runtimes fill the slot with their own message.
 pub const UNCONNECTED_KEYS: [(&str, &str); 2] = [("unconnectedNotKept", "The database connection is not set yet"), ("unconnectedFailed", "The database did not open: {problem}")];
 
+/// Why an engine beside the screen stopped, which its canvas shows in place
+/// of its drawing (DESIGN 5.12): the host's own message in `{problem}`.
+pub const SCREEN_ENGINE_KEYS: [(&str, &str); 1] = [("screenEngineFailed", "The engine stopped: {problem}")];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -132,6 +136,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&UNCONNECTED_KEYS)
         .chain(&SECRET_KEYS)
         .chain(&KEYS_WINDOW_KEYS)
+        .chain(&SCREEN_ENGINE_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -475,6 +480,7 @@ fn shown(project: &Project) -> Shown {
     let commands = project.files.iter().any(|f| !f.commands.is_empty());
     let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
     let keys_window = crate::frame::clicks_to(project, "keys");
+    let screen_engines = project.files.iter().flat_map(|f| &f.engines).any(|e| e.beside);
     let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let own = RENDERER_KEYS
         .iter()
@@ -489,7 +495,8 @@ fn shown(project: &Project) -> Shown {
         .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
         .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
         .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] })
-        .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] });
+        .chain(if keys_window { KEYS_WINDOW_KEYS.as_slice() } else { &[] })
+        .chain(if screen_engines { SCREEN_ENGINE_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

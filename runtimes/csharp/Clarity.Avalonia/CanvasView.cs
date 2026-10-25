@@ -3,6 +3,8 @@
 // web renderer draws them (conformance/drawing.json). A color is the
 // theme's by name, through its Clarity<Name> brush, or written out. A canvas
 // with `on click` runs its Command with where it was clicked, in its units.
+// A canvas that `runs` an engine beside the screen (DESIGN 5.12) is drawn
+// by its frames while it shows; when the engine stops, it says why.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -10,6 +12,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
@@ -27,6 +30,52 @@ public class CanvasView : Control
 
     public static readonly StyledProperty<ICommand?> CommandProperty =
         AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(Command));
+
+    public static readonly StyledProperty<Func<IFrames>?> RunsProperty =
+        AvaloniaProperty.Register<CanvasView, Func<IFrames>?>(nameof(Runs));
+
+    public static readonly StyledProperty<string?> StoppedProperty =
+        AvaloniaProperty.Register<CanvasView, string?>(nameof(Stopped));
+
+    /// <summary>The engine beside the screen that draws it: one instance from when it shows until it goes.</summary>
+    public Func<IFrames>? Runs
+    {
+        get => GetValue(RunsProperty);
+        set => SetValue(RunsProperty, value);
+    }
+
+    /// <summary>Why its engine stopped, which it shows in place of its drawing; none while it runs.</summary>
+    public string? Stopped
+    {
+        get => GetValue(StoppedProperty);
+        set => SetValue(StoppedProperty, value);
+    }
+
+    FrameLoop? loop;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (Runs is not { } make || TopLevel.GetTopLevel(this) is not { } top)
+            return;
+        Stopped = null;
+        try
+        {
+            loop = new FrameLoop(make(), f => top.RequestAnimationFrame(f), work => Task.Run(work), ui => Dispatcher.UIThread.Post(ui), shapes => Drawing = shapes, why => Stopped = why);
+            loop.Start();
+        }
+        catch (EngineException failed)
+        {
+            Stopped = failed.Message;
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        loop?.Dispose();
+        loop = null;
+    }
 
     /// What a click runs, given the Pointer of where it was; none: clicks do nothing.
     public ICommand? Command
@@ -56,7 +105,7 @@ public class CanvasView : Control
 
     static CanvasView()
     {
-        AffectsRender<CanvasView>(DrawingProperty, UnitsWidthProperty, UnitsHeightProperty);
+        AffectsRender<CanvasView>(DrawingProperty, UnitsWidthProperty, UnitsHeightProperty, StoppedProperty);
     }
 
     public CanvasView()
@@ -142,6 +191,15 @@ public class CanvasView : Control
 
     public override void Render(DrawingContext context)
     {
+        if (Stopped is { } why)
+        {
+            // In Clarity's words, with the host's message in its slot.
+            var said = new Text("The engine stopped: {problem}") { Key = "screenEngineFailed" }.With("problem", Slot.OfText(why));
+            var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var named) && named is FontFamily ff ? ff : FontFamily.Default;
+            var shown = new FormattedText(Locale.Show(said), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), 13, BrushOf("muted")) { MaxTextWidth = Math.Max(1, Bounds.Width - 16), TextAlignment = TextAlignment.Center };
+            context.DrawText(shown, new Point(8, Math.Max(0, (Bounds.Height - shown.Height) / 2)));
+            return;
+        }
         var (scale, left, top) = Placement();
         if (scale <= 0)
             return;

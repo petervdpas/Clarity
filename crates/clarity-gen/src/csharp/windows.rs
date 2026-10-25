@@ -1443,6 +1443,15 @@ impl<'a> Window<'a> {
                 let source = p.source.as_deref().unwrap_or_default();
                 let _ = writeln!(out, "{pad}<Image {at} Source=\"/resources/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
             }
+            // A canvas an engine beside the screen draws (DESIGN 5.12), an instance of its own.
+            WidgetKind::Canvas if p.runs.is_some() => {
+                let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
+                let engine = pascal(p.runs.as_deref().unwrap_or_default());
+                let _ = writeln!(
+                    out,
+                    "{pad}<c:CanvasView {at} Runs=\"{{x:Static local:ScreenEngines.{engine}}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
+                );
+            }
             // A canvas drawn by its draw handler, through the runtime.
             WidgetKind::Canvas if named.is_some() && Self::handler(widget, Event::Draw).is_some() => {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));

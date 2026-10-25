@@ -558,6 +558,10 @@ pub struct Preview {
     /// The commands a person gives keys in the keys window, where the
     /// project lets them (DESIGN 5.28); empty where it does not.
     pub keys: Vec<shortcuts::KeyLayer>,
+    /// The engines beside the screen (DESIGN 5.12), which the renderer runs itself.
+    #[serde(rename = "screenEngines")]
+    #[ts(rename = "screenEngines")]
+    pub screen_engines: Vec<engines::ScreenEngine>,
     /// Every icon's name, for the designer to offer.
     #[serde(rename = "iconNames")]
     #[ts(rename = "iconNames")]
@@ -570,9 +574,11 @@ impl Preview {
         let displays = sample::display_values(&project);
         let icons = icons::used(&project);
         let keys = if project.keys_editable { shortcuts::catalog(&project) } else { Vec::new() };
+        let screen_engines = engines::screen_engines(&project);
         Self {
             icons,
             keys,
+            screen_engines,
             icon_names: icons::names().map(str::to_string).collect(),
             project,
             samples,

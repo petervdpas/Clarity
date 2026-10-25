@@ -1,0 +1,68 @@
+{
+  "about": "Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one instance per canvas, from when its window opens until it closes. It speaks the engine interface of conformance/engines.json and exports `clarity_tick` and `clarity_draw` besides it. At every frame the renderer calls `clarity_tick` with the milliseconds since the last frame (`[ms]`; the first frame gives 0), then `clarity_draw` (`[]`), whose value is the canvas's shapes in its units, as a draw handler's (conformance/drawing.json). With `on open` (`opens`), `clarity_open` runs once, when the instance is made, before the first frame. The renderer skips a frame while the engine is still busy with the last one, so frames never pile up. `engine` is screen.wasm, built from engines/screen: it draws a dot that moves 1 unit every 10 ms and the time it has run. `frames` gives the ticks in order and the shapes after each. A frame that fails, or runs longer than the engine's time limit, ends the engine: the canvas shows `fails` in place of its drawing, the renderer calls it no more, and the window works on. `fails` cases give the ticks before and the tick that fails.",
+  "engine": "screen.wasm",
+  "name": "Screen",
+  "units": { "width": 160, "height": 100 },
+  "frames": [
+    {
+      "name": "opened, it draws the time it has run",
+      "opens": true,
+      "ticks": [0, 16, 16, 100],
+      "draws": [
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "0 ms", "color": "text", "size": 8 }
+        ],
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 1, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "16 ms", "color": "text", "size": 8 }
+        ],
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 3, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "32 ms", "color": "text", "size": 8 }
+        ],
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 13, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "132 ms", "color": "text", "size": 8 }
+        ]
+      ]
+    },
+    {
+      "name": "without on open, clarity_open does not run",
+      "opens": false,
+      "ticks": [0, 1600],
+      "draws": [
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "0 ms, not opened", "color": "text", "size": 8 }
+        ],
+        [
+          { "op": "clear", "color": "background" },
+          { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+          { "op": "text", "x": 80, "y": 90, "text": "1600 ms, not opened", "color": "text", "size": 8 }
+        ]
+      ]
+    }
+  ],
+  "fails": [
+    {
+      "name": "a frame the engine refuses",
+      "seconds": 5,
+      "ticks": [0, 16],
+      "tick": 20000,
+      "fails": "engine Screen failed in clarity_tick: a frame of more than ten seconds"
+    },
+    {
+      "name": "a frame that runs past the time limit",
+      "seconds": 1,
+      "ticks": [0],
+      "tick": -1,
+      "fails": "engine Screen failed in clarity_tick: it ran longer than 1 second"
+    }
+  ]
+}

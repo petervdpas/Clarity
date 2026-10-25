@@ -224,7 +224,8 @@ fn key_problems(project: &Project, kind: WidgetKind, key: &str, names: &[&str]) 
     problems
 }
 
-fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {
+/// Every widget of `widgets`, with what they hold, in order.
+pub(crate) fn each_widget(widgets: &[Widget], found: &mut impl FnMut(&Widget)) {
     for widget in widgets {
         found(widget);
         each_widget(&widget.children, found);

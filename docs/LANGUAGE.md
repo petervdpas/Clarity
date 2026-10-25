@@ -1421,6 +1421,25 @@ function order_total(order: Order) -> money
 - **An error** that the engine gives back (its own refusal) reaches code as a refusal, in the engine's words. An engine that fails while it runs is an error that names the engine.
 - The declaration is visible to the modules that `use` the module, like its functions. Two engines of one module have different names, and an engine has each function once.
 
+#### An engine beside the screen
+
+An engine declared `beside the screen` draws a canvas frame by frame, where the canvas is drawn; a canvas `runs` it in place of a draw handler.
+
+```clarity
+engine Screen from "screen.wasm"
+    beside the screen
+    on open
+    limit 1 second
+
+page Play: window
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen
+```
+
+- **Each canvas that runs it** has an instance of its own, from when its window opens until it closes. Code does not call it: it has no `function` lines and no `state` line.
+- **Every frame** calls the file's `clarity_tick` with the milliseconds since the last frame (0 first), then `clarity_draw`, whose value is the canvas's shapes in its units, as a draw handler sends them (`{"op": "circle", "x": 50, "y": 50, "r": 5, "color": "accent"}`). A frame is skipped while the last is busy.
+- **A frame that fails** or runs past the limit ends the engine; the canvas shows why (`screenEngineFailed`, with the host's message in `{problem}`).
+- **The checker** wants a `runs` to name an engine beside the screen, no draw handler on that canvas, an engine written in a file (one written in Clarity comes later), and a file that exports `clarity_tick` and `clarity_draw`; an engine beside the screen that no canvas runs is a warning.
+
 #### An engine written in Clarity
 
 An engine without `from` is written in Clarity: what it keeps between calls, and its functions with their code. Every stack generates it as code of its own, like a function, so it needs no file and no other language.

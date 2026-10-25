@@ -278,6 +278,8 @@ pub enum WidgetProperty {
     /// `repeat`: a sound plays its source until it is stopped.
     Repeat,
     Units,
+    /// `runs Screen`: a canvas an engine beside the screen draws.
+    Runs,
     /// `foldable` and `folded`: a panel or form folds by its header.
     Foldable,
     /// `resizable`: a table's header edges are dragged to resize its columns.
@@ -898,7 +900,7 @@ const ENTRIES: &[Entry] = &[
         // Drawn by its draw handler (`on draw`);
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`.
         events: &[Event::Draw, Event::Click, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Surface],
+        properties: &[WidgetProperty::Units, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1163,6 +1165,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         placeholder: None,
         digits: None,
         units: None,
+        runs: None,
         tooltip: None,
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
         to: None,
@@ -1332,6 +1335,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     }
     if let Some(units) = props.units {
         parts.push(format!("units {} x {}", units.width, units.height));
+    }
+    if let Some(engine) = &props.runs {
+        parts.push(format!("runs {engine}"));
     }
     if !props.columns.is_empty() {
         let columns: Vec<String> = props
@@ -1528,6 +1534,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Cancel, props.cancel, "cancel"),
         (WidgetProperty::Digits, props.digits.is_some(), "digits"),
         (WidgetProperty::Units, props.units.is_some(), "units"),
+        (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),

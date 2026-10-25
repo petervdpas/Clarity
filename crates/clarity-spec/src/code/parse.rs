@@ -72,8 +72,26 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let mut uses = Vec::new();
     let mut says = Vec::new();
     let (mut state, mut stated, mut opens) = (EngineState::None, false, false);
+    let mut beside = false;
     for child in &node.children {
         let mut line = Cursor::new(child.line);
+        if line.eat_keyword("beside") {
+            let parsed = (|| {
+                if beside {
+                    return Err(line.error_here("an engine has one 'beside the screen' line"));
+                }
+                if !line.eat_keyword("the") || !line.eat_keyword("screen") {
+                    return Err(line.error_here("expected 'beside the screen'"));
+                }
+                beside = true;
+                line.expect_end()?;
+                no_children(child)
+            })();
+            if let Err(diag) = parsed {
+                diagnostics.push(diag);
+            }
+            continue;
+        }
         if line.eat_keyword("state") {
             let parsed = (|| {
                 if stated {
@@ -218,7 +236,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
         }
     }
     let body = written.then_some(body);
-    Ok(EngineDecl { name, file, uses, says, state, opens, seconds, megabytes, functions, body, span: node.span() })
+    Ok(EngineDecl { name, file, uses, says, state, opens, beside, seconds, megabytes, functions, body, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {

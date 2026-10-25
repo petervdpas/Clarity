@@ -1,0 +1,12 @@
+module play
+
+app Game
+    main Play
+
+engine Screen from "screen.wasm"
+    beside the screen
+    on open
+    limit 1 second
+
+page Play: window
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen

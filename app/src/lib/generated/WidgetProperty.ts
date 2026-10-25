@@ -3,4 +3,4 @@
 /**
  * Extra properties beyond position, caption, binding and events.
  */
-export type WidgetProperty = "columns" | "edit" | "show" | "orientation" | "surface" | "source" | "for" | "placeholder" | "readonly" | "tabOrder" | "shortcut" | "default" | "cancel" | "digits" | "volume" | "repeat" | "units" | "foldable" | "resizable" | "sortable" | "orderBy" | "icon" | "to" | "max" | "min" | "step" | "split" | "labels" | "typed" | "search" | "page" | "children" | "by" | "measure" | "points" | "every";
+export type WidgetProperty = "columns" | "edit" | "show" | "orientation" | "surface" | "source" | "for" | "placeholder" | "readonly" | "tabOrder" | "shortcut" | "default" | "cancel" | "digits" | "volume" | "repeat" | "units" | "runs" | "foldable" | "resizable" | "sortable" | "orderBy" | "icon" | "to" | "max" | "min" | "step" | "split" | "labels" | "typed" | "search" | "page" | "children" | "by" | "measure" | "points" | "every";

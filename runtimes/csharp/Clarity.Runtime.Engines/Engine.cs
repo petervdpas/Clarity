@@ -19,9 +19,6 @@ using System.Text.Json.Serialization;
 
 namespace Clarity.Runtime;
 
-/// An engine that could not load, or that failed while it ran.
-public sealed class EngineException(string what) : ClarityException(what);
-
 /// What one call of an engine may take: how long it may run, and how much
 /// memory the engine may grow to.
 public readonly record struct EngineLimits(uint Seconds, uint Megabytes);
@@ -50,7 +47,8 @@ public sealed record EngineDeclaration(
     IReadOnlyList<string> Uses,
     EngineLimits Limits,
     EngineState State = EngineState.None,
-    bool Opens = false);
+    bool Opens = false,
+    bool Screen = false);
 
 /// <summary>
 /// What the services give in place of the system's: a fixed clock or seed,
@@ -159,6 +157,10 @@ public sealed class Engine
             throw Refused("lacks the memory of the engine interface");
         if (functions.FirstOrDefault(f => !exported.Contains(f)) is { } missing)
             throw Refused($"has no function {missing}");
+        // An engine beside the screen exports its frame loop (DESIGN 5.12).
+        foreach (var needed in declaration.Screen ? new[] { "clarity_tick", "clarity_draw" } : [])
+            if (!exported.Contains(needed))
+                throw Refused($"lacks {needed}, which an engine beside the screen needs");
         if (declaration.Opens && !exported.Contains("clarity_open"))
             throw Refused("lacks clarity_open, which its on open needs");
         return new Engine(name, engine, module, declaration, new EngineServices());

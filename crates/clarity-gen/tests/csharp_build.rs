@@ -362,3 +362,28 @@ fn questions_and_their_answers_build_in_csharp() {
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
+/// the application builds with the engine embedded and a canvas that runs
+/// it. With CLARITY_KEEP set the built application stays, to run it.
+#[test]
+#[ignore]
+fn an_engine_beside_the_screen_builds_in_csharp() {
+    let mut project = clarity_spec::load_sources([("play.clarity", include_str!("../../../conformance/engines/play.clarity"))]);
+    let bytes = include_bytes!("../../../conformance/engines/screen.wasm").to_vec();
+    clarity_spec::engines::attach(&mut project, vec![clarity_spec::engines::EngineFile { name: "screen.wasm".into(), bytes }]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = clarity_project::starter("Play", "play");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join("clarity-gen-csharp-play");
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+}

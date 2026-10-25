@@ -267,10 +267,33 @@ Each stack hosts a WebAssembly file with a WebAssembly runtime written for it. Y
 
 The generated program carries the engine inside it: embedded on Rust, Go and C#, as bytes in `src/engines.c` or `src/engines.cpp` on C and C++. Shared tests (`conformance/engines.json`) run the same calls through every host.
 
+## An engine beside the screen
+
+An engine can also draw a canvas, frame by frame, at the pace of the screen: a game, an animation, a simulation. It runs where the canvas is drawn, not on the backend, so a frame needs no trip to the backend.
+
+```clarity
+engine Screen from "screen.wasm"
+    beside the screen
+    on open
+    limit 1 second
+
+page Play: window
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen
+```
+
+- **`beside the screen`** says where it runs. Code does not call it, so it has no `function` lines, and no `state` line: every canvas that `runs` it has an instance of its own, from when its window opens until it closes.
+- **The frame loop.** At every frame the canvas calls the engine's `clarity_tick` with the milliseconds since the last frame (0 for the first), then `clarity_draw`, which answers the canvas's shapes in its units: the same shapes a draw handler draws (`clear`, `line`, `rect`, `circle`, `ring`, `text`). A canvas that runs an engine has no draw handler.
+- **One frame at a time.** While the engine is busy with a frame, the screen's next frames are skipped; the next tick gives all the time since the last one, so nothing is lost.
+- **Limits** hold per call: a frame that runs longer than the limit, or that fails, ends the engine. The canvas then says why in place of its drawing, in Clarity's words (`screenEngineFailed`), and the window works on.
+- **`on open`** runs `clarity_open` once, before the first frame.
+- **Where it runs.** On the web stacks in a Web Worker of its own, with the browser's WebAssembly, so an engine that loops never freezes the window; the engine's file travels in the model the screen reads. On Avalonia in Wasmtime, in the application's process, its frames worked off the screen's thread. The backend never loads it.
+
+The file exports `clarity_tick` and `clarity_draw` besides the engine interface; the designer says so when it lacks them. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
+
 ## Not yet
 
 These are designed but not built:
 
 - The service `progress`, which would let a long call show on the screen how far it is.
-- Hooks such as `on tick`, for engines beside the screen.
-- Engines that run beside the screen, drawing on a canvas.
+- Pointer and keys for an engine beside the screen (`clarity_pointer`, `clarity_key`), what it tells the window (`tells`) and what a handler tells it (`hears`).
+- Engines beside the screen written in Clarity (`on tick`, `on draw`).

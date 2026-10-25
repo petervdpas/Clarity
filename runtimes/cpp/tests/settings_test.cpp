@@ -24,9 +24,14 @@ TEST(the_settings_file_is_where_every_runtime_puts_it) {
 }
 
 TEST(settings_kept_are_read_back) {
-#ifndef _WIN32
+    // A folder of the test's own, not the user's settings.
     auto folder = std::filesystem::temp_directory_path() / "clarity-settings-cpp";
     std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    const char* had = std::getenv("APPDATA");
+    std::string was = had ? had : "";
+    _putenv_s("APPDATA", folder.string().c_str());
+#else
     setenv("XDG_CONFIG_HOME", folder.string().c_str(), 1);
 #endif
     const std::string program = "clarity-settings-test";
@@ -34,4 +39,8 @@ TEST(settings_kept_are_read_back) {
     json values = {{"pageSize", 20}, {"language", "nl"}};
     keep_settings(program, values);
     CHECK(read_settings(program) == values);
+    std::filesystem::remove_all(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was.c_str());
+#endif
 }

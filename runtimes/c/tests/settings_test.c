@@ -30,9 +30,12 @@ void the_settings_file_is_where_every_runtime_puts_it(void) {
 }
 
 void settings_kept_are_read_back(void) {
-#ifndef _WIN32
-    // Beside the tests, where they run.
-    const char* folder = clarity_format("clarity-settings-%d", rand());
+    // A folder of the test's own, not the user's settings.
+    const char* folder = clarity_format("%s/clarity-settings-c-%d", temp_folder(), rand());
+#ifdef _WIN32
+    const char* was = getenv("APPDATA") ? clarity_format("%s", getenv("APPDATA")) : "";
+    _putenv_s("APPDATA", folder);
+#else
     setenv("XDG_CONFIG_HOME", folder, 1);
 #endif
     const char* program = "clarity-settings-test";
@@ -45,10 +48,9 @@ void settings_kept_are_read_back(void) {
     CHECK(cJSON_Compare(kept, values, 1));
     cJSON_Delete(kept);
     cJSON_Delete(values);
-#ifndef _WIN32
     // What the test kept goes, so the next run starts without it.
-    remove(clarity_format("%s/%s/settings.json", folder, program));
-    rmdir(clarity_format("%s/%s", folder, program));
-    rmdir(folder);
+    remove_tree(folder);
+#ifdef _WIN32
+    _putenv_s("APPDATA", was);
 #endif
 }

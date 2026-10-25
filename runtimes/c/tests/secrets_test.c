@@ -62,7 +62,7 @@ void settings_keep_their_secrets_out_of_the_file(void) {
 void a_database_connects_with_a_secret_setting(void) {
     if (!store_works()) return;
     clarity_secrets_use();
-    const char* file = clarity_format("%s/clarity-secret-connection-c.db", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
+    const char* file = clarity_format("%s/clarity-secret-connection-c.db", temp_folder());
     CHECK(clarity_secret_set(PROGRAM, "shopDb", file));
     ClaritySource source = {"main", CLARITY_SQLITE, "setting:" PROGRAM "/shopDb"};
     ClarityDb* db = NULL;

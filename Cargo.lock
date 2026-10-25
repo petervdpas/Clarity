@@ -861,6 +861,8 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "ts-rs",
+ "webview2-com",
+ "windows-core",
 ]
 
 [[package]]

@@ -54,8 +54,8 @@ static const ClarityEntity album = {
 };
 
 static const char* scratch(const char* name) {
-    const char* dir = clarity_format("%s/clarity-pictures-c-%s", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp", name);
-    system(clarity_format("rm -rf '%s'", dir));
+    const char* dir = clarity_format("%s/clarity-pictures-c-%s", temp_folder(), name);
+    remove_tree(dir);
     return dir;
 }
 
@@ -145,7 +145,7 @@ void a_picture_is_kept_in_the_database_and_fetched_on_its_own(void) {
     read.cover = clarity_picture_new((ClarityBytes){(const uint8_t*)"%PDF", 4});
     CHECK_FAILS(CLARITY_INVALID, clarity_save(db, &album, &read));
     clarity_db_close(db);
-    system(clarity_format("rm -rf '%s'", store));
+    remove_tree(store);
 }
 
 void a_picture_in_a_file_store_is_a_file_named_by_its_bytes(void) {
@@ -170,5 +170,5 @@ void a_picture_in_a_file_store_is_a_file_named_by_its_bytes(void) {
     CHECK_FAILS(CLARITY_STORAGE, clarity_add_store(other, "photos", "env:CLARITY_NO_SUCH_STORE"));
     clarity_db_close(other);
     clarity_db_close(db);
-    system(clarity_format("rm -rf '%s'", store));
+    remove_tree(store);
 }

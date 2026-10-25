@@ -16,6 +16,12 @@ cJSON* conformance(const char* name);
 /// Whether JSON equals the JSON written in `expected`, ignoring the order of names.
 int check_json(const cJSON* got, const char* expected);
 
+/// The folder for a test's scratch files: TMPDIR, else TEMP (Windows), else /tmp.
+const char* temp_folder(void);
+
+/// Removes a folder and everything in it, if it is there.
+void remove_tree(const char* path);
+
 #define CHECK(cond)                                                       \
     do {                                                                  \
         if (!(cond)) check_fail(__FILE__, __LINE__, "failed: " #cond);    \

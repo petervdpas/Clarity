@@ -15,7 +15,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(__GNUC__)
+#if defined(__MINGW32__)
+// MinGW's own printf (__USE_MINGW_ANSI_STDIO, set in clarity.cmake) knows %zu and %lld.
+#define CLARITY_PRINTF(at, from) __attribute__((format(gnu_printf, at, from)))
+#elif defined(__GNUC__)
 #define CLARITY_PRINTF(at, from) __attribute__((format(printf, at, from)))
 #else
 #define CLARITY_PRINTF(at, from)

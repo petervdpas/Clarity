@@ -1,6 +1,7 @@
 //! The Clarity app backend. It owns parsing, checking, sample data, edits
 //! and their history; the frontend only renders the `Preview` it receives.
 
+mod browser_keys;
 mod build;
 mod links;
 mod diagrams;
@@ -768,6 +769,8 @@ pub fn run() {
             system::start(app.handle().clone());
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
+                // F5, Ctrl+R, Ctrl+P and Ctrl+F are Clarity's, not the webview's.
+                browser_keys::turn_off(&window);
                 // Hidden until its page has drawn itself (main.ts); see show_later.
                 manual::show_later(window.clone());
                 let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));

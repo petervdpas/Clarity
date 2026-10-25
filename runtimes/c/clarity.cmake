@@ -9,6 +9,10 @@ file(GLOB CLARITY_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/clarity/*.
 add_library(clarity STATIC ${CLARITY_SOURCES} ${CMAKE_CURRENT_LIST_DIR}/third_party/cjson/cJSON.c)
 target_include_directories(clarity PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
 target_link_libraries(clarity PUBLIC SQLite::SQLite3 m)
+if(MINGW)
+  # The C99 printf, so %zu and %lld print as they do elsewhere.
+  target_compile_definitions(clarity PUBLIC __USE_MINGW_ANSI_STDIO=1)
+endif()
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(clarity PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra>)
 endif()

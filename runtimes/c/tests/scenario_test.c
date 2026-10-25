@@ -183,7 +183,7 @@ static ClarityDecimal dec(const char* text) {
 }
 
 void the_server_scenario_on_sqlite(void) {
-    const char* file = clarity_format("%s/clarity-scenario-c.db", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
+    const char* file = clarity_format("%s/clarity-scenario-c.db", temp_folder());
     remove(file);
     cJSON* cases = conformance("migrations.json");
     const cJSON* sqlite = cJSON_GetObjectItem(cJSON_GetObjectItem(cases, "steps"), "sqlite");

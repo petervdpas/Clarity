@@ -107,5 +107,5 @@ void a_file_is_kept_with_its_name_in_the_database_or_its_store(void) {
     CHECK(!again.manual);
     CHECK_JSON(clarity_file_json(clarity_record_file("C:\\docs\\a.pdf", clarity_picture_stored())), "{\"stored\":true,\"name\":\"a.pdf\"}");
     clarity_db_close(db);
-    system(clarity_format("rm -rf '%s'", store));
+    remove_tree(store);
 }

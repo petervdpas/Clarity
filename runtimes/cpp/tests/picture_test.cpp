@@ -118,6 +118,7 @@ TEST(a_picture_in_a_file_store_is_a_file_named_by_its_bytes) {
     db.save(album);
     std::ifstream written(store / file_name(jpg), std::ios::binary);
     CHECK(Bytes(std::istreambuf_iterator<char>(written), {}) == jpg);
+    written.close(); // Windows removes no file that is open.
     CHECK(db.picture<Album>(album.id, "photo") == jpg);
     // A path that leaves the store is refused.
     db.batch("", "UPDATE album SET photo = '../secret.png' WHERE id = " + std::to_string(album.id));

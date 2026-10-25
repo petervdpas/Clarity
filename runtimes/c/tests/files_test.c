@@ -2,8 +2,12 @@
 // (conformance/files.json), and filtered and sorted as generated code does.
 
 #include <stdlib.h>
-#include <sys/time.h>
 #include <time.h>
+#ifdef _WIN32
+#include <sys/utime.h>
+#else
+#include <sys/time.h>
+#endif
 
 #include "check.h"
 #include "clarity/code.h"
@@ -11,8 +15,8 @@
 #include "tests.h"
 
 static const char* planted(void) {
-    const char* root = clarity_format("%s/clarity-files-c", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
-    system(clarity_format("rm -rf '%s'", root));
+    const char* root = clarity_format("%s/clarity-files-c", temp_folder());
+    remove_tree(root);
     cJSON* cases = conformance("files.json");
     const cJSON* f;
     cJSON_ArrayForEach(f, cJSON_GetObjectItem(cases, "tree")) {
@@ -23,9 +27,14 @@ static const char* planted(void) {
         ClarityDateTime at;
         clarity_date_time_parse(cJSON_GetObjectItem(f, "modified")->valuestring, &at);
         struct tm when = {.tm_year = at.year - 1900, .tm_mon = at.month - 1, .tm_mday = at.day, .tm_hour = at.hour, .tm_min = at.minute, .tm_sec = at.second};
+#ifdef _WIN32
+        struct _utimbuf times = {_mkgmtime(&when), _mkgmtime(&when)};
+        _utime(path, &times);
+#else
         time_t seconds = timegm(&when);
         struct timeval times[2] = {{seconds, 0}, {seconds, 0}};
         utimes(path, times);
+#endif
     }
     return root;
 }
@@ -91,7 +100,7 @@ void a_store_lists_its_files_as_every_runtime_does(void) {
     CHECK(bytes.size == png.size && memcmp(bytes.data, png.data, png.size) == 0);
     CHECK_FAILS(CLARITY_INVALID, clarity_store_file(db, "photos", "../x.png", &bytes));
     clarity_db_close(db);
-    system(clarity_format("rm -rf '%s'", root));
+    remove_tree(root);
 }
 
 static const char* names(const ClarityFileList* files) {

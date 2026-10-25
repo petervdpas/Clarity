@@ -28,6 +28,24 @@ int check_json(const cJSON* got, const char* expected) {
     return want && got && cJSON_Compare(got, want, 1);
 }
 
+const char* temp_folder(void) {
+    if (getenv("TMPDIR")) return getenv("TMPDIR");
+    if (getenv("TEMP")) return getenv("TEMP");
+    return "/tmp";
+}
+
+void remove_tree(const char* path) {
+#ifdef _WIN32
+    // cmd.exe has no rm; rmdir wants backslashes.
+    char* native = (char*)clarity_format("%s", path);
+    for (char* c = native; *c; ++c)
+        if (*c == '/') *c = '\\';
+    system(clarity_format("if exist \"%s\" rmdir /s /q \"%s\"", native, native));
+#else
+    system(clarity_format("rm -rf '%s'", path));
+#endif
+}
+
 #define LISTED(name) {#name, name},
 
 static const struct {

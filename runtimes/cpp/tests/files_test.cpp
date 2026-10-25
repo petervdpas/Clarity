@@ -52,6 +52,7 @@ TEST(a_store_lists_its_files_as_every_runtime_does) {
     db.write_text("photos", "exports/titles.txt", "Blue Train\n");
     std::ifstream written(root / "exports" / "titles.txt");
     CHECK_EQ(std::string(std::istreambuf_iterator<char>(written), {}), "Blue Train\n");
+    written.close(); // Windows removes no file that is open.
     for (const auto& path : cases["refused"]) CHECK_THROWS(InvalidError, db.write_text("photos", path.get<std::string>(), "x"));
 
     // A file becomes a picture: linked in its own store, copied elsewhere.

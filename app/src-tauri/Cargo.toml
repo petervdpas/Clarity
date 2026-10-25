@@ -27,3 +27,8 @@ ts-rs.workspace = true
 tauri-plugin-dialog = "2"
 # The load of the computer and of Clarity, for Clarity settings, System, and the status bar.
 sysinfo = { version = "0.39.6", default-features = false, features = ["system", "disk", "network"] }
+
+# WebView2's settings, to turn off its own browser keys (browser_keys.rs).
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"

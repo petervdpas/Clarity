@@ -509,7 +509,7 @@ settings
 - **Only a password input shows it.** A text box or a text part bound to it is an error; a settings window gives it a password input. It has no default.
 - **In code it is text.** `settings.apiToken = value` keeps it, and `settings.apiToken = ""` forgets it.
 - **Only in settings.** An entity's field cannot be a secret.
-- **Signing and connecting.** The project file names it as `"setting:apiToken"`: a web API signs its calls with it (`auth bearer "setting:apiToken"`), and a server database connects with it (`datasource main postgres "setting:shopDb"`). A database whose secret is not kept yet does not open.
+- **Signing and connecting.** The project file names it as `"setting:apiToken"`: a web API signs its calls with it (`auth bearer "setting:apiToken"`), and a server database connects with it (`datasource main postgres "setting:shopDb"`). While it is not kept, the database does not open: the application then shows the window where the secret is entered, saying why, and connects once it is kept and that window closes. The app's `on unconnected` handler can show something else instead (see [App settings](#app-settings)). A secret connection needs one of the two.
 
 ## 5. Windows
 
@@ -1065,6 +1065,7 @@ app Shop
 | `main Window` | The window shown at start; it must be a `window`. |
 | `data name: Entity` | Data for the parts in the sidebars and the footer. |
 | `on start: handler` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
+| `on unconnected: handler` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why. What it opens shows first. Closing the last window then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
 
 ### Regions
 

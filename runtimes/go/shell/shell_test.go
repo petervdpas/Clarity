@@ -287,3 +287,31 @@ func TestAnAnswerRunsTheHandlerItGoesToWithItsValues(t *testing.T) {
 		t.Fatal(windows.log)
 	}
 }
+
+// The databases did not open (DESIGN 5.27): start says what to show and why,
+// and connect opens them once the person has kept their connection.
+func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
+	c, _ := service(t)
+	tries := 0
+	c.options.Unconnected = &Unconnected{Window: "Preferences", Problem: "the secret setting shopDb is not kept yet"}
+	c.options.Connect = func() (*clarity.Db, error) {
+		tries++
+		if tries == 1 {
+			return nil, &clarity.StorageError{What: "still not kept"}
+		}
+		return clarity.Memory()
+	}
+	got := wire(t, call(t, c, "start", `{}`))
+	if got != `{"value":{"main":"Card","model":{"project":{}},"unconnected":{"handler":null,"problem":"the secret setting shopDb is not kept yet","window":"Preferences"}}}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "connect", `{}`)); got != `{"error":"storage: still not kept"}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "connect", `{}`)); got != `{"value":null}` {
+		t.Fatal(got)
+	}
+	if got := wire(t, call(t, c, "start", `{}`)); got != `{"value":{"main":"Card","model":{"project":{}}}}` {
+		t.Fatal(got)
+	}
+}

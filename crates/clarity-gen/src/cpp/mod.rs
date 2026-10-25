@@ -434,6 +434,42 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         }
         answers.push_str("        }\n");
     }
+    // The app's `on unconnected` runs with why the databases did not open, on
+    // empty app data: there are no records to load (DESIGN 5.27).
+    let unconnected = crate::unconnected(project);
+    if let Some((app, handler)) = unconnected.as_ref().and_then(|u| u.handler.clone())
+        && let Some(a) = apps.iter().find(|a| a.name == app)
+    {
+        let reason = if crate::unconnected_takes_reason(project, &app, &handler) { ", values.empty() ? std::string() : values.at(0).get<std::string>()" } else { "" };
+        let _ = writeln!(
+            answers,
+            "        if (state.window.empty() && handler == {}) {{\n            {} app;\n            app.{}(db, ui{reason});\n            return ui.reply(state.window, state.data);\n        }}",
+            string(&handler),
+            a.struct_name,
+            logic::method(&handler)
+        );
+    }
+    let (open_db, unconnected_options) = match &unconnected {
+        None => (
+            format!("        clarity::Db db({program}::databases);\n        for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);\n        for (const auto& [name, at] : {program}::stores) db.add_store(name, at);\n"),
+            String::new(),
+        ),
+        Some(u) => (
+            format!(
+                "        // The databases did not open (DESIGN 5.27): the windows work on an empty one in\n        // memory, and the screen shows what keeps the connection first.\n        std::unique_ptr<clarity::Db> opened;\n        std::optional<std::string> unconnected;\n        try {{\n            opened = {program}::open_databases();\n        }} catch (const std::exception& e) {{\n            for (int i = 1; i < argc; ++i)\n                if (std::strcmp(argv[i], \"--check\") == 0) throw;\n            unconnected = e.what();\n            opened = std::make_unique<clarity::Db>(clarity::Db::memory());\n        }}\n        clarity::Db& db = *opened;\n"
+            ),
+            format!(
+                "        options.unconnected = unconnected;\n        options.unconnected_handler = {};\n        options.unconnected_window = {};\n        options.connect = {program}::open_databases;\n",
+                string(u.handler.as_ref().map(|(_, h)| h.as_str()).unwrap_or_default()),
+                string(u.window.as_deref().unwrap_or_default())
+            ),
+        ),
+    };
+    let open_function = if unconnected.is_some() {
+        "\n/// Opens every database, brings it up to date and adds its file stores.\nstd::unique_ptr<clarity::Db> open_databases() {\n    auto db = std::make_unique<clarity::Db>(databases);\n    for (const auto& s : sources()) db->migrate_source(s.source, s.steps);\n    for (const auto& [name, at] : stores) db->add_store(name, at);\n    return db;\n}\n"
+    } else {
+        ""
+    };
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {
         let _ = writeln!(dispatch, "        if (state.window == {}) {{\n            auto w = state.data.get<{}>();", string(&w.name), w.struct_name);
@@ -559,16 +595,13 @@ public:
 }};
 
 }}  // namespace
-
+{open_function}
 }}  // namespace {program}
 
 {secrets_include}int main(int argc, char** argv) {{
 {use_secrets}
     try {{
-{check_engines}        clarity::Db db({program}::databases);
-        for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);
-        for (const auto& [name, at] : {program}::stores) db.add_store(name, at);
-        // --check opens and migrates the databases without windows, for builds and scripts.
+{check_engines}{open_db}        // --check opens and migrates the databases without windows, for builds and scripts.
         for (int i = 1; i < argc; ++i) {{
             if (std::strcmp(argv[i], "--check") == 0) {{
                 std::cout << {ready} << "\n";
@@ -576,7 +609,8 @@ public:
             }}
         }}
         {program}::AppWindows windows;
-        return clarity::shell::run({{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows, {{{width}, {height}}}}});
+        clarity::shell::Options options{{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows, {{{width}, {height}}}}};
+{unconnected_options}        return clarity::shell::run(options);
     }} catch (const std::exception& e) {{
         std::cerr << e.what() << "\n";
         return 1;

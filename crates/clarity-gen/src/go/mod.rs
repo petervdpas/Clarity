@@ -557,6 +557,35 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         }
         answers.push_str("\t\t}\n");
     }
+    // The app's `on unconnected` runs with why the databases did not open, on
+    // empty app data: there are no records to load (DESIGN 5.27).
+    let unconnected = crate::unconnected(project);
+    if let Some((app, handler)) = unconnected.as_ref().and_then(|u| u.handler.clone())
+        && let Some(a) = apps.iter().find(|a| a.name == app)
+    {
+        let (decode, passed) = if crate::unconnected_takes_reason(project, &app, &handler) {
+            ("\t\t\treason, err := clarity.Answer[string](values[0])\n\t\t\tif err != nil {\n\t\t\t\treturn clarity.Reply{}, err\n\t\t\t}\n", ", reason")
+        } else {
+            ("", "")
+        };
+        answers.push_str(&format!(
+            "\tcase \"\":\n\t\tswitch handler {{\n\t\tcase {}:\n\t\t\tif len(values) < 1 {{\n\t\t\t\treturn clarity.Reply{{}}, &clarity.InvalidError{{What: handler + \" takes why the databases did not open\"}}\n\t\t\t}}\n\t\t\tapp := &{}{{}}\n{decode}\t\t\tif err := app.{}(db, ui{passed}); err != nil {{\n\t\t\t\treturn clarity.Reply{{}}, err\n\t\t\t}}\n\t\t\treturn ui.Reply(state.Window, state.Data)\n\t\t}}\n",
+            string(&handler),
+            a.struct_name,
+            names::local(&handler)
+        ));
+    }
+    let (unconnected_open, unconnected_options) = match &unconnected {
+        None => (String::new(), String::new()),
+        Some(u) => (
+            format!(
+                "\t// The databases did not open (DESIGN 5.27): the windows work on an empty one in\n\t// memory, and the screen shows what keeps the connection first.\n\tvar unconnected *shell.Unconnected\n\tif err != nil && !slices.Contains(os.Args[1:], \"--check\") {{\n\t\tunconnected = &shell.Unconnected{{Handler: {}, Window: {}, Problem: err.Error()}}\n\t\tdb, err = clarity.Memory()\n\t}}\n",
+                string(u.handler.as_ref().map(|(_, h)| h.as_str()).unwrap_or_default()),
+                string(u.window.as_deref().unwrap_or_default())
+            ),
+            ", Unconnected: unconnected, Connect: openDatabases".to_string(),
+        ),
+    };
     let mut app_dispatch = String::new();
     for a in &apps {
         for (handler, method) in &a.handlers {
@@ -735,7 +764,7 @@ func (windows) Picture(db *clarity.Db, entity string, id int64, field string) ([
 
 func main() {{
 {use_secrets}{check_engines}\tdb, err := openDatabases()
-\tif err != nil {{
+{unconnected_open}\tif err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
@@ -750,7 +779,7 @@ func main() {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-{register_parts}\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}}}, bind); err != nil {{
+{register_parts}\tif err := shell.Run(shell.Options{{Name: {module_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}, bind); err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}

@@ -192,3 +192,30 @@ void a_closed_window_is_reported(void) {
     clarity_service_free(s);
     clarity_db_close(db);
 }
+
+static int connect_tries = 0;
+
+/// Opens the databases on the second try, as when the person kept their connection between.
+static bool connect_later(ClarityDb** out) {
+    if (++connect_tries == 1) return clarity_fail(CLARITY_STORAGE, "still not kept");
+    return clarity_db_memory(out);
+}
+
+/// The databases did not open (DESIGN 5.27): start says what to show and
+/// why, and connect opens them once the person has kept their connection.
+void an_unconnected_start_says_why_and_connects_later(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    options.unconnected = "the secret setting shopDb is not kept yet";
+    options.unconnected_window = "Preferences";
+    options.connect = connect_later;
+    connect_tries = 0;
+    ClarityService* s = clarity_service_new(&options);
+    CHECK_JSON(invoked(s, "start", "{}", NULL),
+               "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\",\"unconnected\":{\"handler\":null,\"window\":\"Preferences\",\"problem\":\"the secret setting shopDb is not kept yet\"}}}");
+    CHECK_JSON(invoked(s, "connect", "{}", NULL), "{\"error\":\"storage: still not kept\"}");
+    CHECK_JSON(invoked(s, "connect", "{}", NULL), "{\"value\":null}");
+    CHECK_JSON(invoked(s, "start", "{}", NULL), "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}");
+    clarity_service_free(s);
+}

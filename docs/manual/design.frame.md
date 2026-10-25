@@ -29,6 +29,7 @@ app Shop
 
 - `main Window` is the window shown at start; it must be a `window`.
 - `on start` runs once, before the main window opens. The app's handlers are in `code Shop`.
+- `on unconnected` runs instead of the main window when the databases did not open, such as a server that is down. `handler notConnected(reason: text)` gets why; what it opens shows first, and closing it after changing a setting connects again. Without it, a database that connects with a [secret setting](../LANGUAGE.md#secret-settings) shows the window where that setting is entered.
 - `data name: Entity` gives the parts in the sidebars and footer data of their own.
 
 To design it, click **App** on the Project tab, or App at the top of the project tree. A new project already has one; **New app** makes one when there is none. The canvas then shows only the frame, and The window in the properties has the title, the Main window and the start event.

@@ -143,11 +143,14 @@ pub enum Event {
     Finish,
     /// A timer's time has come round again (DESIGN 5.26).
     Tick,
+    /// The app's databases did not open, as when a connection kept as a
+    /// secret setting is not kept yet (DESIGN 5.27).
+    Unconnected,
 }
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 16] = [
+pub const ALL_EVENTS: [Event; 17] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -164,12 +167,13 @@ pub const ALL_EVENTS: [Event; 16] = [
     Event::Next,
     Event::Finish,
     Event::Tick,
+    Event::Unconnected,
 ];
 
 pub const WINDOW_EVENTS: [Event; 3] = [Event::Open, Event::Close, Event::Return];
 
-/// The events the app has.
-pub const APP_EVENTS: [Event; 1] = [Event::Start];
+/// The events the app has: `unconnected` when its databases did not open (DESIGN 5.27).
+pub const APP_EVENTS: [Event; 2] = [Event::Start, Event::Unconnected];
 
 impl Event {
     pub fn keyword(self) -> &'static str {
@@ -190,6 +194,7 @@ impl Event {
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Tick => "tick",
+            Event::Unconnected => "unconnected",
         }
     }
 
@@ -211,6 +216,7 @@ impl Event {
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "tick" => Some(Event::Tick),
+            "unconnected" => Some(Event::Unconnected),
             _ => None,
         }
     }

@@ -197,6 +197,64 @@
   let settings: Record<string, unknown> | null = null;
   /** The settings kept in the system's protected store, by name. */
   let secrets: string[] = [];
+  /** The settings being kept now: a connection waits for them. */
+  let keeping: Promise<unknown> = Promise.resolve();
+
+  /**
+   * The databases did not open (DESIGN 5.27): the app's `on unconnected` runs with
+   * why, or else the window that keeps a secret connection shows. Closing the
+   * last window then connects again when a setting changed, and the main window
+   * opens once it does; closing it unchanged ends the application.
+   */
+  type Unconnected = { handler: string | null; window: string | null; problem: string };
+  let unconnected: Unconnected | null = null;
+  let mainWindow = "";
+  /** The settings when the window that keeps the connection showed: closing it unchanged ends the application. */
+  let settingsShown = "";
+
+  async function showUnconnected(why: Unconnected) {
+    unconnected = why;
+    settingsShown = JSON.stringify(settings);
+    try {
+      if (why.handler) {
+        const reply = received(await invoke<Reply>("answer_event", { state: { window: "", data: {} }, handler: why.handler, values: [why.problem] }), true);
+        await nav.follow(reply, -1);
+      }
+      // A handler that opens no window leaves it to the window that keeps the connection.
+      if (stack.length === 0) {
+        say({ level: "error", text: why.problem });
+        if (why.window) await nav.open(why.window);
+      }
+    } catch (err) {
+      say({ level: "error", text: errorText(err) });
+    }
+  }
+
+  /** The last window closed while unconnected: connects, and starts once that works. */
+  async function reconnect() {
+    const was = unconnected;
+    if (!was) return;
+    if (JSON.stringify(settings) === settingsShown) {
+      await invoke("quit_app");
+      return;
+    }
+    await keeping;
+    try {
+      await invoke("connect");
+    } catch (err) {
+      await showUnconnected({ ...was, problem: String(err) });
+      return;
+    }
+    unconnected = null;
+    await startMain();
+  }
+
+  /** The app's `on start`, then its main window. */
+  async function startMain() {
+    const started = received(await invoke<Reply>("start_app"), true);
+    await nav.open(mainWindow);
+    await nav.follow(started, -1);
+  }
 
   /** The settings when the application starts: what was kept and still fits, over the defaults. */
   async function startSettings(preview: Preview) {
@@ -224,7 +282,7 @@
     settings = { ...values };
     for (const state of stack) if (SETTINGS in state.data) state.data[SETTINGS] = { ...settings };
     const { id: _id, ...kept } = settings;
-    invoke("keep_settings", { settings: kept, secrets }).catch((err) => say({ level: "error", text: errorText(err) }));
+    keeping = invoke("keep_settings", { settings: kept, secrets }).catch((err) => say({ level: "error", text: errorText(err) }));
     apply(settings);
   }
 
@@ -283,7 +341,8 @@
         return invoke("open_apart", { window, with: withSettings(withData), width: size?.width, height: size?.height });
       },
       // The main window ends the application; a window of its own just closes.
-      quit: () => invoke(apart ? "close_apart" : "quit_app"),
+      // While the databases are not open, the last window closing connects again.
+      quit: () => (unconnected ? reconnect() : invoke(apart ? "close_apart" : "quit_app")),
     },
     say,
     (err) => say({ level: "error", text: errorText(err) }),
@@ -609,7 +668,8 @@
 
   // The app's `on start` runs before its main window opens; windows it opens
   // come on top of the main window.
-  invoke<{ model: Preview; main: string }>("start").then(async (start) => {
+  invoke<{ model: Preview; main: string; unconnected?: Unconnected }>("start").then(async (start) => {
+    mainWindow = start.main;
     model = start.model;
     remember(start.model);
     await startSettings(start.model);
@@ -622,9 +682,11 @@
         await nav.open(own.window, own.with);
         return;
       }
-      const started = received(await invoke<Reply>("start_app"), true);
-      await nav.open(start.main);
-      await nav.follow(started, -1);
+      if (start.unconnected) {
+        await showUnconnected(start.unconnected);
+        return;
+      }
+      await startMain();
     } catch (err) {
       say({ level: "error", text: errorText(err) });
     }

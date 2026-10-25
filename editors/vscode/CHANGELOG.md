@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.15
+
+- Colors `unconnected`, the app's event for when its databases did not open.
+
 ## 0.1.14
 
 - Colors the `trend` and `timer` parts.

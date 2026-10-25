@@ -63,3 +63,128 @@ fn the_secrets_are_named_to_the_settings() {
         assert!(code.contains("clarity_secrets"), "{backend:?} links the store");
     }
 }
+
+/// The app's `on unconnected` (DESIGN 5.27) takes over from the window that
+/// keeps the connection: the start says it, with why, and it opens what shows first.
+const HANDLED: &str = "
+app Shop
+    main Main
+    on unconnected: notConnected
+
+code Shop
+    handler notConnected(reason: text)
+        message reason
+        open Main
+";
+
+fn handled(backend: Backend, ui: Ui) -> String {
+    let mut settings: Settings = starter("Shop", "shop");
+    settings.stack.backend = backend;
+    settings.stack.ui = ui;
+    settings.datasources[0].kind = SourceKind::Postgres;
+    settings.datasources[0].url = "setting:shopDb".into();
+    let source = format!("{SHOP}{HANDLED}");
+    let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    files.iter().map(|f| format!("// {}\n{}\n", f.path, f.text)).collect()
+}
+
+#[test]
+fn the_app_handles_its_databases_not_opening() {
+    let rust = handled(Backend::Rust, Ui::Web);
+    assert!(rust.contains("const UNCONNECTED_HANDLER: Option<&str> = Some(\"notConnected\");"));
+    assert!(rust.contains("const CONNECTION_WINDOW: Option<&str> = Some(\"Main\");"));
+    assert!(rust.contains("clarity_runtime::ui::answer(value(0)?)?"));
+    let go = handled(Backend::Go, Ui::Web);
+    assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: err.Error()}"));
+    assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
+    let csharp = handled(Backend::Csharp, Ui::Avalonia);
+    assert!(csharp.contains("Handler = (db, unconnecting) => new AppUnconnectedViewModel(db).Unconnected(unconnecting),"));
+    assert!(csharp.contains("RunUnconnected(unconnecting, reason => OnNotConnected(reason));"));
+}
+
+/// C and C++ keep their records in SQLite: a file that does not open runs
+/// the app's `on unconnected` too.
+#[test]
+fn c_and_cpp_handle_their_database_not_opening() {
+    for backend in [Backend::C, Backend::Cpp] {
+        let mut settings: Settings = starter("Shop", "shop");
+        settings.stack.backend = backend;
+        settings.stack.ui = Ui::Web;
+        let source = format!("{SHOP}{HANDLED}");
+        let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+        let files: Vec<OutFile> = generate(&project, &settings).unwrap_or_else(|e| panic!("{backend:?}: {e:#?}"));
+        let code: String = files.iter().map(|f| f.text.clone()).collect();
+        assert!(code.contains("options.unconnected_handler = \"notConnected\";"), "{backend:?} names the handler to the screen");
+        assert!(code.contains("options.connect = "), "{backend:?} connects again");
+    }
+}
+
+/// An application with `on unconnected`, written out to be built.
+fn written(backend: Backend, ui: Ui) -> std::path::PathBuf {
+    let mut settings: Settings = starter("Shop", "shop");
+    settings.stack.backend = backend;
+    settings.stack.ui = ui;
+    let source = format!("{SHOP}{HANDLED}");
+    let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
+    let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated").join(format!("unconnected-{backend:?}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["build", "data", "target", "bin", "obj"]).unwrap();
+    out
+}
+
+fn run(dir: &std::path::Path, command: &mut std::process::Command) -> String {
+    let out = command.current_dir(dir).output().unwrap_or_else(|e| panic!("{command:?}: {e}"));
+    let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success(), "{command:?} failed in {}:\n{said}", dir.display());
+    said
+}
+
+#[test]
+#[ignore = "builds the Rust program with cargo (Tauri)"]
+fn an_unconnected_app_builds_in_rust() {
+    let out = written(Backend::Rust, Ui::Web);
+    let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/rust").canonicalize().unwrap();
+    std::fs::create_dir_all(out.join(".cargo")).unwrap();
+    std::fs::write(out.join(".cargo/config.toml"), format!("[patch.crates-io]\nclarity-runtime = {{ path = {:?} }}\n", runtime.display().to_string())).unwrap();
+    let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/generated");
+    run(&out, std::process::Command::new("cargo").args(["build", "--quiet"]).env("CARGO_TARGET_DIR", &target));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+#[ignore = "builds the Go program"]
+fn an_unconnected_app_builds_in_go() {
+    let out = written(Backend::Go, Ui::Web);
+    let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/go").canonicalize().unwrap();
+    let go = include_str!("../../../runtimes/go/go.mod").lines().find(|l| l.starts_with("go ")).unwrap();
+    std::fs::write(out.join("go.work"), format!("{go}\n\nuse .\n\nreplace github.com/petervdpas/Clarity/runtimes/go => {}\n", clarity_project::slashed(&runtime))).unwrap();
+    assert_eq!(run(&out, std::process::Command::new("gofmt").args(["-l", "."])), "", "gofmt would change these files");
+    run(&out, std::process::Command::new("go").args(["vet", "./..."]));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+#[ignore = "builds the C# program with dotnet"]
+fn an_unconnected_app_builds_in_csharp() {
+    let out = written(Backend::Csharp, Ui::Avalonia);
+    let runtime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtimes/csharp");
+    run(&out, std::process::Command::new("dotnet").args(["build", "-warnaserror"]).env("CLARITY_RUNTIME", runtime));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+#[ignore = "builds the C and C++ programs with CMake"]
+fn an_unconnected_app_builds_in_c_and_cpp() {
+    for backend in [Backend::C, Backend::Cpp] {
+        let out = written(backend, Ui::Web);
+        let said = run(&out, std::process::Command::new("cmake").args(["--workflow", "--preset", "debug"]));
+        let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+        assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+}

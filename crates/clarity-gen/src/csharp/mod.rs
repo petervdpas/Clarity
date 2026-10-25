@@ -109,6 +109,27 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             }
         }
     }
+    // The app's `on unconnected` (DESIGN 5.27) runs on a window of its own that
+    // is never shown, made of the app's frame and code: its ViewModel alone.
+    if let Some((app, handler)) = crate::unconnected(project).and_then(|u| u.handler)
+        && let Some(file) = project.files.iter().find(|f| f.apps.iter().any(|a| a.name.name == app))
+    {
+        let file_types = types.get(&file.path).cloned().unwrap_or_default();
+        let host = unconnected_host(project);
+        match windows::emit(project, &host, &file_types, &name, &texts) {
+            Ok(window) => files.extend(window.into_iter().filter(|f| f.path.ends_with("ViewModel.cs"))),
+            Err(mut problems) => errors.append(&mut problems),
+        }
+        let reason = if crate::unconnected_takes_reason(project, &app, &handler) { "reason" } else { "" };
+        files.push(text(
+            &format!("Windows/{}Run.cs", host.name.name),
+            format!(
+                "{HEADER}\nusing Clarity.Avalonia;\n\nnamespace {name};\n\npublic sealed partial class {}ViewModel\n{{\n    /// <summary>Runs the app's <c>on unconnected</c>, with why the databases did not open.</summary>\n    public void Unconnected(Unconnecting unconnecting) => RunUnconnected(unconnecting, reason => On{}({reason}));\n}}\n",
+                host.name.name,
+                pascal(&handler)
+            ),
+        ));
+    }
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -397,6 +418,22 @@ fn app_cs(project: &Project, name: &str, main_window: &str) -> String {
     let application = string(name);
     // The person's settings, after the language and theme they may name (DESIGN 5.17).
     let settings_start = if project.entities().any(|e| e.settings) { "            Settings.Start();\n" } else { "" };
+    let runtime_using = if crate::unconnected(project).is_some() { "using Clarity.Runtime;\n" } else { "" };
+    let start_main = match crate::unconnected(project) {
+        None => format!("            var db = Program.OpenDatabases();\n            desktop.Exit += (_, _) => db.Dispose();\n            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n            desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));\n"),
+        Some(unconnected) => {
+            let window = unconnected.window.map(|w| format!("                    Window = db => new {w}ViewModel(db),\n")).unwrap_or_default();
+            let handler = if unconnected.handler.is_some() {
+                format!("                    Handler = (db, unconnecting) => new {}ViewModel(db).Unconnected(unconnecting),\n", unconnected_host(project).name.name)
+            } else {
+                String::new()
+            };
+            let settings = if project.entities().any(|e| e.settings) { "                    Settings = Settings.Current,\n" } else { "" };
+            format!(
+                "            Db? db = null;\n            var problem = \"\";\n            try\n            {{\n                db = Program.OpenDatabases();\n            }}\n            catch (Exception e)\n            {{\n                problem = e.Message;\n            }}\n            if (db is not null)\n            {{\n                desktop.Exit += (_, _) => db.Dispose();\n                desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n                desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));\n            }}\n            else\n            {{\n                // The databases did not open (DESIGN 5.27): what keeps the connection shows first.\n                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;\n                new Unconnected\n                {{\n                    Connect = Program.OpenDatabases,\n                    Main = open => new {main_window}ViewModel(open),\n{window}{handler}                    View = Views.Create,\n                    InfoDuration = TimeSpan.FromMilliseconds({MESSAGE_MS}),\n{settings}                    Shown = shell => desktop.MainWindow = shell,\n                    Connected = open =>\n                    {{\n                        desktop.Exit += (_, _) => open.Dispose();\n                        desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;\n                    }},\n                    Ended = () => desktop.Shutdown(),\n                }}.Start(problem);\n            }}\n"
+            )
+        }
+    };
     format!(
         "{HEADER}
 using Avalonia;
@@ -404,7 +441,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Clarity.Avalonia;
-
+{runtime_using}
 namespace {name};
 
 public partial class App : Application
@@ -418,16 +455,33 @@ public partial class App : Application
             Remembered.Use({application});
             Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
 {engines_language}            Themes.Start(AppThemes.Offered);
-{settings_start}            var db = Program.OpenDatabases();
-            desktop.Exit += (_, _) => db.Dispose();
-            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
-            desktop.MainWindow = Shell.Start(new {main_window}ViewModel(db), Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));
-        }}
+{settings_start}{start_main}        }}
         base.OnFrameworkInitializationCompleted();
     }}
 }}
 "
     )
+}
+
+/// The window the app's `on unconnected` runs on: empty, with the app's frame,
+/// never shown (DESIGN 5.27).
+fn unconnected_host(project: &Project) -> clarity_spec::model::Page {
+    use clarity_spec::model::{Frame, Ident, Page, PageKind};
+    let taken = |n: &str| project.pages().any(|p| p.name.name == n);
+    let name = if taken("AppUnconnected") { "AppUnconnectedStart" } else { "AppUnconnected" };
+    Page {
+        name: Ident { name: name.to_string(), span: Default::default() },
+        kind: PageKind::Window,
+        title: None,
+        size: None,
+        data: Vec::new(),
+        columns: 12,
+        widgets: Vec::new(),
+        frame: Frame::default(),
+        handlers: Vec::new(),
+        gives: None,
+        span: Default::default(),
+    }
 }
 
 /// The view of each window's ViewModel, for the shell.

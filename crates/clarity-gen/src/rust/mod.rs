@@ -297,6 +297,26 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     } else {
         ("clarity_runtime::settings::read_with(PROGRAM, SECRETS)", "clarity_runtime::settings::keep_with(PROGRAM, &settings, SECRETS)")
     };
+    // A database that connects with a secret setting (DESIGN 5.27): when it
+    // cannot open at start, the screen shows the window that keeps it first.
+    let (start_command, open_db, connecting_manage, connect_command) = match crate::unconnected(project) {
+        None => (
+            "#[tauri::command]\nfn start() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n".to_string(),
+            "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
+            String::new(),
+            "",
+        ),
+        Some(unconnected) => (
+            format!(
+                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<String>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    let db = open_databases().map_err(|err| Value::from(err.to_string()))?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n",
+                unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
+                unconnected.window.as_deref()
+            ),
+            "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(err.to_string())),\n    };\n".to_string(),
+            "\n        .manage(Connecting(Mutex::new(problem)))".to_string(),
+            "\n            connect,",
+        ),
+    };
     let settings_commands = format!(
         "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings() -> Map<String, Value> {{\n    {read}\n}}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(settings: Map<String, Value>) -> Answer<()> {{\n    {keep}.map_err(|err| Value::from(err.to_string()))\n}}"
     );
@@ -450,6 +470,19 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
                 s = o.struct_name
             ));
         }
+    }
+    // The app's `on unconnected` runs with why the databases did not open, on empty
+    // app data: there are no records to load (DESIGN 5.27).
+    if let Some((app, handler)) = crate::unconnected(project).and_then(|u| u.handler)
+        && let Some(o) = owners.iter().find(|o| o.is_app && o.name == app)
+    {
+        let function = format!("{}__{}", names::snake(&app), names::snake(&handler));
+        let reason = if crate::unconnected_takes_reason(project, &app, &handler) { ", clarity_runtime::ui::answer(value(0)?)?" } else { "" };
+        answers.push_str(&format!(
+            "        (_, {handler:?}) => {{\n            let mut app = {m}::{s}::default();\n            {m}::{function}(db, &mut app, &mut ui{reason})?;\n            Ok(ui.reply(&state.window, state.data.clone()))\n        }}\n",
+            m = o.module,
+            s = o.struct_name
+        ));
     }
     // The app's handlers run from any window, on the app's own data.
     for o in owners.iter().filter(|o| o.is_app) {
@@ -649,9 +682,17 @@ fn locked<T>(app: &App, run: impl FnOnce(&Db) -> Result<T>) -> Answer<T> {{
     }})
 }}
 
-#[tauri::command]
-fn start() -> Value {{
-    serde_json::json!({{ "model": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), "main": MAIN_WINDOW }})
+{start_command}
+/// Opens every database, brings it up to date and adds its file stores.
+fn open_databases() -> Result<Db> {{
+    let mut db = Db::connect(DATABASES)?;
+    for (source, steps) in schema::SOURCES {{
+        db.migrate_source(source, steps)?;
+    }}
+    for (name, at) in STORES {{
+        db.add_store(name, at)?;
+    }}
+    Ok(db)
 }}
 
 #[tauri::command]
@@ -777,15 +818,8 @@ fn main() {{
 {parts_start}
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
-    let mut db = Db::connect(DATABASES).expect("cannot open the databases");
-    for (source, steps) in schema::SOURCES {{
-        db.migrate_source(source, steps).expect("cannot bring the database up to date");
-    }}
-    for (name, at) in STORES {{
-        db.add_store(name, at).expect("cannot open a file store");
-    }}
-    tauri::Builder::default()
-        .manage(App(Mutex::new(db))){apart_manage}{apart_events}{parts_manage}
+{open_db}    tauri::Builder::default()
+        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{apart_events}{parts_manage}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -802,7 +836,7 @@ fn main() {{
             save_file,
             store_file,{apart_commands}{parts_commands}
             read_settings,
-            keep_settings,
+            keep_settings,{connect_command}
             set_language,
             set_title,
             open_link,

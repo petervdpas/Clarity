@@ -471,6 +471,22 @@ fn page_c(project: &Project) -> String {
 }
 
 fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(String, Sql, String)], owners: &[logic::Owner], main_window: &str) -> String {
+    // The databases did not open (DESIGN 5.27): the windows work on an empty one in
+    // memory, and the screen shows what keeps the connection first.
+    let unconnected = crate::unconnected(project);
+    let (not_opened, unconnected_options) = match &unconnected {
+        None => ("        return failed(db);\n".to_string(), String::new()),
+        Some(u) => (
+            "        for (int i = 1; i < argc; i++)\n            if (strcmp(argv[i], \"--check\") == 0) return failed(NULL);\n        unconnected = strdup(clarity_error()->message);\n        if (!clarity_db_memory(&db)) return failed(db);\n".to_string(),
+            format!(
+                "    options.unconnected = unconnected;\n    options.unconnected_handler = {};\n    options.unconnected_window = {};\n    options.connect = open_databases;\n",
+                u.handler.as_ref().map_or_else(|| "NULL".to_string(), |(_, h)| string(h)),
+                u.window.as_deref().map_or_else(|| "NULL".to_string(), string)
+            ),
+        ),
+    };
+    let unconnected_decl = if unconnected.is_some() { "    char* unconnected = NULL;\n" } else { "" };
+    let not_opened = if unconnected.is_some() { format!("        // Why they did not open, which the screen says.\n{not_opened}") } else { not_opened };
     // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
     let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
         (String::new(), String::new())
@@ -478,7 +494,7 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
         ("#include \"secrets/secrets.h\"\n\n".to_string(), "    clarity_secrets_use();\n".to_string())
     };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("    {{{}, CLARITY_SQLITE, {}}},", string(name), string(at))).collect();
-    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return failed(db);", string(&s.name), string(&s.location))).collect();
+    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return closed(db);", string(&s.name), string(&s.location))).collect();
     let windows: Vec<&logic::Owner> = owners.iter().filter(|o| !o.is_app).collect();
     let apps: Vec<&logic::Owner> = owners.iter().filter(|o| o.is_app).collect();
 
@@ -599,6 +615,21 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
             );
         }
         answers.push_str("    }\n");
+    }
+    // The app's `on unconnected` runs with why the databases did not open, on
+    // empty app data: there are no records to load (DESIGN 5.27).
+    if let Some((app, handler)) = unconnected.as_ref().and_then(|u| u.handler.clone())
+        && let Some(a) = apps.iter().find(|a| a.name == app)
+    {
+        let reason = if crate::unconnected_takes_reason(project, &app, &handler) { ", cJSON_IsString(why) ? why->valuestring : \"\"" } else { "" };
+        let _ = write!(
+            answers,
+            "    if (strcmp(state->window, \"\") == 0 && strcmp(handler, {}) == 0) {{\n        {} app = {{0}};\n        const cJSON* why = cJSON_GetArrayItem(values, 0);\n        (void)why;\n        if (!{}_{}(db, ui, &app{reason})) return false;\n        *out = clarity_ui_reply(ui, state->window, state->data);\n        return true;\n    }}\n",
+            string(&handler),
+            a.struct_name,
+            a.prefix,
+            names::snake(&handler)
+        );
     }
     let needs = crate::dropdown_needs(project);
     let mut options = String::new();
@@ -753,15 +784,32 @@ static int failed(ClarityDb* db) {{
     return 1;
 }}
 
-{secrets_include}int main(int argc, char** argv) {{
-{use_secrets}
-{check_engines}    ClarityDb* db = NULL;
-    if (!clarity_db_open(databases, sizeof databases / sizeof databases[0], &db)) return failed(db);
+/// Closes what opened of the databases, keeping what went wrong. Always false.
+static bool closed(ClarityDb* db) {{
+    ClarityError kept = *clarity_error();
+    clarity_db_close(db);
+    clarity_set_error(&kept);
+    return false;
+}}
+
+/// Opens every database, brings it up to date and adds its file stores.
+static bool open_databases(ClarityDb** out) {{
+    ClarityDb* db = NULL;
+    if (!clarity_db_open(databases, sizeof databases / sizeof databases[0], &db)) return closed(db);
     size_t count = 0;
     const SourceSteps* sources = schema_sources(&count);
     for (size_t i = 0; i < count; i++)
-        if (!clarity_migrate(db, sources[i].source, sources[i].steps, sources[i].count, NULL)) return failed(db);
+        if (!clarity_migrate(db, sources[i].source, sources[i].steps, sources[i].count, NULL)) return closed(db);
 {stores}
+    *out = db;
+    return true;
+}}
+
+{secrets_include}int main(int argc, char** argv) {{
+{use_secrets}
+{check_engines}    ClarityDb* db = NULL;
+{unconnected_decl}    if (!open_databases(&db)) {{
+{not_opened}    }}
     clarity_scratch_reset();
     // --check opens and migrates the databases without windows, for builds and scripts.
     for (int i = 1; i < argc; i++) {{
@@ -772,7 +820,7 @@ static int failed(ClarityDb* db) {{
         }}
     }}
     ClarityShellOptions options = {{{name}, {title}, {main}, page_model(), page_html(), db, &windows, {width}, {height}}};
-    int status = clarity_shell_run(&options);
+{unconnected_options}    int status = clarity_shell_run(&options);
     clarity_db_close(db);
     return status;
 }}

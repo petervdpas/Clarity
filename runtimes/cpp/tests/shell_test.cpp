@@ -135,3 +135,24 @@ TEST(a_closed_window_is_reported) {
     CHECK(state["instance"].get<uint64_t>() > 0);
     CHECK_EQ(closed, state["instance"].get<uint64_t>());
 }
+
+// The databases did not open (DESIGN 5.27): start says what to show and why,
+// and connect opens them once the person has kept their connection.
+TEST(an_unconnected_start_says_why_and_connects_later) {
+    Db db = Db::memory();
+    Cards cards;
+    shell::Options options{"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards};
+    options.unconnected = "the secret setting shopDb is not kept yet";
+    options.unconnected_window = "Preferences";
+    int tries = 0;
+    options.connect = [&tries] {
+        if (++tries == 1) throw StorageError("still not kept");
+        return std::make_unique<Db>(Db::memory());
+    };
+    shell::Service service(options);
+    CHECK_EQ(service.invoke("start", json::object()),
+             json::parse(R"({"value":{"model":{"project":{}},"main":"Card","unconnected":{"handler":null,"window":"Preferences","problem":"the secret setting shopDb is not kept yet"}}})"));
+    CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"error":"storage: still not kept"})"));
+    CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"value":null})"));
+    CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
+}

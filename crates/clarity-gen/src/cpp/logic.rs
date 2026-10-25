@@ -1603,7 +1603,7 @@ fn through(hops: &[crate::query::Hop], cond: String) -> String {
 
 /// A handler (camelCase in Clarity) as the member function of its window,
 /// in C++'s snake_case: `approveClicked` is `approve_clicked`.
-fn method(handler: &str) -> String {
+pub(crate) fn method(handler: &str) -> String {
     ident(&super::names::snake(handler))
 }
 

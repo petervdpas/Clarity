@@ -440,6 +440,30 @@ pub(crate) fn with_secret_locations(databases: Vec<(String, ddl::Sql, String)>, 
         .collect()
 }
 
+/// What an application does when its databases do not open (DESIGN 5.27):
+/// the app's `on unconnected` handler, by its app and handler names, and
+/// the window that keeps a secret connection. None when it just stops.
+pub(crate) struct Unconnected {
+    pub window: Option<String>,
+    /// The app and its handler, which takes why as its one value, or none.
+    pub handler: Option<(String, String)>,
+}
+
+pub(crate) fn unconnected(project: &Project) -> Option<Unconnected> {
+    let handler = project
+        .files
+        .iter()
+        .flat_map(|f| &f.apps)
+        .find_map(|a| a.handlers.iter().find(|h| h.event == clarity_spec::widgets::Event::Unconnected).map(|h| (a.name.name.clone(), h.handler.clone())));
+    let window = project.connection_window().map(|p| p.name.name.clone());
+    (handler.is_some() || window.is_some()).then_some(Unconnected { window, handler })
+}
+
+/// Whether the `on unconnected` handler `name` of `app` takes why, as text.
+pub(crate) fn unconnected_takes_reason(project: &Project, app: &str, name: &str) -> bool {
+    project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == app).flat_map(|b| &b.handlers).any(|h| h.name.name == name && h.params.len() == 1)
+}
+
 /// The secret settings' names as a list a program hands its runtime (DESIGN 5.27).
 pub(crate) fn secret_names(project: &Project) -> Vec<String> {
     project.secret_settings().into_iter().map(str::to_string).collect()

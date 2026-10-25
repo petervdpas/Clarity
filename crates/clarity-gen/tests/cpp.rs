@@ -185,12 +185,12 @@ fn rows_read_again_lose_their_selected_row() {
 #[test]
 fn the_desktop_window_opens_at_the_main_windows_size() {
     let code: String = files().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.as_str()).collect();
-    has(&code, "::page(), &db, &windows, {1100, 760}});");
+    has(&code, "::page(), &db, &windows, {1100, 760}};");
     let sized = SALES.replace("    title \"Order\"\n", "    title \"Order\"\n    size 640 x 480\n");
     assert_ne!(sized, SALES);
     let project = load_sources([("sales.clarity", sized.as_str())]);
     let code: String = generate(&project, &settings()).unwrap().iter().filter(|f| f.path.ends_with(".cpp")).map(|f| f.text.clone()).collect();
-    has(&code, "::page(), &db, &windows, {640, 480}});");
+    has(&code, "::page(), &db, &windows, {640, 480}};");
 }
 
 /// A click can pass values to its handler: each written call is a case of

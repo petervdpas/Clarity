@@ -81,7 +81,7 @@ fn rust_records_hold_their_pictures() {
     has(music, "    const PICTURES: &'static [PictureColumn] = &[PictureColumn { column: \"cover\", store: None, name: None }, PictureColumn { column: \"photo\", store: Some(\"photos\"), name: None }];\n");
     let main = text(&files, "src/main.rs");
     has(main, "const STORES: &[(&str, &str)] = &[(\"photos\", \"env:PHOTO_FOLDER\")];");
-    has(main, "db.add_store(name, at).expect(\"cannot open a file store\");");
+    has(main, "db.add_store(name, at)?;");
     has(main, "        (\"Album\", \"cover\") => db.picture::<modules::music::Album>(id, \"cover\"),\n");
     has(main, "fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {");
 }

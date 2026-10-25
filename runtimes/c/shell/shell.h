@@ -47,6 +47,14 @@ typedef struct {
     const ClarityWindows* windows;
     /// The size the main window's desktop window opens at; zero for the standard size.
     int width, height;
+    /// Why the databases did not open (DESIGN 5.27), with `db` an empty one in
+    /// memory until `connect` opens them; NULL when they opened. What the
+    /// screen shows first then: the app's `on unconnected` handler, or else
+    /// the window that keeps the connection; NULL for none.
+    const char* unconnected;
+    const char* unconnected_handler;
+    const char* unconnected_window;
+    bool (*connect)(ClarityDb** out);
 } ClarityShellOptions;
 
 /// The size a desktop window opens at: its window's, or the standard size

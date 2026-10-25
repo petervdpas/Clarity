@@ -48,6 +48,7 @@
     X(every_open_window_has_its_own_number)                       \
     X(a_closed_window_is_reported_to_what_listens)                \
     X(a_closed_window_is_reported)                                \
+    X(an_unconnected_start_says_why_and_connects_later)           \
     X(show_and_text)                                              \
     X(files_are_filtered_and_sorted_by_their_details)            \
     X(bytes_are_read_and_written_as_they_are)                     \

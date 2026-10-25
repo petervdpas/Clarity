@@ -69,6 +69,14 @@ struct Options {
     Windows* windows = nullptr;
     /// The size the main window's desktop window opens at; zero for the standard size.
     Size size;
+    /// Why the databases did not open (DESIGN 5.27), with `db` an empty one in
+    /// memory until `connect` opens them; none when they opened. What the
+    /// screen shows first then: the app's `on unconnected` handler, or else
+    /// the window that keeps the connection; empty for none.
+    std::optional<std::string> unconnected;
+    std::string unconnected_handler;
+    std::string unconnected_window;
+    std::function<std::unique_ptr<Db>()> connect;
 };
 
 /// A desktop window, as the commands of the renderer in it see it.
@@ -115,6 +123,8 @@ private:
         std::string opener;
     };
     Options options_;
+    /// The databases `connect` opened, which `options_.db` then points at.
+    std::unique_ptr<Db> connected_;
     std::mutex mutex_;
     std::map<std::string, Apart> apart_;
     std::map<uint64_t, std::string> parts_windows_;

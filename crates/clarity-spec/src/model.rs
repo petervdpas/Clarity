@@ -959,6 +959,22 @@ impl Project {
         self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Secret).map(|f| f.name.name.as_str()).collect()
     }
 
+    /// The secret settings a database connects with (DESIGN 5.27): its
+    /// connection is `setting:name` in the project file.
+    pub fn secret_connections(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self.sources.iter().filter(|s| s.sql).filter_map(|s| s.address.strip_prefix("setting:")).collect();
+        names.dedup();
+        names
+    }
+
+    /// The window where the person keeps a database's secret connection: the
+    /// first that shows one. An application whose database cannot connect
+    /// opens it first, and connects once it closes (DESIGN 5.27).
+    pub fn connection_window(&self) -> Option<&Page> {
+        let names = self.secret_connections();
+        self.files.iter().flat_map(|f| &f.pages).find(|page| names.iter().any(|name| shows_setting(&page.widgets, name)))
+    }
+
     pub fn in_web_api(&self, entity: &str) -> bool {
         self.source_of(entity).is_some_and(|source| self.sources.iter().any(|s| s.name == source && !s.sql))
     }
@@ -1203,4 +1219,12 @@ pub struct ThemePart {
     pub state: Option<String>,
     pub look: Look,
     pub span: Span,
+}
+
+/// Whether a part of `widgets`, or of a container among them, binds the setting `name`.
+pub fn shows_setting(widgets: &[Widget], name: &str) -> bool {
+    let path = format!("{}.{name}", crate::parser::SETTINGS_DATA);
+    widgets.iter().any(|w| {
+        w.props.bind.as_deref() == Some(path.as_str()) || shows_setting(&w.children, name) || w.pages.iter().any(|p| shows_setting(&p.children, name))
+    })
 }

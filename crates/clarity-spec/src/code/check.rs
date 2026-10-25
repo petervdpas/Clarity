@@ -1078,6 +1078,21 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
         }
         return;
     }
+    // The app's databases did not open (DESIGN 5.27): the handler may take why, as text.
+    if wired.own_event && wired.event == "unconnected" {
+        let fits = match decl.params.as_slice() {
+            [] => true,
+            [reason] => env.type_ref(&reason.ty).is_ok_and(|ty| matches!(ty, Ty::Text)),
+            _ => false,
+        };
+        if !fits {
+            out.push(Diagnostic::error(
+                format!("handler {} takes {}; 'on unconnected' gives one text, why the databases did not open", wired.handler, params()),
+                wired.span,
+            ));
+        }
+        return;
+    }
     if wired.own_event {
         if !decl.params.is_empty() {
             out.push(Diagnostic::error(
@@ -3723,6 +3738,18 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
         {
             found.push(Diagnostic::error(
                 format!("database {} connects with setting '{name}', which is no secret setting; add it to settings as {name}: secret", source.name),
+                Span::default(),
+            ));
+        }
+        // The person keeps it in a window before the database opens.
+        if let Some(name) = source.address.strip_prefix("setting:").filter(|_| source.sql)
+            && secrets.contains(&name)
+            && project.files.iter().any(|f| !f.pages.is_empty())
+            && !project.files.iter().flat_map(|f| &f.pages).any(|p| crate::model::shows_setting(&p.widgets, name))
+            && !project.files.iter().flat_map(|f| &f.apps).any(|a| a.handlers.iter().any(|h| h.event == crate::widgets::Event::Unconnected))
+        {
+            found.push(Diagnostic::error(
+                format!("database {} connects with setting '{name}', which no window shows and no 'on unconnected' handles; add a password input bound to settings.{name}, such as in a settings window, or an app handler on unconnected", source.name),
                 Span::default(),
             ));
         }

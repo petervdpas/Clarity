@@ -76,7 +76,21 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
     try {
         WindowState state = args.contains("state") ? args["state"].get<WindowState>() : WindowState{};
         json with = args.value("with", json::object());
-        if (command == "start") return value({{"model", json::parse(options_.model)}, {"main", options_.main}});
+        if (command == "start") {
+            json started = {{"model", json::parse(options_.model)}, {"main", options_.main}};
+            auto or_null = [](const std::string& text) { return text.empty() ? json(nullptr) : json(text); };
+            if (options_.unconnected)
+                started["unconnected"] = {{"handler", or_null(options_.unconnected_handler)}, {"window", or_null(options_.unconnected_window)}, {"problem", *options_.unconnected}};
+            return value(started);
+        }
+        // The databases again, as when the person has kept their connection.
+        if (command == "connect") {
+            if (!options_.connect) return value(nullptr);
+            connected_ = options_.connect();
+            options_.db = connected_.get();
+            options_.unconnected.reset();
+            return value(nullptr);
+        }
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
         if (command == "read_settings") return value(read_settings_with(options_.name, args.value("secrets", json(nullptr))));
         // The person's settings, as the screen has them now.

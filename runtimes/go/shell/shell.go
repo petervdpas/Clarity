@@ -66,6 +66,26 @@ type Options struct {
 	Assets  fs.FS
 	Db      *clarity.Db
 	Windows Windows
+	// Unconnected is what the screen shows when the databases did not open
+	// (DESIGN 5.27), with Db an empty one in memory until Connect opens them;
+	// nil when they opened.
+	Unconnected *Unconnected
+	Connect     func() (*clarity.Db, error)
+}
+
+// Unconnected is why the databases did not open, and what the screen shows
+// first: the app's `on unconnected` handler, or else the window that keeps
+// a secret connection; "" for none.
+type Unconnected struct {
+	Handler, Window, Problem string
+}
+
+// orNull is text as the screen takes it: null when there is none.
+func orNull(text string) any {
+	if text == "" {
+		return nil
+	}
+	return text
 }
 
 // Answer is what a command gives: its value, or what went wrong as the
@@ -215,7 +235,26 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	db := c.options.Db
 	switch command {
 	case "start":
-		return Answer{Value: map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}}
+		start := map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}
+		if u := c.options.Unconnected; u != nil {
+			start["unconnected"] = map[string]any{"handler": orNull(u.Handler), "window": orNull(u.Window), "problem": u.Problem}
+		}
+		return Answer{Value: start}
+	case "connect":
+		// The databases again, as when the person has kept their connection.
+		if c.options.Connect == nil {
+			return Answer{}
+		}
+		opened, err := c.options.Connect()
+		if err != nil {
+			return failed(err)
+		}
+		if c.options.Db != nil {
+			c.options.Db.Close()
+		}
+		c.options.Db = opened
+		c.options.Unconnected = nil
+		return Answer{}
 	case "read_settings":
 		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
 		return Answer{Value: clarity.ReadSettingsWith(c.options.Name, a.Secrets)}

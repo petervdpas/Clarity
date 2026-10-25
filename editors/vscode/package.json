@@ -2,7 +2,7 @@
   "name": "clarity-designer",
   "displayName": "Clarity Designer",
   "description": "Colors, snippets and a file icon for Clarity files (.clarity): the language of the Clarity designer.",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "publisher": "petervdpas",
   "license": "MIT",
   "icon": "images/icon.png",

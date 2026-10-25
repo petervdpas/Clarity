@@ -39,6 +39,17 @@ public abstract class WindowViewModel(Db db) : ObservableObject
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
+    /// <summary>
+    /// Runs the app's <c>on unconnected</c> on this window, which is not shown
+    /// (DESIGN 5.27): what it says and the windows it opens go to <paramref name="unconnecting"/>.
+    /// </summary>
+    public void RunUnconnected(Unconnecting unconnecting, Action<string> handler)
+    {
+        Messages = unconnecting.Said;
+        OpenRequested += (other, _) => unconnecting.Open(other);
+        Handle(() => handler(unconnecting.Reason));
+    }
+
     /// <summary>Windows a running handler asked to open, and whether it asked to close this one.</summary>
     readonly List<(WindowViewModel Window, bool NewWindow)> opening = [];
     readonly List<Question> asking = [];

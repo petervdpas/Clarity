@@ -168,7 +168,23 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         cJSON* started = cJSON_CreateObject();
         cJSON_AddItemToObject(started, "model", cJSON_Parse(s->options.model));
         cJSON_AddStringToObject(started, "main", s->options.main);
+        if (s->options.unconnected) {
+            cJSON* why = cJSON_AddObjectToObject(started, "unconnected");
+            cJSON_AddItemToObject(why, "handler", s->options.unconnected_handler ? cJSON_CreateString(s->options.unconnected_handler) : cJSON_CreateNull());
+            cJSON_AddItemToObject(why, "window", s->options.unconnected_window ? cJSON_CreateString(s->options.unconnected_window) : cJSON_CreateNull());
+            cJSON_AddStringToObject(why, "problem", s->options.unconnected);
+        }
         return value(started);
+    }
+    if (strcmp(command, "connect") == 0) {
+        // The databases again, as when the person has kept their connection.
+        if (!s->options.connect) return value(cJSON_CreateNull());
+        ClarityDb* opened = NULL;
+        if (!s->options.connect(&opened)) return failed();
+        clarity_db_close(s->options.db);
+        s->options.db = opened;
+        s->options.unconnected = NULL;
+        return value(cJSON_CreateNull());
     }
     if (strcmp(command, "read_settings") == 0) {
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.

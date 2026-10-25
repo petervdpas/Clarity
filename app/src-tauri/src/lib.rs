@@ -772,13 +772,13 @@ pub fn run() {
                 manual::show_later(window.clone());
                 let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
                 window.set_title(&window_title(&info.name, &info.version.to_string(), dev_release))?;
-                // The manual's window closes with Clarity's.
+                // The manual's window closes with Clarity's; its own close only hides it.
                 let app = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Destroyed = event
                         && let Some(manual) = app.get_webview_window("manual")
                     {
-                        manual.close().ok();
+                        manual.destroy().ok();
                     }
                 });
             }

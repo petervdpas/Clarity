@@ -148,8 +148,17 @@ pub async fn open_manual(app: tauri::AppHandle, topic: String, anchor: Option<St
         .visible(false)
         .background_color(tauri::window::Color(0x15, 0x18, 0x1e, 0xff))
         .build()
-        .map(show_later)
-        .map(|_| ())
+        .map(|window| {
+            // Closing it only hides it, so the next F1 shows it at once.
+            let hidden = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = hidden.hide();
+                }
+            });
+            show_later(window);
+        })
         .map_err(|err| err.to_string())
 }
 

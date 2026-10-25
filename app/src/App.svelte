@@ -21,6 +21,8 @@
   import { resourceKinds } from "./lib/resourceKinds.svelte";
   import type { ResourceKind } from "./lib/generated/ResourceKind";
   import RibbonButton from "./lib/RibbonButton.svelte";
+  import { IDE_COMMANDS, commandFor, eventKey, fieldKeeps, shownKey, type Layer } from "./lib/keys";
+  import { ideKeys, ideKeysOf, mac } from "./lib/keys.svelte";
   import Splitter from "./lib/Splitter.svelte";
   import { layout } from "./lib/layout.svelte";
   import EntityEditor from "./lib/EntityEditor.svelte";
@@ -990,22 +992,72 @@
     invoke("open_manual", { topic: topicForTab(inAgent ? "agent" : tab) }).catch(() => {});
   }
 
+  /** What each command does and whether it can now, as its ribbon button says (DESIGN 5.28, lib/keys.ts). */
+  const commands: Record<string, { run: () => unknown; can?: () => boolean }> = {
+    manual: { run: () => openManual() },
+    "view.project": { run: () => switchTab("project") },
+    "view.design": { run: () => switchTab("design") },
+    "view.preview": { run: () => switchTab("preview") },
+    "view.vault": { run: () => switchTab("vault") },
+    "project.open": { run: chooseProject },
+    "project.new": { run: newProject },
+    settings: { run: () => (appSettings.open ? closeAppSettings() : (appSettings.open = true)) },
+    agent: { run: () => agent.toggle() },
+    "project.reload": { run: () => openFile && openProject(openFile), can: () => !!openFile },
+    "project.settings": { run: selectSettings, can: () => !!preview },
+    "project.check": { run: checkProject, can: () => !!preview },
+    "window.new": { run: startNewWindow, can: () => !!preview },
+    "design.undo": { run: () => replay("undo_edit"), can: () => history.undo > 0 },
+    "design.redo": { run: () => replay("redo_edit"), can: () => history.redo > 0 },
+    "design.grid": { run: () => (pageDesigner.showGrid = !pageDesigner.showGrid) },
+    "preview.main": { run: () => preview && (stack = startWindow(preview)), can: () => !!preview },
+    "preview.back": { run: () => (stack = stack.slice(0, -1)), can: () => stack.length >= 2 },
+    "preview.run": { run: () => buildApp(false, true), can: () => !!preview && !building && errorCount === 0 },
+    "preview.build": { run: () => buildApp(true, false), can: () => !!preview && !building && errorCount === 0 },
+    "preview.stop": { run: stopApp, can: () => running || commandRunning },
+    "vault.secrets": { run: () => (vault.view = "secrets") },
+    "vault.connections": { run: () => (vault.view = "connections") },
+    "vault.lock": { run: () => vault.lock(), can: () => vault.unlocked },
+    "vault.add": { run: () => vault.startSecret(), can: () => vault.unlocked },
+    "vault.edit": { run: () => vault.editSecret(), can: () => vault.unlocked && !!vault.selected },
+    "vault.delete": { run: () => vault.deleteSecret(), can: () => vault.unlocked && !!vault.selected },
+    "vault.copy": { run: () => vault.copyValue(), can: () => vault.unlocked && !!vault.selected },
+    "vault.categories": { run: () => (vault.dialog = "categories"), can: () => vault.unlocked },
+    "vault.newConnection": { run: () => vault.newConnection() },
+    "vault.removeConnection": { run: () => vault.removeConnection(), can: () => !!vault.draft },
+  };
+
+  /** The layers whose keys answer now, the innermost first: the view open, then everywhere. */
+  const activeLayers = $derived.by((): Layer[] => {
+    if (appSettings.open) return ["global"];
+    if (tab === "vault") return [vault.view === "secrets" ? "vault.secrets" : "vault.connections", "vault", "global"];
+    return [tab, "global"];
+  });
+
+  /** A command's keys now, for its ribbon button. */
+  const keysFor = (id: string) => ideKeysOf(id);
+
+  /** A tooltip with the command's keys after it. */
+  function keyTip(text: string, id: string): string {
+    const keys = ideKeysOf(id).map((k) => shownKey(k, mac));
+    return keys.length ? `${text} (${keys.join(" or ")})` : text;
+  }
+
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === "F1") {
-      e.preventDefault();
-      openManual();
-      return;
-    }
-    if (tab !== "design" || !(e.ctrlKey || e.metaKey)) return;
-    if ((e.target as HTMLElement | null)?.closest("input, textarea, select")) return;
-    const key = e.key.toLowerCase();
-    if (key === "z" && !e.shiftKey) {
-      e.preventDefault();
-      replay("undo_edit");
-    } else if (key === "y" || (key === "z" && e.shiftKey)) {
-      e.preventDefault();
-      replay("redo_edit");
-    }
+    // What has the focus answered it already, such as the code editor.
+    if (e.defaultPrevented) return;
+    const key = eventKey(e, mac);
+    if (!key) return;
+    // A dialog keeps its keys; nothing behind it runs.
+    if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+    const target = e.target as HTMLElement | null;
+    const typing = !!target?.closest('input, textarea, select, [contenteditable="true"], .cm-editor');
+    if (typing && fieldKeeps(key)) return;
+    const id = commandFor(key, activeLayers, IDE_COMMANDS, ideKeys.choices);
+    const command = id ? commands[id] : undefined;
+    if (!command || (command.can && !command.can())) return;
+    e.preventDefault();
+    void command.run();
   }
 
   function fileName(path: string): string {
@@ -1146,42 +1198,42 @@
     <div class="ribbon-tabs" role="tablist">
       <div class="brand"><img class="logo" src={logo} alt="" /> Clarity IDE</div>
       {#each TABS as t (t.key)}
-        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => switchTab(t.key)}>{t.name}</button>
+        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} title={keyTip(t.name, `view.${t.key}`)} onclick={() => switchTab(t.key)}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
-      <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title="Clarity's own settings: its display, where projects and apps go, where the build tools are, and what the agent may run">Clarity settings</button>
-      <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
-      <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
+      <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title={keyTip("Clarity's own settings: its display, its keys, where projects and apps go, where the build tools are, and what the agent may run", "settings")}>Clarity settings</button>
+      <button class="corner manual-button" onclick={() => openManual()} title={keyTip("Open the manual on this tab's page", "manual")}>Manual</button>
+      <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title={keyTip("Show or hide the agent", "agent")}>Agent</button>
     </div>
     <div class="ribbon-body">
       {#if tab === "project"}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" onclick={newProject} />
-            <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" onclick={chooseProject} />
-            <RibbonButton icon="reload" label="Reload" disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
-            <RibbonButton icon="settings" label="Settings" title="Stack and data sources" disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
+            <RibbonButton icon="new" label="New" title="Create a project: a .clarity file with its folder" keys={keysFor("project.new")} onclick={newProject} />
+            <RibbonButton icon="open" label="Open" title="Open a project file (.clarity)" keys={keysFor("project.open")} onclick={chooseProject} />
+            <RibbonButton icon="reload" label="Reload" keys={keysFor("project.reload")} disabled={!openFile} onclick={() => openFile && openProject(openFile)} />
+            <RibbonButton icon="settings" label="Settings" title="Stack and data sources" keys={keysFor("project.settings")} disabled={!preview} active={current?.kind === "settings"} onclick={selectSettings} />
           </div>
           <div class="group-name">Project</div>
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="window" label="New window" disabled={!preview} onclick={startNewWindow} />
+            <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
             <RibbonButton icon="app" label={app ? "App" : "New app"} disabled={!preview} onclick={() => (app ? selectApp() : preview && addApp(preview.project.files[0]))} />
           </div>
           <div class="group-name">Windows</div>
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" disabled={!preview} onclick={checkProject} />
+            <RibbonButton icon="check" label={errorCount === 0 ? "No errors" : errorCount === 1 ? "1 error" : `${errorCount} errors`} title="Read every file again and check the whole project" keys={keysFor("project.check")} disabled={!preview} onclick={checkProject} />
           </div>
           <div class="group-name">Check</div>
         </div>
       {:else if tab === "design"}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="undo" label="Undo" title="Undo (Ctrl+Z)" disabled={history.undo === 0} onclick={() => replay("undo_edit")} />
-            <RibbonButton icon="redo" label="Redo" title="Redo (Ctrl+Y)" disabled={history.redo === 0} onclick={() => replay("redo_edit")} />
+            <RibbonButton icon="undo" label="Undo" keys={keysFor("design.undo")} disabled={history.undo === 0} onclick={() => replay("undo_edit")} />
+            <RibbonButton icon="redo" label="Redo" keys={keysFor("design.redo")} disabled={history.redo === 0} onclick={() => replay("redo_edit")} />
             <RibbonButton
               icon="delete"
               label="Delete"
@@ -1194,8 +1246,8 @@
         </div>
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="window" label="New window" disabled={!preview} onclick={startNewWindow} />
-            <RibbonButton icon="grid" label="Grid" active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
+            <RibbonButton icon="window" label="New window" keys={keysFor("window.new")} disabled={!preview} onclick={startNewWindow} />
+            <RibbonButton icon="grid" label="Grid" keys={keysFor("design.grid")} active={pageDesigner.showGrid} onclick={() => (pageDesigner.showGrid = !pageDesigner.showGrid)} />
           </div>
           <div class="group-name">Window</div>
         </div>
@@ -1215,34 +1267,34 @@
       {:else if tab === "vault"}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="key" label="Secrets" active={vault.view === "secrets"} onclick={() => (vault.view = "secrets")} />
-            <RibbonButton icon="link" label="Connections" active={vault.view === "connections"} onclick={() => (vault.view = "connections")} />
+            <RibbonButton icon="key" label="Secrets" keys={keysFor("vault.secrets")} active={vault.view === "secrets"} onclick={() => (vault.view = "secrets")} />
+            <RibbonButton icon="link" label="Connections" keys={keysFor("vault.connections")} active={vault.view === "connections"} onclick={() => (vault.view = "connections")} />
           </div>
           <div class="group-name">Vault</div>
         </div>
         {#if vault.view === "secrets"}
           <div class="group">
             <div class="buttons">
-              <RibbonButton icon="new" label="Add" disabled={!vault.unlocked} onclick={() => vault.startSecret()} />
-              <RibbonButton icon="edit" label="Edit" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.editSecret()} />
-              <RibbonButton icon="delete" label="Delete" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.deleteSecret()} />
-              <RibbonButton icon="copy" label="Copy value" disabled={!vault.unlocked || !vault.selected} onclick={() => vault.copyValue()} />
-              <RibbonButton icon="tag" label="Categories" disabled={!vault.unlocked} onclick={() => (vault.dialog = "categories")} />
+              <RibbonButton icon="new" label="Add" keys={keysFor("vault.add")} disabled={!vault.unlocked} onclick={() => vault.startSecret()} />
+              <RibbonButton icon="edit" label="Edit" keys={keysFor("vault.edit")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.editSecret()} />
+              <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.delete")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.deleteSecret()} />
+              <RibbonButton icon="copy" label="Copy value" keys={keysFor("vault.copy")} disabled={!vault.unlocked || !vault.selected} onclick={() => vault.copyValue()} />
+              <RibbonButton icon="tag" label="Categories" keys={keysFor("vault.categories")} disabled={!vault.unlocked} onclick={() => (vault.dialog = "categories")} />
             </div>
             <div class="group-name">Secrets</div>
           </div>
         {:else}
           <div class="group">
             <div class="buttons">
-              <RibbonButton icon="new" label="New connection" onclick={() => vault.newConnection()} />
-              <RibbonButton icon="delete" label="Delete" disabled={!vault.draft} onclick={() => vault.removeConnection()} />
+              <RibbonButton icon="new" label="New connection" keys={keysFor("vault.newConnection")} onclick={() => vault.newConnection()} />
+              <RibbonButton icon="delete" label="Delete" keys={keysFor("vault.removeConnection")} disabled={!vault.draft} onclick={() => vault.removeConnection()} />
             </div>
             <div class="group-name">Connections</div>
           </div>
         {/if}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="lock" label="Lock" disabled={!vault.unlocked} onclick={() => vault.lock()} />
+            <RibbonButton icon="lock" label="Lock" keys={keysFor("vault.lock")} disabled={!vault.unlocked} onclick={() => vault.lock()} />
             <RibbonButton icon="key" label="Change password" disabled={!vault.unlocked} onclick={() => (vault.dialog = "password")} />
             <RibbonButton icon="delete" label="Destroy vault" disabled={!vault.info?.exists} onclick={() => (vault.dialog = "destroy")} />
           </div>
@@ -1251,8 +1303,8 @@
       {:else}
         <div class="group">
           <div class="buttons">
-            <RibbonButton icon="window" label="Main window" disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
-            <RibbonButton icon="back" label="Back" disabled={stack.length < 2} onclick={() => (stack = stack.slice(0, -1))} />
+            <RibbonButton icon="window" label="Main window" keys={keysFor("preview.main")} disabled={!preview} onclick={() => preview && (stack = startWindow(preview))} />
+            <RibbonButton icon="back" label="Back" keys={keysFor("preview.back")} disabled={stack.length < 2} onclick={() => (stack = stack.slice(0, -1))} />
           </div>
           <div class="group-name">Preview</div>
         </div>
@@ -1263,6 +1315,7 @@
               icon="play"
               label={building ? "Building..." : "Run"}
               title="Generate the application, build it with its toolchain and start it"
+              keys={keysFor("preview.run")}
               disabled={!preview || building || errorCount > 0}
               onclick={() => buildApp(false, true)}
             />
@@ -1270,10 +1323,11 @@
               icon="build"
               label="Build"
               title="Build a release program of the application"
+              keys={keysFor("preview.build")}
               disabled={!preview || building || errorCount > 0}
               onclick={() => buildApp(true, false)}
             />
-            <RibbonButton icon="stop" label="Stop" title="Close the running application" disabled={!running && !commandRunning} onclick={stopApp} />
+            <RibbonButton icon="stop" label="Stop" title="Close the running application" keys={keysFor("preview.stop")} disabled={!running && !commandRunning} onclick={stopApp} />
           </div>
           <div class="group-name">Application</div>
         </div>

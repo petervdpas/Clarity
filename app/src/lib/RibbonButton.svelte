@@ -1,5 +1,7 @@
 <script lang="ts">
-  // A large ribbon button: an icon above its label.
+  // A large ribbon button: an icon above its label, its keys in its tooltip.
+  import { shownKey } from "./keys";
+  import { mac } from "./keys.svelte";
 
   let {
     icon,
@@ -7,6 +9,7 @@
     title = undefined,
     disabled = false,
     active = false,
+    keys = [],
     onclick,
   }: {
     icon: string;
@@ -14,11 +17,16 @@
     title?: string;
     disabled?: boolean;
     active?: boolean;
+    /** The keys that run it too (DESIGN 5.28). */
+    keys?: string[];
     onclick: () => void;
   } = $props();
+
+  const shown = $derived(keys.map((k) => shownKey(k, mac)));
+  const tip = $derived(shown.length === 0 ? title : `${title ?? label} (${shown.join(" or ")})`);
 </script>
 
-<button class="ribbon-button" class:active {title} {disabled} {onclick}>
+<button class="ribbon-button" class:active title={tip} aria-keyshortcuts={keys.length ? keys.map((k) => k.replace(/^Ctrl(?=\+)/, mac ? "Meta" : "Control")).join(" ") : undefined} {disabled} {onclick}>
   <svg viewBox="0 0 24 24" aria-hidden="true">
     {#if icon === "new"}
       <path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /><path d="M12 11v6M9 14h6" />

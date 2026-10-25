@@ -14,11 +14,15 @@ static ClarityJsonIs is_of(const char* word) {
     if (strcmp(word, "enum") == 0) return CLARITY_JSON_ENUM;
     if (strcmp(word, "values") == 0) return CLARITY_JSON_VALUES;
     if (strcmp(word, "other") == 0) return CLARITY_JSON_OTHER;
+    if (strcmp(word, "record") == 0) return CLARITY_JSON_RECORD;
+    if (strcmp(word, "records") == 0) return CLARITY_JSON_RECORDS;
     return CLARITY_JSON_TEXT;
 }
 
+static ClarityJsonField* fields_of(const cJSON* listed, size_t* count);
+
 static ClarityJsonKind kind_of(const cJSON* field, const char* word) {
-    ClarityJsonKind kind = {is_of(word), NULL, 0, NULL};
+    ClarityJsonKind kind = {is_of(word), NULL, 0, NULL, NULL, NULL, 0, NULL};
     const cJSON* values = cJSON_GetObjectItem(field, "values");
     if (values) {
         int n = cJSON_GetArraySize(values);
@@ -32,7 +36,23 @@ static ClarityJsonKind kind_of(const cJSON* field, const char* word) {
         *item = kind_of(field, cJSON_GetObjectItem(field, "item")->valuestring);
         kind.item = item;
     }
+    if (kind.is == CLARITY_JSON_RECORD || kind.is == CLARITY_JSON_RECORDS) {
+        kind.entity = cJSON_GetObjectItem(field, "entity")->valuestring;
+        kind.fields = fields_of(cJSON_GetObjectItem(field, "fields"), &kind.field_count);
+        kind.base = cJSON_GetObjectItem(field, "base");
+    }
     return kind;
+}
+
+static ClarityJsonField* fields_of(const cJSON* listed, size_t* count) {
+    int n = cJSON_GetArraySize(listed);
+    ClarityJsonField* fields = CLARITY_NEW(ClarityJsonField, n);
+    for (int i = 0; i < n; i++) {
+        const cJSON* f = cJSON_GetArrayItem(listed, i);
+        fields[i] = (ClarityJsonField){cJSON_GetObjectItem(f, "name")->valuestring, kind_of(f, cJSON_GetObjectItem(f, "kind")->valuestring)};
+    }
+    *count = (size_t)n;
+    return fields;
 }
 
 void json_is_fitted_as_every_runtime_fits_it(void) {
@@ -40,17 +60,12 @@ void json_is_fitted_as_every_runtime_fits_it(void) {
     REQUIRE(cases);
     const cJSON* c;
     cJSON_ArrayForEach(c, cJSON_GetObjectItem(cases, "cases")) {
-        const cJSON* listed = cJSON_GetObjectItem(c, "fields");
-        int count = cJSON_GetArraySize(listed);
-        ClarityJsonField* fields = CLARITY_NEW(ClarityJsonField, count);
-        for (int i = 0; i < count; i++) {
-            const cJSON* f = cJSON_GetArrayItem(listed, i);
-            fields[i] = (ClarityJsonField){cJSON_GetObjectItem(f, "name")->valuestring, kind_of(f, cJSON_GetObjectItem(f, "kind")->valuestring)};
-        }
+        size_t count = 0;
+        ClarityJsonField* fields = fields_of(cJSON_GetObjectItem(c, "fields"), &count);
         const cJSON* at = cJSON_GetObjectItem(c, "at");
         cJSON* got = NULL;
         bool fitted = clarity_json_fit(cJSON_GetObjectItem(c, "json")->valuestring, cJSON_IsString(at) ? at->valuestring : NULL, cJSON_IsTrue(cJSON_GetObjectItem(c, "many")),
-                                       cJSON_GetObjectItem(c, "entity")->valuestring, fields, (size_t)count, cJSON_GetObjectItem(c, "base"), &got);
+                                       cJSON_GetObjectItem(c, "entity")->valuestring, fields, count, cJSON_GetObjectItem(c, "base"), &got);
         const cJSON* error = cJSON_GetObjectItem(c, "error");
         if (cJSON_IsString(error)) {
             CHECK(!fitted);

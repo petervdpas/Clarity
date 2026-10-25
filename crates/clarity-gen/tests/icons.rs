@@ -32,7 +32,8 @@ fn the_web_stacks_model_carries_only_the_icons_the_project_uses() {
     let check = clarity_spec::icons::path("check").unwrap();
     let unused = clarity_spec::icons::path("zap").unwrap();
     for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
-        let code = all(&files(backend, Ui::Web));
+        // C keeps the model as pieces of 2000 bytes, which may cut a path; joined, it reads whole.
+        let code = all(&files(backend, Ui::Web)).replace("\",\n    \"", "");
         assert!(code.contains(check), "{backend:?} carries the check icon");
         assert!(!code.contains(unused), "{backend:?} carries no icon it does not use");
     }

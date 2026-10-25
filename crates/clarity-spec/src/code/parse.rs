@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, HttpPair, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, HttpPair, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -339,7 +339,10 @@ fn parse_params(cursor: &mut Cursor) -> ParseResult<Vec<Param>> {
     loop {
         let name = cursor.expect_ident("a parameter name")?;
         cursor.expect(TokenKind::Colon, "':' and a type")?;
-        params.push(Param { name, ty: parse_type_ref(cursor)? });
+        let ty = parse_type_ref(cursor)?;
+        // `limit: integer = 0`: a call may leave it out.
+        let default = if cursor.eat(TokenKind::Assign) { Some(parse_expr(cursor)?) } else { None };
+        params.push(Param { name, ty, default });
         if cursor.eat(TokenKind::RParen) {
             return Ok(params);
         }
@@ -519,7 +522,8 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
                 }
                 let call = parse_expr(&mut cursor)?;
                 let (then, args) = match call.kind {
-                    ExprKind::Call { function, args } => (function, args),
+                    ExprKind::Call { function, args, named } if named.is_empty() => (function, args),
+                    ExprKind::Call { function, .. } => return Err(Diagnostic::error(format!("handler '{}' takes its values in order, without names", function.name), call.span)),
                     ExprKind::Name { name } => (Ident { name, span: call.span }, Vec::new()),
                     _ => return Err(Diagnostic::error("after 'then' comes the handler the answer runs, as in 'then lend(album)'", call.span)),
                 };
@@ -533,7 +537,8 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             }
             let call = parse_expr(&mut cursor)?;
             let (then, args) = match call.kind {
-                ExprKind::Call { function, args } => (function, args),
+                ExprKind::Call { function, args, named } if named.is_empty() => (function, args),
+                ExprKind::Call { function, .. } => return Err(Diagnostic::error(format!("handler '{}' takes its values in order, without names", function.name), call.span)),
                 ExprKind::Name { name } => (Ident { name, span: call.span }, Vec::new()),
                 _ => return Err(Diagnostic::error("after 'then' comes the handler the answer runs, as in 'then lend(album)'", call.span)),
             };
@@ -1322,11 +1327,25 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
         TokenKind::Ident if !RESERVED.contains(&token.text.as_str()) => {
             cursor.next();
             if cursor.eat(TokenKind::LParen) {
-                let mut args = Vec::new();
+                let (mut args, mut named) = (Vec::new(), Vec::new());
                 if cursor.peek_kind() != Some(TokenKind::RParen) {
-                    args.push(parse_expr(cursor)?);
-                    while cursor.eat(TokenKind::Comma) {
-                        args.push(parse_expr(cursor)?);
+                    loop {
+                        // `limit: 10` gives a value by its parameter's name.
+                        let is_named = cursor.peek_kind() == Some(TokenKind::Ident) && cursor.peek_at(1).is_some_and(|t| t.kind == TokenKind::Colon);
+                        if is_named {
+                            let name = cursor.expect_ident("a parameter name")?;
+                            cursor.expect(TokenKind::Colon, "':' and the value")?;
+                            named.push(NamedArg { name, value: parse_expr(cursor)? });
+                        } else {
+                            let value = parse_expr(cursor)?;
+                            if !named.is_empty() {
+                                return Err(Diagnostic::error("a value without a name cannot follow a named one: write name: value", value.span));
+                            }
+                            args.push(value);
+                        }
+                        if !cursor.eat(TokenKind::Comma) {
+                            break;
+                        }
                     }
                 }
                 let close = cursor.expect(TokenKind::RParen, "')'")?;
@@ -1338,6 +1357,7 @@ fn parse_primary(cursor: &mut Cursor) -> ParseResult<Expr> {
                             span: token.span,
                         },
                         args,
+                        named,
                     },
                 });
             }
@@ -1426,7 +1446,15 @@ fn parse_http(cursor: &mut Cursor) -> ParseResult<Expr> {
         cursor.expect(TokenKind::Colon, "':' and the value")?;
         let value = parse_expr(cursor)?;
         end = value.span;
-        into.push(HttpPair { name: Ident { name: name.text.clone(), span: name.span }, value });
+        // `query "limit": "{limit}" when limit != 0` leaves the pair out when it does not hold.
+        let when = if cursor.eat_keyword("when") {
+            let condition = parse_expr(cursor)?;
+            end = condition.span;
+            Some(condition)
+        } else {
+            None
+        };
+        into.push(HttpPair { name: Ident { name: name.text.clone(), span: name.span }, value, when });
     }
     Ok(Expr { span: join(start, end), kind: ExprKind::Http { method, url: Box::new(url), from, body, headers, query } })
 }

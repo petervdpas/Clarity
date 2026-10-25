@@ -31,7 +31,8 @@ pub fn emit(project: &Project) -> (String, String) {
         let _ = writeln!(header, "/// Records of {name}, in the scratch arena.\ntypedef struct {{\n    {name}* items;\n    size_t count;\n}} {};", list_type(name));
     }
     header.push('\n');
-    for entity in project.entities() {
+    // A record held inside another is declared first (DESIGN 5.25).
+    for entity in crate::holding_order(project) {
         let (h, s) = record(project, entity);
         header.push_str(&h);
         source.push_str(&s);
@@ -71,7 +72,7 @@ fn enum_decl(decl: &EnumDecl) -> (String, String) {
 
 /// Fields that are stored in the entity's own table.
 pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
-    entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. }))
+    entity.fields.iter().filter(|f| !f.ty.is_held())
 }
 
 /// The value a new record starts with, when it is not zero.
@@ -85,6 +86,8 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
+        // A record held inside starts as a new one (DESIGN 5.25).
+        (FieldType::Record { entity }, _) => Some(format!("{}_new()", prefix(&entity.name))),
         _ => None,
     }
 }
@@ -104,7 +107,7 @@ fn to_value(f: &Field) -> String {
         FieldType::Image => format!("clarity_picture_value({value})"),
         FieldType::File => unreachable!("a file field stores two values, written by its record"),
         FieldType::Values { item } => format!("{}_value({})", list_of(item), named(item, &value)),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
@@ -136,7 +139,7 @@ fn read(i: usize, f: &Field) -> String {
             field = ident(&f.name.name)
         ),
         FieldType::Values { item } => format!("    if (!clarity_get_{}({column}, values[{i}], &{target})) return false;\n", list_word(item)),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
@@ -155,6 +158,7 @@ pub(crate) fn json_of(f: &Field) -> String {
         FieldType::Image => format!("clarity_picture_json({value})"),
         FieldType::File => format!("clarity_file_json({value})"),
         FieldType::List { item } => format!("{}_list_json(&{value})", prefix(&item.name)),
+        FieldType::Record { entity } => format!("{}_json(&{value})", prefix(&entity.name)),
         FieldType::Values { item } => format!("clarity_json_{}({})", list_word(item), named(item, &value)),
     }
 }
@@ -188,6 +192,11 @@ fn json_read(f: &Field) -> String {
         FieldType::List { item } => format!(
             "    const cJSON* {field}_items = cJSON_GetObjectItemCaseSensitive(in, {key});\n    if ({field}_items && !cJSON_IsNull({field}_items) && !{}_list_from_json({field}_items, &{target})) return false;\n",
             prefix(&item.name),
+            field = ident(&f.name.name)
+        ),
+        FieldType::Record { entity } => format!(
+            "    const cJSON* {field}_record = cJSON_GetObjectItemCaseSensitive(in, {key});\n    if ({field}_record && !cJSON_IsNull({field}_record) && !{}_from_json({field}_record, &{target})) return false;\n",
+            prefix(&entity.name),
             field = ident(&f.name.name)
         ),
     }
@@ -226,7 +235,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let events: Vec<DataEvent> =
         project.files.iter().flat_map(|f| &f.code).filter(|b| b.name.name == *name).flat_map(|b| b.events.iter().map(|e| e.event)).collect();
     let header = format!(
-        "struct {name} {{\n    int64_t id;\n{fields}}};\n\n/// How the runtime reads and writes records of {name}.\nextern const ClarityEntity {p}_entity;\n/// A new record, with the defaults of its fields.\n{name} {p}_new(void);\n/// Inserts a new record (and gives it its id) or updates a stored one.\nbool {p}_save(ClarityDb* db, {name}* record);\nbool {p}_delete(ClarityDb* db, const {name}* record);\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out);\nbool {p}_all(ClarityDb* db, {list}* out);\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out);\n/// The record a reference field points at.\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out);\ncJSON* {p}_json(const {name}* record);\nbool {p}_from_json(const cJSON* in, {name}* out);\ncJSON* {p}_list_json(const {list}* list);\nbool {p}_list_from_json(const cJSON* in, {list}* out);\n\n"
+        "struct {name} {{\n    int64_t id;\n{fields}}};\n\n/// How the runtime reads and writes records of {name}.\nextern const ClarityEntity {p}_entity;\n/// A new record, with the defaults of its fields.\n{name} {p}_new(void);\n/// Inserts a new record (and gives it its id) or updates a stored one.\nbool {p}_save(ClarityDb* db, {name}* record);\nbool {p}_delete(ClarityDb* db, const {name}* record);\nbool {p}_find(ClarityDb* db, const ClarityQuery* query, {list}* out);\nbool {p}_all(ClarityDb* db, {list}* out);\nbool {p}_get(ClarityDb* db, int64_t id, {name}* out);\n/// The record a reference field points at.\nbool {p}_load(ClarityDb* db, int64_t reference, {name}* out);\ncJSON* {p}_json(const {name}* record);\n/// The JSON of a new record, which JSON read into a record held inside keeps.\ncJSON* {p}_json_new(void);\nbool {p}_from_json(const cJSON* in, {name}* out);\ncJSON* {p}_list_json(const {list}* list);\nbool {p}_list_from_json(const cJSON* in, {list}* out);\n\n"
     );
 
     let mut source = String::new();
@@ -322,7 +331,7 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     }
     let _ = write!(
         source,
-        "cJSON* {p}_json(const {name}* r) {{\n    cJSON* out = cJSON_CreateObject();\n    cJSON_AddItemToObject(out, \"id\", clarity_json_integer(r->id));\n{to}    return out;\n}}\n\nbool {p}_from_json(const cJSON* in, {name}* r) {{\n    *r = {p}_new();\n    if (!clarity_json_get_integer(in, \"id\", &r->id)) return false;\n{from}    return true;\n}}\n\ncJSON* {p}_list_json(const {list}* list) {{\n    cJSON* out = cJSON_CreateArray();\n    for (size_t i = 0; i < list->count; i++) cJSON_AddItemToArray(out, {p}_json(&list->items[i]));\n    return out;\n}}\n\nbool {p}_list_from_json(const cJSON* in, {list}* out) {{\n    size_t count = (size_t)cJSON_GetArraySize(in);\n    {name}* items = CLARITY_NEW({name}, count);\n    size_t i = 0;\n    const cJSON* item;\n    cJSON_ArrayForEach(item, in) {{\n        if (!{p}_from_json(item, &items[i++])) return false;\n    }}\n    *out = ({list}){{items, count}};\n    return true;\n}}\n\n"
+        "cJSON* {p}_json_new(void) {{\n    {name} r = {p}_new();\n    return {p}_json(&r);\n}}\n\ncJSON* {p}_json(const {name}* r) {{\n    cJSON* out = cJSON_CreateObject();\n    cJSON_AddItemToObject(out, \"id\", clarity_json_integer(r->id));\n{to}    return out;\n}}\n\nbool {p}_from_json(const cJSON* in, {name}* r) {{\n    *r = {p}_new();\n    if (!clarity_json_get_integer(in, \"id\", &r->id)) return false;\n{from}    return true;\n}}\n\ncJSON* {p}_list_json(const {list}* list) {{\n    cJSON* out = cJSON_CreateArray();\n    for (size_t i = 0; i < list->count; i++) cJSON_AddItemToArray(out, {p}_json(&list->items[i]));\n    return out;\n}}\n\nbool {p}_list_from_json(const cJSON* in, {list}* out) {{\n    size_t count = (size_t)cJSON_GetArraySize(in);\n    {name}* items = CLARITY_NEW({name}, count);\n    size_t i = 0;\n    const cJSON* item;\n    cJSON_ArrayForEach(item, in) {{\n        if (!{p}_from_json(item, &items[i++])) return false;\n    }}\n    *out = ({list}){{items, count}};\n    return true;\n}}\n\n"
     );
     (header, source)
 }

@@ -4,6 +4,7 @@ import type { Ident } from "./Ident";
 
 /**
  * `header "Accept": "text/plain"` or `query "status": s` of an HTTP call:
- * the name as written, and its value, a text.
+ * the name as written, its value, a text, and the condition after `when`
+ * that leaves it out of the call when it does not hold.
  */
-export type HttpPair = { name: Ident, value: Expr, };
+export type HttpPair = { name: Ident, value: Expr, when: Expr | null, };

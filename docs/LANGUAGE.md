@@ -260,7 +260,8 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `id` | the id of a record |
 | an enum name | one value of that enum |
 | `ref Entity` | a reference to a record of another entity |
-| `list<Entity>` | the records of another entity that belong to this one |
+| an entity name | in an entity of a web API, a record of that entity held inside this one, as the service's JSON nests it: `owner: User`; see [Calling web APIs](#calling-web-apis) |
+| `list<Entity>` | the records of another entity that belong to this one; in an entity of a web API, held inside it |
 | `list<text>`, `list<integer>`, `list<decimal>`, `list<date>`, `list<Enum>` | a list of values, kept in one column; see [Lists in records](#lists-in-records) |
 
 **Modifiers**
@@ -1337,6 +1338,7 @@ action approve(order: Order)
 ```
 
 - **The signature** is `name(param: type, ...)`, optionally followed by `-> type` for the result. The types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum, and `list<Entity>`.
+- **A default** makes a parameter optional: `limit: integer = 0`. It is a value written out (a number, a text, `true` or `false`, `none` or an enum's value), and the parameters with one come after those without. A call leaves them out, or gives any of them by name after the values in order: `list_templates("published")`, `list_templates("published", limit: 10)`, `greeting(times: 2, name: "Bo")`. Each parameter is given once, and every one without a default is given. Handlers, built-in calls and an engine's functions take their values in order, without names.
 - **`require expr`** checks the arguments before the body runs. **`ensure expr`** checks the result after it, as `result`. Both must be bool, and both come before the statements.
 - **`effects`** lists what an action does to data and the world: `db.read`, `db.write`, `files.read`, `files.write` and `net`, comma separated. An action that uses `save` or `delete`, or that calls an action with `db.write`, must declare `db.write`; one that lists or reads files declares `files.read`, one that writes a file `files.write`, and one that calls a web API `net`. A function cannot reach files or the network at all; handlers can, as they can save.
 - **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
@@ -1648,9 +1650,11 @@ code Status
 - A call does not stop the code: a server that is not there, a wrong name or a timeout of 30 seconds is a reply with status 0, so the code decides what a failure means. Only `http` and `https` addresses are called; redirects are followed.
 - Calling out is the effect `net`, which an action declares. Handlers and commands call out as they are; a function, an engine and a data event cannot.
 - `http get "/orders" from shop` calls a path of the web API data source `shop`: at its address, signed with its `auth` (`bearer` sends `Authorization: Bearer <secret>`, `api-key` `X-Api-Key: <secret>`, `basic` `Authorization: Basic ...`). `query "status": status` adds a query parameter, encoded, as many as needed.
+- `when` after a header or query pair leaves it out of the call when its condition does not hold: `query "limit": "{limit}" when limit != 0`. With a default, it sends an optional value only when one is given.
+- **Records inside records.** An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, and code reads them as any record and list (`order.owner.name`, `for line in order.lines`); `json of` writes them nested too. What it holds lives in the web API as well, and a record never holds itself, through any number of records: a list may, as it can be empty. A stored entity refers to another with `ref User` instead, and keeps its lists in their own table.
 - A key does not belong in the code: a header named `Authorization`, or one that holds `key`, `token` or `secret`, with a plain text as its value is a warning. Keep the key in a setting and put it in with a slot.
 - `json of value` is the JSON of a record, a list of records or a value, as Clarity writes values everywhere: names as the fields are named, decimals and money as exact text, enums by name, dates as `2026-10-25`. A post sends a record with `http post url with json of order header "Content-Type": "application/json"`.
-- `read Order from json text` reads one record and `read list<Order> from json text` a list; `at "data.orders"` starts inside the JSON, at those names. A service's JSON is fitted to the entity: a name matches also ignoring case, underscores and hyphens (`creditLimit` is `credit_limit`), numbers and strings of numbers stand for each other, a date and time keeps its date where a date is wanted, an enum value matches in any case. What the JSON leaves out or gives as null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of records are not read. The records are new, so `save` adds them. JSON that does not fit stops the code with a message that says where (`field 'lines' of Order is an integer, not "three"`). Reading JSON has no effect, so a function may do it; an engine does not.
+- `read Order from json text` reads one record and `read list<Order> from json text` a list; `at "data.orders"` starts inside the JSON, at those names. A service's JSON is fitted to the entity: a name matches also ignoring case, underscores and hyphens (`creditLimit` is `credit_limit`), numbers and strings of numbers stand for each other, a date and time keeps its date where a date is wanted, an enum value matches in any case. What the JSON leaves out or gives as null keeps its default; other names, `id` and the fields that are references, pictures, files and lists of stored records are not read. A record held inside (`owner: User`) and a list of them (`lines: list<Line>`) are read from the nested object and list, each fitted to its own entity, and an error says where: `field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not "three"`. The records are new, so `save` adds them. JSON that does not fit stops the code with a message that says where (`field 'lines' of Order is an integer, not "three"`). Reading JSON has no effect, so a function may do it; an engine does not.
 
 ### Types
 
@@ -1837,6 +1841,11 @@ code          = "code" (Window | App)
 function      = ("function" | "action") name "(" [param ("," param)*] ")" ["->" type-ref]
                     ("require" expr | "ensure" expr | "effects" effect ("," effect)*)*
                     statement*
+param         = name ":" type-ref ["=" expr]                  // a default: the parameters with one come last
+call          = name "(" [expr ("," expr)*] ["," named ("," named)*] ")"   // or only named values
+named         = name ":" expr
+http          = "http" ("get" | "post" | "put" | "delete") expr ["from" name] ["with" expr]
+                    (("header" | "query") String ":" expr ["when" expr])*
 
 engine        = "engine" Name "from" String
                     ["uses" service ("," service)*]

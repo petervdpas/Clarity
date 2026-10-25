@@ -75,4 +75,10 @@ command store(status: text)
     for item in items_in(status)
         print "{item.name} {item.price}"
     print asked(status)
+    print asked(status, page: 2)
+    print asked(sort: "name", status: status, page: 3)
     print signed()
+    let b = basket()
+    print "{b.title} for {b.buyer.name}"
+    for line in b.lines
+        print "{line.name} {line.price}"

@@ -65,7 +65,8 @@ code Orders
 
 - `read Order from json text` reads one record, `read list<Order> from json text` a list. `at "data"` starts inside the JSON, at the names given with dots between: `at "result.items"`.
 - A service names its fields its own way, so names match also ignoring case, underscores and hyphens: `creditLimit` fills `credit_limit`. A number fills a money or decimal field, and a string of a number fills an integer. A date and time fills a date with its date. An enum value matches in any case.
-- What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of records. The records are new: `save` adds them.
+- What the JSON leaves out keeps its default, and what the entity does not have is left aside. The id is never read, nor references, pictures, files and lists of stored records. The records are new: `save` adds them.
+- An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several. They are read from the nested object and list, each fitted to its own entity, and `json of` writes them nested. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`.
 - JSON that does not fit stops the handler with a message that says where, such as `field 'lines' of Order is an integer, not "three"`, as a refused save does.
 
 ## A web API data source
@@ -77,7 +78,7 @@ datasource forms rest "https://forms.example.com/api"
     auth bearer "env:FORMS_TOKEN"
 ```
 
-`http get "/templates" from forms` calls a path of it: at its address, signed with its key. `query "status": status` adds a query parameter, encoded, as many as needed. A module with `source forms` holds the records the service keeps: they are not stored in a database, so no migration covers them, and `find`, `save` and `delete` do not reach them. Its actions read and send them.
+`http get "/templates" from forms` calls a path of it: at its address, signed with its key. `query "status": status` adds a query parameter, encoded, as many as needed. `when` after a header or query pair leaves it out when its condition does not hold, which suits an optional value: `query "limit": "{limit}" when limit != 0`. A module with `source forms` holds the records the service keeps: they are not stored in a database, so no migration covers them, and `find`, `save` and `delete` do not reach them. Its actions read and send them.
 
 ## An OpenAPI description
 
@@ -94,7 +95,9 @@ datasource forms rest "https://forms.example.com/api"
 - Only what is picked is written, so a service with many operations and schemas gives the application just what it uses. **API...** lists them all with a box to pick each.
 - The module is Clarity's: do not edit it. Clarity writes it again when the description or the picks change, so a new revision of the description updates the entities and actions. A pick the new revision no longer has is a warning.
 - Your own modules use it with `use forms`, and call its actions as any others: `templates = list_templates("published")`.
-- Not yet read: optional query parameters, which a comment above the action names, nested objects and lists of them, and patch operations.
+- An optional parameter of an operation is an optional parameter of its action, with the description's default or else `""`, `0` or `false`, and it is sent only when it differs: `list_templates(status: text, limit: integer = 0)`, called as `list_templates("published")` or `list_templates("published", limit: 10)`. A yes-or-no value goes to the service as `true` or `false`.
+- A nested object is a record inside the record (`owner: User`), and a list of objects a list of them (`sections: list<Section>`); the schemas they name are written as entities too. One that would make a record hold itself, and an object without a schema of its own, are named in a comment above the field instead.
+- Not yet read: patch operations.
 
 ## Where code calls out
 

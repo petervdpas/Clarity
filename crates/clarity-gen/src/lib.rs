@@ -5,6 +5,7 @@
 
 pub mod tools;
 mod c;
+pub mod calls;
 pub mod libraries;
 pub mod parts;
 mod commands;
@@ -385,6 +386,31 @@ pub struct OutFile {
 /// The project with each key that points at a resource made a text in every
 /// language: the Markdown of its file, or the name of its picture. Every
 /// stack shows a key's value through its texts, so this one way covers them.
+/// The entities in an order where each comes after the records it holds
+/// (DESIGN 5.25), as C and C++ declare a struct before one that holds it.
+/// The checker keeps a record from holding itself.
+pub(crate) fn holding_order(project: &Project) -> Vec<&clarity_spec::model::Entity> {
+    fn visit<'p>(project: &'p Project, entity: &'p clarity_spec::model::Entity, out: &mut Vec<&'p clarity_spec::model::Entity>, busy: &mut Vec<String>) {
+        if out.iter().any(|e| e.name.name == entity.name.name) || busy.contains(&entity.name.name) {
+            return;
+        }
+        busy.push(entity.name.name.clone());
+        for field in &entity.fields {
+            if let clarity_spec::model::FieldType::Record { entity: held } = &field.ty
+                && let Some(held) = project.entity(&held.name)
+            {
+                visit(project, held, out, busy);
+            }
+        }
+        out.push(entity);
+    }
+    let mut out = Vec::new();
+    for entity in project.entities() {
+        visit(project, entity, &mut out, &mut Vec::new());
+    }
+    out
+}
+
 pub fn with_resource_texts(project: &Project) -> Project {
     let mut project = project.clone();
     let markdown = project.resources.as_ref().map(|r| r.markdown.clone()).unwrap_or_default();
@@ -408,7 +434,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !misfits.is_empty() {
         return Err(misfits);
     }
-    let project = &with_resource_texts(project);
+    let project = &with_resource_texts(&calls::filled(project));
     let mut files = match settings.stack.backend {
         Backend::Rust => rust::generate(project, settings)?,
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => csharp::generate(project, settings)?,
@@ -469,7 +495,7 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
-    let project = &with_resource_texts(project);
+    let project = &with_resource_texts(&calls::filled(project));
     match settings.stack.backend {
         Backend::Rust => rust::generate_cli(project, settings),
         Backend::Go => go::generate_cli(project, settings),

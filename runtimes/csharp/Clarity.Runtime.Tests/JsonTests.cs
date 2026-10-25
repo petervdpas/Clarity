@@ -13,7 +13,13 @@ public sealed class JsonTests
     static JsonKind KindOf(JsonElement field, string word) => new(
         word,
         field.TryGetProperty("values", out var values) ? values.EnumerateArray().Select(v => v.GetString()!).ToArray() : null,
-        word == "values" ? KindOf(field, field.GetProperty("item").GetString()!) : null);
+        word == "values" ? KindOf(field, field.GetProperty("item").GetString()!) : null,
+        word is "record" or "records" ? field.GetProperty("entity").GetString() : null,
+        word is "record" or "records" ? FieldsOf(field.GetProperty("fields")) : null,
+        word is "record" or "records" ? JsonNode.Parse(field.GetProperty("base").GetRawText()) : null);
+
+    static JsonField[] FieldsOf(JsonElement list) =>
+        list.EnumerateArray().Select(f => new JsonField(f.GetProperty("name").GetString()!, KindOf(f, f.GetProperty("kind").GetString()!))).ToArray();
 
     [Fact]
     public void JsonIsFittedAsEveryRuntimeFitsIt()
@@ -22,7 +28,7 @@ public sealed class JsonTests
         foreach (var c in file.GetProperty("cases").EnumerateArray())
         {
             var name = c.GetProperty("name").GetString();
-            var fields = c.GetProperty("fields").EnumerateArray().Select(f => new JsonField(f.GetProperty("name").GetString()!, KindOf(f, f.GetProperty("kind").GetString()!))).ToArray();
+            var fields = FieldsOf(c.GetProperty("fields"));
             var at = c.TryGetProperty("at", out var a) ? a.GetString() : null;
             var many = c.TryGetProperty("many", out var m) && m.GetBoolean();
             var template = JsonNode.Parse(c.GetProperty("base").GetRawText());

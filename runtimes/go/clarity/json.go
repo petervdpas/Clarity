@@ -18,11 +18,16 @@ import (
 
 // JSONKind is what a field of an entity takes from JSON: text, integer,
 // decimal (and money), bool, date, datetime, enum (one of Values, any case),
-// values (a list whose items fit Item), or other (never read).
+// values (a list whose items fit Item), record (an object fitted to Entity's
+// Fields over Base, a new record of it), records (a list of such objects),
+// or other (never read).
 type JSONKind struct {
 	Is     string
 	Values []string
 	Item   *JSONKind
+	Entity string
+	Fields []JSONField
+	Base   any
 }
 
 // JSONField is a field of an entity, as JSON is fitted to it.
@@ -166,6 +171,15 @@ func fitRecord(object map[string]any, entity string, fields []JSONField, templat
 		if !found || given == nil || field.Kind.Is == "other" {
 			continue
 		}
+		// Records inside the record (DESIGN 5.25), each fitted to its own entity.
+		if field.Kind.Is == "record" || field.Kind.Is == "records" {
+			value, err := fitNested(given, field, entity)
+			if err != nil {
+				return nil, err
+			}
+			out[field.Name] = value
+			continue
+		}
 		value, fits := fitValue(given, field.Kind)
 		if !fits {
 			return nil, fmt.Errorf("field '%s' of %s is %s, not %s", field.Name, entity, wanted(field.Kind), JSONOf(given))
@@ -173,6 +187,41 @@ func fitRecord(object map[string]any, entity string, fields []JSONField, templat
 		out[field.Name] = value
 	}
 	return out, nil
+}
+
+// fitNested fits a record inside the record, or a list of them, to the
+// field's own entity; an error says where it is.
+func fitNested(given any, field JSONField, entity string) (any, error) {
+	kind := field.Kind
+	template := baseOf(kind.Base)
+	if kind.Is == "record" {
+		object, isObject := given.(map[string]any)
+		if !isObject {
+			return nil, fmt.Errorf("field '%s' of %s is one %s, not %s", field.Name, entity, kind.Entity, JSONOf(given))
+		}
+		record, err := fitRecord(object, kind.Entity, kind.Fields, template)
+		if err != nil {
+			return nil, fmt.Errorf("field '%s' of %s: %w", field.Name, entity, err)
+		}
+		return record, nil
+	}
+	items, isList := given.([]any)
+	if !isList {
+		return nil, fmt.Errorf("field '%s' of %s is a list of %s, not %s", field.Name, entity, kind.Entity, JSONOf(given))
+	}
+	fitted := make([]any, 0, len(items))
+	for i, item := range items {
+		object, isObject := item.(map[string]any)
+		if !isObject {
+			return nil, fmt.Errorf("field '%s' of %s, item %d is not one %s", field.Name, entity, i+1, kind.Entity)
+		}
+		record, err := fitRecord(object, kind.Entity, kind.Fields, template)
+		if err != nil {
+			return nil, fmt.Errorf("field '%s' of %s, item %d: %w", field.Name, entity, i+1, err)
+		}
+		fitted = append(fitted, record)
+	}
+	return fitted, nil
 }
 
 func wanted(kind JSONKind) string {

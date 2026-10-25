@@ -21,7 +21,21 @@ func kindOf(field map[string]any, word string) JSONKind {
 		inner := kindOf(field, item)
 		kind.Item = &inner
 	}
+	if word == "record" || word == "records" {
+		kind.Entity = field["entity"].(string)
+		kind.Fields = fieldsOf(field["fields"].([]any))
+		kind.Base = field["base"]
+	}
 	return kind
+}
+
+func fieldsOf(list []any) []JSONField {
+	var fields []JSONField
+	for _, f := range list {
+		field := f.(map[string]any)
+		fields = append(fields, JSONField{Name: field["name"].(string), Kind: kindOf(field, field["kind"].(string))})
+	}
+	return fields
 }
 
 func TestJSONIsFittedAsEveryRuntimeFitsIt(t *testing.T) {
@@ -36,11 +50,7 @@ func TestJSONIsFittedAsEveryRuntimeFitsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range file.Cases {
-		var fields []JSONField
-		for _, f := range c["fields"].([]any) {
-			field := f.(map[string]any)
-			fields = append(fields, JSONField{Name: field["name"].(string), Kind: kindOf(field, field["kind"].(string))})
-		}
+		fields := fieldsOf(c["fields"].([]any))
 		at, _ := c["at"].(string)
 		many, _ := c["many"].(bool)
 		got, err := FitJSON(c["json"].(string), at, many, c["entity"].(string), fields, c["base"])

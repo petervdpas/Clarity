@@ -18,13 +18,21 @@
 
 namespace clarity {
 
-/// What a field of an entity takes from JSON.
+struct JsonField;
+
+/// What a field of an entity takes from JSON. Record is a record inside the
+/// record (DESIGN 5.25), an object fitted to `entity`'s `fields` over
+/// `base`, a new record of it; Records a list of such objects.
 struct JsonKind {
-    enum Is { Text, Integer, Decimal, Bool, Date, DateTime, Enum, Values, Other } is = Text;
+    enum Is { Text, Integer, Decimal, Bool, Date, DateTime, Enum, Values, Other, Record, Records } is = Text;
     /// The values of an enum, matched in any case.
     std::vector<std::string> values = {};
     /// What the items of a list of values are.
     std::shared_ptr<const JsonKind> item = nullptr;
+    /// For a record or records: the entity, its fields and a new record of it.
+    std::string entity = {};
+    std::shared_ptr<const std::vector<JsonField>> fields = nullptr;
+    nlohmann::json base = nullptr;
 };
 
 /// A field of an entity, as JSON is fitted to it.

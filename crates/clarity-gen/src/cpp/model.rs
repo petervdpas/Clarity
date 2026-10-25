@@ -26,7 +26,8 @@ pub fn emit(project: &Project) -> (String, String) {
         let _ = writeln!(header, "struct {};", entity.name.name);
     }
     header.push('\n');
-    for entity in project.entities() {
+    // A record held inside another is declared first (DESIGN 5.25).
+    for entity in crate::holding_order(project) {
         let (h, s) = record(project, entity);
         header.push_str(&h);
         source.push_str(&s);
@@ -71,7 +72,7 @@ fn enum_decl(decl: &EnumDecl) -> (String, String) {
 
 /// Fields that are stored in the entity's own table.
 pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
-    entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. }))
+    entity.fields.iter().filter(|f| !f.ty.is_held())
 }
 
 /// The value a new record starts with, when it is not the type's own.
@@ -106,7 +107,7 @@ fn to_value(f: &Field) -> String {
         // Its content, then its name in the column beside it.
         FieldType::File => format!("clarity::file_content({value}), clarity::file_name_value({value})"),
         FieldType::Values { .. } => format!("clarity::sql::list({value})"),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
@@ -126,7 +127,7 @@ fn read(i: usize, f: &Field) -> String {
         FieldType::File => format!("clarity::get_file({column}, values[{i}], values[{}])", i + 1),
         FieldType::Enum { name } => format!("{}({})", from_name(&name.name), get("text")),
         FieldType::Values { .. } => format!("{}.get<{}>()", get("list"), field_type(&f.ty)),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 

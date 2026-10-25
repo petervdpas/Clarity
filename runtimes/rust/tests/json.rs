@@ -11,7 +11,7 @@ fn leak<T>(value: T) -> &'static T {
     Box::leak(Box::new(value))
 }
 
-fn kind(word: &str, field: &Value) -> Kind {
+fn kind(word: &str, field: &Value) -> Kind<'static> {
     match word {
         "text" => Kind::Text,
         "integer" => Kind::Integer,
@@ -24,9 +24,20 @@ fn kind(word: &str, field: &Value) -> Kind {
             Kind::Enum(leak(values).as_slice())
         }
         "values" => Kind::Values(leak(kind(field["item"].as_str().unwrap(), field))),
+        "record" => Kind::Record(nested(field)),
+        "records" => Kind::Records(nested(field)),
         "other" => Kind::Other,
         other => panic!("no kind {other}"),
     }
+}
+
+fn fields(list: &Value) -> Vec<Field<'static>> {
+    list.as_array().unwrap().iter().map(|f| Field { name: leak(f["name"].as_str().unwrap().to_string()), kind: kind(f["kind"].as_str().unwrap(), f) }).collect()
+}
+
+/// A record inside the record: its entity, fields and base, from the field.
+fn nested(field: &Value) -> &'static json::Nested<'static> {
+    leak(json::Nested { entity: leak(field["entity"].as_str().unwrap().to_string()), fields: leak(fields(&field["fields"])), base: leak(field["base"].clone()) })
 }
 
 #[test]
@@ -34,12 +45,7 @@ fn json_is_fitted_as_every_runtime_fits_it() {
     let cases: Value = serde_json::from_str(CASES).unwrap();
     for case in cases["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
-        let fields: Vec<Field> = case["fields"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|f| Field { name: leak(f["name"].as_str().unwrap().to_string()), kind: kind(f["kind"].as_str().unwrap(), f) })
-            .collect();
+        let fields = fields(&case["fields"]);
         let got = json::fit(
             case["json"].as_str().unwrap(),
             case["at"].as_str(),

@@ -905,7 +905,7 @@ impl<'a> Emitter<'a> {
                 let prop = if id { "Id".to_string() } else { property(&entity, &field.name) };
                 match self.field_type(&entity, &field.name) {
                     Some(FieldType::Ref { entity: target }) => format!("{db}.Load<{}>({object}.{prop})", target.name),
-                    Some(FieldType::List { .. }) => {
+                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
                     }
@@ -917,6 +917,25 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a value.
+    /// The headers or query pairs of an http call, as an array; a pair with
+    /// `when` is spread in only while its condition holds.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair]) -> String {
+        let items: Vec<String> = pairs
+            .iter()
+            .map(|p| {
+                let pair = format!("({}, {})", string(&p.name.name), self.value(&p.value));
+                match &p.when {
+                    Some(when) => format!(
+                        ".. ({} ? new (string Name, string Value)[] {{ {pair} }} : System.Array.Empty<(string Name, string Value)>())",
+                        self.value(when)
+                    ),
+                    None => pair,
+                }
+            })
+            .collect();
+        format!("[{}]", items.join(", "))
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
@@ -959,11 +978,11 @@ impl<'a> Emitter<'a> {
                 let opts: Vec<String> = options.iter().map(|o| self.value(o)).collect();
                 format!("new {}[] {{ {} }}.Contains({v})", value_type(&common), opts.join(", "))
             }
-            ExprKind::Call { function, args } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
+            ExprKind::Call { function, args, .. } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
                 let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
                 format!("On{}({})", pascal(&function.name), values.join(", "))
             }
-            ExprKind::Call { function, args } => self.call(&function.name, args),
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => {
@@ -994,15 +1013,14 @@ impl<'a> Emitter<'a> {
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
             ExprKind::Http { method, url, from, body, headers, query } => {
                 let url = self.value(url);
-                let items: Vec<String> = headers.iter().map(|h| format!("({}, {})", string(&h.name.name), self.value(&h.value))).collect();
-                let headers = format!("[{}]", items.join(", "));
+                let headers = self.http_pairs(headers);
                 if from.is_some() || !query.is_empty() {
                     // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
                     let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
-                    let query: Vec<String> = query.iter().map(|q| format!("({}, {})", string(&q.name.name), self.value(&q.value))).collect();
+                    let query = self.http_pairs(query);
                     let body = body.as_ref().map_or("null".to_string(), |b| self.value(b));
                     let (kind, secret) = auth.map_or(("null".to_string(), "null".to_string()), |(k, s)| (string(k), string(s)));
-                    return format!("Http.At({}, {}, {url}, [{}], {body}, {headers}, {kind}, {secret})", string(method.verb()), string(base), query.join(", "));
+                    return format!("Http.At({}, {}, {url}, {query}, {body}, {headers}, {kind}, {secret})", string(method.verb()), string(base));
                 }
                 let call = pascal(method.word());
                 match body {
@@ -1334,6 +1352,14 @@ fn cs_json_kind(kind: &crate::json_fields::Kind) -> String {
     match kind {
         Kind::Enum(values) => format!("new JsonKind(\"enum\", [{}])", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
         Kind::Values(item) => format!("new JsonKind(\"values\", null, {})", cs_json_kind(item)),
+        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
+        Kind::Record(nested) | Kind::Records(nested) => format!(
+            "JsonKind.{}({}, [{}], new {}())",
+            if matches!(kind, Kind::Record(_)) { "Record" } else { "Records" },
+            string(&nested.entity),
+            nested.fields.iter().map(|(name, kind)| format!("new JsonField({}, {})", string(name), cs_json_kind(kind))).collect::<Vec<_>>().join(", "),
+            nested.entity
+        ),
         other => format!("new JsonKind(\"{}\")", other.word()),
     }
 }

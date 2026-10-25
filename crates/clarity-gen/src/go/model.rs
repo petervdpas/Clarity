@@ -67,7 +67,7 @@ fn enum_decl(decl: &EnumDecl) -> String {
 
 /// Fields that are stored in the entity's own table.
 fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
-    entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. }))
+    entity.fields.iter().filter(|f| !f.ty.is_held())
 }
 
 /// A literal decimal: `decimal.NewFromInt(100)`, `decimal.RequireFromString("9.95")`.
@@ -93,6 +93,9 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(constant(&name.name, v)),
         // An enum without a default starts with its first value, as on every stack.
         (FieldType::Enum { name }, _) => project.enum_decl(&name.name).and_then(|d| d.variants.first()).map(|v| constant(&name.name, &v.name.name)),
+        // Held records (DESIGN 5.25): a new one, and an empty list rather than nil.
+        (FieldType::Record { entity }, _) => Some(format!("New{}()", entity.name)),
+        (FieldType::List { .. }, _) => Some(format!("{}{{}}", field_type(&f.ty))),
         _ => None,
     }
 }
@@ -127,18 +130,20 @@ fn read(i: usize, f: &Field, project: &Project) -> String {
             format!("{}(read.Name({i}, {column}{names}))", name.name)
         }
         FieldType::Values { item } => format!("clarity.ReadList[{}](read, {i}, {column})", value_type(&ValueItem::of_list(item).info())),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
 fn record(project: &Project, entity: &Entity) -> String {
     let name = &entity.name.name;
     let mut rows = vec![vec!["ID".to_string(), "int64".into(), "`json:\"id\"`".into()]];
-    for f in stored(entity) {
+    // An entity of a web API holds its records inside (DESIGN 5.25); a stored one keeps them in their own table.
+    let held: Vec<&Field> = if project.in_web_api(name) { entity.fields.iter().filter(|f| f.ty.is_held()).collect() } else { Vec::new() };
+    let fields: Vec<&Field> = stored(entity).chain(held.iter().copied()).collect();
+    for f in &fields {
         rows.push(vec![field(&f.name.name), field_type(&f.ty), format!("`json:\"{}\"`", f.name.name)]);
     }
-    let defaults: Vec<String> =
-        stored(entity).filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
+    let defaults: Vec<String> = fields.iter().filter_map(|f| initial(project, f).map(|v| format!("{}: {v}", field(&f.name.name)))).collect();
     // A file has the column of its name beside its own.
     let columns = stored(entity)
         .flat_map(|f| {

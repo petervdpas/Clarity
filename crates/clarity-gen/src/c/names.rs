@@ -93,6 +93,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "ClarityPicture*".into(),
         FieldType::File => "ClarityRecordFile*".into(),
         FieldType::List { item } => list_type(&item.name),
+        FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => values_type(&ValueItem::of_list(item)),
     }
 }

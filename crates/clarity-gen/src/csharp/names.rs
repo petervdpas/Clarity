@@ -155,6 +155,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "Picture?".into(),
         FieldType::File => "RecordFile?".into(),
         FieldType::List { item } => format!("List<{}>", item.name),
+        FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => format!("List<{}>", value_type(&ValueItem::of_list(item).info())),
     }
 }

@@ -4,4 +4,4 @@
 package clarity
 
 // Version is the version of the runtime module.
-const Version = "v0.26.0"
+const Version = "v0.27.0"

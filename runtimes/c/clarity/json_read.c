@@ -49,6 +49,8 @@ static const char* wanted(ClarityJsonKind kind) {
         case CLARITY_JSON_DATE_TIME: return "a date and time";
         case CLARITY_JSON_VALUES: return "a list";
         case CLARITY_JSON_OTHER: return "something else";
+        case CLARITY_JSON_RECORD: return clarity_format("one %s", kind.entity);
+        case CLARITY_JSON_RECORDS: return clarity_format("a list of %s", kind.entity);
         case CLARITY_JSON_ENUM:
             if (kind.count == 0) return "an enum value";
             if (kind.count == 1) return kind.values[0];
@@ -160,9 +162,36 @@ static cJSON* fit_value(const cJSON* given, ClarityJsonKind kind) {
             return list;
         }
         case CLARITY_JSON_OTHER:
+        case CLARITY_JSON_RECORD:
+        case CLARITY_JSON_RECORDS:
             return NULL;
     }
     return NULL;
+}
+
+static bool fit_record(const cJSON* given, const char* entity, const ClarityJsonField* fields, size_t count, const cJSON* base, const char* prefix, cJSON** out);
+
+/// A record inside the record, or a list of them, fitted to the field's own
+/// entity; an error says where (DESIGN 5.25).
+static bool fit_nested(const cJSON* value, const ClarityJsonField* field, const char* entity, const char* prefix, cJSON** out) {
+    ClarityJsonKind kind = field->kind;
+    if (kind.is == CLARITY_JSON_RECORD) {
+        if (!cJSON_IsObject(value)) return clarity_fail(CLARITY_VALUE, "%sfield '%s' of %s is one %s, not %s", prefix, field->name, entity, kind.entity, clarity_json_of(value));
+        return fit_record(value, kind.entity, kind.fields, kind.field_count, kind.base, clarity_format("%sfield '%s' of %s: ", prefix, field->name, entity), out);
+    }
+    if (!cJSON_IsArray(value)) return clarity_fail(CLARITY_VALUE, "%sfield '%s' of %s is a list of %s, not %s", prefix, field->name, entity, kind.entity, clarity_json_of(value));
+    cJSON* list = cJSON_CreateArray();
+    int n = 0;
+    const cJSON* item;
+    cJSON_ArrayForEach(item, value) {
+        n++;
+        if (!cJSON_IsObject(item)) return clarity_fail(CLARITY_VALUE, "%sfield '%s' of %s, item %d is not one %s", prefix, field->name, entity, n, kind.entity);
+        cJSON* record = NULL;
+        if (!fit_record(item, kind.entity, kind.fields, kind.field_count, kind.base, clarity_format("%sfield '%s' of %s, item %d: ", prefix, field->name, entity, n), &record)) return false;
+        cJSON_AddItemToArray(list, record);
+    }
+    *out = list;
+    return true;
 }
 
 static bool fit_record(const cJSON* given, const char* entity, const ClarityJsonField* fields, size_t count, const cJSON* base, const char* prefix, cJSON** out) {
@@ -170,7 +199,12 @@ static bool fit_record(const cJSON* given, const char* entity, const ClarityJson
     for (size_t i = 0; i < count; i++) {
         const cJSON* value = found(given, fields[i].name);
         if (!value || cJSON_IsNull(value) || fields[i].kind.is == CLARITY_JSON_OTHER) continue;
-        cJSON* fitted = fit_value(value, fields[i].kind);
+        cJSON* fitted = NULL;
+        if (fields[i].kind.is == CLARITY_JSON_RECORD || fields[i].kind.is == CLARITY_JSON_RECORDS) {
+            if (!fit_nested(value, &fields[i], entity, prefix, &fitted)) return false;
+        } else {
+            fitted = fit_value(value, fields[i].kind);
+        }
         if (!fitted) return clarity_fail(CLARITY_VALUE, "%sfield '%s' of %s is %s, not %s", prefix, fields[i].name, entity, wanted(fields[i].kind), clarity_json_of(value));
         cJSON_DeleteItemFromObjectCaseSensitive(record, fields[i].name);
         cJSON_AddItemToObject(record, fields[i].name, fitted);

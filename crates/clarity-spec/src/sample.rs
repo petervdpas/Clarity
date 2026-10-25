@@ -113,7 +113,8 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
         // Lengths of songs: 3:05 and up.
         FieldType::Duration => Value::from(bounded(field, 185 + (i as i64 * 37) % 240)),
         // No picture in sample data: the image part shows its placeholder.
-        FieldType::Image | FieldType::File => Value::Null,
+        // A record held inside: the preview shows none.
+        FieldType::Image | FieldType::File | FieldType::Record { .. } => Value::Null,
         FieldType::Date => {
             Value::String(format!("2026-{:02}-{:02}", (i % 12) + 1, (i * 3 % 28) + 1))
         }

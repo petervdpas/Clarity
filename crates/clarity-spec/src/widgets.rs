@@ -1032,6 +1032,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Id => "id",
         FieldType::Enum { .. } => "enum",
         FieldType::Ref { .. } => "ref",
+        FieldType::Record { .. } => "record",
         FieldType::List { .. } => "list",
         FieldType::Values { .. } => "values",
     }

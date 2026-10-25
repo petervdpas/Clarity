@@ -758,7 +758,7 @@ impl<'a> Emitter<'a> {
                     Some(FieldType::Ref { entity: target }) => {
                         format!("db.load::<{}>({object}.{})?", target.name, ident(&member.name))
                     }
-                    Some(FieldType::List { .. }) => {
+                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
                     }
@@ -835,7 +835,7 @@ impl<'a> Emitter<'a> {
                     .collect();
                 format!("[{}].contains(&{v})", opts.join(", "))
             }
-            ExprKind::Call { function, args } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
+            ExprKind::Call { function, args, .. } if self.types.name_of(expr) == Some(&NameKind::Handler) => {
                 let prefix = self.window.as_ref().map(|w| w.prefix.clone()).unwrap_or_default();
                 let params = self.window.as_ref().and_then(|w| w.params.get(&function.name).cloned()).unwrap_or_default();
                 let mut code = String::new();
@@ -846,7 +846,7 @@ impl<'a> Emitter<'a> {
                 }
                 format!("{prefix}__{}(db, w, ui{code})?", super::names::snake(&function.name))
             }
-            ExprKind::Call { function, args } => self.call(&function.name, args),
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             // A function of an engine: values to JSON and back (DESIGN 5.11).
             ExprKind::EngineCall { engine, function, args } if crate::engine(self.project, &engine.name).is_some_and(|e| e.body.is_some()) => {
                 self.written_call(&engine.name, &function.name, args)
@@ -922,7 +922,7 @@ impl<'a> Emitter<'a> {
                     Some(body) => format!("Some(({}).as_str())", self.value(body)),
                     None => "None".to_string(),
                 };
-                let headers: Vec<String> = headers.iter().map(|h| format!("({:?}, ({}).as_str())", h.name.name, self.value(&h.value))).collect();
+                let headers = self.http_pairs(headers);
                 let method = match method {
                     HttpMethod::Get => "Get",
                     HttpMethod::Post => "Post",
@@ -930,7 +930,7 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Delete => "Delete",
                 };
                 if from.is_none() && query.is_empty() {
-                    return format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, &[{}])", headers.join(", "));
+                    return format!("clarity_runtime::http::call(clarity_runtime::http::Method::{method}, &{url}, {body}, {headers})");
                 }
                 // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
@@ -940,16 +940,32 @@ impl<'a> Emitter<'a> {
                     Some(("basic", secret)) => format!("clarity_runtime::http::Auth::Basic({secret:?})"),
                     _ => "clarity_runtime::http::Auth::None".to_string(),
                 };
-                let query: Vec<String> = query.iter().map(|q| format!("({:?}, ({}).as_str())", q.name.name, self.value(&q.value))).collect();
-                format!(
-                    "clarity_runtime::http::call_at(clarity_runtime::http::Method::{method}, {base:?}, &{url}, &[{}], {body}, &[{}], {auth})",
-                    query.join(", "),
-                    headers.join(", ")
-                )
+                let query = self.http_pairs(query);
+                format!("clarity_runtime::http::call_at(clarity_runtime::http::Method::{method}, {base:?}, &{url}, {query}, {body}, {headers}, {auth})")
             }
             ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),
             ExprKind::New { entity } => format!("{}::default()", entity.name),
         }
+    }
+
+    /// The headers or query pairs of an http call, as a slice; with `when`,
+    /// a pair whose condition does not hold is left out.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair]) -> String {
+        if pairs.iter().all(|p| p.when.is_none()) {
+            let items: Vec<String> = pairs.iter().map(|p| format!("({:?}, ({}).as_str())", p.name.name, self.value(&p.value))).collect();
+            return format!("&[{}]", items.join(", "));
+        }
+        let items: Vec<String> = pairs
+            .iter()
+            .map(|p| {
+                let pair = format!("({:?}, ({}).as_str())", p.name.name, self.value(&p.value));
+                match &p.when {
+                    Some(when) => format!("({}).then_some({pair})", self.value(when)),
+                    None => format!("Some({pair})"),
+                }
+            })
+            .collect();
+        format!("&[{}].into_iter().flatten().collect::<Vec<_>>()", items.join(", "))
     }
 
     /// `print list columns a, b`: a heading per field (its label), then
@@ -1220,7 +1236,7 @@ impl<'a> Emitter<'a> {
                     None => format!("sql::reference(Some({}.id))", self.object(value)),
                 }
             }
-            FieldType::List { .. } => {
+            FieldType::List { .. } | FieldType::Record { .. } => {
                 self.errors.push("a list field cannot be compared in a query".into());
                 String::new()
             }
@@ -1824,5 +1840,13 @@ fn rust_json_kind(kind: &crate::json_fields::Kind) -> String {
         Kind::DateTime => "clarity_runtime::json::Kind::DateTime".into(),
         Kind::Enum(values) => format!("clarity_runtime::json::Kind::Enum(&[{}])", values.iter().map(|v| format!("{v:?}")).collect::<Vec<_>>().join(", ")),
         Kind::Values(item) => format!("clarity_runtime::json::Kind::Values(&{})", rust_json_kind(item)),
+        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
+        Kind::Record(nested) | Kind::Records(nested) => format!(
+            "clarity_runtime::json::Kind::{}(&clarity_runtime::json::Nested {{ entity: {:?}, fields: &[{}], base: &serde_json::to_value({}::default()).unwrap_or_default() }})",
+            if matches!(kind, Kind::Record(_)) { "Record" } else { "Records" },
+            nested.entity,
+            nested.fields.iter().map(|(name, kind)| format!("clarity_runtime::json::Field {{ name: {name:?}, kind: {} }}", rust_json_kind(kind))).collect::<Vec<_>>().join(", "),
+            nested.entity
+        ),
     }
 }

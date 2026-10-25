@@ -210,7 +210,14 @@ pub enum FieldType {
     Ref {
         entity: Ident,
     },
-    /// Records of another entity, kept in their own table.
+    /// A record of another entity held inside this one (DESIGN 5.25), as a
+    /// web API's JSON nests it: `owner: User`. Only an entity of a web API
+    /// has one; a stored entity refers to another with `ref`.
+    Record {
+        entity: Ident,
+    },
+    /// Records of another entity, kept in their own table; in an entity of
+    /// a web API, held inside the record (DESIGN 5.25).
     List {
         item: Ident,
     },
@@ -219,6 +226,15 @@ pub enum FieldType {
     Values {
         item: ListItem,
     },
+}
+
+impl FieldType {
+    /// Whether the field holds records rather than a value: `list<Line>`,
+    /// kept in its own table or (in a web API) inside the record, and a
+    /// record held inside (DESIGN 5.25). Neither is a column of its table.
+    pub fn is_held(&self) -> bool {
+        matches!(self, FieldType::List { .. } | FieldType::Record { .. })
+    }
 }
 
 /// What a list field of plain values holds.

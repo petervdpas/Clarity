@@ -615,6 +615,35 @@ impl<'a> Emitter<'a> {
         format!("clarity.SortFiles({list}, {})", keys.join(", "))
     }
 
+    /// The headers or query pairs of an http call; with `when`, the list is
+    /// built in lines before it, leaving out a pair whose condition does not hold.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair], pre: &mut String) -> String {
+        if pairs.is_empty() {
+            return "nil".to_string();
+        }
+        let item = |this: &mut Self, p: &clarity_spec::code::HttpPair, pre: &mut String| {
+            format!("clarity.Header{{Name: {}, Value: {}}}", string(&p.name.name), bare(this.value(&p.value, pre)))
+        };
+        if pairs.iter().all(|p| p.when.is_none()) {
+            let items: Vec<String> = pairs.iter().map(|p| item(self, p, pre).trim_start_matches("clarity.Header").to_string()).collect();
+            return format!("[]clarity.Header{{{}}}", items.join(", "));
+        }
+        self.temps += 1;
+        let list = format!("v{}", self.temps);
+        pre.push_str(&format!("{list} := []clarity.Header{{}}\n"));
+        for p in pairs {
+            let value = item(self, p, pre);
+            match &p.when {
+                Some(when) => {
+                    let cond = bare(self.value(when, pre));
+                    pre.push_str(&format!("if {cond} {{\n\t{list} = append({list}, {value})\n}}\n"));
+                }
+                None => pre.push_str(&format!("{list} = append({list}, {value})\n")),
+            }
+        }
+        list
+    }
+
     /// The lines that lift a call that can fail; gives the name of its value.
     /// `code` as a plain operand: an expression with an operator is held in a
     /// variable of its own first.
@@ -809,7 +838,7 @@ impl<'a> Emitter<'a> {
                 out.push_str(if self.returns().is_some() { "return\n" } else { "return nil\n" });
             }
             StmtKind::Call { call } => {
-                let ExprKind::Call { function, args } = &call.kind else {
+                let ExprKind::Call { function, args, .. } = &call.kind else {
                     self.errors.push("only a call can stand on its own".into());
                     return;
                 };
@@ -1265,7 +1294,7 @@ impl<'a> Emitter<'a> {
                     Some(FieldType::Ref { entity: target }) => {
                         self.lift(format!("clarity.Ref[{}](db, {object}.{})", target.name, field(&member.name)), pre)
                     }
-                    Some(FieldType::List { .. }) => {
+                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
                     }
@@ -1397,7 +1426,7 @@ impl<'a> Emitter<'a> {
                 let opts: Vec<String> = options.iter().map(|o| bare(self.value(o, pre))).collect();
                 format!("slices.Contains([]{}{{{}}}, {})", value_type(&value_ty), opts.join(", "), bare(v))
             }
-            ExprKind::Call { function, args } => self.call(&function.name, args, pre),
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args, pre),
             ExprKind::Find { entity, filter, order, var } => {
                 let query = self.find(&var.name, &entity.name, filter.as_deref(), order, pre);
                 self.lift(query, pre)
@@ -1435,19 +1464,12 @@ impl<'a> Emitter<'a> {
                     Some(body) => bare(self.value(body, pre)),
                     None => "\"\"".to_string(),
                 };
-                let mut pairs = |pairs: &[clarity_spec::code::HttpPair], pre: &mut String| {
-                    if pairs.is_empty() {
-                        return "nil".to_string();
-                    }
-                    let items: Vec<String> = pairs.iter().map(|h| format!("{{Name: {}, Value: {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
-                    format!("[]clarity.Header{{{}}}", items.join(", "))
-                };
-                let headers = pairs(headers, pre);
+                let headers = self.http_pairs(headers, pre);
                 if from.is_none() && query.is_empty() {
                     return format!("clarity.HTTP({}, {url}, {body}, {headers})", string(method.verb()));
                 }
                 // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
-                let query = pairs(query, pre);
+                let query = self.http_pairs(query, pre);
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
                 let auth = match auth {
                     Some((kind, secret)) => format!("clarity.HTTPAuth{{Kind: {}, Secret: {}}}", string(kind), string(secret)),
@@ -1814,7 +1836,7 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("{}.ID", self.value(value, pre)),
                 _ => bare(self.value(value, pre)),
             },
-            FieldType::List { .. } => {
+            FieldType::List { .. } | FieldType::Record { .. } => {
                 self.errors.push("a list field cannot be compared in a query".into());
                 String::new()
             }
@@ -1892,6 +1914,14 @@ fn go_json_kind(kind: &crate::json_fields::Kind) -> String {
     match kind {
         Kind::Enum(values) => format!("clarity.JSONKind{{Is: \"enum\", Values: []string{{{}}}}}", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
         Kind::Values(item) => format!("clarity.JSONKind{{Is: \"values\", Item: &{}}}", go_json_kind(item)),
+        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
+        Kind::Record(nested) | Kind::Records(nested) => format!(
+            "clarity.JSONKind{{Is: \"{}\", Entity: {}, Fields: []clarity.JSONField{{{}}}, Base: New{}()}}",
+            kind.word(),
+            string(&nested.entity),
+            nested.fields.iter().map(|(name, kind)| format!("{{Name: {}, Kind: {}}}", string(name), go_json_kind(kind))).collect::<Vec<_>>().join(", "),
+            nested.entity
+        ),
         other => format!("clarity.JSONKind{{Is: \"{}\"}}", other.word()),
     }
 }

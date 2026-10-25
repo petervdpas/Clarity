@@ -684,7 +684,7 @@ impl<'a> Emitter<'a> {
             StmtKind::Return { value: None } if self.command => out.push_str("return 0;\n"),
             StmtKind::Return { value: None } => out.push_str("return;\n"),
             StmtKind::Call { call } => {
-                let ExprKind::Call { function, args } = &call.kind else {
+                let ExprKind::Call { function, args, .. } = &call.kind else {
                     self.errors.push("only a call can stand on its own".into());
                     return;
                 };
@@ -1048,7 +1048,7 @@ impl<'a> Emitter<'a> {
                     // Every record has an id.
                     None if member.name == clarity_spec::code::check::RECORD_ID => format!("{object}.id"),
                     Some(FieldType::Ref { entity: target }) => format!("db.load<{}>({object}.{})", target.name, ident(&member.name)),
-                    Some(FieldType::List { .. }) => {
+                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
                     }
@@ -1115,6 +1115,24 @@ impl<'a> Emitter<'a> {
     }
 
     /// An expression as a value.
+    /// The headers or query pairs of an http call; with `when`, a lambda
+    /// builds the list, leaving out a pair whose condition does not hold.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair]) -> String {
+        if pairs.iter().all(|p| p.when.is_none()) {
+            let items: Vec<String> = pairs.iter().map(|p| format!("{{{}, {}}}", string(&p.name.name), self.value(&p.value))).collect();
+            return format!("{{{}}}", items.join(", "));
+        }
+        let mut lines = String::new();
+        for p in pairs {
+            let push = format!("pairs.push_back({{{}, {}}});", string(&p.name.name), self.value(&p.value));
+            match &p.when {
+                Some(when) => lines.push_str(&format!(" if ({}) {push}", self.value(when))),
+                None => lines.push_str(&format!(" {push}")),
+            }
+        }
+        format!("[&] {{ std::vector<std::pair<std::string, std::string>> pairs;{lines} return pairs; }}()")
+    }
+
     fn value(&mut self, expr: &Expr) -> String {
         let ty = self.types.type_of(expr);
         match &expr.kind {
@@ -1143,7 +1161,7 @@ impl<'a> Emitter<'a> {
                 let opts: Vec<String> = options.iter().map(|o| self.value(o)).collect();
                 format!("clarity::one_of<{}>({v}, {{{}}})", value_type(&common), opts.join(", "))
             }
-            ExprKind::Call { function, args } => self.call(&function.name, args),
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args),
             ExprKind::Find { entity, filter, order, var } => self.find(&var.name, &entity.name, filter.as_deref(), order),
             ExprKind::Files { var, store, filter, order } => self.files(&var.name, &store.name, filter.as_deref(), order),
             ExprKind::ReadText { file } => format!("db.read_text({})", self.value(file)),
@@ -1172,7 +1190,7 @@ impl<'a> Emitter<'a> {
                     Some(body) => self.value(body),
                     None => "std::string()".to_string(),
                 };
-                let items: Vec<String> = headers.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), self.value(&h.value))).collect();
+                let headers = self.http_pairs(headers);
                 let method = match method {
                     HttpMethod::Get => "Get",
                     HttpMethod::Post => "Post",
@@ -1180,11 +1198,11 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Delete => "Delete",
                 };
                 if from.is_none() && query.is_empty() {
-                    return format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {{{}}})", items.join(", "));
+                    return format!("clarity::http_call(clarity::HttpMethod::{method}, {url}, {body}, {headers})");
                 }
                 // A path of a web API data source (DESIGN 5.23): its address and auth come from the project file.
                 let (base, auth) = from.as_ref().and_then(|f| crate::web_source(self.project, &f.name)).unwrap_or(("", None));
-                let query: Vec<String> = query.iter().map(|q| format!("{{{}, {}}}", string(&q.name.name), self.value(&q.value))).collect();
+                let query = self.http_pairs(query);
                 let (kind, secret) = match auth {
                     Some(("bearer", s)) => ("Bearer", s),
                     Some(("api-key", s)) => ("ApiKey", s),
@@ -1192,10 +1210,8 @@ impl<'a> Emitter<'a> {
                     _ => ("None", ""),
                 };
                 format!(
-                    "clarity::http_call_at(clarity::HttpMethod::{method}, std::string({}), {url}, {{{}}}, {body}, {{{}}}, clarity::HttpAuth::{kind}, std::string({}))",
+                    "clarity::http_call_at(clarity::HttpMethod::{method}, std::string({}), {url}, {query}, {body}, {headers}, clarity::HttpAuth::{kind}, std::string({}))",
                     string(base),
-                    query.join(", "),
-                    items.join(", "),
                     string(secret)
                 )
             }
@@ -1541,7 +1557,7 @@ impl<'a> Emitter<'a> {
                 TypeInfo::Record(_) => format!("clarity::sql::integer({}.id)", self.value(value)),
                 _ => format!("clarity::sql::reference({})", self.value(value)),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. } => {
+            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list is compared with none only".into());
                 String::new()
             }
@@ -1597,10 +1613,20 @@ fn cpp_json_kind(kind: &crate::json_fields::Kind) -> String {
         Kind::DateTime => "DateTime",
         Kind::Enum(_) => "Enum",
         Kind::Values(_) => "Values",
+        Kind::Record(_) => "Record",
+        Kind::Records(_) => "Records",
     };
     match kind {
         Kind::Enum(values) => format!("clarity::JsonKind{{clarity::JsonKind::Enum, {{{}}}}}", values.iter().map(|v| string(v)).collect::<Vec<_>>().join(", ")),
         Kind::Values(item) => format!("clarity::JsonKind{{clarity::JsonKind::Values, {{}}, std::make_shared<clarity::JsonKind>({})}}", cpp_json_kind(item)),
+        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
+        Kind::Record(nested) | Kind::Records(nested) => format!(
+            "clarity::JsonKind{{clarity::JsonKind::{}, {{}}, nullptr, {}, std::make_shared<std::vector<clarity::JsonField>>(std::vector<clarity::JsonField>{{{}}}), nlohmann::json({}{{}})}}",
+            is(kind),
+            string(&nested.entity),
+            nested.fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), cpp_json_kind(kind))).collect::<Vec<_>>().join(", "),
+            nested.entity
+        ),
         other => format!("clarity::JsonKind{{clarity::JsonKind::{}}}", is(other)),
     }
 }

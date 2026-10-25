@@ -184,7 +184,8 @@ fn fits(ty: &FieldType, declared: &str) -> bool {
         FieldType::Ref { .. } => k == Kind::Integer,
         // The picture itself, or the path of its file in a file store.
         FieldType::Image | FieldType::File => matches!(k, Kind::Blob | Kind::Text),
-        FieldType::List { .. } => false,
+        // Held inside a web API's record, never in a column.
+        FieldType::List { .. } | FieldType::Record { .. } => false,
     }
 }
 

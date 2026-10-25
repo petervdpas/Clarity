@@ -12,7 +12,7 @@ use crate::{Error, Result};
 
 /// What a field of an entity takes from JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
+pub enum Kind<'a> {
     Text,
     Integer,
     /// Decimals and money, written as exact text.
@@ -21,18 +21,31 @@ pub enum Kind {
     Date,
     DateTime,
     /// One of these values, matched in any case.
-    Enum(&'static [&'static str]),
+    Enum(&'a [&'a str]),
     /// A list whose items fit the kind.
-    Values(&'static Kind),
-    /// Never read: a reference, a picture, a file, a list of records.
+    Values(&'a Kind<'a>),
+    /// A record inside the record (DESIGN 5.25): an object fitted to its own entity.
+    Record(&'a Nested<'a>),
+    /// Records inside the record: a list of objects, each fitted to its entity.
+    Records(&'a Nested<'a>),
+    /// Never read: a reference, a picture, a file, a list of stored records.
     Other,
 }
 
 /// A field of an entity, as JSON is fitted to it.
-#[derive(Debug, Clone, Copy)]
-pub struct Field {
-    pub name: &'static str,
-    pub kind: Kind,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Field<'a> {
+    pub name: &'a str,
+    pub kind: Kind<'a>,
+}
+
+/// The entity of a record inside a record: its name, its fields, and a new
+/// record of it as Clarity writes it, which what JSON leaves out keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Nested<'a> {
+    pub entity: &'a str,
+    pub fields: &'a [Field<'a>],
+    pub base: &'a Value,
 }
 
 /// The JSON of a value, as Clarity writes values everywhere.
@@ -90,10 +103,27 @@ fn record(object: &Map<String, Value>, entity: &str, fields: &[Field], base: &Va
     for field in fields {
         let given = object.get(field.name).or_else(|| object.iter().find(|(name, _)| plain(name) == plain(field.name)).map(|(_, v)| v));
         let Some(given) = given.filter(|v| !v.is_null()) else { continue };
-        if field.kind == Kind::Other {
-            continue;
-        }
-        let value = value(given, field.kind).ok_or_else(|| format!("field '{}' of {entity} is {}, not {}", field.name, wanted(field.kind), compact(given)))?;
+        let value = match field.kind {
+            Kind::Other => continue,
+            Kind::Record(nested) => match given {
+                Value::Object(inner) => record(inner, nested.entity, nested.fields, nested.base).map_err(|why| format!("field '{}' of {entity}: {why}", field.name))?,
+                other => return Err(format!("field '{}' of {entity} is one {}, not {}", field.name, nested.entity, compact(other))),
+            },
+            Kind::Records(nested) => {
+                let Value::Array(items) = given else {
+                    return Err(format!("field '{}' of {entity} is a list of {}, not {}", field.name, nested.entity, compact(given)));
+                };
+                let mut fitted = Vec::new();
+                for (i, item) in items.iter().enumerate() {
+                    let Value::Object(inner) = item else {
+                        return Err(format!("field '{}' of {entity}, item {} is not one {}", field.name, i + 1, nested.entity));
+                    };
+                    fitted.push(record(inner, nested.entity, nested.fields, nested.base).map_err(|why| format!("field '{}' of {entity}, item {}: {why}", field.name, i + 1))?);
+                }
+                Value::Array(fitted)
+            }
+            kind => value(given, kind).ok_or_else(|| format!("field '{}' of {entity} is {}, not {}", field.name, wanted(kind), compact(given)))?,
+        };
         out.insert(field.name.to_string(), value);
     }
     Ok(Value::Object(out))
@@ -114,6 +144,8 @@ fn wanted(kind: Kind) -> String {
             [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
         },
         Kind::Values(_) => "a list".into(),
+        Kind::Record(nested) => format!("one {}", nested.entity),
+        Kind::Records(nested) => format!("a list of {}", nested.entity),
         Kind::Other => "something else".into(),
     }
 }

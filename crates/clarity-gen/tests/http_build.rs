@@ -81,6 +81,7 @@ fn serve() -> String {
                 "/query" => (200, query.clone()),
                 "/auth" => (200, authorization.clone()),
                 "/items" => (200, r#"{"items": [{"name": "Pen", "price": 1.5}, {"Name": "Ink", "PRICE": "12"}]}"#.to_string()),
+                "/basket" => (200, r#"{"title": "Week", "buyer": {"Name": "Ann", "id": 7}, "lines": [{"name": "Pen", "price": 1.5}, {"name": "Ink", "price": "12"}]}"#.to_string()),
                 // A service's list: its own names, a number for money, a string for an integer.
                 "/orders" => (
                     200,
@@ -128,7 +129,7 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert!(!broken.status.success());
     assert!(String::from_utf8_lossy(&broken.stderr).contains("the text is no JSON"), "{}", String::from_utf8_lossy(&broken.stderr));
     // A web API data source (DESIGN 5.23): its entities read from its paths, its query encoded, its calls signed.
-    assert_eq!(printed(program, dir, &["store", "open & paid"]), "Pen 1.5\nInk 12\nstatus=open%20%26%20paid&page=2\nBearer t0k3n");
+    assert_eq!(printed(program, dir, &["store", "open & paid"]), "Pen 1.5\nInk 12\nstatus=open%20%26%20paid\nstatus=open%20%26%20paid&page=2\nstatus=open%20%26%20paid&page=3&sort=name\nBearer t0k3n\nWeek for Ann\nPen 1.5\nInk 12");
 }
 
 #[test]

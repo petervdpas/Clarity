@@ -231,8 +231,15 @@ fn resolve_data(files: &mut [model::SpecFile]) {
                 decl.of = DataKind::Value { ty, default: None };
             }
         }
-        // A field `list<Genre>` of an enum is a list of values (U1c).
+        // A field `list<Genre>` of an enum is a list of values (U1c), and a
+        // field named after an entity holds a record of it (DESIGN 5.25).
         for field in file.entities.iter_mut().flat_map(|e| &mut e.fields) {
+            if let model::FieldType::Enum { name } = &field.ty
+                && entities.contains(&name.name)
+                && !enums.contains(&name.name)
+            {
+                field.ty = model::FieldType::Record { entity: name.clone() };
+            }
             if let model::FieldType::List { item } = &field.ty
                 && enums.contains(&item.name)
                 && !entities.contains(&item.name)

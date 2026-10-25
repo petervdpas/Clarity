@@ -29,6 +29,12 @@ paths:
         - name: limit
           in: query
           schema: { type: integer }
+        - name: sort
+          in: query
+          schema: { type: string, default: name }
+        - name: archived
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: The templates
@@ -91,6 +97,7 @@ components:
         price: { type: number }
         tags: { type: array, items: { type: string } }
         owner: { $ref: "#/components/schemas/User" }
+        sections: { type: array, items: { $ref: "#/components/schemas/Section" } }
         active: { type: boolean }
     Entry:
       type: object
@@ -102,6 +109,12 @@ components:
       type: object
       properties:
         name: { type: string }
+        manager: { $ref: "#/components/schemas/User" }
+    Section:
+      type: object
+      properties:
+        title: { type: string }
+        settings: { type: object, properties: { open: { type: boolean } } }
 "##;
 
 const PROJECT: &str = r#"project Forms
@@ -166,7 +179,7 @@ fn a_description_reads_alike_from_yaml_and_json() {
     let ids: Vec<&str> = yaml.operations.iter().map(|o| o.id.as_str()).collect();
     assert_eq!(ids, ["listTemplates", "createTemplate", "getTemplate", "deleteTemplate", "listEntries"]);
     let names: Vec<&str> = yaml.schemas.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["Template", "Entry", "User"]);
+    assert_eq!(names, ["Template", "Entry", "User", "Section"]);
     // The same description written as JSON, in the same order.
     let json = openapi::json_of(FORMS).unwrap();
     assert!(serde_json::from_str::<serde_json::Value>(&json).is_ok(), "{json}");
@@ -179,10 +192,12 @@ fn the_module_holds_what_the_picks_need() {
     let written = openapi::module("forms", "forms.yaml", &description, &["listTemplates".into(), "getTemplate".into(), "createTemplate".into()], &[]);
     assert!(written.warnings.is_empty(), "{:?}", written.warnings);
     let text = &written.text;
-    // Only the schema the picked operations take and give.
+    // Only the schemas the picked operations take and give, and those they hold.
     assert!(text.contains("module forms\nsource forms\n"), "{text}");
-    assert!(text.contains("entity Template\n"), "{text}");
-    assert!(!text.contains("entity Entry") && !text.contains("entity User"), "{text}");
+    for entity in ["entity Template\n", "entity User\n", "entity Section\n"] {
+        assert!(text.contains(entity), "no {entity:?} in\n{text}");
+    }
+    assert!(!text.contains("entity Entry"), "{text}");
     for line in [
         "    name: text",
         "    created_at: datetime",
@@ -195,12 +210,17 @@ fn the_module_holds_what_the_picks_need() {
     ] {
         assert!(text.contains(line), "no {line:?} in\n{text}");
     }
-    // What is not read yet is named, not left out silently.
-    assert!(text.contains("// owner: a User, which is not read yet"), "{text}");
+    // A nested object and a list of them are records inside the record (DESIGN 5.25).
+    assert!(text.contains("    owner: User\n"), "{text}");
+    assert!(text.contains("    sections: list<Section>\n"), "{text}");
+    // A record that would hold itself, and an object without a schema of its own, are named, not left out silently.
+    assert!(text.contains("    // manager: a User, which would hold itself; not read\n"), "{text}");
+    assert!(text.contains("    // settings: an object without a schema of its own, which is not read yet\n"), "{text}");
     // An action per picked operation, on the calls of the language.
     for line in [
-        "action list_templates(status: text) -> list<Template>",
-        "    let reply = http get \"/templates\" from forms query \"status\": status",
+        // An optional parameter has a default; it is sent only when it differs.
+        "action list_templates(status: text, limit: integer = 0, sort: text = \"name\", archived: bool = false) -> list<Template>",
+        "    let reply = http get \"/templates\" from forms query \"status\": status query \"limit\": \"{limit}\" when limit != 0 query \"sort\": sort when sort != \"name\" query \"archived\": \"true\" when archived",
         "    return read list<Template> from json reply.text",
         "action get_template(template_id: integer) -> Template",
         "    let reply = http get \"/templates/{template_id}\" from forms",
@@ -211,8 +231,7 @@ fn the_module_holds_what_the_picks_need() {
         assert!(text.contains(line), "no {line:?} in\n{text}");
     }
     assert!(!text.contains("delete_template") && !text.contains("list_entries"), "{text}");
-    // An optional query parameter is named for the developer.
-    assert!(text.contains("// limit (query, optional) is not passed yet"), "{text}");
+    assert!(!text.contains("not passed yet"), "{text}");
 }
 
 #[test]

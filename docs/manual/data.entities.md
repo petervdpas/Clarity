@@ -43,6 +43,7 @@ A field whose type is an enum holds one of its values.
 - `ref Entity` refers to a record of another entity.
 - `image` holds a picture; see [Pictures and files](data.pictures-files.md).
 - `id` holds the id of a record, and `list<Entity>` the records of another entity that belong to this one.
+- In an entity of a web API, a field named after another entity holds a record inside: `owner: User`, and `list<Line>` holds the lines inside it, as the service's JSON nests them. Code reads them as any record and list: `order.owner.name`, `for line in order.lines`. A record never holds itself; a list may. See [Calling web APIs](code.web-apis.md).
 
 ## Modifiers
 
@@ -61,7 +62,7 @@ Each modifier appears at most once per field. The checker reports a default or a
 
 The Data section of the project tree, on the Project and Design tabs, lists every entity and enum. Click one to open its editor; **+ New entity** and **+ New enum** ask for a name and add one.
 
-The entity editor shows a row per field, with columns for the name, the type, **Req.**, **Unique**, **Label**, **Default**, **Format**, **Help** and **Store**. The type box suggests the built-in types, your enums, and `ref` and `list<...>` of your entities. **Format** offers the formats of the field's type, and **Store** appears for image fields. The arrows move a field, the cross removes it, and **Add field** at the bottom adds one. The name at the top renames the entity everywhere it is used, and **Delete entity** removes it.
+The entity editor shows a row per field, with columns for the name, the type, **Req.**, **Unique**, **Label**, **Default**, **Format**, **Help** and **Store**. The type box suggests the built-in types, your enums, and `ref` and `list<...>` of your entities; in a module of a data source (`source shop`), also the module's other entities, to hold inside. **Format** offers the formats of the field's type, and **Store** appears for image fields. The arrows move a field, the cross removes it, and **Add field** at the bottom adds one. The name at the top renames the entity everywhere it is used, and **Delete entity** removes it.
 
 The enum editor works the same way, with a row per value and its label.
 

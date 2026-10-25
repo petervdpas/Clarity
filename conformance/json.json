@@ -1,5 +1,5 @@
 {
-  "about": "Reading JSON into records (DESIGN 5.23): `read Order from json text` and `read list<Order> from json text`, with `at \"data.items\"` to start inside. Every runtime fits what it reads to the entity before its own decoder reads the record: the text is parsed, `at` walks object names (dots between them), then each object is fitted to the entity's fields. A field is found by its name, else by its name ignoring case, underscores and hyphens (credit_limit, creditLimit and Credit-Limit are one). Fields the JSON leaves out, or gives as null, keep the record's defaults (`base`, a new record as Clarity writes it), and names the entity does not have are ignored; so is `id`, as the record is new. Each kind takes: text a string, a number or a bool (written as JSON writes it); integer a whole number or a string of one; decimal (and money) a number or a string of one, written as exact text; bool true or false; date a string of the date (a date and time keeps its date); datetime a string `YYYY-MM-DDTHH:MM` or with seconds, a fraction of a second and a `Z` left out; enum a string of one of its values, any case; values a list whose items fit `item`; other (a reference, a picture, a file, a list of records) is never read. `fitted` is the record or list that results; `error` the message a reading that does not fit gives, word for word.",
+  "about": "Reading JSON into records (DESIGN 5.23): `read Order from json text` and `read list<Order> from json text`, with `at \"data.items\"` to start inside. Every runtime fits what it reads to the entity before its own decoder reads the record: the text is parsed, `at` walks object names (dots between them), then each object is fitted to the entity's fields. A field is found by its name, else by its name ignoring case, underscores and hyphens (credit_limit, creditLimit and Credit-Limit are one). Fields the JSON leaves out, or gives as null, keep the record's defaults (`base`, a new record as Clarity writes it), and names the entity does not have are ignored; so is `id`, as the record is new. Each kind takes: text a string, a number or a bool (written as JSON writes it); integer a whole number or a string of one; decimal (and money) a number or a string of one, written as exact text; bool true or false; date a string of the date (a date and time keeps its date); datetime a string `YYYY-MM-DDTHH:MM` or with seconds, a fraction of a second and a `Z` left out; enum a string of one of its values, any case; values a list whose items fit `item`; record an object, fitted to the fields and base of its own entity (`entity`, `fields`, `base` on the field), and records a list of such objects, each fitted alike: records inside records, which an entity of a web API has (DESIGN 5.25); other (a reference, a picture, a file, a list of stored records) is never read. An error inside a nested object or list says where: `field 'lines' of Order, item 2: ` before the message about the inner record. `fitted` is the record or list that results; `error` the message a reading that does not fit gives, word for word.",
   "cases": [
     {
       "name": "an object fits its fields, by name and by name ignoring case and underscores",
@@ -157,6 +157,90 @@
       "base": { "id": 0, "on": null },
       "json": "{\"on\": \"25-10-2026\"}",
       "error": "field 'on' of Visit is a date, not \"25-10-2026\""
+    },
+    {
+      "name": "a nested object and a list of objects fit their own entities",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"title\": \"Pens\", \"Owner\": {\"Name\": \"Ann\", \"age\": \"41\", \"id\": 9}, \"lines\": [{\"product\": \"Pen\", \"quantity\": 2}, {\"PRODUCT\": \"Ink\"}]}",
+      "fitted": { "id": 0, "title": "Pens", "owner": { "id": 0, "name": "Ann", "age": 41 }, "lines": [{ "id": 0, "product": "Pen", "quantity": 2 }, { "id": 0, "product": "Ink", "quantity": 0 }] }
+    },
+    {
+      "name": "a nested object or list left out or null keeps its default",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"title\": \"Empty\", \"owner\": null}",
+      "fitted": { "id": 0, "title": "Empty", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] }
+    },
+    {
+      "name": "a nested object that is no object",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"owner\": \"Ann\"}",
+      "error": "field 'owner' of Order is one User, not \"Ann\""
+    },
+    {
+      "name": "a list of objects that is no list",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"lines\": 3}",
+      "error": "field 'lines' of Order is a list of Line, not 3"
+    },
+    {
+      "name": "an item of a nested list that is no object",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"lines\": [{\"product\": \"Pen\"}, 7]}",
+      "error": "field 'lines' of Order, item 2 is not one Line"
+    },
+    {
+      "name": "a value inside a nested object that does not fit",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"owner\": {\"age\": \"old\"}}",
+      "error": "field 'owner' of Order: field 'age' of User is an integer, not \"old\""
+    },
+    {
+      "name": "a value inside a nested list that does not fit",
+      "entity": "Order",
+      "fields": [
+        { "name": "title", "kind": "text" },
+        { "name": "owner", "kind": "record", "entity": "User", "fields": [{ "name": "name", "kind": "text" }, { "name": "age", "kind": "integer" }], "base": { "id": 0, "name": "", "age": 0 } },
+        { "name": "lines", "kind": "records", "entity": "Line", "fields": [{ "name": "product", "kind": "text" }, { "name": "quantity", "kind": "integer" }], "base": { "id": 0, "product": "", "quantity": 0 } }
+      ],
+      "base": { "id": 0, "title": "", "owner": { "id": 0, "name": "", "age": 0 }, "lines": [] },
+      "json": "{\"lines\": [{\"quantity\": 1}, {\"quantity\": \"three\"}]}",
+      "error": "field 'lines' of Order, item 2: field 'quantity' of Line is an integer, not \"three\""
     }
   ]
 }

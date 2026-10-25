@@ -98,6 +98,10 @@ pub fn data_model_of(project: &Project, only: Option<&[String]>) -> View {
                     let line = if field.modifiers.owned { "--" } else { ".." };
                     out.line(&format!("    {} ||{line}o{{ {} : {}", entity.name.name, item.name, field.name.name), Some((path, field.span)));
                 }
+                // A record held inside (DESIGN 5.25): one with the record, always.
+                FieldType::Record { entity: other } if shown(&other.name) => {
+                    out.line(&format!("    {} ||--|| {} : {}", entity.name.name, other.name, field.name.name), Some((path, field.span)));
+                }
                 FieldType::Ref { entity: other } if shown(&other.name) && !listed(&entities, &other.name, &entity.name.name) => {
                     let one = if field.modifiers.required { "||" } else { "o|" };
                     out.line(&format!("    {} }}o..{one} {} : {}", entity.name.name, other.name, field.name.name), Some((path, field.span)));
@@ -150,6 +154,14 @@ pub fn classes_of(project: &Project, only: Option<&[String]>) -> ClassDesign {
                         link: if field.modifiers.owned { ClassLink::Composition } else { ClassLink::Aggregation },
                         left_count: Cardinality::ExactlyOne,
                         right_count: Cardinality::ZeroOrMore,
+                        label: Some(field.name.name.clone()),
+                    }),
+                    FieldType::Record { entity: other } if shown(&other.name) => design.relations.push(ClassRelation {
+                        left: entity.name.name.clone(),
+                        right: other.name.clone(),
+                        link: ClassLink::Composition,
+                        left_count: Cardinality::ExactlyOne,
+                        right_count: Cardinality::ExactlyOne,
                         label: Some(field.name.name.clone()),
                     }),
                     FieldType::Ref { entity: other } if shown(&other.name) => {

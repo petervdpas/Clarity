@@ -65,7 +65,7 @@ public static partial class Labels
 
 /// Fields that are stored in the entity's own table.
 fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
-    entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. }))
+    entity.fields.iter().filter(|f| !f.ty.is_held())
 }
 
 /// The initial value of a field, when it has one beyond C#'s own default.
@@ -78,6 +78,8 @@ fn initial(field: &Field) -> Option<String> {
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
         (FieldType::Enum { name }, Some(Literal::Ident(v))) => Some(format!("{}.{v}", name.name)),
         (FieldType::List { .. } | FieldType::Values { .. }, _) => Some("[]".into()),
+        // A record held inside starts as a new one (DESIGN 5.25).
+        (FieldType::Record { entity }, _) => Some(format!("new {}()", entity.name)),
         _ => None,
     }
 }
@@ -240,7 +242,7 @@ fn from_sql(field: &Field) -> String {
         FieldType::Image => "GetPicture".into(),
         FieldType::File => "GetFile".into(),
         FieldType::Values { item } => return format!("ListFields.Read<{}>", value_type(&ValueItem::of_list(item).info())),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     };
     format!("Sql.{read}")
 }

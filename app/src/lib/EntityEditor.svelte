@@ -37,9 +37,15 @@
   } = $props();
 
   const BASE_TYPES = ["text", "text(80)", "integer", "decimal(10, 2)", "money", "bool", "date", "datetime", "duration", "image", "email", "url", "color", "id"];
+  /** In a module of a data source (`source shop`), the other entities can be held inside as records (DESIGN 5.25). */
+  const held = $derived.by(() => {
+    const file = preview.project.files.find((f) => f.entities.some((e) => e.name.name === entity.name.name));
+    return file?.source ? file.entities.filter((e) => e.name.name !== entity.name.name && !e.settings).map((e) => e.name.name) : [];
+  });
   const types = $derived([
     ...BASE_TYPES,
     ...preview.project.files.flatMap((f) => f.enums.map((e) => e.name.name)),
+    ...held,
     ...preview.project.files.flatMap((f) => f.entities.filter((e) => !e.settings).flatMap((e) => [`ref ${e.name.name}`, `list<${e.name.name}>`])),
   ]);
 

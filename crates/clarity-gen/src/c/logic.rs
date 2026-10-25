@@ -725,6 +725,33 @@ impl<'a> Emitter<'a> {
     }
 
     /// A new lifted value: `v1`, `v2`.
+    /// The headers or query pairs of an http call, as an array and its
+    /// length; with `when`, the array is filled in lines before the call,
+    /// leaving out a pair whose condition does not hold.
+    fn http_pairs(&mut self, pairs: &[clarity_spec::code::HttpPair], pre: &mut String) -> String {
+        if pairs.is_empty() {
+            return "NULL, 0".to_string();
+        }
+        if pairs.iter().all(|p| p.when.is_none()) {
+            let items: Vec<String> = pairs.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
+            return format!("(ClarityHttpHeader[]){{{}}}, {}", items.join(", "), pairs.len());
+        }
+        let list = self.temp();
+        pre.push_str(&format!("ClarityHttpHeader {list}[{}];\nsize_t {list}_n = 0;\n", pairs.len()));
+        for p in pairs {
+            let value = bare(self.value(&p.value, pre));
+            let add = format!("{list}[{list}_n++] = (ClarityHttpHeader){{{}, {value}}};", string(&p.name.name));
+            match &p.when {
+                Some(when) => {
+                    let cond = bare(self.value(when, pre));
+                    pre.push_str(&format!("if ({cond}) {add}\n"));
+                }
+                None => pre.push_str(&format!("{add}\n")),
+            }
+        }
+        format!("{list}, {list}_n")
+    }
+
     fn temp(&mut self) -> String {
         self.temps += 1;
         format!("v{}", self.temps)
@@ -953,7 +980,7 @@ impl<'a> Emitter<'a> {
             }
             StmtKind::Return { value: None } => out.push_str("return true;\n"),
             StmtKind::Call { call } => {
-                let ExprKind::Call { function, args } = &call.kind else {
+                let ExprKind::Call { function, args, .. } = &call.kind else {
                     self.errors.push("only a call can stand on its own".into());
                     return;
                 };
@@ -1528,10 +1555,12 @@ impl<'a> Emitter<'a> {
                         let id = arrow(&object, &ident(&member.name));
                         self.lift_record(&target.name, &format!("{}_load(db, {id}, {{out}})", prefix(&target.name)), pre)
                     }
-                    Some(FieldType::List { .. }) => {
+                    Some(FieldType::List { .. }) if !self.project.in_web_api(&entity) => {
                         self.errors.push(format!("list fields like '{}' are not loaded yet", print::expr(expr)));
                         String::new()
                     }
+                    // A record held inside (DESIGN 5.25) is a value of the record; code reaches records through a pointer.
+                    Some(FieldType::Record { .. }) => format!("&{}", arrow(&object, &ident(&member.name))),
                     _ => arrow(&object, &ident(&member.name)),
                 }
             }
@@ -1710,7 +1739,7 @@ impl<'a> Emitter<'a> {
                     .collect();
                 if tests.is_empty() { "false".into() } else { format!("({})", tests.join(" || ")) }
             }
-            ExprKind::Call { function, args } => self.call(&function.name, args, pre),
+            ExprKind::Call { function, args, .. } => self.call(&function.name, args, pre),
             ExprKind::Find { entity, filter, order, var } => {
                 let query = self.find(&var.name, &entity.name, filter.as_deref(), order, pre);
                 self.lift(&list_type(&entity.name), &format!("{}_find(db, {query}, {{out}})", prefix(&entity.name)), pre)
@@ -1785,15 +1814,8 @@ impl<'a> Emitter<'a> {
                     Some(body) => bare(self.value(body, pre)),
                     None => "NULL".to_string(),
                 };
-                let mut pairs = |pairs: &[clarity_spec::code::HttpPair], pre: &mut String| {
-                    if pairs.is_empty() {
-                        return "NULL, 0".to_string();
-                    }
-                    let items: Vec<String> = pairs.iter().map(|h| format!("{{{}, {}}}", string(&h.name.name), bare(self.value(&h.value, pre)))).collect();
-                    format!("(ClarityHttpHeader[]){{{}}}, {}", items.join(", "), pairs.len())
-                };
-                let headers = pairs(headers, pre);
-                let query_pairs = pairs(query, pre);
+                let headers = self.http_pairs(headers, pre);
+                let query_pairs = self.http_pairs(query, pre);
                 let method = match method {
                     HttpMethod::Get => "CLARITY_HTTP_GET",
                     HttpMethod::Post => "CLARITY_HTTP_POST",
@@ -2223,7 +2245,7 @@ impl<'a> Emitter<'a> {
                 }
                 _ => format!("clarity_reference_value({})", bare(self.value(value, pre))),
             },
-            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Values { .. } => {
+            FieldType::Image | FieldType::File | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Values { .. } => {
                 self.errors.push("a picture, a file or a list field can only be compared with none in a query".into());
                 String::new()
             }
@@ -2337,6 +2359,8 @@ fn c_json_kind(kind: &crate::json_fields::Kind) -> String {
         Kind::DateTime => "CLARITY_JSON_DATE_TIME",
         Kind::Enum(_) => "CLARITY_JSON_ENUM",
         Kind::Values(_) => "CLARITY_JSON_VALUES",
+        Kind::Record(_) => "CLARITY_JSON_RECORD",
+        Kind::Records(_) => "CLARITY_JSON_RECORDS",
     };
     match kind {
         Kind::Enum(values) => format!(
@@ -2345,6 +2369,12 @@ fn c_json_kind(kind: &crate::json_fields::Kind) -> String {
             values.len()
         ),
         Kind::Values(item) => format!("{{CLARITY_JSON_VALUES, NULL, 0, &(ClarityJsonKind){}}}", c_json_kind(item)),
+        // A record held inside (DESIGN 5.25): its entity's fields, over a new record of it.
+        Kind::Record(nested) | Kind::Records(nested) => {
+            let fields: Vec<String> = nested.fields.iter().map(|(name, kind)| format!("{{{}, {}}}", string(name), c_json_kind(kind))).collect();
+            let listed = if fields.is_empty() { "NULL".to_string() } else { format!("(ClarityJsonField[]){{{}}}", fields.join(", ")) };
+            format!("{{{}, NULL, 0, NULL, {}, {listed}, {}, {}_json_new()}}", is(kind), string(&nested.entity), fields.len(), prefix(&nested.entity))
+        }
         other => format!("{{{}, NULL, 0, NULL}}", is(other)),
     }
 }

@@ -73,6 +73,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "std::optional<clarity::Picture>".into(),
         FieldType::File => "std::optional<clarity::RecordFile>".into(),
         FieldType::List { item } => format!("std::vector<{}>", item.name),
+        FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => format!("std::vector<{}>", value_type(&ValueItem::of_list(item).info())),
     }
 }

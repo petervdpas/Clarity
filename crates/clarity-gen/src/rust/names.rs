@@ -43,6 +43,7 @@ pub fn field_type(ty: &FieldType) -> String {
         FieldType::Image => "Option<Picture>".into(),
         FieldType::File => "Option<RecordFile>".into(),
         FieldType::List { item } => format!("Vec<{}>", item.name),
+        FieldType::Record { entity } => entity.name.clone(),
         FieldType::Values { item } => format!("Vec<{}>", value_type(&ValueItem::of_list(item).info())),
     }
 }

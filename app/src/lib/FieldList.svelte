@@ -42,7 +42,7 @@
 {#each fields as f, i (i)}
   <div class="field">
     <input class="fname" value={f.name} spellcheck="false" title="Name, in snake_case" onchange={(e) => setField(i, { name: e.currentTarget.value.trim() })} onkeydown={enter} />
-    <input class="ftype" value={f.typeText} list={listId} spellcheck="false" title="Type: text(80), money, an enum, ref Customer, list<OrderLine>" onchange={(e) => setField(i, { typeText: e.currentTarget.value.trim() })} onkeydown={enter} />
+    <input class="ftype" value={f.typeText} list={listId} spellcheck="false" title="Type: text(80), money, an enum, ref Customer, list<OrderLine>; in a web API, a record held inside: User" onchange={(e) => setField(i, { typeText: e.currentTarget.value.trim() })} onkeydown={enter} />
     <button class="remove" onclick={() => onchange(fields.filter((_, j) => j !== i))} title="Take this field away" aria-label="Take {f.name} away">x</button>
     <label class="flag"><input type="checkbox" checked={f.required} onchange={(e) => setField(i, { required: e.currentTarget.checked })} /> required</label>
     <label class="flag"><input type="checkbox" checked={f.unique} onchange={(e) => setField(i, { unique: e.currentTarget.checked })} /> unique</label>

@@ -20,10 +20,10 @@ pub fn expr(e: &Expr) -> String {
             expr(value),
             options.iter().map(expr).collect::<Vec<_>>().join(", ")
         ),
-        ExprKind::Call { function, args } => format!(
+        ExprKind::Call { function, args, named } => format!(
             "{}({})",
             function.name,
-            args.iter().map(expr).collect::<Vec<_>>().join(", ")
+            args.iter().map(expr).chain(named.iter().map(|n| format!("{}: {}", n.name.name, expr(&n.value)))).collect::<Vec<_>>().join(", ")
         ),
         ExprKind::Find { var, entity, filter, order } => query(&format!("find {} in {}", var.name, entity.name), filter.as_deref(), order),
         ExprKind::Files { var, store, filter, order } => query(&format!("files {} in {}", var.name, store.name), filter.as_deref(), order),
@@ -47,11 +47,12 @@ pub fn expr(e: &Expr) -> String {
             if let Some(body) = body {
                 text.push_str(&format!(" with {}", expr(body)));
             }
+            let when = |pair: &clarity_spec::code::HttpPair| pair.when.as_ref().map(|w| format!(" when {}", expr(w))).unwrap_or_default();
             for header in headers {
-                text.push_str(&format!(" header {:?}: {}", header.name.name, expr(&header.value)));
+                text.push_str(&format!(" header {:?}: {}{}", header.name.name, expr(&header.value), when(header)));
             }
             for pair in query {
-                text.push_str(&format!(" query {:?}: {}", pair.name.name, expr(&pair.value)));
+                text.push_str(&format!(" query {:?}: {}{}", pair.name.name, expr(&pair.value), when(pair)));
             }
             text
         }

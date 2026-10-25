@@ -31,6 +31,8 @@ std::string wanted(const JsonKind& kind) {
         case JsonKind::DateTime: return "a date and time";
         case JsonKind::Values: return "a list";
         case JsonKind::Other: return "something else";
+        case JsonKind::Record: return "one " + kind.entity;
+        case JsonKind::Records: return "a list of " + kind.entity;
         case JsonKind::Enum: {
             if (kind.values.empty()) return "an enum value";
             std::string out;
@@ -135,9 +137,42 @@ std::optional<json> fit_value(const json& given, const JsonKind& kind) {
             return list;
         }
         case JsonKind::Other:
+        case JsonKind::Record:
+        case JsonKind::Records:
             return std::nullopt;
     }
     return std::nullopt;
+}
+
+json fit_record(const json& given, const std::string& entity, const std::vector<JsonField>& fields, const json& base);
+
+/// A record inside the record, or a list of them, fitted to the field's own
+/// entity; an error says where (DESIGN 5.25).
+json fit_nested(const json& value, const JsonField& field, const std::string& entity) {
+    const JsonKind& kind = field.kind;
+    static const std::vector<JsonField> none;
+    const std::vector<JsonField>& fields = kind.fields ? *kind.fields : none;
+    std::string where = "field '" + field.name + "' of " + entity;
+    if (kind.is == JsonKind::Record) {
+        if (!value.is_object()) throw ValueError(where + " is one " + kind.entity + ", not " + value.dump());
+        try {
+            return fit_record(value, kind.entity, fields, kind.base);
+        } catch (const ValueError& e) {
+            throw ValueError(where + ": " + e.what());
+        }
+    }
+    if (!value.is_array()) throw ValueError(where + " is a list of " + kind.entity + ", not " + value.dump());
+    json list = json::array();
+    for (size_t i = 0; i < value.size(); ++i) {
+        std::string item = where + ", item " + std::to_string(i + 1);
+        if (!value[i].is_object()) throw ValueError(item + " is not one " + kind.entity);
+        try {
+            list.push_back(fit_record(value[i], kind.entity, fields, kind.base));
+        } catch (const ValueError& e) {
+            throw ValueError(item + ": " + e.what());
+        }
+    }
+    return list;
 }
 
 json fit_record(const json& given, const std::string& entity, const std::vector<JsonField>& fields, const json& base) {
@@ -155,6 +190,10 @@ json fit_record(const json& given, const std::string& entity, const std::vector<
             }
         }
         if (!value || value->is_null() || field.kind.is == JsonKind::Other) continue;
+        if (field.kind.is == JsonKind::Record || field.kind.is == JsonKind::Records) {
+            record[field.name] = fit_nested(*value, field, entity);
+            continue;
+        }
         auto fitted = fit_value(*value, field.kind);
         if (!fitted) throw ValueError("field '" + field.name + "' of " + entity + " is " + wanted(field.kind) + ", not " + value->dump());
         record[field.name] = *fitted;

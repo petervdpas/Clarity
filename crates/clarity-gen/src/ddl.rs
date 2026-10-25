@@ -110,7 +110,7 @@ impl Sql {
             }
             // A list starts empty.
             (FieldType::Values { .. }, _) => Some(self.text("[]")),
-            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File, _) => None,
+            (FieldType::Date | FieldType::DateTime | FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Record { .. } | FieldType::Image | FieldType::File, _) => None,
         };
         // MySQL takes a default for long text only as an expression.
         let value = match value {
@@ -150,7 +150,7 @@ impl Sql {
         match (self, ty) {
             // SQLite keeps decimals and dates as text, so nothing is lost.
             (Sql::Sqlite, FieldType::Integer | FieldType::Id | FieldType::Duration | FieldType::Bool | FieldType::Ref { .. }) => "INTEGER".into(),
-            (Sql::Sqlite, FieldType::List { .. }) => String::new(),
+            (Sql::Sqlite, FieldType::List { .. } | FieldType::Record { .. }) => String::new(),
             (Sql::Sqlite, _) => "TEXT".into(),
 
             (_, FieldType::Text { max_length: Some(n) }) => match self {
@@ -180,7 +180,7 @@ impl Sql {
             (Sql::Postgres, FieldType::Enum { .. }) => "TEXT".into(),
             (Sql::Mssql, FieldType::Enum { .. }) => "NVARCHAR(100)".into(),
             (_, FieldType::Enum { .. }) => "VARCHAR(100)".into(),
-            (_, FieldType::List { .. }) => String::new(),
+            (_, FieldType::List { .. } | FieldType::Record { .. }) => String::new(),
             // A list of values as JSON: `["jazz","live"]`.
             (Sql::Mssql, FieldType::Values { .. }) => "NVARCHAR(MAX)".into(),
             (_, FieldType::Values { .. }) => "TEXT".into(),

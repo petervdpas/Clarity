@@ -13,8 +13,19 @@ using System.Text.Json.Serialization;
 namespace Clarity.Runtime;
 
 /// <summary>What a field takes from JSON: text, integer, decimal (and money), bool, date, datetime, enum (one of
-/// <paramref name="Values"/>, any case), values (a list whose items fit <paramref name="Item"/>) or other (never read).</summary>
-public sealed record JsonKind(string Is, string[]? Values = null, JsonKind? Item = null);
+/// <paramref name="Values"/>, any case), values (a list whose items fit <paramref name="Item"/>), record (an object
+/// fitted to <paramref name="Entity"/>'s <paramref name="Fields"/> over <paramref name="Base"/>, a new record of it),
+/// records (a list of such objects) or other (never read).</summary>
+public sealed record JsonKind(string Is, string[]? Values = null, JsonKind? Item = null, string? Entity = null, JsonField[]? Fields = null, JsonNode? Base = null)
+{
+    /// <summary>A record inside the record (DESIGN 5.25), fitted to its own entity over <paramref name="template"/>.</summary>
+    public static JsonKind Record<T>(string entity, JsonField[] fields, T template) =>
+        new("record", Entity: entity, Fields: fields, Base: JsonSerializer.SerializeToNode(template, JsonValues.Options));
+
+    /// <summary>Records inside the record: a list of objects, each fitted to the entity.</summary>
+    public static JsonKind Records<T>(string entity, JsonField[] fields, T template) =>
+        new("records", Entity: entity, Fields: fields, Base: JsonSerializer.SerializeToNode(template, JsonValues.Options));
+}
 
 /// <summary>A field of an entity, as JSON is fitted to it.</summary>
 public sealed record JsonField(string Name, JsonKind Kind);
@@ -123,9 +134,52 @@ public static class JsonValues
                 value = given.FirstOrDefault(p => Plain(p.Key) == Plain(field.Name)).Value;
             if (value is null || field.Kind.Is == "other")
                 continue;
+            if (field.Kind.Is is "record" or "records")
+            {
+                record[field.Name] = Nested(value, field, entity);
+                continue;
+            }
             record[field.Name] = Value(value, field.Kind) ?? throw new ValueException($"field '{field.Name}' of {entity} is {Wanted(field.Kind)}, not {value.ToJsonString(Compact)}");
         }
         return record;
+    }
+
+    /// <summary>A record inside the record, or a list of them, fitted to the field's own entity; an error says where.</summary>
+    static JsonNode Nested(JsonNode value, JsonField field, string entity)
+    {
+        var kind = field.Kind;
+        var template = kind.Base as JsonObject ?? new JsonObject();
+        var fields = kind.Fields ?? [];
+        if (kind.Is == "record")
+        {
+            if (value is not JsonObject one)
+                throw new ValueException($"field '{field.Name}' of {entity} is one {kind.Entity}, not {value.ToJsonString(Compact)}");
+            try
+            {
+                return Record(one, kind.Entity!, fields, template);
+            }
+            catch (ValueException e)
+            {
+                throw new ValueException($"field '{field.Name}' of {entity}: {e.Message}");
+            }
+        }
+        if (value is not JsonArray items)
+            throw new ValueException($"field '{field.Name}' of {entity} is a list of {kind.Entity}, not {value.ToJsonString(Compact)}");
+        var fitted = new JsonArray();
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i] is not JsonObject item)
+                throw new ValueException($"field '{field.Name}' of {entity}, item {i + 1} is not one {kind.Entity}");
+            try
+            {
+                fitted.Add(Record(item, kind.Entity!, fields, template));
+            }
+            catch (ValueException e)
+            {
+                throw new ValueException($"field '{field.Name}' of {entity}, item {i + 1}: {e.Message}");
+            }
+        }
+        return fitted;
     }
 
     static string Wanted(JsonKind kind) => kind.Is switch

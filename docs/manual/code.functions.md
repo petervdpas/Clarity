@@ -28,6 +28,18 @@ Use a function when you compute something from what you get, such as a total or 
 
 The signature is `name(param: type, ...)`, optionally followed by `-> type` for the result. Parameter and result types are `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`, an entity (one record), an enum and `list<Entity>`.
 
+A parameter with a default is optional: `limit: integer = 0`. The default is a value written out, such as `0`, `""`, `true` or an enum's value, and the parameters with one come last. A call leaves them out, or names the ones it gives after the values in order:
+
+```
+action list_templates(status: text, limit: integer = 0, sort: text = "name")
+
+list_templates("published")
+list_templates("published", limit: 10)
+list_templates(sort: "date", status: "draft")
+```
+
+Each parameter is given once, and every one without a default must be given. Handlers take their values in order, without names.
+
 A function or action with a result must `return` a value on every path; the checker reports a path that does not. One without a result can leave early with a bare `return`.
 
 ## The body

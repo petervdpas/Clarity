@@ -47,7 +47,7 @@ fn enum_decl(decl: &EnumDecl) -> String {
 
 /// Fields that are stored in the entity's own table.
 pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
-    entity.fields.iter().filter(|f| !matches!(f.ty, FieldType::List { .. }))
+    entity.fields.iter().filter(|f| !f.ty.is_held())
 }
 
 fn default_value(project: &Project, field: &Field) -> String {
@@ -67,6 +67,8 @@ fn default_value(project: &Project, field: &Field) -> String {
             None => "Default::default()".into(),
         },
         (FieldType::List { .. } | FieldType::Values { .. }, _) => "Vec::new()".into(),
+        // A record held inside starts as a new one (DESIGN 5.25).
+        (FieldType::Record { entity }, _) => format!("{}::default()", entity.name),
         _ => "None".into(),
     }
 }
@@ -86,7 +88,7 @@ fn to_sql(field: &Field) -> String {
         // Its content, then its name in the column beside it.
         FieldType::File => format!("sql::file_content(&{value}),\n            sql::file_name(&{value})"),
         FieldType::Values { .. } => format!("sql::list(&{value})"),
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
@@ -103,7 +105,7 @@ fn from_sql(field: &Field) -> &'static str {
         FieldType::Image => "get_picture",
         FieldType::File => "get_file",
         FieldType::Values { .. } => "get_list",
-        FieldType::List { .. } => unreachable!("list fields are not stored in the table"),
+        FieldType::List { .. } | FieldType::Record { .. } => unreachable!("held records are not stored in the table"),
     }
 }
 
@@ -148,8 +150,12 @@ fn record(project: &Project, entity: &Entity) -> String {
     let lists: String = entity
         .fields
         .iter()
-        .filter(|f| matches!(f.ty, FieldType::List { .. }))
-        .map(|f| format!("            {}: Vec::new(),\n", ident(&f.name.name)))
+        .filter(|f| f.ty.is_held())
+        .map(|f| match &f.ty {
+            // A record held inside starts as a new one (DESIGN 5.25).
+            FieldType::Record { entity } => format!("            {}: {}::default(),\n", ident(&f.name.name), entity.name),
+            _ => format!("            {}: Vec::new(),\n", ident(&f.name.name)),
+        })
         .collect();
     // The data events written in the entity's code block; each runs the
     // action generated from it.

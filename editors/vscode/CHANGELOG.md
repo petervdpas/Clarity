@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.13
+
+- Colors `when`, which leaves a header or query pair out of an HTTP call when its condition does not hold.
+
 ## 0.1.12
 
 - Colors `query` in HTTP calls of a web API data source.

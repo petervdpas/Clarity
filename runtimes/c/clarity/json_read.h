@@ -25,19 +25,31 @@ typedef enum {
     CLARITY_JSON_ENUM,
     /// A list whose items fit `item`.
     CLARITY_JSON_VALUES,
-    /// Never read: a reference, a picture, a file, a list of records.
+    /// Never read: a reference, a picture, a file, a list of stored records.
     CLARITY_JSON_OTHER,
+    /// A record inside the record (DESIGN 5.25): an object fitted to
+    /// `entity`'s `fields` over `base`, a new record of it.
+    CLARITY_JSON_RECORD,
+    /// Records inside the record: a list of objects, each fitted alike.
+    CLARITY_JSON_RECORDS,
 } ClarityJsonIs;
+
+struct ClarityJsonField;
 
 typedef struct ClarityJsonKind {
     ClarityJsonIs is;
     const char* const* values;
     size_t count;
     const struct ClarityJsonKind* item;
+    /// For a record or records: the entity, its fields and a new record of it.
+    const char* entity;
+    const struct ClarityJsonField* fields;
+    size_t field_count;
+    const cJSON* base;
 } ClarityJsonKind;
 
 /// A field of an entity, as JSON is fitted to it.
-typedef struct {
+typedef struct ClarityJsonField {
     const char* name;
     ClarityJsonKind kind;
 } ClarityJsonField;

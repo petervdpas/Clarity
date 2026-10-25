@@ -108,6 +108,7 @@ impl EventDecl {
                     kind: TypeRefKind::Named { name: entity.to_string() },
                     span: self.head,
                 },
+                default: None,
             }],
             returns: None,
             requires: Vec::new(),
@@ -332,9 +333,13 @@ pub enum ExprKind {
         value: Box<Expr>,
         options: Vec<Expr>,
     },
+    /// `greeting("Ann", times: 3)`: the values in order, then those given
+    /// by name. Generation fills in the rest from the defaults
+    /// (clarity_gen::calls), so a stack sees every value in order.
     Call {
         function: Ident,
         args: Vec<Expr>,
+        named: Vec<NamedArg>,
     },
     /// A function of an engine: `Pricing.total(lines)` (DESIGN 5.11).
     EngineCall {
@@ -447,14 +452,27 @@ impl HttpMethod {
 /// The expressions of an HTTP call: its url, its body, and its headers' and
 /// query parameters' values.
 pub fn http_exprs<'e>(url: &'e Expr, body: Option<&'e Expr>, headers: &'e [HttpPair], query: &'e [HttpPair]) -> Vec<&'e Expr> {
-    std::iter::once(url).chain(body).chain(headers.iter().chain(query).map(|h| &h.value)).collect()
+    std::iter::once(url)
+        .chain(body)
+        .chain(headers.iter().chain(query).flat_map(|h| std::iter::once(&h.value).chain(&h.when)))
+        .collect()
 }
 
 /// `header "Accept": "text/plain"` or `query "status": s` of an HTTP call:
-/// the name as written, and its value, a text.
+/// the name as written, its value, a text, and the condition after `when`
+/// that leaves it out of the call when it does not hold.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct HttpPair {
+    pub name: Ident,
+    pub value: Expr,
+    pub when: Option<Expr>,
+}
+
+/// `limit: 10` in a call: a value given by its parameter's name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct NamedArg {
     pub name: Ident,
     pub value: Expr,
 }
@@ -581,6 +599,8 @@ impl FunctionKind {
 pub struct Param {
     pub name: Ident,
     pub ty: TypeRef,
+    /// `limit: integer = 0`: the value a call that leaves it out gives.
+    pub default: Option<Expr>,
 }
 
 /// `part Arena` (DESIGN 5.19): a part an outside library draws, with what
@@ -967,7 +987,8 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             each_expr(value, found);
             options.iter().for_each(|o| each_expr(o, found));
         }
-        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
+        ExprKind::Call { args, named, .. } => args.iter().chain(named.iter().map(|n| &n.value)).for_each(|a| each_expr(a, found)),
+        ExprKind::EngineCall { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
         ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
             if let Some(filter) = filter {
                 each_expr(filter, found);
@@ -1002,6 +1023,134 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
             for part in parts {
                 if let TextPart::Slot { value } = part {
                     each_expr(value, found);
+                }
+            }
+        }
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty | ExprKind::Name { .. } | ExprKind::New { .. } => {}
+    }
+}
+
+/// Calls `found` for every expression in `body` and inside them, outer
+/// first, and lets it change them: for rewrites before generation, such as
+/// filling in a call's defaults (clarity_gen::calls). Every statement is
+/// named here, so none is passed over.
+pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
+    for stmt in body {
+        match &mut stmt.kind {
+            StmtKind::Let { value, .. }
+            | StmtKind::Save { value }
+            | StmtKind::Delete { value }
+            | StmtKind::CloseWith { value }
+            | StmtKind::Message { text: value, .. }
+            | StmtKind::Refuse { text: value }
+            | StmtKind::Print { value, .. }
+            | StmtKind::Exit { code: value }
+            | StmtKind::Call { call: value } => each_expr_mut(value, found),
+            StmtKind::Assign { target, value } => {
+                each_expr_mut(target, found);
+                each_expr_mut(value, found);
+            }
+            StmtKind::If { branches, otherwise } => {
+                for branch in branches {
+                    each_expr_mut(&mut branch.condition, found);
+                    each_expr_in_mut(&mut branch.body, found);
+                }
+                if let Some(body) = otherwise {
+                    each_expr_in_mut(body, found);
+                }
+            }
+            StmtKind::Return { value } => {
+                if let Some(value) = value {
+                    each_expr_mut(value, found);
+                }
+            }
+            StmtKind::For { list, body, .. } => {
+                each_expr_mut(list, found);
+                each_expr_in_mut(body, found);
+            }
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
+            StmtKind::Open { with, .. } => with.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
+            StmtKind::Ask { question, form, args, .. } => {
+                if let Some(question) = question {
+                    each_expr_mut(question, found);
+                }
+                ask_exprs_mut(form, found);
+                args.iter_mut().for_each(|a| each_expr_mut(a, found));
+            }
+            StmtKind::Write { text, path, .. } => {
+                each_expr_mut(text, found);
+                each_expr_mut(path, found);
+            }
+            StmtKind::Close | StmtKind::Reload { .. } => {}
+        }
+    }
+}
+
+fn ask_exprs_mut(form: &mut AskForm, found: &mut impl FnMut(&mut Expr)) {
+    match form {
+        AskForm::Confirm { yes, no } => yes.iter_mut().chain(no.iter_mut()).for_each(|e| each_expr_mut(e, found)),
+        AskForm::Value { default, from, .. } => default.iter_mut().chain(from.iter_mut()).for_each(|e| each_expr_mut(e, found)),
+        AskForm::Window { with, .. } => with.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
+    }
+}
+
+/// `each_expr` that lets `found` change each expression; outer first, so
+/// what it puts in is visited too.
+pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
+    found(expr);
+    match &mut expr.kind {
+        ExprKind::Member { object, .. } => each_expr_mut(object, found),
+        ExprKind::Unary { operand, .. } => each_expr_mut(operand, found),
+        ExprKind::Binary { left, right, .. } => {
+            each_expr_mut(left, found);
+            each_expr_mut(right, found);
+        }
+        ExprKind::In { value, options } => {
+            each_expr_mut(value, found);
+            options.iter_mut().for_each(|o| each_expr_mut(o, found));
+        }
+        ExprKind::Call { args, named, .. } => {
+            args.iter_mut().for_each(|a| each_expr_mut(a, found));
+            named.iter_mut().for_each(|n| each_expr_mut(&mut n.value, found));
+        }
+        ExprKind::EngineCall { args, .. } | ExprKind::ListOf { items: args } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
+        ExprKind::Find { filter, .. } | ExprKind::Files { filter, .. } => {
+            if let Some(filter) = filter {
+                each_expr_mut(filter, found);
+            }
+        }
+        ExprKind::ReadText { file } | ExprKind::ReadBytes { file } | ExprKind::JsonOf { value: file } => each_expr_mut(file, found),
+        ExprKind::Ask { question, form } => {
+            each_expr_mut(question, found);
+            ask_exprs_mut(form, found);
+        }
+        ExprKind::Key { args, .. } => args.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
+        ExprKind::Index { list, index } => {
+            each_expr_mut(list, found);
+            each_expr_mut(index, found);
+        }
+        ExprKind::ReadJson { text, at, .. } => {
+            each_expr_mut(text, found);
+            if let Some(at) = at {
+                each_expr_mut(at, found);
+            }
+        }
+        ExprKind::Http { url, body, headers, query, .. } => {
+            each_expr_mut(url, found);
+            if let Some(body) = body {
+                each_expr_mut(body, found);
+            }
+            for pair in headers.iter_mut().chain(query.iter_mut()) {
+                each_expr_mut(&mut pair.value, found);
+                if let Some(when) = &mut pair.when {
+                    each_expr_mut(when, found);
+                }
+            }
+        }
+        ExprKind::Text { parts } => {
+            for part in parts {
+                if let TextPart::Slot { value } = part {
+                    each_expr_mut(value, found);
                 }
             }
         }

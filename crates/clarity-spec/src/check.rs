@@ -1448,7 +1448,7 @@ impl<'a> Checker<'a> {
             FieldType::Enum { name } => {
                 self.resolve(file, name, DeclKind::Enum);
             }
-            FieldType::Ref { entity } | FieldType::List { item: entity } => {
+            FieldType::Ref { entity } | FieldType::List { item: entity } | FieldType::Record { entity } => {
                 self.resolve(file, entity, DeclKind::Entity);
             }
             FieldType::Values { item: crate::model::ListItem::Enum { name } } => {

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, HttpPair, HttpMethod, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
+use super::{AskForm, HttpPair, HttpMethod, NamedArg, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -681,7 +681,7 @@ impl<'a> Env<'a> {
             FieldType::Image => Ty::Image,
             FieldType::File => Ty::RecordFile,
             FieldType::Enum { name } => self.enum_decl(&name.name).map_or(Ty::Unknown, Ty::Enum),
-            FieldType::Ref { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
+            FieldType::Ref { entity } | FieldType::Record { entity } => self.entity(&entity.name).map_or(Ty::Unknown, Ty::Record),
             FieldType::List { item } => self.entity(&item.name).map_or(Ty::Unknown, Ty::List),
             FieldType::Values { item } => match item {
                 ListItem::Text => Ty::Values(Item::Text),
@@ -1386,6 +1386,7 @@ fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent
         command: None,
         out,
     };
+    checker.defaults(decl);
     for condition in &decl.requires {
         checker.condition(condition);
     }
@@ -2275,6 +2276,13 @@ impl<'a> BodyChecker<'_, 'a> {
     /// `http get url ...`: the url, the body and the headers are text; only
     /// post and put send a body.
     fn http(&mut self, method: HttpMethod, url: &Expr, body: Option<&Expr>, headers: &[HttpPair], query: &[HttpPair], span: Span) -> Ty<'a> {
+        // `when` leaves a pair out of the call when it does not hold.
+        for when in headers.iter().chain(query).filter_map(|p| p.when.as_ref()) {
+            let ty = self.expr(when, Some(Ty::Bool));
+            if !matches!(ty, Ty::Bool | Ty::Unknown) {
+                self.error(format!("the condition after 'when' is a bool, not {}", described(&ty)), when.span);
+            }
+        }
         for pair in query {
             let ty = self.expr(&pair.value, Some(Ty::Text));
             if !matches!(ty, Ty::Text | Ty::Unknown) {
@@ -2927,12 +2935,51 @@ impl<'a> BodyChecker<'_, 'a> {
         callee.returns.as_ref().map_or(Ty::Unknown, |r| self.env.type_ref(r).unwrap_or(Ty::Unknown))
     }
 
+    /// The defaults of a function's or action's parameters: fixed values of
+    /// their types, on the last parameters only; an engine's functions take
+    /// every value.
+    fn defaults(&mut self, decl: &FunctionDecl) {
+        let mut first_default: Option<&str> = None;
+        for param in &decl.params {
+            let Some(default) = &param.default else {
+                if let Some(earlier) = first_default {
+                    self.error(format!("parameter '{}' needs a default, as '{earlier}' before it has one", param.name.name), param.name.span);
+                }
+                continue;
+            };
+            first_default.get_or_insert(param.name.name.as_str());
+            if self.engine.is_some() {
+                self.error(format!("engine function {} takes every value; a default is for functions and actions", decl.name.name), default.span);
+                continue;
+            }
+            if !is_fixed(default) {
+                self.error(format!("the default of '{}' is a fixed value, such as 0, \"\", true or an enum's value", param.name.name), default.span);
+                continue;
+            }
+            let expected = self.env.type_ref(&param.ty).unwrap_or(Ty::Unknown);
+            let ty = self.expr(default, Some(expected));
+            if !expected.accepts(&ty) {
+                self.error(format!("the default of '{}' is {}, not {}", param.name.name, described(&ty), described(&expected)), default.span);
+            }
+        }
+    }
+
     /// Checks a call. Returns its result type; None when it returns
     /// nothing (reported unless the call is a statement of its own).
     fn call(&mut self, expr: &Expr, statement: bool) -> Option<Ty<'a>> {
-        let ExprKind::Call { function, args } = &expr.kind else {
+        let ExprKind::Call { function, args, named } = &expr.kind else {
             return Some(self.expr(expr, None));
         };
+        // Only functions and actions take values by name.
+        let built_in = ["count", SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
+        let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
+        if !named.is_empty() && (built_in || handler) {
+            for n in named {
+                self.expr(&n.value, None);
+            }
+            let what = if handler { "handler" } else { "function" };
+            self.error(format!("{what} '{}' takes its values in order, without names", function.name), expr.span);
+        }
         if function.name == "count" {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
             match tys.as_slice() {
@@ -3028,7 +3075,9 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(Ty::Unknown);
         };
         self.check_callee(callee, function.span);
-        if args.len() != callee.params.len() {
+        if !named.is_empty() || callee.params.iter().any(|p| p.default.is_some()) {
+            self.arguments(callee, args, named, expr.span);
+        } else if args.len() != callee.params.len() {
             let n = callee.params.len();
             self.error(
                 format!(
@@ -3068,6 +3117,50 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("{} does not return a value", callee.name.name), expr.span);
                 }
                 None
+            }
+        }
+    }
+
+    /// The values of a call to a function with defaults or with values given
+    /// by name: each parameter once, every one without a default given.
+    fn arguments(&mut self, callee: &FunctionDecl, args: &[Expr], named: &[NamedArg], span: Span) {
+        let callee_name = &callee.name.name;
+        let n = callee.params.len();
+        if args.len() > n {
+            self.error(format!("{callee_name} takes at most {n} argument{}, not {}", if n == 1 { "" } else { "s" }, args.len()), span);
+        }
+        let mut given: Vec<&str> = Vec::new();
+        let typed = |checker: &mut Self, param: &Param, arg: &Expr| {
+            let expected = checker.env.type_ref(&param.ty).unwrap_or(Ty::Unknown);
+            let ty = checker.expr(arg, Some(expected));
+            if !expected.accepts(&ty) {
+                checker.error(format!("argument '{}' of {callee_name} is {} {}, not {}", param.name.name, article(&expected.name()), expected.name(), ty.name()), arg.span);
+            }
+        };
+        for (arg, param) in args.iter().zip(&callee.params) {
+            typed(self, param, arg);
+            given.push(&param.name.name);
+        }
+        for arg in args.iter().skip(n) {
+            self.expr(arg, None);
+        }
+        for arg in named {
+            let Some(param) = callee.params.iter().find(|p| p.name.name == arg.name.name) else {
+                self.expr(&arg.value, None);
+                self.error(format!("{callee_name} has no parameter '{}'", arg.name.name), arg.name.span);
+                continue;
+            };
+            if given.contains(&param.name.name.as_str()) {
+                self.expr(&arg.value, None);
+                self.error(format!("{callee_name} gets '{}' twice", arg.name.name), arg.name.span);
+                continue;
+            }
+            typed(self, param, &arg.value);
+            given.push(&param.name.name);
+        }
+        for param in &callee.params {
+            if param.default.is_none() && !given.contains(&param.name.name.as_str()) {
+                self.error(format!("{callee_name} needs a value for '{}', which has no default", param.name.name), span);
             }
         }
     }
@@ -3477,6 +3570,17 @@ fn join(a: Span, b: Span) -> Span {
 }
 
 /// A type as a sentence names it: "text", "money", "a date", "an integer".
+/// A value written out, which a default must be: a number, a text, a
+/// bool, `none`, a negative number or an enum's value.
+fn is_fixed(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Empty => true,
+        ExprKind::Unary { operand, .. } => matches!(operand.kind, ExprKind::Number { .. }),
+        ExprKind::Member { object, .. } => matches!(object.kind, ExprKind::Name { .. }),
+        _ => false,
+    }
+}
+
 fn described(ty: &Ty) -> String {
     match ty {
         Ty::Text | Ty::Money | Ty::Bool => ty.name(),
@@ -3485,6 +3589,11 @@ fn described(ty: &Ty) -> String {
 }
 
 fn article(word: &str) -> &'static str {
+    // Words that start with the sound of "you" or "won" take "a": a User, a Unit, a European one.
+    let lower = word.to_lowercase();
+    if ["uni", "use", "usu", "uti", "eu", "one"].iter().any(|start| lower.starts_with(start)) {
+        return "a";
+    }
     match word.chars().next() {
         Some(c) if "aeiouAEIOU".contains(c) => "an",
         _ => "a",
@@ -3513,7 +3622,8 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::Unary { operand, .. } => mentions(operand, var),
         ExprKind::Binary { left, right, .. } => mentions(left, var) || mentions(right, var),
         ExprKind::In { value, options } => mentions(value, var) || options.iter().any(|o| mentions(o, var)),
-        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => args.iter().any(|a| mentions(a, var)),
+        ExprKind::Call { args, named, .. } => args.iter().chain(named.iter().map(|n| &n.value)).any(|a| mentions(a, var)),
+        ExprKind::EngineCall { args, .. } => args.iter().any(|a| mentions(a, var)),
         // An inner query has its own record name.
         ExprKind::Find { var: inner, filter, .. } | ExprKind::Files { var: inner, filter, .. } => {
             inner.name != var && filter.as_deref().is_some_and(|f| mentions(f, var))
@@ -3589,7 +3699,7 @@ pub(crate) fn check_readonly(project: &mut crate::model::Project) {
 pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
     let web: Vec<&str> = project.entities().map(|e| e.name.name.as_str()).filter(|e| project.in_web_api(e)).collect();
     let types = types(&project.files);
-    let mut found = Vec::new();
+    let mut found = held_records(project);
     let not_stored = |entity: &str| {
         let source = project.source_of(entity).unwrap_or_default();
         format!("{entity} lives in the web API {source}, not in a database: its actions read and send it")
@@ -3631,6 +3741,91 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
         }
     }
     project.diagnostics.extend(found);
+}
+
+/// Records inside records (DESIGN 5.25): only an entity of a web API holds
+/// a record (`owner: User`), what it holds lives in the web API too, and a
+/// record never holds itself, through any number of records.
+fn held_records(project: &crate::model::Project) -> Vec<Diagnostic> {
+    use crate::model::FieldType;
+    let mut found = Vec::new();
+    let held = |ty: &FieldType| match ty {
+        FieldType::Record { entity } => Some(entity.name.clone()),
+        _ => None,
+    };
+    for file in &project.files {
+        for entity in &file.entities {
+            let name = &entity.name.name;
+            let web = project.in_web_api(name);
+            for field in &entity.fields {
+                let inner = match &field.ty {
+                    FieldType::Record { entity } => entity,
+                    FieldType::List { item } if web => item,
+                    _ => continue,
+                };
+                let field_name = &field.name.name;
+                let inner_name = &inner.name;
+                if project.entity(inner_name).is_none() {
+                    continue;
+                }
+                if !web {
+                    found.push(
+                        Diagnostic::error(
+                            format!("field '{field_name}' of {name} holds {} {inner_name} inside the record, which only an entity of a web API does; a stored entity refers to one with ref {inner_name}", article(inner_name)),
+                            field.span,
+                        )
+                        .in_file(&file.path),
+                    );
+                } else if !project.in_web_api(inner_name) {
+                    found.push(
+                        Diagnostic::error(
+                            format!("field '{field_name}' of {name} holds {} {inner_name}, which is stored; a record inside a web API's record is of the web API too", article(inner_name)),
+                            field.span,
+                        )
+                        .in_file(&file.path),
+                    );
+                }
+            }
+        }
+    }
+    // A record that holds itself has no end; a list may be empty, so it may hold any.
+    let mut reported: Vec<String> = Vec::new();
+    for entity in project.entities() {
+        let start = &entity.name.name;
+        if reported.contains(start) {
+            continue;
+        }
+        let mut path: Vec<(String, String)> = Vec::new();
+        let mut at = entity;
+        let mut seen = vec![start.clone()];
+        let circle = loop {
+            let Some((field, next)) = at.fields.iter().find_map(|f| held(&f.ty).map(|n| (f.name.name.clone(), n))) else { break None };
+            path.push((field, next.clone()));
+            if &next == start {
+                break Some(path.clone());
+            }
+            if seen.contains(&next) {
+                break None;
+            }
+            seen.push(next.clone());
+            match project.entity(&next) {
+                Some(e) => at = e,
+                None => break None,
+            }
+        };
+        if let Some(circle) = circle {
+            let (first_field, first) = &circle[0];
+            let mut text = format!("record {start} holds itself: {start}.{first_field} holds {} {first}", article(first));
+            for (_, next) in &circle[1..] {
+                text.push_str(&format!(", which holds {} {next}", article(next)));
+            }
+            text.push_str("; hold a list instead, which may be empty");
+            reported.extend(circle.iter().map(|(_, n)| n.clone()));
+            let file = project.files.iter().find(|f| f.entities.iter().any(|e| &e.name.name == start)).map(|f| f.path.clone()).unwrap_or_default();
+            found.push(Diagnostic::error(text, entity.name.span).in_file(&file));
+        }
+    }
+    found
 }
 
 /// A query runs in one database: its condition and order may go through
@@ -3850,7 +4045,12 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
                 each_expr(option, found);
             }
         }
-        ExprKind::Call { args, .. } | ExprKind::EngineCall { args, .. } => {
+        ExprKind::Call { args, named, .. } => {
+            for arg in args.iter().chain(named.iter().map(|n| &n.value)) {
+                each_expr(arg, found);
+            }
+        }
+        ExprKind::EngineCall { args, .. } => {
             for arg in args {
                 each_expr(arg, found);
             }

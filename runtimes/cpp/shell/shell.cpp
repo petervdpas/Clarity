@@ -3,6 +3,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+#if defined(__APPLE__)
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
@@ -79,16 +84,23 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         if (command == "start") {
             json started = {{"model", json::parse(options_.model)}, {"main", options_.main}};
             auto or_null = [](const std::string& text) { return text.empty() ? json(nullptr) : json(text); };
-            if (options_.unconnected)
-                started["unconnected"] = {{"handler", or_null(options_.unconnected_handler)}, {"window", or_null(options_.unconnected_window)}, {"problem", *options_.unconnected}};
+            if (options_.unconnected) {
+                started["unconnected"] = {{"handler", or_null(options_.unconnected_handler)}, {"window", or_null(options_.unconnected_window)}, {"problem", json(*options_.unconnected)}};
+                to_screen_ = true;
+            }
             return value(started);
         }
         // The databases again, as when the person has kept their connection.
         if (command == "connect") {
             if (!options_.connect) return value(nullptr);
-            connected_ = options_.connect();
+            try {
+                connected_ = options_.connect();
+            } catch (const std::exception& e) {
+                return {{"error", json(unconnected_reason(e))}};
+            }
             options_.db = connected_.get();
             options_.unconnected.reset();
+            to_screen_ = false;
             return value(nullptr);
         }
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
@@ -158,6 +170,7 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             return value(nullptr);
         }
         if (command == "quit_app") {
+            to_screen_ = false;
             if (quit) quit();
             return value(nullptr);
         }
@@ -279,6 +292,43 @@ private:
 
 }  // namespace
 
+// While the databases are not open, the title bar's close of the main window
+// goes to the screen, which connects again (DESIGN 5.27): each system's own
+// close is held back and the screen is asked instead.
+namespace {
+
+const char* const close_requested = "window.clarityCloseRequested && window.clarityCloseRequested()";
+std::function<bool()> close_to_screen;
+
+#if defined(_WIN32)
+WNDPROC window_proc;
+LRESULT CALLBACK on_message(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_CLOSE && close_to_screen && close_to_screen()) return 0;
+    return CallWindowProcW(window_proc, hwnd, message, wp, lp);
+}
+#elif defined(__APPLE__)
+id main_ns_window;
+BOOL should_close(id, SEL, id sender) { return sender == main_ns_window && close_to_screen && close_to_screen() ? NO : YES; }
+#endif
+
+void hold_back_close(Window& main) {
+    auto native = main.view().window();
+    if (!native.ok()) return;
+#if defined(__linux__)
+    g_signal_connect(G_OBJECT(native.value()), "delete-event",
+                     G_CALLBACK(+[](GtkWidget*, GdkEvent*, gpointer) -> gboolean { return close_to_screen && close_to_screen() ? TRUE : FALSE; }), nullptr);
+#elif defined(_WIN32)
+    auto hwnd = static_cast<HWND>(native.value());
+    window_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(on_message)));
+#elif defined(__APPLE__)
+    main_ns_window = static_cast<id>(native.value());
+    id delegate = reinterpret_cast<id (*)(id, SEL)>(objc_msgSend)(main_ns_window, sel_registerName("delegate"));
+    if (delegate) class_addMethod(object_getClass(delegate), sel_registerName("windowShouldClose:"), reinterpret_cast<IMP>(should_close), "c@:@");
+#endif
+}
+
+}  // namespace
+
 int run(const Options& options) {
 #if defined(__linux__)
     // WebKitGTK 2.52 paints parts of a new window black through its DMABUF
@@ -291,6 +341,12 @@ int run(const Options& options) {
     std::map<std::string, std::unique_ptr<Window>> windows;
     windows["main"] = std::make_unique<Window>("main", service, options, window_size(options.size));
     service.quit = [&] { windows["main"]->view().terminate(); };
+    close_to_screen = [&] {
+        if (!service.closes_to_screen()) return false;
+        windows["main"]->eval(close_requested);
+        return true;
+    };
+    hold_back_close(*windows["main"]);
     service.open_desktop = [&](Desktop&, const std::string& name, Size size) {
         auto& window = windows[name] = std::make_unique<Window>(name, service, options, size);
 #if defined(__linux__)
@@ -324,6 +380,7 @@ int run(const Options& options) {
         if (!problem.empty()) fprintf(stderr, "%s\n", problem.c_str());
     }
     windows["main"]->view().run();
+    close_to_screen = nullptr;
     parts::stop();
     return 0;
 }

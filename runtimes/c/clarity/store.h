@@ -5,6 +5,7 @@
 #pragma once
 
 #include "clarity/dialect.h"
+#include "clarity/text.h"
 #include "clarity/value.h"
 
 /// One row a query read: a value per column.
@@ -47,6 +48,11 @@ const char* clarity_applied_sql(int version);
 /// Where a database or store is: as written, or from the environment
 /// variable `env:NAME` names, so passwords stay out of the program.
 bool clarity_location(const char* text, const char** out);
+
+/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// conformance/unconnected.json): in Clarity's own words, which the project
+/// translates, with this runtime's message in the slot.
+ClarityText* clarity_unconnected_reason(const ClarityError* error);
 /// Connects to the database of a data source.
 bool clarity_open_driver(ClarityDialect dialect, const char* at, ClarityDriver** out);
 bool clarity_open_sqlite(const char* path, ClarityDriver** out);

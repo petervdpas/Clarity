@@ -82,7 +82,7 @@ public sealed class SecretsTests
         {
             Secrets.Set(Program, "shopDb", "");
         }
-        var missing = Assert.Throws<StorageException>(() => Db.Connect(("main", Dialect.Sqlite, $"setting:{Program}/shopDb")));
+        var missing = Assert.Throws<NotKeptException>(() => Db.Connect(("main", Dialect.Sqlite, $"setting:{Program}/shopDb")));
         Assert.Contains("the secret setting shopDb is not kept yet", missing.Message);
     }
 }

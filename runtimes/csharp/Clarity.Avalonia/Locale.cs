@@ -103,5 +103,8 @@ public static class Locale
 
     /// <summary>Text as shown: a key by its value in the language shown, each slot in the person's format.</summary>
     public static string Show(Text text) =>
-        Formats.Fill(text.WithTemplate(text.Key is { } key ? (Translate(key) is var value && value != key ? value : Text.Plain(key).Template) : text.Template), label, Translate);
+        Formats.Fill(text.WithTemplate(text.Key is { } key ? (Translate(key) is var value && value != key ? value : Unkept(text, key)) : text.Template), label, Translate);
+
+    /// <summary>A key the project gives no value: Clarity's own words read as their English, written as the template; any other key as itself.</summary>
+    static string Unkept(Text text, string key) => text.Template is { Length: > 0 } english ? english : Text.Plain(key).Template;
 }

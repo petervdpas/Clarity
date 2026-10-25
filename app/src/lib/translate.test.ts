@@ -55,3 +55,15 @@ test("a remembered choice applies while its language is there", () => {
   assert.equal(rememberedChoice("fr", "en", ["nl"]), undefined);
   assert.equal(rememberedChoice(null, "en", ["nl"]), undefined);
 });
+
+test("Clarity's own words sent by key read as their English until the project gives them a value", () => {
+  const unconnected: { words: Record<string, string> } = JSON.parse(readFileSync(new URL("../../../conformance/unconnected.json", import.meta.url), "utf8"));
+  const none: Texts = { values: { en: {} }, picked: null, fallback: "en" };
+  for (const [key, english] of Object.entries(unconnected.words)) {
+    assert.deepEqual(translateText({ key }, none), { text: english, values: {} });
+  }
+  const given: Texts = { values: { en: { unconnectedNotKept: "Vul eerst de verbinding in" } }, picked: null, fallback: "en" };
+  assert.deepEqual(translateText({ key: "unconnectedNotKept" }, given), { text: "Vul eerst de verbinding in", values: {} });
+  // A key of the project's own that has no value shows as its key.
+  assert.deepEqual(translateText({ key: "saveCaption" }, none), { text: "saveCaption", values: {} });
+});

@@ -5,7 +5,10 @@
 
 package clarity
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ContractError is a require or ensure of a function or action that did not hold.
 type ContractError struct{ What string }
@@ -56,6 +59,30 @@ type StorageError struct {
 func (e *StorageError) Error() string { return "storage: " + e.What }
 
 func (e *StorageError) Unwrap() error { return e.Err }
+
+// NotKeptError is a database that connects with a secret setting (DESIGN
+// 5.27) the person has not kept yet.
+type NotKeptError struct{ Setting string }
+
+func (e *NotKeptError) Error() string {
+	return "storage: the secret setting " + e.Setting + " is not kept yet: the settings name the connection"
+}
+
+// UnconnectedReason is why the databases did not open, as the person reads
+// it (DESIGN 5.27, conformance/unconnected.json): in Clarity's own words,
+// which the project translates, with this runtime's message in the slot.
+func UnconnectedReason(err error) Text {
+	var notKept *NotKeptError
+	if errors.As(err, &notKept) {
+		return KeyText("unconnectedNotKept")
+	}
+	problem := err.Error()
+	var storage *StorageError
+	if errors.As(err, &storage) {
+		problem = storage.What
+	}
+	return KeyText("unconnectedFailed").With("problem", SlotText(problem))
+}
 
 // RefusedError is a refusal: a data event or code that will not go on, in
 // the application's own words, which the screen shows.

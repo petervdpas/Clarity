@@ -3,6 +3,7 @@
   // its secrets, and a connection's fields. Clarity's vault is Clarity's
   // own; an application keeps its own secrets, only when its design adds them.
   import Modal from "./Modal.svelte";
+  import SecretField from "./SecretField.svelte";
   import { resizableColumns } from "./columnWidths";
   import { CategoryEditor } from "./vault";
   import { vault } from "./vaultStore.svelte";
@@ -12,7 +13,6 @@
   let current = $state("");
   let next = $state("");
   let nextRepeat = $state("");
-  let reveal = $state(false);
   // The categories dialog: its list, the category picked in it, the name
   // being typed for Add or Rename, and why the last step was refused.
   let editor = $state<CategoryEditor | null>(null);
@@ -176,9 +176,9 @@
     </p>
     <div class="form-grid">
       <label class="form-label" for="new-password">Master password</label>
-      <input id="new-password" type="password" bind:value={password} autocomplete="new-password" />
+      <SecretField id="new-password" bind:value={password} autocomplete="new-password" />
       <label class="form-label" for="repeat-password">Again</label>
-      <input id="repeat-password" type="password" bind:value={repeat} autocomplete="new-password" />
+      <SecretField id="repeat-password" bind:value={repeat} autocomplete="new-password" />
       {#if repeat && password !== repeat}<p class="form-help">The two passwords differ.</p>{/if}
       <span></span>
       <div class="form-inline">
@@ -191,7 +191,7 @@
     <p class="intro">It locks itself after 15 minutes without use. <code>{vault.info.folder}</code></p>
     <form class="form-grid" onsubmit={(e) => (e.preventDefault(), unlock())}>
       <label class="form-label" for="unlock-password">Master password</label>
-      <input id="unlock-password" type="password" bind:value={password} autocomplete="current-password" />
+      <SecretField id="unlock-password" bind:value={password} autocomplete="current-password" />
       <span></span>
       <div class="form-inline">
         <button class="primary" type="submit" disabled={!password || vault.busy}>{vault.busy ? "Unlocking..." : "Unlock"}</button>
@@ -213,10 +213,7 @@
       <label class="form-label" for="secret-key">Key</label>
       <input id="secret-key" bind:value={draft.key} spellcheck="false" />
       <label class="form-label" for="secret-value">Value</label>
-      <div class="form-inline">
-        <input id="secret-value" type={reveal ? "text" : "password"} bind:value={draft.value} autocomplete="off" spellcheck="false" />
-        <button type="button" title={reveal ? "Hide the value" : "Show the value"} onclick={() => (reveal = !reveal)}>{reveal ? "Hide" : "Show"}</button>
-      </div>
+      <SecretField id="secret-value" bind:value={draft.value} />
       <label class="form-label" for="secret-description">Description</label>
       <textarea id="secret-description" rows="4" bind:value={draft.description}></textarea>
       <p class="form-help">Not secret: the description shows in the list, to tell secrets apart.</p>
@@ -226,7 +223,7 @@
       {/if}
       <span></span>
       <div class="form-inline">
-        <button type="button" onclick={() => ((vault.editing = null), (reveal = false))}>Cancel</button>
+        <button type="button" onclick={() => (vault.editing = null)}>Cancel</button>
         <button class="primary" type="submit" disabled={!draft.category.trim() || !draft.key.trim()}>Save</button>
       </div>
     </form>
@@ -298,11 +295,11 @@
       {#if vault.error}<p class="refusal" role="alert">{vault.error}</p>{/if}
       <div class="form-grid">
         <label class="form-label" for="current-password">Current</label>
-        <input id="current-password" type="password" bind:value={current} autocomplete="current-password" />
+        <SecretField id="current-password" bind:value={current} autocomplete="current-password" />
         <label class="form-label" for="next-password">New</label>
-        <input id="next-password" type="password" bind:value={next} autocomplete="new-password" />
+        <SecretField id="next-password" bind:value={next} autocomplete="new-password" />
         <label class="form-label" for="next-repeat">Again</label>
-        <input id="next-repeat" type="password" bind:value={nextRepeat} autocomplete="new-password" />
+        <SecretField id="next-repeat" bind:value={nextRepeat} autocomplete="new-password" />
       </div>
       <div class="actions">
         <button onclick={() => (vault.dialog = null)}>Cancel</button>
@@ -317,7 +314,7 @@
       <p>Every secret in it is gone for good, for Clarity and for any tool that shares this vault. Connections stay, but their vault fields find nothing.</p>
       <div class="form-grid">
         <label class="form-label" for="destroy-password">Master password</label>
-        <input id="destroy-password" type="password" bind:value={current} autocomplete="current-password" />
+        <SecretField id="destroy-password" bind:value={current} autocomplete="current-password" />
       </div>
       <div class="actions">
         <button onclick={() => (vault.dialog = null)}>Cancel</button>

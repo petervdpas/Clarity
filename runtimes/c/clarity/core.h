@@ -85,6 +85,9 @@ typedef enum {
     /// A value in code that does not fit where it is used: a position
     /// outside its list, a highest number below 1 (conformance/lists.json).
     CLARITY_VALUE,
+    /// A database connects with a secret setting (DESIGN 5.27) the person
+    /// has not kept yet; its message reads as a storage error's.
+    CLARITY_NOT_KEPT,
 } ClarityErrorKind;
 
 typedef struct ClarityText ClarityText;

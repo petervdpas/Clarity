@@ -41,7 +41,7 @@ func location(text string) (string, error) {
 			return value, nil
 		}
 		_, setting, _ := strings.Cut(at, "/")
-		return "", &StorageError{What: "the secret setting " + setting + " is not kept yet: the settings name the connection"}
+		return "", &NotKeptError{Setting: setting}
 	}
 	name, ok := strings.CutPrefix(text, "env:")
 	if !ok {

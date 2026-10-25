@@ -82,8 +82,11 @@ public sealed record Text(string Template)
     /// </summary>
     public static Func<string, string?> KeyValue { get; set; } = _ => null;
 
-    /// <summary>The text as written, or for a key its value in the language shown.</summary>
-    public string Written => Key is { } key ? KeyValue(key) ?? key.Replace("{", "{{").Replace("}", "}}") : Template;
+    /// <summary>
+    /// The text as written, or for a key its value in the language shown; a key
+    /// no language has reads as its template (Clarity's own words in English), or as itself.
+    /// </summary>
+    public string Written => Key is { } key ? KeyValue(key) ?? (Template.Length > 0 ? Template : key.Replace("{", "{{").Replace("}", "}}")) : Template;
 
     /// <summary>Text that is shown as it is: a brace in it is no slot.</summary>
     public static Text Plain(string text) => new(text.Replace("{", "{{").Replace("}", "}}"));

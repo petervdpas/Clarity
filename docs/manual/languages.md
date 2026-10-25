@@ -58,6 +58,8 @@ translation nl
 - A key is camelCase, as names are. You type a text in the designer, and Clarity makes its key from the part and what the text is to it: `saveCaption`, `customerNameLabel`, `customerCardTitle`. Rename it under the field in Properties.
 - A text people read that is written in quotes is an error that asks for a key. A text without letters, such as a calculator's `"7"` or `"+"`, reads the same in every language and stays as it is.
 - `yes` and `no` are how the screen shows a bool; an image part bound to a picture has `noPicture`, `loadPicture` and `removePicture`. Every project gives them their texts.
+- `showSecret`, `hideSecret` and `copySecret` name the eye and the copy button of a password input.
+- `unconnectedNotKept` and `unconnectedFailed` say why the databases did not open: the connection is not set yet, or it did not work, with the database's own message in `{problem}`. A project whose database connects with a secret setting, or that handles `on unconnected`, has them.
 
 ## Slots
 

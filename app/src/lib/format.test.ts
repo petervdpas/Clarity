@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editText, fillText, formatValue, numberEditing, parseNumber, userLocale, type FieldFormat, type ShownText } from "./format.ts";
+import { editText, errorText, fillText, formatValue, numberEditing, parseNumber, userLocale, type FieldFormat, type ShownText } from "./format.ts";
 
 type Shows = { what: string; locale: string; currency: string | null; field: FieldFormat; value: string | number; shows: string };
 type Reads = { what: string; locale: string; currency: string | null; field: FieldFormat; typed: string; value: string | number | null };
@@ -85,4 +85,15 @@ test("a number input shows its value for editing and reads what is typed; cleare
   assert.equal(hours.read("lots"), null);
   assert.equal(hours.read(" "), "0");
   assert.equal(numberEditing({ kind: "integer" }, f).read(""), 0);
+});
+
+test("an error from the backend is shown as text: a refusal and a key keep their slots, anything else is its message", () => {
+  const refused = { text: "Order {n} is over", values: { n: { kind: "text", value: "ORD-1" } } };
+  assert.deepEqual(errorText(refused), refused);
+  // Why the databases did not open, in Clarity's own words (conformance/unconnected.json).
+  const reason = { key: "unconnectedFailed", values: { problem: { kind: "text", value: "the server did not answer" } } };
+  assert.deepEqual(errorText(reason), reason);
+  assert.deepEqual(errorText({ key: "unconnectedNotKept" }), { key: "unconnectedNotKept" });
+  assert.equal(errorText("storage: locked"), "storage: locked");
+  assert.equal(errorText(new Error("gone")), "Error: gone");
 });

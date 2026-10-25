@@ -42,11 +42,18 @@ export function translate(text: string, texts: Texts): string {
   return keyValue(key, texts) ?? key;
 }
 
+/** Clarity's own words the backend sends by key, in English, as they read
+ *  until the project gives them a value (translations UNCONNECTED_KEYS). */
+const OWN_TEXTS: Record<string, string> = {
+  unconnectedNotKept: "The database connection is not set yet",
+  unconnectedFailed: "The database did not open: {problem}",
+};
+
 /** Text from the backend: a key takes its value, keeping its slot values;
  *  other text is as the backend wrote it. */
 export function translateText(text: ShownText, texts: Texts): ShownText {
   if (typeof text === "string" || "text" in text) return text;
-  const value = keyValue(text.key, texts) ?? text.key.replaceAll("{", "{{").replaceAll("}", "}}");
+  const value = keyValue(text.key, texts) ?? OWN_TEXTS[text.key] ?? text.key.replaceAll("{", "{{").replaceAll("}", "}}");
   return { text: value, values: text.values ?? {} };
 }
 

@@ -55,7 +55,7 @@ pub(crate) fn location(text: &str) -> Result<String> {
             return Ok(value);
         }
         let _ = program;
-        return Err(Error::Storage(format!("the secret setting {name} is not kept yet: the settings name the connection")));
+        return Err(Error::NotKept(name.to_string()));
     }
     match text.strip_prefix("env:") {
         Some(name) => std::env::var(name).map_err(|_| Error::Storage(format!("the environment variable {name} is not set"))),

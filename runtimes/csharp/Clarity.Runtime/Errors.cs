@@ -31,7 +31,14 @@ public sealed class InvalidValueException(string what) : ClarityException($"inva
 
 public sealed class StorageException(string what, Exception? inner = null) : ClarityException($"storage: {what}")
 {
+    public string What { get; } = what;
     public new Exception? InnerException { get; } = inner;
+}
+
+/// <summary>A database connects with a secret setting (DESIGN 5.27) the person has not kept yet.</summary>
+public sealed class NotKeptException(string setting) : ClarityException($"storage: the secret setting {setting} is not kept yet: the settings name the connection")
+{
+    public string Setting { get; } = setting;
 }
 
 /// <summary>A data event refused a save or delete, or code refused to go on, in its own words.</summary>

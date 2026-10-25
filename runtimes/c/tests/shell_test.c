@@ -207,15 +207,20 @@ void an_unconnected_start_says_why_and_connects_later(void) {
     ClarityDb* db;
     REQUIRE_OK(clarity_db_memory(&db));
     ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
-    options.unconnected = "the secret setting shopDb is not kept yet";
+    clarity_fail(CLARITY_NOT_KEPT, "the secret setting shopDb is not kept yet");
+    ClarityError not_kept = *clarity_error();
+    options.unconnected = &not_kept;
     options.unconnected_window = "Preferences";
     options.connect = connect_later;
     connect_tries = 0;
     ClarityService* s = clarity_service_new(&options);
     CHECK_JSON(invoked(s, "start", "{}", NULL),
-               "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\",\"unconnected\":{\"handler\":null,\"window\":\"Preferences\",\"problem\":\"the secret setting shopDb is not kept yet\"}}}");
-    CHECK_JSON(invoked(s, "connect", "{}", NULL), "{\"error\":\"storage: still not kept\"}");
+               "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\",\"unconnected\":{\"handler\":null,\"window\":\"Preferences\",\"problem\":{\"key\":\"unconnectedNotKept\"}}}}");
+    // While unconnected, the title bar's close goes to the screen, which connects again.
+    CHECK(clarity_service_closes_to_screen(s));
+    CHECK_JSON(invoked(s, "connect", "{}", NULL), "{\"error\":{\"key\":\"unconnectedFailed\",\"values\":{\"problem\":{\"kind\":\"text\",\"value\":\"still not kept\"}}}}");
     CHECK_JSON(invoked(s, "connect", "{}", NULL), "{\"value\":null}");
+    CHECK(!clarity_service_closes_to_screen(s));
     CHECK_JSON(invoked(s, "start", "{}", NULL), "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}");
     clarity_service_free(s);
 }

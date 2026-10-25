@@ -14,6 +14,8 @@ The vault is encrypted behind one master password. The key made from it is kept 
 
 When something needs a secret while the vault is locked, such as sending a request to the agent, a dialog asks for the master password over whatever tab you are on. Unlock it and what you were doing goes on; **Cancel** stops it instead.
 
+Every password and secret field has an eye that shows what you typed or hides it again, and a button that copies it.
+
 Write the master password down somewhere safe. Without it, nobody can open the vault, Clarity included.
 
 ## The Vault tab

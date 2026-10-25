@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{CLI_KEYS, FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{CLI_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -66,6 +66,10 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     let trees = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tree ") || l.trim_start().starts_with("treetable ")));
     let tags = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("tags ") && l.contains(" bind ")));
     let commands = modules.iter().any(|(_, text)| text.lines().any(|l| l.starts_with("command ")));
+    // Only the project file says which database connects with a secret: a
+    // secret setting or an `on unconnected` may mean it does.
+    let passwords = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("password ")));
+    let unconnected = modules.iter().any(|(_, text)| text.lines().any(|l| l.trim() == "on unconnected" || l.trim_start().starts_with("on unconnected:") || (l.starts_with("    ") && l.contains(": secret"))));
     // The pickers of the click targets `language` and `theme` have a heading.
     // The settings' own `language` and `theme` are labeled with the same words.
     let clicks_to = |target: &str| {
@@ -83,7 +87,9 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("language") { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if clicks_to("theme") { THEME_PICKER_KEYS.as_slice() } else { &[] })
-        .chain(if commands { CLI_KEYS.as_slice() } else { &[] });
+        .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
+        .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
+        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] });
     for (key, value) in own {
         maker.add_exact(key, value);
     }

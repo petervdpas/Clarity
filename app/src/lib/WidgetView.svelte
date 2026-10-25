@@ -491,6 +491,7 @@
       <TextInput
         {id}
         kind={p.kind === "password" ? "password" : p.kind === "memo" ? "memo" : bound?.field.type.kind === "email" ? "email" : "text"}
+        words={p.kind === "password" ? { show: ownWord(preview, "Show"), hide: ownWord(preview, "Hide"), copy: ownWord(preview, "Copy") } : undefined}
         value={shown}
         placeholder={p.placeholder ? tr(preview, p.placeholder) : undefined}
         tabindex={p.tabOrder ?? undefined}

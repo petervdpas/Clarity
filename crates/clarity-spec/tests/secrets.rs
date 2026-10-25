@@ -119,3 +119,50 @@ fn an_app_handles_its_databases_not_opening() {
         Some("handler notConnected takes (reason: integer); 'on unconnected' gives one text, why the databases did not open")
     );
 }
+
+/// Why the databases did not open is in Clarity's own words, which the
+/// project translates (conformance/unconnected.json): an application that can
+/// be unconnected needs them, one that cannot does not.
+#[test]
+fn why_the_databases_did_not_open_is_in_clarity_s_own_words() {
+    let shop = SHOP.replace("shopToken", "shopDb");
+    let keys_of = |source: &str, connection: &str| -> Vec<String> {
+        let project = clarity_spec::load_in([("shop.clarity", source)], [], &[clarity_spec::SourceRef::sql("main").at(connection, None)]);
+        clarity_spec::translations::keys(&project).into_iter().map(|k| k.key).collect()
+    };
+    let words: Vec<String> = clarity_spec::translations::UNCONNECTED_KEYS.iter().map(|(k, _)| k.to_string()).collect();
+    let secret = keys_of(&shop, "setting:shopDb");
+    assert!(words.iter().all(|w| secret.contains(w)), "{secret:?}");
+    let plain = keys_of(&shop, "data/shop.db");
+    assert!(!words.iter().any(|w| plain.contains(w)), "{plain:?}");
+    // An app that handles it on a SQLite file, as C and C++ do, needs them too.
+    let handled = format!("{shop}\napp Shop\n    main Main\n    on unconnected: notConnected\n\ncode Shop\n    handler notConnected(reason: text)\n        message reason\n");
+    let handled = keys_of(&handled, "data/shop.db");
+    assert!(words.iter().all(|w| handled.contains(w)), "{handled:?}");
+}
+
+#[test]
+fn clarity_s_words_for_the_databases_not_opening_are_the_shared_ones() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!("../../../conformance/unconnected.json")).unwrap();
+    let mut words: Vec<(String, String)> = cases["words"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+    let mut ours: Vec<(String, String)> = clarity_spec::translations::UNCONNECTED_KEYS.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    words.sort();
+    ours.sort();
+    assert_eq!(ours, words);
+}
+
+/// A password input shows what is typed or hides it again, and copies it:
+/// its buttons are named in Clarity's own words, which a project with one translates.
+#[test]
+fn a_password_input_has_clarity_s_words_to_show_hide_and_copy() {
+    let keys_of = |source: &str| -> Vec<String> { clarity_spec::translations::keys(&load_sources([("shop.clarity", source)])).into_iter().map(|k| k.key).collect() };
+    let words: Vec<String> = clarity_spec::translations::SECRET_KEYS.iter().map(|(k, _)| k.to_string()).collect();
+    assert_eq!(words, ["showSecret", "hideSecret", "copySecret"]);
+    let with = keys_of(SHOP);
+    assert!(words.iter().all(|w| with.contains(w)), "{with:?}");
+    let without = keys_of(&SHOP.replace("    password name tokenBox at 1,1 span 6 bind settings.shopToken\n", ""));
+    assert!(!words.iter().any(|w| without.contains(w)), "{without:?}");
+    // The key maker gives them their English too.
+    let made = clarity_spec::keyed::make_keys(&[("shop.clarity", SHOP)], &[], "en");
+    assert!(words.iter().all(|w| made.order.contains(w)), "{:?}", made.order);
+}

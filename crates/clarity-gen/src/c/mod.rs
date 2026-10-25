@@ -477,7 +477,7 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
     let (not_opened, unconnected_options) = match &unconnected {
         None => ("        return failed(db);\n".to_string(), String::new()),
         Some(u) => (
-            "        for (int i = 1; i < argc; i++)\n            if (strcmp(argv[i], \"--check\") == 0) return failed(NULL);\n        unconnected = strdup(clarity_error()->message);\n        if (!clarity_db_memory(&db)) return failed(db);\n".to_string(),
+            "        for (int i = 1; i < argc; i++)\n            if (strcmp(argv[i], \"--check\") == 0) return failed(NULL);\n        unconnected_error = *clarity_error();\n        unconnected = &unconnected_error;\n        if (!clarity_db_memory(&db)) return failed(db);\n".to_string(),
             format!(
                 "    options.unconnected = unconnected;\n    options.unconnected_handler = {};\n    options.unconnected_window = {};\n    options.connect = open_databases;\n",
                 u.handler.as_ref().map_or_else(|| "NULL".to_string(), |(_, h)| string(h)),
@@ -485,7 +485,7 @@ fn main_c(project: &Project, settings: &Settings, program: &str, databases: &[(S
             ),
         ),
     };
-    let unconnected_decl = if unconnected.is_some() { "    char* unconnected = NULL;\n" } else { "" };
+    let unconnected_decl = if unconnected.is_some() { "    ClarityError unconnected_error;\n    const ClarityError* unconnected = NULL;\n" } else { "" };
     let not_opened = if unconnected.is_some() { format!("        // Why they did not open, which the screen says.\n{not_opened}") } else { not_opened };
     // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
     let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {

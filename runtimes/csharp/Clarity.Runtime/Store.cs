@@ -51,7 +51,7 @@ internal static class Store
             var at = text[8..].Split('/', 2);
             var setting = at.Length == 2 ? at[1] : at[0];
             var value = at.Length == 2 ? Secrets.Get(at[0], setting) : null;
-            return string.IsNullOrEmpty(value) ? throw new StorageException($"the secret setting {setting} is not kept yet: the settings name the connection") : value;
+            return string.IsNullOrEmpty(value) ? throw new NotKeptException(setting) : value;
         }
         if (!text.StartsWith("env:", StringComparison.Ordinal))
             return text;

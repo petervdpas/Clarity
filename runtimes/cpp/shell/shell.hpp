@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -73,7 +74,7 @@ struct Options {
     /// memory until `connect` opens them; none when they opened. What the
     /// screen shows first then: the app's `on unconnected` handler, or else
     /// the window that keeps the connection; empty for none.
-    std::optional<std::string> unconnected;
+    std::optional<Text> unconnected;
     std::string unconnected_handler;
     std::string unconnected_window;
     std::function<std::unique_ptr<Db>()> connect;
@@ -115,6 +116,9 @@ public:
     std::optional<std::string> closed(const std::string& name);
     /// The desktop window an open window's custom parts are in, by the open window's number.
     std::optional<std::string> parts_window(uint64_t instance);
+    /// Whether the title bar's close of the main window goes to the screen:
+    /// while the databases are not open, closing it connects again (DESIGN 5.27).
+    bool closes_to_screen() const { return to_screen_; }
 
 private:
     struct Apart {
@@ -129,6 +133,8 @@ private:
     std::map<std::string, Apart> apart_;
     std::map<uint64_t, std::string> parts_windows_;
     int next_ = 0;
+    /// Not behind mutex_: a command that holds it may wait on the desktop's thread, where the close arrives.
+    std::atomic<bool> to_screen_ = false;
 
     Reply on_event(const WindowState& state, const std::string& event);
     /// Runs a handler, then draws the window's canvases anew.

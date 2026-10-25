@@ -21,8 +21,28 @@ public:
 /// The database or the disk failed.
 class StorageError : public Error {
 public:
-    explicit StorageError(const std::string& what) : Error("storage: " + what) {}
+    explicit StorageError(const std::string& what) : Error("storage: " + what), problem_(what) {}
+    /// What went wrong, without the kind before it.
+    const std::string& problem() const { return problem_; }
+
+private:
+    std::string problem_;
 };
+
+/// A database connects with a secret setting (DESIGN 5.27) the person has not kept yet.
+class NotKeptError : public StorageError {
+public:
+    explicit NotKeptError(const std::string& setting) : StorageError("the secret setting " + setting + " is not kept yet: the settings name the connection") {}
+};
+
+/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// conformance/unconnected.json): in Clarity's own words, which the project
+/// translates, with this runtime's message in the slot.
+inline Text unconnected_reason(const std::exception& e) {
+    if (dynamic_cast<const NotKeptError*>(&e)) return Text::key("unconnectedNotKept");
+    if (auto storage = dynamic_cast<const StorageError*>(&e)) return Text::key("unconnectedFailed").with("problem", slot_text(storage->problem()));
+    return Text::key("unconnectedFailed").with("problem", slot_text(e.what()));
+}
 
 /// A value does not fit: a wrong date, a reference to nothing, a file that is no picture.
 class InvalidError : public Error {

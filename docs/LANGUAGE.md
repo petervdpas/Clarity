@@ -114,7 +114,7 @@ translation nl
 - The default language gives every key a text; an empty one is an error. Another language may leave a key empty (`savedName ""`): it shows the default's text until it is translated.
 - A key's text may have slots, which code gives values by name: `message @savedName(name = customer.name)`. Each language keeps the slots of the default's text and may move them; a slot missing or added is an error, and so is a use that leaves one out or gives one the text does not have.
 - A key no design or code uses is a warning; it can go. A text with letters written in quotes where people read it is an error that asks for a key.
-- `yes` and `no` are what the screen shows for bools; `noPicture`, `loadPicture` and `removePicture` what an image part bound to a picture shows of its own. `languagePicker` and `themePicker` head the pickers that the click targets `language` and `theme` open; a project that uses them gives them their texts. Every project gives them their texts.
+- `yes` and `no` are what the screen shows for bools; `noPicture`, `loadPicture` and `removePicture` what an image part bound to a picture shows of its own. `languagePicker` and `themePicker` head the pickers that the click targets `language` and `theme` open; a project that uses them gives them their texts. `showSecret`, `hideSecret` and `copySecret` name the buttons of a password input; a project with one gives them their texts. `unconnectedNotKept` and `unconnectedFailed` say why the databases did not open (see [Secret settings](#secret-settings)); a project with a secret connection or an `on unconnected` handler gives them their texts, and `{problem}` in the second is the database's own message. Every project gives them their texts.
 - The application shows the language for the locale of the person using it: `nl-BE` takes `nl-BE.clarity`, else `nl.clarity`, else any other region of Dutch, else the default. The designer can show the canvas and Preview in any of the project's languages.
 - A project written before texts had keys gets them with **Make texts keys**, or `clarity spec keys <folder>`: each text becomes a key named after where it is (`saveCaption`, `customerNameLabel`, `cardTitle`), its text the default language's value, and old translation files give the same keys their translations.
 - A menu item or button with `on click -> language` lets the person choose another language while the application runs: it lists the project's languages, each by its own name (Nederlands, Deutsch), and the application remembers the choice for its next start.
@@ -618,7 +618,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 |---|---|---|---|
 | `textbox` | text, email, url | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `memo` | text (several lines) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
-| `password` | text (hidden while typed) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
+| `password` | text (hidden while typed; an eye beside it shows it or hides it again, and a button copies it) | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `number` | integer, decimal, money, id | `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `checkbox` | bool | `readonly`, `taborder` | `change` |
 | `switch` | bool | `readonly`, `taborder` | `change` |
@@ -1065,7 +1065,7 @@ app Shop
 | `main Window` | The window shown at start; it must be a `window`. |
 | `data name: Entity` | Data for the parts in the sidebars and the footer. |
 | `on start: handler` | Runs when the application starts, before its main window opens. Its code is in `code AppName`. |
-| `on unconnected: handler` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why. What it opens shows first. Closing the last window then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
+| `on unconnected: handler` | Runs when the databases did not open, such as a server that is down or a [secret setting](#secret-settings) not kept yet, instead of the main window; `handler notConnected(reason: text)` gets why, in the person's language (Clarity's texts `unconnectedNotKept` and `unconnectedFailed`). What it opens shows first. Closing the last window, or the desktop window from its title bar, then connects again if a setting changed, and the main window opens once it does; closing it unchanged ends the application. |
 
 ### Regions
 

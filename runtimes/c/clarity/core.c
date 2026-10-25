@@ -160,7 +160,7 @@ static void set(ClarityErrorKind kind, const char* message) {
 }
 
 bool clarity_fail(ClarityErrorKind kind, const char* format, ...) {
-    const char* prefix = kind == CLARITY_STORAGE   ? "storage: "
+    const char* prefix = kind == CLARITY_STORAGE || kind == CLARITY_NOT_KEPT ? "storage: "
                          : kind == CLARITY_INVALID  ? "invalid value: "
                          : kind == CLARITY_CONTRACT ? "condition failed: "
                                                     : "";

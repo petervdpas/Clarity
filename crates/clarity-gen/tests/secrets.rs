@@ -97,12 +97,18 @@ fn the_app_handles_its_databases_not_opening() {
     assert!(rust.contains("const UNCONNECTED_HANDLER: Option<&str> = Some(\"notConnected\");"));
     assert!(rust.contains("const CONNECTION_WINDOW: Option<&str> = Some(\"Main\");"));
     assert!(rust.contains("clarity_runtime::ui::answer(value(0)?)?"));
+    // Why, in Clarity's own words the project translates.
+    assert!(rust.contains("serde_json::to_value(clarity_runtime::unconnected_reason(&err))"));
+    // The title bar's close goes to the screen, which connects again.
+    assert!(rust.contains("tauri::WindowEvent::CloseRequested { api, .. }"));
+    assert!(rust.contains("window.clarityCloseRequested && window.clarityCloseRequested()"));
     let go = handled(Backend::Go, Ui::Web);
-    assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: err.Error()}"));
+    assert!(go.contains("unconnected = &shell.Unconnected{Handler: \"notConnected\", Window: \"Main\", Problem: clarity.UnconnectedReason(err)}"));
     assert!(go.contains("reason, err := clarity.Answer[string](values[0])"));
     let csharp = handled(Backend::Csharp, Ui::Avalonia);
     assert!(csharp.contains("Handler = (db, unconnecting) => new AppUnconnectedViewModel(db).Unconnected(unconnecting),"));
     assert!(csharp.contains("RunUnconnected(unconnecting, reason => OnNotConnected(reason));"));
+    assert!(csharp.contains("problem = Unconnected.Reason(e);"));
 }
 
 /// C and C++ keep their records in SQLite: a file that does not open runs
@@ -119,6 +125,9 @@ fn c_and_cpp_handle_their_database_not_opening() {
         let code: String = files.iter().map(|f| f.text.clone()).collect();
         assert!(code.contains("options.unconnected_handler = \"notConnected\";"), "{backend:?} names the handler to the screen");
         assert!(code.contains("options.connect = "), "{backend:?} connects again");
+        // The shell says why in Clarity's own words, from the error kept.
+        let kept = if backend == Backend::C { "unconnected_error = *clarity_error();" } else { "unconnected = clarity::unconnected_reason(e);" };
+        assert!(code.contains(kept), "{backend:?} keeps why");
     }
 }
 
@@ -127,6 +136,12 @@ fn written(backend: Backend, ui: Ui) -> std::path::PathBuf {
     let mut settings: Settings = starter("Shop", "shop");
     settings.stack.backend = backend;
     settings.stack.ui = ui;
+    // A server database whose connection is a secret setting, where the stack has one;
+    // C and C++ have SQLite only, whose file may not open.
+    if !matches!(backend, Backend::C | Backend::Cpp) {
+        settings.datasources[0].kind = SourceKind::Postgres;
+        settings.datasources[0].url = "setting:shopDb".into();
+    }
     let source = format!("{SHOP}{HANDLED}");
     let project = clarity_spec::load_in([("shop.clarity", source.as_str())], [("0001.clarity", "migration \"First\"\n    add entity Customer\n        name: text(80)\n")], &clarity_project::source_refs(&settings));
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));

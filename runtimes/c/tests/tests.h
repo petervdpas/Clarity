@@ -69,7 +69,9 @@
     X(json_is_fitted_as_every_runtime_fits_it)                    \
     X(a_secret_is_kept_read_and_forgotten)                       \
     X(settings_keep_their_secrets_out_of_the_file) \
-    X(a_database_connects_with_a_secret_setting)
+    X(a_database_connects_with_a_secret_setting) \
+    X(a_secret_connection_not_kept_says_so) \
+    X(any_other_failure_says_the_runtimes_message)
 
 #define CLARITY_DECLARED(name) void name(void);
 CLARITY_TESTS(CLARITY_DECLARED)

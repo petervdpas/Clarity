@@ -17,7 +17,7 @@ std::string location(const std::string& text) {
         auto name = slash == std::string::npos ? at : at.substr(slash + 1);
         std::optional<std::string> value;
         if (slash != std::string::npos && secret_store.get) value = secret_store.get(at.substr(0, slash), name);
-        if (!value || value->empty()) throw StorageError("the secret setting " + name + " is not kept yet: the settings name the connection");
+        if (!value || value->empty()) throw NotKeptError(name);
         return *value;
     }
     if (text.rfind("env:", 0) != 0) return text;

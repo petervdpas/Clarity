@@ -1,0 +1,15 @@
+{
+  "about": "Why the databases did not open (DESIGN 5.27), as the person reads it: the window that keeps the connection says it, and the app's `on unconnected` gets it translated. `words` are Clarity's own words for it (translations UNCONNECTED_KEYS) in English. A secret setting that is not kept yet gives `unconnectedNotKept`; any other failure gives `unconnectedFailed` with the runtime's own message in its `problem` slot, without the kind of error before it (no `storage: `). `notKept` is a SQLite database whose connection is a secret setting nobody keeps; `failed` is a storage error with its message.",
+  "words": {
+    "unconnectedNotKept": "The database connection is not set yet",
+    "unconnectedFailed": "The database did not open: {problem}"
+  },
+  "notKept": {
+    "location": "setting:clarity-conformance/neverKept",
+    "reason": { "key": "unconnectedNotKept" }
+  },
+  "failed": {
+    "storage": "the server did not answer",
+    "reason": { "key": "unconnectedFailed", "values": { "problem": { "kind": "text", "value": "the server did not answer" } } }
+  }
+}

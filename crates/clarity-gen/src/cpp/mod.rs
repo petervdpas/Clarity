@@ -456,7 +456,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         ),
         Some(u) => (
             format!(
-                "        // The databases did not open (DESIGN 5.27): the windows work on an empty one in\n        // memory, and the screen shows what keeps the connection first.\n        std::unique_ptr<clarity::Db> opened;\n        std::optional<std::string> unconnected;\n        try {{\n            opened = {program}::open_databases();\n        }} catch (const std::exception& e) {{\n            for (int i = 1; i < argc; ++i)\n                if (std::strcmp(argv[i], \"--check\") == 0) throw;\n            unconnected = e.what();\n            opened = std::make_unique<clarity::Db>(clarity::Db::memory());\n        }}\n        clarity::Db& db = *opened;\n"
+                "        // The databases did not open (DESIGN 5.27): the windows work on an empty one in\n        // memory, and the screen shows what keeps the connection first.\n        std::unique_ptr<clarity::Db> opened;\n        std::optional<clarity::Text> unconnected;\n        try {{\n            opened = {program}::open_databases();\n        }} catch (const std::exception& e) {{\n            for (int i = 1; i < argc; ++i)\n                if (std::strcmp(argv[i], \"--check\") == 0) throw;\n            unconnected = clarity::unconnected_reason(e);\n            opened = std::make_unique<clarity::Db>(clarity::Db::memory());\n        }}\n        clarity::Db& db = *opened;\n"
             ),
             format!(
                 "        options.unconnected = unconnected;\n        options.unconnected_handler = {};\n        options.unconnected_window = {};\n        options.connect = {program}::open_databases;\n",

@@ -293,7 +293,7 @@ func TestAnAnswerRunsTheHandlerItGoesToWithItsValues(t *testing.T) {
 func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 	c, _ := service(t)
 	tries := 0
-	c.options.Unconnected = &Unconnected{Window: "Preferences", Problem: "the secret setting shopDb is not kept yet"}
+	c.options.Unconnected = &Unconnected{Window: "Preferences", Problem: clarity.KeyText("unconnectedNotKept")}
 	c.options.Connect = func() (*clarity.Db, error) {
 		tries++
 		if tries == 1 {
@@ -302,10 +302,10 @@ func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 		return clarity.Memory()
 	}
 	got := wire(t, call(t, c, "start", `{}`))
-	if got != `{"value":{"main":"Card","model":{"project":{}},"unconnected":{"handler":null,"problem":"the secret setting shopDb is not kept yet","window":"Preferences"}}}` {
+	if got != `{"value":{"main":"Card","model":{"project":{}},"unconnected":{"handler":null,"problem":{"key":"unconnectedNotKept"},"window":"Preferences"}}}` {
 		t.Fatal(got)
 	}
-	if got := wire(t, call(t, c, "connect", `{}`)); got != `{"error":"storage: still not kept"}` {
+	if got := wire(t, call(t, c, "connect", `{}`)); got != `{"error":{"key":"unconnectedFailed","values":{"problem":{"kind":"text","value":"still not kept"}}}}` {
 		t.Fatal(got)
 	}
 	if got := wire(t, call(t, c, "connect", `{}`)); got != `{"value":null}` {
@@ -313,5 +313,30 @@ func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 	}
 	if got := wire(t, call(t, c, "start", `{}`)); got != `{"value":{"main":"Card","model":{"project":{}}}}` {
 		t.Fatal(got)
+	}
+}
+
+// While the databases are not open, the title bar's close of the main window
+// goes to the screen, which connects again (DESIGN 5.27); once they are open,
+// or the screen ends the application, it closes as any window does.
+func TestTheTitleBarsCloseGoesToTheScreenWhileUnconnected(t *testing.T) {
+	c, _ := service(t)
+	if c.closesToScreen() {
+		t.Fatal("a connected application closes as usual")
+	}
+	c.options.Unconnected = &Unconnected{Window: "Preferences", Problem: clarity.KeyText("unconnectedNotKept")}
+	c.options.Connect = clarity.Memory
+	call(t, c, "start", `{}`)
+	if !c.closesToScreen() {
+		t.Fatal("unconnected, the screen decides")
+	}
+	call(t, c, "quit_app", `{}`)
+	if c.closesToScreen() {
+		t.Fatal("ending the application closes it")
+	}
+	call(t, c, "start", `{}`)
+	call(t, c, "connect", `{}`)
+	if c.closesToScreen() {
+		t.Fatal("connected, it closes as usual")
 	}
 }

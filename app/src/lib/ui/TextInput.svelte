@@ -1,9 +1,12 @@
 <script lang="ts">
+  import SecretButtons from "./SecretButtons.svelte";
+
   // Clarity's text input on the web: a line of text, an email, a password or
   // a memo, the same as on Avalonia (conformance/forms.json). Typed text is
   // taken when the field is left or Enter is pressed (a memo: only when it is
   // left, Enter is a new line); only text that differs from the value is a
-  // change. What the code sets is never a change.
+  // change. What the code sets is never a change. A password has an eye that
+  // shows what is typed or hides it again, and a button that copies it.
 
   let {
     value,
@@ -20,6 +23,7 @@
     onsubmit = undefined,
     onfocus = undefined,
     onblur = undefined,
+    words = { show: "Show", hide: "Hide", copy: "Copy" },
   }: {
     value: unknown;
     kind?: "text" | "email" | "password" | "memo";
@@ -38,7 +42,12 @@
     onsubmit?: () => boolean | void;
     onfocus?: () => void;
     onblur?: () => void;
+    /** A password's buttons, named in the person's language. */
+    words?: { show: string; hide: string; copy: string };
   } = $props();
+
+  let revealed = $state(false);
+  let input = $state<HTMLInputElement | null>(null);
 
   const shown = $derived(value === null || value === undefined ? "" : String(value));
 
@@ -68,6 +77,29 @@
     {onfocus}
     {onblur}
   ></textarea>
+{:else if kind === "password"}
+  <span class="secret">
+    <input
+      bind:this={input}
+      {id}
+      type={revealed ? "text" : "password"}
+      aria-label={label}
+      value={shown}
+      {placeholder}
+      {tabindex}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
+      {disabled}
+      {readonly}
+      autocomplete="off"
+      spellcheck="false"
+      onchange={(e) => take(e.currentTarget.value)}
+      onkeydown={key}
+      {onfocus}
+      {onblur}
+    />
+    <SecretButtons bind:revealed text={() => input?.value ?? ""} {words} {disabled} />
+  </span>
 {:else}
   <input
     {id}
@@ -88,6 +120,16 @@
 {/if}
 
 <style>
+  .secret {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    gap: 2px;
+  }
+  .secret input {
+    flex: 1;
+    min-width: 0;
+  }
   textarea {
     width: 100%;
     height: 100%;

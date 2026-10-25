@@ -100,6 +100,10 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   // A tags part's words.
   Add: { key: "addTag", written: "Add" },
   Remove: { key: "removeTag", written: "Remove" },
+  // A password input's buttons.
+  Show: { key: "showSecret", written: "Show" },
+  Hide: { key: "hideSecret", written: "Hide" },
+  Copy: { key: "copySecret", written: "Copy" },
   // The headings of the pickers of the click targets `language` and `theme`.
   Language: { key: "languagePicker", written: "Language" },
   Theme: { key: "themePicker", written: "Theme" },
@@ -206,13 +210,6 @@ export function shownText(preview: Preview, text: ShownText): string {
     return variant ? translate(variant.label, texts) : value;
   };
   return fillText(translateText(text, texts), formatsOf(preview), label, (word) => ownWord(preview, word));
-}
-
-/** What went wrong in the backend, as text to show: a refusal arrives as
- *  text with slots, anything else as a plain message. */
-export function errorText(err: unknown): ShownText {
-  if (typeof err === "object" && err !== null && "text" in err && "values" in err) return err as ShownText;
-  return String(err);
 }
 
 /** The theme shown: the one chosen among those the application offers, or

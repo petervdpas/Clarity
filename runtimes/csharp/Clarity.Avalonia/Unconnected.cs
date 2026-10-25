@@ -45,21 +45,35 @@ public sealed class Unconnected
     /// <summary>The person closed the window without changing a setting: the application ends.</summary>
     public required Action Ended { get; init; }
 
+    /// <summary>
+    /// Why the databases did not open, as the person reads it (conformance/unconnected.json):
+    /// in Clarity's own words, which the project translates, with this runtime's message in the slot.
+    /// </summary>
+    public static Text Reason(Exception e) => e switch
+    {
+        NotKeptException => new Text("The database connection is not set yet") { Key = "unconnectedNotKept" },
+        StorageException storage => Failed().With("problem", Slot.OfText(storage.What)),
+        _ => Failed().With("problem", Slot.OfText(e.Message)),
+    };
+
+    /// <summary>Clarity's words, written in English as they read until the project gives them a value.</summary>
+    static Text Failed() => new("The database did not open: {problem}") { Key = "unconnectedFailed" };
+
     /// <summary>Shows what keeps the connection, saying <paramref name="problem"/>.</summary>
-    public void Start(string problem)
+    public void Start(Text problem)
     {
         var memory = Db.Memory();
         var said = new ObservableCollection<Message>();
         WindowViewModel? first = null;
         if (Handler is { } handler)
         {
-            var unconnecting = new Unconnecting(problem, said, opened => first ??= opened);
+            var unconnecting = new Unconnecting(Locale.Show(problem), said, opened => first ??= opened);
             handler(memory, unconnecting);
         }
         // Without a handler, or one that opens nothing, the window that keeps the connection says why.
         if (first is null)
         {
-            said.Add(new Message(Level.Error, Text.Plain(problem)));
+            said.Add(new Message(Level.Error, problem));
             first = Window?.Invoke(memory);
         }
         if (first is null)
@@ -93,7 +107,7 @@ public sealed class Unconnected
             }
             catch (Exception e)
             {
-                Start(e.Message);
+                Start(Reason(e));
                 return;
             }
             Connected?.Invoke(db);

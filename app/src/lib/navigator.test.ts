@@ -141,3 +141,15 @@ test("a window that closes with a value gives it, after it has closed, with its 
   assert.deepEqual(said, ["PickFriend closes", "Albums returns", 'PickFriend gave {"id":3}']);
   assert.deepEqual(stack, ["Albums"]);
 });
+
+test("the title bar's close closes every window from the top, each told, then the desktop window", async () => {
+  const app = application();
+  await app.first.nav.open("Offline");
+  await app.first.nav.open("Connection");
+  app.events.length = 0;
+  await app.first.nav.closeAll();
+  // No window below is told it is on top again: they all close.
+  assert.deepEqual(app.events, ["Connection:close", "Offline:close"]);
+  assert.deepEqual(app.first.stack, []);
+  assert.equal(app.ended(), true);
+});

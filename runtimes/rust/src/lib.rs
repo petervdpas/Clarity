@@ -150,6 +150,9 @@ pub enum Error {
     /// A stored value does not fit its field.
     Invalid(String),
     Storage(String),
+    /// A database connects with a secret setting (DESIGN 5.27) that the
+    /// person has not kept yet: the setting's name.
+    NotKept(String),
     /// A data event refused a save or delete, or code refused to go on, in
     /// its own words.
     Refused(ui::Text),
@@ -158,6 +161,17 @@ pub enum Error {
     /// A value in code that does not fit where it is used: a position
     /// outside its list, a highest number below 1 (conformance/lists.json).
     Value(String),
+}
+
+/// Why the databases did not open, as the person reads it (DESIGN 5.27,
+/// conformance/unconnected.json): in Clarity's own words, which the project
+/// translates, with this runtime's message in the slot.
+pub fn unconnected_reason(err: &Error) -> ui::Text {
+    match err {
+        Error::NotKept(_) => ui::Text::key("unconnectedNotKept"),
+        Error::Storage(what) => ui::Text::key("unconnectedFailed").with("problem", ui::Slot::text(what.clone())),
+        other => ui::Text::key("unconnectedFailed").with("problem", ui::Slot::text(other.to_string())),
+    }
 }
 
 impl fmt::Display for Error {
@@ -169,6 +183,7 @@ impl fmt::Display for Error {
             Error::InUse { table, id } => write!(f, "the {table} with id {id} is still referred to"),
             Error::Invalid(what) => write!(f, "invalid value: {what}"),
             Error::Storage(what) => write!(f, "storage: {what}"),
+            Error::NotKept(setting) => write!(f, "storage: the secret setting {setting} is not kept yet: the settings name the connection"),
             Error::Refused(what) => f.write_str(&what.show()),
             Error::Engine(what) | Error::Value(what) => f.write_str(what),
         }

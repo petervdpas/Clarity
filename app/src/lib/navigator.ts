@@ -99,6 +99,24 @@ export class Navigator<S, M, A = never> {
     }
   }
 
+  /**
+   * The desktop window's own close, from its title bar: every window closes
+   * from the top after its `on close`, none told it is on top again, then
+   * the desktop window closes as after its last window.
+   */
+  async closeAll(): Promise<void> {
+    try {
+      for (let top = this.stack.get().at(-1); top !== undefined; top = this.stack.get().at(-1)) {
+        const closing = await this.backend.close(top);
+        closing.messages.forEach(this.say);
+        this.stack.set(this.stack.get().slice(0, -1));
+      }
+      await this.backend.quit();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   /** A window this desktop window opened elsewhere has closed: the window on top is told. */
   async returned(): Promise<void> {
     const top = this.stack.get().at(-1);

@@ -20,7 +20,7 @@ For every part, its own properties, events and binding rules are in [the languag
 
 ## Basic input
 
-- `textbox` binds to text, email or url; `memo` to text, over several lines; `password` to text, hidden while typed. Events: `change`, `enter`, `leave`.
+- `textbox` binds to text, email or url; `memo` to text, over several lines; `password` to text, hidden while typed; the eye beside it shows what is typed or hides it again, and the button next to it copies it. Events: `change`, `enter`, `leave`.
 - `number` binds to integer, decimal, money, id or duration. Events: `change`, `enter`, `leave`.
 - `checkbox` and `switch` bind to bool; `dropdown` to an enum or a `ref`; `radio` to an enum, one button per value; `date` to date or datetime. Event: `change`.
 - `button` binds to nothing. Event: `click`. It can have a `key`: `"Ctrl+S"`, or a character such as `"7"` or `"+"`, which the keyboard and the number pad both type (not while typing in a text input), and be the `default` (Enter) or `cancel` (Escape) button. With `on click: digit(7)` it gives its handler values; see [Handlers](code.handlers.md).

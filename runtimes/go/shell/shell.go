@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 	"github.com/petervdpas/Clarity/runtimes/go/parts"
@@ -77,7 +78,9 @@ type Options struct {
 // first: the app's `on unconnected` handler, or else the window that keeps
 // a secret connection; "" for none.
 type Unconnected struct {
-	Handler, Window, Problem string
+	Handler, Window string
+	// Problem is why, in Clarity's own words the project translates.
+	Problem clarity.Text
 }
 
 // orNull is text as the screen takes it: null when there is none.
@@ -125,7 +128,14 @@ type Service struct {
 	// partWindows is the desktop window an open window's custom parts are
 	// in, by the open window's number (DESIGN 6.5).
 	partWindows map[uint64]string
+	// toScreen is whether the title bar's close of the main window goes to
+	// the screen: while the databases are not open, closing it connects again
+	// (DESIGN 5.27). Not behind mu: a command that holds mu waits on the
+	// desktop's thread, where the close arrives.
+	toScreen atomic.Bool
 }
+
+func (c *Service) closesToScreen() bool { return c.toScreen.Load() }
 
 func New(options Options) *Service {
 	// Text code makes is translated from the model's translations.
@@ -237,6 +247,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 	case "start":
 		start := map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}
 		if u := c.options.Unconnected; u != nil {
+			c.toScreen.Store(true)
 			start["unconnected"] = map[string]any{"handler": orNull(u.Handler), "window": orNull(u.Window), "problem": u.Problem}
 		}
 		return Answer{Value: start}
@@ -247,13 +258,14 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		}
 		opened, err := c.options.Connect()
 		if err != nil {
-			return failed(err)
+			return Answer{Error: clarity.UnconnectedReason(err)}
 		}
 		if c.options.Db != nil {
 			c.options.Db.Close()
 		}
 		c.options.Db = opened
 		c.options.Unconnected = nil
+		c.toScreen.Store(false)
 		return Answer{}
 	case "read_settings":
 		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
@@ -347,6 +359,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		}
 		return Answer{}
 	case "quit_app":
+		c.toScreen.Store(false)
 		if c.app != nil {
 			c.app.Quit()
 		}
@@ -457,7 +470,13 @@ func Run(options Options, bind func(*Service) application.Service) error {
 		Assets:   application.AssetOptions{Handler: application.AssetFileServerFS(options.Assets)},
 		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 	})
-	service.window("main", options.Width, options.Height)
+	main := service.window("main", options.Width, options.Height)
+	main.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if service.closesToScreen() {
+			e.Cancel()
+			main.ExecJS("window.clarityCloseRequested && window.clarityCloseRequested()")
+		}
+	})
 	if hasParts {
 		// A part tells on the part host's goroutine; the renderer of its window hears it.
 		err := parts.Start(func(window uint64, part, tell string, given []any) {

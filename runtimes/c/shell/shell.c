@@ -7,11 +7,17 @@
 #include "clarity/db_internal.h"
 #include "clarity/record_file.h"
 #include "clarity/settings.h"
+#include "clarity/store.h"
 #include "shell/parts.h"
 #include "webview/webview.h"
 
 #if defined(__linux__)
 #include <gtk/gtk.h>
+#endif
+
+#if defined(__APPLE__)
+#include <objc/message.h>
+#include <objc/runtime.h>
 #endif
 
 #if defined(_WIN32)
@@ -49,7 +55,11 @@ struct ClarityService {
     bool (*open_link)(const char* address);
     void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name, int width, int height);
     void* context;
+    /// The title bar's close of the main window goes to the screen.
+    bool to_screen;
 };
+
+bool clarity_service_closes_to_screen(const ClarityService* service) { return service->to_screen; }
 
 ClarityService* clarity_service_new(const ClarityShellOptions* options) {
     clarity_start();
@@ -172,7 +182,8 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
             cJSON* why = cJSON_AddObjectToObject(started, "unconnected");
             cJSON_AddItemToObject(why, "handler", s->options.unconnected_handler ? cJSON_CreateString(s->options.unconnected_handler) : cJSON_CreateNull());
             cJSON_AddItemToObject(why, "window", s->options.unconnected_window ? cJSON_CreateString(s->options.unconnected_window) : cJSON_CreateNull());
-            cJSON_AddStringToObject(why, "problem", s->options.unconnected);
+            cJSON_AddItemToObject(why, "problem", clarity_text_json(clarity_unconnected_reason(s->options.unconnected)));
+            s->to_screen = true;
         }
         return value(started);
     }
@@ -180,10 +191,15 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         // The databases again, as when the person has kept their connection.
         if (!s->options.connect) return value(cJSON_CreateNull());
         ClarityDb* opened = NULL;
-        if (!s->options.connect(&opened)) return failed();
+        if (!s->options.connect(&opened)) {
+            cJSON* out = cJSON_CreateObject();
+            cJSON_AddItemToObject(out, "error", clarity_text_json(clarity_unconnected_reason(clarity_error())));
+            return out;
+        }
         clarity_db_close(s->options.db);
         s->options.db = opened;
         s->options.unconnected = NULL;
+        s->to_screen = false;
         return value(cJSON_CreateNull());
     }
     if (strcmp(command, "read_settings") == 0) {
@@ -290,6 +306,7 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         return open_link(address) ? value(NULL) : error_text(clarity_format("cannot open %s", address));
     }
     if (strcmp(command, "quit_app") == 0) {
+        s->to_screen = false;
         if (s->quit) s->quit(s->context);
         return value(NULL);
     }
@@ -555,6 +572,57 @@ static void on_told(uint64_t window, const char* part, const char* tell, const c
     free(quoted_tell);
 }
 
+// While the databases are not open, the title bar's close of the main window
+// goes to the screen, which connects again (DESIGN 5.27): each system's own
+// close is held back and the screen is asked instead.
+static const char* const CLOSE_REQUESTED = "window.clarityCloseRequested && window.clarityCloseRequested()";
+static Desktop* closing_desktop;
+
+/// Whether the close of the main window goes to the screen; when it does, it is asked.
+static bool close_to_screen(void) {
+    if (!closing_desktop || !clarity_service_closes_to_screen(closing_desktop->service)) return false;
+    webview_eval(main_window(closing_desktop)->view, CLOSE_REQUESTED);
+    return true;
+}
+
+#if defined(__linux__)
+static gboolean on_delete(GtkWidget* widget, GdkEvent* event, gpointer data) {
+    (void)widget;
+    (void)event;
+    (void)data;
+    return close_to_screen() ? TRUE : FALSE;
+}
+#elif defined(_WIN32)
+static WNDPROC window_proc;
+static LRESULT CALLBACK on_message(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_CLOSE && close_to_screen()) return 0;
+    return CallWindowProcW(window_proc, hwnd, message, wp, lp);
+}
+#elif defined(__APPLE__)
+static id main_ns_window;
+static BOOL should_close(id self, SEL selector, id sender) {
+    (void)self;
+    (void)selector;
+    return sender == main_ns_window && close_to_screen() ? NO : YES;
+}
+#endif
+
+static void hold_back_close(Desktop* desktop, Window* first) {
+    closing_desktop = desktop;
+#if defined(__linux__)
+    g_signal_connect(G_OBJECT(webview_get_window(first->view)), "delete-event", G_CALLBACK(on_delete), NULL);
+#elif defined(_WIN32)
+    HWND hwnd = (HWND)webview_get_window(first->view);
+    window_proc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)on_message);
+#elif defined(__APPLE__)
+    main_ns_window = (id)webview_get_window(first->view);
+    id delegate = ((id (*)(id, SEL))objc_msgSend)(main_ns_window, sel_registerName("delegate"));
+    if (delegate) class_addMethod(object_getClass(delegate), sel_registerName("windowShouldClose:"), (IMP)should_close, "c@:@");
+#else
+    (void)first;
+#endif
+}
+
 int clarity_shell_run(const ClarityShellOptions* options) {
 #if defined(__linux__)
     // WebKitGTK 2.52 paints parts of a new window black through its DMABUF
@@ -570,11 +638,13 @@ int clarity_shell_run(const ClarityShellOptions* options) {
     clarity_window_size(&width, &height);
     Window* first = open_window(&desktop, "main", width, height);
     if (!first) return 1;
+    hold_back_close(&desktop, first);
     if (clarity_shell_parts_present()) {
         const char* problem = clarity_shell_parts_start(on_told, &desktop);
         if (problem) fprintf(stderr, "%s\n", problem);
     }
     webview_run(first->view);
+    closing_desktop = NULL;
     clarity_shell_parts_stop();
     for (Window* w = desktop.windows; w;) {
         Window* next = w->next;

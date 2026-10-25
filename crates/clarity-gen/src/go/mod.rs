@@ -579,7 +579,7 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         None => (String::new(), String::new()),
         Some(u) => (
             format!(
-                "\t// The databases did not open (DESIGN 5.27): the windows work on an empty one in\n\t// memory, and the screen shows what keeps the connection first.\n\tvar unconnected *shell.Unconnected\n\tif err != nil && !slices.Contains(os.Args[1:], \"--check\") {{\n\t\tunconnected = &shell.Unconnected{{Handler: {}, Window: {}, Problem: err.Error()}}\n\t\tdb, err = clarity.Memory()\n\t}}\n",
+                "\t// The databases did not open (DESIGN 5.27): the windows work on an empty one in\n\t// memory, and the screen shows what keeps the connection first.\n\tvar unconnected *shell.Unconnected\n\tif err != nil && !slices.Contains(os.Args[1:], \"--check\") {{\n\t\tunconnected = &shell.Unconnected{{Handler: {}, Window: {}, Problem: clarity.UnconnectedReason(err)}}\n\t\tdb, err = clarity.Memory()\n\t}}\n",
                 string(u.handler.as_ref().map(|(_, h)| h.as_str()).unwrap_or_default()),
                 string(u.window.as_deref().unwrap_or_default())
             ),

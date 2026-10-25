@@ -967,6 +967,11 @@ impl Project {
         names
     }
 
+    /// Whether an app of the project has an `on unconnected` handler (DESIGN 5.27).
+    pub fn handles_unconnected(&self) -> bool {
+        self.files.iter().flat_map(|f| &f.apps).any(|a| a.handlers.iter().any(|h| h.event == crate::widgets::Event::Unconnected))
+    }
+
     /// The window where the person keeps a database's secret connection: the
     /// first that shows one. An application whose database cannot connect
     /// opens it first, and connects once it closes (DESIGN 5.27).

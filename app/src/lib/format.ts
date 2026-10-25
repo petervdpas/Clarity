@@ -214,6 +214,17 @@ export type Slot = {
  *  with its slot values, whose value the language gives. */
 export type ShownText = string | { text: string; values: Record<string, Slot> } | { key: string; values?: Record<string, Slot> };
 
+/** What went wrong in the backend, as text to show: a refusal arrives as
+ *  text with slots, Clarity's own words (why the databases did not open) as
+ *  a key with its slots, anything else as a plain message. */
+export function errorText(err: unknown): ShownText {
+  if (typeof err === "object" && err !== null) {
+    if ("text" in err && "values" in err) return err as ShownText;
+    if ("key" in err && typeof err.key === "string") return err as ShownText;
+  }
+  return String(err);
+}
+
 function slotText(
   slot: Slot | undefined,
   f: Formats,

@@ -142,7 +142,7 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
     Db db = Db::memory();
     Cards cards;
     shell::Options options{"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards};
-    options.unconnected = "the secret setting shopDb is not kept yet";
+    options.unconnected = Text::key("unconnectedNotKept");
     options.unconnected_window = "Preferences";
     int tries = 0;
     options.connect = [&tries] {
@@ -151,8 +151,12 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
     };
     shell::Service service(options);
     CHECK_EQ(service.invoke("start", json::object()),
-             json::parse(R"({"value":{"model":{"project":{}},"main":"Card","unconnected":{"handler":null,"window":"Preferences","problem":"the secret setting shopDb is not kept yet"}}})"));
-    CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"error":"storage: still not kept"})"));
+             json::parse(R"({"value":{"model":{"project":{}},"main":"Card","unconnected":{"handler":null,"window":"Preferences","problem":{"key":"unconnectedNotKept"}}}})"));
+    // While unconnected, the title bar's close goes to the screen, which connects again.
+    CHECK(service.closes_to_screen());
+    CHECK_EQ(service.invoke("connect", json::object()),
+             json::parse(R"({"error":{"key":"unconnectedFailed","values":{"problem":{"kind":"text","value":"still not kept"}}}})"));
     CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"value":null})"));
+    CHECK(!service.closes_to_screen());
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
 }

@@ -87,6 +87,15 @@ pub const CLI_KEYS: [(&str, &str); 20] = [
     ("cliChooseNumber", "Type a number from 1 to {count}"),
 ];
 
+/// Clarity's words of a password input: its buttons that show what is
+/// typed, hide it again, and copy it.
+pub const SECRET_KEYS: [(&str, &str); 3] = [("showSecret", "Show"), ("hideSecret", "Hide"), ("copySecret", "Copy")];
+
+/// Clarity's words for why the databases did not open (DESIGN 5.27): the
+/// window that keeps the connection says it, and the app's `on unconnected`
+/// gets it. The runtimes fill the slot with their own message.
+pub const UNCONNECTED_KEYS: [(&str, &str); 2] = [("unconnectedNotKept", "The database connection is not set yet"), ("unconnectedFailed", "The database did not open: {problem}")];
+
 /// Every list of Clarity's own words, with their English.
 pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
     RENDERER_KEYS
@@ -100,6 +109,8 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&LANGUAGE_PICKER_KEYS)
         .chain(&THEME_PICKER_KEYS)
         .chain(&CLI_KEYS)
+        .chain(&UNCONNECTED_KEYS)
+        .chain(&SECRET_KEYS)
 }
 
 /// The key a text names, without its `@`; none for a text written as it is.
@@ -441,6 +452,8 @@ fn shown(project: &Project) -> Shown {
     let languages = crate::frame::clicks_to(project, "language") || setting(FieldType::Language);
     let themes = crate::frame::clicks_to(project, "theme") || setting(FieldType::Theme);
     let commands = project.files.iter().any(|f| !f.commands.is_empty());
+    let unconnected = !project.secret_connections().is_empty() || project.handles_unconnected();
+    let passwords = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Password));
     let own = RENDERER_KEYS
         .iter()
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
@@ -451,7 +464,9 @@ fn shown(project: &Project) -> Shown {
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
         .chain(if languages { LANGUAGE_PICKER_KEYS.as_slice() } else { &[] })
         .chain(if themes { THEME_PICKER_KEYS.as_slice() } else { &[] })
-        .chain(if commands { CLI_KEYS.as_slice() } else { &[] });
+        .chain(if commands { CLI_KEYS.as_slice() } else { &[] })
+        .chain(if unconnected { UNCONNECTED_KEYS.as_slice() } else { &[] })
+        .chain(if passwords { SECRET_KEYS.as_slice() } else { &[] });
     // The runtimes fill the slots of Clarity's own words, the ones its English has.
     for (key, english) in own {
         shown.uses.push(Use { key: key.to_string(), place: "Clarity".into(), path: String::new(), span: Span::default(), args: Some(slots(english)) });

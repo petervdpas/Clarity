@@ -137,3 +137,11 @@ export function settingsDefaults(preview: Preview, language: string, theme: stri
   }
   return out;
 }
+
+/** Whether two sets of the person's settings hold the same values: the
+ *  backend sends them back in its own order and with the record's id. */
+export function sameSettings(a: Record<string, unknown> | null, b: Record<string, unknown> | null): boolean {
+  const values = (settings: Record<string, unknown> | null) =>
+    JSON.stringify(Object.entries(settings ?? {}).filter(([name]) => name !== "id").sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+  return values(a) === values(b);
+}

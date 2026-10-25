@@ -11,12 +11,12 @@
   import type { Event as PartEvent } from "../lib/generated/Event";
   import type { Preview } from "../lib/generated/Preview";
   import { provideLive, type PartState, type Pointer } from "../lib/live";
-  import { errorText, languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
+  import { languageOf, offeredThemes, ownWord, shownText, themeArea, themeOf, tr, type Row } from "../lib/model";
   import ChoicePicker from "../lib/ChoicePicker.svelte";
   import { themeChoice } from "../lib/scheme.svelte";
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
-  import type { ShownText } from "../lib/format";
+  import { errorText, type ShownText } from "../lib/format";
   import { allParts, findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
   import { handlerCall } from "../lib/calls";
   import type { Place } from "../lib/customParts";
@@ -28,7 +28,7 @@
   import AskDialog from "../lib/ui/AskDialog.svelte";
   import Dialog from "../lib/ui/Dialog.svelte";
   import { answerValues, type Ask } from "../lib/asks";
-  import { keptSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
+  import { keptSettings, sameSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
   import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
 
   /** One open window, as the backend sends it. */
@@ -206,18 +206,21 @@
    * last window then connects again when a setting changed, and the main window
    * opens once it does; closing it unchanged ends the application.
    */
-  type Unconnected = { handler: string | null; window: string | null; problem: string };
+  /** Why is in Clarity's own words, which the project translates (conformance/unconnected.json). */
+  type Unconnected = { handler: string | null; window: string | null; problem: ShownText };
   let unconnected: Unconnected | null = null;
   let mainWindow = "";
   /** The settings when the window that keeps the connection showed: closing it unchanged ends the application. */
-  let settingsShown = "";
+  let settingsShown: Record<string, unknown> | null = null;
 
   async function showUnconnected(why: Unconnected) {
     unconnected = why;
-    settingsShown = JSON.stringify(settings);
+    settingsShown = settings ? { ...settings } : null;
     try {
       if (why.handler) {
-        const reply = received(await invoke<Reply>("answer_event", { state: { window: "", data: {} }, handler: why.handler, values: [why.problem] }), true);
+        // The handler reads why as the person does, in their language.
+        const reason = model ? shownText(model, why.problem) : String(why.problem);
+        const reply = received(await invoke<Reply>("answer_event", { state: { window: "", data: {} }, handler: why.handler, values: [reason] }), true);
         await nav.follow(reply, -1);
       }
       // A handler that opens no window leaves it to the window that keeps the connection.
@@ -234,7 +237,7 @@
   async function reconnect() {
     const was = unconnected;
     if (!was) return;
-    if (JSON.stringify(settings) === settingsShown) {
+    if (sameSettings(settings, settingsShown)) {
       await invoke("quit_app");
       return;
     }
@@ -242,7 +245,7 @@
     try {
       await invoke("connect");
     } catch (err) {
-      await showUnconnected({ ...was, problem: String(err) });
+      await showUnconnected({ ...was, problem: errorText(err) });
       return;
     }
     unconnected = null;
@@ -278,7 +281,7 @@
   function adopt(next: unknown) {
     if (!settings || !next || typeof next !== "object") return;
     const values = next as Record<string, unknown>;
-    if (JSON.stringify(values) === JSON.stringify(settings)) return;
+    if (sameSettings(values, settings)) return;
     settings = { ...values };
     for (const state of stack) if (SETTINGS in state.data) state.data[SETTINGS] = { ...settings };
     const { id: _id, ...kept } = settings;
@@ -479,6 +482,9 @@
 
   // A window opened elsewhere (`in new window`) has closed: this one is on top again.
   window.addEventListener("clarity-return", () => nav.returned());
+  // The title bar's close, which the shell sends here while the databases are
+  // not open (DESIGN 5.27): every window closes, and closing the last connects again.
+  (globalThis as unknown as { clarityCloseRequested: () => void }).clarityCloseRequested = () => void nav.closeAll();
 
   function navigate(target: string, newWindow = false) {
     if (target === "close") nav.close();

@@ -51,7 +51,7 @@ typedef struct {
     /// memory until `connect` opens them; NULL when they opened. What the
     /// screen shows first then: the app's `on unconnected` handler, or else
     /// the window that keeps the connection; NULL for none.
-    const char* unconnected;
+    const ClarityError* unconnected;
     const char* unconnected_handler;
     const char* unconnected_window;
     bool (*connect)(ClarityDb** out);
@@ -97,6 +97,9 @@ void clarity_service_on_desktop(ClarityService* service, void (*quit)(void* cont
 /// A desktop window of its own closed: gives its opener's name, so it can
 /// reload its data, or NULL. The name stays until the service is freed.
 const char* clarity_service_closed(ClarityService* service, const char* name);
+/// Whether the title bar's close of the main window goes to the screen:
+/// while the databases are not open, closing it connects again (DESIGN 5.27).
+bool clarity_service_closes_to_screen(const ClarityService* service);
 
 /// Shows the application's window and runs until its last window closes.
 int clarity_shell_run(const ClarityShellOptions* options);

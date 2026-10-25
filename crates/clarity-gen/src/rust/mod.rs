@@ -73,6 +73,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !project.secret_settings().is_empty() {
         features.push("secrets");
     }
+    // Until the databases open, the windows work on an empty SQLite one in memory.
+    if crate::unconnected(project).is_some() {
+        features.push("sqlite");
+    }
     features.sort();
     features.dedup();
     let Some(main_window) = main_window(project) else {
@@ -308,11 +312,11 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         ),
         Some(unconnected) => (
             format!(
-                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<String>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    let db = open_databases().map_err(|err| Value::from(err.to_string()))?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n",
+                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n",
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
-            "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(err.to_string())),\n    };\n".to_string(),
+            "    // Until they open, the windows work on an empty database in memory.\n    let (db, problem) = match open_databases() {\n        Ok(db) => (db, None),\n        Err(err) => (Db::memory().expect(\"cannot open a database in memory\"), Some(serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())),\n    };\n".to_string(),
             "\n        .manage(Connecting(Mutex::new(problem)))".to_string(),
             "\n            connect,",
         ),
@@ -349,11 +353,12 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     } else {
         ("", "", "", "")
     };
-    let (apart_code, apart_manage, apart_events, apart_commands) = if apart {
-        (APART.replace("{title}", &format!("{title:?}")).replace("{width}", &clarity_spec::layout::WINDOW_WIDTH.to_string()).replace("{height}", &clarity_spec::layout::WINDOW_HEIGHT.to_string()), "\n        .manage(Apart::default())", APART_EVENTS, "\n            open_apart,\n            apart_start,\n            close_apart,")
+    let (apart_code, apart_manage, apart_commands) = if apart {
+        (APART.replace("{title}", &format!("{title:?}")).replace("{width}", &clarity_spec::layout::WINDOW_WIDTH.to_string()).replace("{height}", &clarity_spec::layout::WINDOW_HEIGHT.to_string()), "\n        .manage(Apart::default())", "\n            open_apart,\n            apart_start,\n            close_apart,")
     } else {
-        (String::new(), "", "", "")
+        (String::new(), "", "")
     };
+    let window_events = window_events(apart, crate::unconnected(project).is_some());
     let databases = databases
         .iter()
         .map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime()))
@@ -819,7 +824,7 @@ fn main() {{
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
 {open_db}    tauri::Builder::default()
-        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{apart_events}{parts_manage}
+        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -1005,12 +1010,31 @@ const PARTS_X11: &str = r#"    // The program's custom parts, for the part host.
     }
 "#;
 
-const APART_EVENTS: &str = r#"
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                apart_closed(window);
+/// What the desktop windows do on their own: a window of its own that closes
+/// tells its opener; while the databases are not open, the title bar's close
+/// of the main window goes to the screen, which connects again (DESIGN 5.27).
+fn window_events(apart: bool, unconnected: bool) -> String {
+    let mut arms = String::new();
+    if apart {
+        arms.push_str("            tauri::WindowEvent::Destroyed => apart_closed(window),\n");
+    }
+    if unconnected {
+        arms.push_str(UNCONNECTED_CLOSE);
+    }
+    if arms.is_empty() {
+        return String::new();
+    }
+    format!("\n        .on_window_event(|window, event| match event {{\n{arms}            _ => {{}}\n        }})")
+}
+
+const UNCONNECTED_CLOSE: &str = r#"            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "main" && unconnected(window) => {
+                api.prevent_close();
+                use tauri::Manager;
+                if let Some(view) = window.app_handle().get_webview_window("main") {
+                    let _ = view.eval("window.clarityCloseRequested && window.clarityCloseRequested()");
+                }
             }
-        })"#;
+"#;
 
 /// The Cargo package (and program) name of a project.
 pub fn crate_name(settings: &Settings) -> String {

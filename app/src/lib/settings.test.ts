@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fits, keptSettings, secretSettings } from "./settings.ts";
+import { fits, keptSettings, sameSettings, secretSettings } from "./settings.ts";
 
 const cases = JSON.parse(readFileSync(new URL("../../../conformance/settings.json", import.meta.url), "utf8"));
 
@@ -20,4 +20,11 @@ test("the secret settings are named for the shell, which keeps them out of the f
   const field = (name: string, kind: string) => ({ name: { name }, type: { kind } });
   const preview = { project: { files: [{ entities: [{ settings: true, fields: [field("pageSize", "integer"), field("shopToken", "secret")] }] }] } };
   assert.deepEqual(secretSettings(preview as never), ["shopToken"]);
+});
+
+test("settings are the same when their values are, whatever order they come in and with or without their id", () => {
+  assert.equal(sameSettings({ connDb: "a", language: "nl" }, { language: "nl", connDb: "a", id: 0 }), true);
+  assert.equal(sameSettings({ connDb: "a", decimals: 2 }, { decimals: 2, connDb: "b" }), false);
+  assert.equal(sameSettings({ connDb: "a" }, { connDb: "a", theme: "Dark" }), false);
+  assert.equal(sameSettings(null, null), true);
 });

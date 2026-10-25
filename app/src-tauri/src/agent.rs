@@ -946,9 +946,10 @@ pub fn agent_send(text: String, connection: String, runs: Runs, app: AppHandle, 
     agent.stop.store(false, Ordering::SeqCst);
     let stop = agent.stop.clone();
     let project = open_project_of(&app.state::<WatchState>()).ok();
-    let projects_folder = project
-        .as_ref()
-        .and_then(|(file, _)| file.parent().map(Path::to_path_buf))
+    // New projects go to the projects folder of Clarity settings, else beside the open one.
+    let projects_folder = clarity_project::Folders::current()
+        .projects
+        .or_else(|| project.as_ref().and_then(|(file, _)| file.parent().map(Path::to_path_buf)))
         .unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("Clarity"));
     std::thread::spawn(move || {
         let state = app.state::<AgentState>();

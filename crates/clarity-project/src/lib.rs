@@ -5,6 +5,7 @@
 
 pub mod engines;
 mod file;
+pub mod folders;
 pub mod openapi;
 
 use std::path::{Path, PathBuf};
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub use file::{parse, write};
+pub use folders::{out_dir_in, Folders};
 
 /// The extension of project files, the same as module files.
 pub const PROJECT_EXTENSION: &str = "clarity";
@@ -318,10 +320,10 @@ pub fn module_dir(file: &Path) -> PathBuf {
     file.with_extension("")
 }
 
-/// The output folder of the project file `file`: relative to its folder,
-/// or an absolute path as it is.
+/// The app folder of the project file `file`, with this computer's
+/// folders (see `out_dir_in`).
 pub fn out_dir(file: &Path, settings: &Settings) -> PathBuf {
-    module_dir(file).join(settings.out.trim())
+    out_dir_in(file, settings, &Folders::current())
 }
 
 /// The folder of one target's program inside the output folder: each
@@ -356,11 +358,15 @@ pub struct ProjectFile {
     pub title: String,
     pub problems: Vec<String>,
     pub catalog: Catalog,
+    /// Where Run and Build write the app, as this computer's folders make
+    /// it (`out_dir`); empty when the file cannot be read.
+    pub app_folder: String,
 }
 
 pub fn load(path: &Path) -> ProjectFile {
     let file = |settings: Option<Settings>, version, problems| ProjectFile {
         title: settings.as_ref().map(title).unwrap_or_default(),
+        app_folder: settings.as_ref().map(|s| plain(out_dir(path, s)).display().to_string()).unwrap_or_default(),
         settings,
         version,
         problems,

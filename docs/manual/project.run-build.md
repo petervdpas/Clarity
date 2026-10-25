@@ -23,7 +23,7 @@ The tool each stack builds with:
 
 ## The output folder
 
-Clarity writes the generated project into the output folder, `out` in the project's folder unless the `output` setting names another. It is a complete project for the stack, such as a `Cargo.toml` or a `.csproj`, which the stack's tools build without Clarity.
+Clarity writes the generated project into the output folder, `out` in the project's folder unless the `output` setting names another. With an Apps folder set in **Clarity settings**, **Folders**, a project left at `out` is written to a folder named after its project file in the Apps folder instead: `shop.clarity` goes to `<Apps>/shop`. The project settings show the folder builds write to. It is a complete project for the stack, such as a `Cargo.toml` or a `.csproj`, which the stack's tools build without Clarity.
 
 Clarity writes it on Run and Build only. Each time, the folder ends up holding exactly what the project generates: changed files are written, unchanged ones are left alone so the build tool sees no change, and files that are no longer generated are removed. The build tool's own folders (such as `target`, `bin`, `obj` or `build`) and `data` are kept.
 

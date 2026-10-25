@@ -17,4 +17,9 @@ version: string,
 /**
  * The name people see (see `title`); empty when the file cannot be read.
  */
-title: string, problems: Array<string>, catalog: Catalog, };
+title: string, problems: Array<string>, catalog: Catalog, 
+/**
+ * Where Run and Build write the app, as this computer's folders make
+ * it (`out_dir`); empty when the file cannot be read.
+ */
+app_folder: string, };

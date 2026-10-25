@@ -25,3 +25,5 @@ notify = "8"
 base64 = "0.22"
 ts-rs.workspace = true
 tauri-plugin-dialog = "2"
+# The load of the computer and of Clarity, for Clarity settings, System, and the status bar.
+sysinfo = { version = "0.39.6", default-features = false, features = ["system", "disk", "network"] }

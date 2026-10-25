@@ -39,9 +39,12 @@
   import ThemeView from "./lib/ThemeView.svelte";
   import NameDialog from "./lib/NameDialog.svelte";
   import NewProjectDialog from "./lib/NewProjectDialog.svelte";
+  import StatusBar from "./lib/StatusBar.svelte";
+  import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
   import type { Catalog } from "./lib/generated/Catalog";
   import type { ProjectFile } from "./lib/generated/ProjectFile";
+  import type { FoldersView } from "./lib/generated/FoldersView";
   import type { Settings } from "./lib/generated/Settings";
   import type { Stack } from "./lib/generated/Stack";
   import type { BuildDone } from "./lib/generated/BuildDone";
@@ -69,7 +72,7 @@
   import { firstCommand, programs, stackLabel } from "./lib/commandLine";
   import { agent } from "./lib/agentStore.svelte";
   import AppSettingsView from "./lib/AppSettingsView.svelte";
-  import { appSettings, closeAppSettings } from "./lib/appSettings.svelte";
+  import { appSettings, closeAppSettings, openAppSettings } from "./lib/appSettings.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import type { CodeView } from "./lib/generated/CodeView";
   import { themeArea, themeOf, tr } from "./lib/model";
@@ -116,7 +119,8 @@
   /** The project file, which the Project tab shows and edits. */
   let projectFile = $state<ProjectFile | null>(null);
   /** The folder and the choices, while the New project dialog is open. */
-  let newProjectIn = $state<{ folder: string; catalog: Catalog } | null>(null);
+  /** The New dialog: the chosen file, or the projects folder it asks a name for. */
+  let newProjectIn = $state<{ folder: string; projects: string | null; catalog: Catalog } | null>(null);
   let newProjectError = $state<string | null>(null);
   /** Bumped when a settings change is refused, so the editor shows the file again. */
   let settingsRevision = $state(0);
@@ -372,6 +376,14 @@
         return true;
     }
   }
+
+  // The app folder follows Clarity's folders: the project file is read again when the settings close.
+  let settingsWereOpen = false;
+  $effect(() => {
+    const open = appSettings.open;
+    if (settingsWereOpen && !open && untrack(() => openFile)) void loadProjectFile();
+    settingsWereOpen = open;
+  });
 
   async function loadProjectFile() {
     try {
@@ -756,12 +768,32 @@
     }
   }
 
+  /** The projects folder of Clarity settings, when one is set. */
+  async function projectsFolder(): Promise<string | null> {
+    try {
+      return (await invoke<FoldersView>("folders_view")).projects;
+    } catch {
+      return null;
+    }
+  }
+
   async function chooseProject() {
-    const file = await openDialog({ title: "Open a Clarity project", filters: PROJECT_FILTER });
+    const defaultPath = (await projectsFolder()) ?? undefined;
+    const file = await openDialog({ title: "Open a Clarity project", filters: PROJECT_FILTER, defaultPath });
     if (typeof file === "string") openProject(file);
   }
 
   async function newProject() {
+    const projects = await projectsFolder();
+    if (projects) {
+      try {
+        newProjectError = null;
+        newProjectIn = { folder: projects, projects, catalog: await invoke<Catalog>("stack_catalog") };
+      } catch (err) {
+        loadError = String(err);
+      }
+      return;
+    }
     const chosen = await saveDialog({
       title: "New project: its file, with a folder of the same name next to it",
       defaultPath: "project.clarity",
@@ -771,14 +803,16 @@
     const file = chosen.endsWith(".clarity") ? chosen : chosen + ".clarity";
     try {
       newProjectError = null;
-      newProjectIn = { folder: file, catalog: await invoke<Catalog>("stack_catalog") };
+      newProjectIn = { folder: file, projects: null, catalog: await invoke<Catalog>("stack_catalog") };
     } catch (err) {
       loadError = String(err);
     }
   }
 
+  /** Makes the project; with the New dialog asking the name, `file` is that name. */
   async function createProject(file: string, chosen: Stack) {
     try {
+      if (newProjectIn?.projects) file = await invoke<string>("new_project_file", { name: file });
       const result = await invoke<Preview>("new_project", { path: file, stack: chosen });
       newProjectIn = null;
       loadError = null;
@@ -965,6 +999,7 @@
     };
     const unlisten = listen<Preview>("preview-updated", (e) => applyPreview(e.payload));
     const unlistenProject = listen<ProjectFile>("project-updated", (e) => (projectFile = e.payload));
+    const unlistenLoad = listenToLoad();
     // A build starts, from the toolbar or from the agent once the person allowed it.
     const unlistenStarted = listen("build-started", () => {
       buildLog = [];
@@ -989,6 +1024,7 @@
     return () => {
       unlisten.then((stop) => stop());
       unlistenProject.then((stop) => stop());
+      unlistenLoad.then((stop) => stop());
       unlistenLine.then((stop) => stop());
       unlistenStarted.then((stop) => stop());
       unlistenDone.then((stop) => stop());
@@ -1055,7 +1091,7 @@
         <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), appSettings.open && closeAppSettings())}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
-      <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title="Clarity's own settings: its display, where the build tools are, and what the agent may run">Clarity settings</button>
+      <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title="Clarity's own settings: its display, where projects and apps go, where the build tools are, and what the agent may run">Clarity settings</button>
       <button class="corner manual-button" onclick={() => openManual()} title="Open the manual on this tab's page (F1)">Manual</button>
       <button class="corner agent-toggle" class:active={agent.open} aria-pressed={agent.open} onclick={() => agent.toggle()} title="Show or hide the agent">Agent</button>
     </div>
@@ -1228,7 +1264,7 @@
               <dt>File</dt>
               <dd class="path" title={openFile}>{openFile}</dd>
               <dt>App folder</dt>
-              <dd class="path"><button class="link" title="Open the project settings" onclick={selectSettings}>{projectFile?.settings?.out ?? "-"}</button></dd>
+              <dd class="path"><button class="link" title="Open the project settings" onclick={selectSettings}>{projectFile?.app_folder || "-"}</button></dd>
               <dt>Main window</dt>
               <dd>{app?.main?.name ?? "(none)"}</dd>
               <dt>Stack</dt>
@@ -1478,6 +1514,22 @@
       <AgentPanel />
     {/if}
   </div>
+  <StatusBar
+    open={current}
+    file={openFile}
+    {building}
+    {commandRunning}
+    {running}
+    done={buildDone}
+    errors={errorCount}
+    warnings={warnings.length}
+    stack={stackSummary}
+    appFolder={projectFile?.app_folder ?? ""}
+    onoutput={() => (showOutput = true)}
+    oncheck={checkProject}
+    onsettings={() => (appSettings.open && closeAppSettings(), selectSettings())}
+    onsystem={() => openAppSettings("system")}
+  />
 </div>
 
 <UnlockDialog />
@@ -1588,7 +1640,8 @@
     catalog={newProjectIn.catalog}
     folder={newProjectIn.folder}
     error={newProjectError}
-    onsubmit={(chosen) => newProjectIn && createProject(newProjectIn.folder, chosen)}
+    projects={newProjectIn.projects}
+    onsubmit={(chosen, name) => newProjectIn && createProject(newProjectIn.projects ? name : newProjectIn.folder, chosen)}
     oncancel={() => (newProjectIn = null)}
   />
 {/if}
@@ -1606,7 +1659,7 @@
 <style>
   .app {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100%;
   }
 

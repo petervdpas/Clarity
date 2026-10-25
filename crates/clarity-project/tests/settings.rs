@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use clarity_project::{
-    Auth, AuthKind, Backend, DataSource, FileStore, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir,
+    Auth, AuthKind, Backend, DataSource, FileStore, Settings, SourceKind, Stack, Target, Ui, catalog, load, module_dir, out_dir_in, Folders,
     parse, starter, target_dir, title, validate, write,
 };
 
@@ -305,10 +305,10 @@ fn the_output_folder_is_never_the_project_itself() {
 fn the_modules_and_output_live_in_the_folder_next_to_the_file() {
     let file = Path::new("/work/examples/shop.clarity");
     assert_eq!(module_dir(file), Path::new("/work/examples/shop"));
-    assert_eq!(out_dir(file, &shop()), Path::new("/work/examples/shop/out"));
+    assert_eq!(out_dir_in(file, &shop(), &Folders::default()), Path::new("/work/examples/shop/out"));
     let mut absolute = shop();
     absolute.out = "/builds/shop".into();
-    assert_eq!(out_dir(file, &absolute), Path::new("/builds/shop"));
+    assert_eq!(out_dir_in(file, &absolute, &Folders::default()), Path::new("/builds/shop"));
 }
 
 #[test]
@@ -326,11 +326,14 @@ fn loads_a_project_file() {
     assert_eq!(found.settings, Some(shop()));
     assert!(found.problems.is_empty());
     assert!(!found.version.is_empty());
+    // Where builds write the app, with this computer's folders.
+    assert_eq!(found.app_folder, clarity_project::out_dir(&file, &shop()).display().to_string());
 
     std::fs::write(&file, "project Shop\n    stak rust\n").unwrap();
     let broken = load(&file);
     assert_eq!(broken.settings, None);
     assert_eq!(broken.problems.len(), 1);
+    assert_eq!(broken.app_folder, "");
 
     std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -7,6 +7,8 @@ mod diagrams;
 mod resources;
 mod engines;
 mod environment;
+mod folders;
+mod system;
 mod parts;
 mod external;
 mod apis;
@@ -762,6 +764,8 @@ fn window_title(name: &str, version: &str, dev_release: Option<&str>) -> String 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // The status bar's meters, and the System page while it is open.
+            system::start(app.handle().clone());
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
                 let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
@@ -821,6 +825,12 @@ pub fn run() {
             parts::build_part,
             environment::environment_view,
             environment::choose_tool,
+            folders::folders_view,
+            folders::set_folder,
+            folders::new_project_file,
+            system::machine_facts,
+            system::watch_system,
+            system::disk_space,
             parts::write_part_folders,
             engines::save_engine_source,
             engines::new_engine_source,

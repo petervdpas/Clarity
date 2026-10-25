@@ -26,7 +26,7 @@ Only `stack` is required. Each setting appears once, except `datasource` and `fi
 - `project Name`: the project's name, a Clarity name like `MyShop`. It is also the program's name.
 - `title "text"`: the name people see, in the window title. Without it, it is derived from the name.
 - `stack backend ui target...`: what the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the web renderer) or `avalonia`, which is for `csharp` only. Targets: `desktop`, `web`, or both. Clarity generates Rust, Go, C and C++ with `web`, and C# with `avalonia`; C# with `web` is not generated yet. The web target (serving the application over HTTP) is not built yet either: the generated program is a desktop program.
-- `output "folder"`: where Run and Build write the generated application. The default is `out`, inside the project's folder. It can also be a full path. See [Run and Build](project.run-build.md).
+- `output "folder"`: where Run and Build write the generated application. The default is `out`, inside the project's folder; with an Apps folder set in **Clarity settings**, **Folders**, the default is a folder named after the project file there instead. It can also be a full path. See [Run and Build](project.run-build.md).
 - `output keeps "vendor", "notes"`: folders in the output that are the project's own. Clarity leaves them where they are and does not count them as somebody else's files. Each is the name of one folder in the output, not a path. The folders the stack's build tools make (such as `target`, `bin` or `build`) are kept without this line.
 - `language "tag"`: the language the project's texts are written in, such as `"en"` or `"nl-NL"`. See [Languages](languages.md).
 - `currency CODE`: the currency of `money` fields, as its ISO code: `EUR`, `USD`. Without it, amounts show without a currency sign.
@@ -54,7 +54,7 @@ Entities live in the first data source unless their module names another with `s
 
 On the **Project** tab, click **Settings** (or the app folder or the stack in the sidebar). The view edits every setting:
 
-- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), with Browse.
+- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), with Browse, and the folder builds write to.
 - Stack: Backend, UI and Targets, and the Build tools row with Environment..., which opens Clarity settings where the tools are chosen.
 - Language, formats and theme: Language, Currency, and the themes that are offered, with the one the application starts with.
 - Data sources: a row per source with its kind, location, auth and the External and Read-only boxes; Import and Own for an external SQLite database; API for a web API, which picks what the application uses of its description; Add data source.

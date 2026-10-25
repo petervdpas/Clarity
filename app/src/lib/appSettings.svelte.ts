@@ -4,7 +4,7 @@
 
 import { checkTools } from "./tools.svelte";
 
-export type AppSettingsSection = "display" | "environment" | "agent";
+export type AppSettingsSection = "display" | "folders" | "environment" | "agent" | "system";
 
 export const appSettings = $state<{ open: boolean; section: AppSettingsSection }>({ open: false, section: "display" });
 

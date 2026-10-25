@@ -4,7 +4,7 @@ A short walk from an empty folder to a running application: a task entity, a win
 
 ## 1. Create the project
 
-On the **Project** tab, click **New**. Choose where the project file goes and give it a name, such as `tasks.clarity`. The folder `tasks` next to it must be new or empty.
+On the **Project** tab, click **New**. Choose where the project file goes and give it a name, such as `tasks.clarity`. The folder `tasks` next to it must be new or empty. With a Projects folder set in **Clarity settings**, **Folders**, New only asks for the name, `tasks`, and makes the project there.
 
 The New project dialog asks for the stack: a backend, a UI and one or more targets. The Build tools row says whether this machine has what the stack needs. Click **Create project**.
 

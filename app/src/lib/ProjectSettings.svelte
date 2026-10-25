@@ -231,8 +231,10 @@
           </div>
           <p class="form-help">
             Where Run and Build create the app: its sources and its build project. Relative to the project's folder, or a
-            full path. Clarity replaces its contents, so it only writes into an empty folder or one it made.
+            full path. Left at out, it follows the Apps folder of Clarity settings when one is set. Clarity replaces its
+            contents, so it only writes into an empty folder or one it made.
           </p>
+          {#if project.app_folder}<p class="form-help">Builds write to <span class="mono">{project.app_folder}</span>.</p>{/if}
         </div>
       </section>
 

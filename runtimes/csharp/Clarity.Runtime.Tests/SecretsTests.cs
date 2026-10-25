@@ -2,6 +2,7 @@
 // back and forgotten, apart from settings.json. Needs a store, such as the
 // Secret Service of a desktop session; without one it checks nothing.
 
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Clarity.Runtime;
 using Xunit;
@@ -33,6 +34,21 @@ public sealed class SecretsTests
     {
         if (Environment.GetEnvironmentVariable("CLARITY_SECRET_STORE") == "1")
             Assert.True(StoreWorks(), "the system's protected store cannot be reached");
+    }
+
+    /// <summary>On Windows a secret is kept as every stack keeps it (conformance/secret-store.json): target, user and UTF-8 blob.</summary>
+    [Fact]
+    public void The_credential_manager_shape_is_every_stack_s()
+    {
+        var cases = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "secret-store.json"))).RootElement.GetProperty("windows");
+        foreach (var c in cases.EnumerateArray())
+        {
+            var value = c.GetProperty("value").GetString()!;
+            Assert.Equal(c.GetProperty("target").GetString(), Secrets.WindowsTarget(c.GetProperty("program").GetString()!, c.GetProperty("name").GetString()!));
+            var blob = Secrets.WindowsBlob(value);
+            Assert.Equal(c.GetProperty("blob").GetString(), Convert.ToHexStringLower(blob));
+            Assert.Equal(value, Secrets.FromWindowsBlob(blob));
+        }
     }
 
     [Fact]

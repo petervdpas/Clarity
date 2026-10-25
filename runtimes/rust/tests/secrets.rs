@@ -67,3 +67,18 @@ fn a_database_connects_with_a_secret_setting() {
     let missing = clarity_runtime::Db::connect(&[("main", clarity_runtime::Dialect::Sqlite, &format!("setting:{PROGRAM}/shopDb"))]).err().unwrap();
     assert!(missing.to_string().contains("the secret setting shopDb is not kept yet"), "{missing}");
 }
+
+/// On Windows a secret is kept as every stack keeps it
+/// (conformance/secret-store.json): target, user and UTF-8 blob.
+#[test]
+fn the_credential_manager_shape_is_every_stack_s() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/secret-store.json")).unwrap();
+    for case in cases["windows"].as_array().unwrap() {
+        let text = |name: &str| case[name].as_str().unwrap().to_string();
+        assert_eq!(secrets::windows_target(&text("program"), &text("name")), text("target"));
+        let blob = secrets::windows_blob(&text("value"));
+        let hex: String = blob.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(hex, text("blob"));
+        assert_eq!(secrets::from_windows_blob(&blob).as_deref(), Some(text("value").as_str()));
+    }
+}

@@ -38,6 +38,8 @@ public static class KeysWindow
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
         view.Closed += window.Close;
+        // Sized once to what it shows first; after that it keeps its size.
+        window.Opened += (_, _) => window.SizeToContent = SizeToContent.Manual;
         _ = window.ShowDialog(owner);
     }
 }
@@ -52,6 +54,9 @@ public sealed class KeysView : UserControl
     string? note;
     (string Id, string Key, string Other)? swap;
     TopLevel? listening;
+
+    const double MessageWidth = 460;
+    const double MessageHeight = 72;
 
     /// <summary>The person closed the window.</summary>
     public event Action? Closed;
@@ -147,19 +152,23 @@ public sealed class KeysView : UserControl
 
     void Render()
     {
-        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(16), MinWidth = 360 };
+        // A width of its own, so a long message wraps instead of widening the window.
+        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(16), Width = MessageWidth };
         panel.Children.Add(new TextBlock { Text = Word("keysTitle", "Keys"), Classes = { "heading" } });
+        // The message line is always there, so nothing moves when it says something.
+        var message = new Panel { MinHeight = MessageHeight };
         if (swap is { } s)
         {
             var row = new WrapPanel { Orientation = Orientation.Horizontal };
-            row.Children.Add(new TextBlock { Text = Said("keysTaken", "{key} is the key of {command}. Swap them?", ("key", s.Key), ("command", NameOf(s.Other))), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+            row.Children.Add(new TextBlock { Text = Said("keysTaken", "{key} is the key of {command}. Swap them?", ("key", s.Key), ("command", NameOf(s.Other))), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0), TextWrapping = global::Avalonia.Media.TextWrapping.Wrap });
             var swapWord = Word("keysSwap", "Swap");
             row.Children.Add(Button(swapWord, "Swap", () => Take(s.Id, s.Key)));
             row.Children.Add(Button(Word("cancel", "Cancel"), "Cancel", () => { swap = null; Render(); }));
-            panel.Children.Add(row);
+            message.Children.Add(row);
         }
-        if (note is not null)
-            panel.Children.Add(new TextBlock { Text = note, TextWrapping = global::Avalonia.Media.TextWrapping.Wrap });
+        else if ((note ?? (capturing is null ? null : Word("keysPress", "Press the new key; Escape stops"))) is { } said)
+            message.Children.Add(new TextBlock { Text = said, TextWrapping = global::Avalonia.Media.TextWrapping.Wrap });
+        panel.Children.Add(message);
         foreach (var layer in layers)
         {
             var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"), RowSpacing = 4, ColumnSpacing = 6 };
@@ -169,10 +178,12 @@ public sealed class KeysView : UserControl
                 grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
                 var name = NameOf(c.Id);
                 var keys = PersonKeys.Choices.TryGetValue(c.Id, out var mine) ? mine : c.Keys;
-                var shown = capturing == c.Id ? Word("keysPress", "Press the new key; Escape stops") : keys.Count > 0 ? string.Join(", ", keys) : Word("keysNone", "None");
+                var shown = keys.Count > 0 ? string.Join(", ", keys) : Word("keysNone", "None");
+                // The command that waits for its new key stands out; the message line says what to do.
+                var weight = capturing == c.Id ? global::Avalonia.Media.FontWeight.Bold : global::Avalonia.Media.FontWeight.Normal;
                 var cells = new Control[]
                 {
-                    new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = name, FontWeight = weight, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = shown, VerticalAlignment = VerticalAlignment.Center },
                     Button(Word("keysChange", "Change"), $"Change {name}", () => { capturing = c.Id; swap = null; note = null; Render(); }),
                     Button(Word("keysReset", "Reset"), $"Reset {name}", () => { note = null; PersonKeys.Set(KeyRules.Reset(commands, PersonKeys.Choices, c.Id)); }, PersonKeys.Choices.ContainsKey(c.Id)),

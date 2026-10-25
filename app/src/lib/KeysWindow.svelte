@@ -75,25 +75,29 @@
 <Dialog label={word("keysTitle")} {onclose}>
   <div class="keys">
     <h2>{word("keysTitle")}</h2>
-    {#if swap}
-      {@const s = swap}
-      <div class="swap" role="alert">
-        <span>{word("keysTaken", { key: text(s.key), command: text(nameOf(s.other)) })}</span>
-        <button onclick={() => (take(s.id, s.key), (swap = null))}>{word("keysSwap")}</button>
-        <button onclick={() => (swap = null)}>{ownWord(preview, "Cancel")}</button>
-      </div>
-    {/if}
-    {#if note}<p class="note" role="status">{note}</p>{/if}
+    <!-- The message line is always there, so nothing moves when it says something. -->
+    <div class="message" role="status">
+      {#if swap}
+        {@const s = swap}
+        <div class="swap" role="alert">
+          <span>{word("keysTaken", { key: text(s.key), command: text(nameOf(s.other)) })}</span>
+          <button onclick={() => (take(s.id, s.key), (swap = null))}>{word("keysSwap")}</button>
+          <button onclick={() => (swap = null)}>{ownWord(preview, "Cancel")}</button>
+        </div>
+      {:else if note}
+        <p>{note}</p>
+      {:else if capturing}
+        <p>{word("keysPress")}</p>
+      {/if}
+    </div>
     {#each preview.keys as layer (layer.id)}
       <fieldset>
         <legend>{placeName(layer.title)}</legend>
         {#each commands.filter((c) => c.layers[0] === layer.id) as c (c.id)}
           <div class="row">
-            <span class="name">{c.name}</span>
+            <span class="name" class:waiting={capturing === c.id}>{c.name}</span>
             <span class="key">
-              {#if capturing === c.id}
-                <em>{word("keysPress")}</em>
-              {:else if shown(c).length}
+              {#if shown(c).length}
                 {#each shown(c) as k, i (k)}{#if i > 0}, {/if}<kbd>{k}</kbd>{/each}
               {:else}
                 <span class="muted">{word("keysNone")}</span>
@@ -113,11 +117,21 @@
 </Dialog>
 
 <style>
+  /* A width of its own, so a long message wraps instead of widening the dialog. */
   .keys {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-width: 0;
+    width: min(460px, 100%);
+  }
+  .message {
+    min-height: 4.5em;
+  }
+  .message p {
+    margin: 0;
+  }
+  .waiting {
+    font-weight: bold;
   }
   h2 {
     margin: 0;
@@ -148,8 +162,5 @@
   }
   .actions {
     justify-content: flex-end;
-  }
-  .note {
-    margin: 0;
   }
 </style>

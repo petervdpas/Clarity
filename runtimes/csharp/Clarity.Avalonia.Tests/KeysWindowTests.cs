@@ -7,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia;
 using Avalonia.VisualTree;
 using Clarity.Avalonia;
 using Clarity.Runtime;
@@ -91,6 +92,33 @@ public sealed class KeysWindowTests
         window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
         Assert.Empty(PersonKeys.Choices);
         Assert.Contains("A cannot be used: a key without Ctrl or Alt is typing", Texts(view));
+        window.Close();
+    }
+
+    // Where a button is in the view, and how big the view wants to be.
+    static (global::Avalonia.Point? At, global::Avalonia.Size Wants) Place(KeysView view, string button)
+    {
+        var b = Named(view, button);
+        view.Measure(global::Avalonia.Size.Infinity);
+        return (b.TranslatePoint(new global::Avalonia.Point(0, 0), view), view.DesiredSize);
+    }
+
+    /// <summary>A message or a swap offer takes a line kept for it, so nothing moves under the mouse.</summary>
+    [AvaloniaFact]
+    public void Its_buttons_stay_put_when_it_says_something()
+    {
+        var (window, view) = Shown();
+        var change = Place(view, "Change Save");
+        var close = Place(view, "Close");
+        Named(view, "Change Save").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
+        Assert.Equal(change, Place(view, "Change Save"));
+        Assert.Equal(close, Place(view, "Close"));
+        Named(view, "Change Keys").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.KeyPressQwerty(PhysicalKey.Q, RawInputModifiers.Control);
+        Assert.Contains("Ctrl+Q is the key of Quit. Swap them?", Texts(view));
+        Assert.Equal(change, Place(view, "Change Save"));
+        Assert.Equal(close, Place(view, "Close"));
         window.Close();
     }
 }

@@ -2,7 +2,8 @@
 // person and per application, never in settings.json. Windows keeps them in
 // the Credential Manager, macOS in the Keychain, other systems in the Secret
 // Service over D-Bus (GNOME Keyring, KWallet). An entry is the program's name
-// with the setting's, as the other stacks keep it.
+// with the setting's, as the other stacks keep it; on Windows the target
+// `program:name` and the value's UTF-8 bytes (conformance/secret-store.json).
 
 using System.Runtime.InteropServices;
 using System.Text;
@@ -18,7 +19,7 @@ public static class Secrets
         try
         {
             if (OperatingSystem.IsWindows())
-                return WindowsCredentials.Read($"{program}:{name}");
+                return WindowsCredentials.Read(WindowsTarget(program, name));
             if (OperatingSystem.IsMacOS())
                 return MacKeychain.Find(program, name);
             return Task.Run(() => SecretService.Get(program, name)).GetAwaiter().GetResult();
@@ -35,7 +36,7 @@ public static class Secrets
         try
         {
             if (OperatingSystem.IsWindows())
-                WindowsCredentials.Write($"{program}:{name}", name, value);
+                WindowsCredentials.Write(WindowsTarget(program, name), name, value);
             else if (OperatingSystem.IsMacOS())
                 MacKeychain.Keep(program, name, value);
             else
@@ -46,6 +47,15 @@ public static class Secrets
             throw new ValueException($"cannot keep the secret '{name}' in the system's protected store: {e.Message}");
         }
     }
+
+    /// <summary>The Credential Manager's target of the secret <paramref name="name"/> of <paramref name="program"/>.</summary>
+    public static string WindowsTarget(string program, string name) => $"{program}:{name}";
+
+    /// <summary>What the Credential Manager keeps of a secret: its UTF-8 bytes.</summary>
+    public static byte[] WindowsBlob(string value) => Encoding.UTF8.GetBytes(value);
+
+    /// <summary>The secret a Credential Manager blob holds.</summary>
+    public static string FromWindowsBlob(byte[] blob) => Encoding.UTF8.GetString(blob);
 
     /// <summary>The Secret Service of the desktop session (org.freedesktop.secrets).</summary>
     static class SecretService
@@ -208,7 +218,11 @@ public static class Secrets
             try
             {
                 var credential = Marshal.PtrToStructure<Credential>(found);
-                return credential.CredentialBlobSize == 0 ? "" : Marshal.PtrToStringUni(credential.CredentialBlob, credential.CredentialBlobSize / 2);
+                var blob = new byte[credential.CredentialBlobSize];
+                Marshal.Copy(credential.CredentialBlob, blob, 0, blob.Length);
+                var value = FromWindowsBlob(blob);
+                Array.Clear(blob);
+                return value;
             }
             finally
             {
@@ -224,16 +238,20 @@ public static class Secrets
                     throw new ExternalException("the Credential Manager refused to forget it", Marshal.GetLastWin32Error());
                 return;
             }
-            var blob = Marshal.StringToCoTaskMemUni(value);
+            var bytes = WindowsBlob(value);
+            var blob = Marshal.AllocCoTaskMem(bytes.Length);
             try
             {
-                var credential = new Credential { Type = Generic, TargetName = target, UserName = user, CredentialBlob = blob, CredentialBlobSize = value.Length * 2, Persist = LocalMachine };
+                Marshal.Copy(bytes, 0, blob, bytes.Length);
+                var credential = new Credential { Type = Generic, TargetName = target, UserName = user, CredentialBlob = blob, CredentialBlobSize = bytes.Length, Persist = LocalMachine };
                 if (!CredWrite(ref credential, 0))
                     throw new ExternalException("the Credential Manager refused to keep it", Marshal.GetLastWin32Error());
             }
             finally
             {
-                Marshal.ZeroFreeCoTaskMemUnicode(blob);
+                Marshal.Copy(new byte[bytes.Length], 0, blob, bytes.Length);
+                Marshal.FreeCoTaskMem(blob);
+                Array.Clear(bytes);
             }
         }
     }

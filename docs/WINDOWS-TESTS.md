@@ -24,6 +24,7 @@ Per stack, with a Postgres database whose connection is a secret setting (a Post
 - [x] Avalonia, the same; its close goes through its own shell, as before.
 - [ ] The secret is in the Credential Manager (`Program:connDb`), not in `%APPDATA%\Program\settings.json`.
   - 2026-10-25: never in settings.json on any stack. Go and C# keep it as `wintest:shopDb` / `Wintest:shopDb`, but Rust keeps it as `shopDb.wintest`: `keyring::Entry::new(program, name)` (runtimes/rust/src/secrets.rs) uses keyring's default target; `Entry::new_with_target(&format!("{program}:{name}"), program, name)` would match. And the blob differs: C# (`StringToCoTaskMemUni`, Secrets.cs) writes UTF-16, C and C++ write and read UTF-8 bytes, so after the C# app kept the connection the C app read it as `p` and the C++ app with a zero byte between letters. Each stack reads back its own; switching a project's stack loses or garbles the kept secret. (keyring-rs also writes UTF-16 on Windows, as far as known; Go's blob was not checked.)
+  - Fixed on Linux the same day: every stack keeps `Program:name` with the value's UTF-8 bytes, as Go (go-keyring), C and C++ did; Rust (crate 0.28.0) and C# (NuGet 0.39.0) changed, checked by conformance/secret-store.json. To try again: keep the connection in one stack's app and open it in another's (C# then C, Rust then Go). A secret the old C# or Rust kept is not found or garbled once: the app asks for it again.
 
 ## 3. Showing and copying a secret
 
@@ -52,6 +53,7 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 - [x] A menu item's key works while the menu is shut; a ribbon button's key whichever tab is open.
 - [x] A window's own button with the frame's key goes first (Ctrl+H on both).
 - [x] The keys window: Change takes the new key; a key taken in the same place offers a swap; a refused key says why; Reset and Reset all. Also the other place's note: "Ctrl+Q is also the key of Hello, elsewhere; here Save goes first" (Avalonia). On Avalonia the keys window grows and shrinks with its message line, so its buttons move under the mouse.
+  - Fixed the same day, on Avalonia and the web: the message line is always there, the window has a fixed width, and "Press the new key" shows in that line (the waiting command in bold), not in its key column. To try again: Change, a refused key, a swap; nothing moves.
 - [x] `%APPDATA%\Program\settings.json` keeps only what differs, as `keys`. Only tried in a project with a `settings` block (the secret).
 - [x] On Avalonia the same, and the file shows `Ctrl+K` as written.
 - [x] A toolbar or ribbon button's tooltip shows its key (it used to say "Opens Window"): Print showed "Ctrl+P" on Go, Rust and Avalonia.
@@ -64,6 +66,9 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 
 ## Releases
 
-- [ ] Upload NuGet 0.38.0: the six packages in each project's `bin/Release`.
+- [x] Upload NuGet 0.38.0 (on nuget.org).
+- [ ] Build and upload NuGet 0.39.0 (secrets on Windows, the keys window).
+- [ ] Tag the Rust crate 0.28.0 (`runtimes/rust/v0.28.0`; secrets on Windows).
+- C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - Go v0.30.0 is released and its sums are recorded.

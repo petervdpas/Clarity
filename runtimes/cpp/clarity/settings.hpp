@@ -24,4 +24,20 @@ nlohmann::json read_settings(const std::string& program);
 /// Keeps `values` as the settings of `program`, written whole and then put in place.
 void keep_settings(const std::string& program, const nlohmann::json& values);
 
+/// The system's protected store of secret settings (DESIGN 5.27): `get`
+/// gives a secret or none, `set` keeps one ("" forgets it). Empty in a
+/// program without secret settings; one with them calls secrets_use
+/// (secrets/secrets.hpp) to fill it.
+struct SecretStore {
+    std::function<std::optional<std::string>(const std::string& program, const std::string& name)> get;
+    std::function<void(const std::string& program, const std::string& name, const std::string& value)> set;
+};
+extern SecretStore secret_store;
+
+/// read_settings with the secrets named in `secrets` (an array of names, or
+/// null), each from the store, beside the file's values.
+nlohmann::json read_settings_with(const std::string& program, const nlohmann::json& secrets);
+/// keep_settings with those named in `secrets` kept in the store, never in the file.
+void keep_settings_with(const std::string& program, const nlohmann::json& values, const nlohmann::json& secrets);
+
 }  // namespace clarity

@@ -10,6 +10,7 @@
 
 #include "clarity/core.h"
 #include "clarity/picture.h"
+#include "clarity/settings.h"
 
 static size_t keep(char* data, size_t size, size_t count, void* into) {
     clarity_buffer_add_n((ClarityBuffer*)into, data, size * count);
@@ -103,11 +104,19 @@ const char* clarity_url_part(const char* text) {
 }
 
 /// A secret where the project file says it is: `env:NAME` reads that
-/// environment variable; empty when it is not set.
+/// environment variable, `setting:<program>/<name>` a secret setting from
+/// the system's protected store (DESIGN 5.27); empty when it is not there.
 static const char* secret_at(const char* location) {
     if (!location) return "";
     if (strncmp(location, "env:", 4) == 0) {
         const char* value = getenv(location + 4);
+        return value ? value : "";
+    }
+    if (strncmp(location, "setting:", 8) == 0) {
+        const char* at = location + 8;
+        const char* slash = strchr(at, '/');
+        if (!slash || !clarity_secret_store.get) return "";
+        const char* value = clarity_secret_store.get(clarity_copy_n(at, (size_t)(slash - at)), slash + 1);
         return value ? value : "";
     }
     return location;

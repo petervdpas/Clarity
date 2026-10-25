@@ -17,7 +17,12 @@ const STORE: &str = include_str!("fixtures/store.clarity");
 /// The program on `backend`, its web API data source `shop` at `server`,
 /// signed with a bearer token from CALLS_TOKEN.
 fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
-    let sources = [clarity_spec::SourceRef::sql("main"), clarity_spec::SourceRef::web("shop").at(server, Some(("bearer", "env:CALLS_TOKEN")))];
+    let sources = [
+        clarity_spec::SourceRef::sql("main"),
+        clarity_spec::SourceRef::web("shop").at(server, Some(("bearer", "env:CALLS_TOKEN"))),
+        // Signed with a secret setting, from the system's protected store (DESIGN 5.27).
+        clarity_spec::SourceRef::web("vault").at(server, Some(("bearer", "setting:apiToken"))),
+    ];
     // Order lives in the database and has its step; Item lives in the web API and needs none.
     let step = "migration \"Orders\"\n    add entity Order\n        number: text(20)\n        total: money\n        lines: integer\n        paid: bool\n        kind: Kind\n        placed: date\n        tags: list<text>\n";
     let project = clarity_spec::load_in([("calls/calls.clarity", FIXTURE), ("calls/store.clarity", STORE)], [("migrations/main/0001.clarity", step)], &sources);
@@ -129,6 +134,17 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert!(!broken.status.success());
     assert!(String::from_utf8_lossy(&broken.stderr).contains("the text is no JSON"), "{}", String::from_utf8_lossy(&broken.stderr));
     // A web API data source (DESIGN 5.23): its entities read from its paths, its query encoded, its calls signed.
+    // A secret setting (DESIGN 5.27): kept in the system's protected store, never in the
+    // settings file, and signing the calls of the web API that names it. Needs a store,
+    // such as a desktop session's Secret Service; CLARITY_SECRET_STORE=1 says there is one.
+    if std::env::var("CLARITY_SECRET_STORE").as_deref() == Ok("1") {
+        assert_eq!(printed(program, dir, &["token", "s3cr3t"]), "");
+        assert_eq!(printed(program, dir, &["vaulted", "auth"]), "Bearer s3cr3t");
+        let kept = std::fs::read_dir(dir.join("config")).into_iter().flatten().flatten().filter_map(|e| std::fs::read_to_string(e.path().join("settings.json")).ok()).collect::<String>();
+        assert!(!kept.contains("s3cr3t"), "the secret is in the settings file: {kept}");
+        assert_eq!(printed(program, dir, &["token", ""]), "");
+        assert_eq!(printed(program, dir, &["vaulted", "auth"]), "Bearer");
+    }
     assert_eq!(printed(program, dir, &["store", "open & paid"]), "Pen 1.5\nInk 12\nstatus=open%20%26%20paid\nstatus=open%20%26%20paid&page=2\nstatus=open%20%26%20paid&page=3&sort=name\nBearer t0k3n\nWeek for Ann\nPen 1.5\nInk 12");
 }
 

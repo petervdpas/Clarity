@@ -78,7 +78,7 @@ pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The value a new record starts with, when it is not the type's own.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => Some("0".into()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(decimal(n)),
@@ -95,7 +95,7 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
 fn to_value(f: &Field) -> String {
     let value = ident(&f.name.name);
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity::sql::text({value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity::sql::integer({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("clarity::sql::decimal({value})"),
         FieldType::Bool => format!("clarity::sql::boolean({value})"),
@@ -116,7 +116,7 @@ fn read(i: usize, f: &Field) -> String {
     let column = string(&f.name.name);
     let get = |what: &str| format!("clarity::sql::get_{what}({column}, values[{i}])");
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => get("text"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => get("text"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => get("integer"),
         FieldType::Decimal { .. } | FieldType::Money => get("decimal"),
         FieldType::Bool => get("boolean"),

@@ -78,8 +78,8 @@ pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The value a new record starts with, when it is not zero.
 fn initial(project: &Project, f: &Field) -> Option<String> {
     match (&f.ty, f.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(string(s)),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, _) => Some("\"\"".into()),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(n.clone()),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(decimal(n)),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
@@ -96,7 +96,7 @@ fn initial(project: &Project, f: &Field) -> Option<String> {
 fn to_value(f: &Field) -> String {
     let value = format!("r->{}", ident(&f.name.name));
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity_text_value({value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity_integer_value({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("clarity_decimal_value({value})"),
         FieldType::Bool => format!("clarity_bool_value({value})"),
@@ -117,7 +117,7 @@ fn read(i: usize, f: &Field) -> String {
     let target = format!("r->{}", ident(&f.name.name));
     let get = |what: &str| format!("    if (!clarity_get_{what}({column}, values[{i}], &{target})) return false;\n");
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => get("text"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => get("text"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => get("integer"),
         FieldType::Decimal { .. } | FieldType::Money => get("decimal"),
         FieldType::Bool => get("bool"),
@@ -147,7 +147,7 @@ fn read(i: usize, f: &Field) -> String {
 pub(crate) fn json_of(f: &Field) -> String {
     let value = format!("r->{}", ident(&f.name.name));
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity_json_text({value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_json_text({value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity_json_integer({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("clarity_json_decimal({value})"),
         FieldType::Bool => format!("clarity_json_bool({value})"),
@@ -169,7 +169,7 @@ fn json_read(f: &Field) -> String {
     let target = format!("r->{}", ident(&f.name.name));
     let get = |what: &str| format!("    if (!clarity_json_get_{what}(in, {key}, &{target})) return false;\n");
     match &f.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => get("text"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => get("text"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => get("integer"),
         FieldType::Decimal { .. } | FieldType::Money => get("decimal"),
         FieldType::Bool => get("bool"),

@@ -476,7 +476,7 @@ const ENTRIES: &[Entry] = &[
     },
     input(WidgetKind::Textbox, "textbox", "Text box", (4, 1), &["text", "email", "url"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Memo, "memo", "Memo", (6, 3), &["text"], INPUT_EVENTS, TYPED),
-    input(WidgetKind::Password, "password", "Password", (4, 1), &["text"], INPUT_EVENTS, TYPED),
+    input(WidgetKind::Password, "password", "Password", (4, 1), &["text", "secret"], INPUT_EVENTS, TYPED),
     input(WidgetKind::Number, "number", "Number", (3, 1), &["integer", "decimal", "money", "id", "duration"], INPUT_EVENTS, TYPED),
     Entry {
         caption: Some("Check box"),
@@ -1077,6 +1077,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Email => "email",
         FieldType::Url => "url",
         FieldType::Color => "color",
+        FieldType::Secret => "secret",
         FieldType::Language => "language",
         FieldType::Theme => "theme",
         FieldType::Id => "id",
@@ -1698,5 +1699,7 @@ mod tests {
             WidgetKind::Textbox
         );
         assert_eq!(widget_for(&FieldType::DateTime), WidgetKind::Date);
+        // A secret shows only as dots (DESIGN 5.27).
+        assert_eq!(widget_for(&FieldType::Secret), WidgetKind::Password);
     }
 }

@@ -896,6 +896,12 @@ func RunCliProgram(program CliProgram, run func(cli *CliSession, command int, va
 // CliKeepSettings keeps the settings when a command changed them, as a
 // window does.
 func CliKeepSettings(program string, before, after any) {
+	CliKeepSettingsWith(program, before, after, nil)
+}
+
+// CliKeepSettingsWith is CliKeepSettings with the secret settings named kept
+// in the system's protected store, never in the file (DESIGN 5.27).
+func CliKeepSettingsWith(program string, before, after any, secrets []string) {
 	was, _ := json.Marshal(before)
 	now, _ := json.Marshal(after)
 	if string(was) == string(now) {
@@ -904,7 +910,7 @@ func CliKeepSettings(program string, before, after any) {
 	values := map[string]any{}
 	_ = json.Unmarshal(now, &values)
 	delete(values, "id")
-	if err := KeepSettings(program, values); err != nil {
+	if err := KeepSettingsWith(program, values, secrets); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
 }

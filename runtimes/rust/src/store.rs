@@ -44,9 +44,19 @@ pub(crate) fn applied(version: usize) -> String {
     format!("INSERT INTO clarity_schema (version) VALUES ({version})")
 }
 
-/// The location of a database: as written, or from the environment
-/// variable that `env:NAME` names, so passwords stay out of the program.
+/// The location of a database: as written, from the environment variable
+/// that `env:NAME` names, or from the secret setting `setting:<program>/<name>`
+/// in the system's protected store (DESIGN 5.27), so passwords stay out of the program.
 pub(crate) fn location(text: &str) -> Result<String> {
+    if let Some(at) = text.strip_prefix("setting:") {
+        let (program, name) = at.split_once('/').unwrap_or(("", at));
+        #[cfg(feature = "secrets")]
+        if let Some(value) = crate::secrets::get(program, name).filter(|v| !v.is_empty()) {
+            return Ok(value);
+        }
+        let _ = program;
+        return Err(Error::Storage(format!("the secret setting {name} is not kept yet: the settings name the connection")));
+    }
     match text.strip_prefix("env:") {
         Some(name) => std::env::var(name).map_err(|_| Error::Storage(format!("the environment variable {name} is not set"))),
         None => Ok(text.to_string()),

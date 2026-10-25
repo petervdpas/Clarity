@@ -172,13 +172,14 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
     }
     if (strcmp(command, "read_settings") == 0) {
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-        return value(clarity_read_settings(s->options.name));
+        return value(clarity_read_settings_with(s->options.name, cJSON_GetObjectItemCaseSensitive(args, "secrets")));
     }
     if (strcmp(command, "keep_settings") == 0) {
         // The person's settings, as the screen has them now.
         const cJSON* settings = cJSON_GetObjectItemCaseSensitive(args, "settings");
         if (!cJSON_IsObject(settings)) return error_text("keep_settings takes the settings as an object");
-        if (!clarity_keep_settings(s->options.name, settings)) return failed();
+        // Its secret settings go to the system's protected store, never the file (DESIGN 5.27).
+        if (!clarity_keep_settings_with(s->options.name, settings, cJSON_GetObjectItemCaseSensitive(args, "secrets"))) return failed();
         return value(cJSON_CreateNull());
     }
     if (strcmp(command, "open_window") == 0) {

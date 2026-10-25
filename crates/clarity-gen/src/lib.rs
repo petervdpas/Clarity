@@ -411,6 +411,40 @@ pub(crate) fn holding_order(project: &Project) -> Vec<&clarity_spec::model::Enti
     out
 }
 
+/// `project` with each web API that signs with a secret setting naming it as
+/// `setting:<program>/<name>` (DESIGN 5.27): where the runtime finds it in
+/// the system's protected store, under the program's own name, which each
+/// stack's settings use too.
+pub(crate) fn with_secret_settings(project: &Project, program: &str) -> Project {
+    let mut project = project.clone();
+    for source in &mut project.sources {
+        if let Some((_, secret)) = &mut source.auth
+            && let Some(name) = secret.strip_prefix("setting:").map(str::to_string)
+        {
+            *secret = format!("setting:{program}/{name}");
+        }
+    }
+    project
+}
+
+/// The databases with each connection kept as a secret setting named as
+/// `setting:<program>/<name>` (DESIGN 5.27), as `with_secret_settings` does
+/// for a web API's key.
+pub(crate) fn with_secret_locations(databases: Vec<(String, ddl::Sql, String)>, program: &str) -> Vec<(String, ddl::Sql, String)> {
+    databases
+        .into_iter()
+        .map(|(name, sql, at)| match at.strip_prefix("setting:") {
+            Some(setting) => (name, sql, format!("setting:{program}/{setting}")),
+            None => (name, sql, at),
+        })
+        .collect()
+}
+
+/// The secret settings' names as a list a program hands its runtime (DESIGN 5.27).
+pub(crate) fn secret_names(project: &Project) -> Vec<String> {
+    project.secret_settings().into_iter().map(str::to_string).collect()
+}
+
 pub fn with_resource_texts(project: &Project) -> Project {
     let mut project = project.clone();
     let markdown = project.resources.as_ref().map(|r| r.markdown.clone()).unwrap_or_default();

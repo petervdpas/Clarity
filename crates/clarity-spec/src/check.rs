@@ -459,6 +459,18 @@ impl<'a> Checker<'a> {
     /// `Settings` theirs.
     fn check_settings(&mut self) {
         let files = self.files;
+        // A secret is the person's, kept in the system's store: never a field of a record (DESIGN 5.27).
+        for (file, f) in files.iter().enumerate() {
+            for entity in f.entities.iter().filter(|e| !e.settings) {
+                for field in entity.fields.iter().filter(|f| f.ty == FieldType::Secret) {
+                    self.error(
+                        file,
+                        format!("a secret is a setting of the person, kept in the system's protected store; entity {} cannot keep '{}' as one", entity.name.name, field.name.name),
+                        field.span,
+                    );
+                }
+            }
+        }
         let blocks: Vec<(usize, &Entity)> = files.iter().enumerate().flat_map(|(i, f)| f.entities.iter().filter(|e| e.settings).map(move |e| (i, e))).collect();
         for (file, extra) in blocks.iter().skip(1) {
             self.error(*file, "a project has one 'settings' block", extra.name.span);
@@ -473,6 +485,9 @@ impl<'a> Checker<'a> {
         }
         for (file, settings) in blocks {
             for field in &settings.fields {
+                if field.ty == FieldType::Secret && field.modifiers.default.is_some() {
+                    self.error(file, format!("a secret has no default: it is the person's own ('{}')", field.name.name), field.span);
+                }
                 let plain = !matches!(field.ty, FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File | FieldType::Id);
                 if !plain {
                     self.error(file, format!("a setting is a plain value; '{}' cannot be {}", field.name.name, field.type_text), field.span);
@@ -1240,6 +1255,12 @@ impl<'a> Checker<'a> {
                         ),
                         widget.span,
                     ),
+                    // Only a password input shows a secret, as dots (DESIGN 5.27).
+                    Some(field) if field.ty == FieldType::Secret && p.kind != WidgetKind::Password => self.error(
+                        file,
+                        format!("{at}: '{field_name}' is secret; only a password input shows it, as dots"),
+                        widget.span,
+                    ),
                     Some(field) if p.kind == WidgetKind::Dropdown => self.check_dropdown(file, &at, widget, &field.ty),
                     Some(field) => self.check_range(file, widget, Some((field_name, &field.ty, &field.modifiers))),
                 }
@@ -1622,6 +1643,8 @@ impl<'a> Checker<'a> {
                 }
                 true
             }
+            // A secret's default is refused on its own (check_settings).
+            (FieldType::Secret, _) => true,
             (t, Literal::Number(_)) if t.is_numeric() => true,
             (t, Literal::Str(_)) if t.is_textual() => true,
             (FieldType::Date | FieldType::DateTime, Literal::Str(_)) => true,

@@ -17,6 +17,8 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.84
+	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.54.0
 )
 
@@ -30,6 +32,7 @@ require (
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -66,7 +69,6 @@ require (
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	modernc.org/libc v1.74.1 // indirect

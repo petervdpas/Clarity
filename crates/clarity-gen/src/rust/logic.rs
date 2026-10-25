@@ -1204,7 +1204,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("sql::text(&{})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => {
                 format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))

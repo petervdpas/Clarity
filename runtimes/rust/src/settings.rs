@@ -55,3 +55,30 @@ pub fn keep(program: &str, values: &Map<String, Value>) -> Result<()> {
     std::fs::write(&written, text).map_err(failed)?;
     std::fs::rename(&written, &path).map_err(failed)
 }
+
+/// The settings `program` kept, with its secrets (DESIGN 5.27): each name of
+/// `secrets` that the system's protected store holds, beside the file's.
+#[cfg(feature = "secrets")]
+pub fn read_with(program: &str, secrets: &[&str]) -> Map<String, Value> {
+    let mut values = read(program);
+    for name in secrets {
+        values.remove(*name);
+        if let Some(secret) = crate::secrets::get(program, name) {
+            values.insert(name.to_string(), Value::String(secret));
+        }
+    }
+    values
+}
+
+/// Keeps `values` as the settings of `program`, those named in `secrets` in
+/// the system's protected store and never in the file.
+#[cfg(feature = "secrets")]
+pub fn keep_with(program: &str, values: &Map<String, Value>, secrets: &[&str]) -> Result<()> {
+    let mut plain = values.clone();
+    for name in secrets {
+        if let Some(value) = plain.remove(*name) {
+            crate::secrets::set(program, name, value.as_str().unwrap_or_default())?;
+        }
+    }
+    keep(program, &plain)
+}

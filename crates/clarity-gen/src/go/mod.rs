@@ -55,6 +55,9 @@ struct Server {
     modules: &'static [&'static str],
 }
 
+/// The modules only the package secrets needs (DESIGN 5.27).
+pub(crate) const SECRET_MODULES: [&str; 2] = ["github.com/danieljoos/wincred", "github.com/zalando/go-keyring"];
+
 const SERVERS: [Server; 3] = [
     Server {
         sql: Sql::Postgres,
@@ -91,8 +94,10 @@ pub fn module_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings)?;
     let module = module_name(settings);
+    let project = &crate::with_secret_settings(project, &module);
+    let (databases, owned) = crate::databases(project, settings)?;
+    let databases = crate::with_secret_locations(databases, &module);
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let Some(main_window) = main_window(project) else {
@@ -100,6 +105,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let (servers, unused): (Vec<&Server>, Vec<&Server>) = SERVERS.iter().partition(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql));
     let mut left_out: Vec<&str> = unused.iter().flat_map(|s| s.modules.iter().copied()).filter(|m| !servers.iter().any(|s| s.modules.contains(m))).collect();
+    // The protected store's modules only for secret settings (DESIGN 5.27).
+    if project.secret_settings().is_empty() {
+        left_out.extend(SECRET_MODULES);
+    }
     // Engines (DESIGN 5.11) need wazero; an application without one leaves it out.
     let engines = crate::engines(project);
     if engines.is_empty() {
@@ -428,6 +437,13 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
         ("github.com/wailsapp/wails/v3/pkg/application".to_string(), String::new()),
     ];
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
+    // Secret settings (DESIGN 5.27): the system's protected store, set before anything reads a setting.
+    let use_secrets = if project.secret_settings().is_empty() {
+        ""
+    } else {
+        imports.push((format!("{RUNTIME_MODULE}/secrets"), String::new()));
+        "\t// The secret settings are kept in the system's protected store (DESIGN 5.27).\n\tclarity.Secrets = secrets.System{}\n"
+    };
     // A decimal value a click gives is written into the dispatch.
     if owners.iter().flat_map(|o| &o.calls).flat_map(|(_, _, values)| values).any(|v| v.starts_with("decimal.")) {
         imports.push(("github.com/shopspring/decimal".to_string(), String::new()));
@@ -718,7 +734,7 @@ func (windows) Picture(db *clarity.Db, entity string, id int64, field string) ([
 }}
 
 func main() {{
-{check_engines}\tdb, err := openDatabases()
+{use_secrets}{check_engines}\tdb, err := openDatabases()
 \tif err != nil {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)

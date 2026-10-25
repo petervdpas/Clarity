@@ -670,7 +670,7 @@ impl<'a> Env<'a> {
 
     fn field_type(&self, ty: &FieldType) -> Ty<'a> {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => Ty::Text,
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
             FieldType::Integer | FieldType::Id => Ty::Integer,
             FieldType::Decimal { .. } => Ty::Decimal,
             FieldType::Money => Ty::Money,
@@ -3714,6 +3714,27 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
     let web: Vec<&str> = project.entities().map(|e| e.name.name.as_str()).filter(|e| project.in_web_api(e)).collect();
     let types = types(&project.files);
     let mut found = held_records(project);
+    // A web API that signs with a setting names a secret one (DESIGN 5.27).
+    let secrets = project.secret_settings();
+    for source in &project.sources {
+        // A database may connect with one too.
+        if let Some(name) = source.address.strip_prefix("setting:").filter(|_| source.sql)
+            && !secrets.contains(&name)
+        {
+            found.push(Diagnostic::error(
+                format!("database {} connects with setting '{name}', which is no secret setting; add it to settings as {name}: secret", source.name),
+                Span::default(),
+            ));
+        }
+        let Some((_, secret)) = &source.auth else { continue };
+        let Some(name) = secret.strip_prefix("setting:") else { continue };
+        if !secrets.contains(&name) {
+            found.push(Diagnostic::error(
+                format!("web API {} signs with setting '{name}', which is no secret setting; add it to settings as {name}: secret", source.name),
+                Span::default(),
+            ));
+        }
+    }
     let not_stored = |entity: &str| {
         let source = project.source_of(entity).unwrap_or_default();
         format!("{entity} lives in the web API {source}, not in a database: its actions read and send it")

@@ -68,7 +68,9 @@ fn command(c: &CommandSpec) -> String {
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let name = crate::commands::program_name(settings);
+    let project = &crate::with_secret_settings(project, &name);
     let (databases, owned) = crate::databases(project, settings)?;
+    let databases = crate::with_secret_locations(databases, &name);
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");
@@ -76,6 +78,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // HTTP calls from code (DESIGN 5.23): the runtime's client.
     if project.calls_out() {
         features.push("http");
+    }
+    // Secret settings (DESIGN 5.27): the system's protected store.
+    if !project.secret_settings().is_empty() {
+        features.push("secrets");
     }
     features.sort();
     features.dedup();
@@ -170,6 +176,21 @@ fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::
         dispatch.push_str(&format!("        {i} => modules::{}::{}(&db, cli, &mut data{args}),\n", snake(&c.module), logic::command_function(c.decl)));
     }
     let engines_mod = if crate::engines(project).is_empty() { "" } else { "mod engines;\n" };
+    // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
+    let secret_names = crate::secret_names(project);
+    let secrets_const = if secret_names.is_empty() {
+        String::new()
+    } else {
+        format!("/// The settings kept in the system's protected store (DESIGN 5.27).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
+    };
+    let (data, keep) = if secret_names.is_empty() {
+        (data, keep)
+    } else {
+        (
+            data.replace("clarity_runtime::settings::read(PROGRAM)", "clarity_runtime::settings::read_with(PROGRAM, SECRETS)"),
+            keep.replace("clarity_runtime::settings::keep(PROGRAM, &values)", "clarity_runtime::settings::keep_with(PROGRAM, &values, SECRETS)"),
+        )
+    };
     format!(
         r#"{HEADER}{ALLOW}
 mod schema;
@@ -184,6 +205,7 @@ const TEXTS: &str = include_str!("texts.json");
 /// The name the desktop program has, which names the folder the person's
 /// settings are kept in: both programs share them.
 const PROGRAM: &str = {program:?};
+{secrets_const}
 /// The database of each data source: its kind, and its file or connection
 /// (`env:NAME` reads it from that environment variable when the program starts).
 const DATABASES: &[(&str, Dialect, &str)] = &[{databases}];

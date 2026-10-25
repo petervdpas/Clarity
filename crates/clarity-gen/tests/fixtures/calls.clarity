@@ -20,6 +20,20 @@ entity Order
 cli Calls
     help "Calls a web API"
 
+// A token the person keeps for a second web API, in the system's protected
+// store (DESIGN 5.27), which that API signs its calls with.
+settings
+    apiToken: secret
+
+command token(value: text)
+    help "Keeps the token of the vault"
+    settings.apiToken = value
+
+command vaulted(path: text)
+    help "Calls the vault, signed with the token kept"
+    let reply = http get path from vault
+    print reply.text
+
 action post_to(url: text, body: text) -> integer
     effects net
     let reply = http post url with body header "Content-Type": "text/plain"

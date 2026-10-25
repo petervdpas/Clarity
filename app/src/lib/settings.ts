@@ -72,6 +72,11 @@ export function settingsEntity(preview: Preview): Entity | undefined {
 }
 
 /** The settings of a project as `fits` reads them. */
+/** The settings kept in the system's protected store, by name (DESIGN 5.27): the shell keeps them out of the file. */
+export function secretSettings(preview: Preview): string[] {
+  return (settingsEntity(preview)?.fields ?? []).filter((f) => f.type.kind === "secret").map((f) => f.name.name);
+}
+
 export function settingsOf(preview: Preview, languages: string[], themes: string[]): Record<string, Setting> {
   const out: Record<string, Setting> = {};
   const enums = preview.project.files.flatMap((f) => f.enums);

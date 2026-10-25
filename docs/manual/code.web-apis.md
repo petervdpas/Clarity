@@ -45,7 +45,7 @@ The window waits while a handler calls out, as it waits for anything a handler d
 let reply = http post "https://api.example.com/orders" with order.summary header "Content-Type": "text/plain" header "Authorization": "Bearer {settings.apiToken}"
 ```
 
-A key or a token does not belong in the code, where everyone who reads the project sees it. Keep it in a [setting](../LANGUAGE.md#settings) and put it in with a slot, as above. A header named `Authorization`, or one whose name holds `key`, `token` or `secret`, with a plain text as its value is a warning on its line.
+A key or a token does not belong in the code, where everyone who reads the project sees it. Keep it in a [secret setting](../LANGUAGE.md#secret-settings), which the system's protected store keeps, and put it in with a slot, as above, or sign the source's calls with it: `auth bearer "setting:apiToken"`. A header named `Authorization`, or one whose name holds `key`, `token` or `secret`, with a plain text as its value is a warning on its line.
 
 ## JSON
 

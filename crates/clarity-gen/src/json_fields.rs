@@ -73,7 +73,7 @@ fn kind(project: &Project, owner: &Entity, ty: &FieldType, path: &mut Vec<String
     Some(match ty {
         FieldType::Record { entity } => Kind::Record(nested(&entity.name, path)?),
         FieldType::List { item } if project.in_web_api(&owner.name.name) => Kind::Records(nested(&item.name, path)?),
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => Kind::Text,
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => Kind::Text,
         FieldType::Integer | FieldType::Duration | FieldType::Id => Kind::Integer,
         FieldType::Decimal { .. } | FieldType::Money => Kind::Decimal,
         FieldType::Bool => Kind::Bool,

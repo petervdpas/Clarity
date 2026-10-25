@@ -28,7 +28,7 @@
   import AskDialog from "../lib/ui/AskDialog.svelte";
   import Dialog from "../lib/ui/Dialog.svelte";
   import { answerValues, type Ask } from "../lib/asks";
-  import { keptSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
+  import { keptSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
   import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
 
   /** One open window, as the backend sends it. */
@@ -195,11 +195,15 @@
   // shell and switches the language and the theme.
   const SETTINGS = "settings";
   let settings: Record<string, unknown> | null = null;
+  /** The settings kept in the system's protected store, by name. */
+  let secrets: string[] = [];
 
   /** The settings when the application starts: what was kept and still fits, over the defaults. */
   async function startSettings(preview: Preview) {
     if (!settingsEntity(preview)) return;
-    const kept = await invoke<Record<string, unknown> | null>("read_settings").catch(() => null);
+    // The secret settings come from the system's protected store, never the file (DESIGN 5.27).
+    secrets = secretSettings(preview);
+    const kept = await invoke<Record<string, unknown> | null>("read_settings", { secrets }).catch(() => null);
     const themes = offeredThemes(preview).map((t) => t.name.name);
     const language = languageChoice.language ?? base;
     const theme = themeOf(preview)?.name.name ?? themes[0] ?? "";
@@ -220,7 +224,7 @@
     settings = { ...values };
     for (const state of stack) if (SETTINGS in state.data) state.data[SETTINGS] = { ...settings };
     const { id: _id, ...kept } = settings;
-    invoke("keep_settings", { settings: kept }).catch((err) => say({ level: "error", text: errorText(err) }));
+    invoke("keep_settings", { settings: kept, secrets }).catch((err) => say({ level: "error", text: errorText(err) }));
     apply(settings);
   }
 

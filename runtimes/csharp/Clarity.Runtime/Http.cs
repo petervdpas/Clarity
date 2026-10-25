@@ -60,9 +60,13 @@ public static class Http
         return out_.ToString();
     }
 
-    /// <summary>A secret where the project file says it is: env:NAME reads that environment variable; empty when it is not set.</summary>
+    /// <summary>A secret where the project file says it is: env:NAME reads that environment variable, setting:program/name
+    /// a secret setting; empty when it is not there.</summary>
     static string Secret(string location) =>
-        location.StartsWith("env:", StringComparison.Ordinal) ? Environment.GetEnvironmentVariable(location[4..]) ?? "" : location;
+        location.StartsWith("env:", StringComparison.Ordinal) ? Environment.GetEnvironmentVariable(location[4..]) ?? ""
+        // A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+        : location.StartsWith("setting:", StringComparison.Ordinal) && location[8..].Split('/', 2) is [var program, var name] ? Secrets.Get(program, name) ?? ""
+        : location;
 
     /// <summary>Calls <paramref name="path"/> of the web API at <paramref name="baseAddress"/> (a data source's address) with the
     /// query parameters, encoded and in order, and the source's auth (<paramref name="authKind"/> bearer, api-key or basic, its

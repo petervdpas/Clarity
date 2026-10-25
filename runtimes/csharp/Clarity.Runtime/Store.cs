@@ -45,6 +45,14 @@ internal static class Store
     /// </summary>
     internal static string Location(string text)
     {
+        // A secret setting (DESIGN 5.27): setting:<program>/<name>, from the system's protected store.
+        if (text.StartsWith("setting:", StringComparison.Ordinal))
+        {
+            var at = text[8..].Split('/', 2);
+            var setting = at.Length == 2 ? at[1] : at[0];
+            var value = at.Length == 2 ? Secrets.Get(at[0], setting) : null;
+            return string.IsNullOrEmpty(value) ? throw new StorageException($"the secret setting {setting} is not kept yet: the settings name the connection") : value;
+        }
         if (!text.StartsWith("env:", StringComparison.Ordinal))
             return text;
         var name = text[4..];

@@ -189,16 +189,18 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Path     string              `json:"path"`
 		Address  string              `json:"address"`
 		Settings map[string]any      `json:"settings"`
-		Name     string              `json:"name"`
-		Data     string              `json:"data"`
-		Instance uint64              `json:"instance"`
-		Part     string              `json:"part"`
-		Kind     string              `json:"kind"`
-		Hear     string              `json:"hear"`
-		X        int                 `json:"x"`
-		Y        int                 `json:"y"`
-		Shown    bool                `json:"shown"`
-		Value    json.RawMessage     `json:"value"`
+		// The secret settings by name (DESIGN 5.27): kept in the system's protected store, never in the file.
+		Secrets  []string        `json:"secrets"`
+		Name     string          `json:"name"`
+		Data     string          `json:"data"`
+		Instance uint64          `json:"instance"`
+		Part     string          `json:"part"`
+		Kind     string          `json:"kind"`
+		Hear     string          `json:"hear"`
+		X        int             `json:"x"`
+		Y        int             `json:"y"`
+		Shown    bool            `json:"shown"`
+		Value    json.RawMessage `json:"value"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -216,10 +218,10 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		return Answer{Value: map[string]any{"model": json.RawMessage(c.options.Model), "main": c.options.Main}}
 	case "read_settings":
 		// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-		return Answer{Value: clarity.ReadSettings(c.options.Name)}
+		return Answer{Value: clarity.ReadSettingsWith(c.options.Name, a.Secrets)}
 	case "keep_settings":
-		// The person's settings, as the screen has them now.
-		if err := clarity.KeepSettings(c.options.Name, a.Settings); err != nil {
+		// The person's settings, as the screen has them now; its secrets go to the protected store.
+		if err := clarity.KeepSettingsWith(c.options.Name, a.Settings, a.Secrets); err != nil {
 			return failed(err)
 		}
 		return Answer{}

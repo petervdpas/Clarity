@@ -81,6 +81,13 @@ const SHELL_FILES: [(&str, &str); 7] = [
 /// runtime) only into an application that declares an engine.
 /// HTTP calls (DESIGN 5.23): the client on libcurl, copied only into an
 /// application whose code calls out.
+/// Secret settings (DESIGN 5.27): the system's protected store, copied only
+/// into an application with a secret setting.
+pub(crate) const SECRET_FILES: [(&str, &str); 2] = [
+    ("secrets/secrets.cpp", include_str!("../../../../runtimes/cpp/secrets/secrets.cpp")),
+    ("secrets/secrets.hpp", include_str!("../../../../runtimes/cpp/secrets/secrets.hpp")),
+];
+
 pub(crate) const HTTP_FILES: [(&str, &str); 2] = [
     ("http/http.cpp", include_str!("../../../../runtimes/cpp/http/http.cpp")),
     ("http/http.hpp", include_str!("../../../../runtimes/cpp/http/http.hpp")),
@@ -100,7 +107,9 @@ pub fn program_name(settings: &Settings) -> String {
 pub use cli::generate as generate_cli;
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
+    let project = &crate::with_secret_settings(project, &program_name(settings));
     let (databases, owned) = crate::databases(project, settings)?;
+    let databases = crate::with_secret_locations(databases, &program_name(settings));
     if let Some((name, sql, _)) = databases.iter().find(|(_, sql, _)| *sql != Sql::Sqlite) {
         return Err(vec![format!(
             "data source '{name}' is a {} database; the C++ backend stores records in SQLite for now",
@@ -118,13 +127,14 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let engines = !crate::engines(project).is_empty();
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out()) + &crate::libraries::cmake_lines(project, &program)),
+        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty()) + &crate::libraries::cmake_lines(project, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     files.extend(crate::parts::out_files(project, &[]));
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
-    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files).chain(http_files) {
+    let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
+    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files).chain(http_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -246,9 +256,11 @@ fn engines_cpp(project: &Project) -> (String, String) {
     (header, source)
 }
 
-fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool) -> String {
+fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool) -> String {
     let engine = if engines { " clarity_engine" } else { "" };
     let http = if http { " clarity_http" } else { "" };
+    // Secret settings (DESIGN 5.27): the system's protected store.
+    let http = if secrets { format!("{http} clarity_secrets") } else { http.to_string() };
     // The native custom parts (DESIGN 6.5), built beside the program, which loads them.
     let parts = if parts { "\n# The custom parts drawn by native libraries, which the program loads.\nadd_subdirectory(parts)\n" } else { "" };
     format!(
@@ -356,6 +368,12 @@ fn indent_lines(text: &str, depth: usize) -> String {
 }
 
 fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[(String, Sql, String)], owners: &[logic::Owner], main_window: &str) -> String {
+    // Secret settings (DESIGN 5.27): the system's protected store, before anything reads a setting.
+    let (secrets_include, use_secrets) = if project.secret_settings().is_empty() {
+        (String::new(), String::new())
+    } else {
+        ("#include \"secrets/secrets.hpp\"\n\n".to_string(), "    clarity::secrets_use();\n".to_string())
+    };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
     let stores: Vec<String> = settings.filestores.iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
     let windows: Vec<&logic::Owner> = owners.iter().filter(|o| !o.is_app).collect();
@@ -544,7 +562,8 @@ public:
 
 }}  // namespace {program}
 
-int main(int argc, char** argv) {{
+{secrets_include}int main(int argc, char** argv) {{
+{use_secrets}
     try {{
 {check_engines}        clarity::Db db({program}::databases);
         for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);

@@ -70,4 +70,31 @@ void keep_settings(const std::string& program, const nlohmann::json& values) {
     if (failed) throw StorageError("cannot keep the settings in " + path.string() + ": " + failed.message());
 }
 
+SecretStore secret_store;
+
+nlohmann::json read_settings_with(const std::string& program, const nlohmann::json& secrets) {
+    nlohmann::json values = read_settings(program);
+    if (!secrets.is_array()) return values;
+    for (const auto& name : secrets) {
+        if (!name.is_string()) continue;
+        values.erase(name.get<std::string>());
+        if (!secret_store.get) continue;
+        if (auto secret = secret_store.get(program, name.get<std::string>())) values[name.get<std::string>()] = *secret;
+    }
+    return values;
+}
+
+void keep_settings_with(const std::string& program, const nlohmann::json& values, const nlohmann::json& secrets) {
+    nlohmann::json plain = values;
+    if (secrets.is_array()) {
+        for (const auto& name : secrets) {
+            if (!name.is_string() || !plain.contains(name.get<std::string>())) continue;
+            const auto& value = plain[name.get<std::string>()];
+            if (secret_store.set) secret_store.set(program, name.get<std::string>(), value.is_string() ? value.get<std::string>() : "");
+            plain.erase(name.get<std::string>());
+        }
+    }
+    keep_settings(program, plain);
+}
+
 }  // namespace clarity

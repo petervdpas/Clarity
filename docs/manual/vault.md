@@ -38,4 +38,4 @@ The vault folder holds one encrypted file per secret, named so that the folder s
 
 ## Your applications
 
-The vault and the connections belong to Clarity, never to a project. They are not in the project's folder, and an application Clarity generates never gets Clarity's vault. A generated application takes its database password from an environment variable instead; see [Data sources](data.sources.md).
+The vault and the connections belong to Clarity, never to a project. They are not in the project's folder, and an application Clarity generates never gets Clarity's vault. A generated application keeps its own secrets in the system's protected store, per person, as [secret settings](../LANGUAGE.md#secret-settings), or reads them from an environment variable; see [Data sources](data.sources.md).

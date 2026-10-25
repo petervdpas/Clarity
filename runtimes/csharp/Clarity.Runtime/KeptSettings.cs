@@ -63,6 +63,35 @@ public static partial class KeptSettings
         System.IO.File.Move(written, file, overwrite: true);
     }
 
+    /// <summary>The settings <paramref name="program"/> kept, with its secrets (DESIGN 5.27): each one named that the
+    /// system's protected store holds, beside the file's values.</summary>
+    public static JsonObject Read(string program, IReadOnlyCollection<string> secrets)
+    {
+        var values = Read(program);
+        foreach (var name in secrets)
+        {
+            values.Remove(name);
+            if (Secrets.Get(program, name) is { } secret)
+                values[name] = secret;
+        }
+        return values;
+    }
+
+    /// <summary>Keeps <paramref name="values"/> as the settings of <paramref name="program"/>, those named in
+    /// <paramref name="secrets"/> in the system's protected store and never in the file.</summary>
+    public static void Keep(string program, JsonObject values, IReadOnlyCollection<string> secrets)
+    {
+        var plain = (JsonObject)values.DeepClone();
+        foreach (var name in secrets)
+        {
+            if (!plain.TryGetPropertyValue(name, out var value))
+                continue;
+            plain.Remove(name);
+            Secrets.Set(program, name, value?.GetValueKind() == JsonValueKind.String ? value.GetValue<string>() : "");
+        }
+        Keep(program, plain);
+    }
+
     /// <summary>Whether a kept value fits its setting.</summary>
     public static bool Fits(Setting setting, JsonNode? value)
     {

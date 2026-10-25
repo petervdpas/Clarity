@@ -22,3 +22,20 @@ const char* clarity_settings_file(const char* program);
 cJSON* clarity_read_settings(const char* program);
 /// Keeps `values` as the settings of `program`, written whole and then put in place.
 bool clarity_keep_settings(const char* program, const cJSON* values);
+
+/// The system's protected store of secret settings (DESIGN 5.27): `get`
+/// gives a secret in the scratch arena or NULL, `set` keeps one ("" forgets
+/// it). Empty in a program without secret settings; one with them calls
+/// clarity_secrets_use (clarity/secrets) to fill it.
+typedef struct {
+    const char* (*get)(const char* program, const char* name);
+    bool (*set)(const char* program, const char* name, const char* value);
+} ClaritySecretStore;
+extern ClaritySecretStore clarity_secret_store;
+
+/// clarity_read_settings with the secrets named in `secrets` (an array of
+/// names, or NULL), each from the store, beside the file's values.
+cJSON* clarity_read_settings_with(const char* program, const cJSON* secrets);
+/// clarity_keep_settings with those named in `secrets` kept in the store,
+/// never in the file.
+bool clarity_keep_settings_with(const char* program, const cJSON* values, const cJSON* secrets);

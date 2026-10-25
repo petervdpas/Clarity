@@ -53,7 +53,9 @@ const ALLOW: &str = "#![allow(non_camel_case_types, non_snake_case, unused_paren
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let crate_name = crate_name(settings);
+    let project = &crate::with_secret_settings(project, &crate_name);
     let (databases, owned) = crate::databases(project, settings)?;
+    let databases = crate::with_secret_locations(databases, &crate_name);
     let mut features: Vec<&str> = databases.iter().map(|(_, sql, _)| sql.feature()).collect();
     if !crate::engines(project).is_empty() {
         features.push("engines");
@@ -66,6 +68,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     // HTTP calls from code (DESIGN 5.23): the runtime's client.
     if project.calls_out() {
         features.push("http");
+    }
+    // Secret settings (DESIGN 5.27): the system's protected store.
+    if !project.secret_settings().is_empty() {
+        features.push("secrets");
     }
     features.sort();
     features.dedup();
@@ -279,6 +285,21 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
     let title = &clarity_project::title(settings);
     let program = crate_name(settings);
+    // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
+    let secret_names = crate::secret_names(project);
+    let secrets_const = if secret_names.is_empty() {
+        String::new()
+    } else {
+        format!("/// The settings kept in the system's protected store (DESIGN 5.27).\nconst SECRETS: &[&str] = &[{}];\n", secret_names.iter().map(|n| format!("{n:?}")).collect::<Vec<_>>().join(", "))
+    };
+    let (read, keep) = if secret_names.is_empty() {
+        ("clarity_runtime::settings::read(PROGRAM)", "clarity_runtime::settings::keep(PROGRAM, &settings)")
+    } else {
+        ("clarity_runtime::settings::read_with(PROGRAM, SECRETS)", "clarity_runtime::settings::keep_with(PROGRAM, &settings, SECRETS)")
+    };
+    let settings_commands = format!(
+        "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings() -> Map<String, Value> {{\n    {read}\n}}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(settings: Map<String, Value>) -> Answer<()> {{\n    {keep}.map_err(|err| Value::from(err.to_string()))\n}}"
+    );
     // An engine whose file does not fit its declaration stops the application at start, not at its first call.
     let (engines_mod, check_engines, close_engines) = if crate::engines(project).is_empty() {
         ("", "", "    let _ = instance;\n")
@@ -508,6 +529,7 @@ const MODEL: &str = include_str!("model.json");
 const MAIN_WINDOW: &str = {main_window:?};
 /// The program's name, which names the folder its settings are kept in.
 const PROGRAM: &str = {program:?};
+{secrets_const}
 /// The database of each data source: its kind, and its file or connection
 /// (`env:NAME` reads it from that environment variable when the
 /// application starts).
@@ -737,17 +759,7 @@ fn quit_app(handle: tauri::AppHandle) {{
     handle.exit(0);
 }}
 
-/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-#[tauri::command]
-fn read_settings() -> Map<String, Value> {{
-    clarity_runtime::settings::read(PROGRAM)
-}}
-
-/// Keeps the person's settings, as the screen has them now.
-#[tauri::command]
-fn keep_settings(settings: Map<String, Value>) -> Answer<()> {{
-    clarity_runtime::settings::keep(PROGRAM, &settings).map_err(|err| Value::from(err.to_string()))
-}}
+{settings_commands}
 
 /// The language the screen picked, which text code makes is translated to.
 #[tauri::command]

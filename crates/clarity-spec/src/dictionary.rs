@@ -39,6 +39,7 @@ pub fn type_text(ty: &FieldType) -> String {
         FieldType::Email => "email".to_string(),
         FieldType::Url => "url".to_string(),
         FieldType::Color => "color".to_string(),
+        FieldType::Secret => "secret".to_string(),
         FieldType::File => "file".to_string(),
         FieldType::Language => "language".to_string(),
         FieldType::Theme => "theme".to_string(),

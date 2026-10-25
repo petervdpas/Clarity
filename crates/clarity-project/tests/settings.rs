@@ -204,7 +204,7 @@ fn secrets_stay_out_of_the_project_file() {
     let problems = problems_of(|s| s.datasources[0].url = "postgres://shop:hunter2@localhost/shop".into());
     assert_eq!(
         problems,
-        ["data source 'main': the connection contains a password; put it in an environment variable (env:NAME) or the keychain (keychain:NAME)"]
+        ["data source 'main': the connection contains a password; put it in an environment variable (env:NAME), the keychain (keychain:NAME) or a secret setting (setting:name)"]
     );
     let problems = problems_of(|s| s.datasources[0].url = "Server=db;Database=shop;Password=hunter2".into());
     assert_eq!(problems.len(), 1, "{problems:?}");
@@ -213,7 +213,7 @@ fn secrets_stay_out_of_the_project_file() {
     let problems = problems_of(|s| s.datasources[1].auth.as_mut().unwrap().secret = "abc123".into());
     assert_eq!(
         problems,
-        ["data source 'payments': the secret must be a reference (env:NAME or keychain:NAME), not the secret itself"]
+        ["data source 'payments': the secret must be a reference (env:NAME, keychain:NAME or setting:name), not the secret itself"]
     );
 }
 
@@ -548,4 +548,36 @@ fn each_target_has_its_own_output_folder() {
     let out = Path::new("/work/examples/shop/out");
     assert_eq!(target_dir(out, Target::Desktop), Path::new("/work/examples/shop/out/desktop"));
     assert_eq!(target_dir(out, Target::Cli), Path::new("/work/examples/shop/out/cli"));
+}
+
+/// A web API's key may be a secret setting of the person (DESIGN 5.27),
+/// which the system's protected store keeps.
+#[test]
+fn a_web_api_signs_with_a_secret_setting() {
+    let text = "project Shop\n    stack go web desktop\n    datasource shop rest \"https://shop.example.com/api\"\n        auth bearer \"setting:shopToken\"\n";
+    let settings = parse(text).unwrap();
+    assert_eq!(validate(&settings), Vec::<String>::new());
+    let bare = text.replace("\"setting:shopToken\"", "\"setting:\"");
+    assert!(validate(&parse(&bare).unwrap()).iter().any(|p| p.contains("must be a reference")));
+}
+
+/// A server database's connection may be a secret setting too (DESIGN 5.27):
+/// the person keeps it, with its password, in the system's protected store.
+/// A SQLite file is no secret.
+#[test]
+fn a_database_connects_with_a_secret_setting() {
+    assert!(problems_of(|s| s.datasources[0].url = "setting:shopDb".into()).is_empty());
+    let problems = problems_of(|s| s.datasources[0].url = "setting:".into());
+    assert_eq!(problems, ["data source 'main': the connection names no variable, keychain entry or setting after its prefix"]);
+    let problems = problems_of(|s| {
+        s.datasources[0].kind = SourceKind::Sqlite;
+        s.datasources[0].url = "setting:shopDb".into();
+    });
+    assert_eq!(problems, ["data source 'main': a SQLite source is a file path, like data/shop.db"]);
+    let refs = clarity_project::source_refs(&{
+        let mut s = shop();
+        s.datasources[0].url = "setting:shopDb".into();
+        s
+    });
+    assert_eq!(refs[0].address, "setting:shopDb");
 }

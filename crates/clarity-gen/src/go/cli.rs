@@ -71,13 +71,19 @@ fn typed(p: &ParamSpec, at: usize) -> String {
 }
 
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let (databases, owned) = crate::databases(project, settings)?;
     let module = super::module_name(settings);
+    let project = &crate::with_secret_settings(project, &module);
+    let (databases, owned) = crate::databases(project, settings)?;
+    let databases = crate::with_secret_locations(databases, &module);
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let (servers, unused): (Vec<&Server>, Vec<&Server>) = SERVERS.iter().partition(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql));
     let mut left_out: Vec<&str> = unused.iter().flat_map(|s| s.modules.iter().copied()).filter(|m| !servers.iter().any(|s| s.modules.contains(m))).collect();
     let engines = crate::engines(project);
+    // The protected store's modules only for secret settings (DESIGN 5.27).
+    if project.secret_settings().is_empty() {
+        left_out.extend(super::SECRET_MODULES);
+    }
     if engines.is_empty() {
         left_out.extend(ENGINE_MODULES);
     }
@@ -128,6 +134,12 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
     let commands = crate::commands::commands(project);
     let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new())];
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
+    // Secret settings (DESIGN 5.27): read and kept through the system's protected store.
+    let secret_names = crate::secret_names(project);
+    let secrets_list = format!("[]string{{{}}}", secret_names.iter().map(|n| string(n)).collect::<Vec<_>>().join(", "));
+    if !secret_names.is_empty() {
+        imports.push((format!("{RUNTIME_MODULE}/secrets"), String::new()));
+    }
     imports.sort();
     let imports: String = imports.iter().map(|(path, name)| format!("\t{name}\"{path}\"\n")).collect();
     let sources = databases.iter().map(|(name, sql, at)| format!("{{Name: {}, Dialect: {}, At: {}}}", string(name), super::dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
@@ -146,11 +158,19 @@ fn main_go(project: &Project, settings: &Settings, module: &str, databases: &[(S
                 .unwrap_or_default();
             (
                 "// CommandData is what every command has as data of its own: the settings (DESIGN 5.17).\ntype CommandData struct {\n\tSettings *Settings\n}\n",
-                format!("\tsettings := clarity.CliKeptSettings(clarity.ReadSettings(program), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}"),
-                "\t// A command that changed a setting keeps it, as a window does.\n\tclarity.CliKeepSettings(program, before, *data.Settings)\n",
+                if secret_names.is_empty() {
+                    format!("\tsettings := clarity.CliKeptSettings(clarity.ReadSettings(program), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}")
+                } else {
+                    format!("\t// The secret settings are kept in the system's protected store (DESIGN 5.27).\n\tclarity.Secrets = secrets.System{{}}\n\tsettings := clarity.CliKeptSettings(clarity.ReadSettingsWith(program, {secrets_list}), NewSettings())\n\tbefore := settings\n\tdata := &CommandData{{Settings: &settings}}\n{language}")
+                },
+                if secret_names.is_empty() {
+                    "\t// A command that changed a setting keeps it, as a window does.\n\tclarity.CliKeepSettings(program, before, *data.Settings)\n".to_string()
+                } else {
+                    format!("\t// A command that changed a setting keeps it, as a window does; its secrets go to the protected store.\n\tclarity.CliKeepSettingsWith(program, before, *data.Settings, {secrets_list})\n")
+                },
             )
         }
-        None => ("// CommandData is what every command has as data of its own.\ntype CommandData struct{}\n", "\tdata := &CommandData{}\n".to_string(), ""),
+        None => ("// CommandData is what every command has as data of its own.\ntype CommandData struct{}\n", "\tdata := &CommandData{}\n".to_string(), String::new()),
     };
     let mut dispatch = String::new();
     for (i, c) in commands.iter().enumerate() {

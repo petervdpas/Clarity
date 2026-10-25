@@ -601,6 +601,7 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
         "email" => FieldType::Email,
         "url" => FieldType::Url,
         "color" => FieldType::Color,
+        "secret" => FieldType::Secret,
         "file" => FieldType::File,
         "id" => FieldType::Id,
         "ref" => FieldType::Ref {

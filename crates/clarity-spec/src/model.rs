@@ -198,6 +198,9 @@ pub enum FieldType {
     Url,
     /// A color, kept as text `#rrggbb` (U1c).
     Color,
+    /// A setting kept in the system's protected store, per person and per
+    /// application, never in settings.json (DESIGN 5.27): a web API's token.
+    Secret,
     /// The language shown, a setting of Clarity's own (`language` in `settings`).
     Language,
     /// The theme shown, a setting of Clarity's own (`theme` in `settings`).
@@ -951,6 +954,11 @@ impl Project {
 
     /// Whether `entity` lives in a web API data source (DESIGN 5.23): a
     /// service keeps its records, so no database stores them.
+    /// The settings kept in the system's protected store (DESIGN 5.27), by name.
+    pub fn secret_settings(&self) -> Vec<&str> {
+        self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Secret).map(|f| f.name.name.as_str()).collect()
+    }
+
     pub fn in_web_api(&self, entity: &str) -> bool {
         self.source_of(entity).is_some_and(|source| self.sources.iter().any(|s| s.name == source && !s.sql))
     }

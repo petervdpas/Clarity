@@ -71,8 +71,8 @@ fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The initial value of a field, when it has one beyond C#'s own default.
 fn initial(field: &Field) -> Option<String> {
     match (&field.ty, field.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, Some(Literal::Str(s))) => Some(string(s)),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme, _) => Some("\"\"".into()),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
@@ -113,10 +113,12 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
             FieldType::Text { .. } => ("text", "null".to_string()),
             FieldType::Enum { name } => ("enum", format!("Enum.GetNames<{}>()", name.name)),
             // The command-line program shows no themes and takes the language kept as it is.
-            FieldType::Language | FieldType::Theme if cli => ("text", "null".into()),
+            FieldType::Language | FieldType::Theme | FieldType::Secret if cli => ("text", "null".into()),
             FieldType::Language => ("language", "Locale.Offered".into()),
             FieldType::Theme => ("theme", "[.. Themes.Offered.Select(t => t.Name)]".into()),
             FieldType::DateTime => ("datetime", "null".into()),
+            // A secret is text, kept apart from the file (DESIGN 5.27).
+            FieldType::Secret => ("text", "null".into()),
             other => (clarity_spec::widgets::field_type_tag(other), "null".into()),
         };
         described.push_str(&format!(
@@ -175,17 +177,25 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
     // The command-line program takes them back when it starts, and keeps
     // them when a command changed them: it shows no language or theme of
     // its own and has no windows to follow.
+    // Secret settings (DESIGN 5.27): kept in the system's protected store, never in the file.
+    let secret_names: Vec<String> = entity.fields.iter().filter(|f| f.ty == FieldType::Secret).map(|f| string(&f.name.name)).collect();
+    let (secrets_arg, secrets_field) = if secret_names.is_empty() {
+        (String::new(), String::new())
+    } else {
+        (", Secrets".to_string(), format!("    /// <summary>The settings kept in the system's protected store (DESIGN 5.27).</summary>\n    static readonly string[] Secrets = [{}];\n", secret_names.join(", ")))
+    };
     let watch = if cli {
         String::new()
     } else {
-        format!("{shown}        settings.PropertyChanged += (_, e) =>\n        {{\n            KeptSettings.Keep(ProgramName, settings.ToJson());\n{follow}        }};\n")
+        format!("{shown}        settings.PropertyChanged += (_, e) =>\n        {{\n            KeptSettings.Keep(ProgramName, settings.ToJson(){secrets_arg});\n{follow}        }};\n")
     };
-    let keep = if cli { "\n    /// <summary>Keeps the settings as they are now.</summary>\n    public static void Keep() => KeptSettings.Keep(ProgramName, Current.ToJson());\n" } else { "" };
+    let keep = if cli { format!("\n    /// <summary>Keeps the settings as they are now.</summary>\n    public static void Keep() => KeptSettings.Keep(ProgramName, Current.ToJson(){secrets_arg});\n") } else { String::new() };
     format!(
         "/// <summary>The person's settings: one for the whole application, shared by every window, kept on their machine as they change.</summary>
 public sealed partial class {name} : ObservableObject
 {{
     const string ProgramName = {program};
+{secrets_field}
 
     /// <summary>The settings shown, the same in every window.</summary>
     public static {name} Current {{ get; private set; }} = new();
@@ -195,7 +205,7 @@ public sealed partial class {name} : ObservableObject
     public static void Start()
     {{
         var settings = new {name}();
-        var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName));
+        var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName{secrets_arg}));
 {taken}        Current = settings;
 {watch}    }}
 {keep}
@@ -231,7 +241,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
 
 fn from_sql(field: &Field) -> String {
     let read = match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => "GetText".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => "GetText".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
         FieldType::Bool => "GetBoolean".into(),

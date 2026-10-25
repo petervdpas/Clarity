@@ -262,7 +262,8 @@ pub struct SourceRef {
     pub external: bool,
     /// Records are read, never saved or deleted.
     pub readonly: bool,
-    /// A web API's address, which `http ... from source` calls paths of.
+    /// Where the source is: a web API's address, which `http ... from source`
+    /// calls paths of, or a database's connection as the project file has it.
     pub address: String,
     /// A web API's auth: its kind as the project file writes it (`bearer`,
     /// `api-key`, `basic`) and where its secret is (`env:NAME`).

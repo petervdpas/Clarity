@@ -78,12 +78,13 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
         json with = args.value("with", json::object());
         if (command == "start") return value({{"model", json::parse(options_.model)}, {"main", options_.main}});
         // The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.
-        if (command == "read_settings") return value(read_settings(options_.name));
+        if (command == "read_settings") return value(read_settings_with(options_.name, args.value("secrets", json(nullptr))));
         // The person's settings, as the screen has them now.
         if (command == "keep_settings") {
             const auto& settings = args.contains("settings") ? args["settings"] : json(nullptr);
             if (!settings.is_object()) throw InvalidError("keep_settings takes the settings as an object");
-            keep_settings(options_.name, settings);
+            // Its secret settings go to the system's protected store, never the file (DESIGN 5.27).
+            keep_settings_with(options_.name, settings, args.value("secrets", json(nullptr)));
             return value(nullptr);
         }
         if (command == "open_window") return value(on_event(options_.windows->open(db, text_of(args, "window"), with), "open"));

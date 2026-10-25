@@ -66,6 +66,26 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.c)
   endif()
 endif()
 
+# Secret settings (DESIGN 5.27) in the system's protected store: only in a
+# project whose runtime copy has them, that is, one with a secret setting.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.c)
+  add_library(clarity_secrets STATIC ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.c)
+  target_include_directories(clarity_secrets PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(clarity_secrets PUBLIC clarity)
+  if(WIN32)
+    target_link_libraries(clarity_secrets PUBLIC advapi32)
+  elseif(APPLE)
+    target_link_libraries(clarity_secrets PUBLIC "-framework Security" "-framework CoreFoundation")
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(CLARITY_GIO REQUIRED IMPORTED_TARGET gio-2.0)
+    target_link_libraries(clarity_secrets PUBLIC PkgConfig::CLARITY_GIO)
+  endif()
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(clarity_secrets PRIVATE -Wall -Wextra)
+  endif()
+endif()
+
 # Engines (DESIGN 5.11), hosted by wasm3: only in a project whose runtime
 # copy has them, that is, one that declares an engine.
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/engine/engine.c)

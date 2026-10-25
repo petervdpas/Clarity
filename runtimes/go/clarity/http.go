@@ -97,10 +97,14 @@ type HTTPAuth struct {
 }
 
 // secretAt is a secret where the project file says it is: env:NAME reads
-// that environment variable; empty when it is not set.
+// that environment variable, setting:<program>/<name> a secret setting in
+// the system's protected store (DESIGN 5.27); empty when it is not there.
 func secretAt(location string) string {
 	if name, found := strings.CutPrefix(location, "env:"); found {
 		return os.Getenv(name)
+	}
+	if at, found := strings.CutPrefix(location, "setting:"); found {
+		return settingSecret(at)
 	}
 	return location
 }

@@ -53,6 +53,26 @@ endif()
 
 # HTTP calls from code (DESIGN 5.23), through libcurl: only in a project
 # whose runtime copy has them, that is, one whose code calls out.
+# Secret settings (DESIGN 5.27) in the system's protected store: only in a
+# project whose runtime copy has them, that is, one with a secret setting.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.cpp)
+  add_library(clarity_secrets STATIC ${CMAKE_CURRENT_LIST_DIR}/secrets/secrets.cpp)
+  target_include_directories(clarity_secrets PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(clarity_secrets PUBLIC clarity)
+  if(WIN32)
+    target_link_libraries(clarity_secrets PUBLIC advapi32)
+  elseif(APPLE)
+    target_link_libraries(clarity_secrets PUBLIC "-framework Security" "-framework CoreFoundation")
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(CLARITY_GIO REQUIRED IMPORTED_TARGET gio-2.0)
+    target_link_libraries(clarity_secrets PUBLIC PkgConfig::CLARITY_GIO)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(clarity_secrets PRIVATE -Wall -Wextra)
+  endif()
+endif()
+
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/http/http.cpp)
   find_package(CURL REQUIRED)
   add_library(clarity_http STATIC ${CMAKE_CURRENT_LIST_DIR}/http/http.cpp)

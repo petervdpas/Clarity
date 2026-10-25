@@ -2245,7 +2245,7 @@ impl<'a> Emitter<'a> {
     /// A value compared with a field of type `ty`, as the runtime takes it.
     fn sql_value(&mut self, ty: &FieldType, value: &Expr, pre: &mut String) -> String {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => format!("clarity_text_value({})", bare(self.value(value, pre))),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({})", bare(self.value(value, pre))),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity_integer_value({})", bare(self.value(value, pre))),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity_decimal_value({})", bare(self.decimal(value, pre))),
             FieldType::Bool => format!("clarity_bool_value({})", bare(self.value(value, pre))),

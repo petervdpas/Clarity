@@ -79,7 +79,7 @@ project Shop
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine. |
-| `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"keychain:NAME"`; it is never written into the file itself. A generated application reads it from `env:NAME`. |
+| `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"`, `"keychain:NAME"` or `"setting:name"`; it is never written into the file itself. A generated application reads it from `env:NAME` or from the secret setting `name` (see [Secret settings](#secret-settings)). |
 | `openapi "file"` | no | Indented under a web API's `datasource` line: its OpenAPI (Swagger) description, a YAML or JSON file of the `apis` folder. Clarity writes the module `apis/<source>.clarity` from it, for what the project picks, and writes it again when the file or the picks change. |
 | `pick "operationId", ...` | no | Indented under a web API with an `openapi` line: the operations the application uses. Each becomes an action, and the schemas it takes or gives entities. `pick schema "Name", ...` makes schemas entities on their own. A pick the description does not have is a warning. |
 
@@ -488,13 +488,28 @@ settings
     pageSize: integer, min 10, max 200, default 50
 ```
 
-- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color or an enum. A reference, a list, a picture or an id is no setting.
+- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color, an enum or a secret (see [Secret settings](#secret-settings)). A reference, a list, a picture or an id is no setting.
 - **Clarity's own.** `language` and `theme` take no type: they are the language and the theme shown, labeled with Clarity's words `languagePicker` and `themePicker`. Setting either switches the language or the theme, as the pickers of the click targets `language` and `theme` do, and those pickers change the same settings.
 - **Kept per person.** Settings are never in the database. Each person's are kept on their machine, as `settings.json` in a folder named after the application, in the folder for application settings of their system (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere). A setting not kept yet has its `default`; a kept value that no longer fits (a setting removed, an enum value gone, a number past its ends) is dropped.
 - **In every window.** Every window and the app have `settings` as their data without a `data` line. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
 - **A settings window.** New window offers "Settings window" when the project has settings: a dialog with a labeled form of every setting and a Close button.
 
 The name `Settings` is theirs: no entity can have it, and no window can have other data called `settings`.
+
+#### Secret settings
+
+A token, a key or a database's connection is a setting of type `secret`:
+
+```clarity
+settings
+    apiToken: secret, label @apiTokenSetting
+```
+
+- **Kept apart.** A secret is kept in the system's protected store, per application and per person: the Credential Manager on Windows, the Keychain on macOS, the Secret Service (such as GNOME Keyring or KWallet) elsewhere. It is never in `settings.json`.
+- **Only a password input shows it.** A text box or a text part bound to it is an error; a settings window gives it a password input. It has no default.
+- **In code it is text.** `settings.apiToken = value` keeps it, and `settings.apiToken = ""` forgets it.
+- **Only in settings.** An entity's field cannot be a secret.
+- **Signing and connecting.** The project file names it as `"setting:apiToken"`: a web API signs its calls with it (`auth bearer "setting:apiToken"`), and a server database connects with it (`datasource main postgres "setting:shopDb"`). A database whose secret is not kept yet does not open.
 
 ## 5. Windows
 

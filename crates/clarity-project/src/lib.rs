@@ -94,7 +94,8 @@ impl Stack {
 #[ts(export)]
 pub struct Auth {
     pub kind: AuthKind,
-    /// Where the secret is kept: `env:NAME` or `keychain:NAME`.
+    /// Where the secret is kept: `env:NAME`, `keychain:NAME`, or `setting:name`,
+    /// a secret setting of the person (DESIGN 5.27).
     pub secret: String,
 }
 
@@ -470,7 +471,8 @@ pub fn validate(settings: &Settings) -> Vec<String> {
 }
 
 fn is_reference(text: &str) -> bool {
-    ["env:", "keychain:"]
+    // setting:name is a secret setting of the person (DESIGN 5.27).
+    ["env:", "keychain:", "setting:"]
         .iter()
         .any(|prefix| text.strip_prefix(prefix).is_some_and(|rest| !rest.trim().is_empty()))
 }
@@ -505,13 +507,16 @@ fn source_problem(source: &DataSource) -> Option<String> {
         SourceKind::Rest if !(url.starts_with("http://") || url.starts_with("https://")) => {
             Some("the base URL must start with http:// or https://".to_string())
         }
+        _ if ["env:", "keychain:", "setting:"].iter().any(|prefix| url.strip_prefix(prefix).is_some_and(|rest| rest.trim().is_empty())) => {
+            Some("the connection names no variable, keychain entry or setting after its prefix".to_string())
+        }
         _ if has_password(url) => Some(
-            "the connection contains a password; put it in an environment variable (env:NAME) or the keychain (keychain:NAME)"
+            "the connection contains a password; put it in an environment variable (env:NAME), the keychain (keychain:NAME) or a secret setting (setting:name)"
                 .to_string(),
         ),
         _ => match &source.auth {
             Some(auth) if !is_reference(auth.secret.trim()) => Some(
-                "the secret must be a reference (env:NAME or keychain:NAME), not the secret itself".to_string(),
+                "the secret must be a reference (env:NAME, keychain:NAME or setting:name), not the secret itself".to_string(),
             ),
             _ => None,
         },
@@ -636,6 +641,8 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
             _ => clarity_spec::SourceRef {
                 external: s.external,
                 readonly: s.readonly,
+                // Its connection, which may name a secret setting (DESIGN 5.27).
+                address: s.url.clone(),
                 ..clarity_spec::SourceRef::sql(&s.name)
             },
         })

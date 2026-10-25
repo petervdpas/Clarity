@@ -118,13 +118,13 @@ A project declares where its data lives. The project file lists one or more data
 ```clarity
 project Shop
     stack rust web desktop
-    // sqlite, postgres, mysql, mssql or rest; secrets only as env: or keychain: references
+    // sqlite, postgres, mysql, mssql or rest; secrets only as env:, keychain: or setting: references
     datasource main postgres "env:SHOP_DB_URL"
     datasource payments rest "https://api.example.com/v2"
         auth bearer "keychain:payments"   // bearer, api_key or basic
 ```
 
-The text after the kind is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:` or `keychain:`), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
+The text after the kind is a file path for SQLite (`data/shop.db`), a connection for the SQL servers and the base URL for a web API. Passwords, tokens and connection strings with secrets never appear in the project file; it only says where to find them (`env:`, `keychain:`, or `setting:` for a secret setting of the person, 5.27), and the checker refuses a connection that contains a password. A new project gets one SQLite source named `main`.
 
 **Which entity lives where.** A module says it with a `source erp` line; its entities live in that source. Without one they use the first source, so a project with one source never mentions it. Each owned SQL source has its own migration steps (`migrations/<source>/`) and its own database at run time; a reference into another database is a plain id without a foreign key (D1c, 2026-10-17). Windows do not know which source is behind an entity: they bind to the dictionary, and the dictionary supplies labels and validation for every source.
 
@@ -1395,6 +1395,17 @@ Asked 2026-10-25: the IDE's System graphs as a generic part. The user chose both
 - **The timer** (`WidgetKind::Timer`, palette Time, `Event::Tick`) has no place, like the sound, and sits in the designer's tray. While its window is open and it is enabled (`clock.enabled`), it runs `on tick` every `every n` seconds (0.1 to 86400); a tick while a handler runs is left out. Web: Runtime.svelte keeps an interval per open window's timer and runs the handler on that window; Avalonia: `Clarity.Avalonia.Timer` on a DispatcherTimer with the tick command.
 - **Lists of values in code and windows.** A window's data may be a list of text, integers, decimals or dates, starting empty; `list + [item]` is a new list (the checker wants lists of one kind on both sides). Each stack joins its way: Rust extends a clone, Go appends to `slices.Clone`, C# `Enumerable.Concat`, C `clarity_<kind>_join` (runtime, copied), C++ a lambda that inserts.
 - Tests: `clarity-spec/tests/live_charts.rs`, `clarity-gen/tests/live_charts.rs` (a monitor window on every stack; ignored tests build it with cargo/Tauri, go vet, dotnet with warnings as errors, CMake for C and C++: all pass), `Clarity.Avalonia.Tests/LiveChartTests.cs`, `app/src/lib/trend.test.ts`. Clarity.Avalonia gets new controls: NuGet 0.33.0.
+
+### 5.27 Secret settings (2026-10-25, built)
+
+Asked 2026-10-25: a token for a web API, and later a database's connection, belongs in the application's settings, in a protected store, per application. A setting of type `secret` is the person's own, kept in the system's protected store, never in `settings.json`.
+
+- **The type.** `apiToken: secret` is a setting (`FieldType::Secret`), only in `settings`: an entity's field cannot be one. It has no default, and only a password input shows it; a text box or a text part bound to it is an error. A settings window gives it a password input (`widget_for`). In code it is text: `settings.apiToken = value` keeps it, `""` forgets it.
+- **The store.** Per program and per person: service = the program's name, user = the setting's name (on Windows the credential `program:name`). Linux and the BSDs use the Secret Service over D-Bus, macOS the Keychain, Windows the Credential Manager. Rust `clarity_runtime::secrets` (crate `keyring`, feature `secrets`); Go `runtimes/go/secrets` (`go-keyring`, set as `clarity.Secrets = secrets.System{}`); C# `Secrets` (Tmds.DBus.Protocol, CredRead and CredWrite, the Security framework); C and C++ `secrets/` (gio, wincred, Security), turned on with `clarity_secrets_use()` / `clarity::secrets_use()`. An application without a secret setting gets none of it: no feature, no Go module (`SECRET_MODULES`), no copied files or `clarity_secrets` link.
+- **Reading and keeping.** The settings runtimes take the secret names: Rust `read_with`/`keep_with`, Go `ReadSettingsWith`/`KeepSettingsWith`/`CliKeepSettingsWith`, C# `KeptSettings.Read(program, secrets)`/`Keep(program, values, secrets)`, C `clarity_read_settings_with`/`clarity_keep_settings_with`, C++ `read_settings_with`/`keep_settings_with`. The web screen sends the names with `read_settings` and `keep_settings` (`secretSettings` in `settings.ts`).
+- **Where a secret signs or connects.** The project file names a secret setting as `setting:name`: a web API's `auth bearer "setting:apiToken"`, and a server database's connection, `datasource main postgres "setting:shopDb"`. The checker wants a secret setting of that name (`check_web_sources`); a SQLite file is no secret. Generation writes it as `setting:<program>/<name>` (`with_secret_settings`, `with_secret_locations`), which the runtimes read from the store: an HTTP call signs with it (empty when not kept), and a database connects with it or fails with "the secret setting shopDb is not kept yet". C and C++ store records in SQLite only for now, so their connection reading waits for server databases.
+- **Open.** A desktop application opens its databases before its first window, so a connection kept as a secret has to be kept before the first start (by a command of the program, or an earlier version); the application cannot yet ask for it in its own settings window.
+- Tests: `clarity-spec/tests/secrets.rs`, `clarity-project/tests/settings.rs`, `clarity-gen/tests/secrets.rs`, `http_build.rs` (a web API signed with a secret on every stack, with `CLARITY_SECRET_STORE=1`), and each runtime's secrets tests against the real store with `CLARITY_SECRET_STORE=1` (Rust, Go, C#, C, C++: all pass on Linux with gnome-keyring).
 
 ## 6. Generation
 

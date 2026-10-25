@@ -3,6 +3,7 @@ import type { AuthKind } from "./AuthKind";
 
 export type Auth = { kind: AuthKind, 
 /**
- * Where the secret is kept: `env:NAME` or `keychain:NAME`.
+ * Where the secret is kept: `env:NAME`, `keychain:NAME`, or `setting:name`,
+ * a secret setting of the person (DESIGN 5.27).
  */
 secret: string, };

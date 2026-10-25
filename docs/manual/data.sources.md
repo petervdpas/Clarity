@@ -24,7 +24,7 @@ The same entities and steps work on all four; the program writes each step in th
 
 ## Passwords stay out of the project
 
-A connection that needs a password is written as `"env:NAME"`. The generated application reads the whole connection from that environment variable when it starts. The checker refuses a connection that contains a password itself. A SQLite source is always a file path.
+A connection that needs a password is written as `"env:NAME"`, or as `"setting:name"` for a [secret setting](../LANGUAGE.md#secret-settings) of the person. The generated application reads the whole connection from that environment variable, or from the system's protected store, when it starts; a secret setting that is not kept yet stops it with a message saying so. The checker refuses a connection that contains a password itself. A SQLite source is always a file path.
 
 ## Several sources
 

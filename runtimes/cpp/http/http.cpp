@@ -9,6 +9,8 @@
 
 #include <curl/curl.h>
 
+#include "clarity/settings.hpp"
+
 namespace clarity {
 
 namespace {
@@ -106,11 +108,18 @@ std::string url_part(const std::string& text) {
 namespace {
 
 /// A secret where the project file says it is: `env:NAME` reads that
-/// environment variable; empty when it is not set.
+/// environment variable, `setting:<program>/<name>` a secret setting from
+/// the system's protected store (DESIGN 5.27); empty when it is not there.
 std::string secret_at(const std::string& location) {
     if (location.rfind("env:", 0) == 0) {
         const char* value = std::getenv(location.substr(4).c_str());
         return value ? value : "";
+    }
+    if (location.rfind("setting:", 0) == 0) {
+        auto at = location.substr(8);
+        auto slash = at.find('/');
+        if (slash == std::string::npos || !secret_store.get) return "";
+        return secret_store.get(at.substr(0, slash), at.substr(slash + 1)).value_or("");
     }
     return location;
 }

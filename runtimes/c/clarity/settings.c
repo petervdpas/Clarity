@@ -67,3 +67,36 @@ bool clarity_keep_settings(const char* program, const cJSON* values) {
 #endif
     return rename(written, file) == 0 || clarity_fail(CLARITY_STORAGE, "cannot keep the settings in %s", file);
 }
+
+ClaritySecretStore clarity_secret_store = {0};
+
+cJSON* clarity_read_settings_with(const char* program, const cJSON* secrets) {
+    cJSON* values = clarity_read_settings(program);
+    const cJSON* name;
+    cJSON_ArrayForEach(name, secrets) {
+        if (!cJSON_IsString(name)) continue;
+        cJSON_DeleteItemFromObjectCaseSensitive(values, name->valuestring);
+        const char* secret = clarity_secret_store.get ? clarity_secret_store.get(program, name->valuestring) : NULL;
+        if (secret) cJSON_AddStringToObject(values, name->valuestring, secret);
+    }
+    return values;
+}
+
+bool clarity_keep_settings_with(const char* program, const cJSON* values, const cJSON* secrets) {
+    cJSON* plain = cJSON_Duplicate(values, 1);
+    const cJSON* name;
+    cJSON_ArrayForEach(name, secrets) {
+        if (!cJSON_IsString(name)) continue;
+        const cJSON* value = cJSON_GetObjectItemCaseSensitive(plain, name->valuestring);
+        if (!value) continue;
+        const char* text = cJSON_IsString(value) ? value->valuestring : "";
+        if (clarity_secret_store.set && !clarity_secret_store.set(program, name->valuestring, text)) {
+            cJSON_Delete(plain);
+            return false;
+        }
+        cJSON_DeleteItemFromObjectCaseSensitive(plain, name->valuestring);
+    }
+    bool kept = clarity_keep_settings(program, plain);
+    cJSON_Delete(plain);
+    return kept;
+}

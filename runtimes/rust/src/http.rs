@@ -92,10 +92,19 @@ pub enum Auth<'a> {
 /// A secret where the project file says it is: `env:NAME` reads that
 /// environment variable; empty when it is not set.
 fn secret(location: &str) -> String {
-    match location.strip_prefix("env:") {
-        Some(name) => std::env::var(name).unwrap_or_default(),
-        None => location.to_string(),
+    if let Some(name) = location.strip_prefix("env:") {
+        return std::env::var(name).unwrap_or_default();
     }
+    // A secret setting (DESIGN 5.27): `setting:<program>/<name>`, from the system's protected store.
+    if let Some(at) = location.strip_prefix("setting:") {
+        #[cfg(feature = "secrets")]
+        if let Some((program, name)) = at.split_once('/') {
+            return crate::secrets::get(program, name).unwrap_or_default();
+        }
+        let _ = at;
+        return String::new();
+    }
+    location.to_string()
 }
 
 /// Text as a part of a url: letters, digits and `- . _ ~` as they are, every

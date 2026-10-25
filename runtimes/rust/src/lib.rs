@@ -18,6 +18,8 @@ pub mod query;
 #[cfg(feature = "parts")]
 pub mod parts;
 pub mod record_file;
+#[cfg(feature = "secrets")]
+pub mod secrets;
 pub mod settings;
 pub mod sql;
 mod store;

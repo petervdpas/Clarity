@@ -18,7 +18,7 @@ file(GLOB CLARITY_TESTS CONFIGURE_DEPENDS tests/*.cpp)
 add_executable(clarity_tests ${CLARITY_TESTS})
 # The HTTP test runs its own small server on a thread.
 find_package(Threads REQUIRED)
-target_link_libraries(clarity_tests PRIVATE clarity clarity_shell clarity_engine clarity_http Threads::Threads)
+target_link_libraries(clarity_tests PRIVATE clarity clarity_shell clarity_engine clarity_http clarity_secrets Threads::Threads)
 if(WIN32)
   target_link_libraries(clarity_tests PRIVATE ws2_32)
 endif()

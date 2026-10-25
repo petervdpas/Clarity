@@ -313,6 +313,25 @@
   }
 
   /** The window the project starts with: the app's main window, or the first one. */
+  /** What each ribbon tab last showed. A tab shows its own view: switching
+      clears what the last tab showed, and coming back shows it again. */
+  let tabViews: Record<Tab, Open[]> = { project: [], design: [], preview: [], vault: [] };
+  /** Whether the view is empty because the tab has nothing chosen yet, so
+      a reload does not fill it with the start window. */
+  let viewCleared = false;
+
+  function switchTab(next: Tab) {
+    if (appSettings.open) closeAppSettings();
+    if (next === tab) return;
+    tabViews[tab] = stack;
+    tab = next;
+    const saved = preview ? tabViews[next].filter((o) => exists(preview!, o)) : [];
+    // Preview runs the main window until another is chosen; the other tabs start empty.
+    stack = saved.length > 0 ? saved : next === "preview" && preview ? startWindow(preview) : [];
+    viewCleared = stack.length === 0;
+    pageDesigner.selected = null;
+  }
+
   function startWindow(p: Preview): Open[] {
     const main = findApp(p)?.main?.name;
     const first = main ?? p.project.files.flatMap((f) => f.pages)[0]?.name.name;
@@ -338,9 +357,10 @@
       loadPicturesWith((name) => invoke<string>("project_resource", { name }));
     }
     preview = next;
-    // Keep the open windows that still exist after an edit.
+    // Keep the open windows that still exist after an edit. A tab left
+    // empty on purpose (switchTab) stays empty.
     const kept = stack.filter((o) => exists(next, o));
-    stack = kept.length > 0 ? kept : startWindow(next);
+    stack = kept.length > 0 ? kept : viewCleared && stack.length === 0 ? [] : startWindow(next);
     refreshHistory();
   }
 
@@ -414,6 +434,7 @@
 
   function select(o: Open) {
     stack = [o];
+    viewCleared = false;
     pageDesigner.selected = null;
   }
 
@@ -741,6 +762,8 @@
       openFile = trimmed;
       writeLastProject(trimmed);
       stack = [];
+      tabViews = { project: [], design: [], preview: [], vault: [] };
+      viewCleared = false;
       applyPreview(result);
       await loadProjectFile();
     } catch (err) {
@@ -819,6 +842,8 @@
       openFile = file;
       writeLastProject(file);
       stack = [];
+      tabViews = { project: [], design: [], preview: [], vault: [] };
+      viewCleared = false;
       applyPreview(result);
       await loadProjectFile();
       tab = "design";
@@ -1088,7 +1113,7 @@
     <div class="ribbon-tabs" role="tablist">
       <div class="brand"><img class="logo" src={logo} alt="" /> Clarity IDE</div>
       {#each TABS as t (t.key)}
-        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => ((tab = t.key), appSettings.open && closeAppSettings())}>{t.name}</button>
+        <button role="tab" aria-selected={tab === t.key} class:active={tab === t.key} onclick={() => switchTab(t.key)}>{t.name}</button>
       {/each}
       {#if projectName}<span class="project-name">{projectName}</span>{/if}
       <button class="corner settings-button" class:active={appSettings.open} aria-pressed={appSettings.open} onclick={() => (appSettings.open ? closeAppSettings() : (appSettings.open = true))} title="Clarity's own settings: its display, where projects and apps go, where the build tools are, and what the agent may run">Clarity settings</button>
@@ -1471,6 +1496,8 @@
           <div class="placeholder">
             <p>Window <code>{current.name}</code> cannot be shown. See the problems list.</p>
           </div>
+        {:else if startWindow(preview).length > 0}
+          <div class="placeholder"><p>Choose what to work on in the project tree on the left.</p></div>
         {:else}
           <div class="placeholder"><p>This project has no windows yet. Add one with New window.</p></div>
         {/if}

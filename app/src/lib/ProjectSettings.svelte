@@ -220,14 +220,10 @@
           <p class="form-help">The project's folder: its modules, pictures, translations and migrations.</p>
           <label class="form-label" for="output-folder">App folder</label>
           <div class="form-inline">
-            <input
-              id="output-folder"
-              class="mono"
-              value={settings.out}
-              spellcheck="false"
-              onchange={(e) => save({ out: e.currentTarget.value.trim() })}
-            />
+            <!-- Chosen with Browse, never typed, so no path is mistyped. -->
+            <input id="output-folder" class="mono" readonly value={settings.out} title={settings.out} />
             <button onclick={browseOutput} title="Choose the app folder">Browse...</button>
+            <button disabled={settings.out === "out"} onclick={() => save({ out: "out" })} title="Back to out, which follows the Apps folder of Clarity settings">Default</button>
           </div>
           <p class="form-help">
             Where Run and Build create the app: its sources and its build project. Relative to the project's folder, or a

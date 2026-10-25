@@ -2,8 +2,10 @@
   // The Environment section of Clarity settings: the build tools of the five
   // stacks on this computer, for every project. A scan finds every copy of
   // each tool with its version; the person picks the one builds use, or
-  // types a path, or leaves it to Clarity (the first one found).
+  // chooses a program elsewhere with Browse, or leaves it to Clarity (the
+  // first one found). Paths are never typed, so none is mistyped.
 
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { invoke } from "./backend";
   import type { EnvironmentView } from "./generated/EnvironmentView";
   import type { ToolView } from "./generated/ToolView";
@@ -12,8 +14,6 @@
   let view = $state<EnvironmentView | null>(null);
   let scanning = $state(false);
   let error = $state<string | null>(null);
-  /** A path being typed, by tool. */
-  let typed = $state<Record<string, string>>({});
 
   /** The choice that leaves the tool to Clarity: the first copy found. */
   const AUTOMATIC = "";
@@ -34,12 +34,17 @@
     error = null;
     try {
       view = await invoke<EnvironmentView>("choose_tool", { program: tool.program, path });
-      typed[tool.program] = "";
       // The project's Build tools row follows the choice.
       checkTools(true);
     } catch (err) {
       error = String(err);
     }
+  }
+
+  /** Chooses a copy the scan did not find, with the system's file chooser. */
+  async function browse(tool: ToolView) {
+    const picked = await openDialog({ title: `The ${tool.name} program builds use`, defaultPath: tool.chosen ?? tool.used ?? undefined });
+    if (typeof picked === "string") choose(tool, picked);
   }
 
   $effect(() => {
@@ -99,14 +104,8 @@
             {/each}
           </select>
           <div class="other">
-            <input
-              type="text"
-              placeholder="Or type the program's path"
-              aria-label="Path of {tool.name}"
-              bind:value={typed[tool.program]}
-              onkeydown={(e) => e.key === "Enter" && typed[tool.program]?.trim() && choose(tool, typed[tool.program])}
-            />
-            <button disabled={!typed[tool.program]?.trim()} onclick={() => choose(tool, typed[tool.program])}>Use</button>
+            <input type="text" readonly value={tool.chosen ?? ""} placeholder="Or choose the program elsewhere with Browse" aria-label="The chosen {tool.name}" title={tool.chosen ?? ""} />
+            <button onclick={() => browse(tool)}>Browse...</button>
           </div>
           <p class="muted used">
             {#if tool.used}Builds use <code>{tool.used}</code>{tool.chosen ? ", as chosen" : ""}.{:else}Not on this computer; the stacks that need it cannot build here.{/if}
@@ -219,6 +218,7 @@
   .other input {
     flex: 1;
     font-family: var(--mono);
+    cursor: default;
   }
   .used {
     margin: 0;

@@ -144,9 +144,22 @@ pub async fn open_manual(app: tauri::AppHandle, topic: String, anchor: Option<St
         .inner_size(860.0, 720.0)
         .min_inner_size(480.0, 360.0)
         .devtools(false)
+        // Hidden on a dark ground until the page has drawn itself (main.ts), so it never flashes white.
+        .visible(false)
+        .background_color(tauri::window::Color(0x15, 0x18, 0x1e, 0xff))
         .build()
+        .map(show_later)
         .map(|_| ())
         .map_err(|err| err.to_string())
+}
+
+/// Shows `window` after a while if its page has not shown it by then, so
+/// a page that fails to load still leaves a window to see.
+pub fn show_later(window: tauri::WebviewWindow) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let _ = window.show();
+    });
 }
 
 /// The manual as a list for the agent: one line per topic with its id,

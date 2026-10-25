@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions for Clarity's windows: the main one and the manual",
   "windows": ["main", "manual"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save", "dialog:allow-ask"]
+  "permissions": ["core:default", "core:window:allow-show", "dialog:allow-open", "dialog:allow-save", "dialog:allow-ask"]
 }

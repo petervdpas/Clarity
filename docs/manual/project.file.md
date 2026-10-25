@@ -54,7 +54,7 @@ Entities live in the first data source unless their module names another with `s
 
 On the **Project** tab, click **Settings** (or the app folder or the stack in the sidebar). The view edits every setting:
 
-- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), with Browse, and the folder builds write to.
+- Project: Name, Title, the project's Folder, and the App folder (the `output` setting), chosen with Browse and set back to `out` with Default, and the folder builds write to.
 - Stack: Backend, UI and Targets, and the Build tools row with Environment..., which opens Clarity settings where the tools are chosen.
 - Language, formats and theme: Language, Currency, and the themes that are offered, with the one the application starts with.
 - Data sources: a row per source with its kind, location, auth and the External and Read-only boxes; Import and Own for an external SQLite database; API for a web API, which picks what the application uses of its description; Add data source.

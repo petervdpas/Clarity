@@ -346,7 +346,8 @@ pub fn machine_name(maker: &str, product: &str, version: &str) -> String {
 }
 
 /// The value of `name` in what `reg query` prints:
-/// `    SystemManufacturer    REG_SZ    LENOVO`.
+/// `    SystemManufacturer    REG_SZ    LENOVO`. Read on Windows; tested everywhere.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn registry_value(text: &str, name: &str) -> String {
     text.lines()
         .find_map(|line| {

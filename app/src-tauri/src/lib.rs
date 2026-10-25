@@ -768,6 +768,8 @@ pub fn run() {
             system::start(app.handle().clone());
             let info = app.package_info();
             if let Some(window) = app.get_webview_window("main") {
+                // Hidden until its page has drawn itself (main.ts); see show_later.
+                manual::show_later(window.clone());
                 let dev_release = cfg!(debug_assertions).then_some(env!("CLARITY_DEV_RELEASE"));
                 window.set_title(&window_title(&info.name, &info.version.to_string(), dev_release))?;
                 // The manual's window closes with Clarity's.

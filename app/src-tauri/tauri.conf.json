@@ -18,7 +18,9 @@
         "height": 820,
         "minWidth": 800,
         "minHeight": 500,
-        "devtools": false
+        "devtools": false,
+        "visible": false,
+        "backgroundColor": "#15181e"
       }
     ],
     "security": {

@@ -42,7 +42,7 @@ The **Build tools** row, in the New project dialog and in the project settings u
 
 ### Where Clarity finds them
 
-Clarity looks on the PATH and in the folders the official installers use. **Clarity settings**, **Environment** shows every stack (ready, or what is missing) and every tool with each copy a scan found and its version. Pick the copy builds use, or type a program's path when it is somewhere else (on Windows, a compiler of Visual Studio's, say); "The first one found" leaves it to Clarity. Each missing tool there has **How to install**, which opens [Setting up the build tools](setup.tools.md) at its part. **Scan again** looks once more after you install something.
+Clarity looks on the PATH and in the folders the official installers use. **Clarity settings**, **Environment** shows every stack (ready, or what is missing) and every tool with each copy a scan found and its version. Pick the copy builds use, or choose the program with **Browse...** when it is somewhere else (on Windows, a compiler of Visual Studio's, say); paths are chosen, never typed; "The first one found" leaves it to Clarity. Each missing tool there has **How to install**, which opens [Setting up the build tools](setup.tools.md) at its part. **Scan again** looks once more after you install something.
 
 The choices hold for every project on this computer and for the `clarity` command too: they are kept in `environment.json` in Clarity's own folder (`~/.clarity`, or the folder `CLARITY_HOME` names). A chosen tool's folder comes first for every build, so the tools it starts are its own, and chosen C and C++ compilers reach CMake as `CC` and `CXX`.
 

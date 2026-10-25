@@ -18,7 +18,8 @@
     /** The web API data source whose picks these are. */
     source: DataSource;
     onsave: (change: Partial<DataSource>) => void;
-    onclose: () => void;
+    /** Closes it where it opens over the project settings; in its own view there is nothing to close. */
+    onclose?: () => void;
   } = $props();
 
   let listing = $state<ApiListing | null>(null);
@@ -74,7 +75,7 @@
 <div class="api">
   <div class="head">
     <strong>Web API {source.name}</strong>
-    <button class="small" onclick={onclose} title="Close">&times;</button>
+    {#if onclose}<button class="small" onclick={onclose} title="Close">&times;</button>{/if}
   </div>
   <p class="intro">
     Pick what the application uses. Clarity writes <code>apis/{source.name}.clarity</code> from the description: an entity for each schema the picked

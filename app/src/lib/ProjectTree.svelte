@@ -4,6 +4,7 @@
 
   import type { Page } from "./generated/Page";
   import type { Preview } from "./generated/Preview";
+  import type { DataSource } from "./generated/DataSource";
   import { projectEngines, engineNote } from "./engines";
   import { commandLine } from "./commandLine";
   import { findApp } from "./frame";
@@ -28,6 +29,8 @@
     onnewlanguage = null,
     onnewresource = null,
     onnewdiagram = null,
+    apis = [],
+    onnewapi = null,
     onmenu = null,
   }: {
     preview: Preview;
@@ -51,6 +54,10 @@
     onnewresource?: (() => void) | null;
     /** Asks for a new diagram: its name and kind; null where the tree only shows. */
     onnewdiagram?: (() => void) | null;
+    /** The web APIs of the project file (DESIGN 5.23): its rest data sources. */
+    apis?: DataSource[];
+    /** Asks for a new web API; null where the tree only shows. */
+    onnewapi?: (() => void) | null;
     /** A right click on a window, entity, enum, theme or engine; null where the tree only shows. */
     onmenu?: ((e: MouseEvent, item: Selected) => void) | null;
   } = $props();
@@ -167,6 +174,22 @@
       {#if onnewdata}
         <button class="row add" onclick={() => onnewdata("entity")}>+ New entity</button>
         <button class="row add" onclick={() => onnewdata("enum")}>+ New enum</button>
+      {/if}
+    </details>
+
+    <!-- The services the application calls (DESIGN 5.23): web API data sources of the project file. -->
+    <details open={apis.length > 0}>
+      <summary>Web APIs <span class="count">{apis.length}</span></summary>
+      {#each apis as api (api.name)}
+        <button class="row" class:current={is("api", api.name)} title={api.url} onclick={() => onselect({ kind: "api", name: api.name })}>
+          {api.name}
+          <span class="note">{api.openapi ? `${api.picks.length} picked` : "no description"}</span>
+        </button>
+      {:else}
+        <p class="empty">No web APIs yet: the services the application calls.</p>
+      {/each}
+      {#if onnewapi}
+        <button class="row add" onclick={onnewapi}>+ New web API</button>
       {/if}
     </details>
 

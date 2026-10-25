@@ -18,6 +18,7 @@ const KIND_NAMES: Record<Selected["kind"], string> = {
   diagram: "Diagram",
   module: "Module",
   settings: "Project settings",
+  api: "Web API",
 };
 
 /** What is open, like `Window Main`. */

@@ -71,7 +71,7 @@ code Orders
 
 ## A web API data source
 
-A web API the application works with is a data source of the project, with its address and where its key is:
+A web API the application works with is a data source of the project, with its address and where its key is. The project tree lists them under **Web APIs**: **+ New web API** adds one by its name, and picking one opens it, with its address, its key and its OpenAPI description. In the project file it reads:
 
 ```
 datasource forms rest "https://forms.example.com/api"
@@ -82,7 +82,7 @@ datasource forms rest "https://forms.example.com/api"
 
 ## An OpenAPI description
 
-A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it with **API...** beside the data source in the project settings. Then pick what the application uses:
+A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it with **Choose file...** where the web API opens from the project tree (or **API...** beside the data source in the project settings). Then pick what the application uses:
 
 ```
 datasource forms rest "https://forms.example.com/api"

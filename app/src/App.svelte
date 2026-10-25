@@ -40,6 +40,7 @@
   import NameDialog from "./lib/NameDialog.svelte";
   import NewProjectDialog from "./lib/NewProjectDialog.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
+  import ApiView from "./lib/ApiView.svelte";
   import { listenToLoad } from "./lib/systemLoad.svelte";
   import ProjectSettings from "./lib/ProjectSettings.svelte";
   import type { Catalog } from "./lib/generated/Catalog";
@@ -393,6 +394,7 @@
       case "diagram":
         return p.project.diagrams.some((d) => d.name === o.name);
       case "settings":
+      case "api":
         return true;
     }
   }
@@ -425,6 +427,35 @@
       await loadProjectFile();
     }
     refreshHistory();
+  }
+
+  /** A new web API (DESIGN 5.23): a rest data source of the project file, by the name code calls it by. */
+  async function startNewApi() {
+    const settings = projectFile?.settings;
+    if (!settings) return;
+    const name = await dialogs.prompt({
+      title: "New web API",
+      text: "Its name, as code calls it: http get \"/orders\" from shop. A short name in small letters, like shop.",
+      value: "",
+      placeholder: "shop",
+      action: "Add",
+    });
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+    if (!/^[a-z][A-Za-z0-9_]*$/.test(trimmed)) {
+      actionError = `'${trimmed}' is not a name code can use; start with a small letter, like shop`;
+      return;
+    }
+    if (settings.datasources.some((s) => s.name === trimmed)) {
+      actionError = `the project already has a data source '${trimmed}'`;
+      return;
+    }
+    await saveSettings({
+      ...settings,
+      datasources: [...settings.datasources, { name: trimmed, kind: "rest", url: "https://", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [] }],
+    });
+    select({ kind: "api", name: trimmed });
+    tab = "project";
   }
 
   function selectSettings() {
@@ -1104,6 +1135,8 @@
       onnewdiagram={full ? startNewDiagram : null}
       onnewwindow={full ? startNewWindow : null}
       onnewapp={full && preview.project.files[0] ? () => preview && addApp(preview.project.files[0]) : null}
+      apis={projectFile?.settings?.datasources.filter((s) => s.kind === "rest") ?? []}
+      onnewapi={full && projectFile?.settings ? startNewApi : null}
     />
   {/if}
 {/snippet}
@@ -1387,6 +1420,8 @@
           </div>
         {:else if current?.kind === "settings" && projectFile && openFile}
           <ProjectSettings project={projectFile} file={openFile} revision={settingsRevision} onsave={saveSettings} {preview} onapplied={applyPreview} onopentheme={(name) => select({ kind: "theme", name })} />
+        {:else if current?.kind === "api" && projectFile}
+          <ApiView project={projectFile} name={current.name} onsave={saveSettings} />
         {:else if current?.kind === "diagram"}
           <DiagramView
             {preview}

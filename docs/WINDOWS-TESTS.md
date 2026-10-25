@@ -75,7 +75,7 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 - [x] Upload NuGet 0.38.0 (on nuget.org).
 - [ ] Build and upload NuGet 0.39.0 (secrets on Windows, the keys window).
 - [ ] Tag the Rust crate 0.28.0 (`runtimes/rust/v0.28.0`; secrets on Windows).
-- [ ] Release the Rust crate 0.28.1: secrets on Windows kept for this machine, through Win32 (the generator still asks for 0.28.0).
+- [ ] Release the Rust crate 0.28.1: secrets on Windows kept for this machine, through Win32 (bumped to 0.28.1, so the generator asks for it).
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - Go v0.30.0 is released and its sums are recorded.

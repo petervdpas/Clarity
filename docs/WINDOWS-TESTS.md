@@ -92,5 +92,4 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [x] The Rust crate 0.28.1 is on crates.io.
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
-- Go v0.30.0 is released and its sums are recorded.
-- [ ] Tag Go v0.31.0 (the shell's `log_line` for engine logs), then record its sums in crates/clarity-gen/src/go/runtime.sum.
+- Go v0.31.0 is released and its sums are recorded.

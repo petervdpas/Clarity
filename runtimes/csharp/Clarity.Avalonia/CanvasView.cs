@@ -4,7 +4,10 @@
 // theme's by name, through its Clarity<Name> brush, or written out. A canvas
 // with `on click` runs its Command with where it was clicked, in its units.
 // A canvas that `runs` an engine beside the screen (DESIGN 5.12) is drawn
-// by its frames while it shows; when the engine stops, it says why.
+// by its frames while it shows; when the engine stops, it says why. Its
+// pointer and keys go to the engine, when it takes them: the canvas keeps
+// the pointer while it is down, and takes the keyboard when clicked or
+// tabbed to.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -62,6 +65,7 @@ public class CanvasView : Control
         try
         {
             loop = new FrameLoop(make(), f => top.RequestAnimationFrame(f), work => Task.Run(work), ui => Dispatcher.UIThread.Post(ui), shapes => Drawing = shapes, why => Stopped = why);
+            Focusable = loop.Hears.Keys;
             loop.Start();
         }
         catch (EngineException failed)
@@ -75,6 +79,63 @@ public class CanvasView : Control
         base.OnDetachedFromVisualTree(e);
         loop?.Dispose();
         loop = null;
+        held.All();
+        engineDown = null;
+    }
+
+    /// The pointer that is down on the drawing, which the canvas keeps for its engine.
+    IPointer? engineDown;
+    readonly HeldKeys held = new();
+
+    bool Pointing => loop is { Hears.Pointer: true } && Stopped is null;
+
+    /// Where `at` is for the engine: on the drawing, or at its nearest edge while down.
+    Pointer? EnginePoint(Point at, bool near)
+    {
+        var units = new Size(UnitsWidth, UnitsHeight);
+        return near ? PointNear(units, Bounds.Size, at) : at.X < 0 || at.Y < 0 || at.X > Bounds.Width || at.Y > Bounds.Height ? null : PointOf(units, Bounds.Size, at);
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (!Pointing || (engineDown is not null && engineDown != e.Pointer))
+            return;
+        if (EnginePoint(e.GetPosition(this), engineDown is not null) is { } point)
+            loop!.Pointer("move", point.X, point.Y);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        engineDown = null;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        // A shortcut with Control, Alt or the command key is the window's.
+        if (loop is not { Hears.Keys: true } || ScreenKeys.NameOf(e.Key) is not { } name)
+            return;
+        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0 && name is not ("Control" or "Alt" or "Shift"))
+            return;
+        e.Handled = true;
+        if (held.Down(name))
+            loop.Key("down", name);
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (ScreenKeys.NameOf(e.Key) is { } name && held.Up(name))
+            loop?.Key("up", name);
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        foreach (var name in held.All())
+            loop?.Key("up", name);
     }
 
     /// What a click runs, given the Pointer of where it was; none: clicks do nothing.
@@ -137,12 +198,38 @@ public class CanvasView : Control
         return new Pointer((long)Math.Floor(x), (long)Math.Floor(y));
     }
 
+    /// Where a pointer that is down is, as PointOf finds it, but beside the
+    /// drawing at its nearest edge; null when the part shows nothing.
+    public static Pointer? PointNear(Size units, Size part, Point at)
+    {
+        var scale = Math.Min(part.Width / units.Width, part.Height / units.Height);
+        if (!(scale > 0) || !double.IsFinite(scale))
+            return null;
+        var x = (at.X - (part.Width - units.Width * scale) / 2) / scale;
+        var y = (at.Y - (part.Height - units.Height * scale) / 2) / scale;
+        static long Edge(double v, double size) => (long)Math.Min(Math.Max(Math.Floor(v), 0), Math.Ceiling(size) - 1);
+        return new Pointer(Edge(x, units.Width), Edge(y, units.Height));
+    }
+
     // A click is the primary button pressed and let go on the canvas.
     bool pressed;
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (Pointing)
+        {
+            if (Focusable)
+                Focus(NavigationMethod.Pointer);
+            if (engineDown is null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && EnginePoint(e.GetPosition(this), false) is { } point)
+            {
+                engineDown = e.Pointer;
+                e.Pointer.Capture(this);
+                loop!.Pointer("down", point.X, point.Y);
+                e.Handled = true;
+            }
+            return;
+        }
         pressed = Command is not null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
         if (pressed)
             e.Handled = true;
@@ -151,6 +238,15 @@ public class CanvasView : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (engineDown is not null && engineDown == e.Pointer)
+        {
+            engineDown = null;
+            if (EnginePoint(e.GetPosition(this), true) is { } released)
+                loop?.Pointer("up", released.X, released.Y);
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            return;
+        }
         if (!pressed)
             return;
         pressed = false;

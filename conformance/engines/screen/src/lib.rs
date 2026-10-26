@@ -8,14 +8,21 @@
 //! every 10 ms across a canvas of 160 units, and that time as text. A tick
 //! of less than no time runs forever, for the renderers' time limit; a
 //! tick of more than ten seconds is refused.
+//!
+//! Pointer and keys: the dot goes where the pointer goes down and follows
+//! it while it is down, and the text says which keys are down.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use serde_json::{Value, json};
 
 thread_local! {
     static ELAPSED: Cell<i64> = const { Cell::new(0) };
     static OPENED: Cell<bool> = const { Cell::new(false) };
+    /// Where the pointer put the dot, once it went down.
+    static DOT: Cell<Option<(i64, i64)>> = const { Cell::new(None) };
+    static PRESSED: Cell<bool> = const { Cell::new(false) };
+    static HELD: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Room in the engine's memory for the host to write into.
@@ -82,15 +89,63 @@ pub extern "C" fn clarity_tick(at: i32, len: i32) -> i64 {
     })
 }
 
+/// The pointer on the canvas: `[kind, x, y]` in its units.
+#[unsafe(no_mangle)]
+pub extern "C" fn clarity_pointer(at: i32, len: i32) -> i64 {
+    answer(at, len, |args| {
+        let kind = args.first().and_then(Value::as_str).ok_or("a pointer gives its kind first")?;
+        let x = args.get(1).and_then(Value::as_i64).ok_or("a pointer gives x")?;
+        let y = args.get(2).and_then(Value::as_i64).ok_or("a pointer gives y")?;
+        match kind {
+            "down" => PRESSED.set(true),
+            "move" if !PRESSED.get() => return Ok(Value::Null),
+            "move" => {}
+            "up" if !PRESSED.get() => return Ok(Value::Null),
+            "up" => PRESSED.set(false),
+            other => return Err(format!("no pointer kind {other}")),
+        }
+        DOT.set(Some((x, y)));
+        Ok(Value::Null)
+    })
+}
+
+/// A key on the canvas: `[kind, key]`.
+#[unsafe(no_mangle)]
+pub extern "C" fn clarity_key(at: i32, len: i32) -> i64 {
+    answer(at, len, |args| {
+        let kind = args.first().and_then(Value::as_str).ok_or("a key gives its kind first")?;
+        let key = args.get(1).and_then(Value::as_str).ok_or("a key gives its name")?.to_string();
+        HELD.with_borrow_mut(|held| match kind {
+            "down" => {
+                if !held.contains(&key) {
+                    held.push(key);
+                }
+                Ok(Value::Null)
+            }
+            "up" => {
+                held.retain(|k| *k != key);
+                Ok(Value::Null)
+            }
+            other => Err(format!("no key kind {other}")),
+        })
+    })
+}
+
 /// The canvas's shapes now, in its units (160 x 100).
 #[unsafe(no_mangle)]
 pub extern "C" fn clarity_draw(at: i32, len: i32) -> i64 {
     answer(at, len, |_| {
         let elapsed = ELAPSED.get();
-        let said = if OPENED.get() { format!("{elapsed} ms") } else { format!("{elapsed} ms, not opened") };
+        let mut said = if OPENED.get() { format!("{elapsed} ms") } else { format!("{elapsed} ms, not opened") };
+        HELD.with_borrow(|held| {
+            if !held.is_empty() {
+                said = format!("{said}, holding {}", held.join(" "));
+            }
+        });
+        let (x, y) = DOT.get().unwrap_or(((elapsed / 10) % 160, 50));
         Ok(json!([
             { "op": "clear", "color": "background" },
-            { "op": "circle", "x": (elapsed / 10) % 160, "y": 50, "r": 5, "color": "accent" },
+            { "op": "circle", "x": x, "y": y, "r": 5, "color": "accent" },
             { "op": "text", "x": 80, "y": 90, "text": said, "color": "text", "size": 8 },
         ]))
     })

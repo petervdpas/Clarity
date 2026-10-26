@@ -1,5 +1,5 @@
 {
-  "about": "Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one instance per canvas, from when its window opens until it closes. It speaks the engine interface of conformance/engines.json and exports `clarity_tick` and `clarity_draw` besides it. At every frame the renderer calls `clarity_tick` with the milliseconds since the last frame (`[ms]`; the first frame gives 0), then `clarity_draw` (`[]`), whose value is the canvas's shapes in its units, as a draw handler's (conformance/drawing.json). With `on open` (`opens`), `clarity_open` runs once, when the instance is made, before the first frame. The renderer skips a frame while the engine is still busy with the last one, so frames never pile up. `engine` is screen.wasm, built from engines/screen: it draws a dot that moves 1 unit every 10 ms and the time it has run. `frames` gives the ticks in order and the shapes after each. A frame that fails, or runs longer than the engine's time limit, ends the engine: the canvas shows `fails` in place of its drawing, the renderer calls it no more, and the window works on. `fails` cases give the ticks before and the tick that fails.",
+  "about": "Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one instance per canvas, from when its window opens until it closes. It speaks the engine interface of conformance/engines.json and exports `clarity_tick` and `clarity_draw` besides it. At every frame the renderer calls `clarity_tick` with the milliseconds since the last frame (`[ms]`; the first frame gives 0), then `clarity_draw` (`[]`), whose value is the canvas's shapes in its units, as a draw handler's (conformance/drawing.json). With `on open` (`opens`), `clarity_open` runs once, when the instance is made, before the first frame. The renderer skips a frame while the engine is still busy with the last one, so frames never pile up. `engine` is screen.wasm, built from engines/screen: it draws a dot that moves 1 unit every 10 ms and the time it has run. `frames` gives the ticks in order and the shapes after each. A frame that fails, or runs longer than the engine's time limit, ends the engine: the canvas shows `fails` in place of its drawing, the renderer calls it no more, and the window works on. `fails` cases give the ticks before and the tick that fails. Pointer and keys on the canvas go to the engine when it exports `clarity_pointer` and `clarity_key` (each is optional; without it the renderer sends none of that). The renderer keeps what happens between frames and hands it over at the start of the next frame, in order, before `clarity_tick`: `clarity_pointer` takes `[kind, x, y]`, kind `down`, `move` or `up`, in the canvas's units rounded down as a click is (conformance/drawing.json); `clarity_key` takes `[kind, key]`, kind `down` or `up`. `down` is the primary button or a touch going down on the drawing; while it is down the canvas keeps the pointer, so `move` and `up` beside the drawing are at its nearest edge (`near`). `move` is sent while the pointer is over the drawing or down. Moves in a row keep only the last (`queued`). A key is sent once when it goes down, not again while it repeats, and once when it comes up; when the canvas loses the keyboard, every key still down comes up. Only the keys of `keys` are sent, by those names: a letter as itself in lower case, a digit, and the named keys. `input` gives each frame's input, its ticks and the shapes after: screen.wasm moves its dot to where the pointer went down and drags it while down, and says which keys are down.",
   "engine": "screen.wasm",
   "name": "Screen",
   "units": { "width": 160, "height": 100 },
@@ -64,5 +64,129 @@
       "tick": -1,
       "fails": "engine Screen failed in clarity_tick: it ran longer than 1 second"
     }
-  ]
+  ],
+  "input": [
+    {
+      "name": "the dot goes where the pointer goes down, and follows it while down",
+      "opens": true,
+      "frames": [
+        {
+          "input": [],
+          "tick": 0,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "0 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "pointer": "move", "x": 10, "y": 10 }],
+          "tick": 16,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 1, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "16 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "pointer": "down", "x": 40, "y": 20 }],
+          "tick": 16,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 40, "y": 20, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "32 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "pointer": "move", "x": 50, "y": 25 }],
+          "tick": 16,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 50, "y": 25, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "48 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [
+            { "pointer": "up", "x": 60, "y": 30 },
+            { "pointer": "move", "x": 90, "y": 90 }
+          ],
+          "tick": 16,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 60, "y": 30, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "64 ms", "color": "text", "size": 8 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the keys that are down",
+      "opens": true,
+      "frames": [
+        {
+          "input": [{ "key": "down", "name": "ArrowLeft" }, { "key": "down", "name": "a" }],
+          "tick": 0,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+            {
+              "op": "text",
+              "x": 80,
+              "y": 90,
+              "text": "0 ms, holding ArrowLeft a",
+              "color": "text",
+              "size": 8
+            }
+          ]
+        },
+        {
+          "input": [{ "key": "up", "name": "ArrowLeft" }],
+          "tick": 10,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 1, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "10 ms, holding a", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "key": "up", "name": "a" }],
+          "tick": 10,
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 2, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "20 ms", "color": "text", "size": 8 }
+          ]
+        }
+      ]
+    }
+  ],
+  "queued": [
+    {
+      "given": [
+        { "pointer": "move", "x": 1, "y": 1 },
+        { "pointer": "move", "x": 2, "y": 2 },
+        { "pointer": "down", "x": 3, "y": 3 },
+        { "pointer": "move", "x": 4, "y": 4 },
+        { "key": "down", "name": "a" },
+        { "pointer": "move", "x": 5, "y": 5 },
+        { "pointer": "move", "x": 6, "y": 6 }
+      ],
+      "sent": [
+        { "pointer": "move", "x": 2, "y": 2 },
+        { "pointer": "down", "x": 3, "y": 3 },
+        { "pointer": "move", "x": 4, "y": 4 },
+        { "key": "down", "name": "a" },
+        { "pointer": "move", "x": 6, "y": 6 }
+      ]
+    }
+  ],
+  "near": [
+    { "part": { "width": 320, "height": 200 }, "at": { "x": -50, "y": 100 }, "x": 0, "y": 50 },
+    { "part": { "width": 320, "height": 200 }, "at": { "x": 400, "y": -10 }, "x": 159, "y": 0 },
+    { "part": { "width": 320, "height": 300 }, "at": { "x": 100, "y": 20 }, "x": 50, "y": 0 },
+    { "part": { "width": 320, "height": 300 }, "at": { "x": 100, "y": 150 }, "x": 50, "y": 50 },
+    { "part": { "width": 0, "height": 0 }, "at": { "x": 0, "y": 0 }, "x": null, "y": null }
+  ],
+  "keys": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "Space", "Enter", "Escape", "Backspace", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown", "Shift", "Control", "Alt", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
 }

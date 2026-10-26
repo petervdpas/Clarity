@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EngineFailed, loadEngine, type Services } from "./engineHost.ts";
+import { EngineFailed, loadEngine, type Input, type Services } from "./engineHost.ts";
 
 const read = (name: string) => readFileSync(new URL(`../../../conformance/${name}`, import.meta.url));
 const cases = JSON.parse(read("engines.json").toString("utf8"));
@@ -81,4 +81,25 @@ test("an engine beside the screen exports its frame loop", async () => {
   await assert.rejects(loadEngine("Test", TEST, { uses: cases.uses, opens: false, ...limits, screen: true }, services()), {
     message: "engine Test lacks clarity_tick, which an engine beside the screen needs",
   });
+});
+
+test("pointer and keys reach the engine before its tick", async () => {
+  for (const run of screen.input) {
+    const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: run.opens, ...limits, screen: true }, services());
+    assert.deepEqual(engine.hears, { pointer: true, keys: true });
+    const drawn = run.frames.map((f: { tick: number; input: Input[] }) => engine.frame(f.tick, f.input));
+    assert.deepEqual(drawn, run.frames.map((f: { draws: unknown }) => f.draws), run.name);
+  }
+});
+
+test("each call of a frame is told before it runs, for its time limit", async () => {
+  const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: true, ...limits, screen: true }, services());
+  const calls: string[] = [];
+  engine.frame(0, [{ key: "down", name: "a" }, { pointer: "down", x: 1, y: 2 }], (call) => calls.push(call));
+  assert.deepEqual(calls, ["clarity_key", "clarity_pointer", "clarity_tick", "clarity_draw"]);
+});
+
+test("an engine without clarity_pointer or clarity_key hears neither", async () => {
+  const engine = await loadEngine("Test", TEST, { uses: cases.uses, opens: false, ...limits }, services());
+  assert.deepEqual(engine.hears, { pointer: false, keys: false });
 });

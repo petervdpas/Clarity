@@ -170,6 +170,9 @@ public sealed class Engine
     /// (a RefusedException in its own words), or what went wrong running it.
     public JsonNode? Call(string function, params object?[] args) => CallIn(0, function, args);
 
+    /// <summary>Whether its file exports <paramref name="function"/>.</summary>
+    public bool Exports(string function) => module.Exports.Any(e => e is Wasmtime.FunctionExport && e.Name == function);
+
     /// Drops the instance window `window` had, when it closes.
     public void CloseWindow(long window)
     {

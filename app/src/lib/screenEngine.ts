@@ -4,20 +4,21 @@
 // that loops never freezes the window. The page asks for frames at the
 // screen's pace and skips one while the engine is busy with the last, so
 // frames never pile up; a worker that does not answer within the engine's
-// time limit is stopped from outside, and the canvas shows why.
+// time limit is stopped from outside, and the canvas shows why. Pointer and
+// keys wait for the next frame and go with it (conformance/screen-engines.json).
 
 import type { ScreenEngine } from "./generated/ScreenEngine";
-import type { Shape } from "./engineHost";
+import type { Hears, Input, Shape } from "./engineHost";
 
 /** What the page tells the worker. */
 export type ToWorker =
   | { kind: "start"; engine: ScreenEngine; language: string }
-  | { kind: "frame"; ms: number; language: string };
+  | { kind: "frame"; ms: number; input: Input[]; language: string };
 
 /** What the worker answers. */
 export type FromWorker =
-  | { kind: "ready" }
-  | { kind: "ticked" }
+  | { kind: "ready"; hears: Hears }
+  | { kind: "calling"; call: string }
   | { kind: "drawn"; shapes: Shape[] }
   | { kind: "failed"; message: string }
   | { kind: "log"; line: string };
@@ -41,7 +42,55 @@ export type RunOptions = {
   onDraw: (shapes: Shape[]) => void;
   onFail: (message: string) => void;
   onLog: (line: string) => void;
+  /** The engine is made, and takes this input. */
+  onReady?: (hears: Hears) => void;
 };
+
+/** Adds `input` to what waits for the next frame: moves in a row keep only the last. */
+export function queue(waiting: Input[], input: Input) {
+  const last = waiting.at(-1);
+  if (last && "pointer" in last && last.pointer === "move" && "pointer" in input && input.pointer === "move") waiting[waiting.length - 1] = input;
+  else waiting.push(input);
+}
+
+/** The named keys an engine gets, as the page names them too. */
+const NAMED_KEYS = new Set([
+  "Enter", "Escape", "Backspace", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown",
+  "Shift", "Control", "Alt", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+]);
+
+/** Clarity's name of a key from the page's (KeyboardEvent.key); null for one an engine does not get. */
+export function keyName(key: string): string | null {
+  if (key === " ") return "Space";
+  if (/^[A-Za-z0-9]$/.test(key)) return key.toLowerCase();
+  return NAMED_KEYS.has(key) ? key : null;
+}
+
+/** The keys that are down, so each goes down once however long it repeats. */
+export class HeldKeys {
+  #held: string[] = [];
+
+  /** Whether `name` went down now, rather than repeating. */
+  down(name: string): boolean {
+    if (this.#held.includes(name)) return false;
+    this.#held.push(name);
+    return true;
+  }
+
+  /** Whether `name` was down. */
+  up(name: string): boolean {
+    const was = this.#held.includes(name);
+    this.#held = this.#held.filter((k) => k !== name);
+    return was;
+  }
+
+  /** Lets go of every key: the canvas lost the keyboard. */
+  all(): string[] {
+    const held = this.#held;
+    this.#held = [];
+    return held;
+  }
+}
 
 /** The words of a time limit that ran out, as every host says it. */
 export function ranLonger(engine: string, call: string, seconds: number): string {
@@ -58,6 +107,9 @@ export class ScreenRun {
   #busy: string | null = null;
   #last: number | null = null;
   #ended = false;
+  /** The input it takes, once made. */
+  #hears: Hears = { pointer: false, keys: false };
+  #waiting: Input[] = [];
 
   constructor(engine: ScreenEngine, options: RunOptions) {
     this.#engine = engine;
@@ -91,6 +143,16 @@ export class ScreenRun {
     }
   }
 
+  /** The pointer on the canvas, in its units. */
+  pointer(kind: "down" | "move" | "up", x: number, y: number) {
+    if (!this.#ended && this.#hears.pointer) queue(this.#waiting, { pointer: kind, x, y });
+  }
+
+  /** A key on the canvas, by Clarity's name. */
+  key(kind: "down" | "up", name: string) {
+    if (!this.#ended && this.#hears.keys) queue(this.#waiting, { key: kind, name });
+  }
+
   /** Ends the run: its window closed. */
   stop() {
     this.#end();
@@ -102,12 +164,14 @@ export class ScreenRun {
       case "ready":
         this.#untime();
         this.#busy = null;
+        this.#hears = message.hears;
+        this.#options.onReady?.(message.hears);
         this.#next();
         break;
-      case "ticked":
+      case "calling":
         this.#untime();
-        this.#busy = "clarity_draw";
-        this.#time("clarity_draw");
+        this.#busy = message.call;
+        this.#time(message.call);
         break;
       case "drawn":
         this.#untime();
@@ -134,9 +198,12 @@ export class ScreenRun {
     if (this.#busy === null) {
       const ms = this.#last === null ? 0 : now - this.#last;
       this.#last = now;
-      this.#busy = "clarity_tick";
-      this.#time("clarity_tick");
-      this.#send({ kind: "frame", ms, language: this.#options.language() });
+      const input = this.#waiting;
+      this.#waiting = [];
+      const first = input[0] === undefined ? "clarity_tick" : "pointer" in input[0] ? "clarity_pointer" : "clarity_key";
+      this.#busy = first;
+      this.#time(first);
+      this.#send({ kind: "frame", ms, input, language: this.#options.language() });
     }
     if (!this.#ended) this.#next();
   }

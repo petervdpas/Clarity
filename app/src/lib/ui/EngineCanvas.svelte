@@ -2,12 +2,16 @@
   // A canvas an engine beside the screen draws (DESIGN 5.12): the engine
   // runs in a Web Worker of its own from when the canvas shows until it
   // goes, and every frame's shapes show through CanvasView. When the engine
-  // stops (a frame failed or ran past its limit), the canvas says why.
+  // stops (a frame failed or ran past its limit), the canvas says why. The
+  // pointer and keys on it go to the engine, when it takes them: the canvas
+  // keeps the pointer while it is down, and takes the keyboard when clicked
+  // or tabbed to.
   import { onDestroy, onMount } from "svelte";
   import CanvasView from "./CanvasView.svelte";
   import ScreenWorker from "../screenWorker.ts?worker&inline";
-  import { ScreenRun, type WorkerLike } from "../screenEngine";
-  import type { Shape } from "../engineHost";
+  import { HeldKeys, keyName, ScreenRun, type WorkerLike } from "../screenEngine";
+  import { pointNear, pointOf } from "../drawing";
+  import type { Hears, Shape } from "../engineHost";
   import type { ScreenEngine } from "../generated/ScreenEngine";
   import type { ShownText } from "../format";
 
@@ -28,7 +32,62 @@
 
   let drawing = $state<Shape[]>([]);
   let stopped = $state<string | null>(null);
+  let hears = $state<Hears>({ pointer: false, keys: false });
   let run: ScreenRun | null = null;
+  /** The pointer that is down on the drawing, which the canvas keeps. */
+  let pressed: number | null = null;
+  const held = new HeldKeys();
+
+  function at(e: PointerEvent, near: boolean) {
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const where = { x: e.clientX - box.left, y: e.clientY - box.top };
+    const part = { width: box.width, height: box.height };
+    return near ? pointNear(units, part, where) : pointOf(units, part, where);
+  }
+
+  function down(e: PointerEvent) {
+    const canvas = e.currentTarget as HTMLElement;
+    // Not every page focuses what holds a drawing when it is clicked.
+    if (hears.keys) canvas.focus();
+    if (!hears.pointer || !e.isPrimary || e.button !== 0 || pressed !== null) return;
+    const point = at(e, false);
+    if (!point) return;
+    // A drag moves what the engine drew; it selects no text.
+    e.preventDefault();
+    pressed = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+    run?.pointer("down", point.x, point.y);
+  }
+
+  function move(e: PointerEvent) {
+    if (!hears.pointer || !e.isPrimary || (pressed !== null && pressed !== e.pointerId)) return;
+    const point = at(e, pressed !== null);
+    if (point) run?.pointer("move", point.x, point.y);
+  }
+
+  function up(e: PointerEvent) {
+    if (pressed !== e.pointerId) return;
+    pressed = null;
+    const point = at(e, true);
+    if (point) run?.pointer("up", point.x, point.y);
+  }
+
+  function keyDown(e: KeyboardEvent) {
+    const name = keyName(e.key);
+    // A shortcut with Control, Alt or the command key is the window's.
+    if (!hears.keys || name === null || ((e.ctrlKey || e.altKey || e.metaKey) && !["Control", "Alt", "Shift"].includes(name))) return;
+    e.preventDefault();
+    if (held.down(name)) run?.key("down", name);
+  }
+
+  function keyUp(e: KeyboardEvent) {
+    const name = keyName(e.key);
+    if (name !== null && held.up(name)) run?.key("up", name);
+  }
+
+  function letGo() {
+    for (const name of held.all()) run?.key("up", name);
+  }
 
   onMount(() => {
     run = new ScreenRun(engine, {
@@ -39,6 +98,7 @@
       onDraw: (shapes) => (drawing = shapes),
       onFail: (problem) => (stopped = problem),
       onLog: (line) => console.info(line),
+      onReady: (taken) => (hears = taken),
     });
     run.start();
   });
@@ -51,10 +111,44 @@
     {shown({ key: "screenEngineFailed", values: { problem: { kind: "text", value: stopped } } } as ShownText)}
   </div>
 {:else}
-  <CanvasView {id} {drawing} {units} {shown} />
+  <!-- An application: the engine, not the page, decides what its pointer and keys do. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div
+    {id}
+    class="engine-canvas"
+    class:pointing={hears.pointer}
+    role="application"
+    tabindex={hears.keys ? 0 : undefined}
+    onpointerdown={down}
+    onpointermove={move}
+    onpointerup={up}
+    onpointercancel={up}
+    onkeydown={keyDown}
+    onkeyup={keyUp}
+    onblur={letGo}
+  >
+    <CanvasView {drawing} {units} {shown} />
+  </div>
 {/if}
 
 <style>
+  .engine-canvas {
+    width: 100%;
+    height: 100%;
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .engine-canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .engine-canvas.pointing {
+    touch-action: none;
+  }
+
   .engine-stopped {
     width: 100%;
     height: 100%;

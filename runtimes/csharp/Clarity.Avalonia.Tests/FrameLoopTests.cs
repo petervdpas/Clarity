@@ -17,12 +17,15 @@ public sealed class FrameLoopTests
     sealed class Frames : IFrames
     {
         public readonly List<double> Given = [];
+        public readonly List<IReadOnlyList<ScreenInput>> Input = [];
+        public Hears Hears { get; set; } = new(true, true);
         public Func<double, JsonArray> Answer = _ => [new JsonObject { ["op"] = "clear", ["color"] = "background" }];
         public bool Disposed;
 
-        public JsonArray Frame(double ms)
+        public JsonArray Frame(double ms, IReadOnlyList<ScreenInput> input)
         {
             Given.Add(ms);
+            Input.Add(input);
             return Answer(ms);
         }
 
@@ -39,8 +42,10 @@ public sealed class FrameLoopTests
         public Action<TimeSpan>? Waiting;
         public readonly FrameLoop Loop;
 
-        public Harness()
+        public Harness(Hears? hears = null)
         {
+            if (hears is { } h)
+                Frames.Hears = h;
             Loop = new FrameLoop(Frames, f => Waiting = f, Background.Add, ui => ui(), Drawn.Add, Stopped.Add);
             Loop.Start();
         }
@@ -114,6 +119,72 @@ public sealed class FrameLoopTests
         Assert.True(h.Frames.Disposed);
         h.Step(1016);
         Assert.Empty(h.Background);
+    }
+
+    [Fact]
+    public void Pointer_and_keys_wait_for_the_next_frame_and_go_with_it()
+    {
+        var h = new Harness();
+        h.Loop.Pointer("down", 4, 5);
+        h.Loop.Key("down", "a");
+        h.Step(1000);
+        // While the frame is busy, input waits for the next one.
+        h.Loop.Pointer("move", 6, 7);
+        h.Loop.Pointer("move", 8, 9);
+        h.Work();
+        h.Step(1016);
+        h.Work();
+        Assert.Equal([new ScreenInput.Pointer("down", 4, 5), new ScreenInput.Key("down", "a")], h.Frames.Input[0]);
+        Assert.Equal([new ScreenInput.Pointer("move", 8, 9)], h.Frames.Input[1]);
+    }
+
+    [Fact]
+    public void Input_an_engine_does_not_hear_is_not_sent()
+    {
+        var h = new Harness(new Hears(false, true));
+        h.Loop.Pointer("down", 1, 1);
+        h.Loop.Key("down", "a");
+        h.Step(1000);
+        h.Work();
+        Assert.Equal([new ScreenInput.Key("down", "a")], h.Frames.Input[0]);
+        Assert.False(h.Loop.Hears.Pointer);
+    }
+
+    static readonly JsonElement Screen = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "screen-engines.json"))).RootElement;
+
+    [Fact]
+    public void A_pointer_that_is_down_is_at_the_drawing_s_nearest_edge_beside_it()
+    {
+        var units = new global::Avalonia.Size(Screen.GetProperty("units").GetProperty("width").GetDouble(), Screen.GetProperty("units").GetProperty("height").GetDouble());
+        foreach (var c in Screen.GetProperty("near").EnumerateArray())
+        {
+            var part = new global::Avalonia.Size(c.GetProperty("part").GetProperty("width").GetDouble(), c.GetProperty("part").GetProperty("height").GetDouble());
+            var at = new global::Avalonia.Point(c.GetProperty("at").GetProperty("x").GetDouble(), c.GetProperty("at").GetProperty("y").GetDouble());
+            var got = CanvasView.PointNear(units, part, at);
+            var expected = c.GetProperty("x").ValueKind == JsonValueKind.Null ? null : new Pointer(c.GetProperty("x").GetInt64(), c.GetProperty("y").GetInt64());
+            Assert.Equal(expected, got);
+        }
+    }
+
+    [Fact]
+    public void Keys_go_by_Clarity_s_names_once_down_and_once_up()
+    {
+        // Every name an engine gets has a key on Avalonia, and only those.
+        var named = Enum.GetValues<global::Avalonia.Input.Key>().Select(ScreenKeys.NameOf).OfType<string>().ToHashSet();
+        Assert.Equal(Screen.GetProperty("keys").EnumerateArray().Select(k => k.GetString()!).ToHashSet(), named);
+        Assert.Equal("a", ScreenKeys.NameOf(global::Avalonia.Input.Key.A));
+        Assert.Equal("7", ScreenKeys.NameOf(global::Avalonia.Input.Key.NumPad7));
+        Assert.Equal("Enter", ScreenKeys.NameOf(global::Avalonia.Input.Key.Return));
+        Assert.Equal("Shift", ScreenKeys.NameOf(global::Avalonia.Input.Key.RightShift));
+        Assert.Null(ScreenKeys.NameOf(global::Avalonia.Input.Key.Tab));
+        var held = new HeldKeys();
+        Assert.True(held.Down("a"));
+        Assert.False(held.Down("a"));
+        Assert.True(held.Down("ArrowLeft"));
+        Assert.True(held.Up("a"));
+        Assert.False(held.Up("a"));
+        Assert.Equal(["ArrowLeft"], held.All());
+        Assert.Empty(held.All());
     }
 
     /// <summary>An engine sends its shapes as a draw handler's (conformance/drawing.json).</summary>

@@ -65,13 +65,15 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 - [x] On Avalonia the same, and the file shows `Ctrl+K` as written.
 - [x] A toolbar or ribbon button's tooltip shows its key (it used to say "Opens Window"): Print showed "Ctrl+P" on Go, Rust and Avalonia.
 
-## 5b. An engine beside the screen (N5a, 2026-10-26)
+## 5b. An engine beside the screen, with pointer and keys (N5a, 2026-10-26)
 
 Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --ignored --exact an_engine_beside_the_screen_builds_in_go` and `--test csharp_build ... an_engine_beside_the_screen_builds_in_csharp`, with `CLARITY_KEEP=1` to keep the app in `target/generated/clarity-gen-go-play` and `clarity-gen-csharp-play`.
 
 - [ ] Go (WebView2, a Web Worker from a `blob:` URL): the dot moves across the canvas and the time under it counts up.
 - [ ] Avalonia (Wasmtime): the same. Its first frame makes the instance and runs `on open` within the one-second limit, which is where the engine tests fail on Windows (section 1): if the canvas says "The engine stopped: ... it ran longer than 1 second" at once, it is that.
 - [ ] Closing the window ends the engine (no leftover process).
+- [ ] Pointer (both): press on the canvas and drag; the dot follows. Let go beside the window: the dot stays at the canvas's edge.
+- [ ] Keys (both): click the canvas, hold Left and A; the text says "holding ArrowLeft a". Let go of Left: "holding a". Click elsewhere (or Alt+Tab) while holding A: "holding" goes away. A shortcut with Ctrl still reaches the window.
 
 ## 6. Not done, so not to be tested
 
@@ -82,9 +84,9 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 ## Releases
 
 - [x] Upload NuGet 0.38.0 (on nuget.org).
-- [ ] Build and upload NuGet 0.39.0 (secrets on Windows, the keys window).
-- [ ] Tag the Rust crate 0.28.0 (`runtimes/rust/v0.28.0`; secrets on Windows).
-- [ ] Release the Rust crate 0.28.1: secrets on Windows kept for this machine, through Win32 (bumped to 0.28.1, so the generator asks for it).
+- [x] NuGet 0.39.0 and 0.40.0 are on nuget.org.
+- [ ] Build and upload NuGet 0.41.0 (pointer and keys for engines beside the screen).
+- [x] The Rust crate 0.28.1 is on crates.io.
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - Go v0.30.0 is released and its sums are recorded.

@@ -286,6 +286,7 @@ page Play: window
 - **One frame at a time.** While the engine is busy with a frame, the screen's next frames are skipped; the next tick gives all the time since the last one, so nothing is lost.
 - **Limits** hold per call: a frame that runs longer than the limit, or that fails, ends the engine. The canvas then says why in place of its drawing, in Clarity's words (`screenEngineFailed`), and the window works on.
 - **`on open`** runs `clarity_open` once, before the first frame.
+- **Pointer and keys.** When the file exports `clarity_pointer`, the canvas sends it the pointer: `["down", x, y]` when the primary button or a finger goes down on the drawing, `["move", x, y]` while it moves over the drawing or is down, `["up", x, y]` when it lets go, in the canvas's units. While it is down the canvas keeps it, so a drag that leaves the drawing is at its nearest edge. When the file exports `clarity_key`, a click on the canvas (or Tab) gives it the keyboard, and each key goes as `["down", key]` once, however long it repeats, and `["up", key]`; when the canvas loses the keyboard, every key still down comes up. Keys are named alike on every stack: `a` to `z`, `0` to `9`, `Space`, `Enter`, `Escape`, `Backspace`, `Delete`, the arrows (`ArrowLeft`), `Home`, `End`, `PageUp`, `PageDown`, `Shift`, `Control`, `Alt` and `F1` to `F12`. A key with Control, Alt or the command key stays the window's shortcut. What happens between two frames goes at the start of the next, before its tick; moves in a row keep only the last.
 - **Where it runs.** On the web stacks in a Web Worker of its own, with the browser's WebAssembly, so an engine that loops never freezes the window; the engine's file travels in the model the screen reads. On Avalonia in Wasmtime, in the application's process, its frames worked off the screen's thread. The backend never loads it.
 
 The file exports `clarity_tick` and `clarity_draw` besides the engine interface; the designer says so when it lacks them. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
@@ -295,5 +296,5 @@ The file exports `clarity_tick` and `clarity_draw` besides the engine interface;
 These are designed but not built:
 
 - The service `progress`, which would let a long call show on the screen how far it is.
-- Pointer and keys for an engine beside the screen (`clarity_pointer`, `clarity_key`), what it tells the window (`tells`) and what a handler tells it (`hears`).
+- What an engine beside the screen tells the window (`tells`) and what a handler tells it (`hears`).
 - Engines beside the screen written in Clarity (`on tick`, `on draw`).

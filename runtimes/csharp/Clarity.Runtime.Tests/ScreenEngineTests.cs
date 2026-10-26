@@ -29,7 +29,7 @@ public sealed class ScreenEngineTests
             var draws = run.GetProperty("draws").EnumerateArray().ToArray();
             for (var i = 0; i < ticks.Length; i++)
             {
-                var drawn = engine.Frame(ticks[i]);
+                var drawn = engine.Frame(ticks[i], []);
                 Assert.True(JsonNode.DeepEquals(JsonNode.Parse(draws[i].GetRawText()), drawn), $"{run.GetProperty("name")}, frame {i}: {drawn.ToJsonString()}");
             }
         }
@@ -42,11 +42,45 @@ public sealed class ScreenEngineTests
         {
             using var engine = Load(true, fails.GetProperty("seconds").GetUInt32());
             foreach (var ms in fails.GetProperty("ticks").EnumerateArray())
-                engine.Frame(ms.GetDouble());
-            var e = Assert.Throws<EngineException>(() => engine.Frame(fails.GetProperty("tick").GetDouble()));
+                engine.Frame(ms.GetDouble(), []);
+            var e = Assert.Throws<EngineException>(() => engine.Frame(fails.GetProperty("tick").GetDouble(), []));
             Assert.Equal(fails.GetProperty("fails").GetString(), e.Message);
             // Ended, it draws no more.
-            Assert.Equal(e.Message, Assert.Throws<EngineException>(() => engine.Frame(16)).Message);
+            Assert.Equal(e.Message, Assert.Throws<EngineException>(() => engine.Frame(16, [])).Message);
+        }
+    }
+
+    /// <summary>An input as the conformance file writes it.</summary>
+    static ScreenInput InputOf(JsonElement i) =>
+        i.TryGetProperty("pointer", out var kind)
+            ? new ScreenInput.Pointer(kind.GetString()!, i.GetProperty("x").GetInt64(), i.GetProperty("y").GetInt64())
+            : new ScreenInput.Key(i.GetProperty("key").GetString()!, i.GetProperty("name").GetString()!);
+
+    [Fact]
+    public void Pointer_and_keys_reach_the_engine_before_its_tick()
+    {
+        foreach (var run in Cases.GetProperty("input").EnumerateArray())
+        {
+            using var engine = Load(run.GetProperty("opens").GetBoolean());
+            Assert.Equal(new Hears(true, true), engine.Hears);
+            var i = 0;
+            foreach (var frame in run.GetProperty("frames").EnumerateArray())
+            {
+                var drawn = engine.Frame(frame.GetProperty("tick").GetDouble(), frame.GetProperty("input").EnumerateArray().Select(InputOf).ToList());
+                Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("draws").GetRawText()), drawn), $"{run.GetProperty("name")}, frame {i++}: {drawn.ToJsonString()}");
+            }
+        }
+    }
+
+    [Fact]
+    public void Moves_in_a_row_keep_only_the_last()
+    {
+        foreach (var c in Cases.GetProperty("queued").EnumerateArray())
+        {
+            var waiting = new List<ScreenInput>();
+            foreach (var given in c.GetProperty("given").EnumerateArray())
+                ScreenInput.Queue(waiting, InputOf(given));
+            Assert.Equal(c.GetProperty("sent").EnumerateArray().Select(InputOf), waiting);
         }
     }
 

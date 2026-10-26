@@ -6,7 +6,8 @@
 // at the place and length the function gives, packed in an i64. The frame
 // loop is conformance/screen-engines.json. The time limit is the page's:
 // a worker that does not answer in time is stopped from outside
-// (screenEngine.ts).
+// (screenEngine.ts). Pointer and keys go to clarity_pointer and
+// clarity_key, when the engine has them, at the start of the next frame.
 
 /** What an engine is declared with. */
 export type Declared = {
@@ -34,6 +35,12 @@ export type Services = {
 
 /** What a shape on a canvas is, as a draw handler's (conformance/drawing.json). */
 export type Shape = { op: string; [value: string]: unknown };
+
+/** Pointer or key on the canvas, as the engine gets it (conformance/screen-engines.json). */
+export type Input = { pointer: "down" | "move" | "up"; x: number; y: number } | { key: "down" | "up"; name: string };
+
+/** Which input an engine beside the screen takes: it exports clarity_pointer, clarity_key. */
+export type Hears = { pointer: boolean; keys: boolean };
 
 /** A call that failed: the engine's error, or what went wrong running it. */
 export class EngineFailed extends Error {}
@@ -66,6 +73,8 @@ export class Engine {
   readonly #megabytes: number;
   readonly #random: { at: bigint };
   readonly #seed: () => bigint;
+  /** The pointer and keys it takes. */
+  readonly hears: Hears;
 
   constructor(name: string, exports: Exports, megabytes: number, random: { at: bigint }, seed: () => bigint) {
     this.#name = name;
@@ -73,6 +82,7 @@ export class Engine {
     this.#megabytes = megabytes;
     this.#random = random;
     this.#seed = seed;
+    this.hears = { pointer: typeof exports.clarity_pointer === "function", keys: typeof exports.clarity_key === "function" };
   }
 
   /** Calls `function` with `args`: its value, or EngineFailed. */
@@ -102,11 +112,23 @@ export class Engine {
     return answer.value;
   }
 
-  /** One frame: the milliseconds since the last frame, then the canvas's shapes. */
-  frame(ms: number, ticked: () => void = () => {}): Shape[] {
-    this.call("clarity_tick", [ms]);
-    ticked();
-    const shapes = this.call("clarity_draw", []);
+  /**
+   * One frame: the input since the last, then the milliseconds since the
+   * last frame, then the canvas's shapes. `calling` hears each call before
+   * it runs, for its time limit. Input it does not take is left out.
+   */
+  frame(ms: number, input: Input[] = [], calling: (call: string) => void = () => {}): Shape[] {
+    const run = (name: string, args: unknown[]) => {
+      calling(name);
+      return this.call(name, args);
+    };
+    for (const i of input) {
+      if ("pointer" in i) {
+        if (this.hears.pointer) run("clarity_pointer", [i.pointer, i.x, i.y]);
+      } else if (this.hears.keys) run("clarity_key", [i.key, i.name]);
+    }
+    run("clarity_tick", [ms]);
+    const shapes = run("clarity_draw", []);
     if (!Array.isArray(shapes)) throw new EngineFailed(`engine ${this.#name} failed in clarity_draw: it gave no list of shapes`);
     return shapes as Shape[];
   }

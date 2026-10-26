@@ -4,6 +4,8 @@
 // since the last, then clarity_draw for the canvas's shapes, each call
 // within the engine's limits; the epoch stops a call that runs too long.
 // A frame that fails ends the engine (conformance/screen-engines.json).
+// Pointer and keys since the last frame go first, to clarity_pointer and
+// clarity_key, when it has them.
 
 using System.Text.Json.Nodes;
 
@@ -22,7 +24,10 @@ public sealed class ScreenEngine : IFrames
     {
         this.name = name;
         this.engine = engine;
+        Hears = new Hears(engine.Exports("clarity_pointer"), engine.Exports("clarity_key"));
     }
+
+    public Hears Hears { get; }
 
     /// <summary>
     /// Loads <paramref name="bytes"/> as engine <paramref name="name"/> for one canvas;
@@ -32,12 +37,19 @@ public sealed class ScreenEngine : IFrames
     public static ScreenEngine Load(string name, byte[] bytes, IReadOnlyList<string> uses, bool opens, EngineLimits limits) =>
         new(name, Engine.Load(name, bytes, new EngineDeclaration([], uses, limits, EngineState.PerWindow, opens, Screen: true)));
 
-    public JsonArray Frame(double ms)
+    public JsonArray Frame(double ms, IReadOnlyList<ScreenInput> input)
     {
         if (ended is not null)
             throw ended;
         try
         {
+            foreach (var given in input)
+            {
+                if (given is ScreenInput.Pointer p && Hears.Pointer)
+                    Call("clarity_pointer", p.Kind, p.X, p.Y);
+                else if (given is ScreenInput.Key k && Hears.Keys)
+                    Call("clarity_key", k.Kind, k.Name);
+            }
             Call("clarity_tick", ms);
             return Call("clarity_draw") as JsonArray ?? throw new EngineException($"engine {name} failed in clarity_draw: it gave no list of shapes");
         }

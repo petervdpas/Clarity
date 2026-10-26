@@ -96,3 +96,21 @@ export function pointOf(
   if (x < 0 || y < 0 || x >= units.width || y >= units.height) return null;
   return { x: Math.floor(x), y: Math.floor(y) };
 }
+
+/**
+ * Where in a canvas's units a pointer that is down is, as pointOf finds it,
+ * but beside the drawing at its nearest edge; null when the part shows
+ * nothing (conformance/screen-engines.json, near).
+ */
+export function pointNear(
+  units: { width: number; height: number },
+  part: { width: number; height: number },
+  at: { x: number; y: number },
+): { x: number; y: number } | null {
+  const scale = Math.min(part.width / units.width, part.height / units.height);
+  if (!(scale > 0) || !Number.isFinite(scale)) return null;
+  const x = (at.x - (part.width - units.width * scale) / 2) / scale;
+  const y = (at.y - (part.height - units.height * scale) / 2) / scale;
+  const edge = (v: number, size: number) => Math.min(Math.max(Math.floor(v), 0), Math.ceil(size) - 1);
+  return { x: edge(x, units.width), y: edge(y, units.height) };
+}

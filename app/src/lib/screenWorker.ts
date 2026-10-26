@@ -1,7 +1,7 @@
 // The Web Worker an engine beside the screen runs in (DESIGN 5.12): it
-// loads the engine, then answers every frame with the canvas's shapes. It
-// draws nothing itself. The page stops it from outside when a call runs
-// past its limit (screenEngine.ts).
+// loads the engine, then gives every frame the input since the last and
+// answers with the canvas's shapes. It draws nothing itself. The page
+// stops it from outside when a call runs past its limit (screenEngine.ts).
 
 import { EngineFailed, loadEngine, type Engine } from "./engineHost";
 import type { FromWorker, ToWorker } from "./screenEngine";
@@ -28,10 +28,10 @@ scope.onmessage = async (event) => {
       const bytes = Uint8Array.from(atob(declared.wasm), (c) => c.charCodeAt(0));
       const services = { clock: () => Date.now(), seed, log: (line: string) => send({ kind: "log", line }), language: () => language };
       engine = await loadEngine(declared.name, bytes, { ...declared, screen: true }, services);
-      send({ kind: "ready" });
+      send({ kind: "ready", hears: engine.hears });
     } else if (engine) {
-      // Its time limit is per call: the page hears when the tick is done.
-      const shapes = engine.frame(message.ms, () => send({ kind: "ticked" }));
+      // Its time limit is per call: the page hears each call as it starts.
+      const shapes = engine.frame(message.ms, message.input, (call) => send({ kind: "calling", call }));
       send({ kind: "drawn", shapes });
     }
   } catch (e) {

@@ -35,6 +35,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         source: None,
         enums: Vec::new(),
         entities: Vec::new(),
+        records: Vec::new(),
         pages: Vec::new(),
         apps: Vec::new(),
         themes: Vec::new(),
@@ -345,6 +346,12 @@ fn parse_top_level(
             cursor.expect_end()?;
             file.entities.push(parse_entity(node, name, diagnostics));
         }
+        Some("record") => {
+            cursor.next();
+            let name = cursor.expect_ident("a record name")?;
+            cursor.expect_end()?;
+            file.records.push(parse_record(node, name, diagnostics));
+        }
         Some("settings") => {
             cursor.next();
             cursor.expect_end()?;
@@ -439,6 +446,26 @@ fn parse_variant(node: &Node) -> ParseResult<EnumVariant> {
     Ok(EnumVariant { name, label })
 }
 
+/// `record Dot` and its fields (DESIGN 5.12): as an entity's, but values
+/// only, so a decimal needs no precision and scale.
+fn parse_record(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
+    let mut fields = Vec::new();
+    for child in &node.children {
+        let field = no_children(child).and_then(|_| {
+            let mut cursor = Cursor::new(child.line);
+            parse_field_typed(&mut cursor, child.line.span, true)
+        });
+        match field {
+            Ok(field) => fields.push(field),
+            Err(diag) => diagnostics.push(diag),
+        }
+    }
+    if node.children.is_empty() {
+        diagnostics.push(Diagnostic::error(format!("record '{}' has no fields", name.name), name.span));
+    }
+    Entity { name, fields, table: None, key: None, settings: false, record: true, span: node.span() }
+}
+
 fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> Entity {
     let mut fields = Vec::new();
     let (mut table, mut key) = (None, None);
@@ -484,6 +511,7 @@ fn parse_entity(node: &Node, name: Ident, diagnostics: &mut Vec<Diagnostic>) -> 
         table,
         key,
         settings: false,
+        record: false,
         span: node.span(),
     }
 }
@@ -525,6 +553,7 @@ fn parse_settings(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Entity {
         table: None,
         key: None,
         settings: true,
+        record: false,
         span,
     }
 }
@@ -542,9 +571,14 @@ fn parse_field(node: &Node) -> ParseResult<Field> {
 
 /// `name: type, modifiers` from the cursor to the end of the line.
 pub(crate) fn parse_field_at(cursor: &mut Cursor, span: Span) -> ParseResult<Field> {
+    parse_field_typed(cursor, span, false)
+}
+
+/// A field of an entity, or of a record (`value`), whose decimal needs no precision and scale.
+fn parse_field_typed(cursor: &mut Cursor, span: Span, value: bool) -> ParseResult<Field> {
     let name = cursor.expect_ident("a field name")?;
     cursor.expect(TokenKind::Colon, "':' after the field name")?;
-    let ty = parse_type(cursor)?;
+    let ty = parse_type_of(cursor, value)?;
     let mut modifiers = Modifiers::default();
     while cursor.eat(TokenKind::Comma) {
         parse_modifier(cursor, &mut modifiers)?;
@@ -568,6 +602,10 @@ pub(crate) fn parse_field_at(cursor: &mut Cursor, span: Span) -> ParseResult<Fie
 const VALUE_WORDS: [&str; 12] = ["bool", "money", "datetime", "duration", "image", "file", "email", "url", "color", "id", "ref", "list"];
 
 pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
+    parse_type_of(cursor, false)
+}
+
+fn parse_type_of(cursor: &mut Cursor, value: bool) -> ParseResult<FieldType> {
     let ident = cursor.expect_ident("a type")?;
     let ty = match ident.name.as_str() {
         "text" => {
@@ -580,6 +618,8 @@ pub(crate) fn parse_type(cursor: &mut Cursor) -> ParseResult<FieldType> {
             };
             FieldType::Text { max_length }
         }
+        // A record's decimal is a value, with no column to size.
+        "decimal" if value && cursor.peek_kind() != Some(TokenKind::LParen) => FieldType::Decimal { precision: 28, scale: 0 },
         "decimal" => {
             cursor.expect(
                 TokenKind::LParen,

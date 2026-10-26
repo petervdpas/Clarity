@@ -77,6 +77,8 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Tells (both): the first number under the canvas counts the laps, one every 1.6 seconds. Click the canvas and press Escape: the second number shows the time.
 - [ ] Hears (both): Start sets the text to "... ms, level 2", the time back near 0 and the laps to 0.
 - [ ] Log (both): run the app from a terminal; each Start writes `engine Screen: level 2` there.
+- [ ] Written in Clarity (Go): `cargo test -p clarity-gen --test go_build -- --ignored --exact a_clarity_engine_beside_the_screen_builds_in_go` with `CLARITY_KEEP=1`, then run `target/generated/clarity-gen-go-sky/skies.exe`: the dot sits left; Start moves it a little right; ten seconds later the number under it shows the time.
+- [ ] Engines written in Clarity on the backend: `an_engine_written_in_clarity_runs_in_{go,c,cpp,csharp}` (ignored build tests) pass on Windows.
 
 ## 6. Not done, so not to be tested
 
@@ -93,3 +95,4 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - Go v0.31.0 is released and its sums are recorded.
+- [ ] Upload NuGet 0.43.0, tag `runtimes/rust/v0.29.0` and `runtimes/go/v0.32.0` (then record the Go sums): engines written in Clarity are WebAssembly now, so the runtimes' `random` and C's keep helpers went.

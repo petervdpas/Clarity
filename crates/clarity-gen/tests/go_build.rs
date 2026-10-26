@@ -362,8 +362,8 @@ fn the_calculator_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("calculator", "Calculator", Runtime::Local);
 }
 
-/// The noughts example's Board engine, written in Clarity, as the Go it
-/// becomes, played from a test of its own.
+/// The noughts example's Board engine, written in Clarity and compiled to
+/// WebAssembly, played through the Go application's engine wrappers.
 const BOARD_TEST: &str = r#"package main
 
 import (
@@ -372,6 +372,11 @@ import (
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
+
+// shown is the text of a key the engine gives, as the screen shows it.
+func shown(key string) string {
+	return clarity.KeyText(key).Show()
+}
 
 func refusal(err error) string {
 	if refused, ok := err.(*clarity.RefusedError); ok {
@@ -386,37 +391,37 @@ func TestEachWindowPlaysAGameOfItsOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 	clarity.LoadTranslations(model)
-	if said, err := boardPlay(nil, 1, 1); err != nil || said != "Your move" {
+	if said, err := boardPlay(1, 1); err != nil || shown(said) != "Your move" {
 		t.Fatalf("play said %q: %v", said, err)
 	}
 	// The computer took the centre.
-	if mark, _ := boardMark(nil, 1, 5); mark != 2 {
+	if mark, _ := boardMark(1, 5); mark != 2 {
 		t.Fatalf("the centre is %d", mark)
 	}
-	if _, err := boardPlay(nil, 1, 5); refusal(err) != "That square is taken" {
+	if _, err := boardPlay(1, 5); refusal(err) != "That square is taken" {
 		t.Fatalf("taken: %v", err)
 	}
-	if _, err := boardPlay(nil, 1, 10); refusal(err) != "There are nine squares" {
+	if _, err := boardPlay(1, 10); refusal(err) != "There are nine squares" {
 		t.Fatalf("nine squares: %v", err)
 	}
 	// Another window has a board of its own, and a closed window's board goes.
-	if mark, _ := boardMark(nil, 2, 1); mark != 0 {
+	if mark, _ := boardMark(2, 1); mark != 0 {
 		t.Fatalf("another window: %d", mark)
 	}
 	clarity.WindowClosed(1)
-	if mark, _ := boardMark(nil, 1, 1); mark != 0 {
+	if mark, _ := boardMark(1, 1); mark != 0 {
 		t.Fatalf("closed: %d", mark)
 	}
 	// The computer blocks your line.
-	boardPlay(nil, 3, 1)
-	boardPlay(nil, 3, 2)
-	if mark, _ := boardMark(nil, 3, 3); mark != 2 {
+	boardPlay(3, 1)
+	boardPlay(3, 2)
+	if mark, _ := boardMark(3, 3); mark != 2 {
 		t.Fatalf("not blocked: %d", mark)
 	}
-	if said, _ := boardRestart(nil, 3); said != "Your move" {
+	if said, _ := boardRestart(3); shown(said) != "Your move" {
 		t.Fatalf("restart said %q", said)
 	}
-	if taken, _ := boardTaken(nil, 3); taken != 0 {
+	if taken, _ := boardTaken(3); taken != 0 {
 		t.Fatalf("taken %d", taken)
 	}
 }
@@ -437,6 +442,33 @@ fn an_engine_written_in_clarity_runs_in_go() {
     std::fs::write(out.join("board_test.go"), BOARD_TEST).unwrap();
     run(&out, "go", &["test", "./..."]);
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// An engine beside the screen written in Clarity (conformance/engines/sky.clarity)
+/// builds in Go: compiled to WebAssembly when generating, carried in the model.
+/// A Start button sends it a hear and its tell fills in the time. With
+/// CLARITY_KEEP set the built application stays, to run it.
+#[test]
+#[ignore]
+fn a_clarity_engine_beside_the_screen_builds_in_go() {
+    let source = format!(
+        "{}\napp Skies\n    main Watch\n\npage Watch: window\n    data time: integer\n    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Sky on finished: finished\n    button \"Start\" name go at 1,11 span 2 on click: startSky\n    number name timeShown at 3,11 span 2 bind time readonly\n\ncode Watch\n    handler startSky\n        sky.start(3)\n\n    handler finished(at: integer)\n        time = at\n",
+        include_str!("../../../conformance/engines/sky.clarity")
+    );
+    let project = clarity_spec::load_sources([("sky.clarity", source.as_str())]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let mut settings = clarity_project::starter("Skies", "sky");
+    settings.stack.backend = clarity_project::Backend::Go;
+    settings.stack.ui = clarity_project::Ui::Web;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join("clarity-gen-go-sky");
+    write(&out, &files, Runtime::Local);
+    checks(&out, Runtime::Local);
+    run(&out, "go", &["build", "-o", "skies", "."]);
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
 }
 
 /// A window that asks each kind of question (DESIGN 5.14) builds, and gofmt

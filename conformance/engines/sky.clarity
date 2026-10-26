@@ -1,0 +1,40 @@
+module sky
+
+// The engine beside the screen written in Clarity that every renderer is
+// tested with (conformance/screen-engines.json, `written`), compiled to
+// sky.wasm: a dot at its level times 10, which it tells finished past ten
+// seconds, and starts again at the level it hears.
+
+record Shape
+    op: text
+    x: integer
+    y: integer
+    r: integer
+    color: text, default "accent"
+
+engine Sky
+    beside the screen
+    tells finished(time: integer)
+    hears start(level: integer)
+    keep elapsed: integer = 0
+    keep stage: integer = 1
+
+    function clarity_tick(ms: integer)
+        elapsed = elapsed + ms
+        if elapsed > 10000
+            tell finished(elapsed)
+
+    function clarity_draw() -> list<Shape>
+        let clear = new Shape
+        clear.op = "clear"
+        clear.color = "background"
+        let dot = new Shape
+        dot.op = "circle"
+        dot.x = stage * 10
+        dot.y = 50
+        dot.r = 5
+        return [clear, dot]
+
+    function start(level: integer)
+        elapsed = 0
+        stage = level

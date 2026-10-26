@@ -128,3 +128,12 @@ test("an engine beside the screen logs with the service it uses", async () => {
     assert.deepEqual(lines, run.lines, run.name);
   }
 });
+
+test("an engine beside the screen written in Clarity runs as any", async () => {
+  const written = screen.written;
+  const bytes = new Uint8Array(read(`engines/${written.engine}`));
+  const engine = await loadEngine(written.name, bytes, { uses: [], opens: false, ...limits, screen: true }, services());
+  written.frames.forEach((f: { tick: number; input: Input[]; tells: unknown; draws: unknown }, i: number) => {
+    assert.deepEqual(engine.frame(f.tick, f.input), { shapes: f.draws, tells: f.tells }, `frame ${i}`);
+  });
+});

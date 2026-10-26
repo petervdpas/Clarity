@@ -74,3 +74,31 @@ fn the_rust_shell_logs_the_engines_lines() {
     assert!(main.contains("fn log_line(line: String) {\n    eprintln!(\"{line}\");\n}"), "{main}");
     assert!(main.contains("            log_line,\n"), "{main}");
 }
+
+/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b) is
+/// compiled when the project is generated, and every stack carries it as it
+/// carries one brought along.
+#[test]
+fn a_clarity_engine_beside_the_screen_is_carried_compiled() {
+    let source = format!(
+        "{}\npage Sky: window\n    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Sky\n",
+        include_str!("../../../conformance/engines/sky.clarity")
+    );
+    let generated = |backend: Backend, ui: Ui| {
+        let mut settings: clarity_project::Settings = clarity_project::starter("Sky", "sky");
+        settings.stack.backend = backend;
+        settings.stack.ui = ui;
+        let project = clarity_spec::load_in([("sky.clarity", source.as_str())], [], &clarity_project::source_refs(&settings));
+        let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+        assert!(errors.is_empty(), "{errors:#?}");
+        generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
+    };
+    for backend in [Backend::Rust, Backend::Go, Backend::C, Backend::Cpp] {
+        let files = generated(backend, Ui::Web);
+        let carried = files.iter().any(|f| f.text.contains("\"screenEngines\":[{\"name\":\"Sky\"") || f.text.contains("\\\"screenEngines\\\":[{\\\"name\\\":\\\"Sky\\\""));
+        assert!(carried, "{backend:?} carries the compiled engine in its model");
+    }
+    let files = generated(Backend::Csharp, Ui::Avalonia);
+    assert!(file(&files, "ScreenEngines.cs").contains("ScreenEngine.Load(\"Sky\", Read(\"sky.wasm\"), [], false,"), "Avalonia loads the compiled engine");
+    assert!(files.iter().any(|f| f.path == "Engines/sky.wasm"));
+}

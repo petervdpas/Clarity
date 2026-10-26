@@ -23,6 +23,7 @@
   import { PLAIN_TYPES, dataEntity, dataType, isList, valueField } from "./windowData";
   import { resourceChoices } from "./resources";
   import { resourceKinds } from "./resourceKinds.svelte";
+  import { besideEngines, canvasEvents, runEngine } from "./engines";
 
   let {
     preview,
@@ -183,6 +184,20 @@
 
   // A custom part's declaration (DESIGN 5.19), when the part picked is one.
   const declared = $derived(p?.kind === "custom" ? preview.project.files.flatMap((f) => f.parts).find((d) => d.name.name === p.part) : undefined);
+
+  // The engines a canvas can run, and the one it runs (DESIGN 5.12).
+  const besides = $derived(besideEngines(preview.project));
+  const running = $derived(p?.runs ? besides.find((e) => e.name.name === p.runs) : undefined);
+  // What tells through the part: a custom part's declared tells, or its engine's.
+  const tellsOffered = $derived(declared?.tells ?? running?.tells ?? []);
+  // The events offered: none to draw a canvas its engine draws.
+  const events = $derived(info && p ? canvasEvents(info.events, p.runs) : []);
+
+  function setRuns(name: string | null) {
+    if (!p) return;
+    const engine = besides.find((e) => e.name.name === name) ?? null;
+    update(runEngine(p, engine));
+  }
 
   /** Writes a property's value on the part's line, or leaves it out with `null`. */
   function setPartValue(name: string, value: Literal | null) {
@@ -652,10 +667,10 @@
       </fieldset>
     {/if}
 
-    {#if info.events.length > 0}
+    {#if events.length > 0}
       <fieldset class="checks">
         <legend>Events</legend>
-        {#each info.events as ev (ev)}
+        {#each events as ev (ev)}
           {@const handler = p.handlers.find((h) => h.event === ev)?.handler ?? ""}
           <div class="event-row">
             <span class="event-name">{ev}</span>
@@ -704,29 +719,31 @@
           <p class="hint">Code reads and sets them as <code>{partName}.{declared.properties[0].name.name}</code>.</p>
         </fieldset>
       {/if}
-      {#if declared.tells.length > 0}
-        <fieldset class="checks">
-          <legend>Tells</legend>
-          {#each declared.tells as tell (tell.name.name)}
-            {@const handler = p.tells.find((t) => t.tell === tell.name.name)?.handler ?? ""}
-            <div class="event-row">
-              <span class="event-name">{tell.name.name}</span>
-              <input value={handler} placeholder="handler" onchange={(e) => setTell(tell.name.name, textOf(e), paramsText(tell.params))} />
-              {#if handler}
-                <span class="event-buttons">
-                  <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
-                  <button class="small" title="Unwire" onclick={() => setTell(tell.name.name, null, "")}>&times;</button>
-                </span>
-              {:else}
-                <button class="small" title="Wire a handler named after the part and the tell" onclick={() => setTell(tell.name.name, partName + tell.name.name[0].toUpperCase() + tell.name.name.slice(1), paramsText(tell.params))}
-                  >Wire</button
-                >
-              {/if}
-            </div>
-          {/each}
-          <p class="hint">A handler wired to a tell takes the tell's values.</p>
-        </fieldset>
-      {/if}
+    {/if}
+
+    <!-- A custom part's tells, or those of the engine a canvas runs, wired like events. -->
+    {#if tellsOffered.length > 0}
+      <fieldset class="checks">
+        <legend>Tells</legend>
+        {#each tellsOffered as tell (tell.name.name)}
+          {@const handler = p.tells.find((t) => t.tell === tell.name.name)?.handler ?? ""}
+          <div class="event-row">
+            <span class="event-name">{tell.name.name}</span>
+            <input value={handler} placeholder="handler" onchange={(e) => setTell(tell.name.name, textOf(e), paramsText(tell.params))} />
+            {#if handler}
+              <span class="event-buttons">
+                <button class="small" title="Show the handler in the code behind" onclick={() => pageDesigner.showCode(handler)}>Code</button>
+                <button class="small" title="Unwire" onclick={() => setTell(tell.name.name, null, "")}>&times;</button>
+              </span>
+            {:else}
+              <button class="small" title="Wire a handler named after the part and the tell" onclick={() => setTell(tell.name.name, partName + tell.name.name[0].toUpperCase() + tell.name.name.slice(1), paramsText(tell.params))}
+                >Wire</button
+              >
+            {/if}
+          </div>
+        {/each}
+        <p class="hint">A handler wired to a tell takes the tell's values.</p>
+      </fieldset>
     {/if}
 
     {#if info.properties.includes("orientation")}
@@ -737,6 +754,19 @@
           <option value="vertical">Stacked</option>
         </select>
       </label>
+    {/if}
+    {#if info.properties.includes("runs")}
+      <label class="prop" title="An engine beside the screen draws the canvas, frame by frame, and hears its pointer and keys">
+        <span>Engine</span>
+        <select value={p.runs ?? ""} onchange={(e) => setRuns(textOf(e))}>
+          <option value="">(none: a draw handler draws it)</option>
+          {#each besides as engine (engine.name.name)}<option value={engine.name.name}>{engine.name.name}</option>{/each}
+          {#if p.runs && !running}<option value={p.runs}>{p.runs} (no engine beside the screen)</option>{/if}
+        </select>
+      </label>
+      {#if running && running.hears.length > 0}
+        <p class="hint">Code tells it {#each running.hears as hear, i (hear.name.name)}{i > 0 ? ", " : ""}<code>{partName}.{hear.name.name}({hear.params.map((v) => v.name.name).join(", ")})</code>{/each}.</p>
+      {/if}
     {/if}
     {#if info.properties.includes("surface")}
       <label class="prop">

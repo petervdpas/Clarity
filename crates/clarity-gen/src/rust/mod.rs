@@ -334,15 +334,6 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "    engines::close_window(instance);\n",
         )
     };
-    // What an engine written in Clarity kept for the window goes too.
-    let mut close_engines = close_engines.to_string();
-    for (file, engine, _) in crate::written_engines(project) {
-        if engine.state == clarity_spec::code::EngineState::Window
-            && let Some(module) = &file.module
-        {
-            close_engines.push_str(&format!("    modules::{}::{}_close(instance);\n", snake(&module.name), snake(&engine.name.name)));
-        }
-    }
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     // Custom parts drawn by native libraries (DESIGN 6.5): the shell's side of the part host.

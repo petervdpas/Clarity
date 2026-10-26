@@ -4,7 +4,10 @@
 
 import type { EngineDecl } from "./generated/EngineDecl";
 import type { EngineFunction } from "./generated/EngineFunction";
+import type { Event as PartEvent } from "./generated/Event";
+import type { Handler } from "./generated/Handler";
 import type { Project } from "./generated/Project";
+import type { TellHandler } from "./generated/TellHandler";
 import { typeText } from "./windowData.ts";
 
 export type ProjectEngine = {
@@ -155,4 +158,32 @@ export function freeName(taken: string[], base: string): string {
   let n = 2;
   while (taken.includes(base + n)) n++;
   return base + n;
+}
+
+/** The engines a canvas can run (DESIGN 5.12): those declared beside the screen. */
+export function besideEngines(project: Project): EngineDecl[] {
+  return project.files.flatMap((file) => file.engines).filter((engine) => engine.beside);
+}
+
+type Running = { runs: string | null; handlers: Handler[]; tells: TellHandler[] };
+
+/**
+ * A canvas set to run `engine`, or none. The engine draws it, so its draw
+ * handler is unwired (the handler stays in the code), and only tells the
+ * engine has stay wired.
+ */
+export function runEngine<P extends Running>(canvas: P, engine: EngineDecl | null): P {
+  if (engine === null) return { ...canvas, runs: null, tells: [] };
+  const tells = new Set(engine.tells.map((t) => t.name.name));
+  return {
+    ...canvas,
+    runs: engine.name.name,
+    handlers: canvas.handlers.filter((h) => h.event !== "draw"),
+    tells: canvas.tells.filter((t) => tells.has(t.tell)),
+  };
+}
+
+/** A canvas's events: none to draw it while an engine does. */
+export function canvasEvents(events: PartEvent[], runs: string | null): PartEvent[] {
+  return runs === null ? events : events.filter((e) => e !== "draw");
 }

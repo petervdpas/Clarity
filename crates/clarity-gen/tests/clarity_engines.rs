@@ -1,6 +1,7 @@
-//! Engines written in Clarity (the Board of tests/fixtures/board.clarity, the
-//! stack's output: a store of what each instance keeps, and per function an
-//! entry point that works on it, called from handlers as any engine's.
+//! Engines written in Clarity (the Board of tests/fixtures/board.clarity)
+//! become WebAssembly files when the project is generated (DESIGN 5.12,
+//! N5b): every stack carries `board.wasm` and calls it as any engine file,
+//! and no stack writes engine code of its own.
 
 use clarity_gen::{OutFile, generate};
 use clarity_project::{Backend, Ui};
@@ -16,85 +17,45 @@ fn files(backend: Backend, ui: Ui) -> Vec<OutFile> {
     generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
-fn text<'a>(files: &'a [OutFile], path: &str) -> &'a str {
-    &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path} in {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>())).text
+fn all(files: &[OutFile]) -> String {
+    files.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("\n")
 }
 
-fn has(files: &[OutFile], path: &str, expected: &str) {
-    let text = text(files, path);
-    assert!(text.contains(expected), "expected\n{expected}\nin {path}:\n{text}");
+/// The compiled engine is among the files, as WebAssembly: a file of its
+/// own, or bytes in the program's source on C and C++.
+fn carries_the_board(files: &[OutFile]) {
+    if let Some(wasm) = files.iter().find(|f| f.path.ends_with("board.wasm")) {
+        assert_eq!(&wasm.bytes.as_deref().expect("the engine file is bytes")[..4], b"\0asm");
+        return;
+    }
+    let source = files.iter().find(|f| f.path == "src/engines.c" || f.path == "src/engines.cpp").expect("board.wasm, or the engines' source");
+    assert!(source.text.contains("/// Engine Board, from board.wasm.") && source.text.contains("0x00, 0x61, 0x73, 0x6d"), "{}", source.path);
+}
+
+/// No stack writes the engine as code of its own any more.
+fn writes_no_engine_code(files: &[OutFile]) {
+    let all = all(files);
+    for written in ["BoardKept", "boardKept", "BoardEngine", "board_play_with", "boardPlayWith", "PlayWith("] {
+        assert!(!all.contains(written), "{written} is still written");
+    }
 }
 
 #[test]
-fn rust_runs_an_engine_written_in_clarity() {
+fn every_stack_carries_a_clarity_engine_as_a_file() {
+    for (backend, ui) in [(Backend::Rust, Ui::Web), (Backend::Go, Ui::Web), (Backend::C, Ui::Web), (Backend::Cpp, Ui::Web), (Backend::Csharp, Ui::Avalonia)] {
+        let files = files(backend, ui);
+        carries_the_board(&files);
+        writes_no_engine_code(&files);
+        // Called through the engine host, as a brought-along engine is, in the handler's window.
+        let all = all(&files);
+        assert!(all.contains("\"play\""), "{backend:?}: the call of play goes to the engine by name");
+    }
+}
+
+/// The keys the engine's code gives are its texts, translated by the host.
+#[test]
+fn a_clarity_engines_keys_are_its_says() {
     let files = files(Backend::Rust, Ui::Web);
-    if std::env::var("CLARITY_DUMP").is_ok() {
-        println!("{}", text(&files, "src/modules/noughts.rs"));
-    }
-    // No WebAssembly to load: the engine is code of the module.
-    assert!(!files.iter().any(|f| f.path == "src/engines.rs" || f.path.ends_with(".wasm")));
-    has(&files, "src/modules/noughts.rs", "pub struct BoardKept {\n    pub squares: Vec<i64>,\n    pub lines: Vec<i64>,\n}");
-    has(&files, "src/modules/noughts.rs", "pub fn board_play(db: &Db, instance: u64, square: i64) -> Result<String> {");
-    has(&files, "src/modules/noughts.rs", "pub fn board_play_with(db: &Db, kept: &mut BoardKept, square: i64) -> Result<String> {");
-    has(&files, "src/modules/noughts.rs", "clarity_runtime::random(");
-    has(&files, "src/modules/noughts.rs", "crate::modules::noughts::board_play(db, ui.instance(), square)?");
-    has(&files, "src/main.rs", "modules::noughts::board_close(instance);");
-}
-
-#[test]
-fn csharp_runs_an_engine_written_in_clarity() {
-    let files = files(Backend::Csharp, Ui::Avalonia);
-    if std::env::var("CLARITY_DUMP").is_ok() {
-        println!("{}", text(&files, "Modules/Noughts.cs"));
-    }
-    assert!(!files.iter().any(|f| f.path == "Engines.cs" || f.path.ends_with(".wasm")));
-    has(&files, "Modules/Noughts.cs", "public static class BoardEngine\n{");
-    has(&files, "Modules/Noughts.cs", "public static string Play(Db db, long instance, long square)");
-    has(&files, "Modules/Noughts.cs", "public static string PlayWith(Db db, Kept kept, long square)");
-    has(&files, "Modules/Noughts.cs", "static BoardEngine() => OpenWindows.Closed += Close;");
-    has(&files, "Modules/Noughts.cs", "Splitmix.Random(");
-}
-
-#[test]
-fn go_runs_an_engine_written_in_clarity() {
-    let files = files(Backend::Go, Ui::Web);
-    if std::env::var("CLARITY_DUMP").is_ok() {
-        println!("{}", text(&files, "noughts_module.go"));
-    }
-    assert!(!files.iter().any(|f| f.path == "engines.go" || f.path.ends_with(".wasm")));
-    has(&files, "noughts_module.go", "type boardKept struct {\n\tsquares []int64\n\tlines   []int64\n}");
-    has(&files, "noughts_module.go", "func boardPlay(db *clarity.Db, instance uint64, square int64) (string, error) {");
-    has(&files, "noughts_module.go", "func boardPlayWith(db *clarity.Db, kept *boardKept, square int64) (string, error) {");
-    has(&files, "noughts_module.go", "clarity.OnWindowClosed(boardClose)");
-    has(&files, "noughts_module.go", "boardPlay(db, ui.Instance(), square)");
-}
-
-#[test]
-fn cpp_runs_an_engine_written_in_clarity() {
-    let files = files(Backend::Cpp, Ui::Web);
-    if std::env::var("CLARITY_DUMP").is_ok() {
-        println!("{}", text(&files, "src/modules/noughts.cpp"));
-    }
-    assert!(!files.iter().any(|f| f.path == "src/engines.cpp" || f.path.ends_with(".wasm")));
-    has(&files, "src/app.hpp", "std::string board_play(clarity::Db& db, uint64_t instance, int64_t square);");
-    has(&files, "src/app.hpp", "void board_close(uint64_t instance);");
-    has(&files, "src/modules/noughts.cpp", "struct BoardKept {\n    std::vector<int64_t> squares;\n    std::vector<int64_t> lines;\n};");
-    has(&files, "src/modules/noughts.cpp", "clarity::on_window_closed(");
-    has(&files, "src/modules/noughts.cpp", "board_play(db, ui.instance(), square)");
-    has(&files, "src/modules/noughts.cpp", "clarity::random(");
-}
-
-#[test]
-fn c_runs_an_engine_written_in_clarity() {
-    let files = files(Backend::C, Ui::Web);
-    if std::env::var("CLARITY_DUMP").is_ok() {
-        println!("{}", text(&files, "src/modules/noughts.c"));
-    }
-    assert!(!files.iter().any(|f| f.path == "src/engines.c" || f.path.ends_with(".wasm")));
-    has(&files, "src/app.h", "bool board_play(ClarityDb* db, uint64_t instance, int64_t square, const char** result);");
-    has(&files, "src/app.h", "void board_close(uint64_t instance);");
-    has(&files, "src/modules/noughts.c", "typedef struct {\n    ClarityIntegers squares;\n    ClarityIntegers lines;\n} BoardKept;");
-    has(&files, "src/modules/noughts.c", "clarity_on_window_closed(board_closed, NULL)");
-    has(&files, "src/modules/noughts.c", "board_play(db, clarity_ui_instance(ui), square, &");
-    has(&files, "src/modules/noughts.c", "clarity_random(");
+    let all = all(&files);
+    assert!(all.contains("thatSquareIsTaken"), "the keys reach the translations");
 }

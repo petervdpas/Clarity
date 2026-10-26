@@ -14,7 +14,7 @@ mod ddl;
 pub(crate) mod go;
 mod cpp;
 mod json_fields;
-mod print;
+use clarity_spec::code::print;
 mod query;
 mod readme;
 mod rust;
@@ -121,19 +121,14 @@ pub(crate) fn engines(project: &Project) -> Vec<&clarity_spec::code::EngineDecl>
     project.files.iter().flat_map(|f| &f.engines).filter(|e| e.body.is_none() && !e.beside).collect()
 }
 
-/// The engines written in Clarity, each with the file that declares it:
-/// every stack generates their code like that of functions.
+/// The engines written in Clarity, each with the file that declares it,
+/// which generation compiles to WebAssembly first (`compile_engines`).
 pub(crate) fn written_engines(project: &Project) -> Vec<(&clarity_spec::model::SpecFile, &clarity_spec::code::EngineDecl, &clarity_spec::code::EngineBody)> {
     project
         .files
         .iter()
         .flat_map(|f| f.engines.iter().filter_map(move |e| e.body.as_ref().map(|b| (f, e, b))))
         .collect()
-}
-
-/// The engine `name`, loaded or written.
-pub(crate) fn engine<'a>(project: &'a Project, name: &str) -> Option<&'a clarity_spec::code::EngineDecl> {
-    project.files.iter().flat_map(|f| &f.engines).find(|e| e.name.name == name)
 }
 
 /// The files of the project's engines, in `folder` of the output; the
@@ -509,6 +504,44 @@ pub fn with_resource_texts(project: &Project) -> Project {
     project
 }
 
+/// Engines written in Clarity become WebAssembly files (DESIGN 5.12, N5b):
+/// each is compiled into the engines folder as `<name>.wasm`, its keys go
+/// to its `says`, and from then on every stack takes it as any engine file.
+fn compile_engines(mut project: Project) -> Result<Project, Vec<String>> {
+    let written: Vec<String> = written_engines(&project).iter().map(|(_, e, _)| e.name.name.clone()).collect();
+    let mut compiled = Vec::new();
+    let mut errors = Vec::new();
+    for name in &written {
+        match clarity_wasm::compile(&project, name) {
+            Ok(bytes) => compiled.push((name.clone(), bytes)),
+            Err(mut problems) => errors.append(&mut problems),
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let mut files = project.engines.take().unwrap_or_default();
+    for (name, bytes) in compiled {
+        let file = format!("{}.wasm", name.to_lowercase());
+        if files.iter().any(|f| f.name == file) {
+            return Err(vec![format!("engine {name} is written in Clarity, so it becomes {file}, which the engines folder already has")]);
+        }
+        let decl = project.files.iter_mut().flat_map(|f| &mut f.engines).find(|e| e.name.name == name).expect("a written engine");
+        if let Some(body) = decl.body.take() {
+            for key in clarity_spec::translations::engine_keys(&body) {
+                let said = format!("@{key}");
+                if !decl.says.contains(&said) {
+                    decl.says.push(said);
+                }
+            }
+        }
+        decl.file = file.clone();
+        files.push(clarity_spec::engines::EngineFile { name: file, bytes });
+    }
+    project.engines = Some(files);
+    Ok(project)
+}
+
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     if project.has_errors() {
         return Err(vec!["the project has errors; fix the errors before generating it".to_string()]);
@@ -524,7 +557,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !misfits.is_empty() {
         return Err(misfits);
     }
-    let mut project = with_resource_texts(&calls::filled(project));
+    let mut project = compile_engines(with_resource_texts(&calls::filled(project)))?;
     // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
     project.keys_editable = settings.keys_editable;
     let project = &project;
@@ -588,7 +621,7 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
-    let project = &with_resource_texts(&calls::filled(project));
+    let project = &compile_engines(with_resource_texts(&calls::filled(project)))?;
     match settings.stack.backend {
         Backend::Rust => rust::generate_cli(project, settings),
         Backend::Go => go::generate_cli(project, settings),

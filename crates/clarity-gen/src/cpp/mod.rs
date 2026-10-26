@@ -162,7 +162,6 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         for decl in file.functions.iter().chain(&logic::events(file)) {
             let _ = writeln!(declarations, "{};", logic::signature(project, decl));
         }
-        declarations.push_str(&logic::engine_declarations(project, file));
         let mut body = String::new();
         match logic::emit(project, file, &file_types) {
             Ok(code) => body.push_str(&code),
@@ -176,9 +175,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             }
             Err(mut problems) => errors.append(&mut problems),
         }
-        // An engine written in Clarity with state keeps each instance's values in a map behind a lock.
-        let kept = file.engines.iter().any(|e| e.body.is_some() && e.state != clarity_spec::code::EngineState::None);
-        let includes = if kept { "#include <map>\n#include <memory>\n#include <mutex>\n\n#include \"../app.hpp\"\n" } else { "#include \"../app.hpp\"\n" };
+        let includes = "#include \"../app.hpp\"\n";
         files.push(text(&format!("src/modules/{}.cpp", snake(&m.name)), namespaced(&program, includes, &body)));
     }
     if !errors.is_empty() {

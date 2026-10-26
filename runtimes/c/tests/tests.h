@@ -8,9 +8,6 @@
     X(every_rounding_case_rounds_as_every_runtime_does)          \
     X(an_item_is_read_by_its_position_from_1)                    \
     X(an_item_is_set_by_its_position_from_1)                     \
-    X(random_gives_what_every_runtime_gives_from_a_seed)         \
-    X(random_stays_within_its_highest_number)                    \
-    X(what_an_engine_keeps_outlives_the_scratch_arena)           \
     X(sin_and_cos_take_degrees_as_every_runtime_does)            \
     X(a_draw_starts_an_empty_drawing_that_travels_with_the_part)  \
     X(a_canvas_says_where_it_was_clicked_as_every_runtime_does)   \

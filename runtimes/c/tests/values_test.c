@@ -355,52 +355,6 @@ void an_item_is_set_by_its_position_from_1(void) {
     CHECK_TEXT(clarity_error()->message, "there is no item 4 in a list of 3");
 }
 
-void random_gives_what_every_runtime_gives_from_a_seed(void) {
-    cJSON* file = conformance("lists.json");
-    const cJSON* c;
-    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "random")) {
-        ClaritySplitmix random = {(uint64_t)cJSON_GetObjectItemCaseSensitive(c, "seed")->valuedouble};
-        int64_t max = (int64_t)cJSON_GetObjectItemCaseSensitive(c, "max")->valuedouble;
-        const cJSON* gives = cJSON_GetObjectItemCaseSensitive(c, "gives");
-        int64_t got = 0;
-        if (!gives) {
-            CHECK_FAILS(CLARITY_VALUE, clarity_splitmix_next(&random, max, &got));
-            CHECK_TEXT(clarity_error()->message, cJSON_GetObjectItemCaseSensitive(c, "fails")->valuestring);
-            continue;
-        }
-        const cJSON* want;
-        cJSON_ArrayForEach(want, gives) {
-            CHECK_OK(clarity_splitmix_next(&random, max, &got));
-            CHECK_INT(got, (int64_t)want->valuedouble);
-        }
-    }
-    cJSON_Delete(file);
-}
-
-void random_stays_within_its_highest_number(void) {
-    for (int i = 0; i < 200; ++i) {
-        int64_t n = 0;
-        CHECK_OK(clarity_random(6, &n));
-        CHECK(n >= 1 && n <= 6);
-    }
-}
-
-void what_an_engine_keeps_outlives_the_scratch_arena(void) {
-    ClarityIntegers kept = {0};
-    ClarityTexts words = {0};
-    clarity_integers_keep(&kept, clarity_integers(2, (int64_t[]){4, 5}));
-    clarity_texts_keep(&words, clarity_texts(1, (const char*[]){clarity_copy("noughts")}));
-    clarity_scratch_reset();
-    CHECK_INT(kept.count, 2);
-    CHECK_INT(kept.items[1], 5);
-    CHECK_TEXT(words.items[0], "noughts");
-    clarity_integers_keep(&kept, clarity_integers(0, NULL));
-    CHECK_INT(kept.count, 0);
-    clarity_texts_drop(&words);
-    CHECK_INT(words.count, 0);
-    clarity_integers_drop(&kept);
-}
-
 void a_custom_parts_values_and_hears_are_as_every_runtime_says(void) {
     cJSON* file = conformance("custom-parts.json");
     const cJSON* c;

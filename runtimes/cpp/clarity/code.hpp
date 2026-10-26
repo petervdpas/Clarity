@@ -91,20 +91,4 @@ bool holds(const std::vector<T>& list, const U& item) {
     return std::find(list.begin(), list.end(), T(item)) != list.end();
 }
 
-/// The numbers `random(max)` gives: splitmix64, the sequence every runtime
-/// gives alike from the same seed.
-class Splitmix {
-public:
-    explicit Splitmix(uint64_t seed) : state_(seed) {}
-    /// A whole number from 1 to max.
-    int64_t next(int64_t max);
-
-private:
-    uint64_t state_;
-};
-
-/// `random(max)` in an engine written in Clarity, from a sequence seeded
-/// once per run of the application.
-int64_t random(int64_t max);
-
 }  // namespace clarity

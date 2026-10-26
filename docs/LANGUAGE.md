@@ -1451,11 +1451,11 @@ code Play
 - **Pointer and keys** on the canvas go to the file's `clarity_pointer` (`[kind, x, y]`, kind `down`, `move` or `up`, in the canvas's units rounded down) and `clarity_key` (`[kind, key]`, kind `down` or `up`), when it exports them. They wait for the next frame and go first, before its tick. While the pointer is down the canvas keeps it, so beside the drawing it is at the nearest edge. A key goes down once however long it repeats; it is named as in `conformance/screen-engines.json` (`a`, `7`, `Space`, `ArrowLeft`, `Shift`, `F1`). A canvas whose engine takes keys can be clicked or tabbed to for the keyboard; a key with Control, Alt or the command key stays the window's shortcut.
 - **Tells and hears.** `tells finished(time: integer)` is what the engine tells its window: the canvas wires it to a handler as a custom part's tell (`canvas ... runs Screen on finished: gameOver`), which runs with the tell's values (`handler gameOver(time: integer)`). The file tells it in the answer of any call: `{"value": null, "tells": [{"tell": "finished", "values": [1200]}]}`. `hears start(level: integer)` is what a handler tells it through the canvas, `sky.start(2)`; the file has a function `start`, which runs with `[2]` at the start of the next frame. Values are plain: text, numbers, dates, durations, enums, bool. Only an engine beside the screen tells and hears.
 - **A frame that fails** or runs past the limit ends the engine; the canvas shows why (`screenEngineFailed`, with the host's message in `{problem}`).
-- **The checker** wants a `runs` to name an engine beside the screen, no draw handler on that canvas, an engine written in a file (one written in Clarity comes later), a file that exports `clarity_tick`, `clarity_draw` and a function per hear, tells wired to tells the engine has, with handlers that take their values; an engine beside the screen that no canvas runs is a warning.
+- **The checker** wants a `runs` to name an engine beside the screen, no draw handler on that canvas, a file that exports `clarity_tick`, `clarity_draw` and a function per hear (or, written in Clarity, functions of those names, below), tells wired to tells the engine has, with handlers that take their values; an engine beside the screen that no canvas runs is a warning.
 
 #### An engine written in Clarity
 
-An engine without `from` is written in Clarity: what it keeps between calls, and its functions with their code. Every stack generates it as code of its own, like a function, so it needs no file and no other language.
+An engine without `from` is written in Clarity: what it keeps between calls, and its functions with their code. Clarity compiles it to a WebAssembly file when it builds the application, so every stack runs the same file and it needs no other language.
 
 ```clarity
 engine Board
@@ -1481,6 +1481,61 @@ engine Board
 - **Its functions** are written as functions are, with `require` and `ensure` if wanted, and call each other by name (`answer()`). Code outside calls them as `Board.play(5)`.
 - **It keeps to itself.** An engine has no window, data, parts or database: `message`, `open`, `save`, `find` and the like are errors in it. It returns what the screen should show, and its texts are keys, translated like the project's own.
 - **`uses random`** gives it `random(n)`: a whole number from 1 to `n`. No other service is needed in Clarity: the language the person picked is already how its texts show.
+
+- **Beside the screen** too: an engine written in Clarity has no words of its own for frames. Its frames are functions of the interface's names, what it draws is a list of records it returns, a hear is a function of its name, and `tell finished(time)` puts a tell in the answer of the call it is in:
+
+```clarity
+record Shape
+    op: text
+    x: integer
+    y: integer
+    r: integer
+    color: text, default "accent"
+
+engine Sky
+    beside the screen
+    tells finished(time: integer)
+    hears start(level: integer)
+    keep elapsed: integer = 0
+    keep stage: integer = 1
+
+    function clarity_tick(ms: integer)
+        elapsed = elapsed + ms
+        if elapsed > 10000
+            tell finished(elapsed)
+
+    function clarity_draw() -> list<Shape>
+        let dot = new Shape
+        dot.op = "circle"
+        dot.x = stage * 10
+        dot.y = 50
+        dot.r = 5
+        return [dot]
+
+    function start(level: integer)
+        elapsed = 0
+        stage = level
+```
+
+  The checker wants `clarity_tick(ms: integer)`, `clarity_draw()` giving a list of records, and a function for each hear with its values; `clarity_pointer(kind: text, x: integer, y: integer)` and `clarity_key(kind: text, key: text)` are there when the engine wants the pointer and keys. What it keeps starts as written, so it has no `on open`. A record's fields that a shape does not have are left alone by the canvas.
+
+#### Records
+
+A record is a value with fields that belongs to no table: declared like an entity, with `record`, never saved or found.
+
+```clarity
+record Dot
+    x: integer
+    y: integer
+    size: decimal, default 1.5
+    tags: list<text>
+```
+
+- **`new Dot`** has every field at its default: the one written with `default`, or 0, empty text, no, an empty list. A record's decimal needs no precision and scale, since it has no column.
+- **`d.x`** reads a field and **`d.x = 3`** sets it. A record is a value: setting a field changes that record only, as an item of a list does.
+- **Lists of records** (`list<Dot>`, `[a, b]`) are read by item and by `for`.
+- **Fields** are values: text, numbers, yes or no, enums and lists of them; not references, pictures or files.
+- **For now** records are for engines written in Clarity, which give and take them as JSON objects of their fields. Code outside an engine does not have them yet.
 
 How to build an engine in another language, and what it exports, is in the manual: [Engines](manual/code.engines.md).
 

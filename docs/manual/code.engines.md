@@ -6,7 +6,7 @@ How to write a processing engine in Clarity, or make, edit and build one compile
 
 An engine does one kind of processing: pricing, scheduling, a solver, the rules of a game. There are two kinds, called alike from code:
 
-- **Written in Clarity.** The engine is Clarity code in a module, and every stack generates it with the application, as it does your functions. It needs no other language and nothing to install. See [An engine written in Clarity](#an-engine-written-in-clarity).
+- **Written in Clarity.** The engine is Clarity code in a module. When the application is built, Clarity compiles it to a WebAssembly file, the same kind as below, so it runs alike on every stack. It needs no other language and nothing to install. See [An engine written in Clarity](#an-engine-written-in-clarity).
 - **Compiled to WebAssembly.** The engine is a file in the `engines` folder, written in Rust or any language that builds to WebAssembly. Every stack runs that same file, so it gives the same answers on every stack.
 
 An engine only computes. It has no database, files, network or screen. Your code reads the records, hands them to the engine as values, and saves or shows what comes back. Work that needs the database while it runs belongs in an [action](code.functions.md), and the action can call an engine for the processing in between.
@@ -254,7 +254,7 @@ The test engine in Clarity's repository, `conformance/engines/test`, is a comple
 
 ## How each stack runs it
 
-An engine written in Clarity is code of the application on every stack, next to your functions: a struct of what it keeps, and the kept values of each window (or of the app) behind a lock. It needs no WebAssembly runtime.
+An engine written in Clarity is compiled to a WebAssembly file when the application is generated (`board.wasm` for `engine Board`), and from then on it runs as any engine file. The texts it gives by key (`@youWin`) join its `says`, so the screen shows them in the person's language.
 
 Each stack hosts a WebAssembly file with a WebAssembly runtime written for it. You install nothing extra.
 
@@ -292,6 +292,7 @@ code Play
         sky.start(2)
 ```
 
+- **In the designer** a canvas's **Engine** field picks the engine it runs, from those beside the screen, and its **Tells** wire the engine's tells to handlers.
 - **`beside the screen`** says where it runs. Code does not call it, so it has no `function` lines, and no `state` line: every canvas that `runs` it has an instance of its own, from when its window opens until it closes.
 - **The frame loop.** At every frame the canvas calls the engine's `clarity_tick` with the milliseconds since the last frame (0 for the first), then `clarity_draw`, which answers the canvas's shapes in its units: the same shapes a draw handler draws (`clear`, `line`, `rect`, `circle`, `ring`, `text`). A canvas that runs an engine has no draw handler.
 - **One frame at a time.** While the engine is busy with a frame, the screen's next frames are skipped; the next tick gives all the time since the last one, so nothing is lost.
@@ -301,6 +302,7 @@ code Play
 - **Hears.** What a handler tells the engine: `hears start(level: integer)` declares it, and `sky.start(2)` in a handler tells it through the canvas. It reaches the engine at the start of the next frame, before the pointer, keys and tick that came after it, and runs the file's function `start` with `[2]`. A hear told before the canvas shows (in `on open`) waits for it. A hear the engine refuses ends it, as a failed frame does.
 - **Pointer and keys.** When the file exports `clarity_pointer`, the canvas sends it the pointer: `["down", x, y]` when the primary button or a finger goes down on the drawing, `["move", x, y]` while it moves over the drawing or is down, `["up", x, y]` when it lets go, in the canvas's units. While it is down the canvas keeps it, so a drag that leaves the drawing is at its nearest edge. When the file exports `clarity_key`, a click on the canvas (or Tab) gives it the keyboard, and each key goes as `["down", key]` once, however long it repeats, and `["up", key]`; when the canvas loses the keyboard, every key still down comes up. Keys are named alike on every stack: `a` to `z`, `0` to `9`, `Space`, `Enter`, `Escape`, `Backspace`, `Delete`, the arrows (`ArrowLeft`), `Home`, `End`, `PageUp`, `PageDown`, `Shift`, `Control`, `Alt` and `F1` to `F12`. A key with Control, Alt or the command key stays the window's shortcut. What happens between two frames goes at the start of the next, before its tick; moves in a row keep only the last.
 - **Services.** `uses clock, random, log, language` as for any engine. The clock and random are the screen's own. A line the engine logs goes into the application's log, the standard error, as `engine Screen: <the line>`, where the backend's engines write; on the web stacks the page hands it to the application's shell, which writes it there.
+- **Written in Clarity.** An engine beside the screen can be written in Clarity too, compiled like any Clarity engine. Its frames are its functions `clarity_tick(ms: integer)` and `clarity_draw()`, which returns a list of records with the shape's fields (`op`, `x`, `y`, `r`, `color` and the like); a hear is a function of its name, and `tell finished(time)` tells the window. See [An engine written in Clarity](../LANGUAGE.md#an-engine-written-in-clarity) and [Records](../LANGUAGE.md#records).
 - **Where it runs.** On the web stacks in a Web Worker of its own, with the browser's WebAssembly, so an engine that loops never freezes the window; the engine's file travels in the model the screen reads. On Avalonia in Wasmtime, in the application's process, its frames worked off the screen's thread. The backend never loads it.
 
 The file exports `clarity_tick`, `clarity_draw` and a function per hear besides the engine interface; the designer says so when it lacks one. Values of tells and hears are plain: text, numbers, dates, durations, enums and yes or no. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
@@ -310,4 +312,6 @@ The file exports `clarity_tick`, `clarity_draw` and a function per hear besides 
 These are designed but not built:
 
 - The service `progress`, which would let a long call show on the screen how far it is.
-- Engines beside the screen written in Clarity (`on tick`, `on draw`).
+- In an engine written in Clarity: a text with slots (`"odd {n}"`) is given as written, not translated, and a key with values (`@welcome(name = n)`) is not compiled; a plain key (`@youWin`) is translated.
+- Records in code outside an engine.
+- Choosing per project whether engines written in Clarity are compiled or interpreted.

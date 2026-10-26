@@ -6,6 +6,7 @@
 pub mod check;
 pub(crate) mod parse;
 pub mod edit;
+pub mod print;
 
 use serde::Serialize;
 use ts_rs::TS;
@@ -228,6 +229,12 @@ pub enum StmtKind {
     /// `exit code`: ends a command-line program with that exit code.
     Exit {
         code: Expr,
+    },
+    /// `tell finished(time)` in an engine beside the screen (DESIGN 5.12):
+    /// a tell with its values, in the answer of the call it is in.
+    Tell {
+        tell: Ident,
+        args: Vec<Expr>,
     },
 }
 
@@ -951,7 +958,7 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_expr_in(body, found);
             }
             StmtKind::Call { call } => each_expr(call, found),
-            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
             StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
@@ -1078,7 +1085,7 @@ pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
                 each_expr_mut(list, found);
                 each_expr_in_mut(body, found);
             }
-            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => args.iter_mut().for_each(|a| each_expr_mut(a, found)),
             StmtKind::Open { with, .. } => with.iter_mut().for_each(|a| each_expr_mut(&mut a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {

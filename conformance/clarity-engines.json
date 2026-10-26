@@ -1,0 +1,65 @@
+{
+  "about": "Engines written in Clarity (DESIGN 5.12, N5b): Clarity compiles one to WebAssembly, a file that speaks the engine interface of conformance/engines.json, so every host runs it as any engine. `source` is a module with the engines. For each of `engines`, `state` is how the host keeps it (`app`: one instance for every call, `none`: a fresh one each call) and `uses` the services it is given, with `seed` for random; its `calls` run in order, each giving `{\"value\": ...}` or `{\"error\": why}`. Whole numbers are 64-bit and wrap when they overflow. Decimals and money are exact, as text in JSON, with the meaning of rust_decimal: up to 28 digits after the point, and dividing gives as many as fit, as rust_decimal writes them (7 / 2 is 3.50); dividing by zero fails with `it divided by zero`. Dividing whole numbers gives a decimal. `round(value, places)` is conformance/rounding.json's, `sin(degrees)` and `cos(degrees)` conformance/drawing.json's. A text by key (`@fine`) gives its key, which the host translates as any engine's `says`. `random(n)` gives 1 to n from the host's random (splitmix64, conformance/engines.json): 1 + the number as unsigned 64-bit, modulo n; n below 1 fails with `random takes a highest number of 1 or more, not N`. A broken `require` or `ensure` fails with `condition failed: ` and the condition as written; `ensure` reads the function's `result`. A list is a value, items counted from 1: reading an item that is not there fails with `there is no item N in a list of M`. A record (`record Dot`) crosses as a JSON object of its fields; `new Dot` has every field at its default (`default`, or 0, empty text, no, an empty list); setting a field gives the record changed, as a list item does. A call that fails or refuses changes nothing the engine keeps.",
+  "source": "module play\n\nengine Counter\n    state per app\n    keep total: integer = 0\n    keep seen: list<integer> = []\n\n    function add(n: integer) -> integer\n        if n < 0\n            refuse \"a count is never below zero\"\n        total = total + n\n        seen = seen + [n]\n        return total\n\n    function added() -> list<integer>\n        return seen\n\n    function squares(n: integer) -> list<integer>\n        let all = [0, 0, 0, 0]\n        for i in [1, 2, 3, 4]\n            if i <= n\n                all[i] = i * i\n        return all\n\n    function pick(at: integer) -> integer\n        let items = [10, 20, 30]\n        return items[at]\n\n    function even(n: integer) -> bool\n        return n in [0, 2, 4, 6, 8] and not (n < 0)\n\n    function describe(n: integer) -> text\n        if even(n)\n            return \"even \" + n\n        else if n > 100\n            return \"large\"\n        return \"odd {n}\"\n\n    function held(n: integer) -> bool\n        return seen contains n\n\n    function taken() -> integer\n        let count = 0\n        for item in seen\n            if item != 0\n                count = count + 1\n        return count\n\nengine Shop\n    uses random\n    says @tooMany, @fine\n\n    function total(price: money, count: integer) -> money\n        require count > 0\n        return price * count\n\n    function share(amount: decimal, ways: integer) -> decimal\n        return round(amount / ways, 2)\n\n    function average(values: list<decimal>) -> decimal\n        let sum = 0.0\n        for v in values\n            sum = sum + v\n        return sum / count(values)\n\n    function half(n: integer) -> decimal\n        return n / 2\n\n    function cheaper(a: money, b: money) -> bool\n        return a < b\n\n    function label(price: money) -> text\n        return \"costs {price}\"\n\n    function angle(degrees: integer) -> decimal\n        return sin(degrees)\n\n    function verdict(count: integer) -> text\n        if count > 10\n            return @tooMany\n        return @fine\n\n    function roll(sides: integer) -> integer\n        return random(sides)\n\n    function rolls() -> list<integer>\n        return [random(6), random(6), random(6)]\n\n    function discount(price: money) -> money\n        ensure result >= 0\n        return price - 10\n\nrecord Dot\n    x: integer\n    y: integer\n    size: decimal, default 1.5\n    color: text, default \"accent\"\n    tags: list<text>\n\nengine Drawing\n    function dot(x: integer) -> Dot\n        let d = new Dot\n        d.x = x\n        d.y = x * 2\n        return d\n\n    function row(n: integer) -> list<Dot>\n        return [dot(1), dot(n)]\n\n    function farthest(dots: list<Dot>) -> integer\n        let most = 0\n        for d in dots\n            if d.x > most\n                most = d.x\n        return most\n\n    function bigger(given: Dot) -> Dot\n        let d = given\n        d.size = d.size * 2\n        d.tags = d.tags + [\"big\"]\n        return d\n\n    function second(dots: list<Dot>) -> text\n        return dots[2].color\n",
+  "seed": 42,
+  "engines": [
+    {
+      "engine": "Counter",
+      "state": "app",
+      "uses": [],
+      "calls": [
+        {"function": "add", "args": [2], "gives": {"value": 2}},
+        {"function": "add", "args": [3], "gives": {"value": 5}},
+        {"function": "add", "args": [-1], "gives": {"error": "a count is never below zero"}},
+        {"function": "add", "args": [1], "gives": {"value": 6}},
+        {"function": "added", "args": [], "gives": {"value": [2, 3, 1]}},
+        {"function": "squares", "args": [3], "gives": {"value": [1, 4, 9, 0]}},
+        {"function": "pick", "args": [2], "gives": {"value": 20}},
+        {"function": "pick", "args": [4], "gives": {"error": "there is no item 4 in a list of 3"}},
+        {"function": "even", "args": [4], "gives": {"value": true}},
+        {"function": "even", "args": [5], "gives": {"value": false}},
+        {"function": "describe", "args": [4], "gives": {"value": "even 4"}},
+        {"function": "describe", "args": [101], "gives": {"value": "large"}},
+        {"function": "describe", "args": [7], "gives": {"value": "odd 7"}},
+        {"function": "held", "args": [3], "gives": {"value": true}},
+        {"function": "held", "args": [9], "gives": {"value": false}},
+        {"function": "taken", "args": [], "gives": {"value": 3}}
+      ]
+    },
+    {
+      "engine": "Shop",
+      "state": "none",
+      "uses": ["random"],
+      "calls": [
+        {"function": "total", "args": ["9.95", 3], "gives": {"value": "29.85"}},
+        {"function": "total", "args": ["9.95", 0], "gives": {"error": "condition failed: count > 0"}},
+        {"function": "share", "args": ["10", 3], "gives": {"value": "3.33"}},
+        {"function": "average", "args": [["1.5", "2.5", "3"]], "gives": {"value": "2.3333333333333333333333333333"}},
+        {"function": "half", "args": [7], "gives": {"value": "3.50"}},
+        {"function": "cheaper", "args": ["1.5", "2"], "gives": {"value": true}},
+        {"function": "label", "args": ["9.50"], "gives": {"value": "costs 9.50"}},
+        {"function": "angle", "args": [30], "gives": {"value": "0.5"}},
+        {"function": "verdict", "args": [11], "gives": {"value": "tooMany"}},
+        {"function": "verdict", "args": [2], "gives": {"value": "fine"}},
+        {"function": "roll", "args": [20], "gives": {"value": 14}},
+        {"function": "roll", "args": [0], "gives": {"error": "random takes a highest number of 1 or more, not 0"}},
+        {"function": "rolls", "args": [], "gives": {"value": [2, 2, 1]}},
+    {"function": "discount", "args": ["15"], "gives": {"value": "5"}},
+    {"function": "discount", "args": ["5"], "gives": {"error": "condition failed: result >= 0"}}
+      ]
+    },
+    {
+      "engine": "Drawing",
+      "state": "none",
+      "uses": [],
+      "calls": [
+        {"function": "dot", "args": [3], "gives": {"value": {"x": 3, "y": 6, "size": "1.5", "color": "accent", "tags": []}}},
+        {"function": "row", "args": [2], "gives": {"value": [{"x": 1, "y": 2, "size": "1.5", "color": "accent", "tags": []}, {"x": 2, "y": 4, "size": "1.5", "color": "accent", "tags": []}]}},
+        {"function": "farthest", "args": [[{"x": 4, "y": 0, "size": "1", "color": "text", "tags": []}, {"x": 9, "y": 0, "size": "1", "color": "text", "tags": []}]], "gives": {"value": 9}},
+        {"function": "bigger", "args": [{"x": 1, "y": 1, "size": "2.5", "color": "text", "tags": ["a"]}], "gives": {"value": {"x": 1, "y": 1, "size": "5.0", "color": "text", "tags": ["a", "big"]}}},
+        {"function": "second", "args": [[{"x": 1, "y": 2, "size": "1.5", "color": "accent", "tags": []}, {"x": 2, "y": 0, "size": "1", "color": "muted", "tags": []}]], "gives": {"value": "muted"}},
+        {"function": "second", "args": [[{"x": 1, "y": 2, "size": "1.5", "color": "accent", "tags": []}]], "gives": {"error": "there is no item 2 in a list of 1"}}
+      ]
+    }
+  ]
+}

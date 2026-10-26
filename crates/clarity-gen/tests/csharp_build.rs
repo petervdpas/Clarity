@@ -269,8 +269,9 @@ fn the_noughts_example_builds_and_runs_in_csharp() {
     builds_and_runs_in_csharp("noughts", "Noughts", Some("nl"), Runtime::Local);
 }
 
-/// The noughts example's Board engine, written in Clarity, as the C# it
-/// becomes, played from a program of its own.
+/// The noughts example's Board engine, written in Clarity and compiled to
+/// WebAssembly, played through the C# application's engine host from a
+/// program of its own.
 const BOARD_CHECK: &str = r#"using Clarity.Avalonia;
 using Clarity.Runtime;
 using Noughts;
@@ -298,23 +299,27 @@ static string Refusal(Action call)
     }
 }
 
-var said = BoardEngine.Play(null!, 1, 1);
+// The engine's functions in a window; what it says is a key, shown in the person's language.
+static string Play(long window, long square) => Locale.Translate(Engines.Board.CallIn<string>(window, "play", square));
+static long Mark(long window, long square) => Engines.Board.CallIn<long>(window, "mark", square);
+
+var said = Play(1, 1);
 Expect(said == "Your move", $"play said {said}");
-Expect(BoardEngine.Mark(null!, 1, 1) == 1, "your cross");
+Expect(Mark(1, 1) == 1, "your cross");
 // The computer took the centre.
-Expect(BoardEngine.Mark(null!, 1, 5) == 2, "the centre");
-Expect(Refusal(() => BoardEngine.Play(null!, 1, 5)) == "That square is taken", "taken");
-Expect(Refusal(() => BoardEngine.Play(null!, 1, 10)) == "There are nine squares", "nine squares");
+Expect(Mark(1, 5) == 2, "the centre");
+Expect(Refusal(() => Play(1, 5)) == "That square is taken", "taken");
+Expect(Refusal(() => Play(1, 10)) == "There are nine squares", "nine squares");
 // Another window has a board of its own, and a closed window's board goes.
-Expect(BoardEngine.Mark(null!, 2, 1) == 0, "another window");
+Expect(Mark(2, 1) == 0, "another window");
 OpenWindows.Close(1);
-Expect(BoardEngine.Mark(null!, 1, 1) == 0, "closed");
+Expect(Mark(1, 1) == 0, "closed");
 // The computer blocks your line.
-BoardEngine.Play(null!, 3, 1);
-BoardEngine.Play(null!, 3, 2);
-Expect(BoardEngine.Mark(null!, 3, 3) == 2, "blocked");
-Expect(BoardEngine.Restart(null!, 3) == "Your move", "restart");
-Expect(BoardEngine.Taken(null!, 3) == 0, "an empty board");
+Play(3, 1);
+Play(3, 2);
+Expect(Mark(3, 3) == 2, "blocked");
+Expect(Locale.Translate(Engines.Board.CallIn<string>(3, "restart")) == "Your move", "restart");
+Expect(Engines.Board.CallIn<long>(3, "taken") == 0, "an empty board");
 Console.WriteLine("the board played");
 "#;
 

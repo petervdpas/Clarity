@@ -167,7 +167,6 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         for command in &file.commands {
             let _ = writeln!(declarations, "{};", logic::command_signature(project, command));
         }
-        declarations.push_str(&logic::engine_declarations(project, file));
         let mut body = String::new();
         match logic::emit(project, file, &file_types) {
             Ok(code) => body.push_str(&code),
@@ -177,8 +176,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             Ok(code) => body.push_str(&code),
             Err(mut problems) => errors.append(&mut problems),
         }
-        let kept = file.engines.iter().any(|e| e.body.is_some() && e.state != clarity_spec::code::EngineState::None);
-        let includes = if kept { "#include <stdlib.h>\n\n#include \"../app.h\"\n" } else { "#include \"../app.h\"\n" };
+        let includes = "#include \"../app.h\"\n";
         files.push(text(&format!("src/modules/{}.c", snake(&m.name)), format!("{HEADER}\n{includes}\n{}", body.trim_end().to_string() + "\n")));
     }
     if !errors.is_empty() {

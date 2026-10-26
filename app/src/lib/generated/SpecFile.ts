@@ -23,7 +23,11 @@ version: string, module: Ident | null, uses: Array<Ident>,
  * `source erp`: the data source the module's entities live in; the
  * project's first data source when there is none.
  */
-source: Ident | null, enums: Array<EnumDecl>, entities: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
+source: Ident | null, enums: Array<EnumDecl>, entities: Array<Entity>, 
+/**
+ * Its records: values with fields that belong to no table (DESIGN 5.12).
+ */
+records: Array<Entity>, pages: Array<Page>, apps: Array<App>, 
 /**
  * Themes: named colors, a font and named styles for parts.
  */

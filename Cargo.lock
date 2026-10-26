@@ -839,6 +839,7 @@ dependencies = [
  "clarity-project",
  "clarity-runtime",
  "clarity-spec",
+ "clarity-wasm",
  "serde",
  "serde_json",
 ]
@@ -880,7 +881,7 @@ dependencies = [
 
 [[package]]
 name = "clarity-runtime"
-version = "0.28.1"
+version = "0.29.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -926,6 +927,17 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "clarity-wasm"
+version = "0.1.0"
+dependencies = [
+ "clarity-runtime",
+ "clarity-spec",
+ "serde_json",
+ "wasm-encoder",
+ "wasmparser",
 ]
 
 [[package]]
@@ -2096,6 +2108,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
  "foldhash 0.1.5",
+ "serde",
 ]
 
 [[package]]
@@ -2763,6 +2776,12 @@ dependencies = [
  "bitflags 2.13.2",
  "libc",
 ]
+
+[[package]]
+name = "leb128fmt"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
 name = "libappindicator"
@@ -6092,6 +6111,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.228.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05d30290541f2d4242a162bbda76b8f2d8b1ac59eab3568ed6f2327d52c9b2c4"
+dependencies = [
+ "leb128fmt",
+ "wasmparser",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6151,7 +6180,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4abf1132c1fdf747d56bbc1bb52152400c70f336870f968b85e89ea422198ae3"
 dependencies = [
  "bitflags 2.13.2",
+ "hashbrown 0.15.5",
  "indexmap 2.14.2",
+ "semver",
+ "serde",
 ]
 
 [[package]]

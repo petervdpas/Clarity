@@ -65,42 +65,6 @@ fn outside(position: i64, len: usize) -> Error {
     Error::Value(format!("there is no item {position} in a list of {len}"))
 }
 
-/// The numbers `random(max)` gives: splitmix64, the sequence every runtime
-/// gives alike from the same seed (conformance/lists.json).
-#[derive(Debug, Clone)]
-pub struct Random {
-    state: u64,
-}
-
-impl Random {
-    pub fn seeded(seed: u64) -> Self {
-        Random { state: seed }
-    }
-
-    /// A whole number from 1 to `max`.
-    pub fn next(&mut self, max: i64) -> Result<i64> {
-        if max < 1 {
-            return Err(Error::Value(format!("random takes a highest number of 1 or more, not {max}")));
-        }
-        self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^= z >> 31;
-        Ok(1 + (z % max as u64) as i64)
-    }
-}
-
-/// `random(max)` in an engine written in Clarity: a whole number from 1 to
-/// `max`, from a sequence seeded once per run of the application.
-pub fn random(max: i64) -> Result<i64> {
-    use std::hash::{BuildHasher, Hasher};
-    use std::sync::{Mutex, OnceLock};
-    static RANDOM: OnceLock<Mutex<Random>> = OnceLock::new();
-    let random = RANDOM.get_or_init(|| Mutex::new(Random::seeded(std::collections::hash_map::RandomState::new().build_hasher().finish())));
-    random.lock().unwrap_or_else(|e| e.into_inner()).next(max)
-}
-
 /// `round(value, places)` in code: at most `places` decimals, rounded half
 /// away from zero; a value with fewer stays as it is, and places below 0
 /// count as 0 (conformance/rounding.json).

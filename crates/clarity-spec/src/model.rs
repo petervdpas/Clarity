@@ -31,6 +31,8 @@ pub struct SpecFile {
     pub source: Option<Ident>,
     pub enums: Vec<EnumDecl>,
     pub entities: Vec<Entity>,
+    /// Its records: values with fields that belong to no table (DESIGN 5.12).
+    pub records: Vec<Entity>,
     pub pages: Vec<Page>,
     pub apps: Vec<App>,
     /// Themes: named colors, a font and named styles for parts.
@@ -82,6 +84,10 @@ pub struct Entity {
     /// person on their machine, never in the database; named `Settings`.
     #[serde(default)]
     pub settings: bool,
+    /// `record Shape` (DESIGN 5.12): values with fields that belong to no
+    /// table, never stored; kept in the module's `records`, not its entities.
+    #[serde(default)]
+    pub record: bool,
     pub span: Span,
 }
 

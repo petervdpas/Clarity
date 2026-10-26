@@ -1,13 +1,13 @@
 //! Expressions back as Clarity text, for the messages of contract checks
 //! (`condition failed: order.status == Pending`).
 
-use clarity_spec::code::{Expr, ExprKind, UnaryOp};
+use super::{Expr, ExprKind, UnaryOp};
 
 pub fn expr(e: &Expr) -> String {
     match &e.kind {
         ExprKind::Number { value } => value.clone(),
         ExprKind::Str { value } => format!("{value:?}"),
-        ExprKind::Text { parts } => format!("{:?}", clarity_spec::code::template(parts)),
+        ExprKind::Text { parts } => format!("{:?}", super::template(parts)),
         ExprKind::Bool { value } => value.to_string(),
         ExprKind::Empty => "none".to_string(),
         ExprKind::Name { name } => name.clone(),
@@ -32,8 +32,8 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::JsonOf { value } => format!("json of {}", expr(value)),
         ExprKind::ReadJson { ty, text, at } => {
             let read = match &ty.kind {
-                clarity_spec::code::TypeRefKind::Named { name } => name.clone(),
-                clarity_spec::code::TypeRefKind::List { item } => format!("list<{item}>"),
+                super::TypeRefKind::Named { name } => name.clone(),
+                super::TypeRefKind::List { item } => format!("list<{item}>"),
                 _ => "...".to_string(),
             };
             let at = at.as_deref().map(|a| format!(" at {}", expr(a))).unwrap_or_default();
@@ -47,7 +47,7 @@ pub fn expr(e: &Expr) -> String {
             if let Some(body) = body {
                 text.push_str(&format!(" with {}", expr(body)));
             }
-            let when = |pair: &clarity_spec::code::HttpPair| pair.when.as_ref().map(|w| format!(" when {}", expr(w))).unwrap_or_default();
+            let when = |pair: &super::HttpPair| pair.when.as_ref().map(|w| format!(" when {}", expr(w))).unwrap_or_default();
             for header in headers {
                 text.push_str(&format!(" header {:?}: {}{}", header.name.name, expr(&header.value), when(header)));
             }
@@ -73,7 +73,7 @@ pub fn expr(e: &Expr) -> String {
 }
 
 /// A `find` or `files` with its condition and order.
-fn query(head: &str, filter: Option<&Expr>, order: &[clarity_spec::code::OrderKey]) -> String {
+fn query(head: &str, filter: Option<&Expr>, order: &[super::OrderKey]) -> String {
     let mut text = head.to_string();
     if let Some(filter) = filter {
         text.push_str(&format!(" where {}", expr(filter)));
@@ -89,4 +89,23 @@ fn query(head: &str, filter: Option<&Expr>, order: &[clarity_spec::code::OrderKe
         text.push_str(&format!(" order by {}", keys.join(", ")));
     }
     text
+}
+
+/// A type as code writes it: `integer`, `list<Shape>`.
+pub fn type_ref(ty: &super::TypeRef) -> String {
+    use super::TypeRefKind as K;
+    match &ty.kind {
+        K::Text => "text".into(),
+        K::Integer => "integer".into(),
+        K::Decimal => "decimal".into(),
+        K::Money => "money".into(),
+        K::Bool => "bool".into(),
+        K::Date => "date".into(),
+        K::DateTime => "datetime".into(),
+        K::Duration => "duration".into(),
+        K::File => "file".into(),
+        K::Bytes => "bytes".into(),
+        K::Named { name } => name.clone(),
+        K::List { item } => format!("list<{item}>"),
+    }
 }

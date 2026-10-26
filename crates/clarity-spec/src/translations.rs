@@ -364,6 +364,23 @@ fn is_shown_property(target: &Expr) -> bool {
 }
 
 /// Every text the project shows, by key or as written.
+/// The keys the code of an engine written in Clarity names, in order and
+/// once each: what it gives people to read, as its `says` would list them
+/// once it is a WebAssembly file (DESIGN 5.12, N5b).
+pub fn engine_keys(body: &crate::code::EngineBody) -> Vec<String> {
+    let mut shown = Shown::default();
+    for decl in &body.functions {
+        shown.code(&decl.body);
+    }
+    let mut keys: Vec<String> = Vec::new();
+    for found in shown.uses {
+        if !keys.contains(&found.key) {
+            keys.push(found.key);
+        }
+    }
+    keys
+}
+
 fn shown(project: &Project) -> Shown {
     let mut shown = Shown::default();
     for file in &project.files {

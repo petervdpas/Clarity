@@ -1,0 +1,18 @@
+# Compiles an engine written in Clarity to WebAssembly (DESIGN 5.12, N5b):
+# the engine's functions added to the support module Clarity carries, so
+# the file speaks the engine interface as any engine does.
+[package]
+name = "clarity-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+clarity-spec = { workspace = true }
+wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
+wasmparser = "0.228.0"
+
+[dev-dependencies]
+clarity-runtime = { path = "../../runtimes/rust", features = ["engines"] }
+serde_json = { workspace = true }

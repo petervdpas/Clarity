@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "crates/clarity-gen", "crates/clarity-cli", "app/src-tauri"]
+members = ["crates/clarity-spec", "crates/clarity-project", "crates/clarity-db", "crates/clarity-vault", "crates/clarity-agent", "runtimes/rust", "runtimes/rust-engine", "crates/clarity-gen", "crates/clarity-cli", "crates/clarity-wasm", "app/src-tauri"]
 # The examples' crates (custom parts, libraries, generated programs) are projects of their own.
 exclude = ["examples"]
 
@@ -15,6 +15,7 @@ clarity-project = { path = "crates/clarity-project" }
 clarity-db = { path = "crates/clarity-db" }
 clarity-vault = { path = "crates/clarity-vault" }
 clarity-agent = { path = "crates/clarity-agent" }
+clarity-wasm = { path = "crates/clarity-wasm" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = { version = "12", features = ["serde-json-impl"] }

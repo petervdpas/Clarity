@@ -139,7 +139,7 @@ export type PageData = Record<string, { entity: Entity; list: boolean; rows: Row
 export function valueEntry(decl: DataDecl, row: Row): PageData[string] | null {
   const field = valueField(decl);
   if (!field) return null;
-  const entity: Entity = { name: decl.name, fields: [field], table: null, key: null, settings: false, span: decl.span };
+  const entity: Entity = { name: decl.name, fields: [field], table: null, key: null, settings: false, record: false, span: decl.span };
   return { entity, list: false, rows: [row], value: true };
 }
 

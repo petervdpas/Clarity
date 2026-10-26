@@ -65,6 +65,7 @@ fn overlaps(a: &WidgetProps, b: &WidgetProps) -> bool {
 enum DeclKind {
     Enum,
     Entity,
+    Record,
     Page,
     App,
     Part,
@@ -76,6 +77,7 @@ impl DeclKind {
         match self {
             Self::Enum => "enum",
             Self::Entity => "entity",
+            Self::Record => "record",
             Self::Page => "page",
             Self::App => "app",
             Self::Part => "part",
@@ -190,6 +192,7 @@ impl<'a> Checker<'a> {
                         .filter(|(_, e)| !e.settings)
                         .map(|(i, e)| (DeclKind::Entity, i, &e.name)),
                 )
+                .chain(file.records.iter().enumerate().map(|(i, r)| (DeclKind::Record, i, &r.name)))
                 .chain(
                     file.pages
                         .iter()
@@ -335,6 +338,24 @@ impl<'a> Checker<'a> {
                     );
                 }
                 self.check_field(file_index, field);
+            }
+        }
+
+        // A record holds values: no table, no references to stored records, no files.
+        for record in &file.records {
+            let mut seen = HashSet::new();
+            for field in &record.fields {
+                if !seen.insert(field.name.name.as_str()) {
+                    self.error(file_index, format!("duplicate field '{}'", field.name.name), field.name.span);
+                }
+                if matches!(field.ty, FieldType::Ref { .. } | FieldType::Image | FieldType::File) {
+                    self.error(file_index, format!("record {} has field {}: a record's fields are values, not references, pictures or files", record.name.name, field.name.name), field.name.span);
+                    continue;
+                }
+                self.check_field(file_index, field);
+            }
+            if record.table.is_some() || record.key.is_some() {
+                self.error(file_index, format!("record {} belongs to no table, so it has no 'table' or 'key'", record.name.name), record.name.span);
             }
         }
 

@@ -103,32 +103,3 @@ bool clarity_decimals_holds(ClarityDecimals list, ClarityDecimal item);
 bool clarity_bools_holds(ClarityBools list, bool item);
 bool clarity_texts_holds(ClarityTexts list, const char* item);
 bool clarity_dates_holds(ClarityDates list, ClarityDate item);
-
-/// What an engine written in Clarity keeps from one command to the next,
-/// outside the scratch arena: `kept` takes a copy of `list` (of `text`), and
-/// what it held before goes.
-void clarity_integers_keep(ClarityIntegers* kept, ClarityIntegers list);
-void clarity_decimals_keep(ClarityDecimals* kept, ClarityDecimals list);
-void clarity_bools_keep(ClarityBools* kept, ClarityBools list);
-void clarity_texts_keep(ClarityTexts* kept, ClarityTexts list);
-void clarity_dates_keep(ClarityDates* kept, ClarityDates list);
-void clarity_text_keep(const char** kept, const char* text);
-/// What was kept goes: the instance it belonged to is gone.
-void clarity_integers_drop(ClarityIntegers* kept);
-void clarity_decimals_drop(ClarityDecimals* kept);
-void clarity_bools_drop(ClarityBools* kept);
-void clarity_texts_drop(ClarityTexts* kept);
-void clarity_dates_drop(ClarityDates* kept);
-void clarity_text_drop(const char** kept);
-
-/// The numbers `random(max)` gives: splitmix64, the sequence every runtime
-/// gives alike from the same seed.
-typedef struct {
-    uint64_t state;
-} ClaritySplitmix;
-
-/// A whole number from 1 to max; false, with an error of CLARITY_VALUE, for a max below 1.
-bool clarity_splitmix_next(ClaritySplitmix* random, int64_t max, int64_t* out);
-/// `random(max)` in an engine written in Clarity, from a sequence seeded
-/// once per run of the application.
-bool clarity_random(int64_t max, int64_t* out);

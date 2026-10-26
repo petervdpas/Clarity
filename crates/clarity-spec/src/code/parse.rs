@@ -453,7 +453,7 @@ fn indented_body(node: &Node, keyword: &str, diagnostics: &mut Vec<Diagnostic>) 
     Ok(parse_block(&node.children, diagnostics))
 }
 
-const STATEMENT_WORDS: [&str; 15] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write", "print", "exit"];
+const STATEMENT_WORDS: [&str; 16] = ["let", "if", "for", "return", "message", "ask", "open", "close", "save", "delete", "reload", "refuse", "write", "print", "exit", "tell"];
 
 fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stmt> {
     let tokens = &node.line.tokens;
@@ -606,6 +606,14 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
             cursor.next();
             StmtKind::Reload {
                 data: cursor.expect_ident("the name of the window's data")?,
+            }
+        }
+        Some("tell") => {
+            cursor.next();
+            let at = cursor.error_here("expected a tell with its values, as in 'tell finished(time)'");
+            match parse_expr(&mut cursor)?.kind {
+                ExprKind::Call { function, args, named } if named.is_empty() => StmtKind::Tell { tell: function, args },
+                _ => return Err(at),
             }
         }
         Some("refuse") => {

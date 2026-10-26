@@ -1,5 +1,5 @@
-// Lists of values and random, against the cases every stack's runtime
-// shares (conformance/lists.json).
+// Lists of values, against the cases every stack's runtime shares
+// (conformance/lists.json).
 
 package clarity
 
@@ -17,12 +17,6 @@ type listCases struct {
 		Gives *int64  `json:"gives"`
 		Fails string  `json:"fails"`
 	} `json:"items"`
-	Random []struct {
-		Seed  uint64  `json:"seed"`
-		Max   int64   `json:"max"`
-		Gives []int64 `json:"gives"`
-		Fails string  `json:"fails"`
-	} `json:"random"`
 }
 
 func readListCases(t *testing.T) listCases {
@@ -56,33 +50,5 @@ func TestAnItemIsSetByItsPositionFrom1(t *testing.T) {
 	}
 	if err := SetAt(list, 4, 1); err == nil || err.Error() != "there is no item 4 in a list of 3" {
 		t.Fatalf("%v", err)
-	}
-}
-
-func TestRandomGivesWhatEveryRuntimeGivesFromASeed(t *testing.T) {
-	for _, c := range readListCases(t).Random {
-		random := NewSplitmix(c.Seed)
-		if c.Gives == nil {
-			if _, err := random.Next(c.Max); err == nil || err.Error() != c.Fails {
-				t.Errorf("max %d: %v, not %q", c.Max, err, c.Fails)
-			}
-			continue
-		}
-		var got []int64
-		for range c.Gives {
-			n, _ := random.Next(c.Max)
-			got = append(got, n)
-		}
-		if !slices.Equal(got, c.Gives) {
-			t.Errorf("seed %d max %d: %v, not %v", c.Seed, c.Max, got, c.Gives)
-		}
-	}
-}
-
-func TestRandomStaysWithinItsHighestNumber(t *testing.T) {
-	for range 200 {
-		if n, err := Random(6); err != nil || n < 1 || n > 6 {
-			t.Fatalf("%d %v", n, err)
-		}
 	}
 }

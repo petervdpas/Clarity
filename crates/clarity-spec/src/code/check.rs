@@ -602,8 +602,14 @@ impl<'a> Env<'a> {
         }
     }
 
+    /// An entity, the settings or a record by its name: what has fields.
     fn entity(&self, name: &str) -> Option<&'a Entity> {
-        self.visible.iter().flat_map(|f| &f.entities).find(|e| e.name.name == name && !e.settings).or_else(|| self.settings.filter(|s| s.name.name == name))
+        self.visible
+            .iter()
+            .flat_map(|f| &f.entities)
+            .find(|e| e.name.name == name && !e.settings)
+            .or_else(|| self.settings.filter(|s| s.name.name == name))
+            .or_else(|| self.visible.iter().flat_map(|f| &f.records).find(|r| r.name.name == name))
     }
 
     fn enum_decl(&self, name: &str) -> Option<&'a EnumDecl> {
@@ -1267,14 +1273,16 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
         seen.push(&engine.name.name);
         if engine.beside {
             let name = &engine.name.name;
-            if engine.body.is_some() {
-                out.push(Diagnostic::error(format!("engine {name} beside the screen is brought along for now: give it its file, as in 'engine {name} from \"screen.wasm\"'"), engine.span));
-            }
             if engine.state != crate::code::EngineState::None {
                 out.push(Diagnostic::error(format!("engine {name} runs beside the screen, one instance per canvas, so it has no state line"), engine.span));
             }
-            if let Some(function) = engine.functions.first() {
-                out.push(Diagnostic::error(format!("engine {name} runs beside the screen, so code does not call it; it has no functions"), function.span));
+            match &engine.body {
+                Some(body) => check_written_screen(env, engine, body, out),
+                None => {
+                    if let Some(function) = engine.functions.first() {
+                        out.push(Diagnostic::error(format!("engine {name} runs beside the screen, so code does not call it; it has no functions"), function.span));
+                    }
+                }
             }
         } else if let Some(message) = engine.tells.first().or(engine.hears.first()) {
             out.push(Diagnostic::error(format!("engine {} tells and hears only beside the screen: code calls it and has its answer", engine.name.name), message.span));
@@ -1330,9 +1338,40 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
                     Ok(_) => {}
                 }
             }
-            if function.returns.is_none() {
+            // Code calls an engine's function for its value; the screen calls a frame function for what it does.
+            if function.returns.is_none() && !engine.beside {
                 out.push(Diagnostic::error(format!("engine function {} gives a value: write its type after '->'", function.name.name), function.span));
             }
+        }
+    }
+}
+
+/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b): the
+/// frame loop is functions of the interface's names, what it draws a list
+/// of records, and each hear a function of its name with its values.
+fn check_written_screen(env: &Env, engine: &EngineDecl, body: &crate::code::EngineBody, out: &mut Output) {
+    let name = &engine.name.name;
+    let function = |wanted: &str| body.functions.iter().find(|f| f.name.name == wanted);
+    let plain = |ty: &TypeRef| crate::code::print::type_ref(ty);
+    if engine.opens {
+        out.push(Diagnostic::error(format!("engine {name} is written in Clarity: what it keeps starts as written, so it has no 'on open'"), engine.span));
+    }
+    let ticks = function("clarity_tick").is_some_and(|f| f.params.len() == 1 && plain(&f.params[0].ty) == "integer" && f.returns.is_none());
+    if !ticks {
+        out.push(Diagnostic::error(format!("engine {name} beside the screen has no function clarity_tick(ms: integer), which its frames call"), engine.span));
+    }
+    let draws = function("clarity_draw").is_some_and(|f| {
+        f.params.is_empty()
+            && matches!(f.returns.as_ref().map(|r| env.type_ref(r)), Some(Ok(Ty::List(record))) if record.record)
+    });
+    if !draws {
+        out.push(Diagnostic::error(format!("engine {name} beside the screen has no function clarity_draw() -> list<Record>, which its frames call"), engine.span));
+    }
+    for hear in &engine.hears {
+        let params = |list: &[crate::code::Param]| list.iter().map(|p| plain(&p.ty)).collect::<Vec<_>>();
+        if !function(&hear.name.name).is_some_and(|f| params(&f.params) == params(&hear.params)) {
+            let written = hear.params.iter().map(|p| format!("{}: {}", p.name.name, plain(&p.ty))).collect::<Vec<_>>().join(", ");
+            out.push(Diagnostic::error(format!("engine {name} hears {0}, so it has a function {0}({written})", hear.name.name), hear.span));
         }
     }
 }
@@ -1406,6 +1445,11 @@ fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mu
     }
 }
 
+/// Why a record cannot be used outside an engine yet.
+fn record_for_engines(record: &Entity) -> String {
+    format!("record {} is for engines for now: code outside an engine does not have records yet", record.name.name)
+}
+
 /// Checks the parameters, conditions and statements of a function, action
 /// or data event.
 fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, out: &mut Output) {
@@ -1417,18 +1461,30 @@ fn check_body<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, 
 fn check_body_in<'a>(env: &Env<'a>, decl: &FunctionDecl, event: Option<DataEvent>, engine: Option<&EngineDecl>, kept: HashMap<String, Ty<'a>>, out: &mut Output) {
     let name = decl.name.name.as_str();
     let mut scope = HashMap::new();
+    // A record is for engines for now (DESIGN 5.12).
+    let outside_engine = |ty: &Ty, span: Span, out: &mut Output| {
+        if engine.is_none()
+            && let Ty::Record(record) | Ty::List(record) = ty
+            && record.record
+        {
+            out.push(Diagnostic::error(record_for_engines(record), span));
+        }
+    };
     for param in &decl.params {
         let ty = env.type_ref(&param.ty).unwrap_or_else(|message| {
             out.push(Diagnostic::error(message, param.ty.span));
             Ty::Unknown
         });
+        outside_engine(&ty, param.ty.span, out);
         scope.insert(param.name.name.clone(), ty);
     }
     let returns = decl.returns.as_ref().map(|r| {
-        env.type_ref(r).unwrap_or_else(|message| {
+        let ty = env.type_ref(r).unwrap_or_else(|message| {
             out.push(Diagnostic::error(message, r.span));
             Ty::Unknown
-        })
+        });
+        outside_engine(&ty, r.span, out);
+        ty
     });
     let mut checker = BodyChecker {
         env,
@@ -1691,6 +1747,44 @@ impl<'a> BodyChecker<'_, 'a> {
     }
 
     /// `arena.restart(2)`: a hear of a custom part, with values of its types.
+    /// `tell finished(time)`: a tell the engine beside the screen declares,
+    /// with values that fit it (DESIGN 5.12).
+    fn tell(&mut self, tell: &Ident, args: &[Expr]) {
+        let message = match self.engine {
+            Some(engine) if engine.beside => {
+                let found = engine.tells.iter().find(|t| t.name.name == tell.name);
+                if found.is_none() {
+                    self.error(format!("engine {} tells no '{}'", engine.name.name, tell.name), tell.span);
+                }
+                found
+            }
+            _ => {
+                self.error("'tell' is for an engine beside the screen, which tells the window it shows in", tell.span);
+                None
+            }
+        };
+        let Some(message) = message else {
+            for arg in args {
+                self.expr(arg, None);
+            }
+            return;
+        };
+        let expected: Vec<Option<Ty<'a>>> = message.params.iter().map(|p| self.env.type_ref(&p.ty).ok()).collect();
+        let gives = message.params.iter().map(|p| format!("{}: {}", p.name.name, crate::code::print::type_ref(&p.ty))).collect::<Vec<_>>().join(", ");
+        if args.len() != message.params.len() {
+            self.error(format!("tell {} gives ({gives}), not {} values", tell.name, args.len()), tell.span);
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let wanted = expected.get(i).copied().flatten();
+            let ty = self.expr(arg, wanted);
+            if let Some(wanted) = wanted
+                && !wanted.accepts(&ty)
+            {
+                self.error(format!("tell {} gives ({gives}), not {}", tell.name, ty.name()), arg.span);
+            }
+        }
+    }
+
     fn hear(&mut self, part: &Ident, hear: &Ident, args: &[Expr]) {
         if let Some((_, Part::Widget(p))) = self.part(&part.name)
             && p.kind == crate::widgets::WidgetKind::Sound
@@ -1953,6 +2047,7 @@ impl<'a> BodyChecker<'_, 'a> {
             StmtKind::Return { value } => self.check_return(value.as_ref(), stmt.span),
             StmtKind::Draw { canvas, shape, args } => self.draw(canvas, shape, args),
             StmtKind::Hear { part, hear, args } => self.hear(part, hear, args),
+            StmtKind::Tell { tell, args } => self.tell(tell, args),
             StmtKind::Call { call } => {
                 self.call(call, true);
             }
@@ -2025,6 +2120,11 @@ impl<'a> BodyChecker<'_, 'a> {
                 let ty = self.expr(value, None);
                 if !matches!(ty, Ty::Record(_) | Ty::Unknown) {
                     self.error(format!("'{word}' needs a record, not {}", ty.name()), value.span);
+                }
+                if let Ty::Record(record) = ty
+                    && record.record
+                {
+                    self.error(format!("{} is a record, which is never stored", record.name.name), value.span);
                 }
                 self.check_own_record(word, value);
             }
@@ -2392,6 +2492,13 @@ impl<'a> BodyChecker<'_, 'a> {
 
     /// `save` and `delete`: not in functions; in actions only with
     /// `effects db.write`.
+    /// A record outside an engine: the generators do not write records yet.
+    fn record_in_engine(&mut self, decl: &Entity, span: Span) {
+        if decl.record && self.engine.is_none() {
+            self.error(record_for_engines(decl), span);
+        }
+    }
+
     fn check_write(&mut self, word: &str, span: Span) {
         let Some(decl) = self.decl else { return };
         match decl.kind {
@@ -2806,6 +2913,7 @@ impl<'a> BodyChecker<'_, 'a> {
                 if items.is_empty() {
                     return match expected {
                         Some(ty @ Ty::Values(_)) => ty,
+                        Some(ty @ Ty::List(record)) if record.record => ty,
                         _ => {
                             self.error("an empty list needs its type, as in let squares: list<integer> = []", expr.span);
                             Ty::Unknown
@@ -2817,6 +2925,18 @@ impl<'a> BodyChecker<'_, 'a> {
                     _ => None,
                 };
                 let first = self.expr(&items[0], wanted);
+                // A list of records (DESIGN 5.12): every item the same record.
+                if let Ty::Record(record) = first
+                    && record.record
+                {
+                    for other in &items[1..] {
+                        let ty = self.expr(other, Some(first));
+                        if !first.accepts(&ty) {
+                            self.error(format!("a list of {} holds only {}, not {}", record.name.name, record.name.name, ty.name()), other.span);
+                        }
+                    }
+                    return Ty::List(record);
+                }
                 let item = match first {
                     Ty::Text => Item::Text,
                     Ty::Integer => Item::Integer,
@@ -2938,7 +3058,10 @@ impl<'a> BodyChecker<'_, 'a> {
                 Ty::Bytes
             }
             ExprKind::New { entity } => match self.env.entity(&entity.name) {
-                Some(decl) => Ty::Record(decl),
+                Some(decl) => {
+                    self.record_in_engine(decl, entity.span);
+                    Ty::Record(decl)
+                }
                 None => {
                     self.error(format!("unknown entity '{}'", entity.name), entity.span);
                     Ty::Unknown
@@ -3293,6 +3416,10 @@ impl<'a> BodyChecker<'_, 'a> {
             self.error(format!("unknown entity '{}'", entity.name), entity.span);
             return Ty::Unknown;
         };
+        if decl.record {
+            self.error(format!("{} is a record, which is never stored, so 'find' has nothing to look through", decl.name.name), entity.span);
+            return Ty::Unknown;
+        }
         self.scopes.push(HashMap::new());
         self.define(var, Ty::Record(decl));
         if let Some(filter) = filter {
@@ -4092,7 +4219,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                 each_stmt_expr(body, found);
             }
             StmtKind::Call { call } => each_expr(call, found),
-            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } => {
+            StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => {
                 for arg in args {
                     each_expr(arg, found);
                 }

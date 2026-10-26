@@ -74,7 +74,7 @@ fn an_engine_beside_the_screen_is_not_called_from_code() {
     assert_has(&errors("    state per window\n"), "engine Screen runs beside the screen, one instance per canvas, so it has no state line");
     assert_has(&errors("    beside the screen\n"), "an engine has one 'beside the screen' line");
     let written = "module play\n\nengine Screen\n    beside the screen\n";
-    assert_has(&messages(written, Severity::Error), "engine Screen beside the screen is brought along for now: give it its file, as in 'engine Screen from \"screen.wasm\"'");
+    assert_has(&messages(written, Severity::Error), "engine Screen beside the screen has no function clarity_tick(ms: integer), which its frames call");
 }
 
 #[test]
@@ -167,4 +167,86 @@ fn tells_and_hears_fit_the_engine() {
     // Only an engine beside the screen tells and hears.
     let backend = "module play\n\nengine Pricing from \"test.wasm\"\n    tells done\n    function add(a: integer, b: integer) -> integer\n";
     assert_has(&errors(backend.to_string()), "engine Pricing tells and hears only beside the screen: code calls it and has its answer");
+}
+
+/// The designer sets `runs` and wires the engine's tells through the part's
+/// properties; the line it writes back reads as it was.
+#[test]
+fn the_designer_writes_a_canvas_that_runs_an_engine() {
+    let (file, diagnostics) = parse(GAME, "play.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let sky = &file.pages[0].widgets[0].props;
+    assert_eq!(
+        clarity_spec::widgets::widget_line(sky),
+        "canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver"
+    );
+}
+
+/// An engine beside the screen written in Clarity (DESIGN 5.12, N5b): its
+/// frame loop is functions of the interface's names, what it draws is a
+/// list of records, and `tell` puts a tell in the call's answer.
+const WRITTEN: &str = "module play
+
+record Shape
+    op: text
+    x: integer
+    y: integer
+    r: integer
+    text: text
+    color: text, default \"accent\"
+    size: integer, default 8
+
+engine Sky
+    beside the screen
+    tells finished(time: integer)
+    hears start(level: integer)
+    keep elapsed: integer = 0
+    keep stage: integer = 1
+
+    function clarity_tick(ms: integer)
+        elapsed = elapsed + ms
+        if elapsed > 10000
+            tell finished(elapsed)
+
+    function clarity_draw() -> list<Shape>
+        let clear = new Shape
+        clear.op = \"clear\"
+        clear.color = \"background\"
+        let dot = new Shape
+        dot.op = \"circle\"
+        dot.x = stage * 10
+        dot.y = 50
+        dot.r = 5
+        return [clear, dot]
+
+    function start(level: integer)
+        elapsed = 0
+        stage = level
+
+page Play: window
+    data best: integer
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Sky on finished: gameOver
+
+code Play
+    handler gameOver(time: integer)
+        best = time
+";
+
+#[test]
+fn an_engine_beside_the_screen_is_written_in_clarity() {
+    let project = load_sources([("play.clarity", WRITTEN)]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+}
+
+#[test]
+fn a_written_engine_beside_the_screen_has_its_frame_loop() {
+    let errors = |source: String| load_sources([("play.clarity", source.as_str())]).diagnostics.into_iter().filter(|d| d.severity == Severity::Error).map(|d| d.message).collect::<Vec<_>>();
+    assert_has(&errors(WRITTEN.replace("function clarity_draw()", "function draw()")), "engine Sky beside the screen has no function clarity_draw() -> list<Record>, which its frames call");
+    assert_has(&errors(WRITTEN.replace("function clarity_tick(ms: integer)", "function clarity_tick(ms: text)")), "engine Sky beside the screen has no function clarity_tick(ms: integer), which its frames call");
+    assert_has(&errors(WRITTEN.replace("    function start(level: integer)\n        elapsed = 0\n        stage = level\n", "")), "engine Sky hears start, so it has a function start(level: integer)");
+    assert_has(&errors(WRITTEN.replace("tell finished(elapsed)", "tell finishes(elapsed)")), "engine Sky tells no 'finishes'");
+    assert_has(&errors(WRITTEN.replace("tell finished(elapsed)", "tell finished(\"late\")")), "tell finished gives (time: integer), not text");
+    assert_has(&errors(WRITTEN.replace("        best = time\n", "        best = time\n        tell finished(time)\n")), "'tell' is for an engine beside the screen");
+    assert_has(&errors(WRITTEN.replace("    beside the screen\n", "    beside the screen\n    on open\n")), "engine Sky is written in Clarity: what it keeps starts as written, so it has no 'on open'");
 }

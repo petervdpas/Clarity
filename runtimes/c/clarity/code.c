@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 const char* clarity_show_integer(int64_t value) { return clarity_format("%lld", (long long)value); }
 const char* clarity_show_decimal(ClarityDecimal value) { return clarity_decimal_text(value); }
@@ -136,91 +135,3 @@ bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value) {
     return true;
 }
 
-// What is kept lives on the heap, as long as the engine's instance.
-#define CLARITY_KEEP(List, Item, name)                                     \
-    void clarity_##name##_keep(List* kept, List list) {                    \
-        Item* items = list.count ? malloc(sizeof(Item) * list.count) : NULL; \
-        if (list.count) memcpy(items, list.items, sizeof(Item) * list.count); \
-        free(kept->items);                                                 \
-        kept->items = items;                                               \
-        kept->count = list.count;                                          \
-    }
-
-CLARITY_KEEP(ClarityIntegers, int64_t, integers)
-CLARITY_KEEP(ClarityDecimals, ClarityDecimal, decimals)
-CLARITY_KEEP(ClarityBools, bool, bools)
-CLARITY_KEEP(ClarityDates, ClarityDate, dates)
-
-void clarity_dates_drop(ClarityDates* kept) {
-    free(kept->items);
-    *kept = (ClarityDates){0};
-}
-
-void clarity_integers_drop(ClarityIntegers* kept) {
-    free(kept->items);
-    *kept = (ClarityIntegers){0};
-}
-
-void clarity_decimals_drop(ClarityDecimals* kept) {
-    free(kept->items);
-    *kept = (ClarityDecimals){0};
-}
-
-void clarity_bools_drop(ClarityBools* kept) {
-    free(kept->items);
-    *kept = (ClarityBools){0};
-}
-
-void clarity_texts_drop(ClarityTexts* kept) {
-    for (size_t i = 0; i < kept->count; ++i) free((char*)kept->items[i]);
-    free(kept->items);
-    *kept = (ClarityTexts){0};
-}
-
-void clarity_text_drop(const char** kept) {
-    free((char*)*kept);
-    *kept = NULL;
-}
-
-static char* heap_copy(const char* text) {
-    size_t length = strlen(text ? text : "");
-    char* copy = malloc(length + 1);
-    memcpy(copy, text ? text : "", length + 1);
-    return copy;
-}
-
-void clarity_text_keep(const char** kept, const char* text) {
-    char* copy = heap_copy(text);
-    free((char*)*kept);
-    *kept = copy;
-}
-
-void clarity_texts_keep(ClarityTexts* kept, ClarityTexts list) {
-    const char** items = list.count ? calloc(list.count, sizeof(const char*)) : NULL;
-    for (size_t i = 0; i < list.count; ++i) items[i] = heap_copy(list.items[i]);
-    for (size_t i = 0; i < kept->count; ++i) free((char*)kept->items[i]);
-    free(kept->items);
-    kept->items = items;
-    kept->count = list.count;
-}
-
-bool clarity_splitmix_next(ClaritySplitmix* random, int64_t max, int64_t* out) {
-    if (max < 1) return clarity_fail(CLARITY_VALUE, "random takes a highest number of 1 or more, not %lld", (long long)max);
-    random->state += 0x9E3779B97F4A7C15ULL;
-    uint64_t z = random->state;
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-    z ^= z >> 31;
-    *out = 1 + (int64_t)(z % (uint64_t)max);
-    return true;
-}
-
-bool clarity_random(int64_t max, int64_t* out) {
-    static ClaritySplitmix shared;
-    static bool seeded;
-    if (!seeded) {
-        shared.state = (uint64_t)time(NULL) ^ ((uint64_t)clock() << 32) ^ (uint64_t)(uintptr_t)&shared;
-        seeded = true;
-    }
-    return clarity_splitmix_next(&shared, max, out);
-}

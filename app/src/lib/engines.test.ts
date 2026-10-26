@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineText, formOf, freeName, functionLine, paramsOf, paramsText, projectEngines, signature } from "./engines.ts";
+import { besideEngines, canvasEvents, engineText, formOf, freeName, functionLine, paramsOf, paramsText, projectEngines, runEngine, signature } from "./engines.ts";
 import type { Project } from "./generated/Project";
 
 const span = (start: number, end: number) => ({ start, end, line: 1, col: 1 });
@@ -110,4 +110,35 @@ test("the project tree says what an engine is written in, beside its functions",
   const { engineNote } = await import("./engines.ts");
   assert.equal(engineNote({ body: { keeps: [], functions: [] }, functions: [{}, {}] } as never), "Clarity, 2 functions");
   assert.equal(engineNote({ body: null, functions: [{}] } as never), "WebAssembly, 1 function");
+});
+
+test("a canvas runs an engine beside the screen, which draws it and tells through it", () => {
+  const tell = (name: string) => ({ name: ident(name), params: [], span: span(0, 0) });
+  const screen = { ...pricing, name: ident("Screen"), file: "screen.wasm", beside: true, functions: [], tells: [tell("lap"), tell("finished")] };
+  const besides = { files: [{ path: "play.clarity", module: { name: "play" }, engines: [{ ...pricing, beside: false }, screen] }] } as unknown as Project;
+  assert.deepEqual(
+    besideEngines(besides).map((e) => e.name.name),
+    ["Screen"],
+  );
+
+  const canvas = {
+    runs: null,
+    handlers: [
+      { event: "draw" as const, handler: "drawSky" },
+      { event: "pointer" as const, handler: "aimed" },
+    ],
+    tells: [],
+  };
+  // The engine draws it, so its draw handler is unwired; the code stays.
+  const running = runEngine(canvas, screen as never);
+  assert.deepEqual(running, { runs: "Screen", handlers: [{ event: "pointer", handler: "aimed" }], tells: [] });
+  // Another engine keeps only the tells it has too.
+  const wired = { ...running, tells: [{ tell: "lap", handler: "lapped" }, { tell: "gone", handler: "went" }] };
+  assert.deepEqual(runEngine(wired, screen as never).tells, [{ tell: "lap", handler: "lapped" }]);
+  // No engine: nothing tells through it.
+  assert.deepEqual(runEngine(wired, null), { runs: null, handlers: running.handlers, tells: [] });
+
+  // While an engine draws it, the canvas offers no draw event.
+  assert.deepEqual(canvasEvents(["draw", "pointer", "click"], "Screen"), ["pointer", "click"]);
+  assert.deepEqual(canvasEvents(["draw", "pointer"], null), ["draw", "pointer"]);
 });

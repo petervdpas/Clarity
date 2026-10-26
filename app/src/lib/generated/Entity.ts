@@ -18,4 +18,9 @@ key: string | null,
  * The project's settings (`settings` block, DESIGN 5.17): kept per
  * person on their machine, never in the database; named `Settings`.
  */
-settings: boolean, span: Span, };
+settings: boolean, 
+/**
+ * `record Shape` (DESIGN 5.12): values with fields that belong to no
+ * table, never stored; kept in the module's `records`, not its entities.
+ */
+record: boolean, span: Span, };

@@ -83,6 +83,13 @@ export interface Live {
   placePart(part: string, kind: string, place: Place, shown: boolean): void;
   /** Gives a custom part one of its values: a property, `value` for what it binds, or `enabled`. */
   setPartValue(part: string, name: string, value: JsonValue): void;
+  /**
+   * A canvas an engine beside the screen draws (DESIGN 5.12) shows: what
+   * handlers tell it reaches `hear`, those told before it showed first.
+   * `tell` runs the handler wired to what the engine told, with its values;
+   * `stop` when the canvas goes.
+   */
+  screen(part: string, hear: (hear: string, values: JsonValue[]) => void): { tell(tell: string, values: JsonValue[]): void; stop(): void };
   /** The person changed a setting (DESIGN 5.17) through an input bound to it: the shell keeps it. */
   keepSettings(): void;
   /**

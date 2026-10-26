@@ -31,6 +31,7 @@
   import AskDialog from "../lib/ui/AskDialog.svelte";
   import Dialog from "../lib/ui/Dialog.svelte";
   import { answerValues, type Ask } from "../lib/asks";
+  import { CanvasHears } from "../lib/screenEngine";
   import { keptSettings, sameSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
   import type { JsonValue } from "../lib/generated/serde_json/JsonValue";
 
@@ -149,6 +150,15 @@
     messages = messages.filter((m) => m.id !== id);
   }
 
+  /** What handlers tell the engines beside the screen of the open windows (DESIGN 5.12). */
+  const canvasHears = new CanvasHears();
+
+  /** Whether `part` of `window` is a canvas an engine beside the screen draws. */
+  function enginePart(window: string, part: string): boolean {
+    const target = model ? findPage(model, window) : undefined;
+    return !!target && allParts(target).some((w) => w.props.name === part && w.props.kind === "canvas" && !!w.props.runs);
+  }
+
   /** The sound parts of the open windows (DESIGN 5.22), by window instance and part name. */
   const sounds = new Map<string, SoundPart>();
 
@@ -174,6 +184,10 @@
     if (!start) adopt(reply.state.data[SETTINGS]);
     // The hears go to the sounds and custom parts of the window the handler ran on.
     for (const h of reply.hears ?? []) {
+      if (enginePart(reply.state.window, h.part)) {
+        canvasHears.hear(reply.state.instance ?? 0, h.part, h.hear, h.values);
+        continue;
+      }
       const sound = soundOf(reply.state.instance ?? 0, reply.state.window, h.part);
       if (sound) sound.hear(h.hear, h.values);
       else invoke("hear_part", { instance: reply.state.instance ?? 0, part: h.part, hear: h.hear, values: h.values }).catch(() => {});
@@ -341,6 +355,7 @@
         const open = new Set(next.map((s) => s.instance));
         for (const gone of stack.filter((s) => s.instance !== undefined && !open.has(s.instance))) {
           invoke("close_parts", { instance: gone.instance }).catch(() => {});
+          canvasHears.closed(gone.instance!);
           // Its sounds stop.
           for (const [key, sound] of sounds) {
             if (key.startsWith(`${gone.instance}\n`)) {
@@ -477,7 +492,7 @@
 
   async function told(instance: number, part: string, tell: string, values: JsonValue[]) {
     while (busy) await new Promise((done) => setTimeout(done, 5));
-    const index = stack.findIndex((s) => s.instance === instance);
+    const index = stack.findIndex((s) => (s.instance ?? 0) === instance);
     const state = stack[index];
     const target = model && state ? findPage(model, state.window) : undefined;
     const widget = target ? allParts(target).find((w) => w.props.name === part) : undefined;
@@ -541,6 +556,17 @@
     },
     setChecked(part: string, checked: boolean) {
       if (current) current.parts[part] = { ...current.parts[part], checked };
+    },
+    screen(part: string, hear: (hear: string, values: JsonValue[]) => void) {
+      // The window the canvas shows in: what it tells runs there, even if another opens over it.
+      const instance = current?.instance ?? 0;
+      const stop = canvasHears.listen(instance, part, (h, values) => hear(h, values as JsonValue[]));
+      return {
+        tell(tell: string, values: JsonValue[]) {
+          telling = telling.then(() => told(instance, part, tell, values)).catch((err) => say({ level: "error", text: errorText(err) }));
+        },
+        stop,
+      };
     },
     setPointer(part: string, pointer: Pointer) {
       if (current) current.parts[part] = { ...current.parts[part], pointer };

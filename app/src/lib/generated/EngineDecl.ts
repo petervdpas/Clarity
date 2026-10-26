@@ -3,6 +3,7 @@ import type { EngineBody } from "./EngineBody";
 import type { EngineFunction } from "./EngineFunction";
 import type { EngineState } from "./EngineState";
 import type { Ident } from "./Ident";
+import type { PartMessage } from "./PartMessage";
 import type { Span } from "./Span";
 
 /**
@@ -37,6 +38,16 @@ opens: boolean,
  * never runs it.
  */
 beside: boolean, 
+/**
+ * `tells finished(score: integer)`: what an engine beside the screen
+ * tells its window, which runs the handler wired on the canvas.
+ */
+tells: Array<PartMessage>, 
+/**
+ * `hears start(level: integer)`: what a handler tells it, through the
+ * canvas (`sky.start(2)`); its file has a function of each name.
+ */
+hears: Array<PartMessage>, 
 /**
  * `limit 2 seconds, 64 MB`: how long one call may run; none written
  * keeps the default (`engines::DEFAULT_SECONDS`).

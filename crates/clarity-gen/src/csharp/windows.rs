@@ -1447,9 +1447,11 @@ impl<'a> Window<'a> {
             WidgetKind::Canvas if p.runs.is_some() => {
                 let (width, height) = p.units.map_or(clarity_spec::widgets::DEFAULT_UNITS, |u| (u.width, u.height));
                 let engine = pascal(p.runs.as_deref().unwrap_or_default());
+                // Handlers tell its engine through its state (`sky.start(2)`).
+                let state = named.map(|n| format!(" State=\"{{Binding {}}}\"", member(n))).unwrap_or_default();
                 let _ = writeln!(
                     out,
-                    "{pad}<c:CanvasView {at} Runs=\"{{x:Static local:ScreenEngines.{engine}}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
+                    "{pad}<c:CanvasView {at} Runs=\"{{x:Static local:ScreenEngines.{engine}}}\"{state} UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{plain_state}{extra} />",
                 );
             }
             // A canvas drawn by its draw handler, through the runtime.

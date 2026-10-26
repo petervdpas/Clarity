@@ -3,8 +3,8 @@
 // the window stays painted, one frame at a time: a frame that comes while
 // the last is busy is skipped, its time not lost. A frame that fails ends
 // the loop, and the canvas says why. The engine's own limits stop a frame
-// that runs too long (ScreenEngine). Pointer and keys wait for the next
-// frame and go with it.
+// that runs too long (ScreenEngine). Pointer, keys and hears wait for the
+// next frame and go with it; what the engine tells comes once it is drawn.
 
 using Clarity.Runtime;
 
@@ -16,7 +16,8 @@ public sealed class FrameLoop(
     Action<Action> background,
     Action<Action> ui,
     Action<IReadOnlyList<Shape>> drawn,
-    Action<string> stopped) : IDisposable
+    Action<string> stopped,
+    Action<ScreenTell>? told = null) : IDisposable
 {
     bool busy;
     bool ended;
@@ -31,6 +32,13 @@ public sealed class FrameLoop(
     {
         if (!ended && Hears.Pointer)
             ScreenInput.Queue(waiting, new ScreenInput.Pointer(kind, x, y));
+    }
+
+    /// <summary>What a handler told the engine: kept for the next frame.</summary>
+    public void Hear(string name, object?[] values)
+    {
+        if (!ended)
+            ScreenInput.Queue(waiting, new ScreenInput.Hear(name, values));
     }
 
     /// <summary>A key on the canvas, by Clarity's name.</summary>
@@ -63,12 +71,16 @@ public sealed class FrameLoop(
     {
         try
         {
-            var shapes = Shape.All(frames.Frame(ms, input));
+            var frame = frames.Frame(ms, input);
+            var shapes = Shape.All(frame.Shapes);
             ui(() =>
             {
                 busy = false;
-                if (!ended)
-                    drawn(shapes);
+                if (ended)
+                    return;
+                drawn(shapes);
+                foreach (var tell in frame.Tells)
+                    told?.Invoke(tell);
             });
         }
         catch (EngineException e)

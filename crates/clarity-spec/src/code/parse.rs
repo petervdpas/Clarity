@@ -73,8 +73,25 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let mut says = Vec::new();
     let (mut state, mut stated, mut opens) = (EngineState::None, false, false);
     let mut beside = false;
+    let (mut tells, mut hears) = (Vec::new(), Vec::new());
     for child in &node.children {
         let mut line = Cursor::new(child.line);
+        let telling = line.eat_keyword("tells");
+        if telling || line.eat_keyword("hears") {
+            let parsed = (|| {
+                let name = line.expect_ident(if telling { "a tell's name, as in tells finished(score: integer)" } else { "a hear's name, as in hears start(level: integer)" })?;
+                let params = if line.eat(TokenKind::LParen) { parse_params(&mut line)? } else { Vec::new() };
+                line.expect_end()?;
+                no_children(child)?;
+                Ok(PartMessage { name, params, span: child.span() })
+            })();
+            match parsed {
+                Ok(message) if telling => tells.push(message),
+                Ok(message) => hears.push(message),
+                Err(diag) => diagnostics.push(diag),
+            }
+            continue;
+        }
         if line.eat_keyword("beside") {
             let parsed = (|| {
                 if beside {
@@ -236,7 +253,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
         }
     }
     let body = written.then_some(body);
-    Ok(EngineDecl { name, file, uses, says, state, opens, beside, seconds, megabytes, functions, body, span: node.span() })
+    Ok(EngineDecl { name, file, uses, says, state, opens, beside, tells, hears, seconds, megabytes, functions, body, span: node.span() })
 }
 
 pub(crate) fn parse_function(node: &Node, kind: FunctionKind, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<FunctionDecl> {

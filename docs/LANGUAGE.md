@@ -1430,16 +1430,28 @@ engine Screen from "screen.wasm"
     beside the screen
     on open
     limit 1 second
+    tells finished(time: integer)
+    hears start(level: integer)
 
 page Play: window
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen
+    data best: integer
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver
+    button "Start" name go at 1,11 span 2 on click: startGame
+
+code Play
+    handler gameOver(time: integer)
+        best = time
+
+    handler startGame
+        sky.start(2)
 ```
 
 - **Each canvas that runs it** has an instance of its own, from when its window opens until it closes. Code does not call it: it has no `function` lines and no `state` line.
 - **Every frame** calls the file's `clarity_tick` with the milliseconds since the last frame (0 first), then `clarity_draw`, whose value is the canvas's shapes in its units, as a draw handler sends them (`{"op": "circle", "x": 50, "y": 50, "r": 5, "color": "accent"}`). A frame is skipped while the last is busy.
 - **Pointer and keys** on the canvas go to the file's `clarity_pointer` (`[kind, x, y]`, kind `down`, `move` or `up`, in the canvas's units rounded down) and `clarity_key` (`[kind, key]`, kind `down` or `up`), when it exports them. They wait for the next frame and go first, before its tick. While the pointer is down the canvas keeps it, so beside the drawing it is at the nearest edge. A key goes down once however long it repeats; it is named as in `conformance/screen-engines.json` (`a`, `7`, `Space`, `ArrowLeft`, `Shift`, `F1`). A canvas whose engine takes keys can be clicked or tabbed to for the keyboard; a key with Control, Alt or the command key stays the window's shortcut.
+- **Tells and hears.** `tells finished(time: integer)` is what the engine tells its window: the canvas wires it to a handler as a custom part's tell (`canvas ... runs Screen on finished: gameOver`), which runs with the tell's values (`handler gameOver(time: integer)`). The file tells it in the answer of any call: `{"value": null, "tells": [{"tell": "finished", "values": [1200]}]}`. `hears start(level: integer)` is what a handler tells it through the canvas, `sky.start(2)`; the file has a function `start`, which runs with `[2]` at the start of the next frame. Values are plain: text, numbers, dates, durations, enums, bool. Only an engine beside the screen tells and hears.
 - **A frame that fails** or runs past the limit ends the engine; the canvas shows why (`screenEngineFailed`, with the host's message in `{problem}`).
-- **The checker** wants a `runs` to name an engine beside the screen, no draw handler on that canvas, an engine written in a file (one written in Clarity comes later), and a file that exports `clarity_tick` and `clarity_draw`; an engine beside the screen that no canvas runs is a warning.
+- **The checker** wants a `runs` to name an engine beside the screen, no draw handler on that canvas, an engine written in a file (one written in Clarity comes later), a file that exports `clarity_tick`, `clarity_draw` and a function per hear, tells wired to tells the engine has, with handlers that take their values; an engine beside the screen that no canvas runs is a warning.
 
 #### An engine written in Clarity
 

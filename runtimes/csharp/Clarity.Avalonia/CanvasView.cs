@@ -7,7 +7,8 @@
 // by its frames while it shows; when the engine stops, it says why. Its
 // pointer and keys go to the engine, when it takes them: the canvas keeps
 // the pointer while it is down, and takes the keyboard when clicked or
-// tabbed to.
+// tabbed to. What handlers tell it through its State (hears) goes to the
+// engine; what the engine tells comes out as Told, which runs its handler.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -40,6 +41,19 @@ public class CanvasView : Control
     public static readonly StyledProperty<string?> StoppedProperty =
         AvaloniaProperty.Register<CanvasView, string?>(nameof(Stopped));
 
+    public static readonly StyledProperty<PartState?> StateProperty =
+        AvaloniaProperty.Register<CanvasView, PartState?>(nameof(State));
+
+    /// <summary>The part's state, through which handlers tell its engine something (<c>sky.start(2)</c>).</summary>
+    public PartState? State
+    {
+        get => GetValue(StateProperty);
+        set => SetValue(StateProperty, value);
+    }
+
+    /// <summary>Its engine told the window something: the tell and its values.</summary>
+    public event Action<string, System.Text.Json.JsonElement[]>? Told;
+
     /// <summary>The engine beside the screen that draws it: one instance from when it shows until it goes.</summary>
     public Func<IFrames>? Runs
     {
@@ -64,7 +78,7 @@ public class CanvasView : Control
         Stopped = null;
         try
         {
-            loop = new FrameLoop(make(), f => top.RequestAnimationFrame(f), work => Task.Run(work), ui => Dispatcher.UIThread.Post(ui), shapes => Drawing = shapes, why => Stopped = why);
+            loop = new FrameLoop(make(), f => top.RequestAnimationFrame(f), work => Task.Run(work), ui => Dispatcher.UIThread.Post(ui), shapes => Drawing = shapes, why => Stopped = why, tell => Told?.Invoke(tell.Tell, tell.Values));
             Focusable = loop.Hears.Keys;
             loop.Start();
         }
@@ -72,11 +86,15 @@ public class CanvasView : Control
         {
             Stopped = failed.Message;
         }
+        // What handlers told before it showed comes first.
+        State?.Listen((_, _) => { }, (hear, values) => loop?.Hear(hear, values));
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        if (Runs is not null)
+            State?.StopListening();
         loop?.Dispose();
         loop = null;
         held.All();

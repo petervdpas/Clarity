@@ -108,3 +108,61 @@ fn why_an_engine_stopped_is_a_clarity_word() {
     assert!(keys(PLAY).contains(&"screenEngineFailed".to_string()));
     assert!(!keys("module play\n").contains(&"screenEngineFailed".to_string()));
 }
+
+/// What an engine beside the screen tells its window, and what a handler
+/// tells it (DESIGN 5.12): `tells` runs the handler wired on the canvas with
+/// the tell's values; `sky.start(2)` reaches the engine's export `start`.
+const GAME: &str = "module play
+
+engine Screen from \"screen.wasm\"
+    beside the screen
+    on open
+    limit 1 second
+    tells finished(time: integer)
+    tells lap(count: integer)
+    hears start(level: integer)
+
+page Play: window
+    data best: integer
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver
+    button \"Start\" name go at 1,11 span 2 on click: startGame
+
+code Play
+    handler gameOver(time: integer)
+        best = time
+
+    handler startGame
+        sky.start(2)
+";
+
+#[test]
+fn an_engine_beside_the_screen_tells_and_hears() {
+    let (file, diags) = parse(GAME, "play.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let screen = &file.engines[0];
+    assert_eq!(screen.tells.iter().map(|t| t.name.name.as_str()).collect::<Vec<_>>(), ["finished", "lap"]);
+    assert_eq!(screen.hears.iter().map(|h| h.name.name.as_str()).collect::<Vec<_>>(), ["start"]);
+    let sky = &file.pages[0].widgets[0].props;
+    assert_eq!((sky.tells[0].tell.as_str(), sky.tells[0].handler.as_str()), ("finished", "gameOver"));
+    assert!(messages(GAME, Severity::Error).is_empty(), "{:#?}", messages(GAME, Severity::Error));
+    assert!(messages(GAME, Severity::Warning).is_empty(), "{:#?}", messages(GAME, Severity::Warning));
+    let line = clarity_spec::widgets::widget_line(sky);
+    assert!(line.ends_with("runs Screen on finished: gameOver"), "{line}");
+}
+
+#[test]
+fn tells_and_hears_fit_the_engine() {
+    let errors = |source: String| messages(&source, Severity::Error);
+    assert_has(&errors(GAME.replace("on finished: gameOver", "on finishes: gameOver")), "engine Screen tells no 'finishes'");
+    assert_has(&errors(GAME.replace("gameOver(time: integer)", "gameOver(time: text)").replace("best = time", "best = 1")), "tell finished of engine Screen gives (time: integer); handler gameOver takes (time: text)");
+    assert_has(&errors(GAME.replace("sky.start(2)", "sky.begin(2)")), "engine Screen hears no 'begin'");
+    assert_has(&errors(GAME.replace("sky.start(2)", "sky.start(\"two\")")), "value 'level' of sky.start is integer, not text");
+    assert_has(&errors(GAME.replace("sky.start(2)", "sky.start()")), "sky.start takes 1 value, not 0");
+    assert_has(&errors(GAME.replace("tells lap(count: integer)", "tells lap(at: list<integer>)")), "a value of a tell or hear is text, a number, a date, a duration, an enum or bool");
+    assert_has(&errors(GAME.replace("    hears start(level: integer)\n", "    hears start(level: integer)\n    hears start(level: integer)\n")), "engine Screen has two tells or hears named 'start'");
+    // Its file has a function for every hear.
+    assert_has(&errors(GAME.replace("hears start(level: integer)", "hears stop")), "engine Screen: 'screen.wasm' has no function stop, which its hear stop needs");
+    // Only an engine beside the screen tells and hears.
+    let backend = "module play\n\nengine Pricing from \"test.wasm\"\n    tells done\n    function add(a: integer, b: integer) -> integer\n";
+    assert_has(&errors(backend.to_string()), "engine Pricing tells and hears only beside the screen: code calls it and has its answer");
+}

@@ -1,5 +1,5 @@
 {
-  "about": "Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one instance per canvas, from when its window opens until it closes. It speaks the engine interface of conformance/engines.json and exports `clarity_tick` and `clarity_draw` besides it. At every frame the renderer calls `clarity_tick` with the milliseconds since the last frame (`[ms]`; the first frame gives 0), then `clarity_draw` (`[]`), whose value is the canvas's shapes in its units, as a draw handler's (conformance/drawing.json). With `on open` (`opens`), `clarity_open` runs once, when the instance is made, before the first frame. The renderer skips a frame while the engine is still busy with the last one, so frames never pile up. `engine` is screen.wasm, built from engines/screen: it draws a dot that moves 1 unit every 10 ms and the time it has run. `frames` gives the ticks in order and the shapes after each. A frame that fails, or runs longer than the engine's time limit, ends the engine: the canvas shows `fails` in place of its drawing, the renderer calls it no more, and the window works on. `fails` cases give the ticks before and the tick that fails. Pointer and keys on the canvas go to the engine when it exports `clarity_pointer` and `clarity_key` (each is optional; without it the renderer sends none of that). The renderer keeps what happens between frames and hands it over at the start of the next frame, in order, before `clarity_tick`: `clarity_pointer` takes `[kind, x, y]`, kind `down`, `move` or `up`, in the canvas's units rounded down as a click is (conformance/drawing.json); `clarity_key` takes `[kind, key]`, kind `down` or `up`. `down` is the primary button or a touch going down on the drawing; while it is down the canvas keeps the pointer, so `move` and `up` beside the drawing are at its nearest edge (`near`). `move` is sent while the pointer is over the drawing or down. Moves in a row keep only the last (`queued`). A key is sent once when it goes down, not again while it repeats, and once when it comes up; when the canvas loses the keyboard, every key still down comes up. Only the keys of `keys` are sent, by those names: a letter as itself in lower case, a digit, and the named keys. `input` gives each frame's input, its ticks and the shapes after: screen.wasm moves its dot to where the pointer went down and drags it while down, and says which keys are down.",
+  "about": "Engines beside the screen (DESIGN 5.12, N5): an engine declared `beside the screen` runs where its canvas is drawn (`canvas ... runs Screen`), one instance per canvas, from when its window opens until it closes. It speaks the engine interface of conformance/engines.json and exports `clarity_tick` and `clarity_draw` besides it. At every frame the renderer calls `clarity_tick` with the milliseconds since the last frame (`[ms]`; the first frame gives 0), then `clarity_draw` (`[]`), whose value is the canvas's shapes in its units, as a draw handler's (conformance/drawing.json). With `on open` (`opens`), `clarity_open` runs once, when the instance is made, before the first frame. The renderer skips a frame while the engine is still busy with the last one, so frames never pile up. `engine` is screen.wasm, built from engines/screen: it draws a dot that moves 1 unit every 10 ms and the time it has run. `frames` gives the ticks in order and the shapes after each. A frame that fails, or runs longer than the engine's time limit, ends the engine: the canvas shows `fails` in place of its drawing, the renderer calls it no more, and the window works on. `fails` cases give the ticks before and the tick that fails. Pointer and keys on the canvas go to the engine when it exports `clarity_pointer` and `clarity_key` (each is optional; without it the renderer sends none of that). The renderer keeps what happens between frames and hands it over at the start of the next frame, in order, before `clarity_tick`: `clarity_pointer` takes `[kind, x, y]`, kind `down`, `move` or `up`, in the canvas's units rounded down as a click is (conformance/drawing.json); `clarity_key` takes `[kind, key]`, kind `down` or `up`. `down` is the primary button or a touch going down on the drawing; while it is down the canvas keeps the pointer, so `move` and `up` beside the drawing are at its nearest edge (`near`). `move` is sent while the pointer is over the drawing or down. Moves in a row keep only the last (`queued`). A key is sent once when it goes down, not again while it repeats, and once when it comes up; when the canvas loses the keyboard, every key still down comes up. Only the keys of `keys` are sent, by those names: a letter as itself in lower case, a digit, and the named keys. `input` gives each frame's input, its ticks and the shapes after: screen.wasm moves its dot to where the pointer went down and drags it while down, and says which keys are down. Tells and hears: the answer of any call may carry `tells`, a list of `{\"tell\": name, \"values\": [...]}`, which the canvas hands to the window in order once the frame is drawn, each running the handler wired to it (`on finished: gameOver`) with its values. A hear (`sky.start(2)` in a handler) comes back with the handler's reply and waits, as input does, for the next frame: `{\"hear\": name, \"values\": [...]}` calls the engine's function of that name with the values. A hear is kept even before the engine is ready; a refused hear ends the engine as a failed frame does. `tells` gives each frame's input, tick, what it tells and its shapes: screen.wasm tells `lap` each time its dot comes round and `finished` with its time when Escape goes down, and hears `start(level)`, which starts it again at that level.",
   "engine": "screen.wasm",
   "name": "Screen",
   "units": { "width": 160, "height": 100 },
@@ -63,6 +63,14 @@
       "ticks": [0],
       "tick": -1,
       "fails": "engine Screen failed in clarity_tick: it ran longer than 1 second"
+    },
+    {
+      "name": "a hear the engine refuses",
+      "seconds": 5,
+      "ticks": [0],
+      "input": [{ "hear": "start", "values": ["two"] }],
+      "tick": 16,
+      "fails": "engine Screen failed in start: a level is a whole number"
     }
   ],
   "input": [
@@ -179,6 +187,18 @@
         { "key": "down", "name": "a" },
         { "pointer": "move", "x": 6, "y": 6 }
       ]
+    },
+    {
+      "given": [
+        { "pointer": "move", "x": 1, "y": 1 },
+        { "hear": "start", "values": [1] },
+        { "pointer": "move", "x": 2, "y": 2 }
+      ],
+      "sent": [
+        { "pointer": "move", "x": 1, "y": 1 },
+        { "hear": "start", "values": [1] },
+        { "pointer": "move", "x": 2, "y": 2 }
+      ]
     }
   ],
   "near": [
@@ -188,5 +208,70 @@
     { "part": { "width": 320, "height": 300 }, "at": { "x": 100, "y": 150 }, "x": 50, "y": 50 },
     { "part": { "width": 0, "height": 0 }, "at": { "x": 0, "y": 0 }, "x": null, "y": null }
   ],
-  "keys": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "Space", "Enter", "Escape", "Backspace", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown", "Shift", "Control", "Alt", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
+  "keys": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "Space", "Enter", "Escape", "Backspace", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown", "Shift", "Control", "Alt", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"],
+  "tells": [
+    {
+      "name": "a tick tells each lap, a hear starts it again, a key tells it finished",
+      "opens": true,
+      "frames": [
+        {
+          "input": [],
+          "tick": 0,
+          "tells": [],
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 0, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "0 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [],
+          "tick": 1000,
+          "tells": [],
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 100, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "1000 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [],
+          "tick": 700,
+          "tells": [{ "tell": "lap", "values": [1] }],
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 10, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "1700 ms", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "hear": "start", "values": [2] }],
+          "tick": 16,
+          "tells": [],
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 1, "y": 50, "r": 5, "color": "accent" },
+            { "op": "text", "x": 80, "y": 90, "text": "16 ms, level 2", "color": "text", "size": 8 }
+          ]
+        },
+        {
+          "input": [{ "key": "down", "name": "Escape" }],
+          "tick": 0,
+          "tells": [{ "tell": "finished", "values": [16] }],
+          "draws": [
+            { "op": "clear", "color": "background" },
+            { "op": "circle", "x": 1, "y": 50, "r": 5, "color": "accent" },
+            {
+              "op": "text",
+              "x": 80,
+              "y": 90,
+              "text": "16 ms, level 2, holding Escape",
+              "color": "text",
+              "size": 8
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

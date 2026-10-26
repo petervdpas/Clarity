@@ -40,10 +40,26 @@ fn avalonia_gives_each_canvas_an_instance_of_its_engine() {
     let engines = file(&files, "ScreenEngines.cs");
     assert!(engines.contains("public static readonly Func<IFrames> Screen = () => ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [], true, new EngineLimits(1, 256));"), "{engines}");
     let view = file(&files, "Windows/PlayView.axaml");
-    assert!(view.contains("Grid.RowSpan=\"10\" Runs=\"{x:Static local:ScreenEngines.Screen}\" UnitsWidth=\"160\" UnitsHeight=\"100\""), "{view}");
+    assert!(view.contains("Grid.RowSpan=\"10\" Runs=\"{x:Static local:ScreenEngines.Screen}\" State=\"{Binding Sky}\" UnitsWidth=\"160\" UnitsHeight=\"100\""), "{view}");
+    // What the engine tells runs its handler with its values; a handler tells it through the canvas's state.
+    let behind = file(&files, "Windows/PlayView.axaml.cs");
+    assert!(behind.contains("sky.Told += (tell, values) => Vm.Told_Sky(tell, values);"), "{behind}");
+    let model = file(&files, "Windows/PlayViewModel.cs");
+    assert!(model.contains("case \"finished\":\n                Handle(() => OnFinished(DotNetPart.Read<long>(values, 0)));"), "{model}");
+    assert!(model.contains("sky.Hear(\"start\", 2L);") || model.contains("Sky.Hear(\"start\", 2L);"), "{model}");
     let csproj = file(&files, "Play.csproj");
     assert!(csproj.contains("Clarity.Runtime.Engines") && csproj.contains("Engines/*.wasm"), "{csproj}");
     assert!(files.iter().any(|f| f.path == "Engines/screen.wasm"));
     // The backend loads no engine: there is none to check at the start.
     assert!(!files.iter().any(|f| f.path == "Engines.cs"));
+}
+
+/// On the web stacks a tell runs its handler through the backend's answers,
+/// with the tell's values, and a hear comes back with the handler's reply.
+#[test]
+fn the_web_stacks_answer_tells_and_send_hears() {
+    let files = files(Backend::Rust, Ui::Web);
+    let all: String = files.iter().map(|f| f.text.as_str()).collect();
+    assert!(all.contains("(\"Play\", \"finished\")") && all.contains("(\"Play\", \"lapped\")"), "the tells' handlers answer");
+    assert!(all.contains("ui.hear(\"sky\", \"start\", vec![to_value(&2"), "a hear goes with the reply");
 }

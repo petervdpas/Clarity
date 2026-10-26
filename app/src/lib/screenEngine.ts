@@ -4,11 +4,13 @@
 // that loops never freezes the window. The page asks for frames at the
 // screen's pace and skips one while the engine is busy with the last, so
 // frames never pile up; a worker that does not answer within the engine's
-// time limit is stopped from outside, and the canvas shows why. Pointer and
-// keys wait for the next frame and go with it (conformance/screen-engines.json).
+// time limit is stopped from outside, and the canvas shows why. Pointer,
+// keys and what handlers tell the engine (hears) wait for the next frame and
+// go with it; what the engine tells comes back with the frame's shapes
+// (conformance/screen-engines.json).
 
 import type { ScreenEngine } from "./generated/ScreenEngine";
-import type { Hears, Input, Shape } from "./engineHost";
+import type { Hears, Input, Shape, Tell } from "./engineHost";
 
 /** What the page tells the worker. */
 export type ToWorker =
@@ -19,7 +21,7 @@ export type ToWorker =
 export type FromWorker =
   | { kind: "ready"; hears: Hears }
   | { kind: "calling"; call: string }
-  | { kind: "drawn"; shapes: Shape[] }
+  | { kind: "drawn"; shapes: Shape[]; tells: Tell[] }
   | { kind: "failed"; message: string }
   | { kind: "log"; line: string };
 
@@ -44,6 +46,8 @@ export type RunOptions = {
   onLog: (line: string) => void;
   /** The engine is made, and takes this input. */
   onReady?: (hears: Hears) => void;
+  /** The engine told the window something: its handler runs. */
+  onTell?: (tell: string, values: unknown[]) => void;
 };
 
 /** Adds `input` to what waits for the next frame: moves in a row keep only the last. */
@@ -153,6 +157,11 @@ export class ScreenRun {
     if (!this.#ended && this.#hears.keys) queue(this.#waiting, { key: kind, name });
   }
 
+  /** What a handler told the engine; kept, even before it is ready, for the next frame. */
+  hear(name: string, values: unknown[]) {
+    if (!this.#ended) queue(this.#waiting, { hear: name, values });
+  }
+
   /** Ends the run: its window closed. */
   stop() {
     this.#end();
@@ -177,6 +186,7 @@ export class ScreenRun {
         this.#untime();
         this.#busy = null;
         this.#options.onDraw(message.shapes);
+        for (const told of message.tells) this.#options.onTell?.(told.tell, told.values);
         break;
       case "failed":
         this.#end();
@@ -200,7 +210,7 @@ export class ScreenRun {
       this.#last = now;
       const input = this.#waiting;
       this.#waiting = [];
-      const first = input[0] === undefined ? "clarity_tick" : "pointer" in input[0] ? "clarity_pointer" : "clarity_key";
+      const first = input[0] === undefined ? "clarity_tick" : "hear" in input[0] ? input[0].hear : "pointer" in input[0] ? "clarity_pointer" : "clarity_key";
       this.#busy = first;
       this.#time(first);
       this.#send({ kind: "frame", ms, input, language: this.#options.language() });
@@ -228,5 +238,41 @@ export class ScreenRun {
     this.#frame = null;
     this.#worker?.terminate();
     this.#worker = null;
+  }
+}
+
+type Listener = (hear: string, values: unknown[]) => void;
+
+/**
+ * Where hears go: the canvas of the window they were told on, by its
+ * number and the part's name. A hear told while the canvas does not show
+ * (an `on open` handler's reply comes before it does) waits for it.
+ */
+export class CanvasHears {
+  #listening = new Map<string, Listener>();
+  #waiting = new Map<string, { hear: string; values: unknown[] }[]>();
+
+  hear(instance: number, part: string, hear: string, values: unknown[]) {
+    const key = `${instance}\n${part}`;
+    const listener = this.#listening.get(key);
+    if (listener) listener(hear, values);
+    else this.#waiting.set(key, [...(this.#waiting.get(key) ?? []), { hear, values }]);
+  }
+
+  /** The canvas shows: it hears what waited, then what comes, until the returned stop. */
+  listen(instance: number, part: string, listener: Listener): () => void {
+    const key = `${instance}\n${part}`;
+    this.#listening.set(key, listener);
+    const waited = this.#waiting.get(key) ?? [];
+    this.#waiting.delete(key);
+    for (const w of waited) listener(w.hear, w.values);
+    return () => {
+      if (this.#listening.get(key) === listener) this.#listening.delete(key);
+    };
+  }
+
+  /** The window closed: what its canvases would hear goes. */
+  closed(instance: number) {
+    for (const map of [this.#listening, this.#waiting]) for (const key of [...map.keys()]) if (key.startsWith(`${instance}\n`)) map.delete(key);
   }
 }

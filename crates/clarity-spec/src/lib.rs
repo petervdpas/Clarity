@@ -139,13 +139,15 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
 }
 
 /// `arena.restart(2)` reads as a shape drawn on a canvas; where `arena` is
-/// a custom part of the window, it is a hear of that part (DESIGN 5.19).
+/// a custom part of the window, or a canvas an engine beside the screen
+/// draws, it is a hear of that part (DESIGN 5.19, 5.12).
 fn make_hears(files: &mut [model::SpecFile]) {
     use code::{Stmt, StmtKind};
     fn custom_parts(widgets: &[model::Widget], found: &mut Vec<String>) {
         for widget in widgets {
             // A custom part and a sound hear what code tells them (DESIGN 5.19, 5.22).
-            if matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound)
+            // So does a canvas an engine beside the screen draws, for its engine (DESIGN 5.12).
+            if (matches!(widget.props.kind, widgets::WidgetKind::Custom | widgets::WidgetKind::Sound) || widget.props.runs.is_some())
                 && let Some(name) = &widget.props.name
             {
                 found.push(name.clone());

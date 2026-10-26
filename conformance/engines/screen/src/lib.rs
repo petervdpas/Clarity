@@ -11,6 +11,10 @@
 //!
 //! Pointer and keys: the dot goes where the pointer goes down and follows
 //! it while it is down, and the text says which keys are down.
+//!
+//! Tells and hears: it tells `lap` with the laps run each time the dot
+//! comes round (every 1600 ms), and `finished` with its time when Escape
+//! goes down. It hears `start(level)`, which starts it again at that level.
 
 use std::cell::{Cell, RefCell};
 
@@ -23,6 +27,15 @@ thread_local! {
     static DOT: Cell<Option<(i64, i64)>> = const { Cell::new(None) };
     static PRESSED: Cell<bool> = const { Cell::new(false) };
     static HELD: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    static LEVEL: Cell<Option<i64>> = const { Cell::new(None) };
+    static LAPS: Cell<i64> = const { Cell::new(0) };
+    /// What it tells with the answer of the call it is in.
+    static TOLD: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Tells the window `tell` with its values, with the answer of this call.
+fn tell(tell: &str, values: Value) {
+    TOLD.with_borrow_mut(|told| told.push(json!({ "tell": tell, "values": values })));
 }
 
 /// Room in the engine's memory for the host to write into.
@@ -48,8 +61,14 @@ fn answer(at: i32, len: i32, function: fn(&[Value]) -> Result<Value, String>) ->
     let bytes = unsafe { Vec::from_raw_parts(at as *mut u8, len as usize, len as usize) };
     let reply = match serde_json::from_slice::<Vec<Value>>(&bytes) {
         Ok(args) => match function(&args) {
-            Ok(value) => json!({ "value": value }),
-            Err(error) => json!({ "error": error }),
+            Ok(value) => match TOLD.take() {
+                told if told.is_empty() => json!({ "value": value }),
+                told => json!({ "value": value, "tells": told }),
+            },
+            Err(error) => {
+                TOLD.take();
+                json!({ "error": error })
+            }
         },
         Err(error) => json!({ "error": format!("the arguments are no JSON list: {error}") }),
     };
@@ -85,6 +104,11 @@ pub extern "C" fn clarity_tick(at: i32, len: i32) -> i64 {
             return Err("a frame of more than ten seconds".into());
         }
         ELAPSED.set(ELAPSED.get() + ms as i64);
+        let laps = ELAPSED.get() / 1600;
+        if laps > LAPS.get() {
+            LAPS.set(laps);
+            tell("lap", json!([laps]));
+        }
         Ok(Value::Null)
     })
 }
@@ -117,6 +141,9 @@ pub extern "C" fn clarity_key(at: i32, len: i32) -> i64 {
         let key = args.get(1).and_then(Value::as_str).ok_or("a key gives its name")?.to_string();
         HELD.with_borrow_mut(|held| match kind {
             "down" => {
+                if key == "Escape" {
+                    tell("finished", json!([ELAPSED.get()]));
+                }
                 if !held.contains(&key) {
                     held.push(key);
                 }
@@ -131,12 +158,27 @@ pub extern "C" fn clarity_key(at: i32, len: i32) -> i64 {
     })
 }
 
+/// The hear `start(level)`: it starts again, at that level.
+#[unsafe(no_mangle)]
+pub extern "C" fn start(at: i32, len: i32) -> i64 {
+    answer(at, len, |args| {
+        let level = args.first().and_then(Value::as_i64).ok_or("a level is a whole number")?;
+        ELAPSED.set(0);
+        LAPS.set(0);
+        LEVEL.set(Some(level));
+        Ok(Value::Null)
+    })
+}
+
 /// The canvas's shapes now, in its units (160 x 100).
 #[unsafe(no_mangle)]
 pub extern "C" fn clarity_draw(at: i32, len: i32) -> i64 {
     answer(at, len, |_| {
         let elapsed = ELAPSED.get();
         let mut said = if OPENED.get() { format!("{elapsed} ms") } else { format!("{elapsed} ms, not opened") };
+        if let Some(level) = LEVEL.get() {
+            said = format!("{said}, level {level}");
+        }
         HELD.with_borrow(|held| {
             if !held.is_empty() {
                 said = format!("{said}, holding {}", held.join(" "));

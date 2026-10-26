@@ -65,16 +65,18 @@ test("an engine that grows past its memory limit fails", async () => {
 test("an engine beside the screen draws its frames", async () => {
   for (const run of screen.frames) {
     const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: run.opens, ...limits, screen: true }, services());
-    const drawn = run.ticks.map((ms: number) => engine.frame(ms));
+    const drawn = run.ticks.map((ms: number) => engine.frame(ms).shapes);
     assert.deepEqual(drawn, run.draws, run.name);
   }
 });
 
 test("a frame the engine refuses fails it", async () => {
-  const refused = screen.fails.find((f: { tick: number }) => f.tick >= 0);
-  const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: true, seconds: refused.seconds, megabytes: 256, screen: true }, services());
-  for (const ms of refused.ticks) engine.frame(ms);
-  assert.throws(() => engine.frame(refused.tick), { message: refused.fails });
+  // A tick of less than no time runs until the page stops it, which screenEngine.test.ts covers.
+  for (const refused of screen.fails.filter((f: { tick: number }) => f.tick >= 0)) {
+    const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: true, seconds: refused.seconds, megabytes: 256, screen: true }, services());
+    for (const ms of refused.ticks) engine.frame(ms);
+    assert.throws(() => engine.frame(refused.tick, refused.input ?? []), { message: refused.fails }, refused.name);
+  }
 });
 
 test("an engine beside the screen exports its frame loop", async () => {
@@ -87,7 +89,7 @@ test("pointer and keys reach the engine before its tick", async () => {
   for (const run of screen.input) {
     const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: run.opens, ...limits, screen: true }, services());
     assert.deepEqual(engine.hears, { pointer: true, keys: true });
-    const drawn = run.frames.map((f: { tick: number; input: Input[] }) => engine.frame(f.tick, f.input));
+    const drawn = run.frames.map((f: { tick: number; input: Input[] }) => engine.frame(f.tick, f.input).shapes);
     assert.deepEqual(drawn, run.frames.map((f: { draws: unknown }) => f.draws), run.name);
   }
 });
@@ -102,4 +104,18 @@ test("each call of a frame is told before it runs, for its time limit", async ()
 test("an engine without clarity_pointer or clarity_key hears neither", async () => {
   const engine = await loadEngine("Test", TEST, { uses: cases.uses, opens: false, ...limits }, services());
   assert.deepEqual(engine.hears, { pointer: false, keys: false });
+});
+
+test("an engine tells with its answers, and hears through its functions", async () => {
+  for (const run of screen.tells) {
+    const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: run.opens, ...limits, screen: true }, services());
+    run.frames.forEach((f: { tick: number; input: Input[]; tells: unknown; draws: unknown }, i: number) => {
+      assert.deepEqual(engine.frame(f.tick, f.input), { shapes: f.draws, tells: f.tells }, `${run.name}, frame ${i}`);
+    });
+  }
+  // A hear is told before it runs, by its own name.
+  const engine = await loadEngine(screen.name, SCREEN, { uses: [], opens: true, ...limits, screen: true }, services());
+  const calls: string[] = [];
+  engine.frame(0, [{ hear: "start", values: [1] }], (call) => calls.push(call));
+  assert.deepEqual(calls, ["start", "clarity_tick", "clarity_draw"]);
 });

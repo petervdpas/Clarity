@@ -7,6 +7,25 @@ engine Screen from "screen.wasm"
     beside the screen
     on open
     limit 1 second
+    tells finished(time: integer)
+    tells lap(count: integer)
+    hears start(level: integer)
 
 page Play: window
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen
+    data laps: integer
+    data time: integer
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: finished on lap: lapped
+    button "Start" name go at 1,11 span 2 on click: startGame
+    number name lapsShown at 3,11 span 2 bind laps readonly
+    number name timeShown at 5,11 span 2 bind time readonly
+
+code Play
+    handler finished(ms: integer)
+        time = ms
+
+    handler lapped(count: integer)
+        laps = count
+
+    handler startGame
+        laps = 0
+        sky.start(2)

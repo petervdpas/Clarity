@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { HeldKeys, keyName, queue, ScreenRun, type FromWorker, type ToWorker, type WorkerLike } from "./screenEngine.ts";
+import { CanvasHears, HeldKeys, keyName, queue, ScreenRun, type FromWorker, type ToWorker, type WorkerLike } from "./screenEngine.ts";
 import { pointNear } from "./drawing.ts";
 import type { Input } from "./engineHost.ts";
 import type { ScreenEngine } from "./generated/ScreenEngine";
@@ -26,7 +26,9 @@ function harness(engine = ENGINE) {
   const drawn: unknown[] = [];
   const failed: string[] = [];
   const heard: unknown[] = [];
+  const told: unknown[] = [];
   const run = new ScreenRun(engine, {
+    onTell: (tell, values) => told.push([tell, values]),
     onReady: (hears) => heard.push(hears),
     worker: () => worker,
     frames: { request: (f) => ((frame = f), 1), cancel: () => (frame = null) },
@@ -42,6 +44,7 @@ function harness(engine = ENGINE) {
     drawn,
     failed,
     heard,
+    told,
     terminated: () => terminated,
     answer: (m: FromWorker) => worker.onmessage?.({ data: m }),
     crash: (message: string) => worker.onerror?.({ message }),
@@ -65,7 +68,7 @@ test("it starts the engine, then asks for a frame at the screen's pace", () => {
   h.step(1000);
   // The first frame gives no time; each next one the time since the last.
   assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 0, input: [], language: "nl" });
-  h.answer({ kind: "drawn", shapes: [{ op: "clear", color: "background" }] });
+  h.answer({ kind: "drawn", shapes: [{ op: "clear", color: "background" }], tells: [] });
   assert.deepEqual(h.drawn, [[{ op: "clear", color: "background" }]]);
   h.step(1016);
   assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 16, input: [], language: "nl" });
@@ -80,7 +83,7 @@ test("a frame is skipped while the last is busy, and its time is not lost", () =
   h.step(1016);
   h.step(1033);
   assert.equal(h.sent.length, frames, "nothing is sent while the engine is busy");
-  h.answer({ kind: "drawn", shapes: [] });
+  h.answer({ kind: "drawn", shapes: [], tells: [] });
   h.step(1050);
   assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 50, input: [], language: "nl" });
 });
@@ -127,7 +130,7 @@ test("a frame that fails ends the engine; stopping ends it too", () => {
   s.run.stop();
   assert.ok(s.terminated() && !s.waiting());
   // A late answer after it stopped draws nothing.
-  s.answer({ kind: "drawn", shapes: [] });
+  s.answer({ kind: "drawn", shapes: [], tells: [] });
   assert.deepEqual(s.drawn, []);
 });
 
@@ -181,12 +184,12 @@ test("pointer and keys wait for the next frame, and go with it", () => {
   // While the frame is busy, input waits for the next one.
   h.run.pointer("move", 6, 7);
   h.step(1016);
-  h.answer({ kind: "drawn", shapes: [] });
+  h.answer({ kind: "drawn", shapes: [], tells: [] });
   h.step(1033);
   assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 33, input: [{ pointer: "move", x: 6, y: 7 }], language: "nl" });
   // The time limit is the first call's.
   h.run.key("up", "a");
-  h.answer({ kind: "drawn", shapes: [] });
+  h.answer({ kind: "drawn", shapes: [], tells: [] });
   h.step(1050);
   h.expire();
   assert.deepEqual(h.failed, ["engine Screen failed in clarity_key: it ran longer than 1 second"]);
@@ -233,4 +236,47 @@ test("keys go by Clarity's names, once down and once up", () => {
   assert.equal(held.up("a"), false);
   assert.deepEqual(held.all(), ["ArrowLeft"], "losing the keyboard lets go of every key still down");
   assert.deepEqual(held.all(), []);
+});
+
+test("a hear waits for the next frame, even before the engine is ready", () => {
+  const h = harness();
+  h.run.start();
+  h.run.hear("start", [2]);
+  h.answer({ kind: "ready", hears: { pointer: false, keys: false } });
+  h.step(1000);
+  assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 0, input: [{ hear: "start", values: [2] }], language: "nl" });
+  // Its time limit is its own.
+  h.expire();
+  assert.deepEqual(h.failed, ["engine Screen failed in start: it ran longer than 1 second"]);
+});
+
+test("what the engine tells goes to the window once its frame is drawn, in order", () => {
+  const h = harness();
+  h.run.start();
+  h.answer({ kind: "ready", hears: { pointer: true, keys: true } });
+  h.step(1000);
+  h.answer({ kind: "drawn", shapes: [], tells: [{ tell: "lap", values: [1] }, { tell: "finished", values: [1700] }] });
+  assert.deepEqual(h.told, [["lap", [1]], ["finished", [1700]]]);
+  assert.equal(h.drawn.length, 1);
+});
+
+test("hears go to the canvas of their window, and wait while it does not show", () => {
+  const hears = new CanvasHears();
+  const got: unknown[] = [];
+  // Told before the canvas shows: an `on open` handler's reply comes first.
+  hears.hear(3, "sky", "start", [1]);
+  const stop = hears.listen(3, "sky", (hear, values) => got.push([hear, values]));
+  assert.deepEqual(got, [["start", [1]]]);
+  hears.hear(3, "sky", "start", [2]);
+  hears.hear(4, "sky", "start", [9]);
+  assert.deepEqual(got, [["start", [1]], ["start", [2]]], "another window's canvas is its own");
+  stop();
+  hears.hear(3, "sky", "start", [5]);
+  assert.equal(got.length, 2);
+  // A window that closed keeps nothing.
+  hears.closed(3);
+  hears.listen(3, "sky", (hear, values) => got.push([hear, values]));
+  assert.equal(got.length, 2);
+  hears.listen(4, "sky", (hear, values) => got.push([hear, values]));
+  assert.deepEqual(got.at(-1), ["start", [9]]);
 });

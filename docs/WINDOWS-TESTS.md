@@ -65,7 +65,7 @@ A project with `keys editable`, a menu item `on click -> keys`, a toolbar or rib
 - [x] On Avalonia the same, and the file shows `Ctrl+K` as written.
 - [x] A toolbar or ribbon button's tooltip shows its key (it used to say "Opens Window"): Print showed "Ctrl+P" on Go, Rust and Avalonia.
 
-## 5b. An engine beside the screen, with pointer and keys (N5a, 2026-10-26)
+## 5b. An engine beside the screen: pointer, keys, tells and hears (N5a, 2026-10-26)
 
 Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --ignored --exact an_engine_beside_the_screen_builds_in_go` and `--test csharp_build ... an_engine_beside_the_screen_builds_in_csharp`, with `CLARITY_KEEP=1` to keep the app in `target/generated/clarity-gen-go-play` and `clarity-gen-csharp-play`.
 
@@ -74,6 +74,8 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Closing the window ends the engine (no leftover process).
 - [ ] Pointer (both): press on the canvas and drag; the dot follows. Let go beside the window: the dot stays at the canvas's edge.
 - [ ] Keys (both): click the canvas, hold Left and A; the text says "holding ArrowLeft a". Let go of Left: "holding a". Click elsewhere (or Alt+Tab) while holding A: "holding" goes away. A shortcut with Ctrl still reaches the window.
+- [ ] Tells (both): the first number under the canvas counts the laps, one every 1.6 seconds. Click the canvas and press Escape: the second number shows the time.
+- [ ] Hears (both): Start sets the text to "... ms, level 2", the time back near 0 and the laps to 0.
 
 ## 6. Not done, so not to be tested
 
@@ -85,7 +87,8 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 
 - [x] Upload NuGet 0.38.0 (on nuget.org).
 - [x] NuGet 0.39.0 and 0.40.0 are on nuget.org.
-- [ ] Build and upload NuGet 0.41.0 (pointer and keys for engines beside the screen).
+- [ ] NuGet 0.41.0 (pointer and keys) was uploaded but is not listed on nuget.org yet (2026-10-26); check it went through.
+- [ ] Build and upload NuGet 0.42.0 (tells and hears for engines beside the screen).
 - [x] The Rust crate 0.28.1 is on crates.io.
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)

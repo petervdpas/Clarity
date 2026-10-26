@@ -276,9 +276,20 @@ engine Screen from "screen.wasm"
     beside the screen
     on open
     limit 1 second
+    tells finished(time: integer)
+    hears start(level: integer)
 
 page Play: window
-    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen
+    data best: integer
+    canvas name sky at 1,1 span 12 rows 10 units 160 x 100 runs Screen on finished: gameOver
+    button "Start" name go at 1,11 span 2 on click: startGame
+
+code Play
+    handler gameOver(time: integer)
+        best = time
+
+    handler startGame
+        sky.start(2)
 ```
 
 - **`beside the screen`** says where it runs. Code does not call it, so it has no `function` lines, and no `state` line: every canvas that `runs` it has an instance of its own, from when its window opens until it closes.
@@ -286,15 +297,16 @@ page Play: window
 - **One frame at a time.** While the engine is busy with a frame, the screen's next frames are skipped; the next tick gives all the time since the last one, so nothing is lost.
 - **Limits** hold per call: a frame that runs longer than the limit, or that fails, ends the engine. The canvas then says why in place of its drawing, in Clarity's words (`screenEngineFailed`), and the window works on.
 - **`on open`** runs `clarity_open` once, before the first frame.
+- **Tells.** What the engine has to say to the window (the game is over, with the time) it tells. `tells finished(time: integer)` declares it; the canvas wires it to a handler (`on finished: gameOver`), which runs with the values, one parameter each, as a handler a button runs. The file tells it with the answer of any call, beside the value: `{"value": null, "tells": [{"tell": "finished", "values": [1200]}]}`. Several can come at once; they run in order once the frame is drawn.
+- **Hears.** What a handler tells the engine: `hears start(level: integer)` declares it, and `sky.start(2)` in a handler tells it through the canvas. It reaches the engine at the start of the next frame, before the pointer, keys and tick that came after it, and runs the file's function `start` with `[2]`. A hear told before the canvas shows (in `on open`) waits for it. A hear the engine refuses ends it, as a failed frame does.
 - **Pointer and keys.** When the file exports `clarity_pointer`, the canvas sends it the pointer: `["down", x, y]` when the primary button or a finger goes down on the drawing, `["move", x, y]` while it moves over the drawing or is down, `["up", x, y]` when it lets go, in the canvas's units. While it is down the canvas keeps it, so a drag that leaves the drawing is at its nearest edge. When the file exports `clarity_key`, a click on the canvas (or Tab) gives it the keyboard, and each key goes as `["down", key]` once, however long it repeats, and `["up", key]`; when the canvas loses the keyboard, every key still down comes up. Keys are named alike on every stack: `a` to `z`, `0` to `9`, `Space`, `Enter`, `Escape`, `Backspace`, `Delete`, the arrows (`ArrowLeft`), `Home`, `End`, `PageUp`, `PageDown`, `Shift`, `Control`, `Alt` and `F1` to `F12`. A key with Control, Alt or the command key stays the window's shortcut. What happens between two frames goes at the start of the next, before its tick; moves in a row keep only the last.
 - **Where it runs.** On the web stacks in a Web Worker of its own, with the browser's WebAssembly, so an engine that loops never freezes the window; the engine's file travels in the model the screen reads. On Avalonia in Wasmtime, in the application's process, its frames worked off the screen's thread. The backend never loads it.
 
-The file exports `clarity_tick` and `clarity_draw` besides the engine interface; the designer says so when it lacks them. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
+The file exports `clarity_tick`, `clarity_draw` and a function per hear besides the engine interface; the designer says so when it lacks one. Values of tells and hears are plain: text, numbers, dates, durations, enums and yes or no. Shared tests (`conformance/screen-engines.json`, with the engine `conformance/engines/screen`) run the same frames on both renderers.
 
 ## Not yet
 
 These are designed but not built:
 
 - The service `progress`, which would let a long call show on the screen how far it is.
-- What an engine beside the screen tells the window (`tells`) and what a handler tells it (`hears`).
 - Engines beside the screen written in Clarity (`on tick`, `on draw`).

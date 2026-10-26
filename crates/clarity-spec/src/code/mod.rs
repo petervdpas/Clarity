@@ -810,6 +810,12 @@ pub struct EngineDecl {
     /// canvas that `runs` it is drawn, one instance per canvas; the backend
     /// never runs it.
     pub beside: bool,
+    /// `tells finished(score: integer)`: what an engine beside the screen
+    /// tells its window, which runs the handler wired on the canvas.
+    pub tells: Vec<PartMessage>,
+    /// `hears start(level: integer)`: what a handler tells it, through the
+    /// canvas (`sky.start(2)`); its file has a function of each name.
+    pub hears: Vec<PartMessage>,
     /// `limit 2 seconds, 64 MB`: how long one call may run; none written
     /// keeps the default (`engines::DEFAULT_SECONDS`).
     pub seconds: Option<u32>,

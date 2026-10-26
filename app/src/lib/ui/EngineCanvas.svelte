@@ -5,7 +5,9 @@
   // stops (a frame failed or ran past its limit), the canvas says why. The
   // pointer and keys on it go to the engine, when it takes them: the canvas
   // keeps the pointer while it is down, and takes the keyboard when clicked
-  // or tabbed to.
+  // or tabbed to. In a running application, what handlers tell the canvas
+  // (hears) goes to the engine, and what the engine tells runs the handler
+  // wired to it.
   import { onDestroy, onMount } from "svelte";
   import CanvasView from "./CanvasView.svelte";
   import ScreenWorker from "../screenWorker.ts?worker&inline";
@@ -14,6 +16,8 @@
   import type { Hears, Shape } from "../engineHost";
   import type { ScreenEngine } from "../generated/ScreenEngine";
   import type { ShownText } from "../format";
+  import { useLive } from "../live";
+  import type { JsonValue } from "../generated/serde_json/JsonValue";
 
   let {
     engine,
@@ -21,6 +25,7 @@
     shown,
     language,
     id,
+    part = null,
   }: {
     engine: ScreenEngine;
     units: { width: number; height: number };
@@ -28,7 +33,12 @@
     /** The language the screen shows now, as its tag; "" for the texts as written. */
     language: () => string;
     id?: string;
+    /** The canvas's name, by which handlers tell it and its tells are wired. */
+    part?: string | null;
   } = $props();
+
+  const live = useLive();
+  let connected: ReturnType<NonNullable<typeof live>["screen"]> | null = null;
 
   let drawing = $state<Shape[]>([]);
   let stopped = $state<string | null>(null);
@@ -99,11 +109,16 @@
       onFail: (problem) => (stopped = problem),
       onLog: (line) => console.info(line),
       onReady: (taken) => (hears = taken),
+      onTell: (tell, values) => connected?.tell(tell, values as JsonValue[]),
     });
     run.start();
+    if (live && part) connected = live.screen(part, (hear, values) => run?.hear(hear, values));
   });
 
-  onDestroy(() => run?.stop());
+  onDestroy(() => {
+    connected?.stop();
+    run?.stop();
+  });
 </script>
 
 {#if stopped !== null}

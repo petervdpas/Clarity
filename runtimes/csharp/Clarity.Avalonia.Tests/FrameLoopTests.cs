@@ -22,11 +22,13 @@ public sealed class FrameLoopTests
         public Func<double, JsonArray> Answer = _ => [new JsonObject { ["op"] = "clear", ["color"] = "background" }];
         public bool Disposed;
 
-        public JsonArray Frame(double ms, IReadOnlyList<ScreenInput> input)
+        public List<ScreenTell> Tells = [];
+
+        public Drawn Frame(double ms, IReadOnlyList<ScreenInput> input)
         {
             Given.Add(ms);
             Input.Add(input);
-            return Answer(ms);
+            return new Drawn(Answer(ms), Tells);
         }
 
         public void Dispose() => Disposed = true;
@@ -39,6 +41,7 @@ public sealed class FrameLoopTests
         public readonly List<Action> Background = [];
         public readonly List<IReadOnlyList<Shape>> Drawn = [];
         public readonly List<string> Stopped = [];
+        public readonly List<ScreenTell> Told = [];
         public Action<TimeSpan>? Waiting;
         public readonly FrameLoop Loop;
 
@@ -46,7 +49,7 @@ public sealed class FrameLoopTests
         {
             if (hears is { } h)
                 Frames.Hears = h;
-            Loop = new FrameLoop(Frames, f => Waiting = f, Background.Add, ui => ui(), Drawn.Add, Stopped.Add);
+            Loop = new FrameLoop(Frames, f => Waiting = f, Background.Add, ui => ui(), Drawn.Add, Stopped.Add, Told.Add);
             Loop.Start();
         }
 
@@ -136,6 +139,25 @@ public sealed class FrameLoopTests
         h.Work();
         Assert.Equal([new ScreenInput.Pointer("down", 4, 5), new ScreenInput.Key("down", "a")], h.Frames.Input[0]);
         Assert.Equal([new ScreenInput.Pointer("move", 8, 9)], h.Frames.Input[1]);
+    }
+
+    [Fact]
+    public void Hears_wait_for_the_next_frame_and_tells_come_once_it_is_drawn()
+    {
+        var h = new Harness(new Hears(false, false));
+        h.Loop.Hear("start", [2L]);
+        h.Frames.Tells = [new ScreenTell("lap", [JsonDocument.Parse("1").RootElement])];
+        h.Step(1000);
+        Assert.Empty(h.Told);
+        h.Work();
+        var hear = Assert.IsType<ScreenInput.Hear>(Assert.Single(h.Frames.Input[0]));
+        Assert.Equal(("start", 2L), (hear.Name, hear.Values[0]));
+        Assert.Equal("lap", Assert.Single(h.Told).Tell);
+        // A loop that ended hears nothing more.
+        h.Loop.Dispose();
+        h.Loop.Hear("start", [3L]);
+        h.Step(1016);
+        Assert.Single(h.Frames.Input);
     }
 
     [Fact]

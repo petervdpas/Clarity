@@ -1617,6 +1617,15 @@ fn parse_widget_props(
             props.tells.push(crate::model::TellHandler { tell, handler });
             continue;
         }
+        // A tell of the engine beside the screen a canvas runs (DESIGN 5.12):
+        // the engine's declaration says which there are.
+        if kind == WidgetKind::Canvas && word == "on" && Event::by_keyword(event_word).is_none() {
+            let tell = cursor.expect_ident("a tell of the engine the canvas runs")?.name;
+            cursor.expect(TokenKind::Colon, "':' and a handler, as in 'on finished: gameOver'")?;
+            let handler = cursor.expect_ident("a handler name")?.name;
+            props.tells.push(crate::model::TellHandler { tell, handler });
+            continue;
+        }
         match word {
             "at" | "span" | "rows" if kind == WidgetKind::Sound => {
                 return Err(Diagnostic::error("a sound has no place in the window: it is heard, not seen, so it has no 'at', 'span' or 'rows'", clause.span));

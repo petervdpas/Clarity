@@ -185,7 +185,11 @@ public sealed class Engine
 
     /// Calls `function` in open window `window`: for an engine with state per
     /// window, on that window's own instance.
-    public JsonNode? CallIn(long window, string function, params object?[] args)
+    public JsonNode? CallIn(long window, string function, params object?[] args) => CallIn(window, function, null, args);
+
+    /// Calls `function` in open window `window`, adding what its answer tells
+    /// to `told` (an engine beside the screen, DESIGN 5.12).
+    public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args)
     {
         EngineException Failed(string why) => new($"engine {name} failed in {function}: {why}");
         // An engine with state keeps its instance, unless a call fails or runs
@@ -233,12 +237,12 @@ public sealed class Engine
                 kept[key] = live;
             else
                 live.Dispose();
-            return Answer(output, Failed);
+            return Answer(output, Failed, told);
         }
     }
 
     /// The value in an engine's answer, or its refusal in its own words.
-    static JsonNode? Answer(byte[] output, Func<string, EngineException> failed)
+    static JsonNode? Answer(byte[] output, Func<string, EngineException> failed, List<ScreenTell>? told)
     {
         JsonNode? answer;
         try
@@ -254,6 +258,16 @@ public sealed class Engine
             throw new RefusedException(Text.Of(error.GetValue<string>()));
         if (answer is not JsonObject found || !found.ContainsKey("value"))
             throw failed("its answer has no value");
+        if (told is not null && found["tells"] is JsonArray tells)
+        {
+            foreach (var tell in tells)
+            {
+                if (tell?["tell"] is not JsonValue named || !named.TryGetValue<string>(out var name))
+                    throw failed("it told something without a name");
+                var values = tell["values"] is JsonArray given ? given.Select(v => JsonDocument.Parse(v?.ToJsonString() ?? "null").RootElement.Clone()).ToArray() : [];
+                told.Add(new ScreenTell(name, values));
+            }
+        }
         return found["value"];
     }
 
@@ -290,7 +304,7 @@ public sealed class Engine
         try
         {
             var output = Invoke(live, "clarity_open", []);
-            Answer(output, _ => new EngineException("its on open gave no answer"));
+            Answer(output, _ => new EngineException("its on open gave no answer"), null);
         }
         catch (RefusedException e)
         {

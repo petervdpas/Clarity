@@ -7,7 +7,9 @@
 // loop is conformance/screen-engines.json. The time limit is the page's:
 // a worker that does not answer in time is stopped from outside
 // (screenEngine.ts). Pointer and keys go to clarity_pointer and
-// clarity_key, when the engine has them, at the start of the next frame.
+// clarity_key, when the engine has them, at the start of the next frame;
+// so do hears, each to the engine's function of its name. An answer may
+// carry `tells`, which the frame gives back with its shapes.
 
 /** What an engine is declared with. */
 export type Declared = {
@@ -37,7 +39,14 @@ export type Services = {
 export type Shape = { op: string; [value: string]: unknown };
 
 /** Pointer or key on the canvas, as the engine gets it (conformance/screen-engines.json). */
-export type Input = { pointer: "down" | "move" | "up"; x: number; y: number } | { key: "down" | "up"; name: string };
+export type Input =
+  | { pointer: "down" | "move" | "up"; x: number; y: number }
+  | { key: "down" | "up"; name: string }
+  /** What a handler told the canvas (`sky.start(2)`): the engine's function of that name. */
+  | { hear: string; values: unknown[] };
+
+/** What the engine tells the window: the handler wired to it runs with its values. */
+export type Tell = { tell: string; values: unknown[] };
 
 /** Which input an engine beside the screen takes: it exports clarity_pointer, clarity_key. */
 export type Hears = { pointer: boolean; keys: boolean };
@@ -75,6 +84,8 @@ export class Engine {
   readonly #seed: () => bigint;
   /** The pointer and keys it takes. */
   readonly hears: Hears;
+  /** What the calls since the last frame told. */
+  #told: Tell[] = [];
 
   constructor(name: string, exports: Exports, megabytes: number, random: { at: bigint }, seed: () => bigint) {
     this.#name = name;
@@ -91,7 +102,7 @@ export class Engine {
     const run = this.#exports[name];
     if (typeof run !== "function") throw failed("it has no such function");
     this.#random.at = BigInt.asUintN(64, this.#seed());
-    let answer: { value?: unknown; error?: string };
+    let answer: { value?: unknown; error?: string; tells?: Tell[] };
     try {
       const input = new TextEncoder().encode(JSON.stringify(args));
       const at = this.#exports.clarity_alloc(input.length);
@@ -109,6 +120,10 @@ export class Engine {
     // The page cannot hold a module's own memory back, so it looks after the call.
     if (this.#exports.memory.buffer.byteLength > this.#megabytes * 1024 * 1024) throw failed(`it grew past its memory limit of ${this.#megabytes} MB`);
     if (answer.error !== undefined) throw failed(answer.error);
+    for (const told of Array.isArray(answer.tells) ? answer.tells : []) {
+      if (typeof told?.tell !== "string") throw failed("it told something without a name");
+      this.#told.push({ tell: told.tell, values: Array.isArray(told.values) ? told.values : [] });
+    }
     return answer.value;
   }
 
@@ -117,20 +132,24 @@ export class Engine {
    * last frame, then the canvas's shapes. `calling` hears each call before
    * it runs, for its time limit. Input it does not take is left out.
    */
-  frame(ms: number, input: Input[] = [], calling: (call: string) => void = () => {}): Shape[] {
+  frame(ms: number, input: Input[] = [], calling: (call: string) => void = () => {}): { shapes: Shape[]; tells: Tell[] } {
     const run = (name: string, args: unknown[]) => {
       calling(name);
       return this.call(name, args);
     };
+    this.#told = [];
     for (const i of input) {
-      if ("pointer" in i) {
+      if ("hear" in i) run(i.hear, i.values);
+      else if ("pointer" in i) {
         if (this.hears.pointer) run("clarity_pointer", [i.pointer, i.x, i.y]);
       } else if (this.hears.keys) run("clarity_key", [i.key, i.name]);
     }
     run("clarity_tick", [ms]);
     const shapes = run("clarity_draw", []);
     if (!Array.isArray(shapes)) throw new EngineFailed(`engine ${this.#name} failed in clarity_draw: it gave no list of shapes`);
-    return shapes as Shape[];
+    const tells = this.#told;
+    this.#told = [];
+    return { shapes: shapes as Shape[], tells };
   }
 }
 

@@ -5,7 +5,8 @@
 // within the engine's limits; the epoch stops a call that runs too long.
 // A frame that fails ends the engine (conformance/screen-engines.json).
 // Pointer and keys since the last frame go first, to clarity_pointer and
-// clarity_key, when it has them.
+// clarity_key, when it has them, and hears to its functions of their names;
+// what its answers tell comes back with the frame.
 
 using System.Text.Json.Nodes;
 
@@ -37,10 +38,11 @@ public sealed class ScreenEngine : IFrames
     public static ScreenEngine Load(string name, byte[] bytes, IReadOnlyList<string> uses, bool opens, EngineLimits limits) =>
         new(name, Engine.Load(name, bytes, new EngineDeclaration([], uses, limits, EngineState.PerWindow, opens, Screen: true)));
 
-    public JsonArray Frame(double ms, IReadOnlyList<ScreenInput> input)
+    public Drawn Frame(double ms, IReadOnlyList<ScreenInput> input)
     {
         if (ended is not null)
             throw ended;
+        told.Clear();
         try
         {
             foreach (var given in input)
@@ -49,9 +51,12 @@ public sealed class ScreenEngine : IFrames
                     Call("clarity_pointer", p.Kind, p.X, p.Y);
                 else if (given is ScreenInput.Key k && Hears.Keys)
                     Call("clarity_key", k.Kind, k.Name);
+                else if (given is ScreenInput.Hear h)
+                    Call(h.Name, h.Values);
             }
             Call("clarity_tick", ms);
-            return Call("clarity_draw") as JsonArray ?? throw new EngineException($"engine {name} failed in clarity_draw: it gave no list of shapes");
+            var shapes = Call("clarity_draw") as JsonArray ?? throw new EngineException($"engine {name} failed in clarity_draw: it gave no list of shapes");
+            return new Drawn(shapes, told.ToList());
         }
         catch (EngineException e)
         {
@@ -61,11 +66,14 @@ public sealed class ScreenEngine : IFrames
         }
     }
 
+    /// <summary>What the calls of this frame told.</summary>
+    readonly List<ScreenTell> told = [];
+
     JsonNode? Call(string function, params object?[] args)
     {
         try
         {
-            return engine.CallIn(Canvas, function, args);
+            return engine.CallIn(Canvas, function, told, args);
         }
         catch (RefusedException e)
         {

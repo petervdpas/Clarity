@@ -1184,8 +1184,15 @@ impl<'a> Checker<'a> {
                         widget.span,
                     ),
                     Some(_) if draws => self.error(file, format!("canvas {canvas} is drawn by engine {engine}, so it has no draw handler"), widget.span),
-                    Some(_) => {}
+                    Some(e) => {
+                        for tell in p.tells.iter().filter(|t| !e.tells.iter().any(|own| own.name.name == t.tell)) {
+                            self.error(file, format!("engine {engine} tells no '{}'", tell.tell), widget.span);
+                        }
+                    }
                 }
+            } else if p.kind == WidgetKind::Canvas && !p.tells.is_empty() {
+                let canvas = p.name.clone().unwrap_or_else(|| format!("at {},{}", p.col, p.row));
+                self.error(file, format!("canvas {canvas} runs no engine, so it tells nothing"), widget.span);
             } else if p.kind == WidgetKind::Canvas && !draws {
                 self.warning(
                     file,

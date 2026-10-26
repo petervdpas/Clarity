@@ -31,8 +31,8 @@ scope.onmessage = async (event) => {
       send({ kind: "ready", hears: engine.hears });
     } else if (engine) {
       // Its time limit is per call: the page hears each call as it starts.
-      const shapes = engine.frame(message.ms, message.input, (call) => send({ kind: "calling", call }));
-      send({ kind: "drawn", shapes });
+      const { shapes, tells } = engine.frame(message.ms, message.input, (call) => send({ kind: "calling", call }));
+      send({ kind: "drawn", shapes, tells });
     }
   } catch (e) {
     engine = null;

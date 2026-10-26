@@ -1042,6 +1042,7 @@
       <EngineCanvas
         {id}
         engine={preview.screenEngines.find((e) => e.name === p.runs)!}
+        part={p.name}
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
         language={() => languageOf(preview) ?? ""}

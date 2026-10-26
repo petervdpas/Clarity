@@ -226,6 +226,11 @@ pub fn attach(project: &mut Project, files: Vec<EngineFile>) {
                             found.push(at(format!("has no function {}", function.name.name)));
                         }
                     }
+                    for hear in engine.hears.iter().filter(|_| engine.beside) {
+                        if !module.functions.contains(&hear.name.name) {
+                            found.push(at(format!("has no function {0}, which its hear {0} needs", hear.name.name)));
+                        }
+                    }
                 }
             }
         }

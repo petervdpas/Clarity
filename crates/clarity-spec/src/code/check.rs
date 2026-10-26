@@ -872,9 +872,16 @@ struct Wired<'a> {
     /// The event's word, like `click`; a window's own events give no values.
     event: &'a str,
     own_event: bool,
-    /// A custom part's tell: the part's declared name. The tell gives the handler its values.
-    tell_of: Option<&'a str>,
+    /// A tell of a custom part or of the engine a canvas runs. The tell gives the handler its values.
+    tell_of: Option<TellOf<'a>>,
     span: Span,
+}
+
+/// Who tells: a custom part, by its declared name, or an engine beside the screen.
+#[derive(Clone, Copy)]
+enum TellOf<'a> {
+    Part(&'a str),
+    Engine(&'a str),
 }
 
 fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
@@ -886,7 +893,11 @@ fn collect_widgets<'a>(widgets: &'a [Widget], owner: &mut Owner<'a>) {
             owner.wired.push(Wired { handler: &handler.handler, args: &handler.args, event: handler.event.keyword(), own_event: false, tell_of: None, span: widget.span });
         }
         for tell in &widget.props.tells {
-            owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: widget.props.part.as_deref(), span: widget.span });
+            owner.wired.push(Wired { handler: &tell.handler, args: &[], event: &tell.tell, own_event: false, tell_of: match (&widget.props.runs, &widget.props.part) {
+                (Some(engine), _) => Some(TellOf::Engine(engine)),
+                (None, Some(part)) => Some(TellOf::Part(part)),
+                (None, None) => None,
+            }, span: widget.span });
         }
         // Its context menu: the menu and its items are parts, their clicks run handlers.
         if let Some(menu) = &widget.menu {
@@ -1063,8 +1074,12 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
         })
     );
     // A tell gives its values: the handler takes them, each of its type.
-    if let Some(part) = wired.tell_of {
-        let Some(message) = env.part_decl(part).and_then(|p| p.tells.iter().find(|t| t.name.name == wired.event)) else { return };
+    if let Some(teller) = wired.tell_of {
+        let (message, part) = match teller {
+            TellOf::Part(part) => (env.part_decl(part).and_then(|p| p.tells.iter().find(|t| t.name.name == wired.event)), format!("part {part}")),
+            TellOf::Engine(engine) => (env.engine(engine).and_then(|e| e.tells.iter().find(|t| t.name.name == wired.event)), format!("engine {engine}")),
+        };
+        let Some(message) = message else { return };
         let fits = message.params.len() == decl.params.len()
             && message.params.iter().zip(&decl.params).all(|(given, taken)| match (env.type_ref(&given.ty), env.type_ref(&taken.ty)) {
                 (Ok(given), Ok(taken)) => taken.accepts(&given),
@@ -1072,7 +1087,7 @@ fn check_values(env: &Env, wired: &Wired, decl: &HandlerDecl, out: &mut Output) 
             });
         if !fits {
             out.push(Diagnostic::error(
-                format!("tell {} of part {part} gives {}; handler {} takes {}", wired.event, signature(env, &message.params), wired.handler, params()),
+                format!("tell {} of {part} gives {}; handler {} takes {}", wired.event, signature(env, &message.params), wired.handler, params()),
                 wired.span,
             ));
         }
@@ -1260,6 +1275,22 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
             }
             if let Some(function) = engine.functions.first() {
                 out.push(Diagnostic::error(format!("engine {name} runs beside the screen, so code does not call it; it has no functions"), function.span));
+            }
+        } else if let Some(message) = engine.tells.first().or(engine.hears.first()) {
+            out.push(Diagnostic::error(format!("engine {} tells and hears only beside the screen: code calls it and has its answer", engine.name.name), message.span));
+        }
+        let mut messages: Vec<&str> = Vec::new();
+        for message in engine.tells.iter().chain(&engine.hears) {
+            if messages.contains(&message.name.name.as_str()) {
+                out.push(Diagnostic::error(format!("engine {} has two tells or hears named '{}'", engine.name.name, message.name.name), message.name.span));
+            }
+            messages.push(&message.name.name);
+            for param in &message.params {
+                match env.type_ref(&param.ty) {
+                    Ok(ty) if !plain_for_part(&ty) => out.push(Diagnostic::error(format!("a value of a tell or hear is text, a number, a date, a duration, an enum or bool, not {}", ty.name()), param.ty.span)),
+                    Ok(_) => {}
+                    Err(problem) => out.push(Diagnostic::error(problem, param.ty.span)),
+                }
             }
         }
         if let Some(body) = &engine.body {
@@ -1666,13 +1697,23 @@ impl<'a> BodyChecker<'_, 'a> {
         {
             return self.sound_hear(part, hear, args);
         }
-        let decl = match self.part(&part.name) {
-            Some((_, Part::Widget(p))) => p.part.as_deref().and_then(|name| self.env.part_decl(name)),
+        // A canvas hears for the engine beside the screen it runs (DESIGN 5.12).
+        let engine = match self.part(&part.name) {
+            Some((_, Part::Widget(p))) => p.runs.as_deref().and_then(|name| self.env.engine(name)),
             _ => None,
         };
-        let message = decl.and_then(|d| d.hears.iter().find(|h| h.name.name == hear.name));
+        let decl = match self.part(&part.name) {
+            Some((_, Part::Widget(p))) if engine.is_none() => p.part.as_deref().and_then(|name| self.env.part_decl(name)),
+            _ => None,
+        };
+        let message = match engine {
+            Some(e) => e.hears.iter().find(|h| h.name.name == hear.name),
+            None => decl.and_then(|d| d.hears.iter().find(|h| h.name.name == hear.name)),
+        };
         let Some(message) = message else {
-            if let Some(decl) = decl {
+            if let Some(e) = engine {
+                self.error(format!("engine {} hears no '{}'", e.name.name, hear.name), hear.span);
+            } else if let Some(decl) = decl {
                 self.error(format!("part {} hears no '{}'", decl.name.name, hear.name), hear.span);
             }
             for arg in args {

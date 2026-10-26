@@ -76,6 +76,7 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Keys (both): click the canvas, hold Left and A; the text says "holding ArrowLeft a". Let go of Left: "holding a". Click elsewhere (or Alt+Tab) while holding A: "holding" goes away. A shortcut with Ctrl still reaches the window.
 - [ ] Tells (both): the first number under the canvas counts the laps, one every 1.6 seconds. Click the canvas and press Escape: the second number shows the time.
 - [ ] Hears (both): Start sets the text to "... ms, level 2", the time back near 0 and the laps to 0.
+- [ ] Log (both): run the app from a terminal; each Start writes `engine Screen: level 2` there.
 
 ## 6. Not done, so not to be tested
 
@@ -87,9 +88,9 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 
 - [x] Upload NuGet 0.38.0 (on nuget.org).
 - [x] NuGet 0.39.0 and 0.40.0 are on nuget.org.
-- [ ] NuGet 0.41.0 (pointer and keys) was uploaded but is not listed on nuget.org yet (2026-10-26); check it went through.
-- [ ] Build and upload NuGet 0.42.0 (tells and hears for engines beside the screen).
+- [x] NuGet 0.41.0 and 0.42.0 are on nuget.org.
 - [x] The Rust crate 0.28.1 is on crates.io.
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - Go v0.30.0 is released and its sums are recorded.
+- [ ] Tag Go v0.31.0 (the shell's `log_line` for engine logs), then record its sums in crates/clarity-gen/src/go/runtime.sum.

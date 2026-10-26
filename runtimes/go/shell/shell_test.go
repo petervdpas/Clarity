@@ -277,6 +277,20 @@ func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
 	}
 }
 
+// An engine beside the screen logs through the shell (DESIGN 5.12): the
+// line goes into the application's log, where the backend's engines write.
+func TestAnEngineLineGoesIntoTheApplicationsLog(t *testing.T) {
+	c, _ := service(t)
+	var lines []string
+	c.logLine = func(line string) { lines = append(lines, line) }
+	if got := wire(t, call(t, c, "log_line", `{"line":"engine Screen: level 2"}`)); got != `{"value":null}` {
+		t.Fatal(got)
+	}
+	if strings.Join(lines, "|") != "engine Screen: level 2" {
+		t.Fatal(lines)
+	}
+}
+
 func TestAnAnswerRunsTheHandlerItGoesToWithItsValues(t *testing.T) {
 	c, windows := service(t)
 	got := wire(t, call(t, c, "answer_event", `{"state":{"window":"Card","data":{"name":"Ada"}},"handler":"rename","values":[7,"Grace"]}`))

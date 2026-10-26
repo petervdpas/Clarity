@@ -93,6 +93,10 @@ static void fake_open(void* context, ClarityDesktop* opener, const char* name, i
 /// The last link the shell opened, in place of the browser.
 static const char* last_link;
 
+static const char* last_line;
+
+static void fake_log(const char* line) { last_line = clarity_copy(line); }
+
 static bool fake_link(const char* address) {
     last_link = clarity_copy(address);
     return true;
@@ -141,6 +145,11 @@ void the_shell_answers_the_renderers_commands(void) {
     CHECK_JSON(invoked(s, "open_link", "{\"address\":\"file:///etc/passwd\"}", NULL),
                "{\"error\":\"a link opens only an http, https or mailto address, not file:///etc/passwd\"}");
     CHECK_TEXT(last_link, "https://example.com/rules");
+
+    // An engine beside the screen logs through the shell: into the application's log.
+    clarity_service_on_log(s, fake_log);
+    CHECK_JSON(invoked(s, "log_line", "{\"line\":\"engine Screen: level 2\"}", NULL), "{\"value\":null}");
+    CHECK_TEXT(last_line, "engine Screen: level 2");
 
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL, 0, 0};

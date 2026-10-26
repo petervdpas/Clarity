@@ -38,7 +38,7 @@ fn the_web_stacks_carry_the_engine_in_the_model_and_not_on_the_backend() {
 fn avalonia_gives_each_canvas_an_instance_of_its_engine() {
     let files = files(Backend::Csharp, Ui::Avalonia);
     let engines = file(&files, "ScreenEngines.cs");
-    assert!(engines.contains("public static readonly Func<IFrames> Screen = () => ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [], true, new EngineLimits(1, 256));"), "{engines}");
+    assert!(engines.contains("public static readonly Func<IFrames> Screen = () => ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, new EngineLimits(1, 256));"), "{engines}");
     let view = file(&files, "Windows/PlayView.axaml");
     assert!(view.contains("Grid.RowSpan=\"10\" Runs=\"{x:Static local:ScreenEngines.Screen}\" State=\"{Binding Sky}\" UnitsWidth=\"160\" UnitsHeight=\"100\""), "{view}");
     // What the engine tells runs its handler with its values; a handler tells it through the canvas's state.
@@ -62,4 +62,15 @@ fn the_web_stacks_answer_tells_and_send_hears() {
     let all: String = files.iter().map(|f| f.text.as_str()).collect();
     assert!(all.contains("(\"Play\", \"finished\")") && all.contains("(\"Play\", \"lapped\")"), "the tells' handlers answer");
     assert!(all.contains("ui.hear(\"sky\", \"start\", vec![to_value(&2"), "a hear goes with the reply");
+}
+
+/// The log of an engine beside the screen goes into the application's log
+/// through the shell; the Rust stack's shell is generated and writes the
+/// line to the standard error, where the backend's engines write.
+#[test]
+fn the_rust_shell_logs_the_engines_lines() {
+    let files = files(Backend::Rust, Ui::Web);
+    let main = file(&files, "src/main.rs");
+    assert!(main.contains("fn log_line(line: String) {\n    eprintln!(\"{line}\");\n}"), "{main}");
+    assert!(main.contains("            log_line,\n"), "{main}");
 }

@@ -125,6 +125,9 @@ type Service struct {
 	next  int
 	// openURL opens a link in the person's browser.
 	openURL func(address string) error
+	// logLine writes a line of an engine beside the screen into the
+	// application's log: the standard error, where the backend's engines write.
+	logLine func(line string)
 	// partWindows is the desktop window an open window's custom parts are
 	// in, by the open window's number (DESIGN 6.5).
 	partWindows map[uint64]string
@@ -142,7 +145,7 @@ func New(options Options) *Service {
 	clarity.LoadTranslations(options.Model)
 	return &Service{options: options, apart: map[string]apart{}, partWindows: map[uint64]string{}, openURL: func(address string) error {
 		return application.Get().Browser.OpenURL(address)
-	}}
+	}, logLine: func(line string) { fmt.Fprintln(os.Stderr, line) }}
 }
 
 // opensLink says whether a link of a markdown part may open: a web or a
@@ -218,6 +221,7 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		Store    string              `json:"store"`
 		Path     string              `json:"path"`
 		Address  string              `json:"address"`
+		Line     string              `json:"line"`
 		Settings map[string]any      `json:"settings"`
 		// The secret settings by name (DESIGN 5.27): kept in the system's protected store, never in the file.
 		Secrets  []string        `json:"secrets"`
@@ -357,6 +361,9 @@ func (c *Service) Invoke(ctx context.Context, command string, args json.RawMessa
 		if err := c.openURL(a.Address); err != nil {
 			return Answer{Error: fmt.Sprintf("cannot open %s: %v", a.Address, err)}
 		}
+		return Answer{}
+	case "log_line":
+		c.logLine(a.Line)
 		return Answer{}
 	case "quit_app":
 		c.toScreen.Store(false)

@@ -784,6 +784,13 @@ fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<Str
     locked(&app, |db| clarity_runtime::picture::data_url(&db.store_file(&store, &path)?))
 }}
 
+/// A line of an engine beside the screen, into the application's log: the
+/// standard error, where the backend's engines write.
+#[tauri::command]
+fn log_line(line: String) {{
+    eprintln!("{{line}}");
+}}
+
 /// Opens a link of a markdown part in the person's browser: only a web or a
 /// mail address, as on every stack.
 #[tauri::command]
@@ -845,6 +852,7 @@ fn main() {{
             set_language,
             set_title,
             open_link,
+            log_line,
             quit_app
         ])
         .run(tauri::generate_context!())

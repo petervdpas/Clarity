@@ -99,6 +99,12 @@ TEST(the_shell_answers_the_renderers_commands) {
              json::parse(R"({"error":"a link opens only an http, https or mailto address, not file:///etc/passwd"})"));
     CHECK_EQ(opened_link, "https://example.com/rules");
 
+    // An engine beside the screen logs through the shell: into the application's log.
+    std::string logged;
+    service.log_line = [&](const std::string& line) { logged = line; };
+    CHECK_EQ(service.invoke("log_line", {{"line", "engine Screen: level 2"}}), json::parse(R"({"value":null})"));
+    CHECK_EQ(logged, "engine Screen: level 2");
+
     // The window a command came from takes its title, and a window of its own starts where it was opened.
     Fake main;
     service.invoke("set_title", {{"title", "Customer card"}}, &main);

@@ -5,6 +5,7 @@ app Game
 
 engine Screen from "screen.wasm"
     beside the screen
+    uses log
     on open
     limit 1 second
     tells finished(time: integer)

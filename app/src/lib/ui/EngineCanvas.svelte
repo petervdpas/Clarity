@@ -17,6 +17,7 @@
   import type { ScreenEngine } from "../generated/ScreenEngine";
   import type { ShownText } from "../format";
   import { useLive } from "../live";
+  import { logLine } from "../backend";
   import type { JsonValue } from "../generated/serde_json/JsonValue";
 
   let {
@@ -107,7 +108,8 @@
       language,
       onDraw: (shapes) => (drawing = shapes),
       onFail: (problem) => (stopped = problem),
-      onLog: (line) => console.info(line),
+      // In an application the line goes into its log, through the shell; in the designer to the console.
+      onLog: (line) => (live ? void logLine(line) : console.info(line)),
       onReady: (taken) => (hears = taken),
       onTell: (tell, values) => connected?.tell(tell, values as JsonValue[]),
     });

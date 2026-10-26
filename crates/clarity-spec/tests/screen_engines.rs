@@ -14,6 +14,7 @@ const PLAY: &str = "module play
 
 engine Screen from \"screen.wasm\"
     beside the screen
+    uses log
     on open
     limit 1 second
 
@@ -94,7 +95,7 @@ fn the_model_carries_the_engines_beside_the_screen() {
     assert_eq!(preview.screen_engines.len(), 1);
     let screen = &preview.screen_engines[0];
     assert_eq!((screen.name.as_str(), screen.opens, screen.seconds, screen.megabytes), ("Screen", true, 1, engines::DEFAULT_MEGABYTES));
-    assert!(screen.uses.is_empty());
+    assert_eq!(screen.uses, ["log"]);
     use base64::Engine as _;
     assert_eq!(base64::engine::general_purpose::STANDARD.decode(&screen.wasm).unwrap(), SCREEN_ENGINE);
 }
@@ -116,6 +117,7 @@ const GAME: &str = "module play
 
 engine Screen from \"screen.wasm\"
     beside the screen
+    uses log
     on open
     limit 1 second
     tells finished(time: integer)

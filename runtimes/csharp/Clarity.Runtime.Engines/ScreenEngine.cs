@@ -34,9 +34,14 @@ public sealed class ScreenEngine : IFrames
     /// Loads <paramref name="bytes"/> as engine <paramref name="name"/> for one canvas;
     /// refuses a module that is no engine, imports more than <paramref name="uses"/> or
     /// lacks its frame loop. With <paramref name="opens"/>, clarity_open runs before the first frame.
+    /// The services are the process's unless <paramref name="services"/> fixes them: the log
+    /// goes to the standard error, the application's log, where the backend's engines write.
     /// </summary>
-    public static ScreenEngine Load(string name, byte[] bytes, IReadOnlyList<string> uses, bool opens, EngineLimits limits) =>
-        new(name, Engine.Load(name, bytes, new EngineDeclaration([], uses, limits, EngineState.PerWindow, opens, Screen: true)));
+    public static ScreenEngine Load(string name, byte[] bytes, IReadOnlyList<string> uses, bool opens, EngineLimits limits, EngineServices? services = null)
+    {
+        var engine = Engine.Load(name, bytes, new EngineDeclaration([], uses, limits, EngineState.PerWindow, opens, Screen: true));
+        return new(name, services is null ? engine : engine.WithServices(services));
+    }
 
     public Drawn Frame(double ms, IReadOnlyList<ScreenInput> input)
     {

@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isTauri, transport, unwrap } from "./backend.ts";
+import { isTauri, logLine, transport, unwrap } from "./backend.ts";
 
 test("a Tauri window has Tauri's internals; a Wails window does not", () => {
   assert.equal(isTauri({ __TAURI_INTERNALS__: {} }), true);
@@ -22,4 +22,19 @@ test("each shell is told by what it puts in the page", () => {
   // The C and C++ shells bind one function into the page, through webview.
   assert.equal(transport({ clarityInvoke: () => {} }), "webview");
   assert.equal(transport({}), "wails");
+});
+
+test("an engine's line goes to the shell, which writes it into the application's log", async () => {
+  const sent: [string, Record<string, unknown>][] = [];
+  const page = globalThis as unknown as { clarityInvoke?: unknown };
+  page.clarityInvoke = async (command: string, args: Record<string, unknown>) => {
+    sent.push([command, args]);
+    return { value: null };
+  };
+  try {
+    await logLine("engine Screen: level 2");
+  } finally {
+    delete page.clarityInvoke;
+  }
+  assert.deepEqual(sent, [["log_line", { line: "engine Screen: level 2" }]]);
 });

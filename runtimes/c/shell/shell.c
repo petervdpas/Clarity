@@ -53,6 +53,7 @@ struct ClarityService {
     int next;
     void (*quit)(void* context);
     bool (*open_link)(const char* address);
+    void (*log_line)(const char* line);
     void (*open_desktop)(void* context, ClarityDesktop* opener, const char* name, int width, int height);
     void* context;
     /// The title bar's close of the main window goes to the screen.
@@ -110,6 +111,11 @@ void clarity_service_on_link(ClarityService* service, bool (*open_link)(const ch
 static bool link_opens(const char* address) {
     return strncmp(address, "http://", 7) == 0 || strncmp(address, "https://", 8) == 0 || strncmp(address, "mailto:", 7) == 0;
 }
+
+void clarity_service_on_log(ClarityService* service, void (*log_line)(const char* line)) { service->log_line = log_line; }
+
+/// A line into the application's log: the standard error, where the backend's engines write.
+static void log_to_stderr(const char* line) { fprintf(stderr, "%s\n", line); }
 
 void clarity_service_on_desktop(ClarityService* service, void (*quit)(void*), void (*open_desktop)(void*, ClarityDesktop*, const char*, int, int), void* context) {
     service->quit = quit;
@@ -304,6 +310,10 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         if (!link_opens(address)) return error_text(clarity_format("a link opens only an http, https or mailto address, not %s", address));
         bool (*open_link)(const char*) = s->open_link ? s->open_link : clarity_open_in_browser;
         return open_link(address) ? value(NULL) : error_text(clarity_format("cannot open %s", address));
+    }
+    if (strcmp(command, "log_line") == 0) {
+        (s->log_line ? s->log_line : log_to_stderr)(text_of(args, "line"));
+        return value(NULL);
     }
     if (strcmp(command, "quit_app") == 0) {
         s->to_screen = false;

@@ -94,6 +94,8 @@ public:
 
 /// Opens a link in the person's browser; whether it could.
 bool open_in_browser(const std::string& address);
+/// Writes a line into the application's log: the standard error.
+void log_to_stderr(const std::string& line);
 
 /// Answers the renderer's commands.
 class Service {
@@ -109,6 +111,9 @@ public:
     std::function<void()> quit;
     /// Opens a link of a markdown part in the person's browser; whether it could.
     std::function<bool(const std::string& address)> open_link = open_in_browser;
+    /// Writes a line of an engine beside the screen into the application's
+    /// log: the standard error, where the backend's engines write.
+    std::function<void(const std::string& line)> log_line = log_to_stderr;
     /// Opens a desktop window of its own, named `name`, for the opener, at
     /// `size` (its window's, or the standard one); set by `run`.
     std::function<void(Desktop& opener, const std::string& name, Size size)> open_desktop;

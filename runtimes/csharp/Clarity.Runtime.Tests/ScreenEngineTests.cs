@@ -16,8 +16,10 @@ public sealed class ScreenEngineTests
     static byte[] Screen => File.ReadAllBytes(Path.Combine(Folder, "engines", Cases.GetProperty("engine").GetString()!));
     static string Name => Cases.GetProperty("name").GetString()!;
 
-    static ScreenEngine Load(bool opens, uint seconds = 5, byte[]? bytes = null) =>
-        ScreenEngine.Load(Name, bytes ?? Screen, [], opens, new EngineLimits(seconds, 256));
+    static string[] Uses => Cases.GetProperty("uses").EnumerateArray().Select(u => u.GetString()!).ToArray();
+
+    static ScreenEngine Load(bool opens, uint seconds = 5, byte[]? bytes = null, EngineServices? services = null) =>
+        ScreenEngine.Load(Name, bytes ?? Screen, Uses, opens, new EngineLimits(seconds, 256), services);
 
     [Fact]
     public void Each_frame_gives_the_canvas_s_shapes()
@@ -79,6 +81,18 @@ public sealed class ScreenEngineTests
                 var drawn = engine.Frame(frame.GetProperty("tick").GetDouble(), frame.GetProperty("input").EnumerateArray().Select(InputOf).ToList()).Shapes;
                 Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("draws").GetRawText()), drawn), $"{run.GetProperty("name")}, frame {i++}: {drawn.ToJsonString()}");
             }
+        }
+    }
+
+    [Fact]
+    public void An_engine_beside_the_screen_logs_with_the_service_it_uses()
+    {
+        foreach (var run in Cases.GetProperty("logs").EnumerateArray())
+        {
+            var lines = new List<string>();
+            using var engine = Load(run.GetProperty("opens").GetBoolean(), services: new EngineServices(Log: lines.Add));
+            engine.Frame(0, run.GetProperty("input").EnumerateArray().Select(InputOf).ToList());
+            Assert.Equal(run.GetProperty("lines").EnumerateArray().Select(l => l.GetString()!), lines);
         }
     }
 

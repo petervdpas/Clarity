@@ -42,6 +42,8 @@ std::string text_of(const json& args, const char* key) { return args.contains(ke
 
 }  // namespace
 
+void log_to_stderr(const std::string& line) { std::fprintf(stderr, "%s\n", line.c_str()); }
+
 bool open_in_browser(const std::string& address) {
 #if defined(_WIN32)
     return reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", address.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32;
@@ -167,6 +169,10 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             std::string address = text_of(args, "address");
             if (!link_opens(address)) return {{"error", "a link opens only an http, https or mailto address, not " + address}};
             if (!open_link || !open_link(address)) return {{"error", "cannot open " + address}};
+            return value(nullptr);
+        }
+        if (command == "log_line") {
+            if (log_line) log_line(text_of(args, "line"));
             return value(nullptr);
         }
         if (command == "quit_app") {

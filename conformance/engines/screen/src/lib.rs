@@ -15,10 +15,19 @@
 //! Tells and hears: it tells `lap` with the laps run each time the dot
 //! comes round (every 1600 ms), and `finished` with its time when Escape
 //! goes down. It hears `start(level)`, which starts it again at that level.
+//!
+//! The log: it uses `log`, and writes `level N` when it starts at a level.
 
 use std::cell::{Cell, RefCell};
 
 use serde_json::{Value, json};
+
+// The one service of Clarity it uses (`uses log`).
+#[link(wasm_import_module = "clarity")]
+unsafe extern "C" {
+    /// A line of UTF-8 text into the application's log.
+    fn log(at: *const u8, len: i32);
+}
 
 thread_local! {
     static ELAPSED: Cell<i64> = const { Cell::new(0) };
@@ -166,6 +175,8 @@ pub extern "C" fn start(at: i32, len: i32) -> i64 {
         ELAPSED.set(0);
         LAPS.set(0);
         LEVEL.set(Some(level));
+        let line = format!("level {level}");
+        unsafe { log(line.as_ptr(), line.len() as i32) };
         Ok(Value::Null)
     })
 }

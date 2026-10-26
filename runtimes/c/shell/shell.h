@@ -89,6 +89,9 @@ bool clarity_open_in_browser(const char* address);
 /// How the service opens a link of a markdown part: clarity_open_in_browser
 /// unless set otherwise, as tests do.
 void clarity_service_on_link(ClarityService* service, bool (*open_link)(const char* address));
+/// Where the service writes a line of an engine beside the screen: the
+/// standard error, the application's log, unless set otherwise, as tests do.
+void clarity_service_on_log(ClarityService* service, void (*log_line)(const char* line));
 /// What the service asks of the desktop, set by clarity_shell_run: ending
 /// the program, and opening a desktop window of its own, named `name`, for
 /// the opener, at `width` x `height` (the window's size, or the standard one).

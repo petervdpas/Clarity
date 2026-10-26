@@ -44,6 +44,18 @@ export function openLink(address: string) {
   invoke("open_link", { address }).catch((err) => console.error(`cannot open ${address}: ${err}`));
 }
 
+/**
+ * A line of an engine beside the screen, into the application's log through
+ * the shell, where the backend's engines write; the page's console when the
+ * shell cannot take it.
+ */
+export function logLine(line: string): Promise<void> {
+  return invoke<null>("log_line", { line }).then(
+    () => undefined,
+    () => console.info(line),
+  );
+}
+
 export async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   const shell = transport(globalThis);
   if (shell === "tauri") return tauriInvoke<T>(command, args);

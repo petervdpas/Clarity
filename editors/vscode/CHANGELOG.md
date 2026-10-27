@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.16
+
+- Colors `record`, `const`, the `picture` type, `tell`, `beside` (engines beside the screen) and the project line `engines compiled` or `engines interpreted`.
+
 ## 0.1.15
 
 - Colors `unconnected`, the app's event for when its databases did not open.

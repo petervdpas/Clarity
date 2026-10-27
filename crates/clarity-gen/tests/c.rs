@@ -372,3 +372,26 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let code = file(&files, "src/modules/sales.c");
     assert!(code.contains("clarity_ui_x(ui, \"dial\") + clarity_ui_y(ui, \"dial\")"), "{code}");
 }
+
+/// The web target (DESIGN 7.3): the program serves the renderer to a
+/// browser; beside the desktop target it serves with `--serve`.
+#[test]
+fn the_web_target_serves_the_renderer() {
+    use clarity_project::Target;
+    let project = load_sources([("sales.clarity", SALES)]);
+    let main_of = |targets: Vec<Target>| {
+        let mut settings = settings();
+        settings.stack.targets = targets;
+        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+        assert!(files.iter().any(|f| f.path == "clarity-runtime/shell/serve.c"), "the server is copied in");
+        file(&files, "src/main.c").to_string()
+    };
+    let desktop = main_of(vec![Target::Desktop]);
+    has(&desktop, "    int status = clarity_shell_run(&options);\n");
+    assert!(!desktop.contains("clarity_serve("), "a desktop program serves nothing");
+    let web = main_of(vec![Target::Web]);
+    has(&web, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv));\n");
+    assert!(!web.contains("clarity_shell_run"), "a web program opens no window");
+    let both = main_of(vec![Target::Desktop, Target::Web]);
+    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv));\n    else\n        status = clarity_shell_run(&options);\n");
+}

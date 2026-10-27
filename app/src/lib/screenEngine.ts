@@ -149,7 +149,7 @@ export class ScreenRun {
 
   /** The pointer on the canvas, in its units. */
   pointer(kind: "down" | "move" | "up", x: number, y: number) {
-    if (!this.#ended && this.#hears.pointer) queue(this.#waiting, { pointer: kind, x, y });
+    if (!this.#ended && this.#hears.pointer) queue(this.#waiting, { pointer: kind, x: Math.round(x), y: Math.round(y) });
   }
 
   /** A key on the canvas, by Clarity's name. */
@@ -206,8 +206,9 @@ export class ScreenRun {
     this.#frame = null;
     if (this.#ended) return;
     if (this.#busy === null) {
-      const ms = this.#last === null ? 0 : now - this.#last;
-      this.#last = now;
+      // Whole milliseconds: a browser's frame clock has fractions, which wait for the next frame.
+      const ms = this.#last === null ? 0 : Math.floor(now - this.#last);
+      this.#last = this.#last === null ? now : this.#last + ms;
       const input = this.#waiting;
       this.#waiting = [];
       const first = input[0] === undefined ? "clarity_tick" : "hear" in input[0] ? input[0].hear : "pointer" in input[0] ? "clarity_pointer" : "clarity_key";

@@ -1,0 +1,340 @@
+module invaders
+
+// The pictures of the resources folder the game draws: each invader in two
+// steps of its march, and the ship.
+const squidUp: picture = "squid-1.svg"
+const squidDown: picture = "squid-2.svg"
+const crabUp: picture = "crab-1.svg"
+const crabDown: picture = "crab-2.svg"
+const octopusUp: picture = "octopus-1.svg"
+const octopusDown: picture = "octopus-2.svg"
+const shipArt: picture = "ship.svg"
+const livesPerGame = 3
+
+// What the engine draws: a shape the canvas knows by its op.
+record Shape
+    op: text
+    x: integer
+    y: integer
+    width: integer
+    height: integer
+    color: text, default "text"
+    picture: text
+
+// The game, beside the screen: a fleet of forty marches from side to side
+// and down, faster as it thins; your ship shoots one shot at a time and
+// the fleet drops bombs. Written in Clarity, it runs in the browser.
+engine Fleet
+    beside the screen
+    uses random
+    tells hit(score: integer)
+    tells lost(lives: integer)
+    tells cleared(wave: integer)
+    tells over(score: integer)
+    hears start
+    // The fleet's places, one to forty, and the steps a frame may take.
+    const places = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
+    const steps = [1, 2, 3, 4, 5, 6, 7, 8]
+    keep playing: bool = false
+    keep ship: integer = 80
+    keep left: bool = false
+    keep right: bool = false
+    keep score: integer = 0
+    keep lives: integer = 3
+    keep wave: integer = 1
+    // Milliseconds not yet spent: on steps, on the fleet's march, on its bombs.
+    keep carry: integer = 0
+    keep marchCarry: integer = 0
+    keep bombCarry: integer = 0
+    // Which step of its march the fleet shows.
+    keep raised: bool = false
+    // Where the fleet is, which way it goes, and who of it still stands.
+    keep fleetX: integer = 10
+    keep fleetY: integer = 12
+    keep heading: integer = 1
+    keep standing: list<bool> = []
+    keep columnOf: list<integer> = []
+    keep rowOf: list<integer> = []
+    keep shooting: bool = false
+    keep shotX: integer = 0
+    keep shotY: integer = 0
+    keep bombX: list<integer> = []
+    keep bombY: list<integer> = []
+
+    function clarity_tick(ms: integer)
+        carry = carry + ms
+        marchCarry = marchCarry + ms
+        bombCarry = bombCarry + ms
+        for each in steps
+            if playing and carry >= 16
+                carry = carry - 16
+                step()
+        if playing and marchCarry >= marchEvery()
+            marchCarry = 0
+            march()
+        if playing and bombCarry >= 700
+            bombCarry = 0
+            dropBomb()
+
+    // One step: the ship by the keys held, the shot up, the bombs down.
+    function step()
+        if left
+            moveShip(ship - 2)
+        if right
+            moveShip(ship + 2)
+        if shooting
+            shotY = shotY - 3
+            if shotY < 0
+                shooting = false
+            else
+                hitInvader()
+        let xs: list<integer> = []
+        let ys: list<integer> = []
+        let struck = false
+        for at in places
+            if count(bombX) >= at
+                let x = bombX[at]
+                let y = bombY[at] + 1
+                if y >= 106 and y <= 113 and x >= ship - 6 and x <= ship + 6
+                    struck = true
+                else if y < 120
+                    xs = xs + [x]
+                    ys = ys + [y]
+        bombX = xs
+        bombY = ys
+        if struck
+            shipHit()
+
+    // The fleet steps aside, or down and back at an edge.
+    function march()
+        raised = not raised
+        let leftmost = 160
+        let rightmost = 0
+        let lowest = 0
+        for at in places
+            if standing[at]
+                if xOf(at) < leftmost
+                    leftmost = xOf(at)
+                if xOf(at) > rightmost
+                    rightmost = xOf(at)
+                if yOf(at) > lowest
+                    lowest = yOf(at)
+        if (heading > 0 and rightmost + 11 > 158) or (heading < 0 and leftmost - 2 < 2)
+            fleetY = fleetY + 4
+            heading = 0 - heading
+        else
+            fleetX = fleetX + heading * 2
+        if lowest + 6 >= 104
+            playing = false
+            tell over(score)
+
+    // How long between two steps of the march: faster as the fleet thins and the waves go on.
+    function marchEvery() -> integer
+        let every = 60 + standingCount() * 12 - wave * 20
+        if every < 40
+            return 40
+        return every
+
+    function standingCount() -> integer
+        let n = 0
+        for at in places
+            if standing[at]
+                n = n + 1
+        return n
+
+    function xOf(at: integer) -> integer
+        return fleetX + (columnOf[at] - 1) * 16
+
+    function yOf(at: integer) -> integer
+        return fleetY + (rowOf[at] - 1) * 10
+
+    // One of the fleet, picked at random, drops a bomb.
+    function dropBomb()
+        let alive = standingCount()
+        if alive == 0
+            return
+        let pick = random(alive)
+        let seen = 0
+        for at in places
+            if standing[at]
+                seen = seen + 1
+                if seen == pick
+                    bombX = bombX + [xOf(at) + 5]
+                    bombY = bombY + [yOf(at) + 6]
+
+    // The shot hits the first of the fleet it is in.
+    function hitInvader()
+        for at in places
+            if shooting and standing[at] and shotX >= xOf(at) and shotX <= xOf(at) + 10 and shotY >= yOf(at) and shotY <= yOf(at) + 6
+                standing[at] = false
+                shooting = false
+                score = score + points(rowOf[at])
+                tell hit(score)
+        if standingCount() == 0
+            wave = wave + 1
+            tell cleared(wave)
+            newFleet()
+
+    function points(row: integer) -> integer
+        if row == 1
+            return 30
+        if row <= 3
+            return 20
+        return 10
+
+    function shipHit()
+        lives = lives - 1
+        tell lost(lives)
+        bombX = []
+        bombY = []
+        if lives == 0
+            playing = false
+            tell over(score)
+
+    function fire()
+        if playing and not shooting
+            shooting = true
+            shotX = ship
+            shotY = 104
+
+    function moveShip(to: integer)
+        if to < 6
+            ship = 6
+        else if to > 154
+            ship = 154
+        else
+            ship = to
+
+    // A fresh fleet of five rows of eight, at the top.
+    function newFleet()
+        fleetX = 10
+        fleetY = 12
+        heading = 1
+        marchCarry = 0
+        standing = []
+        columnOf = []
+        rowOf = []
+        for row in [1, 2, 3, 4, 5]
+            for column in [1, 2, 3, 4, 5, 6, 7, 8]
+                standing = standing + [true]
+                columnOf = columnOf + [column]
+                rowOf = rowOf + [row]
+
+    // The ship follows the pointer, and a press fires.
+    function clarity_pointer(kind: text, x: integer, y: integer)
+        if kind != "up"
+            moveShip(x)
+        if kind == "down"
+            fire()
+
+    // Or the arrow keys while they are down, and space fires.
+    function clarity_key(kind: text, key: text)
+        if key == "ArrowLeft"
+            left = kind == "down"
+        if key == "ArrowRight"
+            right = kind == "down"
+        if key == "Space" and kind == "down"
+            fire()
+
+    // The picture of a row of the fleet, in the step of its march.
+    function art(row: integer) -> text
+        if row == 1
+            if raised
+                return squidUp
+            return squidDown
+        if row <= 3
+            if raised
+                return crabUp
+            return crabDown
+        if raised
+            return octopusUp
+        return octopusDown
+
+    function picture(x: integer, y: integer, width: integer, height: integer, art: text) -> Shape
+        let shape = new Shape
+        shape.op = "image"
+        shape.x = x
+        shape.y = y
+        shape.width = width
+        shape.height = height
+        shape.picture = art
+        return shape
+
+    function bar(x: integer, y: integer, width: integer, height: integer, color: text) -> Shape
+        let shape = new Shape
+        shape.op = "rect"
+        shape.x = x
+        shape.y = y
+        shape.width = width
+        shape.height = height
+        shape.color = color
+        return shape
+
+    function clarity_draw() -> list<Shape>
+        let back = new Shape
+        back.op = "clear"
+        back.color = "background"
+        let shapes = [back]
+        for at in places
+            if count(standing) >= at and standing[at]
+                shapes = shapes + [picture(xOf(at), yOf(at), 10, 7, art(rowOf[at]))]
+        shapes = shapes + [picture(ship - 6, 108, 12, 7, shipArt), bar(0, 117, 160, 1, "muted")]
+        if shooting
+            shapes = shapes + [bar(shotX, shotY, 1, 3, "text")]
+        for at in places
+            if count(bombX) >= at
+                shapes = shapes + [bar(bombX[at], bombY[at], 1, 3, "#e5c07b")]
+        return shapes
+
+    // A new game: a fresh fleet, three lives.
+    function start()
+        playing = true
+        score = 0
+        lives = livesPerGame
+        wave = 1
+        ship = 80
+        shooting = false
+        bombX = []
+        bombY = []
+        carry = 0
+        bombCarry = 0
+        newFleet()
+
+app Invaders
+    title @invadersTitle
+    main Play
+
+page Play: window
+    title @playTitle
+    size 780 x 640
+    data score: integer
+    data lives: integer, default 3
+    data wave: integer, default 1
+    canvas name field at 1,1 span 9 rows 11 units 160 x 120 runs Fleet on hit: hit on lost: lost on cleared: cleared on over: over
+    label @scoreLabel name scoreLabel at 10,1 span 3
+    display name scoreShown at 10,2 span 3 rows 2 bind score digits 4
+    label @livesLabel name livesLabel at 10,4 span 3
+    display name livesShown at 10,5 span 3 rows 2 bind lives digits 1
+    label @waveLabel name waveLabel at 10,7 span 3
+    display name waveShown at 10,8 span 3 rows 2 bind wave digits 2
+    button @startCaption name startButton at 10,10 span 3 on click: startGame
+    label @howLabel name howLabel at 1,12 span 12
+
+code Play
+    handler startGame
+        score = 0
+        lives = livesPerGame
+        wave = 1
+        field.start()
+
+    handler hit(points: integer)
+        score = points
+
+    handler lost(left: integer)
+        lives = left
+
+    handler cleared(next: integer)
+        wave = next
+
+    handler over(points: integer)
+        message @gameOver(score = points)

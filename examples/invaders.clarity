@@ -1,0 +1,11 @@
+// The invaders example: a fleet marches down and you shoot it, a game
+// whose engine runs beside the screen, written in Clarity. Its only target
+// is the web: the program is a web server, and the game plays in the
+// browser that visits it. The modules are in the invaders folder next to
+// this file.
+project Invaders
+    title "Invaders"
+    stack go web web
+    output "out"
+    language "en"
+    datasource main sqlite "data/invaders.db"

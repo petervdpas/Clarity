@@ -305,14 +305,14 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     // cannot open at start, the screen shows the window that keeps it first.
     let (start_command, open_db, connecting_manage, connect_command) = match crate::unconnected(project) {
         None => (
-            "#[tauri::command]\nfn start() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n".to_string(),
+            "/// The model and the main window, which the screen starts from.\nfn started() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n\n#[tauri::command]\nfn start() -> Value {\n    started()\n}\n".to_string(),
             "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
             String::new(),
             "",
         ),
         Some(unconnected) => (
             format!(
-                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n",
+                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\nfn started(connecting: &Connecting) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    started(&connecting)\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\nfn connected(app: &App, connecting: &Connecting) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    connected(&app, &connecting)\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n",
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
@@ -320,6 +320,20 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "\n        .manage(Connecting(Mutex::new(problem)))".to_string(),
             "\n            connect,",
         ),
+    };
+    // The web target (DESIGN 7.3): the commands a browser sends, answered by
+    // what the desktop commands call; and main serving them by the targets.
+    let unconnected = crate::unconnected(project).is_some();
+    let run_desktop = "    tauri::Builder::default()";
+    let serve_web = serve_main(unconnected);
+    let targets = &settings.stack.targets;
+    let (web_start, run_desktop) = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
+        (true, false) => (format!("{serve_web}    return;\n    #[allow(unreachable_code)]\n"), run_desktop.to_string()),
+        (true, true) => (
+            format!("    // --serve runs it as a web server, for a browser, in place of its window.\n    if std::env::args().any(|a| a == \"--serve\") {{\n{}        return;\n    }}\n", serve_web.replace("\n    ", "\n        ").replacen("    ", "        ", 1)),
+            run_desktop.to_string(),
+        ),
+        _ => (String::new(), run_desktop.to_string()),
     };
     let settings_commands = format!(
         "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings() -> Map<String, Value> {{\n    {read}\n}}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(settings: Map<String, Value>) -> Answer<()> {{\n    {keep}.map_err(|err| Value::from(err.to_string()))\n}}"
@@ -334,6 +348,7 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
             "    engines::close_window(instance);\n",
         )
     };
+    let served = served_rs(unconnected, close_engines);
     // A second desktop window only where the design marks a target `in new window`.
     let apart = clarity_spec::frame::opens_new_windows(project);
     // Custom parts drawn by native libraries (DESIGN 6.5): the shell's side of the part host.
@@ -804,7 +819,7 @@ fn quit_app(handle: tauri::AppHandle) {{
 }}
 
 {settings_commands}
-
+{served}
 /// The language the screen picked, which text code makes is translated to.
 #[tauri::command]
 fn set_language(language: Option<String>) {{
@@ -821,7 +836,7 @@ fn main() {{
 {parts_start}
 {check_engines}    // Text code makes is translated from the model's translations.
     clarity_runtime::i18n::load(MODEL);
-{open_db}    tauri::Builder::default()
+{open_db}{web_start}{run_desktop}
         .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}
         .invoke_handler(tauri::generate_handler![
             start,
@@ -1090,4 +1105,100 @@ pub const SOURCES: &[(&str, &[&[&str]])] = &[
     }
     out.push_str("];\n");
     if errors.is_empty() { Ok(out) } else { Err(errors) }
+}
+
+/// The commands a browser sends to the web server (DESIGN 7.3), each
+/// answered by what its desktop command calls. What a browser does itself
+/// (its title, links, files and the person's settings) never comes here,
+/// and custom parts and windows of their own are the desktop's.
+fn served_rs(unconnected: bool, close_engines: &str) -> String {
+    let (connecting, start, connect) = if unconnected {
+        (", connecting: &Connecting", "started(connecting)", "        \"connect\" => given(connected(app, connecting)),\n")
+    } else {
+        ("", "started()", "")
+    };
+    format!(
+        r#"
+/// A command a browser sends to the web server (DESIGN 7.3), answered by what
+/// its desktop command calls: `{{"value": ...}}` or `{{"error": ...}}`.
+#[allow(dead_code)]
+fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
+    fn arg<T: serde::de::DeserializeOwned>(args: &Value, name: &str) -> Answer<T> {{
+        serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null)).map_err(|err| Value::from(format!("{{name}}: {{err}}")))
+    }}
+    fn given<T: serde::Serialize>(answer: Answer<T>) -> Value {{
+        match answer {{
+            Ok(value) => serde_json::json!({{ "value": value }}),
+            Err(error) => serde_json::json!({{ "error": error }}),
+        }}
+    }}
+    match command {{
+        "start" => given(Ok({start})),
+{connect}        "start_app" => given(locked(app, |db| on_event(db, WindowState::new("", Map::new()), "start"))),
+        "open_window" => given((|| {{
+            let (window, with): (String, Map<String, Value>) = (arg(&args, "window")?, arg(&args, "with")?);
+            locked(app, |db| open(db, &window, with))
+        }})()),
+        "close_window" => given((|| {{
+            let state: WindowState = arg(&args, "state")?;
+            let instance = state.instance;
+            let reply = locked(app, |db| on_event(db, state, "close"))?;
+{close_engines}            Ok(reply)
+        }})()),
+        "return_to" => given((|| {{
+            let state: WindowState = arg(&args, "state")?;
+            locked(app, |db| on_event(db, state, "return"))
+        }})()),
+        "dispatch_event" => given((|| {{
+            let (state, handler): (WindowState, String) = (arg(&args, "state")?, arg(&args, "handler")?);
+            locked(app, |db| dispatch(db, state, &handler))
+        }})()),
+        "answer_event" => given((|| {{
+            let (state, handler, values): (WindowState, String, Vec<Value>) = (arg(&args, "state")?, arg(&args, "handler")?, arg(&args, "values")?);
+            locked(app, |db| answer_to(db, state, &handler, values))
+        }})()),
+        "ref_options" => given((|| {{
+            let entity: String = arg(&args, "entity")?;
+            locked(app, |db| options(db, &entity))
+        }})()),
+        "field_values" => given((|| {{
+            let (entity, field): (String, String) = (arg(&args, "entity")?, arg(&args, "field")?);
+            locked(app, |db| values_of(db, &entity, &field))
+        }})()),
+        "picture" => given((|| {{
+            let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
+            locked(app, |db| picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::picture::data_url(&bytes)).transpose())
+        }})()),
+        "file_data" => given((|| {{
+            let (entity, id, field): (String, i64, String) = (arg(&args, "entity")?, arg(&args, "id")?, arg(&args, "field")?);
+            locked(app, |db| Ok(picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes))))
+        }})()),
+        "store_file" => given((|| {{
+            let (store, path): (String, String) = (arg(&args, "store")?, arg(&args, "path")?);
+            locked(app, |db| clarity_runtime::picture::data_url(&db.store_file(&store, &path)?))
+        }})()),
+        "set_language" => given((|| {{
+            let language: Option<String> = arg(&args, "language")?;
+            clarity_runtime::i18n::set_language(language.as_deref());
+            Ok(Value::Null)
+        }})()),
+        "log_line" => given((|| {{
+            let line: String = arg(&args, "line")?;
+            eprintln!("{{line}}");
+            Ok(Value::Null)
+        }})()),
+        _ => serde_json::json!({{ "error": format!("there is no command {{command}}") }}),
+    }}
+}}
+"#
+    )
+}
+
+/// main as a web server: the renderer's files from what Tauri embeds, the
+/// commands answered by `served`.
+fn serve_main(unconnected: bool) -> String {
+    let (connecting, given) = if unconnected { ("    let connecting = Connecting(Mutex::new(problem));\n", ", &connecting") } else { ("", "") };
+    format!(
+        "    let app = App(Mutex::new(db));\n{connecting}    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();\n    let assets = context.assets();\n    let files = |path: &str| assets.get(&path.into()).map(|bytes| bytes.into_owned());\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args), &files, &mut |command, args| served(&app{given}, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
+    )
 }

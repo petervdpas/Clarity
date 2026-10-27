@@ -15,6 +15,8 @@ use std::process::Command;
 
 use clarity_project::SourceKind;
 
+mod served;
+
 /// Where builds go: target/generated in the repository, on disk; never the
 /// system's temporary folder, which may live in memory.
 fn scratch() -> std::path::PathBuf {
@@ -557,5 +559,29 @@ fn questions_and_their_answers_build_in_rust() {
     let target = root.join("target/generated");
     let status = Command::new("cargo").args(["build", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", &target).status().unwrap();
     assert!(status.success(), "the generated project does not build; it is in {}", out.display());
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The web target (DESIGN 7.3): a project whose only target is the web
+/// builds into a web server that serves the renderer and answers its
+/// commands, with what the desktop commands call.
+#[test]
+#[ignore]
+fn the_web_target_serves_in_rust() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-build-web-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["target"]).unwrap();
+    patch(&out);
+    let target = root.join("target/generated");
+    let status = Command::new("cargo").args(["build", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", &target).status().unwrap();
+    assert!(status.success(), "the generated project does not build; it is in {}", out.display());
+    let program = target.join("debug").join(if cfg!(windows) { "music.exe" } else { "music" });
+    served::serves(&out, &program, &[], "127.0.0.1:18734");
     std::fs::remove_dir_all(&out).unwrap();
 }

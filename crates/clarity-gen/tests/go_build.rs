@@ -18,6 +18,7 @@ use std::process::Command;
 use clarity_project::{Backend, SourceKind, Ui};
 
 mod scratch;
+mod served;
 use scratch::empty;
 
 /// Where builds go: target/generated in the repository, on disk; never the
@@ -85,6 +86,15 @@ fn checks(out: &Path, runtime: Runtime) {
 }
 
 fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
+    let out = built_in_go(name, program, runtime);
+    // With CLARITY_KEEP set the built application stays, to run it.
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+}
+
+/// Builds example `name` and runs it with `--check`; the folder it is in.
+fn built_in_go(name: &str, program: &str, runtime: Runtime) -> std::path::PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let file = root.join(format!("examples/{name}.clarity"));
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
@@ -105,10 +115,7 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     if project.stored_entities().next().is_some() {
         assert!(out.join("data/app.db").exists());
     }
-    // With CLARITY_KEEP set the built application stays, to run it.
-    if std::env::var_os("CLARITY_KEEP").is_none() {
-        std::fs::remove_dir_all(&out).unwrap();
-    }
+    out
 }
 
 /// The records example on the published runtime module, at the version the
@@ -529,6 +536,19 @@ fn an_engine_beside_the_screen_builds_in_go() {
     write(&out, &files, Runtime::Local);
     checks(&out, Runtime::Local);
     run(&out, "go", &["build", "-o", "play", "."]);
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
+}
+
+/// The invaders example, whose only target is the web: the program is a web
+/// server that serves the game to a browser and answers its commands.
+#[test]
+#[ignore]
+fn the_invaders_example_serves_in_go() {
+    let out = built_in_go("invaders", "Invaders", Runtime::Local);
+    served::serves(&out, &out.join("invaders"), &[], "127.0.0.1:18731");
+    // With CLARITY_KEEP set the built application stays, to run it.
     if std::env::var_os("CLARITY_KEEP").is_none() {
         std::fs::remove_dir_all(&out).unwrap();
     }

@@ -67,8 +67,10 @@ const RUNTIME_FILES: [(&str, &str); 35] = [
 ];
 
 /// The shell and the webview it shows the renderer in.
-const SHELL_FILES: [(&str, &str); 7] = [
+const SHELL_FILES: [(&str, &str); 9] = [
     ("shell/shell.cpp", include_str!("../../../../runtimes/cpp/shell/shell.cpp")),
+    ("shell/serve.cpp", include_str!("../../../../runtimes/cpp/shell/serve.cpp")),
+    ("shell/serve.hpp", include_str!("../../../../runtimes/cpp/shell/serve.hpp")),
     ("shell/shell.hpp", include_str!("../../../../runtimes/cpp/shell/shell.hpp")),
     ("shell/parts.cpp", include_str!("../../../../runtimes/cpp/shell/parts.cpp")),
     ("shell/parts.hpp", include_str!("../../../../runtimes/cpp/shell/parts.hpp")),
@@ -532,6 +534,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
 
 #include "app.hpp"
 #include "schema.hpp"
+#include "shell/serve.hpp"
 #include "shell/shell.hpp"
 
 namespace {program} {{
@@ -607,7 +610,7 @@ public:
         }}
         {program}::AppWindows windows;
         clarity::shell::Options options{{{name}, {title}, {main}, {program}::model(), {program}::page(), &db, &windows, {{{width}, {height}}}}};
-{unconnected_options}        return clarity::shell::run(options);
+{unconnected_options}{run}
     }} catch (const std::exception& e) {{
         std::cerr << e.what() << "\n";
         return 1;
@@ -616,10 +619,27 @@ public:
 "#,
         sources = sources.join(", "),
         stores = stores.join(", "),
+        run = web_run(settings),
         name = string(&crate::settings_program(settings)),
         main = string(main_window),
         // The desktop window opens at the main window's size.
         width = crate::window_size(project, main_window).0,
         height = crate::window_size(project, main_window).1
     )
+}
+
+/// How main runs the program by its targets (DESIGN 7.3): a web server, a
+/// desktop window, or the window with `--serve` running the server instead.
+fn web_run(settings: &Settings) -> String {
+    use clarity_project::Target;
+    let serve = "clarity::shell::serve(options, clarity::shell::serve_address(argc, argv))";
+    let run = "clarity::shell::run(options)";
+    let targets = &settings.stack.targets;
+    match (targets.contains(&Target::Web), targets.contains(&Target::Desktop)) {
+        (true, false) => format!("        return {serve};\n"),
+        (true, true) => format!(
+            "        // --serve runs it as a web server, for a browser, in place of its window.\n        for (int i = 1; i < argc; ++i)\n            if (std::strcmp(argv[i], \"--serve\") == 0) return {serve};\n        return {run};\n"
+        ),
+        _ => format!("        return {run};\n"),
+    }
 }

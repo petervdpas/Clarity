@@ -71,7 +71,7 @@ project Shop
 | Setting | Required | Meaning |
 |---|---|---|
 | `title "text"` | no | The name people see. When it is left out, it is derived from the project name. |
-| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` and `web` for the program with windows, and `cli` for a command-line program beside it (`stack go web desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
+| `stack backend ui target...` | yes | The stack the project is transpiled into, read by position. Backends: `rust`, `go`, `csharp`, `c`, `cpp`. UIs: `web` (the shared web renderer) or `avalonia`. Targets: `desktop` for the program with windows, `web` for a web server that serves it to a browser (Rust, Go, C and C++; with both, `--serve` serves in place of the window; `--address host:port` says where), and `cli` for a command-line program beside it (`stack go web desktop cli`); a project whose only target is `cli` names no UI (`stack go cli`). See [Commands](#commands). |
 | `output "folder"` | no | Where the generated application goes, relative to the project folder. The default is `out`. |
 | `output keeps "name", ...` | no | Folders in the output that are the project's own, which Clarity leaves alone: each the name of one folder, not a path. |
 | `language "tag"` | no | The language the project's texts are written in, as a language tag: `"en"`, `"nl-NL"`. Dates and numbers follow the locale of the person using the application; this language where the system names none. |

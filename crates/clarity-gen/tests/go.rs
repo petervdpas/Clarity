@@ -391,7 +391,9 @@ fn a_wails_application_with_the_web_renderer() {
     has(main, "\tassets, err := fs.Sub(renderer, \"ui\")");
     // The renderer calls the service the program binds: main.Clarity.Invoke.
     has(main, "type Clarity struct {\n\t*shell.Service\n}");
-    has(main, "shell.Run(shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}, bind)");
+    has(main, "options := shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}\n");
+    has(main, "\tif err := shell.Run(options, bind); err != nil {");
+    assert!(!main.contains("shell.Serve"), "a desktop program serves nothing");
     has(main, "func bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}");
 }
 
@@ -706,4 +708,24 @@ fn a_step_without_statements_is_written_as_gofmt_writes_it() {
     settings.datasources[0].url = "env:MUSIC_DATABASE".into();
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "schema.go"), "\t\t// 2: Search albums\n\t\t{},\n");
+}
+
+/// The web target (DESIGN 7.3): the program serves the renderer to a
+/// browser; beside the desktop target it serves with `--serve`.
+#[test]
+fn the_web_target_serves_the_renderer() {
+    use clarity_project::Target;
+    let project = load_sources([("sales.clarity", SALES)]);
+    let main_of = |targets: Vec<Target>| {
+        let mut settings = settings();
+        settings.stack.targets = targets;
+        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+        file(&files, "main.go").to_string()
+    };
+    let web = main_of(vec![Target::Web]);
+    has(&web, "\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {");
+    assert!(!web.contains("shell.Run(options"), "a web program opens no window");
+    let both = main_of(vec![Target::Desktop, Target::Web]);
+    has(&both, "\tif slices.Contains(os.Args[1:], \"--serve\") {\n\t\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {");
+    has(&both, "\tif err := shell.Run(options, bind); err != nil {");
 }

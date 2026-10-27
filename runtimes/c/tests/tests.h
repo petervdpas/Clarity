@@ -42,6 +42,8 @@
     X(code_texts_are_translated_as_every_runtime_does)            \
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
+    X(the_server_serves_the_page_and_answers_its_commands)        \
+    X(the_server_listens_where_it_is_told)                        \
     X(every_open_window_has_its_own_number)                       \
     X(a_closed_window_is_reported_to_what_listens)                \
     X(a_closed_window_is_reported)                                \

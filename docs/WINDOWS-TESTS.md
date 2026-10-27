@@ -77,6 +77,7 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Tells (both): the first number under the canvas counts the laps, one every 1.6 seconds. Click the canvas and press Escape: the second number shows the time.
 - [ ] Hears (both): Start sets the text to "... ms, level 2", the time back near 0 and the laps to 0.
 - [ ] Log (both): run the app from a terminal; each Start writes `engine Screen: level 2` there.
+- [ ] The web target on Windows (Winsock, Tauri's embedded files): `the_web_target_serves_in_c`, `_in_cpp` (cpp_build) and `_in_rust` (build) pass; the invaders example (Go): `the_invaders_example_serves_in_go` with `CLARITY_KEEP=1`, run it, open http://127.0.0.1:8080 in a browser and play.
 - [ ] SVG pictures (C#): `cargo test -p clarity-gen --test csharp_build -- --ignored --exact pictures_build_in_csharp` builds; an app with `image source "logo.svg"` shows it.
 - [ ] The pills example (Go): `the_pills_example_builds_and_runs_in_go` with `CLARITY_KEEP=1`; run it: the pills and the paddle are pictures, Start plays, the mouse moves the paddle.
 - [ ] Written in Clarity (Go): `cargo test -p clarity-gen --test go_build -- --ignored --exact a_clarity_engine_beside_the_screen_builds_in_go` with `CLARITY_KEEP=1`, then run `target/generated/clarity-gen-go-sky/skies.exe`: the dot sits left; Start moves it a little right; ten seconds later the number under it shows the time.
@@ -97,5 +98,6 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - C and C++ need no release: their files are copied into each app.
 - [x] Check that the Rust crate 0.27.0 is on crates.io; its release workflow was still running when last looked at. (On crates.io, 2026-10-25.)
 - [x] NuGet 0.43.0, crate 0.29.0 and Go v0.32.0 (sums recorded) are released: engines written in Clarity are WebAssembly now, so the runtimes' `random` and C's keep helpers went.
-- [ ] Upload NuGet 0.44.0 (SVG pictures in Clarity.Avalonia, the canvas's image shape).
-- [ ] Release the VS Code extension: its grammar knows record, tell, beside, engines, const and picture.
+- [ ] Tag Go runtime v0.33.0 and crate 0.30.0: the web target's server (shell.Serve, clarity_runtime::serve); record the Go sums after the tag.
+- [x] Upload NuGet 0.44.0 (SVG pictures in Clarity.Avalonia, the canvas's image shape).
+- [x] Release the VS Code extension (0.1.16 on the Marketplace; Open VSX has no token): its grammar knows record, tell, beside, engines, const and picture.

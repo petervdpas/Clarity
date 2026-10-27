@@ -892,3 +892,28 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let sales = file(&files, "src/modules/sales.rs");
     assert!(sales.contains("ui.x(\"dial\") + ui.y(\"dial\")"), "{sales}");
 }
+
+/// The web target (DESIGN 7.3): the program serves the renderer to a
+/// browser, its commands answered by what the desktop commands call; beside
+/// the desktop target it serves with `--serve`.
+#[test]
+fn the_web_target_serves_the_renderer() {
+    use clarity_project::Target;
+    let project = load_sources([("sales.clarity", SALES)]);
+    let main_of = |targets: Vec<Target>| {
+        let mut settings = shop();
+        settings.stack.targets = targets;
+        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+        file(&files, "src/main.rs").to_string()
+    };
+    let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
+    let desktop = main_of(vec![Target::Desktop]);
+    assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
+    has(&desktop, "    tauri::Builder::default()");
+    let web = main_of(vec![Target::Web]);
+    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args), &files, &mut |command, args| served(&app, command, args))");
+    has(&web, "        \"open_window\" => given((|| {");
+    let both = main_of(vec![Target::Desktop, Target::Web]);
+    has(&both, "    if std::env::args().any(|a| a == \"--serve\") {\n        let app = App(Mutex::new(db));\n");
+    has(&both, "        return;\n    }\n    tauri::Builder::default()");
+}

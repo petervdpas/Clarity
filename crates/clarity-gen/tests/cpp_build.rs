@@ -12,6 +12,8 @@ use std::process::Command;
 
 use clarity_project::{Backend, Ui};
 
+mod served;
+
 /// Where builds go: target/generated in the repository, on disk; never the
 /// system's temporary folder, which may live in memory.
 fn scratch() -> std::path::PathBuf {
@@ -292,5 +294,27 @@ fn questions_and_their_answers_build_in_cpp() {
     let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The web target (DESIGN 7.3): a project whose only target is the web
+/// builds into a web server that serves the renderer and answers its commands.
+#[test]
+#[ignore]
+fn the_web_target_serves_in_cpp() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.backend = Backend::Cpp;
+    settings.stack.ui = Ui::Web;
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let out = scratch().join(format!("clarity-gen-cpp-web-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
+    let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
+    assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    served::serves(&out, &out.join("build/debug/music"), &[], "127.0.0.1:18733");
     std::fs::remove_dir_all(&out).unwrap();
 }

@@ -134,10 +134,12 @@ pub(crate) const WASM3_FILES: [(&str, &str); 30] = [
     ("third_party/wasm3/wasm3_defs.h", include_str!("../../../../runtimes/c/third_party/wasm3/wasm3_defs.h")),
 ];
 
-/// The shell and the webview it shows the renderer in.
-const SHELL_FILES: [(&str, &str); 8] = [
+/// The shell, the webview it shows the renderer in, and its web server (the web target).
+const SHELL_FILES: [(&str, &str); 10] = [
     ("shell/shell.c", include_str!("../../../../runtimes/c/shell/shell.c")),
     ("shell/shell.h", include_str!("../../../../runtimes/c/shell/shell.h")),
+    ("shell/serve.c", include_str!("../../../../runtimes/c/shell/serve.c")),
+    ("shell/serve.h", include_str!("../../../../runtimes/c/shell/serve.h")),
     ("shell/parts.c", include_str!("../../../../runtimes/c/shell/parts.c")),
     ("shell/parts.h", include_str!("../../../../runtimes/c/shell/parts.h")),
     ("shell/webview.cc", include_str!("../../../../runtimes/c/shell/webview.cc")),
@@ -699,6 +701,7 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
 #include "app.h"
 #include "page.h"
 #include "schema.h"
+#include "shell/serve.h"
 #include "shell/shell.h"
 
 /// The database of each data source: its name, its kind and where it is.
@@ -817,12 +820,12 @@ static bool open_databases(ClarityDb** out) {{
         }}
     }}
     ClarityShellOptions options = {{{name}, {title}, {main}, page_model(), page_html(), db, &windows, {width}, {height}}};
-{unconnected_options}    int status = clarity_shell_run(&options);
-    clarity_db_close(db);
+{unconnected_options}{run}    clarity_db_close(db);
     return status;
 }}
 "#,
         sources = sources.join("\n"),
+        run = web_run(settings, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv));\n", "    int status = clarity_shell_run(&options);\n"),
         stores = stores.join("\n"),
         name = string(&crate::settings_program(settings)),
         main = string(main_window),
@@ -830,4 +833,24 @@ static bool open_databases(ClarityDb** out) {{
         width = crate::window_size(project, main_window).0,
         height = crate::window_size(project, main_window).1
     )
+}
+
+/// How main runs the program by its targets (DESIGN 7.3): a web server, a
+/// desktop window, or the window with `--serve` running the server instead.
+/// Each statement sets `status`.
+pub(crate) fn web_run(settings: &Settings, serve: &str, run: &str) -> String {
+    use clarity_project::Target;
+    let targets = &settings.stack.targets;
+    match (targets.contains(&Target::Web), targets.contains(&Target::Desktop)) {
+        (true, false) => serve.to_string(),
+        (true, true) => {
+            let indented = |s: &str| s.replace("    int status = ", "        status = ");
+            format!(
+                "    // --serve runs it as a web server, for a browser, in place of its window.\n    int status;\n    bool serving = false;\n    for (int i = 1; i < argc; i++)\n        if (strcmp(argv[i], \"--serve\") == 0) serving = true;\n    if (serving)\n{}    else\n{}",
+                indented(serve),
+                indented(run)
+            )
+        }
+        _ => run.to_string(),
+    }
 }

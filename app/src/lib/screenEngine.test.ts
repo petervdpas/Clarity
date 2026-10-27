@@ -280,3 +280,18 @@ test("hears go to the canvas of their window, and wait while it does not show", 
   hears.listen(4, "sky", (hear, values) => got.push([hear, values]));
   assert.deepEqual(got.at(-1), ["start", [9]]);
 });
+
+test("an engine hears whole numbers: milliseconds, their fractions carried, and the pointer's place", () => {
+  const h = harness();
+  h.run.start();
+  h.answer({ kind: "ready", hears: { pointer: true, keys: true } });
+  h.step(1000.4);
+  h.answer({ kind: "drawn", shapes: [], tells: [] });
+  // A browser's frame clock has fractions of a millisecond.
+  h.step(1017.07);
+  assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 16, input: [], language: "nl" });
+  h.answer({ kind: "drawn", shapes: [], tells: [] });
+  h.run.pointer("move", 12.6, 40.2);
+  h.step(1033.74);
+  assert.deepEqual(h.sent.at(-1), { kind: "frame", ms: 17, input: [{ pointer: "move", x: 13, y: 40 }], language: "nl" });
+});

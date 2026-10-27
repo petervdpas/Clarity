@@ -456,6 +456,15 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
         .collect::<Vec<_>>()
         .join(", ");
     let ready = string(&format!("{}: the databases are ready.", pascal(&settings.name)));
+    // The web target (DESIGN 7.3): a server, by itself or with `--serve` beside the desktop window.
+    let run = "\tif err := shell.Run(options, bind); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
+    let serve = "\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
+    let targets = &settings.stack.targets;
+    let serve = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
+        (true, false) => serve.to_string(),
+        (true, true) => format!("\t// --serve runs it as a web server, for a browser, in place of its window.\n\tif slices.Contains(os.Args[1:], \"--serve\") {{\n\t{}\t\treturn\n\t}}\n{run}", serve.replace("\n\t", "\n\t\t")),
+        _ => run.to_string(),
+    };
     // An engine whose file does not fit its declaration stops the application at start.
     let check_engines = if crate::engines(project).is_empty() {
         String::new()
@@ -780,11 +789,8 @@ func main() {{
 \t\tfmt.Fprintln(os.Stderr, err)
 \t\tos.Exit(1)
 \t}}
-{register_parts}\tif err := shell.Run(shell.Options{{Name: {program_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}, bind); err != nil {{
-\t\tfmt.Fprintln(os.Stderr, err)
-\t\tos.Exit(1)
-\t}}
-}}
+{register_parts}\toptions := shell.Options{{Name: {program_text}, Title: {title}, Main: {main_window}, Width: {width}, Height: {height}, Model: model, Assets: assets, Db: db, Windows: windows{{}}{unconnected_options}}}
+{serve}}}
 "
     )
 }

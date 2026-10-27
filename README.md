@@ -38,6 +38,7 @@ examples/                example projects, each a project file with a folder of 
   dice                   dice thrown on a table drawn in 3D with Bevy (a custom part in Rust), with sound and a history of rolls
   waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
   pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
+  invaders               a fleet that marches down and you shoot it: a game served to a browser, the web target, in Go
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

@@ -1,7 +1,7 @@
 //! Parses `code` blocks: handlers, their statements (one per line, blocks
 //! by indentation) and expressions (precedence climbing on one line).
 
-use super::{AskForm, HttpPair, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep,
+use super::{AskForm, HttpPair, NamedArg, HttpMethod, CliDecl, LibraryDecl, LibrarySource, PartDecl, PartLibrary, PartMessage, PartProperty, CommandDecl, CommandOption, EngineBody, EngineState, Keep, ConstDecl,
     Arg, BinaryOp, Branch, CodeBlock, DataEvent, EngineDecl, EngineFunction, EventDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, MessageLevel, OrderKey, Param,
     Stmt, StmtKind, TypeRef, TypeRefKind, UnaryOp,
 };
@@ -66,7 +66,7 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
     let file = if cursor.eat_keyword("from") { cursor.expect_string("the engine's file in the engines folder")? } else { String::new() };
     cursor.expect_end()?;
     let written = file.is_empty();
-    let mut body = EngineBody { keeps: Vec::new(), functions: Vec::new() };
+    let mut body = EngineBody { consts: Vec::new(), keeps: Vec::new(), functions: Vec::new() };
     let mut functions = Vec::new();
     let (mut seconds, mut megabytes, mut limited) = (None, None, false);
     let mut uses = Vec::new();
@@ -201,6 +201,14 @@ pub(crate) fn parse_engine(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> Pa
             })();
             if let Err(diag) = parsed {
                 diagnostics.push(diag);
+            }
+            continue;
+        }
+        if line.peek().is_some_and(|t| t.text == "const") {
+            match parse_const(child) {
+                Ok(_) if !written => diagnostics.push(Diagnostic::error("only an engine written in Clarity has constants", child.line.span)),
+                Ok(decl) => body.consts.push(decl),
+                Err(diag) => diagnostics.push(diag),
             }
             continue;
         }
@@ -339,6 +347,28 @@ pub(crate) fn is_type_word(word: &str) -> bool {
 
 /// `text`, `integer`, `decimal`, `money`, `bool`, `date`, `datetime`,
 /// `list<Entity>`, or the name of an entity or enum.
+/// `const name = value` or `const name: type = value`, `picture` among the types.
+pub(crate) fn parse_const(node: &Node) -> ParseResult<ConstDecl> {
+    no_children(node)?;
+    let mut line = Cursor::new(node.line);
+    line.next();
+    let name = line.expect_ident("the constant's name")?;
+    let (ty, picture) = if line.eat(TokenKind::Colon) {
+        if line.peek().is_some_and(|t| t.text == "picture") {
+            let word = line.expect_ident("a type")?;
+            (Some(TypeRef { kind: TypeRefKind::Text, span: word.span }), true)
+        } else {
+            (Some(parse_type_ref(&mut line)?), false)
+        }
+    } else {
+        (None, false)
+    };
+    line.expect(TokenKind::Assign, "'=' and its value, as in 'const lives = 3'")?;
+    let value = parse_expr(&mut line)?;
+    line.expect_end()?;
+    Ok(ConstDecl { name, ty, picture, value, span: node.span() })
+}
+
 pub(crate) fn parse_type_ref(cursor: &mut Cursor) -> ParseResult<TypeRef> {
     let ident = cursor.expect_ident("a type")?;
     let mut span = ident.span;

@@ -614,8 +614,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("double({})", self.value(arg)),
                         },
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
-                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => format!("nlohmann::json({})", self.shown(arg)),
                     };
                     fields.push(format!("{{{}, {value}}}", string(key)));

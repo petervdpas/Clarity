@@ -380,6 +380,30 @@ fn questions_and_their_answers_build_in_csharp() {
     std::fs::remove_dir_all(&out).unwrap();
 }
 
+/// Pictures of the resources folder, SVG among them (conformance/drawing.json):
+/// an image by name, and a canvas drawing one, build without a warning.
+#[test]
+#[ignore]
+fn pictures_build_in_csharp() {
+    let source = "module art\n\napp Art\n    main Gallery\n\npage Gallery: window\n    image name logo at 1,1 span 3 rows 3 source \"logo.svg\"\n    canvas name field at 4,1 span 6 rows 6 units 160 x 100 on draw: drawField\n\ncode Gallery\n    handler drawField\n        field.image(10, 20, 17, 5, \"logo.svg\")\n";
+    let mut project = clarity_spec::load_sources([("art.clarity", source)]);
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"red\"/></svg>".to_vec();
+    clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    let mut settings = clarity_project::starter("Art", "art");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-csharp-art-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
 /// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
 /// the application builds with the engine embedded and a canvas that runs
 /// it. With CLARITY_KEEP set the built application stays, to run it.

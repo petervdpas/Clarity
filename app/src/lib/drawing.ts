@@ -52,6 +52,7 @@ export function svgOf(
   shape: Shape,
   units: { width: number; height: number },
   shown: (text: ShownText) => string,
+  picture: (name: string) => string | null | undefined = () => null,
 ): { tag: string; attrs: Record<string, string | number>; text?: string } {
   const color = colorOf(shape.color);
   switch (shape.op) {
@@ -74,6 +75,12 @@ export function svgOf(
         attrs: { x: n(shape.x), y: n(shape.y), fill: color, "font-size": n(shape.size ?? 10), "text-anchor": "middle", "dominant-baseline": "central" },
         text: shown(shape.text as ShownText),
       };
+    // A picture of the resources folder, stretched to fill its box; one that is not there draws nothing.
+    case "image": {
+      const href = picture(String(shape.picture ?? ""));
+      if (!href) return { tag: "g", attrs: {} };
+      return { tag: "image", attrs: { x: n(shape.x), y: n(shape.y), width: n(shape.width), height: n(shape.height), href, preserveAspectRatio: "none" } };
+    }
     default:
       return { tag: "g", attrs: {} };
   }

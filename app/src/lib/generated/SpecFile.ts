@@ -3,6 +3,7 @@ import type { App } from "./App";
 import type { CliDecl } from "./CliDecl";
 import type { CodeBlock } from "./CodeBlock";
 import type { CommandDecl } from "./CommandDecl";
+import type { ConstDecl } from "./ConstDecl";
 import type { EngineDecl } from "./EngineDecl";
 import type { Entity } from "./Entity";
 import type { EnumDecl } from "./EnumDecl";
@@ -40,6 +41,10 @@ code: Array<CodeBlock>,
  * Functions and actions declared in this module.
  */
 functions: Array<FunctionDecl>, 
+/**
+ * Its constants (DESIGN 5.12): `const lives = 3`.
+ */
+consts: Array<ConstDecl>, 
 /**
  * Its engines (DESIGN 5.11).
  */

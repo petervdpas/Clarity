@@ -342,8 +342,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("({}) as f64", self.value(arg)),
                         },
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
-                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color, Err(default)) => format!("{default:?}"),
+                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Picture, Err(default)) => format!("{default:?}"),
                         (ShapeValue::Text, Ok(arg)) => format!("serde_json::to_value({}).unwrap_or_default()", self.shown(arg)),
                         (ShapeValue::Text, Err(default)) => format!("{default:?}"),
                     };

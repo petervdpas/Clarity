@@ -1,0 +1,10 @@
+// The pills example: break the wall of pills with a bouncing ball, three
+// balls a game. Its engine runs beside the screen, written in Clarity and
+// run by Clarity's interpreter, in the pills folder next to this file.
+project Pills
+    title "Pills"
+    stack go web desktop
+    output "out"
+    language "en"
+    engines interpreted
+    datasource main sqlite "data/pills.db"

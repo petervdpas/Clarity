@@ -930,8 +930,8 @@ impl<'a> Emitter<'a> {
                             format!("cJSON_AddNumberToObject({json}, {key}, {value});")
                         }
                         (ShapeValue::Number, Err(default)) => format!("cJSON_AddNumberToObject({json}, {key}, {default});"),
-                        (ShapeValue::Color, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
-                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
+                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
                         (ShapeValue::Text, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_text_json({}));", self.shown(arg, &mut pre)),
                     });
                 }

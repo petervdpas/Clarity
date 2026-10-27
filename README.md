@@ -37,6 +37,7 @@ examples/                example projects, each a project file with a folder of 
   orbs                   a game whose field of orbs a native library draws with SFML (a custom part), in C++
   dice                   dice thrown on a table drawn in 3D with Bevy (a custom part in Rust), with sound and a history of rolls
   waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
+  pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

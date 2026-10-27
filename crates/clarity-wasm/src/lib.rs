@@ -49,7 +49,8 @@ pub fn build(project: &Project, name: &str, mode: Mode) -> Result<Vec<u8>, Vec<S
     let types = clarity_spec::code::check::types(&project.files);
     let types = types.get(&file.path).cloned().unwrap_or_default();
     let records: Vec<&clarity_spec::model::Entity> = project.files.iter().flat_map(|f| &f.records).collect();
-    let lowered = lower::engine(&types, &records, engine, body)?;
+    let consts: Vec<&clarity_spec::code::ConstDecl> = project.files.iter().flat_map(|f| &f.consts).collect();
+    let lowered = lower::engine(&types, &records, &consts, engine, body)?;
     let base = match mode {
         Mode::Compiled => SUPPORT,
         Mode::Interpreted => INTERPRETER,

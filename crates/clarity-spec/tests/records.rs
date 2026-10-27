@@ -23,7 +23,7 @@ engine Shapes
         return s
 
     function all() -> list<Shape>
-        return [dot(1), dot(2)]
+        return [dot(1), dot(2)] + [dot(3)]
 
     function rightmost(shapes: list<Shape>) -> integer
         let most = 0

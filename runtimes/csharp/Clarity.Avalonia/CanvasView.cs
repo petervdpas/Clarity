@@ -337,6 +337,9 @@ public class CanvasView : Control
                 case Shape.Ring ring:
                     context.DrawEllipse(null, new Pen(BrushOf(ring.Color), ring.Width * scale), At(ring.X, ring.Y), ring.R * scale, ring.R * scale);
                     break;
+                case Shape.Image image when ResourcePictures.Of(image.Picture) is { } picture:
+                    context.DrawImage(picture, new Rect(At(image.X, image.Y), new Size(image.Width * scale, image.Height * scale)));
+                    break;
                 case Shape.Words words:
                     var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var family) && family is FontFamily f ? f : FontFamily.Default;
                     var text = new FormattedText(Locale.Show(words.Text), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), words.Size * scale, BrushOf(words.Color));

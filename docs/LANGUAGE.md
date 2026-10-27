@@ -124,7 +124,7 @@ translation nl
 
 ### Resources
 
-The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo, its Markdown files, such as the rules of a game, and any other file it needs, such as a PDF manual or a drawing (`.svg`, `.dxf`). Each is a file with a name of its own; how they are named is up to the project (`rules-en.md`, `rules-nl.md`). A part shows one in two ways:
+The `resources` folder of the module folder holds the files the application carries: its fixed pictures, such as a logo (`.png`, `.jpg`, `.gif`, `.bmp`, `.webp` or `.svg`), its Markdown files, such as the rules of a game, and any other file it needs, such as a PDF manual or a drawing (`.dxf`). Each is a file with a name of its own; how they are named is up to the project (`rules-en.md`, `rules-nl.md`). A part shows one in two ways:
 
 - By its `source`, the same file in every language: `image source "logo.png"`, `markdown source "license.md"`.
 - By a key, a file per language: the part names the key (`markdown @gameRules`), and each language file points the key at the file that language shows (`gameRules resource "rules-nl.md"`).
@@ -1297,6 +1297,7 @@ code Main
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
 | `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
 | `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
+| `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
 
 - A color is a color of the theme by name (`"accent"`, `"text"`, a color the theme declares) or written out (`"#101810"`); a name the theme does not have is its text color.
 - The draw handler runs when the window opens and after every other handler of the window, each time on an empty drawing, so the canvas always shows the data as it is. Only a canvas's own draw handler draws on it, and the handlers it calls that nothing else runs: `draw_mark(5, 100, 100)` can draw one square of a board. A handler that an event or another handler also runs cannot draw, since its shapes would land outside a drawing.
@@ -1387,6 +1388,22 @@ action approve(order: Order)
 - **A function** has no effects. It cannot save or delete, call actions, show messages or open windows. That makes it safe to call anywhere, including in conditions.
 - **An action** can change data. Neither functions nor actions talk to the screen: `message`, `open`, `close` and part properties belong in handlers.
 - A function or action with a result returns a value on every path; the checker reports a path that does not.
+
+### Constants
+
+A constant is a value written out once and read by name, never set:
+
+```clarity
+const lives = 3
+const speed: decimal = 1.5
+const levels = [1, 2, 3]
+const pillRed: picture = "pill-red.svg"
+```
+
+- **Where:** a `const` line in a module, read from its code, its windows' handlers and its engines; or inside an engine written in Clarity, read by that engine. An engine's own constant comes before its module's.
+- **What:** a value written out: a number, text, yes or no, a key (`@welcome`), an enum's value, or a list of them. Its type is the value's own, or the one written after the name; a whole number in a `decimal` constant is a decimal.
+- **`picture`** is text naming a picture of the resources folder; the checker finds the file there, once, where the constant is declared.
+- Setting a constant is an error. Generation writes each constant's value where it is used, so every stack and every engine has it alike.
 
 ### Engines
 

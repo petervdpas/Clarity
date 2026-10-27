@@ -23,11 +23,17 @@ public abstract record Shape
     /// Text centered on its point, shown in the person's format.
     public sealed record Words(double X, double Y, Text Text, string Color = "text", double Size = 10) : Shape;
 
+    /// <summary>A picture of the resources folder by its name, stretched to fill its box.</summary>
+    public sealed record Image(double X, double Y, double Width, double Height, string Picture) : Shape;
+
     /// <summary>A shape as a draw handler or an engine sends it (conformance/drawing.json).</summary>
     public static Shape Of(JsonNode sent)
     {
+        // A number, or its text as an engine gives a decimal.
         double N(string name, double otherwise = double.NaN) =>
-            sent[name] is JsonValue v && v.TryGetValue<double>(out var n) ? n : double.IsNaN(otherwise) ? throw new EngineException($"a shape's {name} is no number: {sent.ToJsonString()}") : otherwise;
+            sent[name] is JsonValue v && (v.TryGetValue<double>(out var n) || v.TryGetValue<string>(out var t) && double.TryParse(t, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out n))
+                ? n
+                : double.IsNaN(otherwise) ? throw new EngineException($"a shape's {name} is no number: {sent.ToJsonString()}") : otherwise;
         string T(string name, string otherwise) => sent[name] is JsonValue v && v.TryGetValue<string>(out var t) ? t : otherwise;
         return T("op", "") switch
         {
@@ -37,6 +43,7 @@ public abstract record Shape
             "circle" => new Circle(N("x"), N("y"), N("r"), T("color", "text")),
             "ring" => new Ring(N("x"), N("y"), N("r"), T("color", "text"), N("width", 1)),
             "text" => new Words(N("x"), N("y"), Text.Plain(T("text", "")), T("color", "text"), N("size", 10)),
+            "image" => new Image(N("x"), N("y"), N("width"), N("height"), T("picture", "")),
             var op => throw new EngineException($"'{op}' is no shape: {sent.ToJsonString()}"),
         };
     }

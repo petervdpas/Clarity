@@ -6,6 +6,7 @@
   // when it happens, so it holds however the part is sized.
   import { pointOf, svgOf, type Shape } from "../drawing";
   import type { ShownText } from "../format";
+  import { pictureUrl } from "../pictures.svelte";
 
   let {
     drawing,
@@ -22,7 +23,7 @@
     onpoint?: ((point: { x: number; y: number }) => void) | null;
   } = $props();
 
-  const elements = $derived(drawing.map((shape) => svgOf(shape, units, shown)));
+  const elements = $derived(drawing.map((shape) => svgOf(shape, units, shown, pictureUrl)));
 
   /** The pointer that went down on the canvas: a click is it coming up again. */
   let pressed: number | null = null;

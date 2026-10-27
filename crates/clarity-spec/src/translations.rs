@@ -369,6 +369,9 @@ fn is_shown_property(target: &Expr) -> bool {
 /// once it is a WebAssembly file (DESIGN 5.12, N5b).
 pub fn engine_keys(body: &crate::code::EngineBody) -> Vec<String> {
     let mut shown = Shown::default();
+    for decl in &body.consts {
+        shown.expr(Some(&decl.value));
+    }
     for decl in &body.functions {
         shown.code(&decl.body);
     }
@@ -462,6 +465,13 @@ fn shown(project: &Project) -> Shown {
                 shown.expr(option.help.as_ref());
             }
             shown.code(&command.body);
+        }
+        // A constant's keys are used; its plain text is not read where it is
+        // written (a picture's name, a shape's op), so it is no literal.
+        for decl in file.consts.iter().chain(file.engines.iter().filter_map(|e| e.body.as_ref()).flat_map(|b| &b.consts)) {
+            let mut keys = Shown { place: format!("const {}", decl.name.name), path: shown.path.clone(), ..Shown::default() };
+            keys.expr(Some(&decl.value));
+            shown.uses.extend(keys.uses);
         }
         for engine in &file.engines {
             shown.place = format!("engine {}", engine.name.name);

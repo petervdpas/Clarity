@@ -22,7 +22,7 @@ pub const MARKDOWN_EXTENSION: &str = "md";
 
 /// The kinds of picture every stack shows without extra libraries: the
 /// web renderer, and Avalonia through Skia.
-pub const PICTURE_EXTENSIONS: [&str; 6] = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
+pub const PICTURE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"];
 
 /// The sound files every stack plays (DESIGN 5.22): the browser engines of
 /// the web stacks and SoundFlow on Avalonia read these alike.
@@ -67,7 +67,7 @@ pub enum ResourceKind {
     /// A picture every stack shows, which an image shows.
     Picture,
     Pdf,
-    /// A vector drawing, in SVG or DXF; an image does not show one yet.
+    /// A vector drawing in DXF, which no part shows yet; an SVG is a picture.
     Drawing,
     /// A sound every stack plays, which a sound part plays.
     Sound,
@@ -92,7 +92,7 @@ pub fn kinds() -> Vec<ResourceKindInfo> {
         kind(ResourceKind::Markdown, "Markdown", &[MARKDOWN_EXTENSION]),
         kind(ResourceKind::Picture, "Picture", &PICTURE_EXTENSIONS),
         kind(ResourceKind::Pdf, "PDF", &["pdf"]),
-        kind(ResourceKind::Drawing, "Drawing", &["svg", "dxf"]),
+        kind(ResourceKind::Drawing, "Drawing", &["dxf"]),
         kind(ResourceKind::Sound, "Sound", &SOUND_EXTENSIONS),
         kind(ResourceKind::File, "Other file", &[]),
     ]
@@ -172,8 +172,53 @@ pub fn attach(project: &mut Project, mut files: Vec<ResourceFile>) {
             });
         }
     }
+    // The pictures canvases draw by name, written out in their draw handlers.
+    for file in &project.files {
+        for block in &file.code {
+            for handler in &block.handlers {
+                crate::code::check::each_stmt(&handler.body, &mut |stmt| {
+                    if let crate::code::StmtKind::Draw { canvas, shape, args } = &stmt.kind
+                        && shape.name == "image"
+                        && let Some(crate::code::Expr { kind: crate::code::ExprKind::Str { value }, span }) = args.get(4)
+                        && let Some(message) = named_problem(&format!("{}.image draws", canvas.name), value, &pictures)
+                    {
+                        found.push(Diagnostic::error(message, *span).in_file(&file.path));
+                    }
+                });
+            }
+        }
+    }
+    // Picture constants, of the module and of its engines.
+    for file in &project.files {
+        let consts = file.consts.iter().chain(file.engines.iter().filter_map(|e| e.body.as_ref()).flat_map(|b| &b.consts));
+        for decl in consts.filter(|c| c.picture) {
+            if let crate::code::ExprKind::Str { value } = &decl.value.kind
+                && let Some(message) = named_problem(&format!("const {} is", decl.name.name), value, &pictures)
+            {
+                found.push(Diagnostic::error(message, decl.value.span).in_file(&file.path));
+            }
+        }
+    }
     project.diagnostics.extend(found);
     project.resources = Some(Resources { files, markdown });
+}
+
+/// Why a file is no picture, after its name.
+const NOT_A_PICTURE: &str = "is not a picture every stack can show; use a .png, .jpg, .gif, .bmp, .webp or .svg file";
+
+/// What is wrong with a picture named in code: one a canvas draws
+/// (`field.image(..., "pill.svg")`, `said` "field.image draws") or a
+/// picture constant's (`const pill: picture = "pill.svg"`).
+fn named_problem(said: &str, picture: &str, pictures: &[&str]) -> Option<String> {
+    Some(if !is_picture(picture) {
+        format!("{said} '{picture}', which {NOT_A_PICTURE}")
+    } else if pictures.contains(&picture) {
+        return None;
+    } else if pictures.is_empty() {
+        format!("{said} '{picture}', which is not in the resources folder, which has no pictures yet")
+    } else {
+        format!("{said} '{picture}', which is not in the resources folder; it has {}", pictures.join(", "))
+    })
 }
 
 /// What is wrong with the file a part names as its `source`.
@@ -183,7 +228,7 @@ fn source_problem(kind: WidgetKind, source: &str, pictures: &[&str], documents: 
         WidgetKind::Sound if sounds.contains(&source) => return None,
         WidgetKind::Sound if sounds.is_empty() => format!("sound '{source}' is not in the resources folder, which has no sounds yet"),
         WidgetKind::Sound => format!("sound '{source}' is not in the resources folder; it has {}", sounds.join(", ")),
-        WidgetKind::Image if !is_picture(source) => format!("'{source}' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp or .webp file"),
+        WidgetKind::Image if !is_picture(source) => format!("'{source}' {NOT_A_PICTURE}"),
         WidgetKind::Image if pictures.contains(&source) => return None,
         WidgetKind::Image if pictures.is_empty() => format!("image '{source}' is not in the resources folder, which has no pictures yet"),
         WidgetKind::Image => format!("image '{source}' is not in the resources folder; it has {}", pictures.join(", ")),

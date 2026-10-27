@@ -60,7 +60,7 @@ fn a_canvas_has_units_and_a_draw_handler() {
 #[test]
 fn a_draw_handler_draws_the_shapes_a_canvas_has() {
     let with = |line: &str| errors(&DIAL.replace("        dial.rect(0, 95, 200, 5, \"muted\")\n", &format!("        {line}\n")));
-    assert_has(&with("dial.wobble(1)"), "a canvas draws clear, line, rect, circle, ring and text, not 'wobble'");
+    assert_has(&with("dial.wobble(1)"), "a canvas draws clear, line, rect, circle, ring, text and image, not 'wobble'");
     assert_has(&with("dial.line(1, 2, 3)"), "'line' takes x1, y1, x2, y2, color and width (width can be left out)");
     assert_has(&with("dial.circle(\"a\", 1, 2, \"x\")"), "x of 'circle' is a number, not text");
     assert_has(&with("dial.clear(3)"), "color of 'clear' is text, not integer");

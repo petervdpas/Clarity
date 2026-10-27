@@ -6,6 +6,7 @@
 pub mod tools;
 mod c;
 pub mod calls;
+mod consts;
 pub mod libraries;
 pub mod parts;
 mod commands;
@@ -559,7 +560,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !misfits.is_empty() {
         return Err(misfits);
     }
-    let mut project = compile_engines(with_resource_texts(&calls::filled(project)), settings)?;
+    let mut project = compile_engines(with_resource_texts(&consts::inlined(&calls::filled(project))), settings)?;
     // The keys window and the person's keys, where the project file allows them (DESIGN 5.28).
     project.keys_editable = settings.keys_editable;
     let project = &project;
@@ -623,7 +624,7 @@ pub fn generate_cli(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
-    let project = &compile_engines(with_resource_texts(&calls::filled(project)), settings)?;
+    let project = &compile_engines(with_resource_texts(&consts::inlined(&calls::filled(project))), settings)?;
     match settings.stack.backend {
         Backend::Rust => rust::generate_cli(project, settings),
         Backend::Go => go::generate_cli(project, settings),

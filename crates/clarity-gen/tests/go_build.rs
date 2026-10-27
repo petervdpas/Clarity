@@ -105,7 +105,10 @@ fn builds_and_runs_in_go(name: &str, program: &str, runtime: Runtime) {
     if project.stored_entities().next().is_some() {
         assert!(out.join("data/app.db").exists());
     }
-    std::fs::remove_dir_all(&out).unwrap();
+    // With CLARITY_KEEP set the built application stays, to run it.
+    if std::env::var_os("CLARITY_KEEP").is_none() {
+        std::fs::remove_dir_all(&out).unwrap();
+    }
 }
 
 /// The records example on the published runtime module, at the version the
@@ -353,6 +356,14 @@ fn functions_named_like_types_build_in_go() {
 #[ignore]
 fn the_dial_example_builds_and_runs_in_go() {
     builds_and_runs_in_go("dial", "Dial", Runtime::Local);
+}
+
+/// The pills example: a game like Arkanoid whose engine runs beside the
+/// screen, written in Clarity and run by the interpreter (`engines interpreted`).
+#[test]
+#[ignore]
+fn the_pills_example_builds_and_runs_in_go() {
+    builds_and_runs_in_go("pills", "Pills", Runtime::Local);
 }
 
 /// The calculator example: keys, a display and the person's settings.

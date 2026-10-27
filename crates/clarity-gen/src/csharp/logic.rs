@@ -408,6 +408,7 @@ impl<'a> Emitter<'a> {
                     "rect" => "Rect",
                     "circle" => "Circle",
                     "ring" => "Ring",
+                    "image" => "Image",
                     _ => "Words",
                 };
                 let mut values = Vec::new();
@@ -418,8 +419,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("(double)({})", self.value(arg)),
                         },
                         (ShapeValue::Number, Err(default)) => default.to_string(),
-                        (ShapeValue::Color, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg),
                     });
                 }

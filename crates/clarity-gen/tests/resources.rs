@@ -92,13 +92,14 @@ fn avalonia_embeds_the_resources() {
     assert!(text(&files, "Shop.csproj").contains("<AvaloniaResource Include=\"resources/**\" />"), "{}", text(&files, "Shop.csproj"));
     assert!(text(&files, "Texts.nl.resx").contains("<data name=\"GameRules\" xml:space=\"preserve\">\n    <value># Regels</value>"), "{}", text(&files, "Texts.nl.resx"));
     let view = text(&files, "Windows/HomeView.axaml");
-    assert!(view.contains("Source=\"/resources/logo.png\" Stretch=\"Uniform\""), "{view}");
+    // A picture of the resources by name, SVG or bitmap alike.
+    assert!(view.contains("<c:ResourceImage x:Name=\"image1\"") && view.contains("Picture=\"logo.png\" Stretch=\"Uniform\""), "{view}");
     assert!(view.contains("<c:MarkdownView x:Name=\"licenseText\" Grid.Column=\"0\" Grid.Row=\"3\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Source=\"license.md\" "), "{view}");
     assert!(view.contains("<c:MarkdownView x:Name=\"rulesText\" Grid.Column=\"0\" Grid.Row=\"6\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Markdown=\"{x:Static local:Texts.GameRules}\" "), "{view}");
-    assert!(view.contains("<Image x:Name=\"banner\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"2\" Source=\"{Binding Source={x:Static local:Texts.BannerPicture}, Converter={x:Static local:Shown.Picture}}\" Stretch=\"Uniform\""), "{view}");
+    assert!(view.contains("<Image x:Name=\"banner\" Grid.Column=\"0\" Grid.Row=\"9\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"2\" Source=\"{Binding Source={x:Static local:Texts.BannerPicture}, Converter={x:Static c:ResourcePictures.Named}}\" Stretch=\"Uniform\""), "{view}");
     assert!(view.contains("<c:MarkdownView x:Name=\"notesText\" Grid.Column=\"0\" Grid.Row=\"11\" Grid.ColumnSpan=\"6\" Grid.RowSpan=\"3\" Markdown=\"{Binding Notes}\" "), "{view}");
-    // The picture of a key's value, by its name, from the embedded resources.
-    assert!(text(&files, "Shown.cs").contains("public static readonly IValueConverter Picture"), "{}", text(&files, "Shown.cs"));
+    // The pictures come from Clarity.Avalonia's ResourcePictures, which reads SVG too.
+    assert!(!text(&files, "Shown.cs").contains("new Bitmap("), "{}", text(&files, "Shown.cs"));
 }
 
 /// A project without resources carries no folder for them.

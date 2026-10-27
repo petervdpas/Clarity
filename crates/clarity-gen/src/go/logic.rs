@@ -813,8 +813,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("float64({})", bare(self.value(arg, &mut pre))),
                         },
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
-                        (ShapeValue::Color, Ok(arg)) => bare(self.value(arg, &mut pre)),
-                        (ShapeValue::Color | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => bare(self.value(arg, &mut pre)),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg, &mut pre),
                     };
                     fields.push(format!("{}: {value}", string(key)));

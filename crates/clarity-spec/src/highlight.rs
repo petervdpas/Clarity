@@ -62,6 +62,8 @@ const KEYWORDS: &[&str] = &[
     "http", "get", "post", "put", "header", "json", "query", "when",
     // Custom parts (DESIGN 5.19).
     "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "library", "cmake",
+    // Engines beside the screen and written in Clarity (DESIGN 5.12).
+    "record", "tell", "beside", "engines", "compiled", "interpreted", "const",
     // Parts and the frame.
     "name", "at", "span", "rows", "bind", "placeholder", "tooltip", "taborder", "cancel", "horizontal", "vertical", "edit", "as",
     "switch", "show", "surface", "on", "menu", "toolbar", "ribbon", "sidebar", "footer", "item", "separator", "icon",
@@ -71,7 +73,7 @@ const KEYWORDS: &[&str] = &[
 
 /// Clarity's own types.
 const TYPES: &[&str] =
-    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "color", "id", "ref", "image"];
+    &["text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "file", "bytes", "list", "email", "url", "color", "id", "ref", "image", "picture"];
 
 const LITERALS: &[&str] = &["true", "false", "none"];
 
@@ -83,7 +85,7 @@ pub fn is_word_of_the_language(word: &str) -> bool {
 
 /// Words after which the next word is a name the project gives.
 const NAMING: &[&str] =
-    &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "module", "use", "source", "store", "datasource", "filestore"];
+    &["name", "bind", "handler", "function", "action", "let", "for", "data", "keep", "const", "module", "use", "source", "store", "datasource", "filestore"];
 
 /// The pieces of every line of `source`, in order.
 pub fn highlight(source: &str) -> Vec<Piece> {

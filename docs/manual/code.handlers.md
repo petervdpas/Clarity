@@ -88,7 +88,7 @@ code Main
         dial.text(50, 72, "{speed} km/h")
 ```
 
-The shapes are `clear(color)`, `line(x1, y1, x2, y2, color, width)`, `rect(x, y, width, height, color)`, `circle(x, y, r, color)`, `ring(x, y, r, color, width)` and `text(x, y, text, color, size)`; a width can be left out (1), and so can a text's color and size (`"text"`, 10). A color is a color of the theme by name or written out, `"#101810"`. `sin` and `cos` take degrees.
+The shapes are `clear(color)`, `line(x1, y1, x2, y2, color, width)`, `rect(x, y, width, height, color)`, `circle(x, y, r, color)`, `ring(x, y, r, color, width)`, `text(x, y, text, color, size)` and `image(x, y, width, height, picture)`; a width can be left out (1), and so can a text's color and size (`"text"`, 10). An image draws a picture of the resources folder by its name, an SVG among them, stretched to fill its box; a picture constant (`const pill: picture = "pill.svg"`) names one the checker has found. A color is a color of the theme by name or written out, `"#101810"`. `sin` and `cos` take degrees.
 
 The draw handler runs when the window opens and after every other handler of the window, each time on an empty canvas, so it only says what the canvas shows for the data as it is. The canvas scales its units to fit the part, keeping their proportion, on every stack alike.
 

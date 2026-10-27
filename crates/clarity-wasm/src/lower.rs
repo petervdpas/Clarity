@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use clarity_engine_ir::{self as ir, Arg, Cmp, Condition, IntOp, Kind, NumOp, Place};
 use clarity_spec::code::check::{FileTypes, NameKind, TypeInfo, ValueItem};
-use clarity_spec::code::{BinaryOp, EngineBody, EngineDecl, Expr, ExprKind, FunctionDecl, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp};
+use clarity_spec::code::{BinaryOp, ConstDecl, EngineBody, EngineDecl, Expr, ExprKind, FunctionDecl, Stmt, StmtKind, TextPart, TypeRef, TypeRefKind, UnaryOp};
 use clarity_spec::model::{Entity, Field, FieldType, Literal};
 
 /// The services of Clarity an engine may import.
@@ -58,7 +58,7 @@ fn item_of(list: &TypeInfo) -> Kind {
 }
 
 /// The engine's code as IR.
-pub fn engine(types: &FileTypes, records: &[&Entity], engine: &EngineDecl, body: &EngineBody) -> Result<ir::Engine, Vec<String>> {
+pub fn engine(types: &FileTypes, records: &[&Entity], consts: &[&ConstDecl], engine: &EngineDecl, body: &EngineBody) -> Result<ir::Engine, Vec<String>> {
     let mut errors = Vec::new();
     let services: Vec<String> = engine.uses.iter().filter(|u| SERVICES.contains(&u.name.as_str())).map(|u| u.name.clone()).collect();
     let keeps: Vec<(String, Kind)> = body
@@ -74,7 +74,9 @@ pub fn engine(types: &FileTypes, records: &[&Entity], engine: &EngineDecl, body:
             )
         })
         .collect();
-    let lower = Lower { types, records, keeps: &keeps, functions: &body.functions, services: &services };
+    // The engine's own constants first, then the project's.
+    let consts: Vec<&ConstDecl> = body.consts.iter().chain(consts.iter().copied()).collect();
+    let lower = Lower { types, records, keeps: &keeps, functions: &body.functions, services: &services, consts: &consts };
     let mut ir_keeps = Vec::new();
     for (keep, (_, kind)) in body.keeps.iter().zip(&keeps) {
         let mut scope = Scope::new(&lower);
@@ -103,6 +105,7 @@ struct Lower<'a> {
     keeps: &'a [(String, Kind)],
     functions: &'a [FunctionDecl],
     services: &'a [String],
+    consts: &'a [&'a ConstDecl],
 }
 
 impl Lower<'_> {
@@ -290,6 +293,11 @@ impl<'l, 'a> Scope<'l, 'a> {
                 }
                 joined
             }
+            // A constant: its value, written out where it is used.
+            ExprKind::Name { name } if self.types().name_of(expr) == Some(&NameKind::Const) => {
+                let decl = self.lower.consts.iter().find(|c| c.name.name == *name).ok_or_else(|| format!("there is no const {name}"))?;
+                written(&decl.value, decl.ty.as_ref().map(|t| &t.kind))?
+            }
             ExprKind::Name { name } => match self.place(name, expr)? {
                 (Place::Local(local), kind) => ir::Expr::Local(local, kind),
                 (Place::Kept(index, _), kind) => ir::Expr::Kept(index, kind),
@@ -404,6 +412,29 @@ impl<'l, 'a> Scope<'l, 'a> {
         let result = callee.returns.as_ref().map(kind_of_ref).transpose()?;
         Ok(ir::Expr::Call(index as u32, lowered, result))
     }
+}
+
+/// A value written out, as a constant has it: its own type, or `ty` when it is given.
+fn written(value: &Expr, ty: Option<&TypeRefKind>) -> Result<ir::Expr, String> {
+    let decimal = matches!(ty, Some(TypeRefKind::Decimal | TypeRefKind::Money));
+    Ok(match &value.kind {
+        // A whole number in a decimal constant is a decimal, as where generation writes it out (clarity_gen::consts).
+        ExprKind::Number { value } if decimal && !value.contains('.') => ir::Expr::Decimal(format!("{value}.0")),
+        ExprKind::Number { value } if value.contains('.') => ir::Expr::Decimal(value.clone()),
+        ExprKind::Number { value } => ir::Expr::Int(value.parse().map_err(|_| format!("{value} is no whole number"))?),
+        ExprKind::Unary { op: UnaryOp::Neg, operand } => match written(operand, ty)? {
+            ir::Expr::Int(n) => ir::Expr::Int(-n),
+            ir::Expr::Decimal(d) => ir::Expr::Decimal(format!("-{d}")),
+            other => return Err(format!("{other:?} has no minus")),
+        },
+        ExprKind::Str { value } => ir::Expr::Text(value.clone()),
+        ExprKind::Key { key, .. } => ir::Expr::Text(key.name.clone()),
+        ExprKind::Bool { value } => ir::Expr::Bool(*value),
+        ExprKind::ListOf { items } => ir::Expr::List(items.iter().map(|i| written(i, None)).collect::<Result<_, _>>()?),
+        // An enum's value, by its name.
+        ExprKind::Member { member, .. } => ir::Expr::Text(member.name.clone()),
+        other => return Err(format!("a constant of {other:?} is not compiled yet")),
+    })
 }
 
 /// A field's default: written with `default`, or the empty value of its type.

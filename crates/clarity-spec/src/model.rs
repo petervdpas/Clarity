@@ -41,6 +41,8 @@ pub struct SpecFile {
     pub code: Vec<crate::code::CodeBlock>,
     /// Functions and actions declared in this module.
     pub functions: Vec<crate::code::FunctionDecl>,
+    /// Its constants (DESIGN 5.12): `const lives = 3`.
+    pub consts: Vec<crate::code::ConstDecl>,
     /// Its engines (DESIGN 5.11).
     pub engines: Vec<crate::code::EngineDecl>,
     /// The `cli` block of a command-line program (DESIGN 5.20).

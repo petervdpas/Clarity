@@ -52,8 +52,11 @@ fn a_picture_that_is_not_in_the_folder_is_an_error() {
 
 #[test]
 fn a_picture_must_be_one_every_stack_can_show() {
-    let project = with_files(&HOME.replace("logo.png", "logo.svg"), &["logo.svg"]);
-    assert_eq!(errors(&project), ["'logo.svg' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp or .webp file"]);
+    let project = with_files(&HOME.replace("logo.png", "logo.tiff"), &["logo.tiff"]);
+    assert_eq!(errors(&project), ["'logo.tiff' is not a picture every stack can show; use a .png, .jpg, .gif, .bmp, .webp or .svg file"]);
+    // An SVG is a picture too.
+    let drawn = with_files(&HOME.replace("logo.png", "logo.svg"), &["logo.svg"]);
+    assert_eq!(errors(&drawn), Vec::<String>::new());
 }
 
 /// Pictures inside containers count too.
@@ -200,8 +203,9 @@ fn a_project_folder_brings_its_resources() {
     assert_eq!(resources.markdown["notes.md"], "Notes");
 }
 
-/// Every resource has a type, by its extension: Markdown, a picture, a PDF,
-/// a drawing (SVG or DXF), or another file the application carries as it is.
+/// Every resource has a type, by its extension: Markdown, a picture (SVG
+/// among them), a PDF, a drawing (DXF), or another file the application
+/// carries as it is.
 #[test]
 fn a_resource_has_a_type_by_its_extension() {
     use clarity_spec::resources::{ResourceKind, kind_of, kinds};
@@ -209,16 +213,34 @@ fn a_resource_has_a_type_by_its_extension() {
     assert_eq!(kind_of("Logo.PNG"), ResourceKind::Picture);
     assert_eq!(kind_of("manual.pdf"), ResourceKind::Pdf);
     assert_eq!(kind_of("floor-plan.dxf"), ResourceKind::Drawing);
-    assert_eq!(kind_of("icon.svg"), ResourceKind::Drawing);
+    assert_eq!(kind_of("icon.svg"), ResourceKind::Picture);
     assert_eq!(kind_of("data.csv"), ResourceKind::File);
     assert_eq!(kind_of("roll.WAV"), ResourceKind::Sound);
     // The types a new resource can have, each with its name and extensions; the first extension is the one a file gets.
     let listed: Vec<(ResourceKind, String, Vec<String>)> = kinds().into_iter().map(|k| (k.kind, k.name, k.extensions)).collect();
     assert_eq!(listed[0], (ResourceKind::Markdown, "Markdown".to_string(), vec!["md".to_string()]));
     assert_eq!(listed[1].0, ResourceKind::Picture);
-    assert_eq!(listed[1].2, ["png", "jpg", "jpeg", "gif", "bmp", "webp"]);
+    assert_eq!(listed[1].2, ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"]);
     assert_eq!(listed[2], (ResourceKind::Pdf, "PDF".to_string(), vec!["pdf".to_string()]));
-    assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["svg".to_string(), "dxf".to_string()]));
+    assert_eq!(listed[3], (ResourceKind::Drawing, "Drawing".to_string(), vec!["dxf".to_string()]));
     assert_eq!(listed[4], (ResourceKind::Sound, "Sound".to_string(), vec!["wav".to_string(), "mp3".to_string(), "flac".to_string()]));
     assert_eq!(listed[5], (ResourceKind::File, "Other file".to_string(), vec![]));
+}
+
+const FIELD: &str = "module play
+
+page Play: window
+    canvas name field at 1,1 span 6 rows 6 units 160 x 100 on draw: drawField
+
+code Play
+    handler drawField
+        field.image(10, 20, 17, 5, \"pill.svg\")
+";
+
+/// A canvas draws a picture of the resources folder by its name (conformance/drawing.json).
+#[test]
+fn a_picture_a_canvas_draws_is_in_the_folder() {
+    assert_eq!(errors(&with_files(FIELD, &["pill.svg"])), Vec::<String>::new());
+    assert_eq!(errors(&with_files(FIELD, &["paddle.svg", "rules.md"])), ["field.image draws 'pill.svg', which is not in the resources folder; it has paddle.svg"]);
+    assert_eq!(errors(&with_files(&FIELD.replace("pill.svg", "pill.tiff"), &["pill.tiff"])), ["field.image draws 'pill.tiff', which is not a picture every stack can show; use a .png, .jpg, .gif, .bmp, .webp or .svg file"]);
 }

@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::{AskForm, HttpPair, HttpMethod, NamedArg, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
+use super::{AskForm, ConstDecl, HttpPair, HttpMethod, NamedArg, CommandDecl, EngineBody, EngineState, LibraryDecl, Param, PartDecl,
     BinaryOp, CodeBlock, DataEvent, EFFECTS, EngineDecl, Expr, TextPart, ExprKind, FunctionDecl, FunctionKind, HandlerDecl, OrderKey, Stmt, StmtKind,
     TypeRef, TypeRefKind, UnaryOp,
 };
@@ -528,6 +528,8 @@ pub enum NameKind {
     Handler,
     /// What an engine written in Clarity keeps between calls.
     Kept,
+    /// A constant: `const lives = 3` (DESIGN 5.12).
+    Const,
 }
 
 /// Types and names of one file, keyed by the span (start, end) of each
@@ -610,6 +612,19 @@ impl<'a> Env<'a> {
             .find(|e| e.name.name == name && !e.settings)
             .or_else(|| self.settings.filter(|s| s.name.name == name))
             .or_else(|| self.visible.iter().flat_map(|f| &f.records).find(|r| r.name.name == name))
+    }
+
+    /// A constant of a visible module.
+    fn constant(&self, name: &str) -> Option<&'a ConstDecl> {
+        self.visible.iter().flat_map(|f| &f.consts).find(|c| c.name.name == name)
+    }
+
+    /// The type of a constant: as written, or its value's.
+    fn const_type(&self, decl: &ConstDecl) -> Ty<'a> {
+        match &decl.ty {
+            Some(ty) => self.type_ref(ty).unwrap_or(Ty::Unknown),
+            None => written_type(&decl.value),
+        }
     }
 
     fn enum_decl(&self, name: &str) -> Option<&'a EnumDecl> {
@@ -1002,6 +1017,7 @@ fn owners(file: &SpecFile) -> Vec<Owner<'_>> {
 }
 
 fn check_file(env: &Env, file: &SpecFile, out: &mut Output) {
+    check_consts(env, &file.consts, None, out);
     check_functions(env, file, out);
     for command in &file.commands {
         check_command(env, command, out);
@@ -1346,6 +1362,79 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
     }
 }
 
+/// The type of a value written out, as a constant without a type has it.
+fn written_type<'a>(value: &Expr) -> Ty<'a> {
+    match &value.kind {
+        ExprKind::Number { value } if value.contains('.') => Ty::Decimal,
+        ExprKind::Number { .. } => Ty::Integer,
+        ExprKind::Str { .. } | ExprKind::Text { .. } | ExprKind::Key { .. } => Ty::Text,
+        ExprKind::Bool { .. } => Ty::Bool,
+        ExprKind::Unary { op: UnaryOp::Neg, operand } => written_type(operand),
+        ExprKind::ListOf { items } => match items.first().map(written_type) {
+            Some(Ty::Integer) => Ty::Values(Item::Integer),
+            Some(Ty::Decimal) => Ty::Values(Item::Decimal),
+            Some(Ty::Text) => Ty::Values(Item::Text),
+            Some(Ty::Bool) => Ty::Values(Item::Bool),
+            _ => Ty::Unknown,
+        },
+        _ => Ty::Unknown,
+    }
+}
+
+/// Whether a value is written out, as a constant's is: no names but an enum's values, no calls.
+fn written_out(value: &Expr) -> bool {
+    match &value.kind {
+        ExprKind::Number { .. } | ExprKind::Str { .. } | ExprKind::Bool { .. } | ExprKind::Key { .. } => true,
+        ExprKind::Unary { op: UnaryOp::Neg, operand } => matches!(operand.kind, ExprKind::Number { .. }),
+        ExprKind::ListOf { items } => items.iter().all(written_out),
+        ExprKind::Member { object, .. } => matches!(object.kind, ExprKind::Name { .. }),
+        _ => false,
+    }
+}
+
+/// Constants: each name once, each value written out and of its type.
+fn check_consts(env: &Env, consts: &[ConstDecl], engine: Option<&EngineDecl>, out: &mut Output) {
+    let mut seen: Vec<&str> = Vec::new();
+    for decl in consts {
+        let name = decl.name.name.as_str();
+        if seen.contains(&name) {
+            out.push(Diagnostic::error(format!("there is already a const {name}"), decl.name.span));
+        }
+        seen.push(name);
+        if !written_out(&decl.value) {
+            out.push(Diagnostic::error(format!("const {name} is written out: a number, text, yes or no, a key, an enum value or a list of them"), decl.value.span));
+            continue;
+        }
+        let expected = decl.ty.as_ref().map(|t| env.type_ref(t)).transpose().unwrap_or_else(|message| {
+            out.push(Diagnostic::error(message, decl.span));
+            None
+        });
+        let mut checker = BodyChecker {
+            env,
+            owner: None,
+            handlers: &[],
+            decl: None,
+            handler: None,
+            event: None,
+            returns: None,
+            scopes: vec![HashMap::new()],
+            saves_reported: false,
+            engine,
+            command: None,
+            out,
+        };
+        let ty = checker.expr(&decl.value, expected);
+        if let Some(expected) = expected
+            && !expected.accepts(&ty)
+        {
+            checker.error(format!("const {name} is {}, not {}", expected.name(), ty.name()), decl.value.span);
+        }
+        if decl.picture && !matches!(decl.value.kind, ExprKind::Str { .. }) {
+            checker.error(format!("const {name} is a picture: the name of a file of the resources folder, as in \"pill.svg\""), decl.value.span);
+        }
+    }
+}
+
 /// An engine beside the screen written in Clarity (DESIGN 5.12, N5b): the
 /// frame loop is functions of the interface's names, what it draws a list
 /// of records, and each hear a function of its name with its values.
@@ -1410,6 +1499,7 @@ fn check_functions(env: &Env, file: &SpecFile, out: &mut Output) {
 /// An engine written in Clarity: what it keeps starts as a value of its
 /// type, and its functions are checked with those values in scope.
 fn check_engine_body(env: &Env, engine: &EngineDecl, body: &EngineBody, out: &mut Output) {
+    check_consts(env, &body.consts, Some(engine), out);
     let mut kept = HashMap::new();
     for keep in &body.keeps {
         let ty = env.type_ref(&keep.ty).unwrap_or_else(|message| {
@@ -1588,6 +1678,8 @@ pub enum ShapeValue {
     Color,
     /// Text shown in the person's format, with slots.
     Text,
+    /// A picture of the resources folder, by its name.
+    Picture,
 }
 
 /// A shape a draw handler draws on its canvas: its name and its values, in
@@ -1597,7 +1689,7 @@ pub struct Shape {
     pub values: &'static [(&'static str, ShapeValue, Option<&'static str>)],
 }
 
-pub const SHAPES: [Shape; 6] = [
+pub const SHAPES: [Shape; 7] = [
     Shape { name: "clear", values: &[("color", ShapeValue::Color, None)] },
     Shape {
         name: "line",
@@ -1642,6 +1734,16 @@ pub const SHAPES: [Shape; 6] = [
             ("text", ShapeValue::Text, None),
             ("color", ShapeValue::Color, Some("text")),
             ("size", ShapeValue::Number, Some("10")),
+        ],
+    },
+    Shape {
+        name: "image",
+        values: &[
+            ("x", ShapeValue::Number, None),
+            ("y", ShapeValue::Number, None),
+            ("width", ShapeValue::Number, None),
+            ("height", ShapeValue::Number, None),
+            ("picture", ShapeValue::Picture, None),
         ],
     },
 ];
@@ -1909,7 +2011,7 @@ impl<'a> BodyChecker<'_, 'a> {
             };
             let problem = match kind {
                 ShapeValue::Number if !matches!(ty, Ty::Integer | Ty::Decimal | Ty::Money | Ty::Unknown) => Some("a number"),
-                ShapeValue::Color if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
+                ShapeValue::Color | ShapeValue::Picture if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
                 ShapeValue::Text if !ty.is_value() => Some("text or a value"),
                 _ => None,
             };
@@ -2689,6 +2791,12 @@ impl<'a> BodyChecker<'_, 'a> {
                 if let Some((key, part)) = self.part(name) {
                     self.name_is(expr, NameKind::Part);
                     return Some(Place::Part(part, key));
+                }
+                // A constant: the engine's own, then its module's.
+                let constant = self.engine.and_then(|e| e.body.as_ref()).and_then(|b| b.consts.iter().find(|c| c.name.name == *name)).or_else(|| self.env.constant(name));
+                if let Some(decl) = constant {
+                    self.name_is(expr, NameKind::Const);
+                    return Some(Place::Value { ty: self.env.const_type(decl), writable: Err(format!("{name} is a constant and cannot be set")) });
                 }
                 if let Some(decl) = self.env.enum_decl(name) {
                     self.name_is(expr, NameKind::EnumType);
@@ -3736,6 +3844,17 @@ impl<'a> BodyChecker<'_, 'a> {
                     }
                     return l;
                 }
+                // A list of records grows by a list of the same records: `shapes + [dot]`.
+                if let (Ty::List(a), Ty::List(b)) = (l, r)
+                    && a.record
+                    && op == BinaryOp::Add
+                {
+                    if !std::ptr::eq(a, b) {
+                        self.error(format!("cannot add a list of {} to a list of {}", b.name.name, a.name.name), join(left.span, right.span));
+                        return Ty::Unknown;
+                    }
+                    return l;
+                }
                 // `+` joins text with any single value.
                 if op == BinaryOp::Add && (matches!(l, Ty::Text) || matches!(r, Ty::Text)) {
                     if l.is_value() && r.is_value() {
@@ -4252,7 +4371,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
 }
 
 /// Calls `found` for every statement in `body`, nested blocks included.
-fn each_stmt(body: &[Stmt], found: &mut impl FnMut(&Stmt)) {
+pub fn each_stmt(body: &[Stmt], found: &mut impl FnMut(&Stmt)) {
     for stmt in body {
         found(stmt);
         match &stmt.kind {

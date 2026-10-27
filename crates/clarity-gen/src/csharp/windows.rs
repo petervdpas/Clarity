@@ -1436,12 +1436,12 @@ impl<'a> Window<'a> {
                 let named = key.trim_start_matches('{').trim_end_matches('}');
                 let _ = writeln!(
                     out,
-                    "{pad}<Image {at} Source=\"{{Binding Source={{{named}}}, Converter={{x:Static local:Shown.Picture}}}}\" Stretch=\"Uniform\"{plain_state}{extra} />"
+                    "{pad}<Image {at} Source=\"{{Binding Source={{{named}}}, Converter={{x:Static c:ResourcePictures.Named}}}}\" Stretch=\"Uniform\"{plain_state}{extra} />"
                 );
             }
             WidgetKind::Image if p.source.is_some() => {
                 let source = p.source.as_deref().unwrap_or_default();
-                let _ = writeln!(out, "{pad}<Image {at} Source=\"/resources/{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
+                let _ = writeln!(out, "{pad}<c:ResourceImage {at} Picture=\"{}\" Stretch=\"Uniform\"{plain_state}{extra} />", attr(source));
             }
             // A canvas an engine beside the screen draws (DESIGN 5.12), an instance of its own.
             WidgetKind::Canvas if p.runs.is_some() => {

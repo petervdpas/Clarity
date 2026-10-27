@@ -41,6 +41,7 @@ pub fn parse(source: &str, path: &str) -> (SpecFile, Vec<Diagnostic>) {
         themes: Vec::new(),
         code: Vec::new(),
         functions: Vec::new(),
+        consts: Vec::new(),
         engines: Vec::new(),
         clis: Vec::new(),
         commands: Vec::new(),
@@ -375,6 +376,9 @@ fn parse_top_level(
         }
         Some("engine") => {
             file.engines.push(crate::code::parse::parse_engine(node, diagnostics)?);
+        }
+        Some("const") => {
+            file.consts.push(crate::code::parse::parse_const(node)?);
         }
         Some("cli") => {
             file.clis.push(crate::code::parse::parse_cli(node)?);

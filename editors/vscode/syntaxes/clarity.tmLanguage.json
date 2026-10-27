@@ -50,7 +50,7 @@
       "name": "variable.other.constant.key.clarity"
     },
     "keyword": {
-      "match": "\\b(MB|accordion|action|add|after|align|and|app|as|ask|at|auth|background|badge|baseline|before|bind|binds|border|busy|button|buttons|by|cancel|canvas|change|chart|checkbox|cli|click|close|cmake|code|collapsed|collapsible|color|column|columns|command|computed|contains|crate|currency|dark|data|datasource|date|default|delete|desc|display|dll|draw|dropdown|edit|effects|else|engine|ensure|enter|entity|enum|error|exit|external|field|file|files|filestore|find|finish|foldable|folded|font|footer|for|form|format|from|function|get|gives|go|grid|group|handler|header|heading|hears|help|horizontal|http|icon|if|image|in|info|item|json|keep|key|label|labels|language|large|leave|let|library|light|limit|link|list|main|map|markdown|matches|max|maximizable|memo|menu|message|migration|min|mode|module|name|native|new|next|no|not|nuget|number|of|on|open|option|or|order|output|owned|padding|page|pane|panel|part|password|pattern|per|placeholder|pointer|popover|post|preview|print|progress|project|put|query|quit|radio|radius|read|readonly|refuse|reload|remove|rename|require|required|resizable|return|ribbon|rows|save|says|scroll|search|seconds|section|select|separator|settings|shadow|show|sidebar|size|slider|sortable|sound|source|span|spinbox|split|splitter|stack|start|state|status|step|steps|store|style|submit|surface|switch|system|tab|table|taborder|tabs|tags|tells|text|textbox|theme|then|tick|timer|title|to|toggle|toolbar|tooltip|translation|tree|treetable|trend|unconnected|unique|units|use|uses|vertical|warning|weight|when|where|width|window|with|write|x|yes)\\b",
+      "match": "\\b(MB|accordion|action|add|after|align|and|app|as|ask|at|auth|background|badge|baseline|before|beside|bind|binds|border|busy|button|buttons|by|cancel|canvas|change|chart|checkbox|cli|click|close|cmake|code|collapsed|collapsible|color|column|columns|command|compiled|computed|const|contains|crate|currency|dark|data|datasource|date|default|delete|desc|display|dll|draw|dropdown|edit|effects|else|engine|engines|ensure|enter|entity|enum|error|exit|external|field|file|files|filestore|find|finish|foldable|folded|font|footer|for|form|format|from|function|get|gives|go|grid|group|handler|header|heading|hears|help|horizontal|http|icon|if|image|in|info|interpreted|item|json|keep|key|label|labels|language|large|leave|let|library|light|limit|link|list|main|map|markdown|matches|max|maximizable|memo|menu|message|migration|min|mode|module|name|native|new|next|no|not|nuget|number|of|on|open|option|or|order|output|owned|padding|page|pane|panel|part|password|pattern|per|placeholder|pointer|popover|post|preview|print|progress|project|put|query|quit|radio|radius|read|readonly|record|refuse|reload|remove|rename|require|required|resizable|return|ribbon|rows|save|says|scroll|search|seconds|section|select|separator|settings|shadow|show|sidebar|size|slider|sortable|sound|source|span|spinbox|split|splitter|stack|start|state|status|step|steps|store|style|submit|surface|switch|system|tab|table|taborder|tabs|tags|tell|tells|text|textbox|theme|then|tick|timer|title|to|toggle|toolbar|tooltip|translation|tree|treetable|trend|unconnected|unique|units|use|uses|vertical|warning|weight|when|where|width|window|with|write|x|yes)\\b",
       "name": "keyword.other.clarity"
     },
     "literal": {
@@ -69,7 +69,7 @@
               "name": "variable.other.clarity"
             }
           },
-          "match": "\\b(name|bind|handler|function|action|let|for|data|keep|module|use|source|store|datasource|filestore)\\s+([a-z_][A-Za-z0-9_]*)\\b"
+          "match": "\\b(name|bind|handler|function|action|let|for|data|keep|const|module|use|source|store|datasource|filestore)\\s+([a-z_][A-Za-z0-9_]*)\\b"
         },
         {
           "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*",
@@ -151,7 +151,7 @@
     "type": {
       "patterns": [
         {
-          "match": "\\b(text|integer|decimal|money|bool|date|datetime|duration|file|bytes|list|email|url|color|id|ref|image)\\b",
+          "match": "\\b(text|integer|decimal|money|bool|date|datetime|duration|file|bytes|list|email|url|color|id|ref|image|picture)\\b",
           "name": "storage.type.clarity"
         },
         {

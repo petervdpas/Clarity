@@ -1,0 +1,227 @@
+module pills
+
+// The pictures of the resources folder the game draws, and its rules.
+const pillRed: picture = "pill-red.svg"
+const pillYellow: picture = "pill-yellow.svg"
+const pillGreen: picture = "pill-green.svg"
+const pillBlue: picture = "pill-blue.svg"
+const paddleArt: picture = "paddle.svg"
+const ballsPerGame = 3
+
+// What the engine draws: a shape the canvas knows by its op.
+record Shape
+    op: text
+    x: integer
+    y: integer
+    width: integer
+    height: integer
+    r: integer
+    color: text, default "accent"
+    picture: text
+
+// The game, beside the screen: a ball bounces off the walls and the
+// paddle and breaks the pills it hits. Where it lands on the paddle sets
+// its angle. A ball lost below the paddle costs one of three. Written in
+// Clarity; the project file says `engines interpreted`, so Clarity's
+// interpreter runs it.
+engine Breaker
+    beside the screen
+    tells hit(score: integer)
+    tells lost(balls: integer)
+    tells over(score: integer)
+    hears start
+    keep playing: bool = false
+    keep paddle: integer = 80
+    keep ballX: integer = 80
+    keep ballY: integer = 85
+    // Units a step: across from -2 to 2, down 1 or up -1.
+    keep stepX: integer = 1
+    keep stepY: integer = -1
+    keep score: integer = 0
+    keep balls: integer = 3
+    // Milliseconds not yet spent on steps.
+    keep carry: integer = 0
+    keep left: bool = false
+    keep right: bool = false
+    // The pills, row by row: where each is, and whether it is still there.
+    keep pillX: list<integer> = []
+    keep pillY: list<integer> = []
+    keep pillArt: list<text> = []
+    keep standing: list<bool> = []
+
+    function clarity_tick(ms: integer)
+        carry = carry + ms
+        for each in [1, 2, 3, 4, 5, 6, 7, 8]
+            if playing and carry >= 12
+                carry = carry - 12
+                advance()
+
+    // One step: the paddle by the keys held, the ball one step on.
+    function advance()
+        if left
+            movePaddle(paddle - 2)
+        if right
+            movePaddle(paddle + 2)
+        ballX = ballX + stepX
+        ballY = ballY + stepY
+        // The walls.
+        if ballX <= 2 and stepX < 0
+            stepX = 0 - stepX
+        if ballX >= 158 and stepX > 0
+            stepX = 0 - stepX
+        if ballY <= 2 and stepY < 0
+            stepY = 1
+        // The paddle: where the ball lands sets its angle.
+        if stepY > 0 and ballY >= 89 and ballY <= 92 and ballX >= paddle - 16 and ballX <= paddle + 16
+            stepY = -1
+            stepX = angle(ballX - paddle)
+        hitPill()
+        // Below the paddle: the ball is lost.
+        if ballY > 100
+            balls = balls - 1
+            tell lost(balls)
+            if balls == 0
+                playing = false
+                tell over(score)
+            else
+                serve()
+
+    // How the ball leaves the paddle, by how far from its middle it lands.
+    function angle(off: integer) -> integer
+        if off < -8
+            return -2
+        if off < 0
+            return -1
+        if off <= 8
+            return 1
+        return 2
+
+    // The first pill the ball is in breaks, and the ball turns back.
+    function hitPill()
+        let hits = 0
+        for at in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+            if hits == 0 and standing[at] and ballX >= pillX[at] and ballX <= pillX[at] + 17 and ballY >= pillY[at] and ballY <= pillY[at] + 5
+                standing[at] = false
+                hits = 1
+                stepY = 0 - stepY
+                score = score + 1
+                tell hit(score)
+        if not (standing contains true)
+            wall()
+
+    // A new wall: four rows of eight pills, a colour each row.
+    function wall()
+        pillX = []
+        pillY = []
+        pillArt = []
+        standing = []
+        let colors = [pillRed, pillYellow, pillGreen, pillBlue]
+        for row in [1, 2, 3, 4]
+            for column in [1, 2, 3, 4, 5, 6, 7, 8]
+                pillX = pillX + [column * 20 - 18]
+                pillY = pillY + [row * 8 + 4]
+                pillArt = pillArt + [colors[row]]
+                standing = standing + [true]
+
+    // The ball on the paddle, going up.
+    function serve()
+        ballX = paddle
+        ballY = 85
+        stepY = -1
+        stepX = 1
+
+    function movePaddle(to: integer)
+        if to < 15
+            paddle = 15
+        else if to > 145
+            paddle = 145
+        else
+            paddle = to
+
+    // The paddle follows the pointer.
+    function clarity_pointer(kind: text, x: integer, y: integer)
+        if kind != "up"
+            movePaddle(x)
+
+    // Or the arrow keys, while they are down.
+    function clarity_key(kind: text, key: text)
+        if key == "ArrowLeft"
+            left = kind == "down"
+        if key == "ArrowRight"
+            right = kind == "down"
+
+    function clarity_draw() -> list<Shape>
+        let back = new Shape
+        back.op = "clear"
+        back.color = "background"
+        let shapes = [back]
+        for at in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+            if count(standing) >= at and standing[at]
+                shapes = shapes + [pill(pillX[at], pillY[at], pillArt[at])]
+        let bar = new Shape
+        bar.op = "image"
+        bar.x = paddle - 15
+        bar.y = 91
+        bar.width = 30
+        bar.height = 4
+        bar.picture = paddleArt
+        let ball = new Shape
+        ball.op = "circle"
+        ball.x = ballX
+        ball.y = ballY
+        ball.r = 2
+        ball.color = "text"
+        return shapes + [bar, ball]
+
+    // A pill at x, y: its picture.
+    function pill(x: integer, y: integer, art: text) -> Shape
+        let shape = new Shape
+        shape.op = "image"
+        shape.x = x
+        shape.y = y
+        shape.width = 17
+        shape.height = 5
+        shape.picture = art
+        return shape
+
+    // A new game: a full wall, three balls.
+    function start()
+        playing = true
+        score = 0
+        balls = ballsPerGame
+        carry = 0
+        paddle = 80
+        wall()
+        serve()
+
+app Pills
+    title @pillsTitle
+    main Play
+
+page Play: window
+    title @playTitle
+    size 760 x 600
+    data score: integer
+    data balls: integer, default 3
+    canvas name field at 1,1 span 9 rows 10 units 160 x 100 runs Breaker on hit: hit on lost: lost on over: over
+    label @scoreLabel name scoreLabel at 10,1 span 3
+    display name scoreShown at 10,2 span 3 rows 2 bind score digits 3
+    label @ballsLabel name ballsLabel at 10,4 span 3
+    display name ballsShown at 10,5 span 3 rows 2 bind balls digits 1
+    button @startCaption name startButton at 10,7 span 3 on click: startGame
+    label @howLabel name howLabel at 1,11 span 12
+
+code Play
+    handler startGame
+        score = 0
+        balls = ballsPerGame
+        field.start()
+
+    handler hit(points: integer)
+        score = points
+
+    handler lost(left: integer)
+        balls = left
+
+    handler over(points: integer)
+        message @gameOver(score = points)

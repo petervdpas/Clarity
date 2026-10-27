@@ -21,8 +21,14 @@ test("a color is the theme's by name, or written out", () => {
 });
 
 test("each shape the backend sends is an SVG element", () => {
-  const tags = cases.shapes.map((c) => svgOf(c.sends, { width: 200, height: 100 }, (t) => String(t)).tag);
-  assert.deepEqual(tags, ["rect", "line", "line", "rect", "circle", "circle", "circle", "text", "text"]);
+  const picture = (name: string) => `resources/${name}`;
+  const tags = cases.shapes.map((c) => svgOf(c.sends, { width: 200, height: 100 }, (t) => String(t), picture).tag);
+  assert.deepEqual(tags, ["rect", "line", "line", "rect", "circle", "circle", "circle", "text", "text", "image"]);
+  // A picture of the resources folder, stretched to fill its box.
+  const image = svgOf(cases.shapes[9].sends, { width: 200, height: 100 }, String, picture);
+  assert.deepEqual(image.attrs, { x: 10, y: 20, width: 30, height: 15, href: "resources/pill.svg", preserveAspectRatio: "none" });
+  // One that is not there draws nothing.
+  assert.equal(svgOf(cases.shapes[9].sends, { width: 200, height: 100 }, String, () => null).tag, "g");
   const line = svgOf(cases.shapes[1].sends, { width: 200, height: 100 }, String);
   assert.deepEqual(line.attrs, { x1: 10, y1: 20, x2: 30, y2: 40, stroke: "var(--accent)", "stroke-width": 3, "stroke-linecap": "round" });
   const clear = svgOf(cases.shapes[0].sends, { width: 200, height: 100 }, String);

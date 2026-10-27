@@ -840,10 +840,28 @@ pub struct EngineDecl {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct EngineBody {
+    /// Its constants: `const width = 160`.
+    #[serde(default)]
+    pub consts: Vec<ConstDecl>,
     /// What an instance keeps between calls: `keep squares: list<integer> = [0, 0, 0]`.
     pub keeps: Vec<Keep>,
     /// Its functions, with their code; `functions` of the engine are their signatures.
     pub functions: Vec<FunctionDecl>,
+}
+
+/// `const lives = 3`: a value written out, read by name and never set
+/// (DESIGN 5.12), in a module or an engine written in Clarity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ConstDecl {
+    pub name: Ident,
+    /// `const speed: decimal = 1.5`; none takes the value's own type.
+    pub ty: Option<TypeRef>,
+    /// `const pill: picture = "pill.svg"`: text naming a picture of the
+    /// resources folder, which the checker finds there.
+    pub picture: bool,
+    pub value: Expr,
+    pub span: Span,
 }
 
 /// A value an engine written in Clarity keeps between calls, and what it starts as.

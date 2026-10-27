@@ -270,6 +270,12 @@
           <span class="form-label">Keys</span>
           <label><input type="checkbox" checked={settings.keys_editable} onchange={(e) => save({ keys_editable: e.currentTarget.checked })} /> People set the shortcut keys themselves</label>
           <p class="form-help">On, a menu item or button that clicks to <code>keys</code> opens the keys window, where each person changes the keys of the application's commands for themselves.</p>
+          <label class="form-label" for="project-engines">Engines</label>
+          <select id="project-engines" value={settings.engines_interpreted ? "interpreted" : "compiled"} onchange={(e) => save({ engines_interpreted: e.currentTarget.value === "interpreted" })}>
+            <option value="compiled">Compiled</option>
+            <option value="interpreted">Interpreted</option>
+          </select>
+          <p class="form-help">How the engines written in Clarity run. Compiled turns their code into WebAssembly and runs fastest; interpreted carries their code into the file and runs it with Clarity's interpreter. Both give the same answers on every stack.</p>
           <span class="form-label">Themes</span>
           <div class="themes">
             {#each themes as theme (theme)}

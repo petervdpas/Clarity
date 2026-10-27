@@ -117,6 +117,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut language = None;
     let mut currency = None;
     let mut keys_editable = None;
+    let mut engines_interpreted = None;
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let mut filestores: Vec<FileStore> = Vec::new();
@@ -214,6 +215,14 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     return Err(format!("line {line}: write 'keys editable' to let the people using the application set the keys"));
                 }
                 keys_editable = Some(true);
+            }
+            "engines" => {
+                once(engines_interpreted.is_some())?;
+                engines_interpreted = match (a.len(), a.first().and_then(|t| word(t))) {
+                    (1, Some("interpreted")) => Some(true),
+                    (1, Some("compiled")) => Some(false),
+                    _ => return Err(format!("line {line}: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run")),
+                };
             }
             "currency" => {
                 once(currency.is_some())?;
@@ -340,6 +349,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         out: out.unwrap_or_else(|| DEFAULT_OUT.to_string()),
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
+        engines_interpreted: engines_interpreted.unwrap_or(false),
     })
 }
 
@@ -442,6 +452,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if settings.keys_editable {
         lines.push(("keys".into(), 1, "keys editable".to_string()));
+    }
+    if settings.engines_interpreted {
+        lines.push(("engines".into(), 1, "engines interpreted".to_string()));
     }
     for source in &settings.datasources {
         lines.push((

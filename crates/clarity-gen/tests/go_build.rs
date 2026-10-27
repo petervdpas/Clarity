@@ -430,14 +430,26 @@ func TestEachWindowPlaysAGameOfItsOwn(t *testing.T) {
 #[test]
 #[ignore]
 fn an_engine_written_in_clarity_runs_in_go() {
+    board_runs_in_go(false);
+}
+
+/// The same Board run by the interpreter (`engines interpreted`).
+#[test]
+#[ignore]
+fn an_interpreted_engine_runs_in_go() {
+    board_runs_in_go(true);
+}
+
+fn board_runs_in_go(interpreted: bool) {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/board.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
     let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
     settings.stack.backend = Backend::Go;
     settings.stack.ui = Ui::Web;
     settings.datasources[0].url = "data/app.db".into();
+    settings.engines_interpreted = interpreted;
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let out = scratch().join(format!("clarity-gen-go-board-{}", std::process::id()));
+    let out = scratch().join(format!("clarity-gen-go-board-{}-{}", interpreted, std::process::id()));
     write(&out, &files, Runtime::Local);
     std::fs::write(out.join("board_test.go"), BOARD_TEST).unwrap();
     run(&out, "go", &["test", "./..."]);

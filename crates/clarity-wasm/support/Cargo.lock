@@ -63,9 +63,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "clarity-engine-ir"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "clarity-wasm-support"
 version = "0.1.0"
 dependencies = [
+ "clarity-engine-ir",
  "rust_decimal",
  "serde_json",
 ]
@@ -279,6 +287,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]

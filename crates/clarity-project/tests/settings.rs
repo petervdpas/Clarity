@@ -57,6 +57,7 @@ fn shop() -> Settings {
         out: "out".into(),
         keeps: Vec::new(),
         keys_editable: false,
+        engines_interpreted: false,
     }
 }
 
@@ -613,4 +614,22 @@ fn the_keys_window_opens_where_the_project_allows_it() {
     };
     assert_eq!(problems(true), Vec::<String>::new());
     assert_eq!(problems(false), ["keysItem clicks to keys, the keys window, which opens when the project file says keys editable"]);
+}
+
+/// How the project's engines written in Clarity run (DESIGN 5.12):
+/// `engines interpreted`, or compiled without the line (`engines compiled`
+/// says so too).
+#[test]
+fn the_project_says_how_its_clarity_engines_run() {
+    let text = format!("{SHOP}    engines interpreted\n");
+    let settings = parse(&text).unwrap();
+    assert!(settings.engines_interpreted);
+    assert!(!parse(SHOP).unwrap().engines_interpreted);
+    assert!(!parse(&format!("{SHOP}    engines compiled\n")).unwrap().engines_interpreted);
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    engines interpreted\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    let off = write(Some(&written), &Settings { engines_interpreted: false, ..settings }).unwrap();
+    assert!(!off.contains("engines"), "{off}");
+    assert_eq!(parse(&format!("{SHOP}    engines fast\n")).unwrap_err(), "line 11: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run");
 }

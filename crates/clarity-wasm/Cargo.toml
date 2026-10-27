@@ -10,8 +10,10 @@ publish = false
 
 [dependencies]
 clarity-spec = { workspace = true }
+clarity-engine-ir = { path = "ir" }
 wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
 wasmparser = "0.228.0"
+serde_json = { workspace = true }
 
 [dev-dependencies]
 clarity-runtime = { path = "../../runtimes/rust", features = ["engines"] }

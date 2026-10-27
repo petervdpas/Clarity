@@ -8,7 +8,12 @@ use serde_json::json;
 fn the_noughts_board_compiles_and_plays() {
     let source = include_str!("../../../examples/noughts/noughts.clarity");
     let project = clarity_spec::load_sources([("noughts.clarity", source)]);
-    let bytes = clarity_wasm::compile(&project, "Board").unwrap_or_else(|e| panic!("{e:#?}"));
+    for mode in [clarity_wasm::Mode::Compiled, clarity_wasm::Mode::Interpreted] {
+        plays(&project, clarity_wasm::build(&project, "Board", mode).unwrap_or_else(|e| panic!("{mode:?} {e:#?}")));
+    }
+}
+
+fn plays(project: &clarity_spec::Project, bytes: Vec<u8>) {
     let decl = project.files.iter().flat_map(|f| &f.engines).find(|e| e.name.name == "Board").unwrap();
     let functions: Vec<&str> = decl.functions.iter().map(|f| f.name.name.as_str()).collect();
     let declaration = Declaration { functions: &functions, uses: &["random"], limits: Limits { seconds: 5, megabytes: 64 }, state: State::Window, opens: false };

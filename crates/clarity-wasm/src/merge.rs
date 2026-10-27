@@ -10,8 +10,8 @@ use std::collections::HashMap;
 
 use wasm_encoder::reencode::Reencode;
 use wasm_encoder::{
-    CodeSection, ConstExpr, DataSection, ElementSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, ImportSection,
-    MemorySection, MemoryType, Module, TableSection, TypeSection, ValType,
+    CodeSection, ConstExpr, DataSection, ElementSection, Elements, EntityType, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
+    ImportSection, MemorySection, MemoryType, Module, TableSection, TableType, TypeSection, ValType,
 };
 use wasmparser::{ExternalKind, Parser, Payload};
 
@@ -27,6 +27,8 @@ pub struct Support {
     pages: u64,
     /// How many services the engine imports, before every function.
     imports: u32,
+    /// How many entries its function table has.
+    table: u64,
 }
 
 /// The support module's code with its functions moved up past the imports.
@@ -42,12 +44,17 @@ impl Reencode for Shift {
 
 impl Support {
     pub fn read(bytes: &[u8]) -> Result<Support, String> {
-        let mut support = Support { types: 0, functions: 0, rt: HashMap::new(), pages: 0, imports: 0 };
+        let mut support = Support { types: 0, functions: 0, rt: HashMap::new(), pages: 0, imports: 0, table: 0 };
         for payload in Parser::new(0).parse_all(bytes) {
             match payload.map_err(|e| e.to_string())? {
                 Payload::TypeSection(r) => support.types = r.count(),
                 Payload::ImportSection(r) if r.count() > 0 => return Err("it imports, so its functions would move".into()),
                 Payload::FunctionSection(r) => support.functions = r.count(),
+                Payload::TableSection(r) => {
+                    for table in r {
+                        support.table = table.map_err(|e| e.to_string())?.ty.initial;
+                    }
+                }
                 Payload::MemorySection(r) => {
                     for memory in r {
                         support.pages = memory.map_err(|e| e.to_string())?.initial;
@@ -82,6 +89,11 @@ impl Support {
         self.imports + self.functions + index
     }
 
+    /// The function table's entry the `index`th one added gets.
+    pub fn table_entry(&self, index: u32) -> u32 {
+        (self.table + index as u64) as u32
+    }
+
     /// Where the engine's texts start in memory.
     pub fn texts_at(&self) -> u32 {
         (self.pages * PAGE) as u32
@@ -99,6 +111,8 @@ pub struct Code {
     pub texts: Vec<u8>,
     /// The services it imports from `clarity`, by name, with the number of their type in `types`.
     pub imports: Vec<(String, u32)>,
+    /// Functions added to the function table, by number: what the interpreter calls a service through.
+    pub table: Vec<u32>,
 }
 
 impl Code {
@@ -153,7 +167,17 @@ pub fn write(bytes: &[u8], support: &Support, code: Code) -> Result<Vec<u8>, Str
             }
             Payload::TableSection(r) => {
                 let mut tables = TableSection::new();
-                re.parse_table_section(&mut tables, r).map_err(err)?;
+                for table in r {
+                    let ty = table.map_err(|e| e.to_string())?.ty;
+                    let added = code.table.len() as u64;
+                    tables.table(TableType {
+                        element_type: wasm_encoder::RefType::FUNCREF,
+                        table64: ty.table64,
+                        minimum: ty.initial + added,
+                        maximum: ty.maximum.map(|m| m + added),
+                        shared: ty.shared,
+                    });
+                }
                 module.section(&tables);
             }
             Payload::MemorySection(r) => {
@@ -192,6 +216,9 @@ pub fn write(bytes: &[u8], support: &Support, code: Code) -> Result<Vec<u8>, Str
             Payload::ElementSection(r) => {
                 let mut elements = ElementSection::new();
                 re.parse_element_section(&mut elements, r).map_err(err)?;
+                if !code.table.is_empty() {
+                    elements.active(None, &ConstExpr::i32_const(support.table as i32), Elements::Functions(code.table.as_slice().into()));
+                }
                 module.section(&elements);
             }
             Payload::CodeSectionEntry(body) => {

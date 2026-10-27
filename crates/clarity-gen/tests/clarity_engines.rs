@@ -59,3 +59,26 @@ fn a_clarity_engines_keys_are_its_says() {
     let all = all(&files);
     assert!(all.contains("thatSquareIsTaken"), "the keys reach the translations");
 }
+
+/// With `engines interpreted` the engine's file is the interpreter with the
+/// engine's IR inside; without it, compiled code, with no IR.
+#[test]
+fn the_project_chooses_compiled_or_interpreted_engines() {
+    let board = |interpreted: bool| {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let file = root.join("crates/clarity-gen/tests/fixtures/board.clarity");
+        let project = clarity_spec::load_dir(&clarity_project::module_dir(&file)).unwrap();
+        let mut settings = clarity_project::load(&file).settings.expect("the fixture has a project file");
+        settings.stack.backend = Backend::Go;
+        settings.stack.ui = Ui::Web;
+        settings.engines_interpreted = interpreted;
+        let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+        files.into_iter().find(|f| f.path.ends_with("board.wasm")).and_then(|f| f.bytes).expect("board.wasm").into_owned()
+    };
+    let carries_ir = |bytes: &[u8]| {
+        let needle = b"\"name\":\"play\"";
+        bytes.windows(needle.len()).any(|w| w == needle)
+    };
+    assert!(carries_ir(&board(true)), "the interpreted engine carries its IR");
+    assert!(!carries_ir(&board(false)), "the compiled engine carries code, not IR");
+}

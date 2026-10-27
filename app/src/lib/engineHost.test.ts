@@ -129,11 +129,13 @@ test("an engine beside the screen logs with the service it uses", async () => {
   }
 });
 
-test("an engine beside the screen written in Clarity runs as any", async () => {
+test("an engine beside the screen written in Clarity runs as any, compiled or interpreted", async () => {
   const written = screen.written;
-  const bytes = new Uint8Array(read(`engines/${written.engine}`));
-  const engine = await loadEngine(written.name, bytes, { uses: [], opens: false, ...limits, screen: true }, services());
-  written.frames.forEach((f: { tick: number; input: Input[]; tells: unknown; draws: unknown }, i: number) => {
-    assert.deepEqual(engine.frame(f.tick, f.input), { shapes: f.draws, tells: f.tells }, `frame ${i}`);
-  });
+  for (const file of written.engines) {
+    const bytes = new Uint8Array(read(`engines/${file}`));
+    const engine = await loadEngine(written.name, bytes, { uses: [], opens: false, ...limits, screen: true }, services());
+    written.frames.forEach((f: { tick: number; input: Input[]; tells: unknown; draws: unknown }, i: number) => {
+      assert.deepEqual(engine.frame(f.tick, f.input), { shapes: f.draws, tells: f.tells }, `${file}, frame ${i}`);
+    });
+  }
 });

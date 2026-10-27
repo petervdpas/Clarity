@@ -326,12 +326,24 @@ Console.WriteLine("the board played");
 #[test]
 #[ignore]
 fn an_engine_written_in_clarity_runs_in_csharp() {
+    board_runs_in_csharp(false);
+}
+
+/// The same Board run by the interpreter (`engines interpreted`).
+#[test]
+#[ignore]
+fn an_interpreted_engine_runs_in_csharp() {
+    board_runs_in_csharp(true);
+}
+
+fn board_runs_in_csharp(interpreted: bool) {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/noughts.clarity");
     let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
-    let settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    settings.engines_interpreted = interpreted;
     assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "noughts is a C# example");
     let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
-    let root = scratch().join(format!("clarity-gen-csharp-board-{}", std::process::id()));
+    let root = scratch().join(format!("clarity-gen-csharp-board-{}-{}", interpreted, std::process::id()));
     let (out, check) = (root.join("Noughts"), root.join("Check"));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&out).unwrap();

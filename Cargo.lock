@@ -832,6 +832,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clarity-engine-ir"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "clarity-gen"
 version = "0.1.0"
 dependencies = [
@@ -933,6 +940,7 @@ dependencies = [
 name = "clarity-wasm"
 version = "0.1.0"
 dependencies = [
+ "clarity-engine-ir",
  "clarity-runtime",
  "clarity-spec",
  "serde_json",

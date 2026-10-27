@@ -1,8 +1,10 @@
 # The support module of engines written in Clarity (DESIGN 5.12, N5b): the
-# engine interface, values, JSON, kept values. Built once with
+# engine interface, values, JSON, kept values. Built twice:
 #   cargo build --release --target wasm32-unknown-unknown
-# and copied to crates/clarity-wasm/support.wasm, which the compiler adds
-# each engine's functions to.
+# copied to crates/clarity-wasm/support.wasm, which the compiler adds each
+# engine's functions to, and
+#   cargo build --release --target wasm32-unknown-unknown --features interpreter
+# copied to crates/clarity-wasm/interpreter.wasm, which runs an engine's IR.
 [package]
 name = "clarity-wasm-support"
 version = "0.1.0"
@@ -15,7 +17,13 @@ crate-type = ["cdylib"]
 
 [dependencies]
 serde_json = "1"
+clarity-engine-ir = { path = "../ir", optional = true }
 rust_decimal = { version = "1", default-features = false, features = ["std"] }
+
+# Built with it, the module runs an engine's IR (interpreter.wasm), for
+# projects whose engines are interpreted.
+[features]
+interpreter = ["dep:clarity-engine-ir"]
 
 [profile.release]
 opt-level = "s"

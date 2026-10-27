@@ -52,4 +52,9 @@ keeps: Array<string>,
  * Whether the people using the application set its shortcut keys
  * themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
  */
-keys_editable: boolean, };
+keys_editable: boolean, 
+/**
+ * Whether the engines written in Clarity are run by the interpreter
+ * rather than compiled (DESIGN 5.12): `engines interpreted`.
+ */
+engines_interpreted: boolean, };

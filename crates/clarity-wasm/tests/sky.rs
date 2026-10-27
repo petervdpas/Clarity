@@ -1,7 +1,8 @@
 //! The engine beside the screen written in Clarity that the renderers are
 //! tested with (conformance/engines/sky.clarity, screen-engines.json
-//! `written`). The renderers run the compiled sky.wasm, which this test
-//! keeps in step with its source: with CLARITY_RECORD_SKY=1 it writes it.
+//! `written`). The renderers run the compiled sky.wasm and the interpreted
+//! sky-interpreted.wasm, which this test keeps in step with their source:
+//! with CLARITY_RECORD_SKY=1 it writes them.
 
 use clarity_runtime::engine::{Declaration, Engine, Limits, State};
 use serde_json::Value;
@@ -16,14 +17,20 @@ fn compiled() -> Vec<u8> {
     clarity_wasm::compile(&project, "Sky").unwrap_or_else(|e| panic!("{e:#?}"))
 }
 
+fn interpreted() -> Vec<u8> {
+    let project = clarity_spec::load_sources([("sky.clarity", SOURCE)]);
+    clarity_wasm::build(&project, "Sky", clarity_wasm::Mode::Interpreted).unwrap_or_else(|e| panic!("{e:#?}"))
+}
+
 #[test]
-fn sky_wasm_is_its_source_compiled() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/engines/sky.wasm");
-    let bytes = compiled();
-    if std::env::var_os("CLARITY_RECORD_SKY").is_some() {
-        std::fs::write(&path, &bytes).unwrap();
+fn the_sky_files_are_their_source_built() {
+    for (file, bytes) in [("sky.wasm", compiled()), ("sky-interpreted.wasm", interpreted())] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance/engines").join(file);
+        if std::env::var_os("CLARITY_RECORD_SKY").is_some() {
+            std::fs::write(&path, &bytes).unwrap();
+        }
+        assert_eq!(std::fs::read(&path).ok().as_deref(), Some(bytes.as_slice()), "{file} is not sky.clarity built: write it with CLARITY_RECORD_SKY=1");
     }
-    assert_eq!(std::fs::read(&path).ok().as_deref(), Some(bytes.as_slice()), "sky.wasm is not sky.clarity compiled: write it with CLARITY_RECORD_SKY=1");
 }
 
 /// Its frames as the cases give them, called as the renderers call them:
@@ -33,7 +40,13 @@ fn its_frames_draw_what_the_cases_say() {
     let cases: Value = serde_json::from_str(CASES).unwrap();
     let functions = ["clarity_tick", "clarity_draw", "start"];
     let declaration = Declaration { functions: &functions, uses: &[], limits: Limits { seconds: 5, megabytes: 64 }, state: State::App, opens: false };
-    let engine = Engine::load("Sky", &compiled(), &declaration).unwrap();
+    for bytes in [compiled(), interpreted()] {
+        let engine = Engine::load("Sky", &bytes, &declaration).unwrap();
+        frames(&engine, &cases);
+    }
+}
+
+fn frames(engine: &Engine, cases: &Value) {
     for (i, frame) in cases["written"]["frames"].as_array().unwrap().iter().enumerate() {
         for input in frame["input"].as_array().unwrap() {
             engine.call(input["hear"].as_str().unwrap(), input["values"].as_array().unwrap().clone()).unwrap();

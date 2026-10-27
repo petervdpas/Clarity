@@ -279,8 +279,8 @@
     { "name": "it logs the level a hear starts it at", "opens": true, "input": [{ "hear": "start", "values": [2] }], "lines": ["engine Screen: level 2"] }
   ],
   "written": {
-    "about": "An engine beside the screen written in Clarity (engines/sky.clarity), compiled to sky.wasm, runs as any: its frames are the functions clarity_tick and clarity_draw, what it draws is a list of records, a hear is a function, and `tell` puts a tell in the call's answer.",
-    "engine": "sky.wasm",
+    "about": "An engine beside the screen written in Clarity (engines/sky.clarity), compiled to sky.wasm and built for the interpreter as sky-interpreted.wasm, runs as any, both alike: its frames are the functions clarity_tick and clarity_draw, what it draws is a list of records, a hear is a function, and `tell` puts a tell in the call's answer.",
+    "engines": ["sky.wasm", "sky-interpreted.wasm"],
     "name": "Sky",
     "frames": [
       { "input": [], "tick": 0, "tells": [], "draws": [{ "op": "clear", "x": 0, "y": 0, "r": 0, "color": "background" }, { "op": "circle", "x": 10, "y": 50, "r": 5, "color": "accent" }] },

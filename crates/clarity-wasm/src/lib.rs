@@ -10,6 +10,8 @@
 //! types itself.
 
 mod emit;
+mod interpreted;
+mod lower;
 mod merge;
 
 use clarity_spec::Project;
@@ -18,9 +20,26 @@ use clarity_spec::Project;
 /// the compiled code calls.
 const SUPPORT: &[u8] = include_bytes!("../support.wasm");
 
+/// The support module built with the interpreter, which runs an engine's IR.
+const INTERPRETER: &[u8] = include_bytes!("../interpreter.wasm");
+
+/// How an engine written in Clarity runs: its code as wasm, or its IR run
+/// by the interpreter. Either way it is a file every host runs alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    #[default]
+    Compiled,
+    Interpreted,
+}
+
 /// The engine `name` of the project, written in Clarity, as a WebAssembly
 /// file; or why it cannot be compiled yet.
 pub fn compile(project: &Project, name: &str) -> Result<Vec<u8>, Vec<String>> {
+    build(project, name, Mode::Compiled)
+}
+
+/// The engine `name` as a WebAssembly file, compiled or for the interpreter.
+pub fn build(project: &Project, name: &str, mode: Mode) -> Result<Vec<u8>, Vec<String>> {
     let Some((file, engine)) = project.files.iter().find_map(|f| f.engines.iter().find(|e| e.name.name == name).map(|e| (f, e))) else {
         return Err(vec![format!("there is no engine {name}")]);
     };
@@ -29,9 +48,17 @@ pub fn compile(project: &Project, name: &str) -> Result<Vec<u8>, Vec<String>> {
     };
     let types = clarity_spec::code::check::types(&project.files);
     let types = types.get(&file.path).cloned().unwrap_or_default();
-    let mut support = merge::Support::read(SUPPORT).map_err(|e| vec![format!("the support module cannot be read: {e}")])?;
-    support.importing(emit::services(engine).len() as u32);
     let records: Vec<&clarity_spec::model::Entity> = project.files.iter().flat_map(|f| &f.records).collect();
-    let code = emit::engine(&support, &types, &records, engine, body)?;
-    merge::write(SUPPORT, &support, code).map_err(|e| vec![format!("the engine cannot be written: {e}")])
+    let lowered = lower::engine(&types, &records, engine, body)?;
+    let base = match mode {
+        Mode::Compiled => SUPPORT,
+        Mode::Interpreted => INTERPRETER,
+    };
+    let mut support = merge::Support::read(base).map_err(|e| vec![format!("the support module cannot be read: {e}")])?;
+    support.importing(lowered.services.len() as u32);
+    let code = match mode {
+        Mode::Compiled => emit::engine(&support, &lowered),
+        Mode::Interpreted => interpreted::engine(&support, &lowered).map_err(|e| vec![e])?,
+    };
+    merge::write(base, &support, code).map_err(|e| vec![format!("the engine cannot be written: {e}")])
 }

@@ -178,6 +178,10 @@ pub struct Settings {
     /// themselves, in Clarity's keys window (DESIGN 5.28): `keys editable`.
     #[serde(default)]
     pub keys_editable: bool,
+    /// Whether the engines written in Clarity are run by the interpreter
+    /// rather than compiled (DESIGN 5.12): `engines interpreted`.
+    #[serde(default)]
+    pub engines_interpreted: bool,
 }
 
 /// The output folder when the project file does not name one.
@@ -309,6 +313,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         out: DEFAULT_OUT.to_string(),
         keeps: Vec::new(),
         keys_editable: false,
+        engines_interpreted: false,
     }
 }
 

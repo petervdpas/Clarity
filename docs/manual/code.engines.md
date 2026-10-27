@@ -254,7 +254,7 @@ The test engine in Clarity's repository, `conformance/engines/test`, is a comple
 
 ## How each stack runs it
 
-An engine written in Clarity is compiled to a WebAssembly file when the application is generated (`board.wasm` for `engine Board`), and from then on it runs as any engine file. The texts it gives by key (`@youWin`) join its `says`, so the screen shows them in the person's language.
+An engine written in Clarity becomes a WebAssembly file when the application is generated (`board.wasm` for `engine Board`), and from then on it runs as any engine file. By default its code is compiled; with `engines interpreted` in the project file the file carries the code and Clarity's interpreter runs it. Both give the same answers. The texts it gives by key (`@youWin`) join its `says`, so the screen shows them in the person's language.
 
 Each stack hosts a WebAssembly file with a WebAssembly runtime written for it. You install nothing extra.
 
@@ -314,4 +314,3 @@ These are designed but not built:
 - The service `progress`, which would let a long call show on the screen how far it is.
 - In an engine written in Clarity: a text with slots (`"odd {n}"`) is given as written, not translated, and a key with values (`@welcome(name = n)`) is not compiled; a plain key (`@youWin`) is translated.
 - Records in code outside an engine.
-- Choosing per project whether engines written in Clarity are compiled or interpreted.

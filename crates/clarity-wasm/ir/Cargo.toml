@@ -1,0 +1,12 @@
+# The IR of an engine written in Clarity (DESIGN 5.12): its code lowered
+# once, typed and with every name resolved, which the compiler turns into
+# wasm and the interpreter in the support module runs.
+[package]
+name = "clarity-engine-ir"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

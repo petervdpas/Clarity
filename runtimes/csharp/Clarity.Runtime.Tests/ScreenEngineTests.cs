@@ -85,19 +85,22 @@ public sealed class ScreenEngineTests
     }
 
     [Fact]
-    public void An_engine_beside_the_screen_written_in_Clarity_runs_as_any()
+    public void An_engine_beside_the_screen_written_in_Clarity_runs_as_any_compiled_or_interpreted()
     {
         var written = Cases.GetProperty("written");
-        var bytes = File.ReadAllBytes(Path.Combine(Folder, "engines", written.GetProperty("engine").GetString()!));
-        using var engine = ScreenEngine.Load(written.GetProperty("name").GetString()!, bytes, [], false, new EngineLimits(5, 256));
-        var i = 0;
-        foreach (var frame in written.GetProperty("frames").EnumerateArray())
+        foreach (var file in written.GetProperty("engines").EnumerateArray().Select(e => e.GetString()!))
         {
-            var drawn = engine.Frame(frame.GetProperty("tick").GetDouble(), frame.GetProperty("input").EnumerateArray().Select(InputOf).ToList());
-            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("draws").GetRawText()), drawn.Shapes), $"frame {i}: {drawn.Shapes.ToJsonString()}");
-            var told = JsonSerializer.Serialize(drawn.Tells.Select(t => new { tell = t.Tell, values = t.Values }));
-            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("tells").GetRawText()), JsonNode.Parse(told)), $"frame {i}: {told}");
-            i++;
+            var bytes = File.ReadAllBytes(Path.Combine(Folder, "engines", file));
+            using var engine = ScreenEngine.Load(written.GetProperty("name").GetString()!, bytes, [], false, new EngineLimits(5, 256));
+            var i = 0;
+            foreach (var frame in written.GetProperty("frames").EnumerateArray())
+            {
+                var drawn = engine.Frame(frame.GetProperty("tick").GetDouble(), frame.GetProperty("input").EnumerateArray().Select(InputOf).ToList());
+                Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("draws").GetRawText()), drawn.Shapes), $"{file}, frame {i}: {drawn.Shapes.ToJsonString()}");
+                var told = JsonSerializer.Serialize(drawn.Tells.Select(t => new { tell = t.Tell, values = t.Values }));
+                Assert.True(JsonNode.DeepEquals(JsonNode.Parse(frame.GetProperty("tells").GetRawText()), JsonNode.Parse(told)), $"{file}, frame {i}: {told}");
+                i++;
+            }
         }
     }
 

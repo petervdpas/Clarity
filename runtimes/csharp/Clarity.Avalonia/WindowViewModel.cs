@@ -204,19 +204,10 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     }
 
     /// <summary>Ends the application: the built-in <c>quit</c>.</summary>
-    protected static void QuitApplication()
-    {
-        if (global::Avalonia.Application.Current?.ApplicationLifetime is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.Shutdown();
-    }
+    protected static void QuitApplication() => DesktopProgram.Current?.Quit();
 
     /// <summary>Opens Clarity's keys window over the window the person works in: the built-in <c>keys</c> (DESIGN 5.28).</summary>
-    protected static void ShowKeys()
-    {
-        if (global::Avalonia.Application.Current?.ApplicationLifetime is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
-            && (desktop.Windows.FirstOrDefault(w => w.IsActive) ?? desktop.MainWindow) is { } owner)
-            KeysWindow.Show(owner);
-    }
+    protected static void ShowKeys() => DesktopProgram.Current?.ShowKeys();
 
     /// <summary>The window has opened with its data.</summary>
     public void Opened() => Handle(OnOpen);

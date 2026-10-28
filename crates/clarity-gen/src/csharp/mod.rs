@@ -44,9 +44,13 @@ pub fn runtime_version() -> &'static str {
     RUNTIME_PROPS[start..start + end].trim()
 }
 
-/// The package everything a project needs comes with: the windows, and
-/// through it Clarity.Runtime with SQLite.
+/// The package everything a program in a browser needs comes with: the
+/// windows, and through it Clarity.Runtime with SQLite. Nothing native.
 const UI_PACKAGE: &str = "Clarity.Avalonia";
+
+/// The package a desktop program takes instead: the desktop's own (native
+/// windows, sound, the shell), and through it Clarity.Avalonia (DESIGN 7.6).
+const DESKTOP_PACKAGE: &str = "Clarity.Avalonia.Desktop";
 
 /// What a server database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
@@ -80,14 +84,16 @@ pub use cli::generate as generate_cli;
 /// The program of the project: the desktop program, or with the web target
 /// alone the web application (DESIGN 7.6).
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
-    let desktop = generate_desktop(project, settings)?;
     if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
-        return Ok(desktop);
+        return generate_desktop(project, settings, DESKTOP_PACKAGE);
     }
-    web::generate(&crate::with_secret_settings(project, &crate::settings_program(settings)), settings, desktop)
+    // The windows as the desktop program has them, on the package without the desktop's own.
+    let windows = generate_desktop(project, settings, UI_PACKAGE)?;
+    web::generate(&crate::with_secret_settings(project, &crate::settings_program(settings)), settings, windows)
 }
 
-fn generate_desktop(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
+/// The desktop program, its windows on the package `ui`: the desktop's, or the core one for the web.
+fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
@@ -102,7 +108,7 @@ fn generate_desktop(project: &Project, settings: &Settings) -> Result<Vec<OutFil
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -227,15 +233,15 @@ fn main_window(project: &Project) -> Option<String> {
         .or_else(|| project.pages().next().map(|p| p.name.name.clone()))
 }
 
-/// The project file. It references the runtime's packages: Clarity.Avalonia
-/// and the driver of each server database the data sources are. With the
+/// The project file. It references the runtime's packages: `ui` (Clarity.Avalonia.Desktop,
+/// or Clarity.Avalonia for the web) and the driver of each server database the data sources are. With the
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
 /// references the runtime's own projects there instead, for working on them.
-fn csproj(name: &str, servers: &[&Server], carried: bool, engines: bool, dotnet: String) -> String {
+fn csproj(name: &str, ui: &str, servers: &[&Server], carried: bool, engines: bool, dotnet: String) -> String {
     let version = runtime_version();
     // Engines need Wasmtime, which only an application with an engine carries.
-    let packages: Vec<&str> = std::iter::once(UI_PACKAGE).chain(servers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
+    let packages: Vec<&str> = std::iter::once(ui).chain(servers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     // The files of the project's resources folder, embedded.
@@ -434,6 +440,7 @@ fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Serve
     format!(
         "{HEADER}
 using Avalonia;
+using Clarity.Avalonia;
 using Clarity.Runtime;
 
 namespace {name};
@@ -454,7 +461,7 @@ public static class Program
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }}
 
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UseClarityDesktop().LogToTrace();
 }}
 ",
         ready = string(&format!("{name}: the databases are ready."))

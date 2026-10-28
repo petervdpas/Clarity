@@ -122,8 +122,8 @@ fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
     let project = file(&files, "Shop.csproj");
     has(project, "<TargetFramework>net10.0</TargetFramework>");
     has(project, "<RootNamespace>Shop</RootNamespace>");
-    // Clarity.Avalonia brings Clarity.Runtime and the packages both stand on.
-    has(project, &format!("<PackageReference Include=\"Clarity.Avalonia\" Version=\"{}\" />", runtime_version()));
+    // Clarity.Avalonia.Desktop brings Clarity.Avalonia, Clarity.Runtime and the packages they stand on.
+    has(project, &format!("<PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{}\" />", runtime_version()));
     assert!(!project.contains("Include=\"Clarity.Runtime\"") && !project.contains("Microsoft.Data.Sqlite"), "{project}");
 }
 
@@ -138,10 +138,10 @@ fn the_local_runtime_projects_can_stand_in_for_the_packages() {
         &project,
         &format!(
             "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
-    <PackageReference Include=\"Clarity.Avalonia\" Version=\"{}\" />
+    <PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{}\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
-    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia/Clarity.Avalonia.csproj\" />
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia.Desktop/Clarity.Avalonia.Desktop.csproj\" />
   </ItemGroup>",
             runtime_version()
         ),

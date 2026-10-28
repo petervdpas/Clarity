@@ -79,10 +79,12 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Log (both): run the app from a terminal; each Start writes `engine Screen: level 2` there.
 - [ ] The web target on Windows (Winsock; the C and C++ clarity_service link ws2_32 and shell32; Rust's files by include_bytes!): `the_web_target_serves_in_c`, `_in_cpp` (cpp_build) and `_in_rust` (build) pass; the invaders example (Go): `the_invaders_example_serves_in_go` with `CLARITY_KEEP=1`, run it, open http://127.0.0.1:8080 in a browser and play.
 - [ ] Avalonia in the browser, the browser's own (C#): in the web todo the font is Inter, the tab takes the window's title, a file field downloads; a setting changed survives a reload; a sound part plays; a game with an engine beside the screen plays.
-- [ ] Avalonia in the browser (C#): `the_walker_example_serves_in_csharp` passes (wasm-tools installed); `dotnet build Server` in its `out/web`, run the server, open http://127.0.0.1:8080, press Walk: the figure walks across and back. The IDE's Install for the WebAssembly tools asks with UAC.
+- [ ] Avalonia in the browser (C#): `the_walker_example_serves_in_csharp` passes (wasm-tools installed); `dotnet build Server` in its `out/web`, run the server, open http://127.0.0.1:8080, press Walk: the figure walks across and back. The IDE's Install for the WebAssembly tools asks with UAC. As a person who is not an administrator, and from a folder with a space in its path (W2e): the server starts without "Access is denied", and `--address 0.0.0.0:8080` lets another machine open it (Windows Firewall asks once).
 - [ ] SVG pictures (C#): `cargo test -p clarity-gen --test csharp_build -- --ignored --exact pictures_build_in_csharp` builds; an app with `image source "logo.svg"` shows it.
 - [ ] The pills example (Go): `the_pills_example_builds_and_runs_in_go` with `CLARITY_KEEP=1`; run it: the pills and the paddle are pictures, Start plays, the mouse moves the paddle.
 - [ ] Written in Clarity (Go): `cargo test -p clarity-gen --test go_build -- --ignored --exact a_clarity_engine_beside_the_screen_builds_in_go` with `CLARITY_KEEP=1`, then run `target/generated/clarity-gen-go-sky/skies.exe`: the dot sits left; Start moves it a little right; ten seconds later the number under it shows the time.
+- [ ] Clarity.Avalonia.Desktop (C#, W2e): `the_todo_example_builds_and_runs_in_csharp` and `the_noughts_example_builds_and_runs_in_csharp` pass; a desktop app opens its window, plays a sound part, and `quit` and `keys` work (they go through `UseClarityDesktop()` now). On macOS too.
+- [ ] Avalonia in the browser, Release (W2e): in a generated `out/web`, `dotnet build Server -c Release` (trims the browser program), run `Server/bin/Release/net10.0/<Name>.Server.dll`, open it in Edge: the windows show with the theme, a second window opens, and the browser's network tab shows `content-encoding: br` on the `.wasm` files.
 - [ ] Engines written in Clarity on the backend: `an_engine_written_in_clarity_runs_in_{go,c,cpp,csharp}` and `an_interpreted_engine_runs_in_{go,c,cpp,csharp}` (ignored build tests) pass on Windows.
 
 ## 6. Not done, so not to be tested
@@ -103,4 +105,7 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [x] Tag Go runtime v0.33.0 and crate 0.30.0: the web target's server (shell.Serve, clarity_runtime::serve); sums recorded.
 - [ ] Tag Go runtime v0.34.0 (package desktop apart from shell, Address takes the project's address) and crate 0.31.0 (serve::address takes it); record the Go sums after the tag.
 - [x] Upload NuGet 0.44.0 (SVG pictures in Clarity.Avalonia, the canvas's image shape).
+- [x] Upload NuGet 0.49.0: seven packages now, `Clarity.Avalonia.Desktop` new (the desktop's own, apart from Clarity.Avalonia).
+- [x] Upload NuGet 0.50.0: the web server sends compressed files.
+- [ ] Upload NuGet 0.51.0: the web server over a plain socket (Windows), and the icon with the sparks on every package.
 - [x] Release the VS Code extension (0.1.16 on the Marketplace; Open VSX has no token): its grammar knows record, tell, beside, engines, const and picture.

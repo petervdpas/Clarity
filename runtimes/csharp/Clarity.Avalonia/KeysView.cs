@@ -1,4 +1,4 @@
-// Clarity's keys window on Avalonia (DESIGN 5.28), where the project file
+// What Clarity's keys window shows on Avalonia (DESIGN 5.28), where the project file
 // says `keys editable`: every command per place, Everywhere (the app's
 // frame) first, then each window's own, with its keys. Change, then press
 // the new key; a key another command has in the same place offers a swap;
@@ -19,30 +19,6 @@ public sealed record KeyCommandInfo(string Id, Text Caption, IReadOnlyList<strin
 
 /// <summary>The commands of one place: the app's frame (<c>Id</c> empty, no title) or a window.</summary>
 public sealed record KeyLayerInfo(string Id, Text? Title, IReadOnlyList<KeyCommandInfo> Commands);
-
-public static class KeysWindow
-{
-    /// <summary>The application's commands, which the generated application gives at its start.</summary>
-    public static IReadOnlyList<KeyLayerInfo> Catalog { get; set; } = [];
-
-    /// <summary>Shows the keys window over <paramref name="owner"/>, in a window of Clarity's own.</summary>
-    public static void Show(Window owner)
-    {
-        var view = new KeysView(Catalog);
-        var window = new Window
-        {
-            Title = KeysView.Word("keysTitle", "Keys"),
-            Content = view,
-            SizeToContent = SizeToContent.WidthAndHeight,
-            MaxHeight = 640,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        view.Closed += window.Close;
-        // Sized once to what it shows first; after that it keeps its size.
-        window.Opened += (_, _) => window.SizeToContent = SizeToContent.Manual;
-        _ = window.ShowDialog(owner);
-    }
-}
 
 /// <summary>What the keys window shows: its places, its commands and their keys.</summary>
 public sealed class KeysView : UserControl

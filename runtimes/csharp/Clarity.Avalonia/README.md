@@ -5,12 +5,12 @@
 
 **Clarity.Avalonia** is the user interface half of the C# applications that [Clarity](https://github.com/petervdpas/Clarity) generates, built on [Avalonia](https://avaloniaui.net/). Clarity is a designer-first IDE with its own small language: you design the windows, data and logic, and it writes readable source code for Rust, Go, C#, C or C++.
 
-It stands on [Clarity.Runtime](https://www.nuget.org/packages/Clarity.Runtime/), which holds the data and logic.
+It stands on [Clarity.Runtime](https://www.nuget.org/packages/Clarity.Runtime/), which holds the data and logic. It has nothing native, so a program served to browsers takes it alone; a desktop program takes [Clarity.Avalonia.Desktop](https://www.nuget.org/packages/Clarity.Avalonia.Desktop/), which brings it.
 
 ## What it does
 
 - **Clarity's own parts.** `ClarityTable` (a table whose cells can be edited: text, numbers, checkboxes, switches, choices, dates and moments; a column can have a `Width`, and the table can be `Resizable` with the person's widths kept under `Remember`, `Sortable` by a header click, and shown `OrderBy` a column first), and the inputs of a form, each telling through `IInput.ValueChanged` when the person changed its value: `TextInput` (text, password, memo), `NumberInput` (in the person's format), `CheckInput`, `SwitchInput`, `ChoiceInput` (an enum's values or the records a reference can point at), `RadioInput`, `DateInput` and `DateTimeInput` (a day and a time on a 24-hour clock). They behave the same as Clarity's web parts; see below.
-- **Windows.** `WindowViewModel` is the base of every generated window's view model: its handlers, its messages, and opening and closing windows. `Shell` shows the windows of an application, in place or in a desktop window of their own, and dialogs.
+- **Windows.** `WindowViewModel` is the base of every generated window's view model: its handlers, its messages, and opening and closing windows. On the desktop, Clarity.Avalonia.Desktop's `Shell` shows them; in a browser, `MirrorShell` shows the windows a server keeps in `Sessions`.
 - **Languages and themes.** `Locale` shows the application in the person's language and formats, and lets them choose another; `Themes` switches the look.
 - **Binding.** Converters for values in the person's format (`ShownConverter`, `FormatConverter`), choices for dropdowns (`Choice`) and state per part (`PartState`).
 

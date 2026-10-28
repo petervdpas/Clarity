@@ -1,10 +1,11 @@
 <!-- What every project of Clarity's C# runtime shares: the version and the
-     package settings of its NuGet packages (Clarity.Runtime and
-     Clarity.Avalonia), which always go out together. The test projects are
+     package settings of its NuGet packages (Clarity.Runtime,
+     Clarity.Avalonia, Clarity.Avalonia.Desktop and the others), which always
+     go out together. The test projects are
      not packed. -->
 <Project>
   <PropertyGroup>
-    <Version>0.48.0</Version>
+    <Version>0.51.0</Version>
     <Authors>Peter van de Pas</Authors>
     <PackageLicenseFile>assets/LICENSE.txt</PackageLicenseFile>
     <PackageIcon>assets/icon.png</PackageIcon>

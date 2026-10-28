@@ -147,7 +147,7 @@ fn server_csproj(name: &str) -> String {
     <BrowserInputs Include=\"$(ClarityRuntime)/**/*.cs;$(ClarityRuntime)/**/*.csproj\" Exclude=\"$(ClarityRuntime)/**/bin/**;$(ClarityRuntime)/**/obj/**\" />
   </ItemGroup>
   <Target Name=\"PublishBrowser\" BeforeTargets=\"Build\" Condition=\"'$(SkipBrowser)' != 'true'\" Inputs=\"@(BrowserInputs)\" Outputs=\"browser/$(Configuration)/published\">
-    <Exec Command=\"dotnet publish ../Browser/{name}.Browser.csproj -c $(Configuration) -o $(MSBuildProjectDirectory)/browser/$(Configuration) -p:ClarityRuntime=$(ClarityRuntime) --nologo\" />
+    <Exec Command=\"dotnet publish &quot;../Browser/{name}.Browser.csproj&quot; -c $(Configuration) -o &quot;$(MSBuildProjectDirectory)/browser/$(Configuration)&quot; &quot;-p:ClarityRuntime=$(ClarityRuntime)&quot; --nologo\" />
     <Touch Files=\"browser/$(Configuration)/published\" AlwaysCreate=\"true\" />
   </Target>
   <Target Name=\"CopyBrowser\" AfterTargets=\"Build\" Condition=\"'$(SkipBrowser)' != 'true'\">
@@ -212,8 +212,13 @@ fn browser_csproj(name: &str) -> String {
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Not trimmed: the windows' state crosses by reflection, and themes load by name. -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <!-- Trimmed in Release, which makes the first load a few times smaller; a
+         Debug build is not, so it publishes faster. The windows' state crosses
+         as JSON by reflection, so that stays on, and so do the assemblies
+         whose types it reaches (below). -->
+    <PublishTrimmed Condition=\"'$(Configuration)' == 'Release'\">true</PublishTrimmed>
+    <PublishTrimmed Condition=\"'$(Configuration)' != 'Release'\">false</PublishTrimmed>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <RootNamespace>{name}.Browser</RootNamespace>
     <AssemblyName>{name}.Browser</AssemblyName>
 {CLARITY_RUNTIME}  </PropertyGroup>
@@ -222,6 +227,13 @@ fn browser_csproj(name: &str) -> String {
     <!-- A browser has none of the system's fonts: Inter, which the themes fall back on. -->
     <PackageReference Include=\"Avalonia.Fonts.Inter\" Version=\"{avalonia}\" />
     <ProjectReference Include=\"../App/{name}.csproj\" />
+  </ItemGroup>
+  <!-- Kept whole when trimmed: the windows, whose state the snapshot reads and
+       sets by name, and Clarity's runtime, which does it. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include=\"{name}\" />
+    <TrimmerRootAssembly Include=\"Clarity.Avalonia\" />
+    <TrimmerRootAssembly Include=\"Clarity.Runtime\" />
   </ItemGroup>
 </Project>
 ",
@@ -534,6 +546,18 @@ Then build the server, which publishes the browser program into it, and start it
     dotnet Server/bin/Debug/net10.0/{name}.Server.dll
 
 Open http://{address} in a browser. `--address host:port`, or the environment variable `CLARITY_ADDRESS`, makes it listen elsewhere.
-"
+
+To put it online, build it in Release: the browser program is trimmed then, and the server sends its files compressed, so the first load is some 8 MB instead of nearly 50:
+
+    dotnet build Server -c Release
+    dotnet Server/bin/Release/net10.0/{name}.Server.dll
+
+Clarity's runtime comes as NuGet packages (Clarity.Avalonia {version}, and the driver of each server database), which the first build fetches from nuget.org. To build on the runtime's own projects instead, while working on them, name their folder in Clarity's repository:
+
+    dotnet build Server -p:ClarityRuntime=<Clarity>/runtimes/csharp
+
+or set the environment variable `CLARITY_RUNTIME` to it.
+",
+        version = super::runtime_version()
     )
 }

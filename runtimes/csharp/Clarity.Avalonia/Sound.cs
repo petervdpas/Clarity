@@ -1,18 +1,13 @@
 // The sound part (DESIGN 5.22): heard, not seen. Code tells it what to play
 // through its PartState, as a custom part is told: play its source (a sound
 // of the program's resources), stop, a tone, a melody, a volume. Files and
-// made tones play through SoundOutput, SoundFlow (miniaudio) unless replaced.
+// made tones play through SoundOutput: SoundFlow's on the desktop
+// (Clarity.Avalonia.Desktop), the page's in a browser, none until one is set.
 
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
-using SoundFlow.Abstracts.Devices;
-using SoundFlow.Backends.MiniAudio;
-using SoundFlow.Components;
-using SoundFlow.Enums;
-using SoundFlow.Providers;
-using SoundFlow.Structs;
 
 namespace Clarity.Avalonia;
 
@@ -113,7 +108,7 @@ public static class Melodies
     }
 }
 
-/// <summary>Where sounds play: the computer's speakers through SoundFlow, unless replaced (as tests do).</summary>
+/// <summary>Where sounds play: the computer's speakers through SoundFlow on the desktop, the page's audio in a browser.</summary>
 public abstract class SoundOutput
 {
     /// <summary>Plays <paramref name="file"/> (WAV, MP3 or FLAC data) at <paramref name="volume"/> (0 to 1), over and
@@ -121,83 +116,23 @@ public abstract class SoundOutput
     public abstract IDisposable Play(byte[] file, float volume, bool repeat);
 }
 
-/// <summary>SoundFlow's output: one engine and one playback device for the program, made when a sound first plays.</summary>
-public sealed class SoundFlowOutput : SoundOutput
+/// <summary>No output: what a program plays before it has one, and on a server.</summary>
+public sealed class Silent : SoundOutput
 {
-    static readonly AudioFormat Format = new() { Format = SampleFormat.F32, Channels = 2, SampleRate = 48000 };
-    MiniAudioEngine? engine;
-    AudioPlaybackDevice? device;
-    bool failed;
-
-    sealed class Playing(Mixer mixer, SoundPlayer player, AssetDataProvider data) : IDisposable
-    {
-        public void Dispose()
-        {
-            player.Stop();
-            mixer.RemoveComponent(player);
-            player.Dispose();
-            data.Dispose();
-        }
-    }
-
     sealed class Nothing : IDisposable
     {
         public void Dispose() { }
     }
 
     /// <inheritdoc />
-    public override IDisposable Play(byte[] file, float volume, bool repeat)
-    {
-        if (!Ready())
-            return new Nothing();
-        try
-        {
-            var data = new AssetDataProvider(engine!, file);
-            var player = new SoundPlayer(engine!, Format, data) { IsLooping = repeat, Volume = volume };
-            var mixer = device!.MasterMixer;
-            mixer.AddComponent(player);
-            var playing = new Playing(mixer, player, data);
-            player.PlaybackEnded += (_, _) => { if (!player.IsLooping) Dispatch(playing.Dispose); };
-            player.Play();
-            return playing;
-        }
-        catch (Exception e)
-        {
-            Console.Error.WriteLine($"clarity: cannot play a sound: {e.Message}");
-            return new Nothing();
-        }
-    }
-
-    static void Dispatch(Action action) => global::Avalonia.Threading.Dispatcher.UIThread.Post(action);
-
-    bool Ready()
-    {
-        if (device is not null)
-            return true;
-        if (failed)
-            return false;
-        try
-        {
-            engine = new MiniAudioEngine();
-            device = engine.InitializePlaybackDevice(null, Format);
-            device.Start();
-            return true;
-        }
-        catch (Exception e)
-        {
-            // Without a sound device the program runs on, quietly.
-            failed = true;
-            Console.Error.WriteLine($"clarity: no sound: {e.Message}");
-            return false;
-        }
-    }
+    public override IDisposable Play(byte[] file, float volume, bool repeat) => new Nothing();
 }
 
 /// <summary>A sound of a window: heard, not seen. Code tells it what to play through <see cref="State"/>.</summary>
 public class Sound : Control
 {
     /// <summary>Where every sound plays.</summary>
-    public static SoundOutput Output { get; set; } = new SoundFlowOutput();
+    public static SoundOutput Output { get; set; } = new Silent();
 
     public static readonly StyledProperty<PartState?> StateProperty = AvaloniaProperty.Register<Sound, PartState?>(nameof(State));
     public static readonly StyledProperty<string?> SourceProperty = AvaloniaProperty.Register<Sound, string?>(nameof(Source));

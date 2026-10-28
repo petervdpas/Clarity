@@ -125,13 +125,15 @@ fn an_avalonia_desktop_application() {
     let project = file(&files, "Shop.csproj");
     has(project, "<OutputType>WinExe</OutputType>");
     has(project, "<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>");
-    // Avalonia.Desktop and CommunityToolkit.Mvvm come with Clarity.Avalonia.
-    has(project, "<PackageReference Include=\"Clarity.Avalonia\"");
+    // The desktop's own (native windows and sound) come with Clarity.Avalonia.Desktop,
+    // Avalonia and CommunityToolkit.Mvvm with the Clarity.Avalonia it brings.
+    has(project, "<PackageReference Include=\"Clarity.Avalonia.Desktop\"");
     // They are not named again.
     assert!(!project.contains("Include=\"Avalonia.Desktop\""), "{project}");
     has(file(&files, "App.axaml"), "<FluentTheme />");
     has(file(&files, "App.axaml.cs"), "desktop.MainWindow = Shell.Start(new OrderFormViewModel(db), Views.Create, TimeSpan.FromMilliseconds(5000));");
     has(file(&files, "Program.cs"), ".StartWithClassicDesktopLifetime(args)");
+    has(file(&files, "Program.cs"), "AppBuilder.Configure<App>().UseClarityDesktop().LogToTrace()");
     has(file(&files, "Views.cs"), "OrderFormViewModel vm => new OrderFormView { DataContext = vm },");
 }
 
@@ -741,7 +743,12 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
     settings.port = Some(9090);
     let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
     // The application, as a library: its windows, without a desktop program.
-    has(file(&files, "App/Shop.csproj"), "    <OutputType>Library</OutputType>\n");
+    let app_project = file(&files, "App/Shop.csproj");
+    has(app_project, "    <OutputType>Library</OutputType>\n");
+    // Nothing of the desktop's own: no native windows or sound to carry into the browser.
+    has(app_project, "<PackageReference Include=\"Clarity.Avalonia\" Version=");
+    has(app_project, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia/Clarity.Avalonia.csproj\" />");
+    assert!(!app_project.contains("Clarity.Avalonia.Desktop"), "{app_project}");
     assert!(!files.iter().any(|f| f.path == "Program.cs" || f.path == "App/Program.cs"), "no desktop program");
     has(file(&files, "App/Windows/OrderFormViewModel.cs"), "public OrderFormViewModel(Db? db) : base(db)");
     has(file(&files, "App/Databases.cs"), "public static Db Open()\n");
@@ -750,6 +757,8 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
     has(app, "holder.Content = await MirrorShell.Start(link, Views.Create, TimeSpan.FromMilliseconds(");
     // The server keeps the sessions, at the project's port.
     has(file(&files, "Server/Shop.Server.csproj"), "<ProjectReference Include=\"../App/Shop.csproj\" />");
+    // Its paths quoted: on Windows a person's folder often has spaces in it.
+    has(file(&files, "Server/Shop.Server.csproj"), "<Exec Command=\"dotnet publish &quot;../Browser/Shop.Browser.csproj&quot; -c $(Configuration) -o &quot;$(MSBuildProjectDirectory)/browser/$(Configuration)&quot; &quot;-p:ClarityRuntime=$(ClarityRuntime)&quot; --nologo\" />");
     let server = file(&files, "Server/Program.cs");
     has(server, "using var db = Databases.Open();\n");
     has(server, "new WebServer(new Sessions(() => new OrderFormViewModel(db)), files).Serve(\"Shop\", WebServer.Address(args, \"127.0.0.1:9090\"));");
@@ -760,6 +769,13 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
     has(browser, "<PackageReference Include=\"Avalonia.Browser\" Version=\"12.1.4\" />");
     // A browser has none of the system's fonts: the program carries one.
     has(browser, "<PackageReference Include=\"Avalonia.Fonts.Inter\" Version=\"12.1.4\" />");
+    // Trimmed in Release, for the first load: what the windows reach by reflection stays whole.
+    has(browser, "<PublishTrimmed Condition=\"'$(Configuration)' == 'Release'\">true</PublishTrimmed>");
+    has(browser, "<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>");
+    for kept in ["Shop", "Clarity.Avalonia", "Clarity.Runtime"] {
+        has(browser, &format!("<TrimmerRootAssembly Include=\"{kept}\" />"));
+    }
+    assert!(!browser.contains("<PublishTrimmed>false</PublishTrimmed>"), "{browser}");
     has(file(&files, "Browser/Program.cs"), "AppBuilder.Configure<App>().WithInterFont().With(new Avalonia.Media.FontManagerOptions { DefaultFamilyName = \"fonts:Inter#Inter\" }).StartBrowserAppAsync(\"out\")");
     has(file(&files, "Browser/Program.cs"), "App.Sessions = new HttpSessionLink(new HttpClient { BaseAddress = new Uri(origin) });");
     has(file(&files, "Browser/wwwroot/index.html"), "<script type=\"module\" src=\"./main.js\"></script>");

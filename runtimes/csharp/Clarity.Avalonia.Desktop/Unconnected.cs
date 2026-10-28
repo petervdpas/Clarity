@@ -115,9 +115,3 @@ public sealed class Unconnected
         };
     }
 }
-
-/// <summary>
-/// The app's <c>on unconnected</c> running: why the databases did not open,
-/// where what it says goes, and what it opens.
-/// </summary>
-public sealed record Unconnecting(string Reason, ObservableCollection<Message> Said, Action<WindowViewModel> Open);

@@ -16,6 +16,7 @@ use std::process::Command;
 use clarity_project::{Backend, SourceKind, Ui};
 
 mod scratch;
+mod served;
 use scratch::empty;
 
 /// Where builds go: target/generated in the repository, on disk; never the
@@ -427,4 +428,36 @@ fn an_engine_beside_the_screen_builds_in_csharp() {
     if std::env::var_os("CLARITY_KEEP").is_none() {
         std::fs::remove_dir_all(&out).unwrap();
     }
+}
+
+/// The web target (DESIGN 7.6): the server builds, keeps a session for a
+/// browser tab and answers it with the main window's state. The browser
+/// program needs .NET's wasm-tools workload; it is left out of the build here.
+#[test]
+#[ignore]
+fn the_web_server_keeps_sessions_in_csharp() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let mut settings = clarity_project::starter("Music", "music");
+    settings.stack.backend = Backend::Csharp;
+    settings.stack.ui = Ui::Avalonia;
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let out = scratch().join(format!("clarity-gen-csharp-web-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "Server", "--nologo", "-v", "quiet", "-warnaserror", "-p:SkipBrowser=true"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the server does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    let address = "127.0.0.1:18735";
+    let program = out.join("Server/bin/Debug/net10.0/Music.Server");
+    let mut server = Command::new(&program).args(["--address", address]).current_dir(&out).spawn().unwrap();
+    let started = served::post(address, "/clarity/session", r#"{"do": "start"}"#);
+    let _ = server.kill();
+    let _ = server.wait();
+    let reply: serde_json::Value = serde_json::from_str(&started).unwrap_or_else(|e| panic!("{e}: {started}"));
+    assert!(reply["session"].as_str().is_some_and(|s| !s.is_empty()), "{started}");
+    let window = &reply["windows"][0];
+    assert!(window["type"].as_str().unwrap_or("").starts_with("Music."), "{started}");
+    assert!(window["state"]["parts"].is_object(), "{started}");
+    std::fs::remove_dir_all(&out).unwrap();
 }

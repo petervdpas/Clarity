@@ -3,15 +3,26 @@
 // closing windows go through the Shell that shows them.
 
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Clarity.Runtime;
 
 namespace Clarity.Avalonia;
 
-public abstract class WindowViewModel(Db db) : ObservableObject
+public abstract class WindowViewModel(Db? db) : ObservableObject
 {
-    /// <summary>The databases of the application.</summary>
-    public Db Db { get; } = db;
+    /// <summary>The databases of the application; none in a mirror.</summary>
+    public Db Db { get; } = db!;
+
+    /// <summary>
+    /// Whether this is a mirror of a window whose handlers run on a server
+    /// (DESIGN 7.6): made without a database, it loads nothing itself and
+    /// sends its commands to <see cref="Remote"/>.
+    /// </summary>
+    public bool IsMirror { get; } = db is null;
+
+    /// <summary>Where a mirror sends its commands.</summary>
+    public IRemote? Remote { get; set; }
 
     /// <summary>The number of this open window, its own: what belongs to it, such as an engine's state per window, goes by it.</summary>
     public long Instance { get; } = OpenWindows.Next();
@@ -67,8 +78,14 @@ public abstract class WindowViewModel(Db db) : ObservableObject
     /// this window closes first, then the windows it opened open. False when
     /// it refused or failed, so a wizard keeps its step.
     /// </summary>
-    public bool Handle(Action handler)
+    public bool Handle(Action handler, object?[]? args = null, [CallerMemberName] string command = "")
     {
+        // A mirror's handlers run on the server: the command goes there, by its name.
+        if (Remote is not null)
+        {
+            Remote.Command(this, command, args ?? []);
+            return true;
+        }
         running++;
         var ran = false;
         try

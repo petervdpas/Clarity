@@ -610,6 +610,11 @@ pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, 
     let mut programs = Vec::new();
     if settings.stack.has_ui() {
         programs.push(Program { target: windowed_target(settings), files: generate(project, settings)? });
+        // C# with Avalonia makes the web application apart from the desktop program (DESIGN 7.6).
+        if settings.stack.backend == Backend::Csharp && settings.stack.has(Target::Desktop) && settings.stack.has(Target::Web) {
+            let web = Settings { stack: clarity_project::Stack { targets: vec![Target::Web], ..settings.stack.clone() }, ..settings.clone() };
+            programs.push(Program { target: Target::Web, files: generate(project, &web)? });
+        }
     }
     if settings.stack.has(Target::Cli) {
         programs.push(Program { target: Target::Cli, files: generate_cli(project, settings)? });

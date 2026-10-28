@@ -14,6 +14,7 @@ mod names;
 pub(crate) use names::value_type as value_type_of;
 mod texts;
 mod themes;
+mod web;
 mod windows;
 
 pub use themes::avalonia_theme;
@@ -76,7 +77,17 @@ pub fn project_name(settings: &Settings) -> String {
 
 pub use cli::generate as generate_cli;
 
+/// The program of the project: the desktop program, or with the web target
+/// alone the web application (DESIGN 7.6).
 pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
+    let desktop = generate_desktop(project, settings)?;
+    if settings.stack.has(clarity_project::Target::Desktop) || !settings.stack.has(clarity_project::Target::Web) {
+        return Ok(desktop);
+    }
+    web::generate(&crate::with_secret_settings(project, &crate::settings_program(settings)), settings, desktop)
+}
+
+fn generate_desktop(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, Vec<String>> {
     let project = &crate::with_secret_settings(project, &crate::settings_program(settings));
     let (databases, owned) = crate::databases(project, settings)?;
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
@@ -377,13 +388,17 @@ fn screen_engines_cs(project: &Project, name: &str) -> String {
     )
 }
 
-fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings, engines: bool) -> String {
-    // An engine whose file does not fit its declaration stops the application at start.
-    let check_engines = if engines {
+/// An engine whose file does not fit its declaration stops the application at start.
+fn check_engines(engines: bool) -> &'static str {
+    if engines {
         "        try\n        {\n            Engines.Check();\n        }\n        catch (EngineException e)\n        {\n            Console.Error.WriteLine(e.Message);\n            return 1;\n        }\n"
     } else {
         ""
-    };
+    }
+}
+
+/// The databases of the data sources and the file stores, and `method`, which opens them.
+fn opening(databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings, method: &str) -> String {
     // The server databases, each turned on by its package before the databases open.
     let turned_on: String = servers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
     let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
@@ -393,6 +408,30 @@ fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Serve
         .collect::<Vec<_>>()
         .join(", ");
     format!(
+        "    /// <summary>The database of each data source: its name, its kind and where it is.</summary>
+    static readonly (string, Dialect, string)[] Sources = [{databases}];
+
+    /// <summary>The folder of each file store, which keeps the pictures of image fields kept as files.</summary>
+    static readonly (string, string)[] Stores = [{stores}];
+
+    /// <summary>Opens every database and applies the migration steps it has not had yet.</summary>
+    public static Db {method}()
+    {{
+{turned_on}        var db = Db.Connect(Sources);
+        foreach (var (source, steps) in Schema.Sources)
+            db.MigrateSource(source, steps);
+        foreach (var (name, at) in Stores)
+            db.AddStore(name, at);
+        return db;
+    }}
+"
+    )
+}
+
+fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings, engines: bool) -> String {
+    let check_engines = check_engines(engines);
+    let opening = opening(databases, servers, settings, "OpenDatabases");
+    format!(
         "{HEADER}
 using Avalonia;
 using Clarity.Runtime;
@@ -401,23 +440,7 @@ namespace {name};
 
 public static class Program
 {{
-    /// <summary>The database of each data source: its name, its kind and where it is.</summary>
-    static readonly (string, Dialect, string)[] Databases = [{databases}];
-
-    /// <summary>The folder of each file store, which keeps the pictures of image fields kept as files.</summary>
-    static readonly (string, string)[] Stores = [{stores}];
-
-    /// <summary>Opens every database and applies the migration steps it has not had yet.</summary>
-    public static Db OpenDatabases()
-    {{
-{turned_on}        var db = Db.Connect(Databases);
-        foreach (var (source, steps) in Schema.Sources)
-            db.MigrateSource(source, steps);
-        foreach (var (name, at) in Stores)
-            db.AddStore(name, at);
-        return db;
-    }}
-
+{opening}
     [STAThread]
     public static int Main(string[] args)
     {{

@@ -313,7 +313,7 @@ fn a_project_gets_the_drivers_of_its_databases_only() {
         let program = file(&files, "Program.cs");
         has(program, "\"env:SHOP_DATABASE\")];");
         // The driver is turned on before the databases open.
-        has(program, &format!("        {turned_on}\n        var db = Db.Connect(Databases);"));
+        has(program, &format!("        {turned_on}\n        var db = Db.Connect(Sources);"));
     }
 }
 

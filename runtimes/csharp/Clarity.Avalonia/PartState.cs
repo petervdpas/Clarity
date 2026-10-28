@@ -61,6 +61,9 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
         drawn = null;
     }
 
+    /// <summary>Shows a drawing as it is, such as the one a server drew (DESIGN 7.6).</summary>
+    internal void ShowDrawing(IReadOnlyList<Shape> shapes) => Drawing = shapes;
+
     /// <summary>Where a canvas was last clicked; null before any click.</summary>
     public Pointer? Pointer { get; set; }
 

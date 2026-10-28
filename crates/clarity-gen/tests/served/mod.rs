@@ -18,6 +18,18 @@ fn request(address: &str, method: &str, path: &str, body: &str) -> Option<String
     Some(String::from_utf8_lossy(&reply).into_owned())
 }
 
+/// A POST of `body` to `path` at `address`: the reply's body, once the server answers.
+#[allow(dead_code)]
+pub fn post(address: &str, path: &str, body: &str) -> String {
+    for _ in 0..100 {
+        if let Some(reply) = request(address, "POST", path, body) {
+            return reply.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default();
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("nothing answers at {address}")
+}
+
 /// Starts `program` in `dir` with `args` and the address, checks what it
 /// serves, and stops it, whatever the checks found.
 pub fn serves(dir: &Path, program: &Path, args: &[&str], address: &str) {

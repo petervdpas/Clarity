@@ -671,7 +671,7 @@ fn a_click_on_a_canvas_runs_its_handler_with_where() {
     let vm = file(&files, "Windows/DialViewModel.cs");
     has(vm, "Dial.X + Dial.Y");
     // The canvas gives the window where it was clicked, then runs the handler.
-    has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    });");
+    has(vm, "    [RelayCommand]\n    void ClickAt_Dial(Pointer at) => Handle(() =>\n    {\n        Dial.Pointer = at;\n        OnDialClicked();\n    }, [at]);");
     has(file(&files, "Windows/DialView.axaml"), "UnitsWidth=\"200\" UnitsHeight=\"100\" Command=\"{Binding ClickAt_DialCommand}\"");
 }
 
@@ -719,4 +719,45 @@ fn a_table_has_its_widths_options_and_first_order() {
     has(window, "SelectedItem=\"{Binding Grid.SelectedItem}\" Resizable=\"True\" Sortable=\"True\" OrderBy=\"Due\" OrderDescending=\"True\" Remember=\"Main.grid\"");
     has(window, "<c:TableColumn Field=\"Title\" Header=\"{x:Static local:Texts.TaskTitleLabel}\" Kind=\"Text\" Width=\"240\" Edit=\"True\" />");
     has(window, "<c:TableColumn Field=\"Done\" Header=\"{x:Static local:Texts.TaskDoneLabel}\" Kind=\"Bool\" Edit=\"True\" />");
+}
+
+/// A window can be a mirror, in a browser, of the one its server keeps
+/// (DESIGN 7.6): made without a database, it loads nothing itself.
+#[test]
+fn a_window_made_as_a_mirror_loads_nothing() {
+    let files = files();
+    let vm = file(&files, "Windows/OrderFormViewModel.cs");
+    has(vm, "    public OrderFormViewModel(Db? db) : base(db)\n    {\n        if (IsMirror)\n            return;\n");
+}
+
+/// The web target (DESIGN 7.6): the windows live on a server, in sessions,
+/// and the browser shows mirrors of them. The output is the application as a
+/// library, the server that keeps the sessions, and the browser program.
+#[test]
+fn the_web_target_is_the_application_a_server_and_a_browser_program() {
+    let project = load_keyed([("shop.clarity", SHOP)], &[], "en");
+    let mut settings = settings();
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    settings.port = Some(9090);
+    let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    // The application, as a library: its windows, without a desktop program.
+    has(file(&files, "App/Shop.csproj"), "    <OutputType>Library</OutputType>\n");
+    assert!(!files.iter().any(|f| f.path == "Program.cs" || f.path == "App/Program.cs"), "no desktop program");
+    has(file(&files, "App/Windows/OrderFormViewModel.cs"), "public OrderFormViewModel(Db? db) : base(db)");
+    has(file(&files, "App/Databases.cs"), "public static Db Open()\n");
+    let app = file(&files, "App/App.axaml.cs");
+    has(app, "if (ApplicationLifetime is ISingleViewApplicationLifetime single && Sessions is { } link)");
+    has(app, "holder.Content = await MirrorShell.Start(link, Views.Create, TimeSpan.FromMilliseconds(");
+    // The server keeps the sessions, at the project's port.
+    has(file(&files, "Server/Shop.Server.csproj"), "<ProjectReference Include=\"../App/Shop.csproj\" />");
+    let server = file(&files, "Server/Program.cs");
+    has(server, "using var db = Databases.Open();\n");
+    has(server, "new WebServer(new Sessions(() => new OrderFormViewModel(db)), files).Serve(\"Shop\", WebServer.Address(args, \"127.0.0.1:9090\"));");
+    // The browser program shows the mirrors, its sessions on the server the page came from.
+    let browser = file(&files, "Browser/Shop.Browser.csproj");
+    has(browser, "<Project Sdk=\"Microsoft.NET.Sdk.WebAssembly\">");
+    has(browser, "<TargetFramework>net10.0-browser</TargetFramework>");
+    has(browser, "<PackageReference Include=\"Avalonia.Browser\" Version=\"12.1.4\" />");
+    has(file(&files, "Browser/Program.cs"), "App.Sessions = new HttpSessionLink(new HttpClient { BaseAddress = new Uri(origin) });");
+    has(file(&files, "Browser/wwwroot/index.html"), "<script type=\"module\" src=\"./main.js\"></script>");
 }

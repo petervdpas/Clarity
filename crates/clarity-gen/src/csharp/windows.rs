@@ -1621,7 +1621,7 @@ public partial class {name}View : UserControl
                 let _ = writeln!(constructor, "        {field} = Db.All<{entity}>();");
                 let _ = write!(
                     properties,
-                    "    public List<{entity}> {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    List<{entity}> {field};\n\n"
+                    "    public List<{entity}> {prop} {{ get => {field}; set => SetProperty(ref {field}, value); }}\n    List<{entity}> {field} = [];\n\n"
                 );
             } else if self.project.entity(entity).is_some_and(|e| e.settings) {
                 // Every window shows the same settings.
@@ -1694,7 +1694,7 @@ public partial class {name}View : UserControl
         }
         for (entity, shown) in &choices {
             let _ = writeln!(constructor, "        {entity}Choices = Choice.Of(Db.All<{entity}>(), r => {shown});");
-            let _ = write!(properties, "    public Choice[] {entity}Choices {{ get; }}\n\n");
+            let _ = write!(properties, "    public Choice[] {entity}Choices {{ get; }} = [];\n\n");
         }
         // The dropdowns' options (U1c): the values a typed one's field has,
         // and the records a search picks from with the fields it shows.
@@ -1705,7 +1705,7 @@ public partial class {name}View : UserControl
                 let name = typed_values(entity, field);
                 let read = format!("        {name} = [.. Db.All<{}>().Select(r => r.{})];", entity.name.name, property(&entity.name.name, &field.name.name));
                 if lists.insert(name.clone(), read).is_none() {
-                    let _ = write!(properties, "    public List<string> {name} {{ get; }}\n\n");
+                    let _ = write!(properties, "    public List<string> {name} {{ get; }} = [];\n\n");
                 }
             }
             // Without fields to show, a search picks from the reference's own choices.
@@ -1721,7 +1721,7 @@ public partial class {name}View : UserControl
                     .collect();
                 let read = format!("        {name} = Choice.Of(Db.All<{}>(), r => {}, r => [{}]);", target.name.name, display(target), cells.join(", "));
                 if lists.insert(name.clone(), read).is_none() {
-                    let _ = write!(properties, "    public Choice[] {name} {{ get; }}\n\n");
+                    let _ = write!(properties, "    public Choice[] {name} {{ get; }} = [];\n\n");
                 }
             }
         }
@@ -1870,7 +1870,7 @@ public partial class {name}View : UserControl
             let (Some(canvas), Some(click)) = (&widget.props.name, Self::handler(widget, Event::Click)) else { continue };
             let _ = write!(
                 events,
-                "    [RelayCommand]\n    void ClickAt_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }});\n\n",
+                "    [RelayCommand]\n    void ClickAt_{c}(Pointer at) => Handle(() =>\n    {{\n        {c}.Pointer = at;\n        On{}();\n    }}, [at]);\n\n",
                 pascal(&click.handler),
                 c = member(canvas)
             );
@@ -1964,6 +1964,8 @@ public partial class {name}View : UserControl
             identity.push_str(&format!("\n    public override global::Avalonia.Size? WindowSize => new({}, {});\n", size.width, size.height));
         }
         let body = format!("{identity}\n{properties}{parts}\n{events}{clicks}{handlers}");
+        // A mirror of the window, in a browser, loads nothing: the server sends its state (DESIGN 7.6).
+        let mirror = if constructor.is_empty() { "" } else { "        if (IsMirror)\n            return;\n" };
         Ok(format!(
             "{HEADER}
 using Clarity.Avalonia;
@@ -1974,9 +1976,9 @@ namespace {namespace};
 
 public sealed partial class {name}ViewModel : WindowViewModel
 {{
-    public {name}ViewModel(Db db) : base(db)
+    public {name}ViewModel(Db? db) : base(db)
     {{
-{constructor}    }}
+{mirror}{constructor}    }}
 
 {}
 }}

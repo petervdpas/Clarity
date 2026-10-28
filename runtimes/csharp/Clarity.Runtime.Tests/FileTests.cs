@@ -15,7 +15,7 @@ public sealed class FileTests : IDisposable
         JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "conformance", "files.json"))).RootElement;
 
     readonly string root = Path.Combine(Path.GetTempPath(), $"clarity-files-cs-{Guid.NewGuid():N}");
-    readonly Db db = Db.Memory();
+    readonly Db db = Sqlite.Memory();
 
     public FileTests()
     {

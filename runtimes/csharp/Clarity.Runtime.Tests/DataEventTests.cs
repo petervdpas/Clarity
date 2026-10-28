@@ -66,7 +66,7 @@ public class DataEventTests
 {
     static Db NewDb()
     {
-        var db = Db.Memory();
+        var db = Sqlite.Memory();
         db.Migrate([[
             "CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance INTEGER NOT NULL);",
             "CREATE TABLE log (id INTEGER PRIMARY KEY, text TEXT NOT NULL);",

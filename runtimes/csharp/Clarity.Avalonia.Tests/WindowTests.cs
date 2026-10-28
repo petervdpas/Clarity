@@ -69,7 +69,7 @@ public class WindowTests
     [AvaloniaFact]
     public void AClosingWindowIsReportedByItsNumberAfterItsOnClose()
     {
-        var (first, second) = (new CardViewModel(Db.Memory()), new CardViewModel(Db.Memory()));
+        var (first, second) = (new CardViewModel(Sqlite.Memory()), new CardViewModel(Sqlite.Memory()));
         Assert.True(first.Instance > 0 && first.Instance != second.Instance);
         var reported = new List<(long, bool)>();
         void Listen(long instance) => reported.Add((instance, first.Said.Contains("close")));
@@ -88,7 +88,7 @@ public class WindowTests
     [AvaloniaFact]
     public void ADesktopWindowOpensAtTheSizeOfTheWindowItShowsFirst()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var calculator = new CardViewModel(db, "Calculator", size: new(320, 460));
         var shell = Shell.Start(calculator, View);
         Assert.Equal((320d, 460d), (shell.Width, shell.Height));
@@ -109,7 +109,7 @@ public class WindowTests
     [AvaloniaFact]
     public void HandlersShowWhatWentWrongAsAnErrorMessage()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var vm = new CardViewModel(db);
         vm.Fine();
         Assert.Empty(vm.Messages);
@@ -124,7 +124,7 @@ public class WindowTests
     [AvaloniaFact]
     public void ASelectedRowIsReadFromItsPart()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var vm = new CardViewModel(db);
         Assert.Equal("no row of grid is selected", Assert.Throws<InvalidValueException>(vm.Picked).Message.Replace("invalid value: ", ""));
         vm.Grid.SelectedItem = "b";
@@ -150,7 +150,7 @@ public class WindowTests
     [AvaloniaFact]
     public void WindowsOpenInPlaceAndCloseBackToTheOneBelow()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var card = new CardViewModel(db);
         var shell = Shell.Start(card, View);
         Assert.True(shell.IsVisible);
@@ -183,7 +183,7 @@ public class WindowTests
     [AvaloniaFact]
     public void OnlyADialogOpensADesktopWindowOfItsOwn()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var card = new CardViewModel(db);
         var shell = Shell.Start(card, View);
         card.OpenDialog();
@@ -204,7 +204,7 @@ public class WindowTests
     [AvaloniaFact]
     public async Task InfoMessagesGoAwayByThemselves()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var vm = new CardViewModel(db);
         var list = new MessageList { InfoDuration = TimeSpan.FromMilliseconds(50), Messages = vm.Messages };
         var window = new Window { Content = list };

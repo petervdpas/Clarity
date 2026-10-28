@@ -1,8 +1,9 @@
 // The connection to one database, behind the same few calls for every kind:
 // run a statement, insert and get the new key, read rows, and apply a
-// migration step. SQLite is always there; each server database is a
-// package of its own (Clarity.Runtime.PostgreSql, .MySql, .SqlServer),
-// which a program turns on with its Use() before it opens its databases.
+// migration step. Each kind of database is a package of its own
+// (Clarity.Runtime.Sqlite, .PostgreSql, .MySql, .SqlServer), which a
+// program turns on with its Use() before it opens its databases, so a
+// program in a browser carries none.
 
 using System.Data.Common;
 
@@ -59,17 +60,16 @@ internal static class Store
         return Environment.GetEnvironmentVariable(name) ?? throw new StorageException($"the environment variable {name} is not set");
     }
 
-    /// <summary>The server databases the application turned on, by kind.</summary>
-    static readonly Dictionary<Dialect, Func<string, IDriver>> servers = [];
+    /// <summary>The kinds of database the application turned on.</summary>
+    static readonly Dictionary<Dialect, Func<string, IDriver>> drivers = [];
 
-    /// <summary>Turns on a server database: what its package's Use() does.</summary>
-    internal static void Use(Dialect dialect, Func<string, IDriver> open) => servers[dialect] = open;
+    /// <summary>Turns on a kind of database: what its package's Use() does.</summary>
+    internal static void Use(Dialect dialect, Func<string, IDriver> open) => drivers[dialect] = open;
 
     /// <summary>Connects to the database of a data source.</summary>
     internal static IDriver Open(Dialect dialect, string at) => dialect switch
     {
-        Dialect.Sqlite => SqliteDriver.Open(Location(at)),
-        _ when servers.TryGetValue(dialect, out var open) => open(Location(at)),
+        _ when drivers.TryGetValue(dialect, out var open) => open(Location(at)),
         _ => throw new StorageException($"this application was built without {dialect.Label()}"),
     };
 

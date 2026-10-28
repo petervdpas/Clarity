@@ -113,6 +113,7 @@ fn writes_a_complete_dotnet_project_on_the_runtime_packages() {
             "Texts.cs",
             "Texts.resx",
             "Themes/Clarity.axaml",
+            "Themes/Clarity.axaml.cs",
             "Views.cs",
             "Windows/OrderFormView.axaml",
             "Windows/OrderFormView.axaml.cs",
@@ -138,12 +139,14 @@ fn the_local_runtime_projects_can_stand_in_for_the_packages() {
         &project,
         &format!(
             "  <ItemGroup Condition=\"'$(ClarityRuntime)' == ''\">
-    <PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{}\" />
+    <PackageReference Include=\"Clarity.Avalonia.Desktop\" Version=\"{v}\" />
+    <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{v}\" />
   </ItemGroup>
   <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
     <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Avalonia.Desktop/Clarity.Avalonia.Desktop.csproj\" />
+    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />
   </ItemGroup>",
-            runtime_version()
+            v = runtime_version()
         ),
     );
     // Each project it names is there.
@@ -282,17 +285,19 @@ fn csharp_needs_avalonia_or_the_web_renderer() {
     assert_eq!(generate(&project, &settings).unwrap_err(), ["C# with the web renderer is not generated yet; C# uses Avalonia"]);
 }
 
-/// A project references the package of each server database its data
-/// sources are, and no others (Clarity.Runtime.PostgreSql and the others,
-/// which bring their own clients); the program turns each on before it opens
-/// its databases.
+/// A project references the package of each kind of database its data
+/// sources are, and no others (Clarity.Runtime.Sqlite, .PostgreSql and the
+/// others, which bring their own clients); the program turns each on before
+/// it opens its databases.
 #[test]
 fn a_project_gets_the_drivers_of_its_databases_only() {
     let project = clarity_spec::keyed::load_keyed([("sales.clarity", SALES)], &[], "en");
     let plain = generate(&project, &settings()).unwrap();
     let csproj = file(&plain, "Shop.csproj");
-    assert!(!csproj.contains("Clarity.Runtime."), "{csproj}");
-    assert!(!file(&plain, "Program.cs").contains(".Use();"));
+    has(csproj, &format!("    <PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=\"{}\" />\n", runtime_version()));
+    has(csproj, "    <ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />\n");
+    assert!(!csproj.contains("Microsoft.Data.Sqlite"), "{csproj}");
+    has(file(&plain, "Program.cs"), "        Sqlite.Use();\n        var db = Db.Connect(Sources);");
 
     let packages = ["Clarity.Runtime.PostgreSql", "Clarity.Runtime.MySql", "Clarity.Runtime.SqlServer"];
     for (kind, package, turned_on) in [
@@ -308,6 +313,7 @@ fn a_project_gets_the_drivers_of_its_databases_only() {
         has(csproj, &format!("    <PackageReference Include=\"{package}\" Version=\"{}\" />\n", runtime_version()));
         has(csproj, &format!("    <ProjectReference Include=\"$(ClarityRuntime)/{package}/{package}.csproj\" />\n"));
         assert_eq!(packages.iter().filter(|p| csproj.contains(&format!("Include=\"{p}\""))).count(), 1, "{csproj}");
+        assert!(!csproj.contains("Clarity.Runtime.Sqlite"), "no SQLite without a SQLite source: {csproj}");
         // The clients come with the driver's package.
         assert!(!csproj.contains("Npgsql") && !csproj.contains("MySqlConnector") && !csproj.contains("SqlClient"), "{csproj}");
         let program = file(&files, "Program.cs");

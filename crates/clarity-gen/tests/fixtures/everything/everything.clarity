@@ -1,0 +1,350 @@
+module everything
+
+// Every part of Clarity in one project (tests/everything.rs): asks and
+// dialogs from the asks fixture, and below them the parts it has not.
+
+app Everything
+    title @everything
+    main Albums
+    data recent: list<Friend>
+    data current: Friend
+    menu name mainMenu
+        item @file name fileItem
+            item @folders name foldersItem key "Ctrl+F" on click -> Folders
+            item @gallery name galleryItem on click -> Gallery
+            separator
+            item @quit name quitItem key "Ctrl+Q" on click -> quit
+    toolbar name mainToolbar
+        button @folders name foldersButton icon "folder" on click -> Folders
+        separator
+        button @gallery name galleryButton on click -> Gallery
+    ribbon name mainRibbon collapsible
+        tab @home name homeTab
+            group @goTo name goGroup
+                button @albums name albumsButton icon "disc" large on click -> Albums
+                button @overview name overviewButton icon "list" on click -> Overview
+    sidebar left name leftSidebar width 192
+        list name recentList at 1,1 span 3 rows 10 bind recent show name
+    footer
+        status @ready
+        text name countText at 10,1 span 3 bind current.name
+
+// The command-line program, for a stack with the cli target.
+cli Everything
+    help @cliHelp
+
+command album add(title: text)
+    help @albumAddHelp
+    option copies: integer, default 1, min 0, max 99, help @copiesOptionHelp
+    let made = new Album
+    made.title = title
+    made.copies = copies
+    save made
+    print @albumSaved(title = made.title)
+
+command album list
+    help @albumListHelp
+    let found = find a in Album order by a.title
+    print found columns title, copies, format
+
+part Gauge
+    native "parts/Gauge"
+    binds integer
+    speed: integer, min 1, max 10, default 3
+    title: text
+    tells reached(level: integer)
+    hears reset(level: integer)
+    size 4 x 3
+
+enum Format
+    Vinyl label @formatVinyl
+    Cd label @formatCd
+
+entity Friend
+    name: text(80), required, label @friendName
+    city: text(60), label @friendCity
+
+entity Folder
+    name: text(80), required, label @folderName
+    size: integer, label @folderSize
+    parent: ref Folder, label @folderParent
+    children: list<Folder>, label @folderChildren
+
+entity Album
+    title: text(120), required, search, label @albumTitle
+    copies: integer, label @albumCopies
+    format: Format, label @albumFormat
+    site: url, label @albumSite
+    favourite: bool, label @albumFavourite
+    rating: decimal(3, 1), min 0, max 5, label @albumRating
+    tint: color, default "#3b82f6", label @albumTint
+    booklet: file, label @albumBooklet
+    tags: list<text>, search, label @albumTags
+    formats: list<Format>, label @albumFormats
+    plays: list<date>, label @albumPlays
+    scores: list<decimal>, label @albumScores
+    lentTo: ref Friend, label @albumLentTo
+    price: money, label @albumPrice
+    added: datetime, label @albumAdded
+    released: date, label @albumReleased
+    length: duration, label @albumLength
+    cover: image, label @albumCover
+    contact: email, label @albumContact
+    code: id, label @albumCode
+    notes: text, label @albumNotes
+    level: integer, label @albumLevel
+
+settings
+    language
+    theme
+    apiToken: secret, label @settingsApiToken
+    showToolbar: bool, default true, label @settingsShowToolbar
+    pageSize: integer, min 10, max 200, default 50, label @settingsPageSize
+
+page Albums: window
+    data album: Album
+    data friends: list<Friend>
+    data pal: Friend
+    button @delete name deleteButton at 1,1 span 2 on click: deleteClicked
+    button @lend name lendButton at 3,1 span 2 on click: lendClicked
+    button @copies name copiesButton at 5,1 span 2 on click: copiesClicked
+    button @format name formatButton at 7,1 span 2 on click: formatClicked
+    button @pick name pickButton at 9,1 span 2 on click: pickClicked
+    button @new name newButton at 11,1 span 2 on click: newClicked
+    separator name line at 1,2 span 12
+    link @lucide name lucideLink at 1,3 span 2 to "https://lucide.dev"
+    link name siteLink at 3,3 span 3 bind album.site
+    badge name copiesBadge at 6,3 span 1 bind album.copies
+    progress name copiesBar at 7,3 span 3 bind album.copies max 10
+    busy @lending name lendingBusy at 10,3 span 3
+    toggle @favourite name favouriteToggle icon "star" at 1,4 span 2 bind album.favourite on change: favouriteChanged
+    buttons name sideButtons at 3,4 span 2
+        toggle name leftToggle icon "text-align-start" at 1,1 span 1 on change: leftChanged
+        toggle name rightToggle icon "text-align-end" at 2,1 span 1
+    button @save name saveButton split at 5,4 span 2 on click: favouriteChanged
+        menu
+            item @saveACopy name saveCopyItem on click: newClicked
+    accordion name notesAccordion at 1,5 span 6 rows 4 on change: favouriteChanged
+        section @title
+            text name titleText at 1,1 span 6 bind album.title
+        section @site
+            text name siteText at 1,1 span 6 bind album.site
+    form name albumForm at 1,9 span 12 rows 2 bind album labels 3
+        textbox name albumTitleBox at 4,1 span 9 bind album.title
+        number name albumCopiesBox at 4,2 span 3 bind album.copies
+    scroll name moreScroll at 7,5 span 6 rows 2
+        textbox name titleBox at 1,1 span 6 bind album.title
+        number name copiesBox at 1,4 span 3 bind album.copies
+    slider name ratingSlider at 1,11 span 6 bind album.rating step 0.5 on change: favouriteChanged
+    spinbox name copiesSpin at 7,11 span 3 bind album.copies min 0 max 99
+    color name tintBox at 10,11 span 3 bind album.tint on change: favouriteChanged
+    switch name toolbarSwitch at 1,12 span 3 bind settings.showToolbar
+    dropdown name languageBox at 4,12 span 3 bind settings.language
+    file name bookletBox at 1,13 span 8 bind album.booklet on change: bookletChanged
+    tags name tagsBox at 1,14 span 6 bind album.tags on change: tagsChanged
+    tags name formatsBox at 7,14 span 6 bind album.formats
+    tags name playsBox at 1,15 span 6 bind album.plays
+    dropdown name lentToBox at 7,15 span 6 bind album.lentTo search show name, city on change: tagsChanged
+    dropdown name cityBox at 1,16 span 4 bind pal.city typed on change: tagsChanged
+    dropdown name palBox at 5,16 span 4 bind album.lentTo search
+
+page Folders: window
+    on open: loadFolders
+    data folders: list<Folder>
+    tree name folderTree at 1,1 span 4 rows 8 bind folders children children on select: folderPicked
+    treetable name folderTable at 5,1 span 8 rows 8 bind folders children children columns name 200, size on open: folderPicked
+    data albums: list<Album>
+    chart bar name formatChart at 1,9 span 4 rows 6 bind albums by format count
+    chart line name copiesChart at 5,9 span 4 rows 6 bind albums by copies sum rating
+    chart pie name lentChart at 9,9 span 4 rows 6 bind albums by lentTo average copies
+
+page PickFriend: dialog gives Friend
+    data friends: list<Friend>
+    data onlyNamed: bool
+    table name grid at 1,1 span 12 rows 6 bind friends columns name page 20
+        menu
+            item @pick name pickItem icon "user-check" on click: picked
+            separator
+            item @filter name filterItem on click -> filters
+    button @ok name okButton icon "check" at 1,7 span 2 on click: picked
+    button @filter name filterButton at 3,7 span 2 on click -> filters
+    icon "users" name friendsIcon at 6,7
+    popover name filters for filterButton span 4 rows 1
+        checkbox @onlyNamed name namedBox at 1,1 span 4 bind onlyNamed on change: refilter
+
+page NewAlbum: dialog gives Album
+    data album: Album
+    steps name wizard at 1,1 span 12 rows 8 on next: checkStep on finish: done
+        step @title
+            textbox name titleBox at 1,1 span 6 bind album.title
+        step @copies
+            number name copiesBox at 1,1 span 4 bind album.copies
+        step @format
+            dropdown name formatBox at 1,1 span 4 bind album.format
+
+code Albums
+    handler deleteClicked
+        ask @deleteAlbum(title = album.title) yes @delete no @keep then deleteConfirmed
+
+    handler deleteConfirmed
+        delete album
+
+    handler lendClicked
+        ask @lendItTo for Friend from friends then lend(album)
+
+    handler lend(what: Album, friend: Friend)
+        what.copies = what.copies - 1
+        save what
+
+    handler copiesClicked
+        ask @howManyCopies for integer default album.copies then setCopies
+
+    handler setCopies(copies: integer)
+        album.copies = copies
+
+    handler formatClicked
+        ask @whichFormat for Format then setFormat
+
+    handler setFormat(format: Format)
+        album.format = format
+
+    handler pickClicked
+        ask PickFriend then lend(album)
+
+    handler favouriteChanged
+        save album
+
+    handler leftChanged
+        settings.pageSize = settings.pageSize + 10
+        rightToggle.checked = not leftToggle.checked
+        if notesAccordion.open == 0
+            notesAccordion.open = 2
+        albumCopiesBoxLabel.visible = leftToggle.checked
+
+    handler bookletChanged
+        if album.booklet != none and album.booklet.extension != "pdf"
+            lendingBusy.visible = album.booklet.name == ""
+            album.booklet = none
+
+    handler tagsChanged
+        if album.tags contains "live" and count(album.tags) > 1
+            album.formats = [Vinyl]
+            album.tags[1] = "first"
+        for play in album.plays
+            lendingBusy.visible = play == none
+        if album.formats contains Cd
+            album.scores = [1, 2.5]
+        let live = find a in Album where a.tags contains "live" or a.formats contains Vinyl or a.plays contains today()
+        lendingBusy.visible = count(live) > 0
+        // Full-text search: every word, each as the start of a word.
+        let heard = find a in Album where a matches album.title and not (a matches "live") order by a.title
+        lendingBusy.visible = count(heard) > 0
+
+    handler newClicked
+        ask NewAlbum then added
+
+    handler added(made: Album)
+        album = made
+
+code PickFriend
+    handler picked
+        close with grid.selected
+
+    handler refilter
+        filters.visible = false
+        pickItem.enabled = onlyNamed
+
+code NewAlbum
+    handler checkStep
+        if wizard.step == 1 and album.title == ""
+            refuse @aTitleFirst
+        if wizard.step == 2 and album.copies > 9
+            wizard.step = 3
+
+    handler done
+        save album
+        close with album
+
+code Folders
+    handler loadFolders
+        folders = find f in Folder order by f.name
+        albums = find a in Album
+
+    handler folderPicked
+        if folderTree.selected != none and folderTree.selected.size > 0
+            folderTable.visible = true
+
+// The parts the pages above have not: text, pictures, sound, drawing,
+// time and a custom part.
+page Gallery: window
+    title @gallery
+    data album: Album
+    data albums: list<Album>
+    data shown: decimal
+    data load: decimal
+    data readings: list<decimal>
+    data speed: integer
+    on open: galleryOpened
+    heading @gallery name galleryHeading at 1,1 span 6
+    image source "logo.svg" name logo at 7,1 span 1 rows 1
+    image @bannerPicture name banner at 8,1 span 2 rows 1
+    help name notesHelp at 10,1 span 3 for notesMemo
+    splitter name gallerySplitter at 1,2 span 12 rows 8 horizontal
+        pane
+            panel @album name albumPanel at 1,1 span 12 rows 7
+                memo name notesMemo at 1,1 span 12 rows 3 bind album.notes
+                radio name formatRadio at 1,4 span 6 bind album.format vertical rows 2
+                date name releasedOn at 7,4 span 6 bind album.released
+                number name priceBox at 1,6 span 4 bind album.price
+                number name lengthBox at 5,6 span 4 bind album.length placeholder @length345
+                textbox name contactBox at 9,6 span 4 bind album.contact
+        pane
+            tabs name galleryTabs at 1,1 span 12 rows 7
+                tab @albums
+                    list name albumList at 1,1 span 12 rows 6 bind albums show title, copies on open: albumPicked
+                tab @cover
+                    image name coverImage at 1,1 span 12 rows 6 bind album.cover
+                tab @about
+                    markdown source "about.md" name aboutText at 1,1 span 12 rows 6
+    display name screen at 1,10 span 4 rows 1 bind shown digits 10
+    trend name loadTrend at 5,10 span 4 rows 2 bind load points 30 max 100
+    chart line name history at 9,10 span 4 rows 2 bind readings points 30 max 100
+    canvas name dial at 1,12 span 6 rows 4 units 200 x 100 on draw: drawDial
+    Gauge name gauge at 7,12 span 4 rows 3 bind speed speed 5 title @speed on change: gaugeChanged on reached: gaugeReached
+    password name tokenBox at 1,16 span 6 bind settings.apiToken
+    button @play name playButton at 7,16 span 2 on click: playClicked
+    sound name ding source "ding.wav" volume 80
+    timer name clock every 1 on tick: sampled
+
+page Overview: view
+    title @overview
+    label @overview name overviewLabel at 1,1 span 12
+
+code Gallery
+    handler galleryOpened
+        albums = find a in Album order by a.title
+        shown = 0
+
+    handler albumPicked
+        if albumList.selected != none
+            album = albumList.selected
+
+    handler drawDial
+        dial.clear("panel")
+        dial.ring(50, 50, 42, "border", 3)
+        dial.line(50, 50, 50 + 34 * cos(load), 50 - 34 * sin(load), "accent", 3)
+
+    handler sampled
+        load = load + 1
+        shown = load
+        readings = readings + [load]
+
+    handler playClicked
+        ding.play()
+
+    handler gaugeChanged
+        album.level = speed
+
+    handler gaugeReached(level: integer)
+        gauge.speed = level
+        gauge.reset(1)

@@ -25,7 +25,7 @@ public class WebServerTests
     [Fact]
     public void It_serves_the_browser_programs_files_and_answers_the_sessions()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var dir = Folder();
         try
         {
@@ -53,7 +53,7 @@ public class WebServerTests
     [Fact]
     public void A_file_goes_compressed_to_a_browser_that_takes_it()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var dir = Folder();
         try
         {
@@ -97,7 +97,7 @@ public class WebServerTests
     [Fact]
     public async Task It_answers_browsers_over_a_plain_socket()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var dir = Folder();
         try
         {
@@ -107,20 +107,21 @@ public class WebServerTests
             using var listening = server.Start("127.0.0.1:0");
             using var http = new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.None }) { BaseAddress = new Uri($"http://127.0.0.1:{listening.Port}") };
             // Several requests, one after the other on the same connection.
-            var page = await http.GetAsync("/");
+            var cancel = TestContext.Current.CancellationToken;
+            var page = await http.GetAsync("/", cancel);
             Assert.Equal(HttpStatusCode.OK, page.StatusCode);
             Assert.Equal("text/html", page.Content.Headers.ContentType!.MediaType);
-            Assert.Equal("<html><body></body></html>", await page.Content.ReadAsStringAsync());
+            Assert.Equal("<html><body></body></html>", await page.Content.ReadAsStringAsync(cancel));
             var asked = new HttpRequestMessage(HttpMethod.Get, "/_framework/app.wasm");
             asked.Headers.AcceptEncoding.ParseAdd("gzip, br");
-            var wasm = await http.SendAsync(asked);
+            var wasm = await http.SendAsync(asked, cancel);
             Assert.Equal(["br"], wasm.Content.Headers.ContentEncoding);
-            Assert.Equal([1, 2], await wasm.Content.ReadAsByteArrayAsync());
-            Assert.Equal("// spaced", await http.GetStringAsync("/_framework/a%20b.js"));
-            Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync("/missing.js")).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync("/_framework/..%5C..%5Csecret")).StatusCode);
-            var started = await http.PostAsync(WebServer.SessionPath, new StringContent("""{"do": "start"}""", Encoding.UTF8, "application/json"));
-            Assert.NotNull(JsonNode.Parse(await started.Content.ReadAsStringAsync())!["session"]);
+            Assert.Equal([1, 2], await wasm.Content.ReadAsByteArrayAsync(cancel));
+            Assert.Equal("// spaced", await http.GetStringAsync("/_framework/a%20b.js", cancel));
+            Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync("/missing.js", cancel)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync("/_framework/..%5C..%5Csecret", cancel)).StatusCode);
+            var started = await http.PostAsync(WebServer.SessionPath, new StringContent("""{"do": "start"}""", Encoding.UTF8, "application/json"), cancel);
+            Assert.NotNull(JsonNode.Parse(await started.Content.ReadAsStringAsync(cancel))!["session"]);
         }
         finally
         {

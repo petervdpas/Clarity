@@ -5,6 +5,7 @@
   <Project Path="Clarity.Runtime.Engines/Clarity.Runtime.Engines.csproj" />
   <Project Path="Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
   <Project Path="Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />
+  <Project Path="Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
   <Project Path="Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />
   <Project Path="Clarity.Runtime.Tests/Clarity.Runtime.Tests.csproj" />
   <Project Path="Clarity.Runtime/Clarity.Runtime.csproj" />

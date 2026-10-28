@@ -5,7 +5,7 @@
 
 **Clarity.Runtime.SqlServer** lets the C# applications that [Clarity](https://github.com/petervdpas/Clarity) generates keep their data in SQL Server. It is the SQL Server driver of [Clarity.Runtime](https://www.nuget.org/packages/Clarity.Runtime/), through [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient/).
 
-Clarity.Runtime itself only has SQLite. Each server database is a package of its own, so an application takes only the drivers its data sources need.
+Each kind of database is a package of its own (Clarity.Runtime.Sqlite for SQLite), so an application takes only the drivers its data sources need.
 
 ## How it is used
 

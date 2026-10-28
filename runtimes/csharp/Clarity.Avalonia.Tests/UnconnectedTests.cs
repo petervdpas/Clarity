@@ -68,7 +68,7 @@ public sealed class UnconnectedTests : IDisposable
     public void The_window_that_keeps_the_connection_says_why_and_closing_it_unchanged_ends()
     {
         var run = Track(new Run());
-        run.Start(Db.Memory).Start(Text.Plain("the secret setting shopDb is not kept yet"));
+        run.Start(Sqlite.Memory).Start(Text.Plain("the secret setting shopDb is not kept yet"));
         var shell = Assert.Single(run.Shown);
         Assert.Equal("Preferences", shell.Current!.Title);
         Assert.Equal(["the secret setting shopDb is not kept yet"], shell.Messages.Select(m => m.Shown));
@@ -81,7 +81,7 @@ public sealed class UnconnectedTests : IDisposable
     {
         var run = Track(new Run());
         var tries = 0;
-        run.Start(() => ++tries == 1 ? throw new StorageException("still not kept") : Db.Memory()).Start(Text.Plain("not kept"));
+        run.Start(() => ++tries == 1 ? throw new StorageException("still not kept") : Sqlite.Memory()).Start(Text.Plain("not kept"));
         run.Settings.Change();
         run.Shown[0].Close();
         // Still not: the window shows again, saying why.
@@ -100,7 +100,7 @@ public sealed class UnconnectedTests : IDisposable
     {
         var run = Track(new Run());
         string? given = null;
-        run.Start(Db.Memory, (db, unconnecting) =>
+        run.Start(Sqlite.Memory, (db, unconnecting) =>
         {
             var host = new HostViewModel(db);
             host.RunUnconnected(unconnecting, reason =>
@@ -118,7 +118,7 @@ public sealed class UnconnectedTests : IDisposable
     public void Without_a_window_to_show_the_application_ends()
     {
         var run = Track(new Run());
-        run.Start(Db.Memory, window: false).Start(Text.Plain("server down"));
+        run.Start(Sqlite.Memory, window: false).Start(Text.Plain("server down"));
         Assert.Empty(run.Shown);
         Assert.Equal(1, run.Ended);
     }

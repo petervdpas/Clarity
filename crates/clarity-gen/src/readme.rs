@@ -56,7 +56,7 @@ pub fn readme(settings: &Settings, calls_out: bool) -> String {
     out.push_str("\nClarity looks for these itself (`clarity tools`, and Build tools on the Project tab); this list is for building the project without it.\n");
     if backend == Backend::Csharp {
         out.push_str(&format!(
-            "\nClarity's runtime comes as NuGet packages ({} {}, and the driver of each server database), which the first build fetches from nuget.org. To build on the runtime's own projects instead, while working on them, name their folder in Clarity's repository:\n\n    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n\nor set the environment variable `CLARITY_RUNTIME` to it.\n",
+            "\nClarity's runtime comes as NuGet packages ({} {}, and the driver of each kind of database), which the first build fetches from nuget.org. To build on the runtime's own projects instead, while working on them, name their folder in Clarity's repository:\n\n    dotnet build -p:ClarityRuntime=<Clarity>/runtimes/csharp\n\nor set the environment variable `CLARITY_RUNTIME` to it.\n",
             // A desktop program takes the desktop's package; one served to browsers alone the core (DESIGN 7.6).
             if crate::windowed_target(settings) == clarity_project::Target::Desktop { "Clarity.Avalonia.Desktop" } else { "Clarity.Avalonia" },
             crate::csharp::runtime_version()

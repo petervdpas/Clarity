@@ -8,7 +8,7 @@ use clarity_spec::code::check::{self, TypeInfo};
 use clarity_spec::model::{FieldType, Project};
 
 use super::names::{pascal, string};
-use super::{ENGINES_PACKAGE, HEADER, SERVERS, Server, TARGET_FRAMEWORK, dialect, logic, model, runtime_version, texts, text};
+use super::{ENGINES_PACKAGE, HEADER, DRIVERS, Driver, TARGET_FRAMEWORK, dialect, logic, model, runtime_version, texts, text};
 use crate::OutFile;
 use crate::commands::{CommandSpec, ParamSpec, Said};
 
@@ -79,9 +79,9 @@ fn typed(p: &ParamSpec, at: usize) -> String {
     }
 }
 
-fn csproj(name: &str, program: &str, servers: &[&Server], engines: bool) -> String {
+fn csproj(name: &str, program: &str, drivers: &[&Driver], engines: bool) -> String {
     let version = runtime_version();
-    let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE).chain(servers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
+    let packages: Vec<&str> = std::iter::once(RUNTIME_PACKAGE).chain(drivers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     let resources = if engines { "  <ItemGroup>\n    <EmbeddedResource Include=\"Engines/*.wasm\" LogicalName=\"Engines/%(Filename)%(Extension)\" />\n  </ItemGroup>\n" } else { "" };
@@ -123,9 +123,9 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let texts = texts::Texts::of(project);
-    let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
+    let drivers: Vec<&Driver> = DRIVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &servers, engines))];
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, &program, &drivers, engines))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -158,7 +158,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         files.push(text(&format!("Texts.{language}.resx"), texts.language_resx(values)));
     }
     files.push(text("Locale.cs", locale_cs(project, &name)));
-    files.push(text("Program.cs", program_cs(project, settings, &name, &databases, &servers, engines)));
+    files.push(text("Program.cs", program_cs(project, settings, &name, &databases, &drivers, engines)));
     files.push(text(
         "README.md",
         format!(
@@ -202,10 +202,10 @@ public static partial class Labels
     )
 }
 
-fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(String, crate::ddl::Sql, String)], servers: &[&Server], engines: bool) -> String {
+fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(String, crate::ddl::Sql, String)], drivers: &[&Driver], engines: bool) -> String {
     let commands = crate::commands::commands(project);
     let check_engines = if engines { "        try\n        {\n            Engines.Check();\n        }\n        catch (EngineException e)\n        {\n            Console.Error.WriteLine(e.Message);\n            return 1;\n        }\n" } else { "" };
-    let turned_on: String = servers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
+    let turned_on: String = drivers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
     let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
     let databases = databases.iter().map(|(source, sql, at)| format!("({}, {}, {})", string(source), dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
     let currency = settings.currency.as_deref().map_or("null".to_string(), string);

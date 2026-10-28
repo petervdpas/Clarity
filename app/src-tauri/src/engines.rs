@@ -128,17 +128,19 @@ fn library() -> Option<PathBuf> {
 
 /// Builds every engine of the project in `dir` whose file is older than its
 /// source, before the application is built on them.
-pub fn build_changed(app: &AppHandle, dir: &Path) -> Result<(), String> {
+pub fn build_changed(app: &AppHandle, dir: &Path) -> Result<bool, String> {
     let project = clarity_project::load_modules(dir).map_err(|err| format!("cannot read {}: {err}", dir.display()))?;
     let folder = dir.join(clarity_spec::engines::ENGINES_DIR);
+    let mut built = false;
     for engine in project.files.iter().flat_map(|f| &f.engines) {
         if let Some(source) = engines::source_of(&folder, &engine.file)
             && engines::needs_build(&source, &folder.join(&engine.file))
         {
             build(app, &folder, engine, &source)?;
+            built = true;
         }
     }
-    Ok(())
+    Ok(built)
 }
 
 /// Runs cargo for the engine, sends its output, tells its problems, and

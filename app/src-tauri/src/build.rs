@@ -194,7 +194,21 @@ pub fn stack_tools() -> Vec<StackTools> {
 /// Returns the folder of the program to build, the desktop one or (with
 /// `cli`) the command-line one, and how its stack builds it, as a debug or
 /// (with `release`) a release program.
-pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, clarity_gen::Toolchain, clarity_project::Stack), String> {
+/// A generated program: where it is, how to build it, and what its last
+/// build was made from.
+pub struct Generated {
+    pub out: PathBuf,
+    pub toolchain: clarity_gen::Toolchain,
+    pub stack: clarity_project::Stack,
+    /// The mark of its generated files, which a build records.
+    pub fingerprint: String,
+    pub release: bool,
+    /// The last build, while it was made from these same files and its
+    /// program is there: Run starts it without building again.
+    pub built: Option<(clarity_gen::Toolchain, bool)>,
+}
+
+pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<Generated, String> {
     let dir = clarity_project::module_dir(file);
     // Each web API's module follows its description and picks (DESIGN 5.23).
     clarity_project::refresh_apis(file)?;
@@ -220,13 +234,15 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, c
     if cli && !settings.stack.has(clarity_project::Target::Cli) {
         return Err(format!("{shown} has no command-line program; add the cli target to the stack"));
     }
-    let (target, toolchain) = if cli {
-        (clarity_project::Target::Cli, clarity_gen::cli_toolchain(&settings, release))
-    } else {
-        (clarity_gen::windowed_target(&settings), clarity_gen::toolchain(&settings, release))
-    };
-    let toolchain = toolchain.ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
-    Ok((clarity_project::target_dir(&out, target), toolchain, settings.stack))
+    let target = if cli { clarity_project::Target::Cli } else { clarity_gen::windowed_target(&settings) };
+    let toolchain_of = |release: bool| if cli { clarity_gen::cli_toolchain(&settings, release) } else { clarity_gen::toolchain(&settings, release) };
+    let toolchain = toolchain_of(release).ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
+    let out = clarity_project::target_dir(&out, target);
+    let fingerprint = programs.iter().find(|p| p.target == target).map(clarity_gen::fingerprint).unwrap_or_default();
+    let built = clarity_gen::last_build(&out, &fingerprint)
+        .and_then(|release| toolchain_of(release).map(|t| (t, release)))
+        .filter(|(t, _)| out.join(&t.program).exists());
+    Ok(Generated { out, toolchain, stack: settings.stack, fingerprint, release, built })
 }
 
 /// Why the generated project in `out` cannot be built on this machine: the
@@ -336,7 +352,8 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     }
     begin_output(&app);
     // Generating works without the stack's tools; building needs them.
-    let found = generate_out(&file, release, command_line.is_some()).and_then(|(out, toolchain, stack)| {
+    let found = generate_out(&file, release, command_line.is_some()).and_then(|generated| {
+        let (out, stack) = (generated.out.clone(), generated.stack.clone());
         // A program served to a browser alone runs as a web server, at the project's port.
         let serves = (command_line.is_none() && stack.has(clarity_project::Target::Web) && !stack.has(clarity_project::Target::Desktop))
             .then(|| clarity_project::load(&file).settings.map(|s| clarity_project::serve_address(&s)))
@@ -353,10 +370,10 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             Some(why) => Err(why),
             None if tools_missing => Err(format!("the project is generated in {}; its custom parts need CMake and a C++ compiler", out.display())),
             // The native parts are built first, where the stack's own build does not build them.
-            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), out, toolchain, serves)),
+            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), generated, serves)),
         }
     });
-    let (before, out, toolchain, serves) = match found {
+    let (before, generated, serves) = match found {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -370,9 +387,12 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     std::thread::spawn(move || {
         // The engines whose source changed first, so the application has them as written.
         let done = match crate::engines::build_changed(&app, &dir) {
-            Ok(()) => match before.iter().find_map(|step| run_step(&app, &out, step).err()) {
+            // Run starts the last build when nothing changed since: the
+            // generated files, the engines and the parts are as it had them.
+            Ok(false) if run && let Some((toolchain, _)) = &generated.built => build(&app, &generated, toolchain, false, run, serves, command_line.as_deref()),
+            Ok(_) => match before.iter().find_map(|step| run_step(&app, &generated.out, step).err()) {
                 Some(message) => BuildDone { ok: false, message, binary: None },
-                None => build(&app, &out, &toolchain, run, serves, command_line.as_deref()),
+                None => build(&app, &generated, &generated.toolchain, true, run, serves, command_line.as_deref()),
             },
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
@@ -414,12 +434,57 @@ fn run_step(app: &AppHandle, out: &Path, step: &[String]) -> Result<(), String> 
     }
 }
 
-fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool, serves: Option<String>, command_line: Option<&str>) -> BuildDone {
+/// Builds the generated program with `toolchain` (unless `building` is
+/// false: it is built already), records what it was made from, and with
+/// `run` starts it.
+fn build(app: &AppHandle, generated: &Generated, toolchain: &clarity_gen::Toolchain, building: bool, run: bool, serves: Option<String>, command_line: Option<&str>) -> BuildDone {
+    let out = generated.out.as_path();
     let failed = |message: String| BuildDone {
         ok: false,
         message,
         binary: None,
     };
+    if building {
+        if let Err(done) = build_with(app, out, toolchain) {
+            return done;
+        }
+        let _ = clarity_gen::record_build(out, &generated.fingerprint, generated.release);
+    }
+    let binary = out.join(&toolchain.program);
+    if run && let Some(line) = command_line {
+        return run_command_line(app, out, &binary, line);
+    }
+    if run {
+        stop(app);
+        // A web application listens at the project's port, which no other program may hold.
+        if let Some(address) = &serves
+            && let Err(why) = can_serve_at(address)
+        {
+            return failed(why);
+        }
+        let address = serves;
+        // What starts, and where: after a build, or the last one when nothing changed.
+        send_line(app, format!("{} (in {})", binary.display(), out.display()));
+        let mut command = Command::new(&binary);
+        command.current_dir(out);
+        if let Some(address) = &address {
+            command.args(["--address", address]);
+        }
+        match command.spawn() {
+            Ok(child) => started(app, child, address.map(|a| format!("http://{a}"))),
+            Err(err) => return failed(format!("cannot start {}: {err}", binary.display())),
+        }
+    }
+    BuildDone {
+        ok: true,
+        message: if run { "running".to_string() } else { format!("built {}", binary.display()) },
+        binary: Some(binary.display().to_string()),
+    }
+}
+
+/// Runs the stack's build tool in `out`, its output in the Output panel.
+fn build_with(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain) -> Result<(), BuildDone> {
+    let failed = |message: String| BuildDone { ok: false, message, binary: None };
     let mut command = Command::new(clarity_gen::tools::Probe::find(&clarity_gen::tools::System, toolchain.tool).unwrap_or_else(|| toolchain.tool.into()));
     command
         .args(&toolchain.args)
@@ -436,7 +501,7 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
     send_line(app, format!("{} {} (in {})", toolchain.tool, toolchain.args.join(" "), out.display()));
     let mut child = match command.spawn() {
         Ok(child) => child,
-        Err(err) => return failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing)),
+        Err(err) => return Err(failed(format!("cannot start {}: {err}; {}", toolchain.tool, toolchain.missing))),
     };
     // cargo reports on stderr, dotnet on stdout: both go to the output.
     let stdout = child.stdout.take().map(|stdout| {
@@ -451,37 +516,10 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
     }
     match child.wait() {
         Ok(status) if status.success() => {}
-        Ok(_) => return failed("the build failed; see the output".to_string()),
-        Err(err) => return failed(format!("{} stopped: {err}", toolchain.tool)),
+        Ok(_) => return Err(failed("the build failed; see the output".to_string())),
+        Err(err) => return Err(failed(format!("{} stopped: {err}", toolchain.tool))),
     }
-    let binary = out.join(&toolchain.program);
-    if run && let Some(line) = command_line {
-        return run_command_line(app, out, &binary, line);
-    }
-    if run {
-        stop(app);
-        // A web application listens at the project's port, which no other program may hold.
-        if let Some(address) = &serves
-            && let Err(why) = can_serve_at(address)
-        {
-            return failed(why);
-        }
-        let address = serves;
-        let mut command = Command::new(&binary);
-        command.current_dir(out);
-        if let Some(address) = &address {
-            command.args(["--address", address]);
-        }
-        match command.spawn() {
-            Ok(child) => started(app, child, address.map(|a| format!("http://{a}"))),
-            Err(err) => return failed(format!("cannot start {}: {err}", binary.display())),
-        }
-    }
-    BuildDone {
-        ok: true,
-        message: if run { "running".to_string() } else { format!("built {}", binary.display()) },
-        binary: Some(binary.display().to_string()),
-    }
+    Ok(())
 }
 
 /// Runs the command-line program with the words of `line`, in its folder:
@@ -663,7 +701,7 @@ mod tests {
     #[test]
     fn generates_the_example_into_out() {
         let dir = example("shop");
-        let (out, toolchain, _) = generate_out(&dir.join("shop.clarity"), true, false).unwrap();
+        let Generated { out, toolchain, .. } = generate_out(&dir.join("shop.clarity"), true, false).unwrap();
         // The desktop program, in its own folder of the output (DESIGN 5.20).
         assert_eq!(out, dir.join("shop/out/desktop"));
         assert!(out.join("Cargo.toml").exists());
@@ -737,7 +775,7 @@ mod tests {
     #[test]
     fn a_csharp_project_is_generated_for_dotnet() {
         let dir = example("todo");
-        let (out, toolchain, _) = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
+        let Generated { out, toolchain, .. } = generate_out(&dir.join("todo.clarity"), false, false).unwrap();
         assert!(out.join("Todo.csproj").exists());
         assert!(!out.join("Cargo.toml").exists());
         assert_eq!(toolchain.tool, "dotnet");

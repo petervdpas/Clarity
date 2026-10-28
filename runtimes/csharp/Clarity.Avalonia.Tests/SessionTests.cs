@@ -91,7 +91,7 @@ public class SessionTests
     [Fact]
     public void A_tab_starts_a_session_with_the_main_window_opened()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         var reply = sessions.Answer(Request("""{"do": "start"}"""));
         Assert.False(string.IsNullOrEmpty(reply["session"]?.GetValue<string>()));
@@ -104,7 +104,7 @@ public class SessionTests
     [Fact]
     public void A_command_runs_on_the_state_the_person_left()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         var start = sessions.Answer(Request("""{"do": "start"}"""));
         var session = start["session"]!.GetValue<string>();
@@ -121,7 +121,7 @@ public class SessionTests
     [Fact]
     public void Windows_open_in_place_and_close_back_to_the_one_below()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         var start = sessions.Answer(Request("""{"do": "start"}"""));
         var session = start["session"]!.GetValue<string>();
@@ -138,7 +138,7 @@ public class SessionTests
     [Fact]
     public void A_dialog_closes_with_its_value_to_the_window_that_asked()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         var start = sessions.Answer(Request("""{"do": "start"}"""));
         var session = start["session"]!.GetValue<string>();
@@ -154,7 +154,7 @@ public class SessionTests
     [Fact]
     public void A_question_goes_to_the_browser_and_its_answer_comes_back()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         var start = sessions.Answer(Request("""{"do": "start"}"""));
         var session = start["session"]!.GetValue<string>();
@@ -169,7 +169,7 @@ public class SessionTests
     [Fact]
     public void An_unknown_session_or_command_is_an_error_not_a_crash()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new ShelfViewModel(db));
         Assert.Equal("the session has ended; start again", sessions.Answer(Request("""{"session": "nope", "do": "run", "window": 1, "command": "Greet"}"""))["error"]!.GetValue<string>());
         var start = sessions.Answer(Request("""{"do": "start"}"""));
@@ -180,7 +180,7 @@ public class SessionTests
     [Fact]
     public void A_quiet_session_ends_and_closes_its_windows()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var now = DateTime.UtcNow;
         var sessions = new Sessions(() => new ShelfViewModel(db), TimeSpan.FromMinutes(30), () => now);
         var start = sessions.Answer(Request("""{"do": "start"}"""));
@@ -206,7 +206,7 @@ public class SessionSettingsTests
     [Fact]
     public void Each_request_runs_with_the_settings_of_the_person_who_sent_it()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var sessions = new Sessions(() => new FasterViewModel(db)) { Settings = Prefs.Hooks };
         var start = sessions.Answer(JsonNode.Parse("""{"do": "start", "settings": {"speed": 5}}""")!.AsObject());
         var session = start["session"]!.GetValue<string>();

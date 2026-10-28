@@ -92,7 +92,7 @@ pub fn adapter_starter(project: &Project, part: &PartDecl) -> String {
         string(n)
     );
     for show in shows(project, part) {
-        let body = if show.starts_with("ShowValue(") { " => shown.Text = value?.ToString() ?? \"\";".to_string() } else { "\n    {\n    }".to_string() };
+        let body = if show.starts_with("ShowValue(") { " => shown.Text = $\"{value}\";".to_string() } else { "\n    {\n    }".to_string() };
         let _ = write!(out, "\n    private partial void {show}{body}\n");
     }
     out.push_str("}\n");

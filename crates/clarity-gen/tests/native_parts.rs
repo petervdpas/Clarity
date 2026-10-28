@@ -432,6 +432,18 @@ fn a_dotnet_part_has_its_package_its_adapter_and_its_generated_half() {
     assert!(view.contains("<parts:Notes ") && view.contains("xmlns:parts=\"using:ClarityParts\""), "{view}");
 }
 
+/// The adapter's starter shows the value as text, whatever its type: a
+/// number has no `?.` (found by the every-part project).
+#[test]
+fn a_dotnet_parts_starter_shows_a_value_of_any_type() {
+    let gauge = NOTES.replace("binds text", "binds integer");
+    let p = load_keyed([("notes.clarity", gauge.as_str())], &[], "en");
+    let starter = clarity_gen::parts::dotnet_adapter(&p, "Notes").expect("the part is declared");
+    assert!(starter.contains("private partial void ShowValue(long value) => shown.Text = $\"{value}\";"), "{starter}");
+    let text = clarity_gen::parts::dotnet_adapter(&notes_project(), "Notes").unwrap();
+    assert!(text.contains("private partial void ShowValue(string value) => shown.Text = $\"{value}\";"), "{text}");
+}
+
 #[test]
 fn a_dotnet_part_on_another_stack_is_refused() {
     let mut settings = notes_settings();

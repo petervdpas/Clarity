@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
     <ProjectReference Include="../Clarity.Runtime.PostgreSql/Clarity.Runtime.PostgreSql.csproj" />
     <ProjectReference Include="../Clarity.Runtime.MySql/Clarity.Runtime.MySql.csproj" />
     <ProjectReference Include="../Clarity.Runtime.SqlServer/Clarity.Runtime.SqlServer.csproj" />

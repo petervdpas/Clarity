@@ -1,0 +1,10 @@
+// The every-part project: one project that uses every part, every field
+// type and every kind of page (tests/everything.rs). Each stack's build
+// test builds it with warnings as errors, so no warning hides in a part
+// no example has. Its modules are in the everything folder next to this file.
+project Everything
+    title "Everything"
+    stack csharp avalonia desktop cli
+    output "out"
+    language "en"
+    datasource main sqlite "data/everything.db"

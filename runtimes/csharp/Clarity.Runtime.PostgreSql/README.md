@@ -5,7 +5,7 @@
 
 **Clarity.Runtime.PostgreSql** lets the C# applications that [Clarity](https://github.com/petervdpas/Clarity) generates keep their data in PostgreSQL. It is the PostgreSQL driver of [Clarity.Runtime](https://www.nuget.org/packages/Clarity.Runtime/), through [Npgsql](https://www.nuget.org/packages/Npgsql/).
 
-Clarity.Runtime itself only has SQLite. Each server database is a package of its own, so an application takes only the drivers its data sources need.
+Each kind of database is a package of its own (Clarity.Runtime.Sqlite for SQLite), so an application takes only the drivers its data sources need.
 
 ## How it is used
 

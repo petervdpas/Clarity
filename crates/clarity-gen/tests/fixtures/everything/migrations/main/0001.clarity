@@ -1,0 +1,33 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Step 1"
+    add entity Friend
+        name: text(80)
+        city: text(60)
+    add entity Folder
+        name: text(80)
+        size: integer
+        parent: ref Folder
+    add entity Album
+        title: text(120), search
+        copies: integer
+        format: Format
+        site: url
+        favourite: bool
+        rating: decimal(3, 1)
+        tint: color, default "#3b82f6"
+        booklet: file
+        tags: list<text>, search
+        formats: list<Format>
+        plays: list<date>
+        scores: list<decimal>
+        lentTo: ref Friend
+        price: money
+        added: datetime
+        released: date
+        length: duration
+        cover: image
+        contact: email
+        code: id
+        notes: text
+        level: integer

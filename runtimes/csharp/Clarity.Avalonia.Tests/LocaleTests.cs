@@ -153,7 +153,7 @@ public sealed class LocaleTests : IDisposable
     [AvaloniaFact]
     public void ALanguageChangeRebuildsTheViewsOfEveryWindow()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var built = 0;
         var shell = Shell.Start(new TitledViewModel(db), vm =>
         {

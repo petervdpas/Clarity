@@ -78,7 +78,7 @@ public class PictureTests
 
     static Db Albums(string store)
     {
-        var db = Db.Memory();
+        var db = Sqlite.Memory();
         db.Migrate([["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]);
         db.AddStore("photos", store);
         return db;
@@ -138,7 +138,7 @@ public class PictureTests
     [Fact]
     public void AStoreComesFromItsPlaceOrTheEnvironment()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         Assert.Throws<StorageException>(() => db.AddStore("photos", "env:CLARITY_NO_SUCH_STORE"));
         var store = Scratch("env");
         db.AddStore("photos", store);

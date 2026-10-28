@@ -3,7 +3,7 @@
 //! AXAML view with its ViewModel, shown in the runtime's one-window shell;
 //! and the migration steps of every database. The project builds with
 //! `dotnet build` on the runtime's NuGet packages (Clarity.Avalonia and the
-//! driver of each server database), or on the runtime's own projects while
+//! driver of each kind of database), or on the runtime's own projects while
 //! working on them (the `ClarityRuntime` switch of the project file).
 
 pub(crate) mod parts;
@@ -52,20 +52,21 @@ const UI_PACKAGE: &str = "Clarity.Avalonia";
 /// windows, sound, the shell), and through it Clarity.Avalonia (DESIGN 7.6).
 const DESKTOP_PACKAGE: &str = "Clarity.Avalonia.Desktop";
 
-/// What a server database brings into a project: the runtime's package of
+/// What a kind of database brings into a project: the runtime's package of
 /// its driver (with the client it stands on), and the class whose Use() turns
-/// the driver on.
-struct Server {
+/// the driver on. A program served to a browser carries none: its server does.
+struct Driver {
     sql: Sql,
     /// The class whose Use() turns the driver on, like `PostgreSql`.
     class: &'static str,
     package: &'static str,
 }
 
-const SERVERS: [Server; 3] = [
-    Server { sql: Sql::Postgres, class: "PostgreSql", package: "Clarity.Runtime.PostgreSql" },
-    Server { sql: Sql::Mysql, class: "MySql", package: "Clarity.Runtime.MySql" },
-    Server { sql: Sql::Mssql, class: "SqlServer", package: "Clarity.Runtime.SqlServer" },
+const DRIVERS: [Driver; 4] = [
+    Driver { sql: Sql::Sqlite, class: "Sqlite", package: "Clarity.Runtime.Sqlite" },
+    Driver { sql: Sql::Postgres, class: "PostgreSql", package: "Clarity.Runtime.PostgreSql" },
+    Driver { sql: Sql::Mysql, class: "MySql", package: "Clarity.Runtime.MySql" },
+    Driver { sql: Sql::Mssql, class: "SqlServer", package: "Clarity.Runtime.SqlServer" },
 ];
 
 /// The application's styles, with a line where the style classes of its themes go.
@@ -104,11 +105,13 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     let types = check::types(&project.files);
     let mut errors = Vec::new();
     let texts = texts::Texts::of(project);
-    let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
+    let drivers: Vec<&Driver> = DRIVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = !crate::engines(project).is_empty();
     // Engines beside the screen run in the application's process too, through the same package.
     let screen_engines = !crate::screen_engines(project).is_empty();
-    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, &servers, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
+    // On the web the databases are the server's, which references their drivers instead.
+    let carried: &[&Driver] = if ui == UI_PACKAGE { &[] } else { &drivers };
+    let mut files = vec![text(&format!("{name}.csproj"), csproj(&name, ui, carried, project.resources.as_ref().is_some_and(|r| !r.files.is_empty() || !r.markdown.is_empty()), engines || screen_engines, parts::references(project) + &library_references(project)))];
     for file in &project.files {
         let Some(module) = &file.module else { continue };
         let file_types = types.get(&file.path).cloned().unwrap_or_default();
@@ -153,7 +156,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         return Err(errors);
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
-    files.push(text("Program.cs", program_cs(&name, &databases, &servers, settings, engines)));
+    files.push(text("Program.cs", program_cs(&name, &databases, &drivers, settings, engines)));
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
@@ -203,7 +206,9 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
     }
     let styles = themes::style_properties(&offered);
     for theme in &offered {
-        files.push(text(&themes::theme_path(theme), themes::theme_axaml(theme, &styles)));
+        let class = format!("{name}.{}", themes::theme_class(theme));
+        files.push(text(&themes::theme_path(theme), themes::theme_axaml(theme, &styles, Some(&class))));
+        files.push(text(&format!("{}.cs", themes::theme_path(theme)), themes::theme_code(theme, &name)));
     }
     files.push(text("AppThemes.cs", themes::app_themes(&offered, &name)));
     files.extend(crate::web::resource_files(project, "resources"));
@@ -234,14 +239,14 @@ fn main_window(project: &Project) -> Option<String> {
 }
 
 /// The project file. It references the runtime's packages: `ui` (Clarity.Avalonia.Desktop,
-/// or Clarity.Avalonia for the web) and the driver of each server database the data sources are. With the
+/// or Clarity.Avalonia for the web) and the driver of each kind of database the data sources are. With the
 /// property `ClarityRuntime` (or the environment variable CLARITY_RUNTIME) set
 /// to the runtime's folder (runtimes/csharp in Clarity's repository), it
 /// references the runtime's own projects there instead, for working on them.
-fn csproj(name: &str, ui: &str, servers: &[&Server], carried: bool, engines: bool, dotnet: String) -> String {
+fn csproj(name: &str, ui: &str, drivers: &[&Driver], carried: bool, engines: bool, dotnet: String) -> String {
     let version = runtime_version();
     // Engines need Wasmtime, which only an application with an engine carries.
-    let packages: Vec<&str> = std::iter::once(ui).chain(servers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
+    let packages: Vec<&str> = std::iter::once(ui).chain(drivers.iter().map(|s| s.package)).chain(engines.then_some(ENGINES_PACKAGE)).collect();
     let references: String = packages.iter().map(|p| format!("    <PackageReference Include=\"{p}\" Version=\"{version}\" />\n")).collect();
     let projects: String = packages.iter().map(|p| format!("    <ProjectReference Include=\"$(ClarityRuntime)/{p}/{p}.csproj\" />\n")).collect();
     // The files of the project's resources folder, embedded.
@@ -404,9 +409,9 @@ fn check_engines(engines: bool) -> &'static str {
 }
 
 /// The databases of the data sources and the file stores, and `method`, which opens them.
-fn opening(databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings, method: &str) -> String {
-    // The server databases, each turned on by its package before the databases open.
-    let turned_on: String = servers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
+fn opening(databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, method: &str) -> String {
+    // Each kind of database, turned on by its package before the databases open.
+    let turned_on: String = drivers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
     let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
     let databases = databases
         .iter()
@@ -434,9 +439,9 @@ fn opening(databases: &[(String, Sql, String)], servers: &[&Server], settings: &
     )
 }
 
-fn program_cs(name: &str, databases: &[(String, Sql, String)], servers: &[&Server], settings: &Settings, engines: bool) -> String {
+fn program_cs(name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
     let check_engines = check_engines(engines);
-    let opening = opening(databases, servers, settings, "OpenDatabases");
+    let opening = opening(databases, drivers, settings, "OpenDatabases");
     format!(
         "{HEADER}
 using Avalonia;

@@ -62,7 +62,7 @@ public sealed class Unconnected
     /// <summary>Shows what keeps the connection, saying <paramref name="problem"/>.</summary>
     public void Start(Text problem)
     {
-        var memory = Db.Memory();
+        var memory = Sqlite.Memory();
         var said = new ObservableCollection<Message>();
         WindowViewModel? first = null;
         if (Handler is { } handler)

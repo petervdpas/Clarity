@@ -56,7 +56,7 @@ public class WindowCaseTests
             var name = @case.GetProperty("name").GetString();
             var dialogs = Strings(@case.GetProperty("dialogs")).ToHashSet();
             var log = new List<string>();
-            using var db = Db.Memory();
+            using var db = Sqlite.Memory();
             var shell = Shell.Start(new CaseViewModel(db, @case.GetProperty("start").GetString()!, dialogs, log),
                 vm => new ContentControl { DataContext = vm });
             foreach (var step in @case.GetProperty("steps").EnumerateArray())

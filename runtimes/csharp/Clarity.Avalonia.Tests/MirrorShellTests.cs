@@ -65,7 +65,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task It_shows_a_mirror_of_the_main_window_the_session_opened()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, _) = await Started(db);
         var main = Assert.IsType<ShelfViewModel>(shell.Current);
         Assert.True(main.IsMirror);
@@ -76,7 +76,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task A_command_runs_on_the_server_with_what_the_person_typed()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, link) = await Started(db);
         var main = (ShelfViewModel)shell.Current!;
         main.Name.Text = "Ada";
@@ -89,7 +89,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task Windows_open_and_close_as_the_server_says()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, _) = await Started(db);
         ((ShelfViewModel)shell.Current!).DetailCommand.Execute(null);
         await shell.Idle;
@@ -104,7 +104,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task A_dialog_shows_over_the_window_and_gives_back_its_value()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, link) = await Started(db);
         ((ShelfViewModel)shell.Current!).PickCommand.Execute(null);
         await shell.Idle;
@@ -124,7 +124,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task A_picture_or_a_file_is_fetched_from_the_server()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, link) = await Started(db);
         ((ShelfViewModel)shell.Current!).DetailCommand.Execute(null);
         await shell.Idle;
@@ -138,7 +138,7 @@ public class MirrorShellTests
     [AvaloniaFact]
     public async Task A_question_is_asked_in_the_browser_and_answered_on_the_server()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var (shell, _) = await Started(db);
         ((ShelfViewModel)shell.Current!).RemoveCommand.Execute(null);
         await shell.Idle;
@@ -156,7 +156,7 @@ public class BrowserPageTests
     [AvaloniaFact]
     public async Task The_tab_takes_the_title_of_the_window_on_top()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var page = new FakePage();
         BrowserPage.Current = page;
         try
@@ -212,7 +212,7 @@ public class MirrorSettingsTests
     [AvaloniaFact]
     public async Task The_mirror_sends_the_persons_settings_and_takes_back_what_a_handler_changed()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var person = new JsonObject { ["speed"] = 3 };
         var sessions = new Sessions(() => new FasterViewModel(db)) { Settings = Prefs.Hooks };
         var shell = await MirrorShell.Start(new InProcess(sessions), m => new TextBlock(), settings: (() => person, sent => person = sent));

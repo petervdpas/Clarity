@@ -93,7 +93,7 @@ public class DbTests
 
     static Db NewDb()
     {
-        var db = Db.Memory();
+        var db = Sqlite.Memory();
         Assert.Equal(1, db.Migrate(Steps));
         return db;
     }
@@ -313,7 +313,7 @@ public class DbTests
             }
 
             // Each table is in its own file.
-            using (var onlyMain = Db.Open(main))
+            using (var onlyMain = Sqlite.Open(main))
                 Assert.Single(onlyMain.All<Customer>());
             using (var db = Db.Connect(("main", Dialect.Sqlite, main), ("erp", Dialect.Sqlite, erp)))
             {
@@ -331,7 +331,7 @@ public class DbTests
     [Fact]
     public void ARecordCanLiveInAnExistingTable()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         db.Migrate([["CREATE TABLE tblInvoice (InvoiceID INTEGER PRIMARY KEY, InvNo TEXT NOT NULL, Other TEXT);"]]);
         var first = new Legacy { Number = "INV-1" };
         db.Save(first);

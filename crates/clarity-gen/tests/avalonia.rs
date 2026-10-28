@@ -751,7 +751,15 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
     assert!(!app_project.contains("Clarity.Avalonia.Desktop"), "{app_project}");
     assert!(!files.iter().any(|f| f.path == "Program.cs" || f.path == "App/Program.cs"), "no desktop program");
     has(file(&files, "App/Windows/OrderFormViewModel.cs"), "public OrderFormViewModel(Db? db) : base(db)");
-    has(file(&files, "App/Databases.cs"), "public static Db Open()\n");
+    // The databases are the server's: the browser program carries no driver.
+    assert!(!app_project.contains("Clarity.Runtime.Sqlite"), "{app_project}");
+    assert!(!files.iter().any(|f| f.path == "App/Databases.cs"), "the databases open on the server");
+    let databases = file(&files, "Server/Databases.cs");
+    has(databases, "public static Db Open()\n");
+    has(databases, "        Sqlite.Use();\n        var db = Db.Connect(Sources);");
+    let server_project = file(&files, "Server/Shop.Server.csproj");
+    has(server_project, "<PackageReference Include=\"Clarity.Runtime.Sqlite\" Version=");
+    has(server_project, "<ProjectReference Include=\"$(ClarityRuntime)/Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj\" />");
     let app = file(&files, "App/App.axaml.cs");
     has(app, "if (ApplicationLifetime is ISingleViewApplicationLifetime single && Sessions is { } link)");
     has(app, "holder.Content = await MirrorShell.Start(link, Views.Create, TimeSpan.FromMilliseconds(");
@@ -776,6 +784,10 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
         has(browser, &format!("<TrimmerRootAssembly Include=\"{kept}\" />"));
     }
     assert!(!browser.contains("<PublishTrimmed>false</PublishTrimmed>"), "{browser}");
+    // What the trimmer warns of, code reached by name at runtime, is kept
+    // whole above (and DataGrid's reaches only the windows' records), so a
+    // Release build has nothing to warn of.
+    has(browser, "<SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>");
     // On Windows its build files go to a short folder of their own: the
     // WebAssembly steps nest deep, past Windows' 260 characters when the
     // project's own folder is deep too. One folder per project's place.

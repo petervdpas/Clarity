@@ -757,11 +757,48 @@ fn remove_stale(root: &std::path::Path, dir: &std::path::Path, files: &[OutFile]
             if std::fs::read_dir(&path)?.next().is_none() {
                 std::fs::remove_dir(&path)?;
             }
-        } else if relative != OUT_MARKER && !files.iter().any(|f| f.path == relative) {
+        } else if relative != OUT_MARKER && relative != BUILT_STAMP && !files.iter().any(|f| f.path == relative) {
             std::fs::remove_file(&path)?;
         }
     }
     Ok(())
+}
+
+/// What a program's build was made from, written beside it, so Run starts
+/// the program as built while nothing changed (every stack).
+pub const BUILT_STAMP: &str = ".clarity-built";
+
+/// A mark of a program's generated files, their paths and contents: the
+/// same files give the same mark.
+pub fn fingerprint(program: &Program) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut files: Vec<&OutFile> = program.files.iter().collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for file in files {
+        file.path.hash(&mut hasher);
+        file.bytes.as_deref().unwrap_or(file.text.as_bytes()).hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
+}
+
+/// Records that the program in `dir` was built from `fingerprint`, as a
+/// release program or (not `release`) a debug one.
+pub fn record_build(dir: &std::path::Path, fingerprint: &str, release: bool) -> std::io::Result<()> {
+    let kind = if release { "release" } else { "debug" };
+    std::fs::write(dir.join(BUILT_STAMP), format!("{kind} {fingerprint}\n"))
+}
+
+/// Whether the last build in `dir` was made from `fingerprint`: `Some(true)`
+/// for a release program, `Some(false)` for a debug one, `None` when it was
+/// made from other files or nothing was built.
+pub fn last_build(dir: &std::path::Path, fingerprint: &str) -> Option<bool> {
+    let stamp = std::fs::read_to_string(dir.join(BUILT_STAMP)).ok()?;
+    match stamp.trim().split_once(' ')? {
+        ("release", made) if made == fingerprint => Some(true),
+        ("debug", made) if made == fingerprint => Some(false),
+        _ => None,
+    }
 }
 
 /// How the build tools of a stack build its generated project in `out/`.

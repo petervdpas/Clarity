@@ -9,7 +9,7 @@ It holds no user interface. The Avalonia half is [Clarity.Avalonia](https://www.
 
 ## What it does
 
-- **Records and storage.** `Db` reads, saves and deletes the records of a project's entities (`IRecord<T>`) on SQLite, PostgreSQL, MySQL and SQL Server, and opens a database with every migration step applied.
+- **Records and storage.** `Db` reads, saves and deletes the records of a project's entities (`IRecord<T>`) on SQLite, PostgreSQL, MySQL and SQL Server, each through a package of its own (Clarity.Runtime.Sqlite, .PostgreSql, .MySql, .SqlServer), and opens a database with every migration step applied.
 - **Queries.** `Query` and `Cond` are the `find ... where ...` of the Clarity language, written as SQL for each database (`Dialect`).
 - **Values in the person's format.** `Formats` shows and reads numbers, money, dates and durations in the person's locale, and fills texts with slots (`Text`, `Slot`).
 - **Rules.** `Contracts` checks what an action requires and ensures; a refusal (`RefusedException`) carries its text and slots to the screen.

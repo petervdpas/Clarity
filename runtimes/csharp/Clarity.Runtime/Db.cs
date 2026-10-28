@@ -27,11 +27,8 @@ public sealed partial class Db : IDisposable
 
     Db(List<SourceDb> sources) => this.sources = sources;
 
-    /// <summary>One SQLite database, used for every record.</summary>
-    public static Db Open(string path) => new([new SourceDb("", SqliteDriver.Open(path))]);
-
-    /// <summary>A SQLite database that lives in memory, for tests.</summary>
-    public static Db Memory() => new([new SourceDb("", SqliteDriver.Memory())]);
+    /// <summary>One database, used for every record: what Sqlite.Open and Sqlite.Memory give.</summary>
+    internal static Db Of(IDriver driver) => new([new SourceDb("", driver)]);
 
     /// <summary>
     /// A database per data source: its name, its kind and where it is (a file

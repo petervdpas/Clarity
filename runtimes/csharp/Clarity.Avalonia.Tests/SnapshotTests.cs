@@ -88,7 +88,7 @@ public class SnapshotTests
     [Fact]
     public void A_windows_state_crosses_into_a_mirror_of_it()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var server = Server(db);
         var state = Snapshot.Of(server);
         // A mirror is made without a database and loads nothing itself.
@@ -117,7 +117,7 @@ public class SnapshotTests
     [Fact]
     public void What_the_person_changed_crosses_back_and_keeps_the_rows()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var server = Server(db);
         var mirror = new SongsViewModel(null);
         Snapshot.Apply(mirror, Snapshot.Of(server));
@@ -134,7 +134,7 @@ public class SnapshotTests
     [Fact]
     public void What_a_handler_tells_a_part_crosses_to_the_mirror_once()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var server = new SongsViewModel(db);
         server.Dial.Hear("play");
         server.Dial.Hear("melody", "C4 E4", 120L);
@@ -164,7 +164,7 @@ public class SnapshotTests
     [Fact]
     public void The_server_runs_a_command_by_its_name()
     {
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var server = Server(db);
         Snapshot.Run(server, "Find", []);
         Snapshot.Run(server, "ClickAt_Dial", [new Pointer(7, 8)]);

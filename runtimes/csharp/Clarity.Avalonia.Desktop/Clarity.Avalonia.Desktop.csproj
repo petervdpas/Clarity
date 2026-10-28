@@ -27,6 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Avalonia/Clarity.Avalonia.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

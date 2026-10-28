@@ -35,7 +35,7 @@ public class StepsTests
     static void Walk(JsonElement @case)
     {
         var name = @case.GetProperty("name").GetString();
-        using var db = Db.Memory();
+        using var db = Sqlite.Memory();
         var vm = new WizardViewModel(db);
         var wizard = new StepsView();
         for (var i = 1; i <= @case.GetProperty("steps").GetInt32(); i++)

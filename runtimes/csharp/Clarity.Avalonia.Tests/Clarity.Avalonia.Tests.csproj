@@ -14,6 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Avalonia/Clarity.Avalonia.csproj" />
+    <ProjectReference Include="../Clarity.Runtime.Sqlite/Clarity.Runtime.Sqlite.csproj" />
     <ProjectReference Include="../Clarity.Avalonia.Desktop/Clarity.Avalonia.Desktop.csproj" />
   </ItemGroup>
   <ItemGroup>

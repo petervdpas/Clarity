@@ -21,6 +21,12 @@ Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com
 winget install Microsoft.DotNet.SDK.10
 ```
 
+For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program. Once is enough; they stay with the SDK. Run it in a terminal opened as administrator when .NET is installed for every user, as winget installs it:
+
+```
+dotnet workload install wasm-tools
+```
+
 ### Go on Windows
 
 Install Go from [go.dev/dl](https://go.dev/dl), or in a terminal:
@@ -79,6 +85,12 @@ More about what Tauri needs on each system is on [tauri.app](https://tauri.app/s
 
 Install the .NET 10 SDK as [learn.microsoft.com](https://learn.microsoft.com/dotnet/core/install/linux) describes for your system, from its packages or with the install script.
 
+For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program. Once is enough; they stay with the SDK. With .NET from the system's packages (in `/usr/share/dotnet`) it takes `sudo`; with the install script, in your home folder, leave `sudo` out:
+
+```
+sudo dotnet workload install wasm-tools
+```
+
 ### Go on Linux
 
 Install Go from [go.dev/dl](https://go.dev/dl); the distribution's own package is often older than a project needs. A Go program also needs WebKitGTK; see [WebKitGTK on Linux](#webkitgtk-on-linux).
@@ -102,6 +114,12 @@ Install the Xcode Command Line Tools with `xcode-select --install`, then Rust fr
 ### .NET on macOS
 
 Install the .NET 10 SDK from [dotnet.microsoft.com](https://dotnet.microsoft.com/download).
+
+For an application with the web target (`stack csharp avalonia web`), add .NET's WebAssembly tools, which link Avalonia's drawing into the browser program. Once is enough; they stay with the SDK:
+
+```
+sudo dotnet workload install wasm-tools
+```
 
 ### Go on macOS
 

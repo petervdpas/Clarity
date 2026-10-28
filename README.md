@@ -52,6 +52,7 @@ Generated applications get their runtime as a package: Rust from crates.io (`cla
 - For C applications: CMake 3.25 or newer, a C17 compiler and a C++ compiler (for the webview), pkg-config, and the SQLite 3 development package (`libsqlite3-dev` on Debian)
 - For C++ applications: CMake 3.25 or newer, a C++20 compiler, pkg-config, and the SQLite 3 and nlohmann-json development packages (`libsqlite3-dev nlohmann-json3-dev` on Debian)
 - On Windows, for C and C++ applications: the WebView2 SDK, which the webview builds against (the `Microsoft.Web.WebView2` NuGet package; the runtime itself ships with Windows 11)
+- For C# applications: the .NET 10 SDK; for one with the web target (`stack csharp avalonia web`), also .NET's WebAssembly tools, which link Avalonia's drawing into the browser program: `dotnet workload install wasm-tools` (with `sudo` where .NET is installed for the whole system, as on Linux in `/usr/share/dotnet`)
 
 ### Setting up the tools
 

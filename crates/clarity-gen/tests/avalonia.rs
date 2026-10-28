@@ -776,6 +776,17 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
         has(browser, &format!("<TrimmerRootAssembly Include=\"{kept}\" />"));
     }
     assert!(!browser.contains("<PublishTrimmed>false</PublishTrimmed>"), "{browser}");
+    // On Windows its build files go to a short folder of their own: the
+    // WebAssembly steps nest deep, past Windows' 260 characters when the
+    // project's own folder is deep too. One folder per project's place.
+    let props = file(&files, "Browser/Directory.Build.props");
+    has(props, "<PropertyGroup Condition=\"'$(OS)' == 'Windows_NT' And '$(LOCALAPPDATA)' != ''\">");
+    has(props, "<ClarityBuild>$(LOCALAPPDATA)\\Clarity\\build\\Shop-$([MSBuild]::StableStringHash($(MSBuildThisFileDirectory)))\\</ClarityBuild>");
+    has(props, "<BaseIntermediateOutputPath>$(ClarityBuild)obj\\</BaseIntermediateOutputPath>");
+    has(props, "<BaseOutputPath>$(ClarityBuild)bin\\</BaseOutputPath>");
+    // A Directory.Build.props of the developer's further up still counts.
+    has(props, "<Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))\" Condition=\"'$([MSBuild]::GetPathOfFileAbove(&quot;Directory.Build.props&quot;, &quot;$(MSBuildThisFileDirectory)../&quot;))' != ''\" />");
+    has(file(&files, "README.md"), "On Windows the browser program's build files go to `%LOCALAPPDATA%\\Clarity\\build\\Shop-<number>`");
     has(file(&files, "Browser/Program.cs"), "AppBuilder.Configure<App>().WithInterFont().With(new Avalonia.Media.FontManagerOptions { DefaultFamilyName = \"fonts:Inter#Inter\" }).StartBrowserAppAsync(\"out\")");
     has(file(&files, "Browser/Program.cs"), "App.Sessions = new HttpSessionLink(new HttpClient { BaseAddress = new Uri(origin) });");
     has(file(&files, "Browser/wwwroot/index.html"), "<script type=\"module\" src=\"./main.js\"></script>");

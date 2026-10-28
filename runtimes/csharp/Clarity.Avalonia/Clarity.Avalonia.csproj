@@ -40,6 +40,7 @@
   <ItemGroup>
     <!-- The desktop shell sets a window's messages to its own, as the mirror shell does. -->
     <InternalsVisibleTo Include="Clarity.Avalonia.Desktop" />
+    <InternalsVisibleTo Include="Clarity.Avalonia.Tests" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="" />

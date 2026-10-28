@@ -17,7 +17,7 @@ namespace Clarity.Avalonia.Tests;
 public class TestApp : Application
 {
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<TestApp>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
+        AppBuilder.Configure<TestApp>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 
     // The themes a generated application has, so controls have their parts and can be clicked.
     public override void Initialize()

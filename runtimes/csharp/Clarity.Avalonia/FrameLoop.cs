@@ -57,8 +57,9 @@ public sealed class FrameLoop(
             return;
         if (!busy)
         {
-            var ms = last is { } before ? (now - before).TotalMilliseconds : 0;
-            last = now;
+            // Whole milliseconds: a screen's clock has fractions, which wait for the next frame.
+            var ms = last is { } before ? Math.Floor((now - before).TotalMilliseconds) : 0;
+            last = last is { } was ? was + TimeSpan.FromMilliseconds(ms) : now;
             busy = true;
             var input = waiting;
             waiting = [];

@@ -453,3 +453,20 @@ fn a_csharp_program_with_a_dotnet_part_builds() {
     let out = std::process::Command::new("dotnet").args(["build", "--nologo", "-v", "quiet", "-warnaserror"]).current_dir(&dir).env("CLARITY_RUNTIME", runtime).output().unwrap();
     assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
+
+/// A custom part draws in a native window of the desktop (DESIGN 6.5), which a
+/// program served to a browser alone has not: generating it says so, on each
+/// stack, and the same project with a desktop window generates.
+#[test]
+fn a_program_served_to_a_browser_alone_has_no_native_parts() {
+    use clarity_project::{Backend, Target};
+    for (backend, word) in [(Backend::Cpp, "cpp"), (Backend::Rust, "rust"), (Backend::Go, "go")] {
+        let project = project_for(backend);
+        let web = clarity_project::parse(&format!("project Game\n    stack {word} web web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        assert_eq!(web.stack.targets, [Target::Web]);
+        let refused = clarity_gen::generate(&project, &web).expect_err("a part in a browser");
+        assert_eq!(refused, ["part Arena draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out"]);
+        let both = clarity_project::parse(&format!("project Game\n    stack {word} web desktop web\n    datasource main sqlite \"data/game.db\"\n")).unwrap();
+        assert!(clarity_gen::generate(&project, &both).is_ok(), "{word} with a desktop window");
+    }
+}

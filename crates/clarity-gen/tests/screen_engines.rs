@@ -38,14 +38,16 @@ fn the_web_stacks_carry_the_engine_in_the_model_and_not_on_the_backend() {
 fn avalonia_gives_each_canvas_an_instance_of_its_engine() {
     let files = files(Backend::Csharp, Ui::Avalonia);
     let engines = file(&files, "ScreenEngines.cs");
-    assert!(engines.contains("public static readonly Func<IFrames> Screen = () => ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, new EngineLimits(1, 256));"), "{engines}");
+    assert!(engines.contains("public static readonly Func<IFrames> Screen = () => InBrowser is { } load\n        ? load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, 1, 256)\n        : ScreenEngine.Load(\"Screen\", Read(\"screen.wasm\"), [\"log\"], true, new EngineLimits(1, 256));"), "{engines}");
     let view = file(&files, "Windows/PlayView.axaml");
     assert!(view.contains("Grid.RowSpan=\"10\" Runs=\"{x:Static local:ScreenEngines.Screen}\" State=\"{Binding Sky}\" UnitsWidth=\"160\" UnitsHeight=\"100\""), "{view}");
     // What the engine tells runs its handler with its values; a handler tells it through the canvas's state.
     let behind = file(&files, "Windows/PlayView.axaml.cs");
     assert!(behind.contains("sky.Told += (tell, values) => Vm.Told_Sky(tell, values);"), "{behind}");
     let model = file(&files, "Windows/PlayViewModel.cs");
-    assert!(model.contains("case \"finished\":\n                Handle(() => OnFinished(DotNetPart.Read<long>(values, 0)));"), "{model}");
+    assert!(model.contains("case \"finished\":\n                Handle(() => OnFinished(DotNetPart.Read<long>(values, 0)), [tell, values]);"), "{model}");
+    // A mirror in a browser sends it to the server, which runs it as a command (DESIGN 7.6).
+    assert!(model.contains("    [Command]\n    public void Told_Sky(string tell, System.Text.Json.JsonElement[] values)"), "{model}");
     assert!(model.contains("sky.Hear(\"start\", 2L);") || model.contains("Sky.Hear(\"start\", 2L);"), "{model}");
     let csproj = file(&files, "Play.csproj");
     assert!(csproj.contains("Clarity.Runtime.Engines") && csproj.contains("Engines/*.wasm"), "{csproj}");

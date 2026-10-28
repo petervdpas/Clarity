@@ -758,6 +758,34 @@ fn the_web_target_is_the_application_a_server_and_a_browser_program() {
     has(browser, "<Project Sdk=\"Microsoft.NET.Sdk.WebAssembly\">");
     has(browser, "<TargetFramework>net10.0-browser</TargetFramework>");
     has(browser, "<PackageReference Include=\"Avalonia.Browser\" Version=\"12.1.4\" />");
+    // A browser has none of the system's fonts: the program carries one.
+    has(browser, "<PackageReference Include=\"Avalonia.Fonts.Inter\" Version=\"12.1.4\" />");
+    has(file(&files, "Browser/Program.cs"), "AppBuilder.Configure<App>().WithInterFont().With(new Avalonia.Media.FontManagerOptions { DefaultFamilyName = \"fonts:Inter#Inter\" }).StartBrowserAppAsync(\"out\")");
     has(file(&files, "Browser/Program.cs"), "App.Sessions = new HttpSessionLink(new HttpClient { BaseAddress = new Uri(origin) });");
     has(file(&files, "Browser/wwwroot/index.html"), "<script type=\"module\" src=\"./main.js\"></script>");
+    // What belongs to the browser: the tab's title, downloads, files in a tab, the person's storage.
+    let program = file(&files, "Browser/Program.cs");
+    has(program, "await JSHost.ImportAsync(\"clarity\", \"/clarity.js\");\n        var page = new Page();\n        BrowserPage.Current = page;");
+    has(program, "Clarity.Runtime.KeptSettings.Store = (page.Read, page.Write);\n        Sound.Output = new PageSoundOutput(page);");
+    has(file(&files, "Browser/wwwroot/clarity.js"), "export function play(data, volume, repeat)");
+    has(file(&files, "Browser/Page.cs"), "internal sealed partial class Page : IBrowserPage");
+    has(file(&files, "Browser/wwwroot/clarity.js"), "export function download(name, data)");
+}
+
+/// On the web each person's settings stay in their browser (DESIGN 7.6): the
+/// browser starts them from its storage and sends them with each request, and
+/// the server's handlers read them.
+#[test]
+fn on_the_web_each_persons_settings_travel_with_their_requests() {
+    let source = format!("{SHOP}\nsettings\n    speed: integer, default 2\n");
+    let project = load_keyed([("shop.clarity", source.as_str())], &[], "en");
+    assert!(project.diagnostics.iter().all(|d| d.severity != clarity_spec::Severity::Error), "{:#?}", project.diagnostics);
+    let mut settings = settings();
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let files = generate(&project, &settings).unwrap_or_else(|errors| panic!("{errors:#?}"));
+    has(file(&files, "App/Modules/Shop.cs"), "    public void Apply(JsonObject sent)\n    {\n        var settings = this;\n");
+    has(file(&files, "Server/Program.cs"), "new Sessions(() => new OrderFormViewModel(db)) { Settings = (() => Settings.Current.ToJson(), sent => Settings.Current.Apply(sent)) }");
+    let app = file(&files, "App/App.axaml.cs");
+    has(app, "            Settings.Start();\n");
+    has(app, ", settings: (() => Settings.Current.ToJson(), sent => Settings.Current.Apply(sent)));");
 }

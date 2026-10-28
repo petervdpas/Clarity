@@ -123,7 +123,7 @@ fn avalonia_shows_a_picture_field_in_a_picture_box() {
     has(view, "Picture=\"{Binding Album.Cover}\" Record=\"{Binding Album}\" Fetch=\"{Binding AlbumCoverPicture}\"");
     has(view, "EmptyText=\"{x:Static local:Texts.NoPicture}\"");
     let model = text(&files, "Windows/AlbumFormViewModel.cs");
-    has(model, "    public Func<byte[]?> AlbumCoverPicture => () => Db.PictureOf<Album>(Album.Id, \"cover\");\n");
+    has(model, "    public Func<Task<byte[]?>> AlbumCoverPicture => () => Fetched(nameof(AlbumCoverPicture), () => Db.PictureOf<Album>(Album.Id, \"cover\"));\n");
 }
 
 /// A picture linked from a file before its record is saved shows from its store.
@@ -136,7 +136,7 @@ fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
     has(main, "            store_file,\n");
     let csharp = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);
     let model = text(&csharp, "Windows/AlbumFormViewModel.cs");
-    has(model, "    public Func<string, byte[]?> AlbumPhotoFile => path => Db.StoreFile(\"photos\", path);\n");
+    has(model, "    public Func<string, Task<byte[]?>> AlbumPhotoFile => path => Fetched(nameof(AlbumPhotoFile), () => Db.StoreFile(\"photos\", path), path);\n");
     let view = text(&csharp, "Windows/AlbumFormView.axaml");
     has(view, "Fetch=\"{Binding AlbumPhotoPicture}\" FetchFile=\"{Binding AlbumPhotoFile}\"");
     assert!(!view.contains("AlbumCoverFile"), "a picture kept in the database has no store file");

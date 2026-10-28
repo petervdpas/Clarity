@@ -35,10 +35,16 @@ public static class Remembered
         return [];
     }
 
-    public static string? Get(string key) => Read().GetValueOrDefault(key);
+    /// <summary>A choice kept; in a browser, in its storage (DESIGN 7.6).</summary>
+    public static string? Get(string key) => BrowserPage.Current is { } page ? page.Read($"choice:{key}") : Read().GetValueOrDefault(key);
 
     public static void Set(string key, string value)
     {
+        if (BrowserPage.Current is { } page)
+        {
+            page.Write($"choice:{key}", value);
+            return;
+        }
         if (File is not { } file)
         {
             forRun[key] = value;

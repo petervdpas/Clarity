@@ -22,6 +22,14 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
     readonly Lock gate = new();
 
     /// <summary>
+    /// The application's settings, one for the whole program, as each person's
+    /// browser keeps their own (DESIGN 7.6): a request brings the person's,
+    /// which the handlers then read, and the reply takes back what they changed.
+    /// None for an application without settings.
+    /// </summary>
+    public (Func<JsonObject> Of, Action<JsonObject> Apply)? Settings { get; init; }
+
+    /// <summary>
     /// Answers one request of a browser: <c>start</c> a session; <c>run</c> a
     /// window's command with the state the person left; <c>answer</c> a
     /// question; <c>close</c> a dialog the person closed. The reply holds every
@@ -45,6 +53,17 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
     }
 
     JsonObject Do(JsonObject request)
+    {
+        // The person's settings, before anything of theirs runs.
+        if (Settings is { } settings && request["settings"] is JsonObject theirs)
+            settings.Apply(theirs);
+        var reply = DoWith(request);
+        if (Settings is { } kept && !reply.ContainsKey("error"))
+            reply["settings"] = kept.Of();
+        return reply;
+    }
+
+    JsonObject DoWith(JsonObject request)
     {
         var what = request["do"]?.GetValue<string>();
         if (what == "start")
@@ -70,6 +89,11 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
             case "answer":
                 session.Answer(request["question"]?.GetValue<long>() ?? 0, request["answer"]?.Deserialize<object>(Snapshot.Options));
                 break;
+            case "fetch":
+                // A picture or a file of the database, by the fetcher of the window that shows it.
+                var shows = session.Window(request["window"]?.GetValue<long>() ?? 0);
+                var bytes = Snapshot.Fetch(shows, request["fetcher"]?.GetValue<string>() ?? "", request["args"] as JsonArray);
+                return new JsonObject { ["session"] = session.Id, ["bytes"] = bytes is null ? null : Convert.ToBase64String(bytes) };
             case "close":
                 session.CloseDialog(session.Window(request["window"]?.GetValue<long>() ?? 0));
                 break;
@@ -215,7 +239,7 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
                     ["window"] = window.Instance,
                     ["type"] = window.GetType().AssemblyQualifiedName,
                     ["dialog"] = window.IsDialog,
-                    ["state"] = Snapshot.Of(window),
+                    ["state"] = Snapshot.Of(window, told: true),
                 });
             }
             var questionsAsked = new JsonArray();

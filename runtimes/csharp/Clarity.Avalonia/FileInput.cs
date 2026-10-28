@@ -21,8 +21,8 @@ public sealed class FileInput : Grid, IInput
         AvaloniaProperty.Register<FileInput, RecordFile?>(nameof(File), defaultBindingMode: BindingMode.TwoWay);
 
     public static readonly StyledProperty<object?> RecordProperty = AvaloniaProperty.Register<FileInput, object?>(nameof(Record));
-    public static readonly StyledProperty<Func<byte[]?>?> FetchProperty = AvaloniaProperty.Register<FileInput, Func<byte[]?>?>(nameof(Fetch));
-    public static readonly StyledProperty<Func<string, byte[]?>?> FetchFileProperty = AvaloniaProperty.Register<FileInput, Func<string, byte[]?>?>(nameof(FetchFile));
+    public static readonly StyledProperty<Func<Task<byte[]?>>?> FetchProperty = AvaloniaProperty.Register<FileInput, Func<Task<byte[]?>>?>(nameof(Fetch));
+    public static readonly StyledProperty<Func<string, Task<byte[]?>>?> FetchFileProperty = AvaloniaProperty.Register<FileInput, Func<string, Task<byte[]?>>?>(nameof(FetchFile));
     public static readonly StyledProperty<string> EmptyTextProperty = AvaloniaProperty.Register<FileInput, string>(nameof(EmptyText), "");
     public static readonly StyledProperty<string> ChooseTextProperty = AvaloniaProperty.Register<FileInput, string>(nameof(ChooseText), "");
     public static readonly StyledProperty<string> OpenTextProperty = AvaloniaProperty.Register<FileInput, string>(nameof(OpenText), "");
@@ -35,9 +35,9 @@ public sealed class FileInput : Grid, IInput
     /// <summary>The record the file belongs to: when it changes, so may its stored file.</summary>
     public object? Record { get => GetValue(RecordProperty); set => SetValue(RecordProperty, value); }
     /// <summary>Fetches the stored file of the record.</summary>
-    public Func<byte[]?>? Fetch { get => GetValue(FetchProperty); set => SetValue(FetchProperty, value); }
+    public Func<Task<byte[]?>>? Fetch { get => GetValue(FetchProperty); set => SetValue(FetchProperty, value); }
     /// <summary>Fetches a file of the field's own store, by its path there.</summary>
-    public Func<string, byte[]?>? FetchFile { get => GetValue(FetchFileProperty); set => SetValue(FetchFileProperty, value); }
+    public Func<string, Task<byte[]?>>? FetchFile { get => GetValue(FetchFileProperty); set => SetValue(FetchFileProperty, value); }
     public string EmptyText { get => GetValue(EmptyTextProperty); set => SetValue(EmptyTextProperty, value); }
     public string ChooseText { get => GetValue(ChooseTextProperty); set => SetValue(ChooseTextProperty, value); }
     public string OpenText { get => GetValue(OpenTextProperty); set => SetValue(OpenTextProperty, value); }
@@ -72,8 +72,8 @@ public sealed class FileInput : Grid, IInput
             Children.Add(buttons[i]);
         }
         choose.Click += async (_, _) => await Choose();
-        open.Click += (_, _) => OpenIt();
-        save.Click += (_, _) => SaveCopy();
+        open.Click += (_, _) => _ = OpenIt();
+        save.Click += (_, _) => _ = SaveCopy();
         remove.Click += (_, _) => Remove();
         Show();
     }
@@ -118,25 +118,36 @@ public sealed class FileInput : Grid, IInput
     }
 
     /// <summary>The file's bytes: new ones as chosen, a stored one fetched; null for none.</summary>
-    public byte[]? Bytes() => File?.Content switch
+    public async Task<byte[]?> Bytes() => File?.Content switch
     {
         null => null,
         { Bytes: { } bytes } => bytes,
-        { FilePath: { } path } => FetchFile?.Invoke(path),
-        _ => Fetch?.Invoke(),
+        { FilePath: { } path } => FetchFile is { } file ? await file(path) : null,
+        _ => Fetch is { } fetch ? await fetch() : null,
     };
 
-    /// <summary>Opens the file in the program the system uses for its kind.</summary>
-    public void OpenIt()
+    /// <summary>Opens the file in the program the system uses for its kind; in a browser, in a tab of its own.</summary>
+    public async Task OpenIt()
     {
-        if (File is { } file && Bytes() is { } bytes)
+        if (File is not { } file || await Bytes() is not { } bytes)
+            return;
+        if (BrowserPage.Current is { } page)
+            page.Show(file.Name, bytes);
+        else
             RecordFiles.Open(file.Name, bytes);
     }
 
-    /// <summary>Saves a copy in the person's Downloads folder, and tells where.</summary>
-    public void SaveCopy()
+    /// <summary>Saves a copy in the person's Downloads folder, and tells where; in a browser, as its download.</summary>
+    public async Task SaveCopy()
     {
-        if (File is { } file && Bytes() is { } bytes)
+        if (File is not { } file || await Bytes() is not { } bytes)
+            return;
+        if (BrowserPage.Current is { } page)
+        {
+            page.Download(file.Name, bytes);
+            CopySaved?.Invoke(file.Name);
+        }
+        else
             CopySaved?.Invoke(RecordFiles.SaveCopy(file.Name, bytes));
     }
 

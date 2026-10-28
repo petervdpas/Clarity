@@ -47,6 +47,10 @@ sealed partial class SongsViewModel : WindowViewModel
 
     void OnFind() => Ran.Add("find " + Search.Text);
 
+    /// <summary>What an engine beside the screen told, as a generated window hears it.</summary>
+    [Command]
+    public void Told_Dial(string tell, System.Text.Json.JsonElement[] values) => Handle(() => Ran.Add($"told {tell} {values[0].GetInt64()}"), [tell, values]);
+
     [RelayCommand]
     void ClickAt_Dial(Pointer at) => Handle(() =>
     {
@@ -61,6 +65,8 @@ sealed class Sent : IRemote
     public List<(string Command, object?[] Args)> Commands { get; } = [];
 
     public void Command(WindowViewModel window, string command, object?[] args) => Commands.Add((command, args));
+
+    public Task<byte[]?> Fetch(WindowViewModel window, string fetcher, object?[] args) => Task.FromResult<byte[]?>(null);
 }
 
 public class SnapshotTests
@@ -126,6 +132,23 @@ public class SnapshotTests
     }
 
     [Fact]
+    public void What_a_handler_tells_a_part_crosses_to_the_mirror_once()
+    {
+        using var db = Db.Memory();
+        var server = new SongsViewModel(db);
+        server.Dial.Hear("play");
+        server.Dial.Hear("melody", "C4 E4", 120L);
+        var mirror = new SongsViewModel(null);
+        var heard = new List<string>();
+        mirror.Dial.Listen((_, _) => { }, (hear, values) => heard.Add($"{hear} {string.Join(",", values)}"));
+        Snapshot.Apply(mirror, Snapshot.Of(server, told: true));
+        Assert.Equal(["play ", "melody C4 E4,120"], heard);
+        // Told once: the next reply tells it nothing again.
+        Snapshot.Apply(mirror, Snapshot.Of(server, told: true));
+        Assert.Equal(2, heard.Count);
+    }
+
+    [Fact]
     public void A_mirror_sends_its_commands_instead_of_running_them()
     {
         var mirror = new SongsViewModel(null);
@@ -146,6 +169,10 @@ public class SnapshotTests
         Snapshot.Run(server, "Find", []);
         Snapshot.Run(server, "ClickAt_Dial", [new Pointer(7, 8)]);
         Assert.Equal(["find re", "click 7,8"], server.Ran);
+        // What an engine told, by the method that hears it, with its values as the mirror sends them.
+        var told = Snapshot.Arguments([(object?)"hit", System.Text.Json.JsonSerializer.SerializeToElement(new[] { 30 }).EnumerateArray().ToArray()]);
+        Snapshot.Run(server, "Told_Dial", Snapshot.Arguments(server, "Told_Dial", System.Text.Json.Nodes.JsonNode.Parse(told.ToJsonString())!.AsArray()));
+        Assert.Equal("told hit 30", server.Ran[^1]);
         Assert.Throws<SessionException>(() => Snapshot.Run(server, "Nothing", []));
     }
 }

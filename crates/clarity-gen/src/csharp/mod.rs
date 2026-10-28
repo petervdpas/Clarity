@@ -371,20 +371,20 @@ fn screen_engines_cs(project: &Project, name: &str) -> String {
     let mut members = String::new();
     for engine in crate::screen_engines(project) {
         members.push_str(&format!(
-            "    /// <summary>Engine {engine_name} beside the screen, from {file}: a new instance for each canvas that runs it.</summary>\n    public static readonly Func<IFrames> {member} = () => ScreenEngine.Load({}, Read({}), [{}], {}, new EngineLimits({}, {}));\n\n",
-            string(&engine.name.name),
-            string(&engine.file),
-            engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
-            engine.opens,
-            engine.seconds(),
-            engine.megabytes(),
+            "    /// <summary>Engine {engine_name} beside the screen, from {file}: a new instance for each canvas that runs it.</summary>\n    public static readonly Func<IFrames> {member} = () => InBrowser is {{ }} load\n        ? load({name}, Read({file_text}), [{uses}], {opens}, {seconds}, {megabytes})\n        : ScreenEngine.Load({name}, Read({file_text}), [{uses}], {opens}, new EngineLimits({seconds}, {megabytes}));\n\n",
+            name = string(&engine.name.name),
+            file_text = string(&engine.file),
+            uses = engine.uses.iter().map(|u| string(&u.name)).collect::<Vec<_>>().join(", "),
+            opens = engine.opens,
+            seconds = engine.seconds(),
+            megabytes = engine.megabytes(),
             engine_name = engine.name.name,
             file = engine.file,
             member = pascal(&engine.name.name),
         ));
     }
     format!(
-        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines beside the screen, which the canvases that run them draw with.</summary>\npublic static class ScreenEngines\n{{\n{members}    static byte[] Read(string file)\n    {{\n        using var stream = typeof(ScreenEngines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
+        "{HEADER}\nusing Clarity.Runtime;\n\nnamespace {name};\n\n/// <summary>The engines beside the screen, which the canvases that run them draw with.</summary>\npublic static class ScreenEngines\n{{\n    /// <summary>How a browser loads an engine beside the screen, where Wasmtime cannot run (DESIGN 7.6): its name, file, services, on open and limits; none on the desktop.</summary>\n    public static Func<string, byte[], string[], bool, long, long, IFrames>? InBrowser {{ get; set; }}\n\n{members}    static byte[] Read(string file)\n    {{\n        using var stream = typeof(ScreenEngines).Assembly.GetManifestResourceStream(\"Engines/\" + file) ?? throw new EngineException($\"the engine file {{file}} is missing\");\n        using var bytes = new MemoryStream();\n        stream.CopyTo(bytes);\n        return bytes.ToArray();\n    }}\n}}\n"
     )
 }
 

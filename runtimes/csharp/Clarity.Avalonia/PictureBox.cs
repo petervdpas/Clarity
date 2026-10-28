@@ -26,7 +26,7 @@ public sealed class PictureBox : Grid
     public static readonly StyledProperty<object?> RecordProperty = AvaloniaProperty.Register<PictureBox, object?>(nameof(Record));
 
     /// <summary>Gives the stored picture of the record, fetched when it shows.</summary>
-    public static readonly StyledProperty<Func<byte[]?>?> FetchProperty = AvaloniaProperty.Register<PictureBox, Func<byte[]?>?>(nameof(Fetch));
+    public static readonly StyledProperty<Func<Task<byte[]?>>?> FetchProperty = AvaloniaProperty.Register<PictureBox, Func<Task<byte[]?>>?>(nameof(Fetch));
 
     public static readonly StyledProperty<string> EmptyTextProperty = AvaloniaProperty.Register<PictureBox, string>(nameof(EmptyText), "");
     public static readonly StyledProperty<string> LoadTextProperty = AvaloniaProperty.Register<PictureBox, string>(nameof(LoadText), "");
@@ -34,12 +34,12 @@ public sealed class PictureBox : Grid
     public static readonly StyledProperty<bool> IsReadOnlyProperty = AvaloniaProperty.Register<PictureBox, bool>(nameof(IsReadOnly));
 
     public Picture? Picture { get => GetValue(PictureProperty); set => SetValue(PictureProperty, value); }
-    public Func<byte[]?>? Fetch { get => GetValue(FetchProperty); set => SetValue(FetchProperty, value); }
+    public Func<Task<byte[]?>>? Fetch { get => GetValue(FetchProperty); set => SetValue(FetchProperty, value); }
 
     /// <summary>Gives a file of the field's store: a picture linked from a file before its record is saved.</summary>
-    public static readonly StyledProperty<Func<string, byte[]?>?> FetchFileProperty = AvaloniaProperty.Register<PictureBox, Func<string, byte[]?>?>(nameof(FetchFile));
+    public static readonly StyledProperty<Func<string, Task<byte[]?>>?> FetchFileProperty = AvaloniaProperty.Register<PictureBox, Func<string, Task<byte[]?>>?>(nameof(FetchFile));
 
-    public Func<string, byte[]?>? FetchFile { get => GetValue(FetchFileProperty); set => SetValue(FetchFileProperty, value); }
+    public Func<string, Task<byte[]?>>? FetchFile { get => GetValue(FetchFileProperty); set => SetValue(FetchFileProperty, value); }
     public object? Record { get => GetValue(RecordProperty); set => SetValue(RecordProperty, value); }
     public string EmptyText { get => GetValue(EmptyTextProperty); set => SetValue(EmptyTextProperty, value); }
     public string LoadText { get => GetValue(LoadTextProperty); set => SetValue(LoadTextProperty, value); }
@@ -89,15 +89,21 @@ public sealed class PictureBox : Grid
             Show();
     }
 
-    void Show()
+    /// <summary>How many times the picture was asked for: an answer to an older ask is left.</summary>
+    int asked;
+
+    async void Show()
     {
+        var ask = ++asked;
         var bytes = Picture switch
         {
             null => null,
             { Bytes: { } b } => b,
-            { FilePath: { } path } => FetchFile?.Invoke(path),
-            _ => Fetch?.Invoke(),
+            { FilePath: { } path } => FetchFile is { } file ? await file(path) : null,
+            _ => Fetch is { } fetch ? await fetch() : null,
         };
+        if (ask != asked)
+            return;
         (image.Source as IDisposable)?.Dispose();
         image.Source = bytes is null ? null : Decoded(bytes);
         empty.Text = EmptyText;

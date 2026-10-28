@@ -13,6 +13,8 @@ namespace Clarity.Avalonia.Tests;
 
 sealed partial class ShelfViewModel(Db? db) : WindowViewModel(db)
 {
+    public override string Title => "Shelf";
+
     public List<string> Log { get; set; } = [];
     public PartState Name { get; } = new("name");
 
@@ -35,6 +37,14 @@ sealed partial class ShelfViewModel(Db? db) : WindowViewModel(db)
 
 sealed partial class BookViewModel(Db? db) : WindowViewModel(db)
 {
+    /// <summary>The book's cover, from the server's database as a generated window fetches it.</summary>
+    public Func<Task<byte[]?>> CoverPicture => () => Fetched(nameof(CoverPicture), () => Db is null ? null : [1, 2, 3]);
+
+    /// <summary>A file of the store, by its path.</summary>
+    public Func<string, Task<byte[]?>> CoverFile => path => Fetched(nameof(CoverFile), () => path == "a.png" ? [4] : null, path);
+
+    public override string Title => "Book";
+
     [RelayCommand]
     void Back() => Handle(Close);
 }
@@ -45,6 +55,26 @@ sealed partial class PickViewModel(Db? db) : WindowViewModel(db)
 
     [RelayCommand]
     void Choose(string what) => Handle(() => CloseWith(what), [what]);
+}
+
+/// <summary>A person's settings, one at a time on the server, as a generated Settings is.</summary>
+static class Prefs
+{
+    public static int Speed { get; set; } = 1;
+
+    public static (Func<JsonObject> Of, Action<JsonObject> Apply) Hooks => (() => new JsonObject { ["speed"] = Speed }, sent => Speed = sent["speed"]?.GetValue<int>() ?? Speed);
+}
+
+sealed partial class FasterViewModel(Db? db) : WindowViewModel(db)
+{
+    public int Seen { get; set; }
+
+    [RelayCommand]
+    void Faster() => Handle(() =>
+    {
+        Seen = Prefs.Speed;
+        Prefs.Speed++;
+    });
 }
 
 public class SessionTests
@@ -167,5 +197,23 @@ static class JsonObjectExtensions
     {
         change(o);
         return o;
+    }
+}
+
+[Collection("settings")]
+public class SessionSettingsTests
+{
+    [Fact]
+    public void Each_request_runs_with_the_settings_of_the_person_who_sent_it()
+    {
+        using var db = Db.Memory();
+        var sessions = new Sessions(() => new FasterViewModel(db)) { Settings = Prefs.Hooks };
+        var start = sessions.Answer(JsonNode.Parse("""{"do": "start", "settings": {"speed": 5}}""")!.AsObject());
+        var session = start["session"]!.GetValue<string>();
+        var window = start["windows"]![0]!["window"]!.GetValue<long>();
+        var reply = sessions.Answer(JsonNode.Parse($$$"""{"session": "{{{session}}}", "do": "run", "window": {{{window}}}, "command": "Faster", "args": [], "settings": {"speed": 7}}""")!.AsObject());
+        // The handler saw this person's speed, and what it changed goes back to them.
+        Assert.Equal(7, reply["windows"]![0]!["state"]!["data"]!["Seen"]!.GetValue<int>());
+        Assert.Equal(8, reply["settings"]!["speed"]!.GetValue<int>());
     }
 }

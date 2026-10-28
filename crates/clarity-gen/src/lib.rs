@@ -551,6 +551,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     check_stores(project, settings)?;
     check_web_secrets(project)?;
+    check_parts_in_browser(project, settings)?;
     // A custom part is written in the project's own language (DESIGN 5.19).
     let misfits: Vec<String> = clarity_project::target_problems(settings, project, "")
         .into_iter()
@@ -951,6 +952,25 @@ pub(crate) fn web_source<'p>(project: &'p Project, name: &str) -> Option<(&'p st
 
 /// Why a generated application cannot sign the calls of its web API sources:
 /// it reads a secret from `env:NAME`, not yet from the keychain.
+/// A custom part drawn by a native library, a crate or a Go package draws in
+/// a native window of the desktop (DESIGN 6.5), which a program served to a
+/// browser alone has not. A .NET part is a control of the page, as any.
+fn check_parts_in_browser(project: &Project, settings: &Settings) -> Result<(), Vec<String>> {
+    use clarity_project::Target;
+    use clarity_spec::code::PartLibrary;
+    if settings.stack.has(Target::Desktop) || !settings.stack.has(Target::Web) {
+        return Ok(());
+    }
+    let found: Vec<String> = project
+        .files
+        .iter()
+        .flat_map(|f| &f.parts)
+        .filter(|p| matches!(p.library, Some(PartLibrary::Native { .. } | PartLibrary::Crate { .. } | PartLibrary::Go { .. })))
+        .map(|p| format!("part {} draws in a window of the desktop, which a program served to a browser has not; add the desktop target, or leave the part out", p.name.name))
+        .collect();
+    if found.is_empty() { Ok(()) } else { Err(found) }
+}
+
 fn check_web_secrets(project: &Project) -> Result<(), Vec<String>> {
     let found: Vec<String> = project
         .sources

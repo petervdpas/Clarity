@@ -209,6 +209,13 @@ public sealed partial class {name} : ObservableObject
         var kept = KeptSettings.Taken(Described(), KeptSettings.Read(ProgramName{secrets_arg}));
 {taken}        Current = settings;
 {watch}    }}
+
+    /// <summary>Takes the settings a person's browser sent, those that still fit (DESIGN 7.6).</summary>
+    public void Apply(JsonObject sent)
+    {{
+        var settings = this;
+        var kept = KeptSettings.Taken(Described(), sent);
+{taken}    }}
 {keep}
     /// <summary>The settings as a kept value is checked against them.</summary>
     static Dictionary<string, Setting> Described() => new()

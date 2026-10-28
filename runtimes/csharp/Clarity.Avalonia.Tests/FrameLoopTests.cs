@@ -83,6 +83,20 @@ public sealed class FrameLoopTests
     }
 
     [Fact]
+    public void An_engine_gets_whole_milliseconds_their_fractions_carried()
+    {
+        var h = new Harness();
+        h.Step(1000.4);
+        h.Work();
+        // A screen's frame clock has fractions of a millisecond; the engine takes whole ones.
+        h.Step(1017.07);
+        h.Work();
+        h.Step(1033.74);
+        h.Work();
+        Assert.Equal([0, 16, 17], h.Frames.Given);
+    }
+
+    [Fact]
     public void A_frame_is_skipped_while_the_last_is_busy()
     {
         var h = new Harness();

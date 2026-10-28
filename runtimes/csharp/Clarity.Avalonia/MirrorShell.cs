@@ -39,6 +39,8 @@ public sealed class MirrorShell : UserControl, IRemote
 {
     readonly ISessionLink link;
     readonly Func<WindowViewModel, Control> view;
+    /// <summary>The person's settings, which each request takes to the server; and taking back what a handler changed.</summary>
+    readonly (Func<JsonObject> Of, Action<JsonObject> Apply)? settings;
     readonly ContentControl content = new();
     readonly Panel over = new();
     string session = "";
@@ -67,19 +69,28 @@ public sealed class MirrorShell : UserControl, IRemote
     /// <summary>Done when every request sent so far has been answered and followed.</summary>
     public Task Idle { get; private set; } = Task.CompletedTask;
 
-    MirrorShell(ISessionLink link, Func<WindowViewModel, Control> view, TimeSpan infoDuration)
+    MirrorShell(ISessionLink link, Func<WindowViewModel, Control> view, TimeSpan infoDuration, (Func<JsonObject> Of, Action<JsonObject> Apply)? settings)
     {
         this.link = link;
         this.view = view;
+        this.settings = settings;
         Content = new Panel { Children = { content, over, new MessageList { Messages = Messages, InfoDuration = infoDuration } } };
     }
 
-    /// <summary>Starts a session, and shows its main window.</summary>
-    public static async Task<MirrorShell> Start(ISessionLink link, Func<WindowViewModel, Control> view, TimeSpan? infoDuration = null)
+    /// <summary>Starts a session, and shows its main window; with the person's <paramref name="settings"/> when the application has them.</summary>
+    public static async Task<MirrorShell> Start(ISessionLink link, Func<WindowViewModel, Control> view, TimeSpan? infoDuration = null, (Func<JsonObject> Of, Action<JsonObject> Apply)? settings = null)
     {
-        var shell = new MirrorShell(link, view, infoDuration ?? TimeSpan.FromSeconds(5));
-        shell.Follow(await link.Send(new JsonObject { ["do"] = "start" }));
+        var shell = new MirrorShell(link, view, infoDuration ?? TimeSpan.FromSeconds(5), settings);
+        shell.Follow(await link.Send(shell.WithSettings(new JsonObject { ["do"] = "start" })));
         return shell;
+    }
+
+    /// <summary>A request with the person's settings.</summary>
+    JsonObject WithSettings(JsonObject request)
+    {
+        if (settings is { } kept)
+            request["settings"] = kept.Of().DeepClone();
+        return request;
     }
 
     /// <summary>A mirror's command: to the server, with the state the person left in its window.</summary>
@@ -96,6 +107,21 @@ public sealed class MirrorShell : UserControl, IRemote
         });
     }
 
+    /// <summary>A picture or a file of the database: the server fetches it, after what was sent before.</summary>
+    public Task<byte[]?> Fetch(WindowViewModel window, string fetcher, object?[] args)
+    {
+        var id = mirrors.FirstOrDefault(m => m.Value == window).Key;
+        async Task<byte[]?> After(Task before)
+        {
+            await before;
+            var reply = await link.Send(new JsonObject { ["session"] = session, ["do"] = "fetch", ["window"] = id, ["fetcher"] = fetcher, ["args"] = Snapshot.Arguments(args) });
+            return reply["bytes"]?.GetValue<string>() is { } data ? Convert.FromBase64String(data) : null;
+        }
+        var fetched = After(Idle);
+        Idle = fetched;
+        return fetched;
+    }
+
     /// <summary>The person closed a dialog: nothing goes back to the window that asked.</summary>
     public Task CloseDialog(WindowViewModel dialog)
     {
@@ -110,7 +136,7 @@ public sealed class MirrorShell : UserControl, IRemote
         {
             await before;
             request["session"] = session;
-            Follow(await link.Send(request));
+            Follow(await link.Send(WithSettings(request)));
         }
         return Idle = After(Idle);
     }
@@ -124,6 +150,9 @@ public sealed class MirrorShell : UserControl, IRemote
             return;
         }
         session = reply["session"]?.GetValue<string>() ?? session;
+        // What a handler changed of the person's settings, which their browser keeps.
+        if (settings is { } kept && reply["settings"] is JsonObject changed)
+            kept.Apply(changed);
         var open = new HashSet<long>();
         stack.Clear();
         dialogs.Clear();
@@ -149,6 +178,9 @@ public sealed class MirrorShell : UserControl, IRemote
             views.Remove(gone);
         }
         content.Content = Current is { } top ? ViewOf(top) : null;
+        // The tab takes the title of the window on top, as a desktop window does.
+        if (Current is { } shown)
+            BrowserPage.Current?.SetTitle(shown.Title);
         over.Children.Clear();
         foreach (var dialog in dialogs)
             over.Children.Add(Framed(ViewOf(dialog)));

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:runtime": "vite build --config vite.runtime.config.ts",
+    "build:runtime": "vite build --config vite.runtime.config.ts && vite build --config vite.engine.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-strip-types --no-warnings --test src/lib/*.test.ts && vitest run --config vitest.parts.config.ts",
     "tauri": "tauri"

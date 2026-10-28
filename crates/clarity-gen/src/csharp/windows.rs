@@ -1655,12 +1655,15 @@ public partial class {name}View : UserControl
         for widget in self.parts.iter().filter(|w| matches!(w.props.kind, WidgetKind::Image | WidgetKind::File)) {
             let Some((data, field)) = widget.props.bind.as_deref().and_then(|b| b.split_once('.')) else { continue };
             let Some(entity) = self.entity_of(data) else { continue };
+            // Through Fetched, so a mirror in a browser asks the server for it (DESIGN 7.6).
+            let fetcher = picture_fetch(data, field);
             fetches.insert(
-                picture_fetch(data, field),
-                ("byte[]?", format!("() => Db.PictureOf<{}>({}.Id, {})", entity.name.name, member(data), string(entity.column_of(field)))),
+                fetcher.clone(),
+                ("Task<byte[]?>", format!("() => Fetched(nameof({fetcher}), () => Db.PictureOf<{}>({}.Id, {}))", entity.name.name, member(data), string(entity.column_of(field)))),
             );
             if let Some(store) = entity.field(field).and_then(|f| f.modifiers.store.as_deref()) {
-                fetches.insert(picture_file(data, field), ("string, byte[]?", format!("path => Db.StoreFile({}, path)", string(store))));
+                let fetcher = picture_file(data, field);
+                fetches.insert(fetcher.clone(), ("string, Task<byte[]?>", format!("path => Fetched(nameof({fetcher}), () => Db.StoreFile({}, path), path)", string(store))));
             }
         }
         for (name, (ty, fetch)) in &fetches {
@@ -1928,9 +1931,10 @@ public partial class {name}View : UserControl
                     .enumerate()
                     .map(|(i, p)| format!("DotNetPart.Read<{}>(values, {i})", super::names::value_type(&crate::type_ref_info(self.project, &p.ty))))
                     .collect();
-                let _ = write!(cases, "            case {}:\n                Handle(() => On{}({}));\n                break;\n", string(&wired.tell), pascal(&wired.handler), values.join(", "));
+                // With what it told, so a mirror in a browser runs it on the server (DESIGN 7.6).
+                let _ = write!(cases, "            case {}:\n                Handle(() => On{}({}), [tell, values]);\n                break;\n", string(&wired.tell), pascal(&wired.handler), values.join(", "));
             }
-            let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
+            let _ = write!(clicks, "    /// <summary>What custom part {name} told.</summary>\n    [Command]\n    public void Told_{}(string tell, System.Text.Json.JsonElement[] values)\n    {{\n        switch (tell)\n        {{\n{cases}        }}\n    }}\n\n", member(name));
         }
         // The calls with values its parts wire, a command each.
         for (call, command) in &self.calls {

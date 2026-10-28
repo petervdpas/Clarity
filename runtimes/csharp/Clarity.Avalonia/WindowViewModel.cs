@@ -143,6 +143,13 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
     /// <summary>The person answered: the handler the answer goes to runs, as any handler does.</summary>
     public void Answer(Question question, object? answer) => Handle(() => question.Answered(answer));
 
+    /// <summary>
+    /// A picture or a file of the database, fetched by <paramref name="here"/>;
+    /// a mirror asks the server for it by the name of its <paramref name="fetcher"/> (DESIGN 7.6).
+    /// </summary>
+    protected Task<byte[]?> Fetched(string fetcher, Func<byte[]?> here, params object?[] args) =>
+        Remote is { } remote ? remote.Fetch(this, fetcher, args) : Task.FromResult(here());
+
     /// <summary>The row selected in a table or list.</summary>
     protected static R Selected<R>(PartState part) where R : class =>
         part.SelectedItem as R ?? throw new InvalidValueException($"no row of {part.Name} is selected");

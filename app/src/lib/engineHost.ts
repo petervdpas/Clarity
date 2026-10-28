@@ -153,21 +153,17 @@ export class Engine {
   }
 }
 
-/**
- * Loads `bytes` as engine `name` and makes its instance; refuses a module
- * that is no engine, imports anything but the services it uses, or lacks
- * the interface or a function it is declared with. With `on open` it runs
- * clarity_open once.
- */
-export async function loadEngine(name: string, bytes: Uint8Array, declared: Declared, services: Services): Promise<Engine> {
-  const refused = (why: string) => new EngineFailed(`engine ${name} ${why}`);
-  if (bytes.length < 4 || bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw refused("is no WebAssembly module");
-  let module: WebAssembly.Module;
-  try {
-    module = await WebAssembly.compile(bytes as BufferSource);
-  } catch (e) {
-    throw refused(`is no WebAssembly module: ${e instanceof Error ? e.message : e}`);
-  }
+/** Why engine `name` is refused. */
+const refusal = (name: string) => (why: string) => new EngineFailed(`engine ${name} ${why}`);
+
+/** That `bytes` are a WebAssembly module at all. */
+function checkBytes(name: string, bytes: Uint8Array) {
+  if (bytes.length < 4 || bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw refusal(name)("is no WebAssembly module");
+}
+
+/** That the module imports only the services it uses and exports the engine interface its declaration needs. */
+function checkModule(name: string, module: WebAssembly.Module, declared: Declared) {
+  const refused = refusal(name);
   for (const imported of WebAssembly.Module.imports(module)) {
     if (imported.module !== "clarity" || imported.kind !== "function" || !SERVICES.includes(imported.name) || !declared.uses.includes(imported.name))
       throw refused(`imports ${imported.module}.${imported.name}; an engine imports only the services it uses`);
@@ -179,13 +175,12 @@ export async function loadEngine(name: string, bytes: Uint8Array, declared: Decl
   for (const needed of declared.screen ? SCREEN_INTERFACE : []) if (!functions.has(needed)) throw refused(`lacks ${needed}, which an engine beside the screen needs`);
   for (const f of declared.functions ?? []) if (!functions.has(f)) throw refused(`has no function ${f}`);
   if (declared.opens && !functions.has("clarity_open")) throw refused("lacks clarity_open, which its on open needs");
+}
 
-  const random = { at: 0n };
-  let memory: () => WebAssembly.Memory = () => {
-    throw new Error("the engine is not made yet");
-  };
+/** The services the engine imports, over its memory once it is made. */
+function servicesOf(name: string, services: Services, random: { at: bigint }, memory: () => WebAssembly.Memory) {
   const bytesAt = (at: number, len: number) => new Uint8Array(memory().buffer, at, len);
-  const clarity = {
+  return {
     clock: () => BigInt(Math.trunc(services.clock())),
     random: () => splitmix(random),
     log: (at: number, len: number) => services.log(`engine ${name}: ${new TextDecoder().decode(bytesAt(at, len))}`),
@@ -195,16 +190,69 @@ export async function loadEngine(name: string, bytes: Uint8Array, declared: Decl
       return tag.length;
     },
   };
-  let instance: WebAssembly.Instance;
-  try {
-    instance = await WebAssembly.instantiate(module, { clarity });
-  } catch (e) {
-    throw refused(`did not start: ${e instanceof Error ? e.message : e}`);
-  }
+}
+
+/** The engine its instance is, within its memory limit, opened when its declaration says so. */
+function made(name: string, instance: WebAssembly.Instance, declared: Declared, random: { at: bigint }, services: Services, held: { memory: () => WebAssembly.Memory }): Engine {
   const exports = instance.exports as Exports;
-  memory = () => exports.memory;
-  if (exports.memory.buffer.byteLength > declared.megabytes * 1024 * 1024 + PAGE) throw refused(`starts past its memory limit of ${declared.megabytes} MB`);
+  held.memory = () => exports.memory;
+  if (exports.memory.buffer.byteLength > declared.megabytes * 1024 * 1024 + PAGE) throw refusal(name)(`starts past its memory limit of ${declared.megabytes} MB`);
   const engine = new Engine(name, exports, declared.megabytes, random, services.seed);
   if (declared.opens) engine.call("clarity_open", []);
   return engine;
+}
+
+/** Not made yet: what the services see before the instance is there. */
+const notYet = (): WebAssembly.Memory => {
+  throw new Error("the engine is not made yet");
+};
+
+/**
+ * Loads `bytes` as engine `name` and makes its instance; refuses a module
+ * that is no engine, imports anything but the services it uses, or lacks
+ * the interface or a function it is declared with. With `on open` it runs
+ * clarity_open once.
+ */
+export async function loadEngine(name: string, bytes: Uint8Array, declared: Declared, services: Services): Promise<Engine> {
+  checkBytes(name, bytes);
+  let module: WebAssembly.Module;
+  try {
+    module = await WebAssembly.compile(bytes as BufferSource);
+  } catch (e) {
+    throw refusal(name)(`is no WebAssembly module: ${e instanceof Error ? e.message : e}`);
+  }
+  checkModule(name, module, declared);
+  const random = { at: 0n };
+  const held = { memory: notYet };
+  let instance: WebAssembly.Instance;
+  try {
+    instance = await WebAssembly.instantiate(module, { clarity: servicesOf(name, services, random, () => held.memory()) });
+  } catch (e) {
+    throw refusal(name)(`did not start: ${e instanceof Error ? e.message : e}`);
+  }
+  return made(name, instance, declared, random, services, held);
+}
+
+/**
+ * The engine at once, compiled and made on the calling thread: for .NET in
+ * a browser (DESIGN 7.6), whose calls cannot wait for a promise.
+ */
+export function loadEngineNow(name: string, bytes: Uint8Array, declared: Declared, services: Services): Engine {
+  checkBytes(name, bytes);
+  let module: WebAssembly.Module;
+  try {
+    module = new WebAssembly.Module(bytes as BufferSource);
+  } catch (e) {
+    throw refusal(name)(`is no WebAssembly module: ${e instanceof Error ? e.message : e}`);
+  }
+  checkModule(name, module, declared);
+  const random = { at: 0n };
+  const held = { memory: notYet };
+  let instance: WebAssembly.Instance;
+  try {
+    instance = new WebAssembly.Instance(module, { clarity: servicesOf(name, services, random, () => held.memory()) });
+  } catch (e) {
+    throw refusal(name)(`did not start: ${e instanceof Error ? e.message : e}`);
+  }
+  return made(name, instance, declared, random, services, held);
 }

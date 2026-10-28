@@ -9,6 +9,8 @@ using Xunit;
 
 namespace Clarity.Runtime.Tests;
 
+// With the other tests of kept settings, one at a time: KeptSettings.Store is shared.
+[Collection("kept settings")]
 public sealed class SecretsTests
 {
     const string Program = "clarity-runtime-test";

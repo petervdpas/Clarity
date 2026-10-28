@@ -41,16 +41,26 @@ pub(super) fn generate(project: &Project, settings: &Settings, desktop: Vec<OutF
         match file.path.as_str() {
             // The server and the browser program start it instead.
             "Program.cs" | "README.md" => {}
-            "App.axaml.cs" => files.push(text("App/App.axaml.cs", app_cs(project, &name))),
+            "App.axaml.cs" => files.push(text("App/App.axaml.cs", app_cs(project, &name, project.entities().find(|e| e.settings).map(|e| e.name.name.as_str())))),
             path if path == project_file => files.push(text(&format!("App/{path}"), file.text.replace("<OutputType>WinExe</OutputType>", "<OutputType>Library</OutputType>"))),
             path => files.push(OutFile { path: format!("App/{path}"), ..file }),
         }
     }
     files.push(text("App/Databases.cs", databases_cs(&name, &opening(&databases, &servers, settings, "Open"))));
     files.push(text(&format!("Server/{name}.Server.csproj"), server_csproj(&name)));
-    files.push(text("Server/Program.cs", server_cs(&name, &main, &clarity_project::serve_address(settings), engines)));
+    // The person's settings, which their browser keeps and each request brings (DESIGN 7.6).
+    let kept = project.entities().find(|e| e.settings).map(|e| e.name.name.clone());
+    files.push(text("Server/Program.cs", server_cs(&name, &main, &clarity_project::serve_address(settings), engines, kept.as_deref())));
     files.push(text(&format!("Browser/{name}.Browser.csproj"), browser_csproj(&name)));
-    files.push(text("Browser/Program.cs", browser_cs(&name)));
+    // Engines beside the screen run in the browser's own WebAssembly, through engine.js.
+    let screen = !crate::screen_engines(project).is_empty();
+    files.push(text("Browser/Program.cs", browser_cs(&name, screen)));
+    if screen {
+        files.push(text("Browser/Engines.cs", engines_cs(&name)));
+        files.push(text("Browser/wwwroot/engine.js", ENGINE_JS.to_string()));
+    }
+    files.push(text("Browser/Page.cs", page_cs(&name)));
+    files.push(text("Browser/wwwroot/clarity.js", CLARITY_JS.to_string()));
     files.push(text("Browser/wwwroot/index.html", index_html(&clarity_project::title(settings))));
     files.push(text("Browser/wwwroot/main.js", MAIN_JS.to_string()));
     files.push(text("README.md", readme(&name, &clarity_project::serve_address(settings))));
@@ -63,8 +73,13 @@ fn databases_cs(name: &str, opening: &str) -> String {
 
 /// The application in the browser: in the person's language and theme, a
 /// mirror shell over the sessions of the server the page came from.
-fn app_cs(project: &Project, name: &str) -> String {
+fn app_cs(project: &Project, name: &str, kept: Option<&str>) -> String {
     let currency = project.locale.currency.as_deref().map_or_else(|| "null".to_string(), string);
+    // The person's settings, from the browser's storage, which each request takes to the server.
+    let (start_settings, settings) = match kept {
+        Some(s) => (format!("            {s}.Start();\n"), format!(", settings: (() => {s}.Current.ToJson(), sent => {s}.Current.Apply(sent))")),
+        None => (String::new(), String::new()),
+    };
     format!(
         "{HEADER}
 using Avalonia;
@@ -89,9 +104,9 @@ public partial class App : Application
         {{
             Locale.Start(Texts.BaseLanguage, Texts.Languages, {currency}, Texts.In, Labels.Named);
             Themes.Start(AppThemes.Offered);
-            var holder = new ContentControl();
+{start_settings}            var holder = new ContentControl();
             single.MainView = holder;
-            holder.Content = await MirrorShell.Start(link, Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}));
+            holder.Content = await MirrorShell.Start(link, Views.Create, TimeSpan.FromMilliseconds({MESSAGE_MS}){settings});
         }}
     }}
 }}
@@ -122,13 +137,22 @@ fn server_csproj(name: &str) -> String {
   <ItemGroup>
     <ProjectReference Include=\"../App/{name}.csproj\" />
   </ItemGroup>
-  <!-- The browser program, published beside the server, which serves it. -->
-  <Target Name=\"PublishBrowser\" BeforeTargets=\"Build\" Condition=\"'$(SkipBrowser)' != 'true'\">
-    <Exec Command=\"dotnet publish ../Browser/{name}.Browser.csproj -c $(Configuration) -o $(MSBuildProjectDirectory)/browser -p:ClarityRuntime=$(ClarityRuntime) --nologo\" />
+  <!-- The browser program, published beside the server, which serves it: again
+       only when a file of the application or the browser program changed. -->
+  <ItemGroup>
+    <BrowserInputs Include=\"../App/**;../Browser/**\" Exclude=\"../App/bin/**;../App/obj/**;../Browser/bin/**;../Browser/obj/**\" />
+  </ItemGroup>
+  <!-- Built on Clarity's runtime projects instead of its packages, their sources count too. -->
+  <ItemGroup Condition=\"'$(ClarityRuntime)' != ''\">
+    <BrowserInputs Include=\"$(ClarityRuntime)/**/*.cs;$(ClarityRuntime)/**/*.csproj\" Exclude=\"$(ClarityRuntime)/**/bin/**;$(ClarityRuntime)/**/obj/**\" />
+  </ItemGroup>
+  <Target Name=\"PublishBrowser\" BeforeTargets=\"Build\" Condition=\"'$(SkipBrowser)' != 'true'\" Inputs=\"@(BrowserInputs)\" Outputs=\"browser/$(Configuration)/published\">
+    <Exec Command=\"dotnet publish ../Browser/{name}.Browser.csproj -c $(Configuration) -o $(MSBuildProjectDirectory)/browser/$(Configuration) -p:ClarityRuntime=$(ClarityRuntime) --nologo\" />
+    <Touch Files=\"browser/$(Configuration)/published\" AlwaysCreate=\"true\" />
   </Target>
   <Target Name=\"CopyBrowser\" AfterTargets=\"Build\" Condition=\"'$(SkipBrowser)' != 'true'\">
     <ItemGroup>
-      <BrowserFiles Include=\"browser/wwwroot/**\" />
+      <BrowserFiles Include=\"browser/$(Configuration)/wwwroot/**\" />
     </ItemGroup>
     <Copy SourceFiles=\"@(BrowserFiles)\" DestinationFiles=\"@(BrowserFiles->'$(OutDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')\" SkipUnchangedFiles=\"true\" />
   </Target>
@@ -138,8 +162,10 @@ fn server_csproj(name: &str) -> String {
     )
 }
 
-fn server_cs(name: &str, main: &str, address: &str, engines: bool) -> String {
+fn server_cs(name: &str, main: &str, address: &str, engines: bool, kept: Option<&str>) -> String {
     let check_engines = check_engines(engines);
+    // Each request runs with the settings of the person who sent it (DESIGN 7.6).
+    let settings = kept.map(|s| format!(" {{ Settings = (() => {s}.Current.ToJson(), sent => {s}.Current.Apply(sent)) }}")).unwrap_or_default();
     format!(
         "{HEADER}
 using Clarity.Avalonia;
@@ -165,7 +191,7 @@ public static class Program
         }}
         using var db = Databases.Open();
         var files = Path.Combine(AppContext.BaseDirectory, \"wwwroot\");
-        new WebServer(new Sessions(() => new {main}ViewModel(db)), files).Serve({program}, WebServer.Address(args, {address}));
+        new WebServer(new Sessions(() => new {main}ViewModel(db)){settings}, files).Serve({program}, WebServer.Address(args, {address}));
         return 0;
     }}
 }}
@@ -193,6 +219,8 @@ fn browser_csproj(name: &str) -> String {
 {CLARITY_RUNTIME}  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include=\"Avalonia.Browser\" Version=\"{avalonia}\" />
+    <!-- A browser has none of the system's fonts: Inter, which the themes fall back on. -->
+    <PackageReference Include=\"Avalonia.Fonts.Inter\" Version=\"{avalonia}\" />
     <ProjectReference Include=\"../App/{name}.csproj\" />
   </ItemGroup>
 </Project>
@@ -202,7 +230,12 @@ fn browser_csproj(name: &str) -> String {
     )
 }
 
-fn browser_cs(name: &str) -> String {
+fn browser_cs(name: &str, screen: bool) -> String {
+    let engines = if screen {
+        "        // Engines beside the screen, in the browser's own WebAssembly.\n        await JSHost.ImportAsync(\"engine\", \"/engine.js\");\n        ScreenEngines.InBrowser = PageFrames.Load;\n"
+    } else {
+        ""
+    };
     format!(
         "{HEADER}
 using System.Runtime.InteropServices.JavaScript;
@@ -218,17 +251,236 @@ namespace {name}.Browser;
 /// <summary>The application in the browser: mirrors of the windows the server keeps (DESIGN 7.6).</summary>
 internal sealed partial class Program
 {{
-    private static System.Threading.Tasks.Task Main(string[] args)
+    private static async System.Threading.Tasks.Task Main(string[] args)
     {{
+        // What belongs to the browser: the tab's title, downloads, the person's storage.
+        await JSHost.ImportAsync(\"clarity\", \"/clarity.js\");
+        var page = new Page();
+        BrowserPage.Current = page;
+        // The person's settings stay in the browser's storage, and sounds play through its audio.
+        Clarity.Runtime.KeptSettings.Store = (page.Read, page.Write);
+        Sound.Output = new PageSoundOutput(page);
+{engines}
         // The sessions are the server's the page came from.
         var origin = JSHost.GlobalThis.GetPropertyAsJSObject(\"location\")!.GetPropertyAsString(\"origin\")!;
         App.Sessions = new HttpSessionLink(new HttpClient {{ BaseAddress = new Uri(origin) }});
-        return AppBuilder.Configure<App>().StartBrowserAppAsync(\"out\");
+        // Inter, carried in the program, is the font the themes fall back on.
+        await AppBuilder.Configure<App>().WithInterFont().With(new Avalonia.Media.FontManagerOptions {{ DefaultFamilyName = \"fonts:Inter#Inter\" }}).StartBrowserAppAsync(\"out\");
     }}
 }}
 "
     )
 }
+
+/// The browser's side of what belongs to it, through clarity.js.
+fn page_cs(name: &str) -> String {
+    format!(
+        "{HEADER}
+using System.Runtime.InteropServices.JavaScript;
+using Clarity.Avalonia;
+
+namespace {name}.Browser;
+
+/// <summary>The page the application runs in: its tab, its downloads and the person's storage (DESIGN 7.6).</summary>
+internal sealed partial class Page : IBrowserPage
+{{
+    [JSImport(\"setTitle\", \"clarity\")]
+    private static partial void TabTitle(string title);
+
+    [JSImport(\"download\", \"clarity\")]
+    private static partial void Saved(string name, string data);
+
+    [JSImport(\"show\", \"clarity\")]
+    private static partial void Shown(string name, string data);
+
+    [JSImport(\"read\", \"clarity\")]
+    private static partial string? Kept(string key);
+
+    [JSImport(\"write\", \"clarity\")]
+    private static partial void Keep(string key, string value);
+
+    [JSImport(\"play\", \"clarity\")]
+    private static partial int Sounded(string data, double volume, bool repeat);
+
+    [JSImport(\"stop\", \"clarity\")]
+    private static partial void Stopped(int sound);
+
+    public void SetTitle(string title) => TabTitle(title);
+
+    public void Download(string name, byte[] data) => Saved(name, Convert.ToBase64String(data));
+
+    public void Show(string name, byte[] data) => Shown(name, Convert.ToBase64String(data));
+
+    public string? Read(string key) => Kept(key);
+
+    public void Write(string key, string value) => Keep(key, value);
+
+    public int Play(byte[] file, double volume, bool repeat) => Sounded(Convert.ToBase64String(file), volume, repeat);
+
+    public void Stop(int sound) => Stopped(sound);
+}}
+"
+    )
+}
+
+/// The engines beside the screen in a browser (DESIGN 7.6), built from the
+/// web renderer's engine host (app/src/lib/browserEngines.ts).
+const ENGINE_JS: &str = include_str!("../../ui-engine/engine.js");
+
+/// A canvas's frames in the browser: its engine in the browser's own
+/// WebAssembly, through engine.js, each call answered at once.
+fn engines_cs(name: &str) -> String {
+    format!(
+        "{HEADER}
+using System.Runtime.InteropServices.JavaScript;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Clarity.Runtime;
+
+namespace {name}.Browser;
+
+/// <summary>An engine beside the screen in the browser (DESIGN 7.6): the browser's own WebAssembly, on the page's thread.</summary>
+internal sealed partial class PageFrames : IFrames
+{{
+    [JSImport(\"load\", \"engine\")]
+    private static partial int Loaded(string name, string wasm, string declared);
+
+    [JSImport(\"hears\", \"engine\")]
+    private static partial string HearsOf(int engine);
+
+    [JSImport(\"frame\", \"engine\")]
+    private static partial string Framed(int engine, double ms, string input);
+
+    [JSImport(\"close\", \"engine\")]
+    private static partial void Closed(int engine);
+
+    readonly int engine;
+
+    PageFrames(int engine)
+    {{
+        this.engine = engine;
+        var hears = JsonNode.Parse(HearsOf(engine))!;
+        Hears = new(hears[\"pointer\"]!.GetValue<bool>(), hears[\"keys\"]!.GetValue<bool>());
+    }}
+
+    /// <summary>Loads engine <paramref name=\"name\"/> from its file, as its declaration says.</summary>
+    public static IFrames Load(string name, byte[] bytes, string[] uses, bool opens, long seconds, long megabytes)
+    {{
+        var declared = new JsonObject {{ [\"uses\"] = new JsonArray([.. uses.Select(u => JsonValue.Create(u))]), [\"opens\"] = opens, [\"seconds\"] = seconds, [\"megabytes\"] = megabytes }};
+        try
+        {{
+            return new PageFrames(Loaded(name, Convert.ToBase64String(bytes), declared.ToJsonString()));
+        }}
+        catch (JSException e)
+        {{
+            throw new EngineException(Why(e));
+        }}
+    }}
+
+    public Hears Hears {{ get; }}
+
+    public Drawn Frame(double ms, IReadOnlyList<ScreenInput> input)
+    {{
+        var sent = new JsonArray();
+        foreach (var given in input)
+        {{
+            sent.Add(given switch
+            {{
+                ScreenInput.Pointer p => new JsonObject {{ [\"pointer\"] = p.Kind, [\"x\"] = p.X, [\"y\"] = p.Y }},
+                ScreenInput.Key k => new JsonObject {{ [\"key\"] = k.Kind, [\"name\"] = k.Name }},
+                ScreenInput.Hear h => new JsonObject {{ [\"hear\"] = h.Name, [\"values\"] = JsonSerializer.SerializeToNode(h.Values) }},
+                _ => null,
+            }});
+        }}
+        string drawn;
+        try
+        {{
+            drawn = Framed(engine, ms, sent.ToJsonString());
+        }}
+        catch (JSException e)
+        {{
+            throw new EngineException(Why(e));
+        }}
+        var reply = JsonNode.Parse(drawn)!;
+        var tells = reply[\"tells\"]!.AsArray().Select(t => new ScreenTell(t![\"tell\"]!.GetValue<string>(), JsonSerializer.Deserialize<JsonElement[]>(t[\"values\"]!.ToJsonString())!)).ToList();
+        return new Drawn(reply[\"shapes\"]!.DeepClone().AsArray(), tells);
+    }}
+
+    public void Dispose() => Closed(engine);
+
+    /// <summary>What failed, as the engine host said it, without JavaScript's name for an error.</summary>
+    static string Why(JSException e) => e.Message.StartsWith(\"Error: \") ? e.Message[7..] : e.Message;
+}}
+"
+    )
+}
+
+/// What the page does for the application in the browser, which .NET calls.
+const CLARITY_JS: &str = "// Generated by Clarity. Do not edit: change the project in Clarity instead.
+// What belongs to the browser (DESIGN 7.6), as the application asks it.
+
+const kinds = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', txt: 'text/plain', csv: 'text/csv', md: 'text/markdown' };
+
+function blob(name, data) {
+  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+  const extension = name.split('.').pop().toLowerCase();
+  return URL.createObjectURL(new Blob([bytes], { type: kinds[extension] ?? 'application/octet-stream' }));
+}
+
+export function setTitle(title) {
+  document.title = title;
+}
+
+export function download(name, data) {
+  const link = document.createElement('a');
+  link.href = blob(name, data);
+  link.download = name;
+  link.click();
+}
+
+export function show(name, data) {
+  window.open(blob(name, data), '_blank', 'noopener');
+}
+
+// The person's storage: what a browser that keeps nothing cannot keep is not kept.
+export function read(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function write(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+  }
+}
+
+// Sounds through the browser's own audio, each by its number until it ends or stops.
+const sounds = new Map();
+let nextSound = 0;
+
+export function play(data, volume, repeat) {
+  const audio = new Audio(blob('sound', data));
+  audio.volume = Math.max(0, Math.min(1, volume));
+  audio.loop = repeat;
+  const number = ++nextSound;
+  sounds.set(number, audio);
+  audio.addEventListener('ended', () => sounds.delete(number));
+  audio.play().catch(() => sounds.delete(number));
+  return number;
+}
+
+export function stop(number) {
+  const audio = sounds.get(number);
+  if (audio) {
+    audio.pause();
+    sounds.delete(number);
+  }
+}
+";
 
 fn index_html(title: &str) -> String {
     let title = title.replace('&', "&amp;").replace('<', "&lt;");

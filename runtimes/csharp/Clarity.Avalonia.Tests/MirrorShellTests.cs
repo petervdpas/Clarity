@@ -26,6 +26,31 @@ sealed class InProcess(Sessions sessions) : ISessionLink
     }
 }
 
+/// <summary>A browser page that keeps what it was asked to do.</summary>
+sealed class FakePage : IBrowserPage
+{
+    public List<string> Did { get; } = [];
+    public Dictionary<string, string> Stored { get; } = [];
+
+    public void SetTitle(string title) => Did.Add($"title {title}");
+
+    public void Download(string name, byte[] data) => Did.Add($"download {name} {data.Length}");
+
+    public void Show(string name, byte[] data) => Did.Add($"show {name} {data.Length}");
+
+    public string? Read(string key) => Stored.GetValueOrDefault(key);
+
+    public void Write(string key, string value) => Stored[key] = value;
+
+    public int Play(byte[] file, double volume, bool repeat)
+    {
+        Did.Add($"play {file.Length} {volume} {repeat}");
+        return Did.Count;
+    }
+
+    public void Stop(int sound) => Did.Add($"stop {sound}");
+}
+
 public class MirrorShellTests
 {
     static Control View(WindowViewModel model) => new TextBlock { Text = model.GetType().Name, DataContext = model };
@@ -97,6 +122,20 @@ public class MirrorShellTests
     }
 
     [AvaloniaFact]
+    public async Task A_picture_or_a_file_is_fetched_from_the_server()
+    {
+        using var db = Db.Memory();
+        var (shell, link) = await Started(db);
+        ((ShelfViewModel)shell.Current!).DetailCommand.Execute(null);
+        await shell.Idle;
+        var book = Assert.IsType<BookViewModel>(shell.Current);
+        Assert.Equal([1, 2, 3], await book.CoverPicture());
+        Assert.Equal("fetch", link.Sent[^1]);
+        Assert.Equal([4], await book.CoverFile("a.png"));
+        Assert.Null(await book.CoverFile("b.png"));
+    }
+
+    [AvaloniaFact]
     public async Task A_question_is_asked_in_the_browser_and_answered_on_the_server()
     {
         using var db = Db.Memory();
@@ -109,5 +148,77 @@ public class MirrorShellTests
         await shell.Idle;
         Assert.Null(shell.Asking);
         Assert.Contains("removed", ((ShelfViewModel)shell.Current!).Log);
+    }
+}
+
+public class BrowserPageTests
+{
+    [AvaloniaFact]
+    public async Task The_tab_takes_the_title_of_the_window_on_top()
+    {
+        using var db = Db.Memory();
+        var page = new FakePage();
+        BrowserPage.Current = page;
+        try
+        {
+            var shell = await MirrorShell.Start(new InProcess(new Sessions(() => new ShelfViewModel(db))), m => new TextBlock());
+            Assert.Equal("title Shelf", page.Did[^1]);
+            ((ShelfViewModel)shell.Current!).DetailCommand.Execute(null);
+            await shell.Idle;
+            Assert.Equal("title Book", page.Did[^1]);
+        }
+        finally
+        {
+            BrowserPage.Current = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void A_sound_plays_through_the_page()
+    {
+        var page = new FakePage();
+        var output = new PageSoundOutput(page);
+        var playing = output.Play([1, 2, 3], 0.5f, true);
+        playing.Dispose();
+        Assert.Equal(["play 3 0.5 True", "stop 1"], page.Did);
+    }
+
+    [AvaloniaFact]
+    public void A_file_is_downloaded_or_shown_in_a_tab_in_the_browser()
+    {
+        var page = new FakePage();
+        BrowserPage.Current = page;
+        try
+        {
+            var input = new FileInput();
+            input.Take("rules.pdf", [1, 2, 3]);
+            string? said = null;
+            input.CopySaved += where => said = where;
+            input.SaveCopy();
+            input.OpenIt();
+            Assert.Equal(["download rules.pdf 3", "show rules.pdf 3"], page.Did);
+            Assert.Equal("rules.pdf", said);
+        }
+        finally
+        {
+            BrowserPage.Current = null;
+        }
+    }
+}
+
+[Collection("settings")]
+public class MirrorSettingsTests
+{
+    [AvaloniaFact]
+    public async Task The_mirror_sends_the_persons_settings_and_takes_back_what_a_handler_changed()
+    {
+        using var db = Db.Memory();
+        var person = new JsonObject { ["speed"] = 3 };
+        var sessions = new Sessions(() => new FasterViewModel(db)) { Settings = Prefs.Hooks };
+        var shell = await MirrorShell.Start(new InProcess(sessions), m => new TextBlock(), settings: (() => person, sent => person = sent));
+        ((FasterViewModel)shell.Current!).FasterCommand.Execute(null);
+        await shell.Idle;
+        Assert.Equal(3, ((FasterViewModel)shell.Current!).Seen);
+        Assert.Equal(4, person["speed"]!.GetValue<int>());
     }
 }

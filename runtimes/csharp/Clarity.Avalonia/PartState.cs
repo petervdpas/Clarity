@@ -185,6 +185,19 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
             heard(hear, given);
     }
 
+    /// <summary>
+    /// What code told the part that nothing heard yet, taken: on a server,
+    /// where no view listens, what goes to the browser's mirror (DESIGN 7.6).
+    /// </summary>
+    internal List<(string Hear, object?[] Values)> TakeTold()
+    {
+        if (heard is not null)
+            return [];
+        var told = waiting.ToList();
+        waiting.Clear();
+        return told;
+    }
+
     /// <summary>The part that shows this state hears what is set and told from now on, after
     /// the hears that waited for it.</summary>
     public void Listen(Action<string, object?> onSet, Action<string, object?[]> onHear)

@@ -32,7 +32,7 @@ public sealed class PictureBoxTests
             Fetch = () =>
             {
                 asked++;
-                return Pixel;
+                return Task.FromResult<byte[]?>(Pixel);
             },
         };
         box.Picture = Picture.Stored;
@@ -49,7 +49,7 @@ public sealed class PictureBoxTests
         box.Fetch = () =>
         {
             asked.Add((string)box.Record!);
-            return Pixel;
+            return Task.FromResult<byte[]?>(Pixel);
         };
         box.Record = "second";
         Assert.Equal(["first", "second"], asked);
@@ -65,7 +65,7 @@ public sealed class PictureBoxTests
             FetchFile = path =>
             {
                 asked = path;
-                return Pixel;
+                return Task.FromResult<byte[]?>(Pixel);
             },
         };
         box.Picture = Picture.InStore("2024/cover.png");

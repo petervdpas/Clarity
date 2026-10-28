@@ -78,6 +78,7 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [ ] Hears (both): Start sets the text to "... ms, level 2", the time back near 0 and the laps to 0.
 - [ ] Log (both): run the app from a terminal; each Start writes `engine Screen: level 2` there.
 - [ ] The web target on Windows (Winsock; the C and C++ clarity_service link ws2_32 and shell32; Rust's files by include_bytes!): `the_web_target_serves_in_c`, `_in_cpp` (cpp_build) and `_in_rust` (build) pass; the invaders example (Go): `the_invaders_example_serves_in_go` with `CLARITY_KEEP=1`, run it, open http://127.0.0.1:8080 in a browser and play.
+- [ ] Avalonia in the browser, the browser's own (C#): in the web todo the font is Inter, the tab takes the window's title, a file field downloads; a setting changed survives a reload; a sound part plays; a game with an engine beside the screen plays.
 - [ ] Avalonia in the browser (C#): `the_walker_example_serves_in_csharp` passes (wasm-tools installed); `dotnet build Server` in its `out/web`, run the server, open http://127.0.0.1:8080, press Walk: the figure walks across and back. The IDE's Install for the WebAssembly tools asks with UAC.
 - [ ] SVG pictures (C#): `cargo test -p clarity-gen --test csharp_build -- --ignored --exact pictures_build_in_csharp` builds; an app with `image source "logo.svg"` shows it.
 - [ ] The pills example (Go): `the_pills_example_builds_and_runs_in_go` with `CLARITY_KEEP=1`; run it: the pills and the paddle are pictures, Start plays, the mouse moves the paddle.

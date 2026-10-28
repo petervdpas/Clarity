@@ -30,8 +30,13 @@ public static class Snapshot
         return options;
     }
 
-    /// <summary>The state of <paramref name="window"/>: <c>{"data": ..., "parts": ...}</c>.</summary>
-    public static JsonObject Of(WindowViewModel window)
+    /// <summary>
+    /// The state of <paramref name="window"/>: <c>{"data": ..., "parts": ...}</c>;
+    /// with <paramref name="told"/>, also what code told its parts since the
+    /// last time (a sound to play, a custom part's hear), which the server
+    /// sends its mirror once.
+    /// </summary>
+    public static JsonObject Of(WindowViewModel window, bool told = false)
     {
         var data = new JsonObject();
         var parts = new JsonObject();
@@ -39,7 +44,11 @@ public static class Snapshot
         {
             var value = property.GetValue(window);
             if (value is PartState part)
+            {
                 parts[property.Name] = Part(part);
+                if (told && part.TakeTold() is { Count: > 0 } said)
+                    parts[property.Name]!["told"] = new JsonArray([.. said.Select(t => (JsonNode)new JsonArray([JsonValue.Create(t.Hear), .. t.Values.Select(v => JsonSerializer.SerializeToNode(v, typeof(object), Options))]))]);
+            }
             else
                 data[property.Name] = JsonSerializer.SerializeToNode(value, property.PropertyType, Options);
         }
@@ -92,6 +101,23 @@ public static class Snapshot
     public static object?[] Arguments(WindowViewModel window, string command, JsonArray? sent) =>
         [.. Command(window.GetType(), command).GetParameters().Select((p, i) => sent?.ElementAtOrDefault(i)?.Deserialize(p.ParameterType, Options))];
 
+    /// <summary>
+    /// What the fetcher <paramref name="fetcher"/> of <paramref name="window"/>
+    /// fetches: a picture or a file of the database. Only a fetcher, nothing
+    /// else of the window.
+    /// </summary>
+    public static byte[]? Fetch(WindowViewModel window, string fetcher, JsonArray? args)
+    {
+        var property = window.GetType().GetProperty(fetcher, BindingFlags.Instance | BindingFlags.Public);
+        Task<byte[]?> fetched = property?.GetValue(window) switch
+        {
+            Func<Task<byte[]?>> whole => whole(),
+            Func<string, Task<byte[]?>> byPath => byPath(args?.ElementAtOrDefault(0)?.GetValue<string>() ?? ""),
+            _ => throw new SessionException($"the window has no fetcher {fetcher}"),
+        };
+        return fetched.GetAwaiter().GetResult();
+    }
+
     /// <summary>The form of a question as the server sent it.</summary>
     public static AskForm Form(JsonNode? sent) =>
         sent?.Deserialize<object>(Options) as AskForm ?? throw new SessionException("a question needs its form");
@@ -104,7 +130,7 @@ public static class Snapshot
         for (var t = type; t is not null && t != typeof(WindowViewModel); t = t.BaseType)
         {
             var method = t.GetMethod(command, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-            if (method?.GetCustomAttribute<RelayCommandAttribute>() is not null)
+            if (method?.GetCustomAttribute<RelayCommandAttribute>() is not null || method?.GetCustomAttribute<CommandAttribute>() is not null)
                 return method;
         }
         throw new SessionException($"the window has no command {command}");
@@ -160,6 +186,11 @@ public static class Snapshot
         part.Pointer = sent["pointer"]?.Deserialize<Pointer>(Options);
         part.ShowDrawing(Get<List<Shape>>("drawing", [.. part.Drawing]));
         part.SelectedItem = Matched(window, sent["selected"]?.Deserialize<object>(Options));
+        foreach (var told in sent["told"]?.AsArray() ?? [])
+        {
+            if (told is JsonArray said && said.Count > 0)
+                part.Hear(said[0]!.GetValue<string>(), [.. said.Skip(1).Select(v => v?.Deserialize<object>(Options))]);
+        }
     }
 
     /// <summary>The row of one of the window's lists that <paramref name="row"/> is: the same record, by its id.</summary>

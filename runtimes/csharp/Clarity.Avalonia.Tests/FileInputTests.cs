@@ -21,14 +21,14 @@ public class FileInputTests
     }
 
     [AvaloniaFact]
-    public void Choosing_and_removing_are_changes()
+    public async Task Choosing_and_removing_are_changes()
     {
         var input = new FileInput();
         var changed = 0;
         input.ValueChanged += (_, _) => changed++;
         input.Take("C:\\docs\\manual.pdf", [1, 2, 3]);
         Assert.Equal("manual.pdf", input.File?.Name);
-        Assert.Equal([1, 2, 3], input.Bytes());
+        Assert.Equal([1, 2, 3], await input.Bytes());
         input.Remove();
         Assert.Null(input.File);
         input.Remove();
@@ -39,15 +39,15 @@ public class FileInputTests
     }
 
     [AvaloniaFact]
-    public void A_stored_file_is_fetched_only_when_asked_for()
+    public async Task A_stored_file_is_fetched_only_when_asked_for()
     {
         var fetched = 0;
-        var input = new FileInput { Fetch = () => { fetched++; return [9]; }, FetchFile = path => path == "ab/c.pdf" ? [7] : null };
+        var input = new FileInput { Fetch = () => { fetched++; return Task.FromResult<byte[]?>([9]); }, FetchFile = path => Task.FromResult<byte[]?>(path == "ab/c.pdf" ? [7] : null) };
         input.File = new RecordFile("manual.pdf", Picture.Stored);
         Assert.Equal(0, fetched);
-        Assert.Equal([9], input.Bytes());
+        Assert.Equal([9], await input.Bytes());
         Assert.Equal(1, fetched);
         input.File = new RecordFile("c.pdf", Picture.InStore("ab/c.pdf"));
-        Assert.Equal([7], input.Bytes());
+        Assert.Equal([7], await input.Bytes());
     }
 }

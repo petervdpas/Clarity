@@ -27,7 +27,7 @@ public static class ResourcePictures
         if (Loaded.TryGetValue(name, out var known))
             return known;
         IImage? picture = null;
-        var uri = MarkdownView.ResourceUri(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name, name);
+        var uri = MarkdownView.ResourceUri(MarkdownView.AppAssembly, name);
         try
         {
             if (AssetLoader.Exists(uri))

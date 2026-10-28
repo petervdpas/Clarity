@@ -290,7 +290,7 @@ public class Sound : Control
     /// <summary>A sound of the program's resources, embedded as markdown files and pictures are.</summary>
     static byte[]? Read(string name)
     {
-        var uri = MarkdownView.ResourceUri(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name, name);
+        var uri = MarkdownView.ResourceUri(MarkdownView.AppAssembly, name);
         if (!AssetLoader.Exists(uri))
             return null;
         using var stream = AssetLoader.Open(uri);

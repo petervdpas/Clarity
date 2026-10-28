@@ -1,0 +1,11 @@
+// The walker example: a stick figure walks across the window and back, a
+// picture of the resources folder for each step of its walk. Its target is
+// the web, in C# with Avalonia: the window lives on the server, where the
+// timer's handler moves the figure, and the browser shows it. The modules
+// are in the walker folder next to this file.
+project Walker
+    title "Walker"
+    stack csharp avalonia web
+    output "out"
+    language "en"
+    datasource main sqlite "data/walker.db"

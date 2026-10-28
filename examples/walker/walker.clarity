@@ -1,0 +1,85 @@
+module walker
+
+// The figure in each step of its walk, facing right and facing left.
+const right1: picture = "walk-right-1.svg"
+const right2: picture = "walk-right-2.svg"
+const right3: picture = "walk-right-3.svg"
+const right4: picture = "walk-right-4.svg"
+const left1: picture = "walk-left-1.svg"
+const left2: picture = "walk-left-2.svg"
+const left3: picture = "walk-left-3.svg"
+const left4: picture = "walk-left-4.svg"
+
+// How wide the field is, in its units, and how wide the figure.
+const fieldWidth = 200
+const figureWidth = 20
+
+// The picture of step `step` (1 to 4), facing the way `heading` goes.
+function frame(step: integer, heading: integer) -> text
+    if heading > 0
+        if step == 1
+            return right1
+        if step == 2
+            return right2
+        if step == 3
+            return right3
+        return right4
+    if step == 1
+        return left1
+    if step == 2
+        return left2
+    if step == 3
+        return left3
+    return left4
+
+app Walker
+    title @walkerTitle
+    main Field
+
+page Field: window
+    title @fieldTitle
+    size 820 x 520
+    data x: integer, default 10
+    data step: integer, default 1
+    data heading: integer, default 1
+    data speed: integer, default 2
+    on open: fieldOpened
+    canvas name field at 1,1 span 12 rows 8 units 200 x 100 on draw: drawField
+    button @walkCaption name walkButton at 1,9 span 3 on click: walkClicked
+    button @stopCaption name stopButton at 4,9 span 3 on click: stopClicked
+    label @speedLabel name speedLabel at 7,9 span 2
+    slider name speedSlider at 9,9 span 4 bind speed min 1 max 6 step 1
+    timer name clock every 0.1 on tick: stepped
+
+code Field
+    handler fieldOpened
+        clock.enabled = false
+        stopButton.enabled = false
+
+    handler walkClicked
+        clock.enabled = true
+        walkButton.enabled = false
+        stopButton.enabled = true
+
+    handler stopClicked
+        clock.enabled = false
+        walkButton.enabled = true
+        stopButton.enabled = false
+
+    // A step of the walk: the next picture, a little further, and back at a wall.
+    handler stepped
+        step = step + 1
+        if step > 4
+            step = 1
+        x = x + heading * speed
+        if x + figureWidth >= fieldWidth
+            x = fieldWidth - figureWidth
+            heading = -1
+        if x <= 0
+            x = 0
+            heading = 1
+
+    handler drawField
+        field.clear("panel")
+        field.rect(0, 92, fieldWidth, 8, "border")
+        field.image(x, 52, figureWidth, 40, frame(step, heading))

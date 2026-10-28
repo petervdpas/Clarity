@@ -88,4 +88,5 @@ TEST(bytes_are_read_and_written_as_they_are) {
         // Bytes cross to an engine as base64 text, and back.
         CHECK(from_base64(base64(bytes)) == bytes);
     }
+    fs::remove_all(root);
 }

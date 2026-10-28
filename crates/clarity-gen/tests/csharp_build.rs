@@ -461,3 +461,33 @@ fn the_web_server_keeps_sessions_in_csharp() {
     assert!(window["state"]["parts"].is_object(), "{started}");
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// The walker example, on its own stack: C# with Avalonia on the web. Its
+/// server builds, with the browser program published into it, and a session
+/// opens its window.
+#[test]
+#[ignore]
+fn the_walker_example_serves_in_csharp() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let file = root.join("examples/walker.clarity");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let mut settings = clarity_project::load(&file).settings.expect("the example has a project file");
+    assert_eq!((settings.stack.backend, settings.stack.ui), (Backend::Csharp, Ui::Avalonia), "walker is not a C# example");
+    let out = scratch().join(format!("clarity-gen-csharp-walker-{}", std::process::id()));
+    settings.datasources[0].url = out.join("data/walker.db").display().to_string();
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
+    let built = dotnet(&out, &["build", "Server", "--nologo", "-v", "quiet"], Runtime::Local).output().unwrap();
+    assert!(built.status.success(), "the walker does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
+    assert!(out.join("Server/bin/Debug/net10.0/wwwroot/_framework/dotnet.js").exists(), "the browser program is published into the server");
+    let address = "127.0.0.1:18738";
+    let mut server = Command::new(out.join("Server/bin/Debug/net10.0/Walker.Server")).args(["--address", address]).current_dir(&out).spawn().unwrap();
+    let page = served::post(address, "/clarity/session", r#"{"do": "start"}"#);
+    let _ = server.kill();
+    let _ = server.wait();
+    let reply: serde_json::Value = serde_json::from_str(&page).unwrap_or_else(|e| panic!("{e}: {page}"));
+    assert!(reply["windows"][0]["type"].as_str().unwrap_or("").starts_with("Walker.FieldViewModel"), "{page}");
+    std::fs::remove_dir_all(&out).unwrap();
+}

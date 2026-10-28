@@ -62,12 +62,20 @@ public class MarkdownView : UserControl
     }
 
     /// Where the application's resource `name` is: its resources folder.
+    /// <summary>
+    /// The assembly the application's resources are in: the one of its App,
+    /// which is the program itself on the desktop and the application's
+    /// library in a browser (DESIGN 7.6), where the program is another.
+    /// </summary>
+    internal static string? AppAssembly =>
+        global::Avalonia.Application.Current?.GetType().Assembly.GetName().Name ?? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+
     public static Uri ResourceUri(string? assembly, string name) => new($"avares://{assembly}/resources/{name}");
 
     /// The text of a resource file of the application, or nothing.
     static string ReadResource(string name)
     {
-        var uri = ResourceUri(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name, name);
+        var uri = ResourceUri(AppAssembly, name);
         if (!AssetLoader.Exists(uri)) return "";
         using var reader = new StreamReader(AssetLoader.Open(uri));
         return reader.ReadToEnd();

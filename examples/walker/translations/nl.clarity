@@ -1,0 +1,11 @@
+translation nl
+    walkerTitle "Wandelaar"
+    fieldTitle "Wandelaar"
+    walkCaption "Lopen"
+    stopCaption "Stop"
+    speedLabel "Snelheid"
+    yes "Ja"
+    no "Nee"
+    ok "OK"
+    cancel "Annuleren"
+    dismiss "Sluiten"

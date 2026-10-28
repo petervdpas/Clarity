@@ -47,15 +47,14 @@ TEST(a_secret_is_kept_read_and_forgotten) {
 TEST(settings_keep_their_secrets_out_of_the_file) {
     if (!store_works()) return;
     secrets_use();
-#ifdef _WIN32
     // A folder of the test's own, not the user's settings.
     auto folder = std::filesystem::temp_directory_path() / ("clarity-secret-settings-cpp-" + std::to_string(std::rand()));
+#ifdef _WIN32
     const char* had = std::getenv("APPDATA");
     std::string was = had ? had : "";
     _putenv_s("APPDATA", folder.string().c_str());
 #else
-    // Beside the tests, where they run, as the settings test keeps its own.
-    setenv("XDG_CONFIG_HOME", ("clarity-secret-settings-" + std::to_string(std::rand())).c_str(), 1);
+    setenv("XDG_CONFIG_HOME", folder.string().c_str(), 1);
 #endif
     const std::string program = "clarity-runtime-test-settings";
     keep_settings_with(program, json{{"pageSize", 20}, {"apiToken", "t0k3n"}}, json::array({"apiToken"}));
@@ -66,8 +65,9 @@ TEST(settings_keep_their_secrets_out_of_the_file) {
     CHECK(read.value("apiToken", "") == "t0k3n");
     secret_set(program, "apiToken", "");
     secret_store = SecretStore{};
-#ifdef _WIN32
+    // What the test kept goes, so the next run starts without it.
     std::filesystem::remove_all(folder);
+#ifdef _WIN32
     _putenv_s("APPDATA", was.c_str());
 #endif
 }

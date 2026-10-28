@@ -157,4 +157,5 @@ void bytes_are_read_and_written_as_they_are(void) {
         CHECK(back.size == bytes.size && memcmp(back.data, bytes.data, bytes.size) == 0);
     }
     clarity_db_close(db);
+    remove_tree(root);
 }

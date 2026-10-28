@@ -1,0 +1,11 @@
+translation en
+    walkerTitle "Walker"
+    fieldTitle "Walker"
+    walkCaption "Walk"
+    stopCaption "Stop"
+    speedLabel "Speed"
+    yes "Yes"
+    no "No"
+    ok "OK"
+    cancel "Cancel"
+    dismiss "Dismiss"

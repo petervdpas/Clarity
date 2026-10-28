@@ -35,14 +35,13 @@ void a_secret_is_kept_read_and_forgotten(void) {
 void settings_keep_their_secrets_out_of_the_file(void) {
     if (!store_works()) return;
     clarity_secrets_use();
-#ifdef _WIN32
     // A folder of the test's own, not the user's settings.
     const char* folder = clarity_format("%s/clarity-secret-settings-c-%d", temp_folder(), rand());
+#ifdef _WIN32
     const char* was = getenv("APPDATA") ? clarity_format("%s", getenv("APPDATA")) : "";
     _putenv_s("APPDATA", folder);
 #else
-    // Beside the tests, where they run, as the settings test keeps its own.
-    setenv("XDG_CONFIG_HOME", clarity_format("clarity-secret-settings-%d", rand()), 1);
+    setenv("XDG_CONFIG_HOME", folder, 1);
 #endif
     const char* program = "clarity-runtime-test-settings";
     cJSON* values = cJSON_Parse("{\"pageSize\": 20, \"apiToken\": \"t0k3n\"}");
@@ -60,8 +59,9 @@ void settings_keep_their_secrets_out_of_the_file(void) {
     cJSON_Delete(file);
     cJSON_Delete(read);
     clarity_secret_store = (ClaritySecretStore){0};
-#ifdef _WIN32
+    // What the test kept goes, so the next run starts without it.
     remove_tree(folder);
+#ifdef _WIN32
     _putenv_s("APPDATA", was);
 #endif
 }

@@ -39,6 +39,7 @@ examples/                example projects, each a project file with a folder of 
   waves                  water whose waves meet, drawn by a Go package into a buffer of pixels (a custom part in Go)
   pills                  a game like Arkanoid, breaking a wall of pills: its engine beside the screen, written in Clarity and run by its interpreter, in Go
   invaders               a fleet that marches down and you shoot it: a game served to a browser, the web target, in Go
+  walker                 a stick figure that walks across the window and back: C# with Avalonia in the browser, its timer's handler on the server
   build-engines.sh       builds the examples' engines from their sources in <example>/engines/<name>/
 ```
 

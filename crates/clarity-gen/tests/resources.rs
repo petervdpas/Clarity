@@ -124,3 +124,15 @@ fn the_rust_shell_opens_links() {
     assert!(main.contains("[\"http://\", \"https://\", \"mailto:\"]"), "{main}");
     assert!(main.contains("            open_link,\n"), "{main}");
 }
+
+/// The one-file page of the C and C++ webview carries its pictures as data
+/// URLs, each with its own kind: an SVG as an SVG, which a browser shows only so.
+#[test]
+fn the_one_file_page_carries_an_svg_as_an_svg() {
+    let source = "module art\n\napp Art\n    main Gallery\n\npage Gallery: window\n    image name logo at 1,1 span 3 rows 3 source \"logo.svg\"\n";
+    let mut project = clarity_spec::load_sources([("art.clarity", source)]);
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" r=\"4\"/></svg>".to_vec();
+    clarity_spec::resources::attach(&mut project, vec![clarity_spec::resources::ResourceFile { name: "logo.svg".into(), bytes: svg }]);
+    let page = clarity_gen::web::single_page(&project);
+    assert!(page.contains("\"logo.svg\":\"data:image/svg+xml;base64,"), "{}", &page[page.find("clarityResources").unwrap_or(0)..][..200]);
+}

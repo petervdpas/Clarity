@@ -19,6 +19,7 @@ fn media_type(name: &str) -> &'static str {
         "gif" => "image/gif",
         "bmp" => "image/bmp",
         "webp" => "image/webp",
+        "svg" => "image/svg+xml",
         "wav" => "audio/wav",
         "mp3" => "audio/mpeg",
         "flac" => "audio/flac",
@@ -46,6 +47,15 @@ pub fn project_resource(name: String, state: State<WatchState>) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each picture and sound with its own kind: an SVG as an SVG, which a webview shows only so.
+    #[test]
+    fn a_resource_has_the_media_type_of_its_kind() {
+        assert_eq!(media_type("logo.svg"), "image/svg+xml");
+        assert_eq!(media_type("Photo.JPG"), "image/jpeg");
+        assert_eq!(media_type("roll.wav"), "audio/wav");
+        assert_eq!(media_type("notes.txt"), "application/octet-stream");
+    }
 
     #[test]
     fn a_picture_or_a_sound_is_read_as_a_data_url_from_the_resources_folder_only() {

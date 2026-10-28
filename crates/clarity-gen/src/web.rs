@@ -364,10 +364,12 @@ pub fn single_page(project: &Project) -> String {
                 "jpg" | "jpeg" => "image/jpeg",
                 "gif" => "image/gif",
                 "bmp" => "image/bmp",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
                 "wav" => "audio/wav",
                 "mp3" => "audio/mpeg",
                 "flac" => "audio/flac",
-                _ => "image/webp",
+                _ => "application/octet-stream",
             };
             let url = format!("data:{kind};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
             Some((name.to_string(), serde_json::Value::String(url)))

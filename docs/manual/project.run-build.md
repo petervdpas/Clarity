@@ -19,6 +19,7 @@ The tool each stack builds with:
 |---|---|---|
 | Rust | `cargo build` | `target/debug/<name>` or `target/release/<name>` |
 | C# with Avalonia | `dotnet build` | `bin/Debug/...` or `bin/Release/...` |
+| C# with Avalonia, web target | `dotnet build Server`, which publishes the browser program into the server first | `Server/bin/Debug/...` or `Server/bin/Release/...` |
 | Go | `go build` | `bin/<name>` |
 | C, C++ | `cmake --workflow --preset debug` or `release` | `build/debug/<name>` or `build/release/<name>` |
 

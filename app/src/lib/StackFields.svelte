@@ -11,6 +11,9 @@
   import { programs } from "./commandLine";
   import { toolsNote } from "./stackTools";
   import { checkTools, openSetupGuide, stackTools } from "./tools.svelte";
+  import { dialogs } from "./dialogStore.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
 
   let {
     catalog,
@@ -43,7 +46,31 @@
 
   // Whether this machine can build the stack (P3).
   $effect(() => checkTools());
-  const note = $derived(toolsNote(stackTools.all, stack.backend, stack.ui));
+  const note = $derived(toolsNote(stackTools.all, stack.backend, stack.ui, stack.targets));
+
+  /** Whether Clarity is installing what the stack is missing now. */
+  let installing = $state(false);
+
+  /** Installs what the web target is missing, after the person agreed; the Output panel shows how it goes, and the tools are looked for again after. */
+  async function install(elevated: boolean) {
+    const asked = elevated
+      ? "Clarity installs .NET's WebAssembly tools into the .NET SDK, which is installed for every user of this computer. Your system asks for your password first."
+      : "Clarity installs .NET's WebAssembly tools into the .NET SDK.";
+    if (!(await dialogs.confirm({ title: "Install the WebAssembly tools", text: asked, action: "Install" }))) return;
+    installing = true;
+    const done = await listen("build-done", () => {
+      installing = false;
+      done();
+      checkTools(true);
+    });
+    try {
+      await invoke("install_web_tools");
+    } catch (err) {
+      installing = false;
+      done();
+      await dialogs.message({ title: "Install the WebAssembly tools", text: String(err) });
+    }
+  }
 
   function uiLabel(ui: Ui): string {
     return catalog.uis.find((u) => u.id === ui)?.label ?? ui;
@@ -76,6 +103,10 @@
     <span class="note {note.level}">{note.text}</span>
   {:else}
     <span class="note">{stackTools.checking ? "Looking for the build tools..." : "Not checked"}</span>
+  {/if}
+  {#if note?.install}
+    {@const elevated = note.install.elevated}
+    <button type="button" disabled={installing} onclick={() => install(elevated)} title="Installs what is missing, with its output in the Output panel">{installing ? "Installing..." : "Install"}</button>
   {/if}
   {#if note?.guide}
     <button type="button" onclick={() => openSetupGuide(note.guide)} title="Opens the manual where it tells how to install what is missing">How to install</button>

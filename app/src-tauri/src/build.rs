@@ -162,6 +162,12 @@ pub struct StackTools {
     /// The heading of the manual's setup page (`clarity_gen::tools::SETUP_TOPIC`)
     /// that tells how to install the first of `missing`.
     pub guide: Option<String>,
+    /// What the web target needs beyond these (DESIGN 7.6), found and missing.
+    pub web_found: Vec<String>,
+    pub web_missing: Vec<String>,
+    /// Whether Clarity can install what the web target is missing, and whether the system asks the person's permission for it.
+    pub web_installable: bool,
+    pub web_elevated: bool,
 }
 
 /// Looks for the build tools of every stack the catalog offers.
@@ -176,6 +182,10 @@ pub fn stack_tools() -> Vec<StackTools> {
             found: t.found,
             guide: t.guides.first().map(|g| g.to_string()),
             missing: t.missing,
+            web_found: t.web_found,
+            web_missing: t.web_missing,
+            web_installable: t.web_install.is_some(),
+            web_elevated: t.web_install.is_some_and(|i| i.elevated),
         })
         .collect()
 }
@@ -236,16 +246,34 @@ pub fn cannot_build(tools: &clarity_gen::tools::StackTools, out: &Path) -> Optio
 /// in the Output panel: what Build in the part's view does. `steps` run in
 /// order, with `env`; the first to fail ends it.
 pub fn start_part(app: AppHandle, name: String, folder: PathBuf, steps: Vec<Vec<String>>, env: Vec<(String, String)>) -> Result<(), String> {
+    start_steps(app, folder, steps, env, format!("{name} built"), format!("{name} did not build"))
+}
+
+/// Installs what the web target of C# with Avalonia is missing (DESIGN 7.6),
+/// .NET's WebAssembly tools, its output in the Output panel; the system asks
+/// the person's permission first where .NET is installed for every user.
+pub fn install_web_tools(app: AppHandle) -> Result<(), String> {
+    let tools = clarity_gen::tools::check(clarity_project::Backend::Csharp, clarity_project::Ui::Avalonia, &clarity_gen::tools::System);
+    let Some(install) = tools.web_install else {
+        return Err(if tools.web_missing.is_empty() { "the WebAssembly tools are installed already".into() } else { "Clarity cannot install the WebAssembly tools here; the manual says how".into() });
+    };
+    let folder = std::env::temp_dir();
+    let step = std::iter::once(install.program).chain(install.args).collect();
+    start_steps(app, folder, vec![step], vec![], ".NET's WebAssembly tools are installed".into(), ".NET's WebAssembly tools were not installed".into())
+}
+
+/// Runs `steps` in `folder` one after the other, their output in the Output panel; how it ended as `ok` or `failed`.
+fn start_steps(app: AppHandle, folder: PathBuf, steps: Vec<Vec<String>>, env: Vec<(String, String)>, ok: String, failed: String) -> Result<(), String> {
     let state = app.state::<BuildState>();
     if state.busy.swap(true, Ordering::SeqCst) {
         return Err("a build is already running".to_string());
     }
     begin_output(&app);
     std::thread::spawn(move || {
-        let mut done = BuildDone { ok: true, message: format!("{name} built"), binary: None };
+        let mut done = BuildDone { ok: true, message: ok, binary: None };
         for step in &steps {
             if let Err(message) = run_tool(&app, &folder, step, &env) {
-                done = BuildDone { ok: false, message: format!("{name} did not build: {message}"), binary: None };
+                done = BuildDone { ok: false, message: format!("{failed}: {message}"), binary: None };
                 break;
             }
         }
@@ -313,7 +341,11 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
         let serves = (command_line.is_none() && stack.has(clarity_project::Target::Web) && !stack.has(clarity_project::Target::Desktop))
             .then(|| clarity_project::load(&file).settings.map(|s| clarity_project::serve_address(&s)))
             .flatten();
-        let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
+        let mut tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
+        // A program served to a browser may need more (DESIGN 7.6).
+        if stack.has(clarity_project::Target::Web) {
+            tools.missing.extend(tools.web_missing.clone());
+        }
         // Native parts are built with CMake and a C++ compiler, whatever the stack.
         let parts = out.join(clarity_gen::parts::FOLDER).join("CMakeLists.txt").exists();
         let tools_missing = parts && ["cmake", "c++"].iter().any(|tool| clarity_gen::tools::Probe::find(&clarity_gen::tools::System, tool).is_none());
@@ -652,6 +684,9 @@ mod tests {
             found: vec![],
             missing: vec!["the .NET 10 SDK, from https://dotnet.microsoft.com/download".into()],
             guides: vec!["net-on-linux"],
+            web_found: vec![],
+            web_missing: vec![],
+            web_install: None,
         };
         assert_eq!(
             cannot_build(&check, Path::new("/p/shop/out")),

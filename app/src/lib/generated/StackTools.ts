@@ -27,4 +27,12 @@ missing: Array<string>,
  * The heading of the manual's setup page (`clarity_gen::tools::SETUP_TOPIC`)
  * that tells how to install the first of `missing`.
  */
-guide: string | null, };
+guide: string | null, 
+/**
+ * What the web target needs beyond these (DESIGN 7.6), found and missing.
+ */
+web_found: Array<string>, web_missing: Array<string>, 
+/**
+ * Whether Clarity can install what the web target is missing, and whether the system asks the person's permission for it.
+ */
+web_installable: boolean, web_elevated: boolean, };

@@ -403,6 +403,14 @@ fn stop_app(app: AppHandle) {
     build::stop(&app);
 }
 
+/// Installs what the web target of C# with Avalonia is missing, .NET's
+/// WebAssembly tools; the system asks the person's permission first where
+/// .NET is installed for every user.
+#[tauri::command]
+fn install_web_tools(app: AppHandle) -> Result<(), String> {
+    build::install_web_tools(app)
+}
+
 /// The application Run started, while it runs: where a browser opens it.
 #[tauri::command]
 fn app_state(app: AppHandle) -> Option<build::AppRunning> {
@@ -826,6 +834,7 @@ pub fn run() {
             type_line,
             stop_app,
             app_state,
+            install_web_tools,
             engines::engine_info,
             engines::engine_source_text,
             parts::part_files,

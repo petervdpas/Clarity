@@ -799,12 +799,19 @@ pub fn toolchain(settings: &Settings, release: bool) -> Option<Toolchain> {
         }
         Backend::Csharp if settings.stack.ui == clarity_project::Ui::Avalonia => {
             let configuration = if release { "Release" } else { "Debug" };
+            // The web application is built as its server, which publishes the browser program into it (DESIGN 7.6).
+            let web = windowed_target(settings) == clarity_project::Target::Web;
+            let (project, folder, program) = if web {
+                (vec!["Server".to_string()], "Server/", format!("{}.Server", csharp::project_name(settings)))
+            } else {
+                (vec![], "", csharp::project_name(settings))
+            };
             Some(Toolchain {
                 tool: "dotnet",
                 // `-tl:off`: plain lines, not the terminal logger.
-                args: ["build", "--nologo", "-tl:off", "-c", configuration].map(String::from).to_vec(),
+                args: std::iter::once("build".to_string()).chain(project).chain(["--nologo", "-tl:off", "-c", configuration].map(String::from)).collect(),
                 env: vec![("DOTNET_CLI_TELEMETRY_OPTOUT", "1"), ("DOTNET_NOLOGO", "1")],
-                program: exe(format!("bin/{configuration}/{}/{}", csharp::TARGET_FRAMEWORK, csharp::project_name(settings))),
+                program: exe(format!("{folder}bin/{configuration}/{}/{program}", csharp::TARGET_FRAMEWORK)),
                 missing: "is the .NET SDK installed?",
             })
         }

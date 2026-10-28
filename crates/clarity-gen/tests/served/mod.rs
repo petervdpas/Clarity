@@ -32,6 +32,7 @@ pub fn post(address: &str, path: &str, body: &str) -> String {
 
 /// Starts `program` in `dir` with `args` and the address, checks what it
 /// serves, and stops it, whatever the checks found.
+#[allow(dead_code)]
 pub fn serves(dir: &Path, program: &Path, args: &[&str], address: &str) {
     let mut server = Command::new(program).args(args).args(["--address", address]).current_dir(dir).spawn().unwrap_or_else(|e| panic!("{}: {e}", program.display()));
     let mut page = None;

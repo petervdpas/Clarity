@@ -219,6 +219,12 @@ pub struct StackTools {
     /// For each of `missing`, in the same order, the heading of the manual's
     /// page `SETUP_TOPIC` that tells how to install it on this system.
     pub guides: Vec<&'static str>,
+    /// What the web target needs beyond these (DESIGN 7.6), found and missing:
+    /// for C# with Avalonia, .NET's WebAssembly tools.
+    pub web_found: Vec<String>,
+    pub web_missing: Vec<String>,
+    /// How Clarity installs what the web target is missing, when it can.
+    pub web_install: Option<Install>,
 }
 
 impl StackTools {
@@ -226,6 +232,63 @@ impl StackTools {
     pub fn ready(&self) -> bool {
         self.generated && self.missing.is_empty()
     }
+
+    /// Whether Build and Run can work, for a project with the web target or without.
+    pub fn ready_for(&self, web: bool) -> bool {
+        self.ready() && (!web || self.web_missing.is_empty())
+    }
+}
+
+/// A command that installs a tool; `elevated` when the system asks the
+/// person's permission first (their password), as it does for software
+/// installed for every user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Install {
+    pub program: String,
+    pub args: Vec<String>,
+    pub elevated: bool,
+}
+
+/// What the web target of C# with Avalonia needs: .NET's WebAssembly tools.
+const WASM_TOOLS: &str = ".NET's WebAssembly tools, for the web target: dotnet workload install wasm-tools";
+
+/// How Clarity installs .NET's WebAssembly tools into the SDK of `dotnet`:
+/// as it is where the person may write (`writable`), else with the system's
+/// permission, which it asks in its own way on `os` (std::env::consts::OS):
+/// pkexec on Linux, the administrator prompt on macOS, UAC on Windows.
+pub fn wasm_tools_install(dotnet: &Path, writable: bool, os: &str) -> Install {
+    let program = dotnet.display().to_string();
+    let words = ["workload", "install", "wasm-tools"].map(String::from);
+    if writable {
+        return Install { program, args: words.to_vec(), elevated: false };
+    }
+    match os {
+        "windows" => Install {
+            program: "powershell".into(),
+            args: vec![
+                "-NoProfile".into(),
+                "-Command".into(),
+                format!("Start-Process -FilePath '{}' -ArgumentList 'workload','install','wasm-tools' -Verb RunAs -Wait", program.replace('\'', "''")),
+            ],
+            elevated: true,
+        },
+        "macos" => Install {
+            program: "osascript".into(),
+            args: vec!["-e".into(), format!("do shell script \"'{}' workload install wasm-tools\" with administrator privileges", program.replace('\'', "'\\''"))],
+            elevated: true,
+        },
+        _ => Install { program: "pkexec".into(), args: std::iter::once(program).chain(words).collect(), elevated: true },
+    }
+}
+
+/// Whether the person can write into `folder`: an SDK there takes a workload without the system's permission.
+fn writable(folder: &Path) -> bool {
+    let probe = folder.join(".clarity-write-check");
+    let made = std::fs::write(&probe, b"").is_ok();
+    if made {
+        let _ = std::fs::remove_file(&probe);
+    }
+    made
 }
 
 /// Whether Clarity generates `backend` with `ui`.
@@ -360,6 +423,7 @@ pub fn requirements(backend: Backend) -> Vec<String> {
 /// Looks for the tools `backend` with `ui` builds with.
 pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
     let mut found = Vec::new();
+    let (mut web_found, mut web_missing, mut web_install) = (Vec::new(), Vec::new(), None);
     // What to install, each with where the manual tells how.
     let mut missing: Vec<(String, Guide)> = Vec::new();
     match backend {
@@ -374,9 +438,26 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
             }
         }
         Backend::Csharp => {
-            match probe.run("dotnet", &["--list-sdks"]).and_then(|listed| dotnet_sdk(&listed, dotnet_major())) {
+            let listed = probe.run("dotnet", &["--list-sdks"]);
+            match listed.as_deref().and_then(|listed| dotnet_sdk(listed, dotnet_major())) {
                 Some(version) => found.push(format!(".NET SDK {version}")),
                 None => missing.push((dotnet(), DOTNET_GUIDE)),
+            }
+            // The web target links Avalonia's drawing into the browser program (DESIGN 7.6).
+            if ui == Ui::Avalonia && missing.is_empty() {
+                let workloads = probe.run("dotnet", &["workload", "list"]).unwrap_or_default();
+                match workloads.lines().find(|l| l.split_whitespace().next() == Some("wasm-tools")) {
+                    Some(line) => web_found.push(line.split_whitespace().take(2).collect::<Vec<_>>().join(" ")),
+                    None => {
+                        web_missing.push(WASM_TOOLS.to_string());
+                        // Where the SDK is: `10.0.402 [/usr/share/dotnet/sdk]`.
+                        let root = listed.as_deref().and_then(|l| l.lines().last()).and_then(|l| l.split_once('[')).map(|(_, at)| PathBuf::from(at.trim_end_matches(']').trim())).and_then(|sdk| sdk.parent().map(Path::to_path_buf));
+                        web_install = root.map(|root| {
+                            let program = root.join(if cfg!(windows) { "dotnet.exe" } else { "dotnet" });
+                            wasm_tools_install(&program, writable(&root), std::env::consts::OS)
+                        });
+                    }
+                }
             }
         }
         Backend::Go => {
@@ -434,6 +515,9 @@ pub fn check(backend: Backend, ui: Ui, probe: &dyn Probe) -> StackTools {
         found,
         guides: missing.iter().map(|(_, guide)| guide.here()).collect(),
         missing: missing.into_iter().map(|(what, _)| what).collect(),
+        web_found,
+        web_missing,
+        web_install,
     }
 }
 

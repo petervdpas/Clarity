@@ -30,6 +30,11 @@
     <PackageReference Include="SoundFlow" Version="1.4.2" />
     <!-- SVG pictures: a canvas's image shapes, and the image part (DESIGN 5.7). -->
     <PackageReference Include="Svg.Controls.Skia.Avalonia" Version="12.0.0.17" />
+    <!-- Skia and HarfBuzz for the browser (DESIGN 7.6), at the versions the SVG
+         pictures bring: Avalonia.Browser alone would link older native ones.
+         They act only in a WebAssembly build. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" Version="4.148.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly" Version="14.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Clarity.Runtime/Clarity.Runtime.csproj" />

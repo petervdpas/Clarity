@@ -186,6 +186,8 @@ fn browser_csproj(name: &str) -> String {
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Not trimmed: the windows' state crosses by reflection, and themes load by name. -->
+    <PublishTrimmed>false</PublishTrimmed>
     <RootNamespace>{name}.Browser</RootNamespace>
     <AssemblyName>{name}.Browser</AssemblyName>
 {CLARITY_RUNTIME}  </PropertyGroup>
@@ -216,7 +218,7 @@ namespace {name}.Browser;
 /// <summary>The application in the browser: mirrors of the windows the server keeps (DESIGN 7.6).</summary>
 internal sealed partial class Program
 {{
-    private static Task Main(string[] args)
+    private static System.Threading.Tasks.Task Main(string[] args)
     {{
         // The sessions are the server's the page came from.
         var origin = JSHost.GlobalThis.GetPropertyAsJSObject(\"location\")!.GetPropertyAsString(\"origin\")!;

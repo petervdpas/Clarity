@@ -45,6 +45,17 @@ fn csharp_builds_with_dotnet() {
     assert!(debug.missing.contains(".NET SDK"), "{}", debug.missing);
 }
 
+/// The web application of C# with Avalonia (DESIGN 7.6) is built as its
+/// server, which publishes the browser program into it first.
+#[test]
+fn csharp_on_the_web_builds_its_server() {
+    let mut settings = shop(Backend::Csharp, Ui::Avalonia);
+    settings.stack.targets = vec![clarity_project::Target::Web];
+    let debug = clarity_gen::toolchain(&settings, false).unwrap();
+    assert_eq!(debug.args, ["build", "Server", "--nologo", "-tl:off", "-c", "Debug"]);
+    assert_eq!(debug.program, exe("Server/bin/Debug/net10.0/Shop.Server"));
+}
+
 #[test]
 fn go_builds_with_go_build() {
     let settings = shop(Backend::Go, Ui::Web);

@@ -6,6 +6,7 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -14,7 +15,7 @@ function files(dir: string): string[] {
 }
 
 test("no two files differ only in case, as imports name them", () => {
-  const src = new URL("..", import.meta.url).pathname;
+  const src = fileURLToPath(new URL("..", import.meta.url));
   const seen = new Map<string, string>();
   const clashes: string[] = [];
   for (const file of files(src)) {

@@ -22,6 +22,18 @@ fn scratch() -> std::path::PathBuf {
     dir
 }
 
+/// Removes a finished build. On Windows a file the program or a virus scan
+/// still holds for a moment refuses to go, so it tries again for a while.
+fn remove(out: &Path) {
+    for _ in 0..20 {
+        if std::fs::remove_dir_all(out).is_ok() || !out.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    std::fs::remove_dir_all(out).unwrap();
+}
+
 fn run(dir: &Path, tool: &str, args: &[&str]) -> String {
     let out = Command::new(tool).args(args).current_dir(dir).output().unwrap_or_else(|e| panic!("{tool}: {e}"));
     let said = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
@@ -61,7 +73,7 @@ fn builds_and_runs_in_cpp(name: &str, program: &str) {
     if project.stored_entities().next().is_some() {
         assert!(out.join("data/app.db").exists());
     }
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The game whose field of orbs a native library draws with SFML (a custom
@@ -170,7 +182,7 @@ fn an_engine_answers_in_the_generated_application_in_cpp() {
     // The program itself checks its engines at start, then opens.
     let said = run(&out, &out.join("build/debug/shop").display().to_string(), &["--check"]);
     assert!(said.contains("the databases are ready"), "{said}");
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The noughts example's Board engine, written in Clarity and compiled to
@@ -274,7 +286,7 @@ fn board_runs_in_cpp(interpreted: bool) {
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
     let said = run(&out, &out.join("build/debug/board_check").display().to_string(), &[]);
     assert!(said.contains("the board played"), "{said}");
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// A window that asks each kind of question (DESIGN 5.14) builds without a
@@ -294,7 +306,7 @@ fn questions_and_their_answers_build_in_cpp() {
     let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The web target (DESIGN 7.3): a project whose only target is the web
@@ -323,5 +335,5 @@ fn the_web_target_serves_in_cpp() {
     clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
     run(&out, "cmake", &["--workflow", "--preset", "debug"]);
     served::links_the_desktop_toolkit(&out.join("build/debug/music"));
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }

@@ -27,6 +27,18 @@ fn scratch() -> std::path::PathBuf {
     dir
 }
 
+/// Removes a finished build. On Windows a file the program or a virus scan
+/// still holds for a moment refuses to go, so it tries again for a while.
+fn remove(out: &Path) {
+    for _ in 0..20 {
+        if std::fs::remove_dir_all(out).is_ok() || !out.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    std::fs::remove_dir_all(out).unwrap();
+}
+
 /// Which runtime a generated project builds on.
 #[derive(Clone, Copy)]
 enum Runtime {
@@ -92,7 +104,7 @@ fn builds_and_runs_in_csharp(name: &str, program: &str, translated: Option<&str>
     if let Some(translated) = translated {
         assert!(out.join(format!("bin/Debug/net10.0/{translated}/{program}.resources.dll")).exists());
     }
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The todo example on the runtime's packages from nuget.org, at the version
@@ -156,7 +168,7 @@ fn the_todo_example_builds_and_migrates_on_every_server_database() {
         } else {
             eprintln!("{variable} is not set; built only");
         }
-        std::fs::remove_dir_all(&out).unwrap();
+        remove(&out);
     }
 }
 
@@ -240,7 +252,7 @@ fn an_engine_answers_in_the_generated_application_in_csharp() {
     let ran = dotnet(&check, &["run", "--nologo"], Runtime::Local).output().unwrap();
     let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
     assert!(ran.status.success() && said.contains("every engine function answered"), "{said}\nin {}", root.display());
-    std::fs::remove_dir_all(&root).unwrap();
+    remove(&root);
 }
 
 /// Functions named like a type, an enum value, a constructor or a window
@@ -260,7 +272,7 @@ fn functions_named_like_types_build_in_csharp() {
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
     let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The fifth example: noughts and crosses, each window's game kept by an engine.
@@ -359,7 +371,7 @@ fn board_runs_in_csharp(interpreted: bool) {
     let ran = dotnet(&check, &["run", "--nologo"], Runtime::Local).output().unwrap();
     let said = format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr));
     assert!(ran.status.success() && said.contains("the board played"), "{said}\nin {}", root.display());
-    std::fs::remove_dir_all(&root).unwrap();
+    remove(&root);
 }
 
 /// A window that asks each kind of question (DESIGN 5.14) builds without a
@@ -378,7 +390,7 @@ fn questions_and_their_answers_build_in_csharp() {
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
     let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// Pictures of the resources folder, SVG among them (conformance/drawing.json):
@@ -402,7 +414,7 @@ fn pictures_build_in_csharp() {
     clarity_gen::write_out(&out, &files, &["bin", "obj"]).unwrap();
     let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// An engine beside the screen (DESIGN 5.12, conformance/engines/play.clarity):
@@ -426,7 +438,7 @@ fn an_engine_beside_the_screen_builds_in_csharp() {
     let built = dotnet(&out, &["build", "--nologo", "-v", "quiet", "-warnaserror"], Runtime::Local).output().unwrap();
     assert!(built.status.success(), "the generated project does not build; it is in {}\n{}", out.display(), String::from_utf8_lossy(&built.stdout));
     if std::env::var_os("CLARITY_KEEP").is_none() {
-        std::fs::remove_dir_all(&out).unwrap();
+        remove(&out);
     }
 }
 
@@ -459,7 +471,7 @@ fn the_web_server_keeps_sessions_in_csharp() {
     let window = &reply["windows"][0];
     assert!(window["type"].as_str().unwrap_or("").starts_with("Music."), "{started}");
     assert!(window["state"]["parts"].is_object(), "{started}");
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }
 
 /// The walker example, on its own stack: C# with Avalonia on the web. Its
@@ -489,5 +501,5 @@ fn the_walker_example_serves_in_csharp() {
     let _ = server.wait();
     let reply: serde_json::Value = serde_json::from_str(&page).unwrap_or_else(|e| panic!("{e}: {page}"));
     assert!(reply["windows"][0]["type"].as_str().unwrap_or("").starts_with("Walker.FieldViewModel"), "{page}");
-    std::fs::remove_dir_all(&out).unwrap();
+    remove(&out);
 }

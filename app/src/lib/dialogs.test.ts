@@ -61,7 +61,7 @@ test("a dialog asked while another is open waits its turn", async () => {
 test("Clarity shows no dialog of the system or the browser: only the file pickers come from the dialog plugin", async () => {
   const { readdirSync, readFileSync, statSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const root = new URL("..", import.meta.url).pathname;
+  const root = (await import("node:url")).fileURLToPath(new URL("..", import.meta.url));
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
@@ -87,7 +87,7 @@ test("Clarity shows no dialog of the system or the browser: only the file picker
 
 test("every dialog of the IDE is framed by Modal.svelte: no other draws a backdrop of its own", async () => {
   const { readdirSync, readFileSync } = await import("node:fs");
-  const dir = new URL(".", import.meta.url).pathname;
+  const dir = (await import("node:url")).fileURLToPath(new URL(".", import.meta.url));
   const ownFrames = readdirSync(dir)
     .filter((name) => name.endsWith(".svelte") && name !== "Modal.svelte")
     .filter((name) => readFileSync(dir + name, "utf8").includes('class="backdrop"'));

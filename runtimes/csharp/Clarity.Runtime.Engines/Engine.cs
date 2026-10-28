@@ -296,6 +296,9 @@ public sealed class Engine
     {
         var store = new Wasmtime.Store(engine);
         store.SetLimits(memorySize: limits.Megabytes * 1024L * 1024L);
+        // A new store's deadline is the epoch it starts at, so making the
+        // instance (which may run the module's start) would stop at once.
+        store.SetEpochDeadline(1);
         var serving = new Serving();
         var linker = Linker(serving);
         var live = new Live(store, linker, linker.Instantiate(store, module), serving);

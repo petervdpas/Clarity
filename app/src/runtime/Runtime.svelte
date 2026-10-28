@@ -75,6 +75,8 @@
   /** The dialogs waiting, the first one shown. */
   let waiting = $state<Waiting[]>([]);
   let busy = $state(false);
+  /** How many of the person's events wait for the handler that runs; what a part tells waits behind them. */
+  let personWaiting = 0;
   let options = $state<Record<string, RefOption[]>>({});
   /** The values each typed dropdown's field has, by `Entity.field`. */
   let fieldValues = $state<Record<string, string[]>>({});
@@ -411,9 +413,21 @@
     if (opened?.window === dialog && opened.instance !== undefined) dialogsAsked.set(opened.instance, { ask, window });
   }
 
-  /** Runs a handler on the current window and applies the reply; false when it refused or failed. */
+  /**
+   * Runs a handler on the current window and applies the reply; false when it
+   * refused or failed. While another handler runs it waits its turn, ahead of
+   * what parts tell, so a click is never lost to an engine that tells at every frame.
+   */
   async function run(handler: string): Promise<boolean> {
-    if (!current || busy) return false;
+    if (busy) {
+      personWaiting++;
+      try {
+        while (busy) await new Promise((done) => setTimeout(done, 5));
+      } finally {
+        personWaiting--;
+      }
+    }
+    if (!current) return false;
     busy = true;
     const index = stack.length - 1;
     try {
@@ -491,7 +505,7 @@
   };
 
   async function told(instance: number, part: string, tell: string, values: JsonValue[]) {
-    while (busy) await new Promise((done) => setTimeout(done, 5));
+    while (busy || personWaiting > 0) await new Promise((done) => setTimeout(done, 5));
     const index = stack.findIndex((s) => (s.instance ?? 0) === instance);
     const state = stack[index];
     const target = model && state ? findPage(model, state.window) : undefined;

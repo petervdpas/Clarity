@@ -16,10 +16,10 @@ const APP: &str = include_str!("../../../app/src/App.svelte");
 
 /// The shells of the stacks whose runtime opens the window itself.
 const SHELLS: [(&str, &str); 4] = [
-    ("Go", include_str!("../../../runtimes/go/shell/shell.go")),
+    ("Go", include_str!("../../../runtimes/go/desktop/desktop.go")),
     ("Avalonia", include_str!("../../../runtimes/csharp/Clarity.Avalonia/Shell.cs")),
-    ("C", include_str!("../../../runtimes/c/shell/shell.c")),
-    ("C++", include_str!("../../../runtimes/cpp/shell/shell.cpp")),
+    ("C", include_str!("../../../runtimes/c/shell/service.c")),
+    ("C++", include_str!("../../../runtimes/cpp/shell/service.cpp")),
 ];
 
 /// The number a `const NAME = 123;` line in `source` gives.

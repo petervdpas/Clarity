@@ -547,9 +547,65 @@ fn an_engine_beside_the_screen_builds_in_go() {
 #[ignore]
 fn the_invaders_example_serves_in_go() {
     let out = built_in_go("invaders", "Invaders", Runtime::Local);
+    served::links_no_desktop_toolkit(&out.join("invaders"));
     served::serves(&out, &out.join("invaders"), &[], "127.0.0.1:18731");
     // With CLARITY_KEEP set the built application stays, to run it.
     if std::env::var_os("CLARITY_KEEP").is_none() {
         std::fs::remove_dir_all(&out).unwrap();
     }
+}
+
+/// The packages of the runtime a program imports, in groups: every program
+/// imports the first; the others only when it uses them (a desktop window,
+/// secret settings, engines, a server database).
+const GROUPS: [(&str, &[&str]); 7] = [
+    ("base", &["clarity", "shell"]),
+    ("desktop", &["desktop"]),
+    ("secrets", &["secrets"]),
+    ("engine", &["engine"]),
+    ("postgresql", &["postgresql"]),
+    ("mysql", &["mysql"]),
+    ("sqlserver", &["sqlserver"]),
+];
+
+/// The modules each group of the runtime's packages needs, as `go mod tidy`
+/// picks them for a program that imports the base and that group, with
+/// their sums: what the generator combines into a program's go.mod and
+/// go.sum (crates/clarity-gen/src/go/modules.txt). With
+/// CLARITY_RECORD_GO_MODULES=1 they are recorded, after a change to the
+/// runtime's requirements.
+#[test]
+#[ignore]
+fn the_modules_of_each_package_group_are_recorded() {
+    let mut recorded = String::from("# The modules each group of the runtime's packages needs, with their sums, as\n# go mod tidy picks them. Recorded by the go_build test\n# the_modules_of_each_package_group_are_recorded (CLARITY_RECORD_GO_MODULES=1).\n");
+    for (group, packages) in GROUPS {
+        let dir = scratch().join(format!("clarity-gen-go-group-{group}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let imports: String = GROUPS[0].1.iter().chain(if group == "base" { [].iter() } else { packages.iter() }).map(|p| format!("\t_ \"{RUNTIME}/{p}\"\n")).collect();
+        std::fs::write(dir.join("main.go"), format!("package main\n\nimport (\n{imports})\n\nfunc main() {{}}\n")).unwrap();
+        std::fs::write(dir.join("go.mod"), format!("module scratch\n\ngo 1.25.0\n\nrequire {RUNTIME} v0.0.0\n\nreplace {RUNTIME} => {}\n", runtime_dir().display())).unwrap();
+        let out = Command::new("go").args(["mod", "tidy"]).current_dir(&dir).env("GOWORK", "off").output().unwrap();
+        assert!(out.status.success(), "{group}: {}", String::from_utf8_lossy(&out.stderr));
+        let module = std::fs::read_to_string(dir.join("go.mod")).unwrap();
+        let sums = std::fs::read_to_string(dir.join("go.sum")).unwrap_or_default();
+        let mut lines: Vec<String> = module
+            .lines()
+            .map(|l| l.trim().trim_start_matches("require ").trim())
+            .filter(|l| !l.starts_with(RUNTIME) && l.split_whitespace().nth(1).is_some_and(|v| v.starts_with('v')))
+            .map(|l| {
+                let mut words = l.split_whitespace();
+                format!("{group} require {} {}", words.next().unwrap(), words.next().unwrap())
+            })
+            .collect();
+        lines.extend(sums.lines().filter(|l| !l.starts_with(RUNTIME)).map(|l| format!("{group} sum {l}")));
+        recorded.push_str(&lines.iter().map(|l| format!("{l}\n")).collect::<String>());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/go/modules.txt");
+    if std::env::var("CLARITY_RECORD_GO_MODULES").is_ok() {
+        std::fs::write(&path, &recorded).unwrap();
+        return;
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap_or_default(), recorded, "{} is not current; record it with CLARITY_RECORD_GO_MODULES=1", path.display());
 }

@@ -8,7 +8,7 @@ use clarity_spec::code::check::{self, TypeInfo};
 use clarity_spec::model::{FieldType, Project};
 
 use super::names::{pascal, string};
-use super::{ENGINE_MODULES, RUNTIME_MODULE, SERVERS, Server, go_file, go_mod, go_sum, logic, model, text};
+use super::{RUNTIME_MODULE, SERVERS, Server, go_file, go_mod, go_sum, logic, model, text};
 use crate::OutFile;
 use crate::commands::{CommandSpec, ParamSpec, Said};
 
@@ -77,16 +77,10 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let databases = crate::with_secret_locations(databases, &crate::settings_program(settings));
     let types = check::types(&project.files);
     let mut errors = Vec::new();
-    let (servers, unused): (Vec<&Server>, Vec<&Server>) = SERVERS.iter().partition(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql));
-    let mut left_out: Vec<&str> = unused.iter().flat_map(|s| s.modules.iter().copied()).filter(|m| !servers.iter().any(|s| s.modules.contains(m))).collect();
+    let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = crate::engines(project);
-    // The protected store's modules only for secret settings (DESIGN 5.27).
-    if project.secret_settings().is_empty() {
-        left_out.extend(super::SECRET_MODULES);
-    }
-    if engines.is_empty() {
-        left_out.extend(ENGINE_MODULES);
-    }
+    // A command-line program has no desktop window.
+    let groups = super::groups(project, &servers, false);
     let mut files = vec![text("texts.json", crate::commands::texts_json(project))];
     for file in &project.files {
         let Some(m) = &file.module else { continue };
@@ -115,8 +109,8 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
     }
-    files.push(text("go.mod", go_mod(&module, &left_out, &direct)));
-    files.push(text("go.sum", go_sum(&left_out)));
+    files.push(text("go.mod", go_mod(&module, &groups, &direct)));
+    files.push(text("go.sum", go_sum(&groups)));
     let name = crate::commands::program_name(settings);
     files.push(text(
         "README.md",

@@ -134,12 +134,19 @@ pub(crate) const WASM3_FILES: [(&str, &str); 30] = [
     ("third_party/wasm3/wasm3_defs.h", include_str!("../../../../runtimes/c/third_party/wasm3/wasm3_defs.h")),
 ];
 
-/// The shell, the webview it shows the renderer in, and its web server (the web target).
-const SHELL_FILES: [(&str, &str); 10] = [
-    ("shell/shell.c", include_str!("../../../../runtimes/c/shell/shell.c")),
+/// The service that answers the renderer's commands, and its web server
+/// (the web target): nothing of the desktop toolkit.
+const SERVICE_FILES: [(&str, &str); 4] = [
     ("shell/shell.h", include_str!("../../../../runtimes/c/shell/shell.h")),
+    ("shell/service.c", include_str!("../../../../runtimes/c/shell/service.c")),
     ("shell/serve.c", include_str!("../../../../runtimes/c/shell/serve.c")),
     ("shell/serve.h", include_str!("../../../../runtimes/c/shell/serve.h")),
+];
+
+/// The desktop shell and the webview it shows the renderer in; a program
+/// served to a browser alone has neither.
+const SHELL_FILES: [(&str, &str); 7] = [
+    ("shell/shell.c", include_str!("../../../../runtimes/c/shell/shell.c")),
     ("shell/parts.c", include_str!("../../../../runtimes/c/shell/parts.c")),
     ("shell/parts.h", include_str!("../../../../runtimes/c/shell/parts.h")),
     ("shell/webview.cc", include_str!("../../../../runtimes/c/shell/webview.cc")),
@@ -176,12 +183,14 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(vec!["the project has no window to start with".to_string()]);
     };
     let engines = !crate::engines(project).is_empty();
-    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty()) + &crate::libraries::cmake_lines(project, &program)), text("CMakePresets.json", PRESETS.to_string())];
+    let desktop = settings.stack.has(clarity_project::Target::Desktop);
+    let mut files = vec![text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty(), desktop) + &crate::libraries::cmake_lines(project, &program)), text("CMakePresets.json", PRESETS.to_string())];
     files.extend(crate::parts::out_files(project, &[]));
     let engine_files = ENGINE_FILES.iter().chain(&WASM3_FILES).filter(|_| engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files).chain(http_files).chain(secret_files) {
+    let shell_files = SHELL_FILES.iter().filter(|_| desktop);
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(shell_files).chain(engine_files).chain(http_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -354,7 +363,9 @@ fn engines_c(project: &Project) -> (String, String) {
     (header, source)
 }
 
-fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool) -> String {
+fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool, desktop: bool) -> String {
+    // The desktop window links the shell and its webview; a program served to a browser alone only the service.
+    let shell = if desktop { "clarity_shell" } else { "clarity_service" };
     let engine = if engines { " clarity_engine" } else { "" };
     let http = if http { " clarity_http" } else { "" };
     // Secret settings (DESIGN 5.27): the system's protected store.
@@ -380,7 +391,7 @@ include(clarity-runtime/clarity.cmake)
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.c src/modules/*.c)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
-target_link_libraries({program} PRIVATE clarity clarity_shell{engine}{http})
+target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
 {parts}"
     )
 }
@@ -710,19 +721,19 @@ static const ClaritySource databases[] = {{
 }};
 
 /// The state of `window` when it opens: its data loaded, with `with` filled in by name.
-static bool open_window(ClarityDb* db, const char* window, const cJSON* with, ClarityWindowState** out) {{
+static bool windows_open_window(ClarityDb* db, const char* window, const cJSON* with, ClarityWindowState** out) {{
 {open}    return clarity_fail(CLARITY_INVALID, "there is no window %s", window);
 }}
 
 /// The handler of a window's own event, or NULL.
-static const char* handler_of(const char* window, const char* event) {{
+static const char* windows_handler_of(const char* window, const char* event) {{
     (void)window;
     (void)event;
 {events}    return NULL;
 }}
 
 /// Runs a handler on a window's state.
-static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {{
+static bool windows_dispatch(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {{
     ClarityUi* ui = clarity_ui(state);
     (void)db;
     (void)ui;
@@ -732,7 +743,7 @@ static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char*
 
 /// Runs the handler the answer to a question goes to (DESIGN 5.14), with
 /// the values written for it and the answer last.
-static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {{
+static bool windows_answer(ClarityDb* db, const ClarityWindowState* state, const char* handler, const cJSON* values, ClarityReply** out) {{
     ClarityUi* ui = clarity_ui(state);
     (void)db;
     (void)ui;
@@ -742,7 +753,7 @@ static bool answer(ClarityDb* db, const ClarityWindowState* state, const char* h
 }}
 
 /// The records a reference field of `entity` can point at.
-static bool options(ClarityDb* db, const char* entity, cJSON** out) {{
+static bool windows_options(ClarityDb* db, const char* entity, cJSON** out) {{
     (void)db;
     (void)entity;
     *out = cJSON_CreateArray();
@@ -750,7 +761,7 @@ static bool options(ClarityDb* db, const char* entity, cJSON** out) {{
 }}
 
 /// The values a text field already has, which a typed dropdown offers.
-static bool values(ClarityDb* db, const char* entity, const char* field, cJSON** out) {{
+static bool windows_values(ClarityDb* db, const char* entity, const char* field, cJSON** out) {{
     (void)db;
     (void)entity;
     (void)field;
@@ -759,7 +770,7 @@ static bool values(ClarityDb* db, const char* entity, const char* field, cJSON**
 }}
 
 /// The picture of an image field of a record.
-static bool picture(ClarityDb* db, const char* entity, int64_t id, const char* field, ClarityBytes* out) {{
+static bool windows_picture(ClarityDb* db, const char* entity, int64_t id, const char* field, ClarityBytes* out) {{
     (void)db;
     (void)id;
     (void)out;
@@ -768,14 +779,15 @@ static bool picture(ClarityDb* db, const char* entity, int64_t id, const char* f
 
 /// Draws the canvases of the window `reply` shows anew, each by its draw
 /// handler on an empty drawing (conformance/drawing.json).
-static bool redraw(ClarityDb* db, ClarityReply* reply) {{
+static bool windows_redraw(ClarityDb* db, ClarityReply* reply) {{
 {redraws}    (void)db;
     (void)reply;
     return true;
 }}
 
 /// What the shell asks of the application's windows.
-static const ClarityWindows windows = {{open_window, handler_of, dispatch, options, picture, redraw, answer, values}};
+// Named windows_ so no function of the project (an engine's `answer`) meets them.
+static const ClarityWindows windows = {{windows_open_window, windows_handler_of, windows_dispatch, windows_options, windows_picture, windows_redraw, windows_answer, windows_values}};
 
 /// Says what went wrong, and ends the program.
 static int failed(ClarityDb* db) {{
@@ -825,7 +837,11 @@ static bool open_databases(ClarityDb** out) {{
 }}
 "#,
         sources = sources.join("\n"),
-        run = web_run(settings, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv));\n", "    int status = clarity_shell_run(&options);\n"),
+        run = web_run(
+            settings,
+            &format!("    int status = clarity_serve(&options, clarity_serve_address(argc, argv, {}));\n", string(&clarity_project::serve_address(settings))),
+            "    int status = clarity_shell_run(&options);\n"
+        ),
         stores = stores.join("\n"),
         name = string(&crate::settings_program(settings)),
         main = string(main_window),

@@ -40,3 +40,30 @@ pub fn serves(dir: &Path, program: &Path, args: &[&str], address: &str) {
     assert!(ok(&started) && started.contains(r#"{"value":{"#) && started.contains(r#""main":"#), "{}", &started[..started.len().min(600)]);
     assert!(unknown.contains(r#"{"error":"there is no command nonsense"}"#), "{unknown}");
 }
+
+/// A program served to a browser alone links nothing of the desktop
+/// toolkit: on Linux, neither WebKitGTK nor GTK (as ldd lists them).
+#[allow(dead_code)]
+pub fn links_no_desktop_toolkit(program: &Path) {
+    if let Some(linked) = toolkit(program) {
+        assert!(!linked, "{} links the desktop toolkit", program.display());
+    }
+}
+
+/// A program with a desktop window links its toolkit: the check above can tell.
+#[allow(dead_code)]
+pub fn links_the_desktop_toolkit(program: &Path) {
+    if let Some(linked) = toolkit(program) {
+        assert!(linked, "{} does not link the desktop toolkit", program.display());
+    }
+}
+
+/// Whether `program` links WebKitGTK or GTK, as ldd lists them; none off Linux.
+fn toolkit(program: &Path) -> Option<bool> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let out = Command::new("ldd").arg(program).output().unwrap_or_else(|e| panic!("ldd: {e}"));
+    let linked = String::from_utf8_lossy(&out.stdout);
+    Some(linked.contains("libwebkit") || linked.contains("libgtk"))
+}

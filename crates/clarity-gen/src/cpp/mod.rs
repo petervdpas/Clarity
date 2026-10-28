@@ -66,12 +66,19 @@ const RUNTIME_FILES: [(&str, &str); 35] = [
     ("clarity/values.hpp", include_str!("../../../../runtimes/cpp/clarity/values.hpp")),
 ];
 
-/// The shell and the webview it shows the renderer in.
-const SHELL_FILES: [(&str, &str); 9] = [
-    ("shell/shell.cpp", include_str!("../../../../runtimes/cpp/shell/shell.cpp")),
+/// The service that answers the renderer's commands, and its web server
+/// (the web target): nothing of the desktop toolkit.
+const SERVICE_FILES: [(&str, &str); 4] = [
+    ("shell/shell.hpp", include_str!("../../../../runtimes/cpp/shell/shell.hpp")),
+    ("shell/service.cpp", include_str!("../../../../runtimes/cpp/shell/service.cpp")),
     ("shell/serve.cpp", include_str!("../../../../runtimes/cpp/shell/serve.cpp")),
     ("shell/serve.hpp", include_str!("../../../../runtimes/cpp/shell/serve.hpp")),
-    ("shell/shell.hpp", include_str!("../../../../runtimes/cpp/shell/shell.hpp")),
+];
+
+/// The desktop shell and the webview it shows the renderer in; a program
+/// served to a browser alone has neither.
+const SHELL_FILES: [(&str, &str); 6] = [
+    ("shell/shell.cpp", include_str!("../../../../runtimes/cpp/shell/shell.cpp")),
     ("shell/parts.cpp", include_str!("../../../../runtimes/cpp/shell/parts.cpp")),
     ("shell/parts.hpp", include_str!("../../../../runtimes/cpp/shell/parts.hpp")),
     ("third_party/webview/LICENSE", include_str!("../../../../runtimes/cpp/third_party/webview/LICENSE")),
@@ -128,15 +135,17 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         return Err(vec!["the project has no window to start with".to_string()]);
     };
     let engines = !crate::engines(project).is_empty();
+    let desktop = settings.stack.has(clarity_project::Target::Desktop);
     let mut files = vec![
-        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty()) + &crate::libraries::cmake_lines(project, &program)),
+        text("CMakeLists.txt", cmake_lists(&program, engines, !crate::parts::native_parts(project).is_empty(), project.calls_out(), !project.secret_settings().is_empty(), desktop) + &crate::libraries::cmake_lines(project, &program)),
         text("CMakePresets.json", PRESETS.to_string()),
     ];
     files.extend(crate::parts::out_files(project, &[]));
     let engine_files = ENGINE_FILES.iter().chain(&crate::c::WASM3_FILES).filter(|_| engines);
     let http_files = HTTP_FILES.iter().filter(|_| project.calls_out());
     let secret_files = SECRET_FILES.iter().filter(|_| !project.secret_settings().is_empty());
-    for (path, body) in RUNTIME_FILES.iter().chain(&SHELL_FILES).chain(engine_files).chain(http_files).chain(secret_files) {
+    let shell_files = SHELL_FILES.iter().filter(|_| desktop);
+    for (path, body) in RUNTIME_FILES.iter().chain(&SERVICE_FILES).chain(shell_files).chain(engine_files).chain(http_files).chain(secret_files) {
         files.push(text(&format!("clarity-runtime/{path}"), body.to_string()));
     }
 
@@ -255,7 +264,9 @@ fn engines_cpp(project: &Project) -> (String, String) {
     (header, source)
 }
 
-fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool) -> String {
+fn cmake_lists(program: &str, engines: bool, parts: bool, http: bool, secrets: bool, desktop: bool) -> String {
+    // The desktop window links the shell and its webview; a program served to a browser alone only the service.
+    let shell = if desktop { "clarity_shell" } else { "clarity_service" };
     let engine = if engines { " clarity_engine" } else { "" };
     let http = if http { " clarity_http" } else { "" };
     // Secret settings (DESIGN 5.27): the system's protected store.
@@ -279,7 +290,7 @@ include(clarity-runtime/clarity.cmake)
 file(GLOB PROGRAM_SOURCES CONFIGURE_DEPENDS src/*.cpp src/modules/*.cpp)
 add_executable({program} ${{PROGRAM_SOURCES}})
 target_include_directories({program} PRIVATE src)
-target_link_libraries({program} PRIVATE clarity clarity_shell{engine}{http})
+target_link_libraries({program} PRIVATE clarity {shell}{engine}{http})
 {parts}"
     )
 }
@@ -632,7 +643,8 @@ public:
 /// desktop window, or the window with `--serve` running the server instead.
 fn web_run(settings: &Settings) -> String {
     use clarity_project::Target;
-    let serve = "clarity::shell::serve(options, clarity::shell::serve_address(argc, argv))";
+    // Where it listens: the project's port, unless started with --address or CLARITY_ADDRESS.
+    let serve = format!("clarity::shell::serve(options, clarity::shell::serve_address(argc, argv, {:?}))", clarity_project::serve_address(settings));
     let run = "clarity::shell::run(options)";
     let targets = &settings.stack.targets;
     match (targets.contains(&Target::Web), targets.contains(&Target::Desktop)) {

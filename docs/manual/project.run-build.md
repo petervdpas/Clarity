@@ -2,15 +2,16 @@
 
 How Run, Build and Stop turn the project into a program, where the generated code goes, what each stack needs installed, and the Output panel.
 
-## Run, Build and Stop
+## Run, Build, Stop and Browser
 
-The three buttons are in the Application group of the **Preview** tab.
+The buttons are in the Application group of the **Preview** tab.
 
-- **Run** generates the application, builds a debug program with the stack's own tool, and starts it. A program that Run started before is closed first.
+- **Run** generates the application, builds a debug program with the stack's own tool, and starts it.
 - **Build** generates the application and builds a release program. It does not start it; the Output panel names the program it made.
 - **Stop** closes the program that Run started.
+- **Browser** opens a running web application (the `web` target) in your browser, at its address. The Output panel's header shows the same address as a link.
 
-Run and Build are off while the project has errors (see the Problems list) and while a build is busy. A data dictionary that no migration step covers yet also stops the build, with a message; see [Migrations](data.migrations.md).
+Run and Build are off while the project has errors (see the Problems list) and while a build is busy. Run is also off while the program it started runs: Stop it first. A web application runs at the project's port (see [The project file](project.file.md)); when another program already listens there, Run says so and starts nothing. A data dictionary that no migration step covers yet also stops the build, with a message; see [Migrations](data.migrations.md).
 
 The tool each stack builds with:
 

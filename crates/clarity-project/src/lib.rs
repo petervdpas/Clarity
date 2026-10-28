@@ -182,6 +182,19 @@ pub struct Settings {
     /// rather than compiled (DESIGN 5.12): `engines interpreted`.
     #[serde(default)]
     pub engines_interpreted: bool,
+    /// The port a web application listens on (DESIGN 7.3): `port 8080`;
+    /// none for DEFAULT_PORT.
+    #[serde(default)]
+    pub port: Option<u16>,
+}
+
+/// The port a web application listens on when the project names none.
+pub const DEFAULT_PORT: u16 = 8080;
+
+/// Where the web application of `settings` listens unless it is started
+/// with `--address` or CLARITY_ADDRESS: this computer, at its port.
+pub fn serve_address(settings: &Settings) -> String {
+    format!("127.0.0.1:{}", settings.port.unwrap_or(DEFAULT_PORT))
 }
 
 /// The output folder when the project file does not name one.
@@ -314,6 +327,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         engines_interpreted: false,
+        port: None,
     }
 }
 
@@ -338,7 +352,8 @@ pub fn out_dir(file: &Path, settings: &Settings) -> PathBuf {
 }
 
 /// The folder of one target's program inside the output folder: each
-/// target is a project of its own, `out/desktop` and `out/cli`.
+/// target is a project of its own: `out/desktop` (or `out/web` for a
+/// program served to a browser alone) and `out/cli`.
 pub fn target_dir(out: &Path, target: Target) -> PathBuf {
     out.join(target_word(target))
 }

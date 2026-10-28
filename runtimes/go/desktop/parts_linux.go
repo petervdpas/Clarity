@@ -1,6 +1,6 @@
 //go:build linux && cgo
 
-package shell
+package desktop
 
 /*
 #cgo pkg-config: gtk+-3.0

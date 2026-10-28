@@ -91,11 +91,11 @@ std::string serve_answer(Service& service, const std::string& page, const std::s
     return reply("200 OK", "application/json", answer.dump());
 }
 
-std::string serve_address(int argc, char** argv) {
+std::string serve_address(int argc, char** argv, const std::string& project) {
     for (int i = 1; i + 1 < argc; i++)
         if (std::strcmp(argv[i], "--address") == 0) return argv[i + 1];
     const char* address = std::getenv("CLARITY_ADDRESS");
-    return address && *address ? address : default_address;
+    return address && *address ? std::string(address) : project;
 }
 
 int serve(const Options& options, const std::string& address) {

@@ -57,4 +57,9 @@ keys_editable: boolean,
  * Whether the engines written in Clarity are run by the interpreter
  * rather than compiled (DESIGN 5.12): `engines interpreted`.
  */
-engines_interpreted: boolean, };
+engines_interpreted: boolean, 
+/**
+ * The port a web application listens on (DESIGN 7.3): `port 8080`;
+ * none for DEFAULT_PORT.
+ */
+port: number | null, };

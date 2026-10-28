@@ -92,6 +92,15 @@ void clarity_service_on_link(ClarityService* service, bool (*open_link)(const ch
 /// Where the service writes a line of an engine beside the screen: the
 /// standard error, the application's log, unless set otherwise, as tests do.
 void clarity_service_on_log(ClarityService* service, void (*log_line)(const char* line));
+/// The part host's side of the commands of custom parts (DESIGN 6.5), which
+/// clarity_shell_run sets; a web server has none, and the commands do nothing.
+typedef struct {
+    void (*place)(uint64_t window, const char* part, const char* kind, uintptr_t parent, int x, int y, int width, int height, bool shown);
+    void (*set)(uint64_t window, const char* part, const char* name, const char* value);
+    void (*hear)(uint64_t window, const char* part, const char* hear, const char* values);
+    void (*close)(uint64_t window);
+} ClarityPartsHost;
+void clarity_service_on_parts(ClarityService* service, ClarityPartsHost parts);
 /// What the service asks of the desktop, set by clarity_shell_run: ending
 /// the program, and opening a desktop window of its own, named `name`, for
 /// the opener, at `width` x `height` (the window's size, or the standard one).

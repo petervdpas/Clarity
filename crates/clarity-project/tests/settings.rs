@@ -58,6 +58,7 @@ fn shop() -> Settings {
         keeps: Vec::new(),
         keys_editable: false,
         engines_interpreted: false,
+        port: None,
     }
 }
 
@@ -632,4 +633,23 @@ fn the_project_says_how_its_clarity_engines_run() {
     let off = write(Some(&written), &Settings { engines_interpreted: false, ..settings }).unwrap();
     assert!(!off.contains("engines"), "{off}");
     assert_eq!(parse(&format!("{SHOP}    engines fast\n")).unwrap_err(), "line 11: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run");
+}
+
+/// Where a web application listens (DESIGN 7.3): `port 8080`; without the
+/// line, port 8080. `--address` and CLARITY_ADDRESS still say otherwise.
+#[test]
+fn the_project_says_which_port_it_serves_on() {
+    let text = format!("{SHOP}    port 9090\n");
+    let settings = parse(&text).unwrap();
+    assert_eq!(settings.port, Some(9090));
+    assert_eq!(clarity_project::serve_address(&settings), "127.0.0.1:9090");
+    assert_eq!(parse(SHOP).unwrap().port, None);
+    assert_eq!(clarity_project::serve_address(&parse(SHOP).unwrap()), "127.0.0.1:8080");
+    let written = write(Some(SHOP), &settings).unwrap();
+    assert!(written.contains("\n    port 9090\n"), "{written}");
+    assert_eq!(parse(&written).unwrap(), settings);
+    let off = write(Some(&written), &Settings { port: None, ..settings }).unwrap();
+    assert!(!off.contains("port"), "{off}");
+    assert_eq!(parse(&format!("{SHOP}    port 0\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
+    assert_eq!(parse(&format!("{SHOP}    port web\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
 }

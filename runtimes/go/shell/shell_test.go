@@ -234,15 +234,6 @@ func TestAPictureLinkedFromAFileIsReadFromItsStore(t *testing.T) {
 	}
 }
 
-func TestADesktopWindowOpensAtItsWindowsSizeOrTheStandardOne(t *testing.T) {
-	if w, h := size(320, 460); w != 320 || h != 460 {
-		t.Fatalf("got %dx%d", w, h)
-	}
-	if w, h := size(0, 0); w != 1100 || h != 760 {
-		t.Fatalf("got %dx%d for no size", w, h)
-	}
-}
-
 // A window that closes is reported once its own `on close` has run, so an
 // engine with state per window drops what it had of it.
 func TestAClosedWindowIsReported(t *testing.T) {
@@ -260,11 +251,8 @@ func TestAClosedWindowIsReported(t *testing.T) {
 
 func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
 	c, _ := service(t)
-	var opened []string
-	c.openURL = func(address string) error {
-		opened = append(opened, address)
-		return nil
-	}
+	links := &linkDesktop{}
+	c.SetDesktop(links)
 	if got := wire(t, call(t, c, "open_link", `{"address":"https://example.com/rules"}`)); got != `{"value":null}` {
 		t.Fatal(got)
 	}
@@ -272,6 +260,7 @@ func TestALinkOpensInTheBrowserOnlyForWebAndMailAddresses(t *testing.T) {
 	if got := wire(t, call(t, c, "open_link", `{"address":"file:///etc/passwd"}`)); got != `{"error":"a link opens only an http, https or mailto address, not file:///etc/passwd"}` {
 		t.Fatal(got)
 	}
+	opened := links.opened
 	if strings.Join(opened, " ") != "https://example.com/rules mailto:help@example.com" {
 		t.Fatal(opened)
 	}
@@ -335,22 +324,45 @@ func TestAnUnconnectedStartSaysWhyAndConnectsLater(t *testing.T) {
 // or the screen ends the application, it closes as any window does.
 func TestTheTitleBarsCloseGoesToTheScreenWhileUnconnected(t *testing.T) {
 	c, _ := service(t)
-	if c.closesToScreen() {
+	if c.ClosesToScreen() {
 		t.Fatal("a connected application closes as usual")
 	}
 	c.options.Unconnected = &Unconnected{Window: "Preferences", Problem: clarity.KeyText("unconnectedNotKept")}
 	c.options.Connect = clarity.Memory
 	call(t, c, "start", `{}`)
-	if !c.closesToScreen() {
+	if !c.ClosesToScreen() {
 		t.Fatal("unconnected, the screen decides")
 	}
 	call(t, c, "quit_app", `{}`)
-	if c.closesToScreen() {
+	if c.ClosesToScreen() {
 		t.Fatal("ending the application closes it")
 	}
 	call(t, c, "start", `{}`)
 	call(t, c, "connect", `{}`)
-	if c.closesToScreen() {
+	if c.ClosesToScreen() {
 		t.Fatal("connected, it closes as usual")
+	}
+}
+
+// linkDesktop is a desktop that keeps the links it was asked to open.
+type linkDesktop struct{ opened []string }
+
+func (d *linkDesktop) Command(_ context.Context, command string, a Args) (Answer, bool) {
+	if command != "open_link" {
+		return Answer{}, false
+	}
+	d.opened = append(d.opened, a.Address)
+	return Answer{}, true
+}
+
+func TestWithoutADesktopItsCommandsDoNothingOrSaySo(t *testing.T) {
+	c, _ := service(t)
+	for _, command := range []string{"set_title", "quit_app", "apart_start", "close_apart", "close_parts"} {
+		if got := wire(t, call(t, c, command, `{}`)); got != `{"value":null}` {
+			t.Fatal(command, got)
+		}
+	}
+	if got := wire(t, call(t, c, "open_apart", `{"window":"Card"}`)); got != `{"error":"a window of its own needs the desktop"}` {
+		t.Fatal(got)
 	}
 }

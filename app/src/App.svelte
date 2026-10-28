@@ -51,6 +51,7 @@
   import type { Settings } from "./lib/generated/Settings";
   import type { Stack } from "./lib/generated/Stack";
   import type { BuildDone } from "./lib/generated/BuildDone";
+  import type { AppRunning } from "./lib/generated/AppRunning";
   import type { Selected } from "./lib/selection";
   import type { Edit } from "./lib/generated/Edit";
   import type { RenameKind } from "./lib/generated/RenameKind";
@@ -131,7 +132,15 @@
   /** How many lines of toolchain output the output panel keeps. */
   const BUILD_LOG_LINES = 400;
   let building = $state(false);
+  /** Whether the application Run started runs, as the backend says: Run is off meanwhile, Stop on. */
   let running = $state(false);
+  /** Where a browser opens the running application, when it is served to one (the web target). */
+  let address = $state<string | null>(null);
+
+  /** Opens the running web application in the person's browser. */
+  function openInBrowser() {
+    if (address) invoke("open_link", { address }).catch((err) => (actionError = String(err)));
+  }
   /** A command-line program Run started, which reads what the Output panel types. */
   let commandRunning = $state(false);
   let typed = $state("");
@@ -221,6 +230,7 @@
   async function stopApp() {
     await invoke("stop_app");
     running = false;
+    address = null;
     commandRunning = false;
   }
 
@@ -1012,7 +1022,7 @@
     "design.grid": { run: () => (pageDesigner.showGrid = !pageDesigner.showGrid) },
     "preview.main": { run: () => preview && (stack = startWindow(preview)), can: () => !!preview },
     "preview.back": { run: () => (stack = stack.slice(0, -1)), can: () => stack.length >= 2 },
-    "preview.run": { run: () => buildApp(false, true), can: () => !!preview && !building && errorCount === 0 },
+    "preview.run": { run: () => buildApp(false, true), can: () => !!preview && !building && !running && !commandRunning && errorCount === 0 },
     "preview.build": { run: () => buildApp(true, false), can: () => !!preview && !building && errorCount === 0 },
     "preview.stop": { run: stopApp, can: () => running || commandRunning },
     "vault.secrets": { run: () => (vault.view = "secrets") },
@@ -1123,7 +1133,20 @@
       building = false;
       commandRunning = false;
       buildDone = e.payload;
-      running = e.payload.ok && e.payload.message === "running";
+    });
+    // The backend says when the application Run started runs and ends, also when it ends by itself.
+    const unlistenRunning = listen<AppRunning>("app-running", (e) => {
+      running = true;
+      address = e.payload.address;
+    });
+    const unlistenEnded = listen("app-ended", () => {
+      running = false;
+      address = null;
+    });
+    // After the screen reloads it asks: an application started before may still run.
+    invoke<AppRunning | null>("app_state").then((state) => {
+      running = state !== null;
+      address = state?.address ?? null;
     });
     invoke<string | null>("initial_project").then((dir) => {
       const start = dir ?? readLastProject();
@@ -1137,6 +1160,8 @@
       unlistenStarted.then((stop) => stop());
       unlistenDone.then((stop) => stop());
       unlistenBuilt.then((stop) => stop());
+      unlistenRunning.then((stop) => stop());
+      unlistenEnded.then((stop) => stop());
     };
   });
 </script>
@@ -1316,7 +1341,7 @@
               label={building ? "Building..." : "Run"}
               title="Generate the application, build it with its toolchain and start it"
               keys={keysFor("preview.run")}
-              disabled={!preview || building || errorCount > 0}
+              disabled={!preview || building || running || commandRunning || errorCount > 0}
               onclick={() => buildApp(false, true)}
             />
             <RibbonButton
@@ -1328,6 +1353,7 @@
               onclick={() => buildApp(true, false)}
             />
             <RibbonButton icon="stop" label="Stop" title="Close the running application" keys={keysFor("preview.stop")} disabled={!running && !commandRunning} onclick={stopApp} />
+            <RibbonButton icon="globe" label="Browser" title={address ? `Open the running application in your browser, at ${address}` : "Opens a running web application in your browser"} disabled={!address} onclick={openInBrowser} />
           </div>
           <div class="group-name">Application</div>
         </div>
@@ -1602,7 +1628,10 @@
             {:else if building}
               <span class="status">Building...</span>
             {:else if buildDone}
-              <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? "Running" : buildDone.message) : "Failed: " + buildDone.message}</span>
+              <span class="status" class:failed={!buildDone.ok}>{buildDone.ok ? (buildDone.message === "running" ? (running ? "Running" : "Stopped") : buildDone.message) : "Failed: " + buildDone.message}</span>
+            {/if}
+            {#if address}
+              <button class="link address" onclick={openInBrowser} title="Open it in your browser">{address}</button>
             {/if}
             <button onclick={() => (showOutput = false)} title="Hide the output">&times;</button>
           </header>
@@ -1823,6 +1852,15 @@
 
   .output-panel .status.failed {
     color: var(--error);
+  }
+
+  /* Where the running web application is: a link that opens it in the browser. */
+  .output-panel header button.address {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .output-panel .typed {

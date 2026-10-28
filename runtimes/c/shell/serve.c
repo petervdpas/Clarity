@@ -71,11 +71,11 @@ const char* clarity_serve_answer(ClarityService* service, const char* page, cons
     return reply("200 OK", "application/json", printed, strlen(printed), length);
 }
 
-const char* clarity_serve_address(int argc, char** argv) {
+const char* clarity_serve_address(int argc, char** argv, const char* project) {
     for (int i = 1; i + 1 < argc; i++)
         if (strcmp(argv[i], "--address") == 0) return argv[i + 1];
     const char* address = getenv("CLARITY_ADDRESS");
-    return address && *address ? address : CLARITY_DEFAULT_ADDRESS;
+    return address && *address ? address : project;
 }
 
 /// Reads one request: its headers, then its body by its length. NULL when the client went.

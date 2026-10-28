@@ -97,6 +97,15 @@ bool open_in_browser(const std::string& address);
 /// Writes a line into the application's log: the standard error.
 void log_to_stderr(const std::string& line);
 
+/// The part host's side of the commands of custom parts (DESIGN 6.5), which
+/// `run` sets; a web server has none, and the commands do nothing.
+struct PartsHost {
+    std::function<void(uint64_t window, const std::string& part, const std::string& kind, uintptr_t parent, int x, int y, int width, int height, bool shown)> place;
+    std::function<void(uint64_t window, const std::string& part, const std::string& name, const std::string& value)> set;
+    std::function<void(uint64_t window, const std::string& part, const std::string& hear, const std::string& values)> hear;
+    std::function<void(uint64_t window)> close;
+};
+
 /// Answers the renderer's commands.
 class Service {
 public:
@@ -109,6 +118,8 @@ public:
 
     /// Ends the program; set by `run`.
     std::function<void()> quit;
+    /// The part host; set by `run`.
+    PartsHost parts;
     /// Opens a link of a markdown part in the person's browser; whether it could.
     std::function<bool(const std::string& address)> open_link = open_in_browser;
     /// Writes a line of an engine beside the screen into the application's

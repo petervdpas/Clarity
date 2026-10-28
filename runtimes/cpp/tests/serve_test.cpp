@@ -61,7 +61,7 @@ TEST(the_server_serves_the_page_and_answers_its_commands) {
 TEST(the_server_listens_where_it_is_told) {
     char app[] = "app", flag[] = "--address", where[] = "0.0.0.0:9000";
     char* none[] = {app};
-    CHECK(shell::serve_address(1, none) == "127.0.0.1:8080" || std::getenv("CLARITY_ADDRESS"));
+    CHECK(shell::serve_address(1, none, "127.0.0.1:9090") == "127.0.0.1:9090" || std::getenv("CLARITY_ADDRESS"));
     char* told[] = {app, flag, where};
-    CHECK(shell::serve_address(3, told) == "0.0.0.0:9000");
+    CHECK(shell::serve_address(3, told, "127.0.0.1:9090") == "0.0.0.0:9000");
 }

@@ -107,11 +107,12 @@ fn writes_a_go_module_on_the_runtime_module() {
     let runtime = include_str!("../../../runtimes/go/go.mod");
     let sqlite = runtime.lines().find(|l| l.contains("modernc.org/sqlite")).unwrap().trim();
     has(module, sqlite);
-    // The sums of the runtime's modules this application needs, and those of
-    // the runtime module itself as recorded when it was published.
-    let sums = include_str!("../../../runtimes/go/go.sum");
+    // The sums of the modules this application needs, as go mod tidy picks
+    // them (src/go/modules.txt), and those of the runtime module itself as
+    // recorded when it was published.
+    let sums = include_str!("../src/go/modules.txt");
     let published = include_str!("../src/go/runtime.sum");
-    assert!(file(&files, "go.sum").lines().all(|l| sums.lines().chain(published.lines()).any(|s| s == l)));
+    assert!(file(&files, "go.sum").lines().all(|l| sums.lines().filter_map(|s| s.split_once(" sum ").map(|(_, sum)| sum)).chain(published.lines()).any(|s| s == l)));
     has(file(&files, "go.sum"), &format!("{RUNTIME} {} h1:", runtime_version()));
     has(file(&files, "go.sum"), &format!("{RUNTIME} {}/go.mod h1:", runtime_version()));
     has(file(&files, "go.sum"), "modernc.org/sqlite v1.54.0 h1:");
@@ -153,7 +154,6 @@ fn a_module_gets_the_drivers_of_its_databases_only() {
     for (_, package, module) in drivers {
         assert!(!file(&plain, "main.go").contains(&import(package)), "{package}");
         assert!(!file(&plain, "go.mod").contains(module), "{module}");
-        assert!(!file(&plain, "go.sum").contains(module), "{module}");
     }
     // Shared with the SQLite driver and Wails, so it stays.
     has(file(&plain, "go.mod"), "golang.org/x/crypto ");
@@ -392,7 +392,7 @@ fn a_wails_application_with_the_web_renderer() {
     // The renderer calls the service the program binds: main.Clarity.Invoke.
     has(main, "type Clarity struct {\n\t*shell.Service\n}");
     has(main, "options := shell.Options{Name: \"shop\", Title: \"Shop\", Main: \"OrderForm\", Width: 1100, Height: 760, Model: model, Assets: assets, Db: db, Windows: windows{}}\n");
-    has(main, "\tif err := shell.Run(options, bind); err != nil {");
+    has(main, "\tif err := desktop.Run(options, bind); err != nil {");
     assert!(!main.contains("shell.Serve"), "a desktop program serves nothing");
     has(main, "func bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}");
 }
@@ -723,9 +723,11 @@ fn the_web_target_serves_the_renderer() {
         file(&files, "main.go").to_string()
     };
     let web = main_of(vec![Target::Web]);
-    has(&web, "\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {");
-    assert!(!web.contains("shell.Run(options"), "a web program opens no window");
+    has(&web, "\tif err := shell.Serve(options, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
+    assert!(!web.contains("desktop.Run(options"), "a web program opens no window");
+    // Nor does it link the desktop toolkit.
+    assert!(!web.contains("wails") && !web.contains("/desktop\""), "{web}");
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "\tif slices.Contains(os.Args[1:], \"--serve\") {\n\t\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {");
-    has(&both, "\tif err := shell.Run(options, bind); err != nil {");
+    has(&both, "\tif slices.Contains(os.Args[1:], \"--serve\") {\n\t\tif err := shell.Serve(options, shell.Address(os.Args[1:], \"127.0.0.1:8080\")); err != nil {");
+    has(&both, "\tif err := desktop.Run(options, bind); err != nil {");
 }

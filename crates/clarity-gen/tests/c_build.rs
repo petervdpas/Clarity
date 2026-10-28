@@ -254,6 +254,13 @@ fn the_web_target_serves_in_c() {
     let said = run(&out, "cmake", &["--workflow", "--preset", "debug"]);
     let own: Vec<&str> = said.lines().filter(|l| l.contains("warning") && l.contains("/src/")).collect();
     assert!(own.is_empty(), "warnings:\n{}", own.join("\n"));
+    served::links_no_desktop_toolkit(&out.join("build/debug/music"));
     served::serves(&out, &out.join("build/debug/music"), &[], "127.0.0.1:18732");
+    // The same project for the desktop does link it, so the check can tell.
+    settings.stack.targets = vec![clarity_project::Target::Desktop];
+    let files = clarity_gen::generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
+    clarity_gen::write_out(&out, &files, &["build", "data"]).unwrap();
+    run(&out, "cmake", &["--workflow", "--preset", "debug"]);
+    served::links_the_desktop_toolkit(&out.join("build/debug/music"));
     std::fs::remove_dir_all(&out).unwrap();
 }

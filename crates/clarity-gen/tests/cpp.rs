@@ -389,8 +389,16 @@ fn the_web_target_serves_the_renderer() {
     has(&desktop, "        return clarity::shell::run(options);\n");
     assert!(!desktop.contains("shell::serve("), "a desktop program serves nothing");
     let web = main_of(vec![Target::Web]);
-    has(&web, "        return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv));\n");
+    has(&web, "        return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
     assert!(!web.contains("shell::run("), "a web program opens no window");
+    // Nor does it link the desktop toolkit: only the service, without the webview.
+    let mut settings = settings();
+    settings.stack.targets = vec![Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_service)");
+    for path in ["clarity-runtime/shell/shell.cpp", "clarity-runtime/shell/parts.cpp", "clarity-runtime/third_party/webview/webview.h"] {
+        assert!(!files.iter().any(|f| f.path == path), "{path}");
+    }
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "            if (std::strcmp(argv[i], \"--serve\") == 0) return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv));\n        return clarity::shell::run(options);\n");
+    has(&both, "            if (std::strcmp(argv[i], \"--serve\") == 0) return clarity::shell::serve(options, clarity::shell::serve_address(argc, argv, \"127.0.0.1:8080\"));\n        return clarity::shell::run(options);\n");
 }

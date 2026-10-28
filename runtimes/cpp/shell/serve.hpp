@@ -14,15 +14,13 @@ namespace clarity::shell {
 
 /// Where a page the server serves sends its commands.
 inline constexpr const char* invoke_path = "/clarity/invoke";
-/// Where the server listens when nothing says otherwise.
-inline constexpr const char* default_address = "127.0.0.1:8080";
 
 /// The reply to one HTTP request: `page` at `/`, a command's answer at invoke_path.
 std::string serve_answer(Service& service, const std::string& page, const std::string& request);
 
 /// Where the server listens: `--address host:port`, else the environment's
-/// CLARITY_ADDRESS, else default_address.
-std::string serve_address(int argc, char** argv);
+/// CLARITY_ADDRESS, else `project`, where the project file says (its port).
+std::string serve_address(int argc, char** argv, const std::string& project);
 
 /// Runs the application as a web server on `address` until it stops; the exit status.
 int serve(const Options& options, const std::string& address);

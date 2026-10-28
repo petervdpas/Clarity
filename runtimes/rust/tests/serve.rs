@@ -53,8 +53,8 @@ fn the_server_serves_the_page_and_answers_its_commands() {
 #[test]
 fn the_server_listens_where_it_is_told() {
     let told: Vec<String> = ["app", "--address", "0.0.0.0:9000"].iter().map(|s| s.to_string()).collect();
-    assert_eq!(serve::address(&told), "0.0.0.0:9000");
+    assert_eq!(serve::address(&told, "127.0.0.1:9090"), "0.0.0.0:9000");
     if std::env::var("CLARITY_ADDRESS").is_err() {
-        assert_eq!(serve::address(&["app".to_string()]), serve::DEFAULT_ADDRESS);
+        assert_eq!(serve::address(&["app".to_string()], "127.0.0.1:9090"), "127.0.0.1:9090");
     }
 }

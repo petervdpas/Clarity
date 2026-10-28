@@ -118,6 +118,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
     let mut currency = None;
     let mut keys_editable = None;
     let mut engines_interpreted = None;
+    let mut port = None;
     let mut themes: Option<Vec<String>> = None;
     let mut datasources: Vec<DataSource> = Vec::new();
     let mut filestores: Vec<FileStore> = Vec::new();
@@ -223,6 +224,14 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     (1, Some("compiled")) => Some(false),
                     _ => return Err(format!("line {line}: write 'engines compiled' or 'engines interpreted': how the engines written in Clarity run")),
                 };
+            }
+            "port" => {
+                once(port.is_some())?;
+                let number = match a.as_slice() {
+                    [t] if t.kind == TokenKind::Number => t.text.parse::<u16>().ok().filter(|p| *p > 0),
+                    _ => None,
+                };
+                port = Some(number.ok_or_else(|| format!("line {line}: write 'port' and a number from 1 to 65535: where the web application listens"))?);
             }
             "currency" => {
                 once(currency.is_some())?;
@@ -350,6 +359,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         keeps: keeps.unwrap_or_default(),
         keys_editable: keys_editable.unwrap_or(false),
         engines_interpreted: engines_interpreted.unwrap_or(false),
+        port,
     })
 }
 
@@ -455,6 +465,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
     }
     if settings.engines_interpreted {
         lines.push(("engines".into(), 1, "engines interpreted".to_string()));
+    }
+    if let Some(port) = settings.port {
+        lines.push(("port".into(), 1, format!("port {port}")));
     }
     for source in &settings.datasources {
         lines.push((

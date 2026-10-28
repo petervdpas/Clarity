@@ -83,7 +83,8 @@ fn rust_records_hold_their_pictures() {
     has(main, "const STORES: &[(&str, &str)] = &[(\"photos\", \"env:PHOTO_FOLDER\")];");
     has(main, "db.add_store(name, at)?;");
     has(main, "        (\"Album\", \"cover\") => db.picture::<modules::music::Album>(id, \"cover\"),\n");
-    has(main, "fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {");
+    // The shell's commands are in the desktop module.
+    has(text(&files, "src/desktop.rs"), "fn picture(app: tauri::State<App>, entity: String, id: i64, field: String) -> Answer<Option<String>> {");
 }
 
 #[test]
@@ -129,7 +130,8 @@ fn avalonia_shows_a_picture_field_in_a_picture_box() {
 #[test]
 fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
     let rust = files(Backend::Rust, Ui::Web, SourceKind::Sqlite);
-    let main = text(&rust, "src/main.rs");
+    // The shell's commands are in the desktop module.
+    let main = text(&rust, "src/desktop.rs");
     has(main, "fn store_file(app: tauri::State<App>, store: String, path: String) -> Answer<String> {");
     has(main, "            store_file,\n");
     let csharp = files(Backend::Csharp, Ui::Avalonia, SourceKind::Sqlite);

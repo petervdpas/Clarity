@@ -276,6 +276,23 @@
             <option value="interpreted">Interpreted</option>
           </select>
           <p class="form-help">How the engines written in Clarity run. Compiled turns their code into WebAssembly and runs fastest; interpreted carries their code into the file and runs it with Clarity's interpreter. Both give the same answers on every stack.</p>
+          {#if settings.stack.targets.includes("web")}
+            <label class="form-label" for="project-port">Port</label>
+            <input
+              id="project-port"
+              class="mono"
+              type="number"
+              min="1"
+              max="65535"
+              value={settings.port ?? ""}
+              placeholder="8080"
+              onchange={(e) => {
+                const port = Number(e.currentTarget.value);
+                save({ port: e.currentTarget.value.trim() === "" ? null : Number.isInteger(port) && port >= 1 && port <= 65535 ? port : settings.port });
+              }}
+            />
+            <p class="form-help">Where the web application listens, on this computer: open <code>http://127.0.0.1:{settings.port ?? 8080}</code> in a browser. Empty is 8080. Started with <code>--address host:port</code> it listens there instead.</p>
+          {/if}
           <span class="form-label">Themes</span>
           <div class="themes">
             {#each themes as theme (theme)}

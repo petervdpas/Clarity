@@ -84,31 +84,37 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     };
     let types = check::types(&project.files);
     let mut errors = Vec::new();
+    // A program served to a browser alone has no desktop window, and nothing of Tauri.
+    let desktop = settings.stack.has(clarity_project::Target::Desktop);
     let mut files = vec![
         text(
             "Cargo.toml",
             cargo_toml(
                 &crate_name,
+                desktop,
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
             ),
         ),
-        text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")),
-        text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))),
         text("src/model.json", crate::web::model_json(project)),
     ];
+    // Tauri's build script, settings and icons are the desktop window's.
+    if desktop {
+        files.push(text("build.rs", format!("{HEADER}\nfn main() {{\n    tauri_build::build()\n}}\n")));
+        files.push(text("tauri.conf.json", tauri_conf(&clarity_project::title(settings), &crate_name, crate::window_size(project, &main_window))));
+        files.push(OutFile {
+            path: "icons/icon.png".into(),
+            text: String::new(),
+            bytes: Some(std::borrow::Cow::Borrowed(ICON)),
+        });
+        files.push(OutFile {
+            path: "icons/icon.ico".into(),
+            text: String::new(),
+            bytes: Some(std::borrow::Cow::Borrowed(ICON_ICO)),
+        });
+    }
     files.extend(crate::web::renderer_files(project));
-    files.push(OutFile {
-        path: "icons/icon.png".into(),
-        text: String::new(),
-        bytes: Some(std::borrow::Cow::Borrowed(ICON)),
-    });
-    files.push(OutFile {
-        path: "icons/icon.ico".into(),
-        text: String::new(),
-        bytes: Some(std::borrow::Cow::Borrowed(ICON_ICO)),
-    });
 
     let mut modules = Vec::new();
     let mut owners: Vec<Owner> = Vec::new();
@@ -165,7 +171,16 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     if !crate::engines(project).is_empty() {
         files.push(text("src/engines.rs", engines_rs(project)));
     }
-    files.push(text("src/main.rs", main_rs(project, settings, &owners, &databases, &main_window)));
+    // The renderer's files, which a web server serves from the program itself.
+    let ui: Vec<String> = files.iter().filter_map(|f| f.path.strip_prefix("ui/").map(String::from)).collect();
+    let (main_text, desktop_text) = split_desktop(&main_rs(project, settings, &owners, &databases, &main_window, &ui));
+    // Everything of Tauri is in the desktop module; a program served to a browser alone has none.
+    if settings.stack.has(clarity_project::Target::Desktop) {
+        files.push(text("src/main.rs", main_text.replacen("mod modules;\n", "mod modules;\nmod desktop;\n", 1)));
+        files.push(text("src/desktop.rs", format!("{HEADER}//! The desktop window: Tauri's commands, which call what the program\n//! answers in main.rs, its windows of their own and custom parts.\n\nuse super::*;\n{desktop_text}")));
+    } else {
+        files.push(text("src/main.rs", main_text));
+    }
     Ok(files)
 }
 
@@ -228,7 +243,9 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+fn cargo_toml(name: &str, desktop: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+    // Tauri, for the desktop window; a program served to a browser alone has none.
+    let (tauri, build) = if desktop { ("tauri = { version = \"2\", features = [] }\n", "[build-dependencies]\ntauri-build = { version = \"2\", features = [] }\n\n") } else { ("", "") };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
     let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
@@ -246,13 +263,9 @@ edition = "2024"
 clarity-runtime = {{ version = "{version}", default-features = false, features = [{features}] }}
 serde = {{ version = "1", features = ["derive"] }}
 serde_json = "1"
-tauri = {{ version = "2", features = [] }}
-
+{tauri}
 {parts}
-[build-dependencies]
-tauri-build = {{ version = "2", features = [] }}
-
-# A project of its own, not part of a workspace around it.
+{build}# A project of its own, not part of a workspace around it.
 [workspace]
 "#,
         version = runtime_version()
@@ -286,7 +299,7 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
         .map(|f| ident(&f.name.name))
 }
 
-fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str) -> String {
+fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String]) -> String {
     let title = &clarity_project::title(settings);
     let program = crate::settings_program(settings);
     // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
@@ -305,14 +318,14 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     // cannot open at start, the screen shows the window that keeps it first.
     let (start_command, open_db, connecting_manage, connect_command) = match crate::unconnected(project) {
         None => (
-            "/// The model and the main window, which the screen starts from.\nfn started() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n\n#[tauri::command]\nfn start() -> Value {\n    started()\n}\n".to_string(),
+            "/// The model and the main window, which the screen starts from.\nfn started() -> Value {\n    serde_json::json!({ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW })\n}\n\n//~desktop\n#[tauri::command]\nfn start() -> Value {\n    started()\n}\n//~end\n".to_string(),
             "    let db = open_databases().expect(\"cannot open the databases\");\n".to_string(),
             String::new(),
             "",
         ),
         Some(unconnected) => (
             format!(
-                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\nfn started(connecting: &Connecting) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    started(&connecting)\n}}\n\n/// Opens the databases again, as when the person has kept their connection.\nfn connected(app: &App, connecting: &Connecting) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    connected(&app, &connecting)\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n",
+                "/// What the screen shows when the databases did not open (DESIGN 5.27): the app's\n/// `on unconnected` handler, or else the window that keeps a secret connection.\nconst UNCONNECTED_HANDLER: Option<&str> = {:?};\nconst CONNECTION_WINDOW: Option<&str> = {:?};\n\n/// Why the databases did not open: none once they have.\nstruct Connecting(Mutex<Option<Value>>);\n\n/// The model and the main window; when the databases did not open, what to show\n/// first and why.\nfn started(connecting: &Connecting) -> Value {{\n    let problem = connecting.0.lock().ok().and_then(|p| p.clone());\n    let mut start = serde_json::json!({{ \"model\": serde_json::from_str::<Value>(MODEL).unwrap_or(Value::Null), \"main\": MAIN_WINDOW }});\n    if let Some(problem) = problem {{\n        start[\"unconnected\"] = serde_json::json!({{ \"handler\": UNCONNECTED_HANDLER, \"window\": CONNECTION_WINDOW, \"problem\": problem }});\n    }}\n    start\n}}\n\n//~desktop\n#[tauri::command]\nfn start(connecting: tauri::State<Connecting>) -> Value {{\n    started(&connecting)\n}}\n//~end\n\n/// Opens the databases again, as when the person has kept their connection.\nfn connected(app: &App, connecting: &Connecting) -> Answer<()> {{\n    let db = open_databases().map_err(|err| serde_json::to_value(clarity_runtime::unconnected_reason(&err)).unwrap_or_default())?;\n    *app.0.lock().map_err(|_| Value::from(\"the database is not available\"))? = db;\n    if let Ok(mut problem) = connecting.0.lock() {{\n        *problem = None;\n    }}\n    Ok(())\n}}\n\n//~desktop\n#[tauri::command]\nfn connect(app: tauri::State<App>, connecting: tauri::State<Connecting>) -> Answer<()> {{\n    connected(&app, &connecting)\n}}\n\n/// Whether the databases are still not open.\nfn unconnected(window: &tauri::Window) -> bool {{\n    use tauri::Manager;\n    window.state::<Connecting>().0.lock().map(|p| p.is_some()).unwrap_or(false)\n}}\n//~end\n",
                 unconnected.handler.as_ref().map(|(_, h)| h.as_str()),
                 unconnected.window.as_deref()
             ),
@@ -324,16 +337,17 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
     // The web target (DESIGN 7.3): the commands a browser sends, answered by
     // what the desktop commands call; and main serving them by the targets.
     let unconnected = crate::unconnected(project).is_some();
-    let run_desktop = "    tauri::Builder::default()";
-    let serve_web = serve_main(unconnected);
+    let serve_web = serve_main(unconnected, &clarity_project::serve_address(settings), ui);
     let targets = &settings.stack.targets;
-    let (web_start, run_desktop) = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
-        (true, false) => (format!("{serve_web}    return;\n    #[allow(unreachable_code)]\n"), run_desktop.to_string()),
+    // The desktop window is the desktop module's (desktop.rs), which holds everything of Tauri.
+    let (problem_param, desktop_call) = if unconnected { (", problem: Option<Value>", "    desktop::run(db, problem);\n") } else { ("", "    desktop::run(db);\n") };
+    let (web_start, desktop_call) = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
+        (true, false) => (serve_web, ""),
         (true, true) => (
             format!("    // --serve runs it as a web server, for a browser, in place of its window.\n    if std::env::args().any(|a| a == \"--serve\") {{\n{}        return;\n    }}\n", serve_web.replace("\n    ", "\n        ").replacen("    ", "        ", 1)),
-            run_desktop.to_string(),
+            desktop_call,
         ),
-        _ => (String::new(), run_desktop.to_string()),
+        _ => (String::new(), desktop_call),
     };
     let settings_commands = format!(
         "/// The settings the person kept (DESIGN 5.17); the screen takes back those that still fit.\n#[tauri::command]\nfn read_settings() -> Map<String, Value> {{\n    {read}\n}}\n\n/// Keeps the person's settings, as the screen has them now.\n#[tauri::command]\nfn keep_settings(settings: Map<String, Value>) -> Answer<()> {{\n    {keep}.map_err(|err| Value::from(err.to_string()))\n}}"
@@ -706,6 +720,7 @@ fn open_databases() -> Result<Db> {{
     Ok(db)
 }}
 
+//~desktop
 #[tauri::command]
 fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> Answer<Reply> {{
     locked(&app, |db| open(db, &window, with))
@@ -819,7 +834,9 @@ fn quit_app(handle: tauri::AppHandle) {{
 }}
 
 {settings_commands}
+//~end
 {served}
+//~desktop
 /// The language the screen picked, which text code makes is translated to.
 #[tauri::command]
 fn set_language(language: Option<String>) {{
@@ -832,11 +849,9 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
     let _ = window.set_title(&title);
 }}
 {apart_code}{parts_code}
-fn main() {{
-{parts_start}
-{check_engines}    // Text code makes is translated from the model's translations.
-    clarity_runtime::i18n::load(MODEL);
-{open_db}{web_start}{run_desktop}
+/// Shows the application's desktop window and runs until it closes.
+pub(crate) fn run(db: Db{problem_param}) {{
+{parts_start}    tauri::Builder::default()
         .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}
         .invoke_handler(tauri::generate_handler![
             start,
@@ -864,6 +879,12 @@ fn main() {{
         .run(tauri::generate_context!())
         .expect("cannot start the application");
 }}
+//~end
+
+fn main() {{
+{check_engines}    // Text code makes is translated from the model's translations.
+    clarity_runtime::i18n::load(MODEL);
+{open_db}{web_start}{desktop_call}}}
 "#
     )
 }
@@ -1196,9 +1217,28 @@ fn served(app: &App{connecting}, command: &str, args: Value) -> Value {{
 
 /// main as a web server: the renderer's files from what Tauri embeds, the
 /// commands answered by `served`.
-fn serve_main(unconnected: bool) -> String {
+fn serve_main(unconnected: bool, address: &str, ui: &[String]) -> String {
     let (connecting, given) = if unconnected { ("    let connecting = Connecting(Mutex::new(problem));\n", ", &connecting") } else { ("", "") };
+    // The renderer's files, in the program itself.
+    let arms: String = ui.iter().map(|path| format!("            {path:?} => Some(include_bytes!(\"../ui/{path}\").to_vec()),\n")).collect();
     format!(
-        "    let app = App(Mutex::new(db));\n{connecting}    let context: tauri::Context<tauri::Wry> = tauri::generate_context!();\n    let assets = context.assets();\n    let files = |path: &str| assets.get(&path.into()).map(|bytes| bytes.into_owned());\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args), &files, &mut |command, args| served(&app{given}, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
+        "    let app = App(Mutex::new(db));\n{connecting}    let files = |path: &str| -> Option<Vec<u8>> {{\n        match path {{\n{arms}            _ => None,\n        }}\n    }};\n    let args: Vec<String> = std::env::args().collect();\n    if let Err(err) = clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, {address:?}), &files, &mut |command, args| served(&app{given}, command, args)) {{\n        eprintln!(\"{{PROGRAM}}: {{err}}\");\n        std::process::exit(1);\n    }}\n"
     )
+}
+
+/// The generated main.rs and the desktop module's text: what the template
+/// marks as the desktop's (between `//~desktop` and `//~end` lines) goes
+/// to desktop.rs, the rest stays.
+fn split_desktop(text: &str) -> (String, String) {
+    let (mut main, mut desktop) = (String::new(), String::new());
+    let mut in_desktop = false;
+    for line in text.split_inclusive('\n') {
+        match line.trim_end() {
+            "//~desktop" => in_desktop = true,
+            "//~end" => in_desktop = false,
+            _ if in_desktop => desktop.push_str(line),
+            _ => main.push_str(line),
+        }
+    }
+    (main, desktop)
 }

@@ -602,18 +602,26 @@ pub struct Program {
     pub files: Vec<OutFile>,
 }
 
-/// The programs of the project: the desktop program when a target shows
-/// windows, and the command-line program with the `cli` target.
+/// The programs of the project: the program with windows when a target
+/// shows them (the desktop program, or the web program when it is served
+/// to a browser alone), and the command-line program with the `cli` target.
 pub fn programs(project: &Project, settings: &Settings) -> Result<Vec<Program>, Vec<String>> {
     use clarity_project::Target;
     let mut programs = Vec::new();
     if settings.stack.has_ui() {
-        programs.push(Program { target: Target::Desktop, files: generate(project, settings)? });
+        programs.push(Program { target: windowed_target(settings), files: generate(project, settings)? });
     }
     if settings.stack.has(Target::Cli) {
         programs.push(Program { target: Target::Cli, files: generate_cli(project, settings)? });
     }
     Ok(programs)
+}
+
+/// The target of the program with windows, and its folder of `out/`: the
+/// desktop's, or the web's when it is served to a browser alone.
+pub fn windowed_target(settings: &Settings) -> clarity_project::Target {
+    use clarity_project::Target;
+    if settings.stack.has(Target::Desktop) { Target::Desktop } else { Target::Web }
 }
 
 /// The files of the command-line program, sorted by path; or why it cannot
@@ -646,11 +654,12 @@ fn holds_other_files(dir: &std::path::Path, mine: &[&str]) -> bool {
     })
 }
 
-/// Writes each program into its folder of `out` (`out/desktop`, `out/cli`),
-/// as `write_out` writes one, and removes the folder of a target no longer
-/// generated. Output from before, with the desktop program in `out` itself,
-/// moves into `out/desktop`: its build tools' folders and data are kept
-/// there, its other files go. Returns how many files changed.
+/// Writes each program into its folder of `out` (`out/desktop` or
+/// `out/web`, and `out/cli`), as `write_out` writes one, and removes the
+/// folder of a target no longer generated. Output from before, with the
+/// program with windows in `out` itself, moves into its folder: its build
+/// tools' folders and data are kept there, its other files go. Returns how
+/// many files changed.
 pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Backend, keeps: &[String]) -> std::io::Result<usize> {
     use clarity_project::{TARGETS, target_dir, target_word};
     let targets: Vec<&str> = TARGETS.iter().map(|t| target_word(*t)).collect();
@@ -669,7 +678,8 @@ pub fn write_programs(out: &std::path::Path, programs: &[Program], backend: Back
             continue;
         }
         // The old place: what the build tools keep moves on, the rest is made again.
-        let desktop = target_dir(out, clarity_project::Target::Desktop);
+        let windowed = programs.iter().map(|p| p.target).find(|t| *t != clarity_project::Target::Cli).unwrap_or(clarity_project::Target::Desktop);
+        let desktop = target_dir(out, windowed);
         if kept.contains(&name.as_str()) && !desktop.join(&name).exists() {
             std::fs::create_dir_all(&desktop)?;
             std::fs::write(desktop.join(OUT_MARKER), OUT_MARKER_TEXT)?;

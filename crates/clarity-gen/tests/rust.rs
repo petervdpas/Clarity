@@ -89,6 +89,12 @@ fn files() -> Vec<OutFile> {
     generate(&project, &shop()).unwrap()
 }
 
+/// The program's code: main.rs, and the desktop window's module when it has one.
+fn program(files: &[OutFile]) -> String {
+    let desktop = files.iter().find(|f| f.path == "src/desktop.rs").map(|f| f.text.as_str()).unwrap_or("");
+    format!("{}{desktop}", file(files, "src/main.rs"))
+}
+
 fn file<'a>(files: &'a [OutFile], path: &str) -> &'a str {
     &files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("no {path}")).text
 }
@@ -105,6 +111,7 @@ fn writes_a_complete_cargo_project() {
             "build.rs",
             "icons/icon.ico",
             "icons/icon.png",
+            "src/desktop.rs",
             "src/main.rs",
             "src/model.json",
             "src/modules.rs",
@@ -216,7 +223,7 @@ fn handlers_work_on_the_window_and_the_screen() {
     assert!(sales.contains("ui.open(\"OrderForm\", vec![(\"order\", to_value(&ui.selected(\"grid\", &w.orders)?)?)]);"), "{sales}");
     assert!(sales.contains("ui.close = true;"), "{sales}");
 
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("(\"OrderForm\", \"approveClicked\") => {"), "{main}");
     assert!(main.contains("const MAIN_WINDOW: &str = \"OrderForm\";"), "{main}");
     assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\")];"), "{main}");
@@ -228,7 +235,7 @@ fn handlers_work_on_the_window_and_the_screen() {
 #[test]
 fn a_desktop_window_takes_the_title_of_its_window() {
     let files = files();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("fn set_title(window: tauri::WebviewWindow, title: String) {\n    let _ = window.set_title(&title);\n}"), "{main}");
     assert!(main.contains("            set_title,\n"), "{main}");
     let runtime = include_str!("../../../app/src/runtime/Runtime.svelte");
@@ -240,7 +247,7 @@ fn a_desktop_window_takes_the_title_of_its_window() {
 #[test]
 fn the_backend_translates_in_the_language_the_screen_picked() {
     let files = files();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("    clarity_runtime::i18n::load(MODEL);\n"), "{main}");
     assert!(main.contains("fn set_language(language: Option<String>) {\n    clarity_runtime::i18n::set_language(language.as_deref());\n}"), "{main}");
     assert!(main.contains("            set_language,\n"), "{main}");
@@ -260,14 +267,14 @@ fn handlers_set_errors_and_readonly_on_inputs() {
         sales.contains("ui.set_readonly(\"numberInput\", !ui.readonly(\"numberInput\", true));"),
         "{sales}"
     );
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("(\"OrderForm\", \"orderSubmitted\") => {"), "{main}");
 }
 
 #[test]
 fn window_events_and_reload_reach_the_backend() {
     let files = files();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("(\"OrderForm\", \"return\") => Some(\"windowReturned\"),"), "{main}");
     assert!(main.contains("fn close_window("), "{main}");
     assert!(main.contains("on_event(db, state, \"open\")"), "{main}");
@@ -393,7 +400,7 @@ fn each_data_source_gets_its_own_database() {
     let mut project = project;
     project.sources = vec![SourceRef::sql("main"), SourceRef::sql("erp")];
     let files = generate(&project, &settings).unwrap();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("const DATABASES: &[(&str, Dialect, &str)] = &[(\"main\", Dialect::Sqlite, \"data/shop.db\"), (\"erp\", Dialect::Sqlite, \"data/erp.db\")];"), "{main}");
     let erp_rs = file(&files, "src/modules/erp.rs");
     assert!(erp_rs.contains("const SOURCE: &'static str = \"erp\";"), "{erp_rs}");
@@ -423,7 +430,7 @@ fn an_external_source_is_opened_but_never_migrated() {
         pick_schemas: Vec::new(),
     });
     let files = generate(&project, &settings).unwrap();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("(\"erp\", Dialect::Sqlite, \"legacy/erp.db\")"), "{main}");
     let schema = file(&files, "src/schema.rs");
     assert!(!schema.contains("(\"erp\""), "{schema}");
@@ -529,7 +536,7 @@ action check(order: Order, rate: decimal)
 #[test]
 fn a_refusal_reaches_the_screen_with_its_slots() {
     let files = files();
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("type Answer<T> = std::result::Result<T, Value>;"), "{main}");
     assert!(main.contains("Error::Refused(text) => serde_json::to_value(text).unwrap_or_default(),"), "{main}");
     assert!(main.contains("fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {"), "{main}");
@@ -579,12 +586,12 @@ fn only_a_target_in_new_window_makes_a_second_desktop_window() {
     let project = load_sources([("sales.clarity", apart.as_str())]);
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let apart_files = generate(&project, &shop()).unwrap();
-    let main = file(&apart_files, "src/main.rs");
+    let main = &program(&apart_files);
     assert!(main.contains("fn open_apart("), "{main}");
     assert!(main.contains("tauri::WebviewWindowBuilder::new("), "{main}");
     assert!(main.contains("fn close_apart("), "{main}");
     assert!(main.contains("open_apart,\n            apart_start,\n            close_apart,"), "{main}");
-    assert!(!file(&files(), "src/main.rs").contains("open_apart"));
+    assert!(!program(&files()).contains("open_apart"));
 }
 
 /// A window opens at the size it says: the desktop window Tauri opens takes
@@ -604,7 +611,7 @@ fn a_window_opens_at_its_size() {
     let files = generate(&project, &shop()).unwrap();
     let conf: serde_json::Value = serde_json::from_str(file(&files, "tauri.conf.json")).unwrap();
     assert_eq!((conf["app"]["windows"][0]["width"].as_u64(), conf["app"]["windows"][0]["height"].as_u64()), (Some(640), Some(480)));
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("width: Option<f64>, height: Option<f64>"), "{main}");
     assert!(main.contains(".inner_size(width.unwrap_or(1100.0), height.unwrap_or(760.0))"), "{main}");
 }
@@ -766,7 +773,7 @@ fn a_click_passes_values_to_its_handler() {
     assert!(sales.contains("pub fn order_form__digit(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, d: i64) -> Result<()> {"), "{sales}");
     assert!(sales.contains("pub fn order_form__scale(db: &Db, w: &mut OrderFormWindow, ui: &mut Ui, by: Decimal, word: String, loud: bool) -> Result<()> {"), "{sales}");
     assert!(sales.contains("    order_form__digit(db, w, ui, 3i64)?;\n"), "{sales}");
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("(\"OrderForm\", \"digit(7)\") => {"), "{main}");
     assert!(main.contains("sales::order_form__digit(db, &mut w, &mut ui, 7i64)?;"), "{main}");
     assert!(main.contains("(\"OrderForm\", \"scale(0.5, \\\"half\\\", true)\") => {"), "{main}");
@@ -877,7 +884,7 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     assert!(sales.contains("\"width\": (3i64) as f64}));"), "{sales}");
     // Left out: the text's color and size.
     assert!(sales.contains("\"color\": \"text\", \"size\": 10.0}));"), "{sales}");
-    let main = file(&files, "src/main.rs");
+    let main = &program(&files);
     assert!(main.contains("ui.begin_drawing(\"dial\");\n            modules::sales::dial__draw_dial(db, &mut w, &mut ui)?;"), "{main}");
     assert!(main.contains("redraw(db, "), "{main}");
 }
@@ -909,11 +916,21 @@ fn the_web_target_serves_the_renderer() {
     let has = |text: &str, expected: &str| assert!(text.contains(expected), "expected\n{expected}\nin\n{text}");
     let desktop = main_of(vec![Target::Desktop]);
     assert!(!desktop.contains("clarity_runtime::serve::serve("), "a desktop program serves nothing");
-    has(&desktop, "    tauri::Builder::default()");
+    has(&desktop, "    desktop::run(db);\n");
     let web = main_of(vec![Target::Web]);
-    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args), &files, &mut |command, args| served(&app, command, args))");
+    has(&web, "clarity_runtime::serve::serve(PROGRAM, &clarity_runtime::serve::address(&args, \"127.0.0.1:8080\"), &files, &mut |command, args| served(&app, command, args))");
     has(&web, "        \"open_window\" => given((|| {");
+    // Nor does it link the desktop toolkit: no Tauri, no desktop module, the renderer's files in the program.
+    assert!(!web.contains("tauri") && !web.contains("mod desktop;"), "{web}");
+    has(&web, "            \"index.html\" => Some(include_bytes!(\"../ui/index.html\").to_vec()),\n");
+    let mut settings = shop();
+    settings.stack.targets = vec![Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    assert!(!file(&files, "Cargo.toml").contains("tauri"), "{}", file(&files, "Cargo.toml"));
+    for path in ["build.rs", "tauri.conf.json", "src/desktop.rs", "icons/icon.png"] {
+        assert!(!files.iter().any(|f| f.path == path), "{path}");
+    }
     let both = main_of(vec![Target::Desktop, Target::Web]);
     has(&both, "    if std::env::args().any(|a| a == \"--serve\") {\n        let app = App(Mutex::new(db));\n");
-    has(&both, "        return;\n    }\n    tauri::Builder::default()");
+    has(&both, "        return;\n    }\n    desktop::run(db);\n");
 }

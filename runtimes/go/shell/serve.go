@@ -69,12 +69,10 @@ func Serve(options Options, address string) error {
 	return http.ListenAndServe(address, service.Handler(options.Assets))
 }
 
-// DefaultAddress is where the server listens when nothing says otherwise.
-const DefaultAddress = "127.0.0.1:8080"
-
 // Address is where the server listens: `--address host:port`, else the
-// environment's CLARITY_ADDRESS, else DefaultAddress.
-func Address(args []string) string {
+// environment's CLARITY_ADDRESS, else project, where the project file says
+// (its port).
+func Address(args []string, project string) string {
 	for i, arg := range args {
 		if arg == "--address" && i+1 < len(args) {
 			return args[i+1]
@@ -83,5 +81,5 @@ func Address(args []string) string {
 	if address := os.Getenv("CLARITY_ADDRESS"); address != "" {
 		return address
 	}
-	return DefaultAddress
+	return project
 }

@@ -75,3 +75,18 @@ fn a_folder_clarity_did_not_make_is_refused() {
     assert_eq!(read(&out.join("notes.txt")), "mine");
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+/// A program served to a browser alone (the web target) is written into
+/// `out/web`; with a desktop window too it is the desktop program.
+#[test]
+fn a_program_served_alone_is_the_web_program() {
+    let project = clarity_spec::keyed::load_keyed([("music.clarity", include_str!("fixtures/asks.clarity"))], &[], "en");
+    let program_of = |targets: Vec<Target>| {
+        let mut settings = clarity_project::starter("A", "a");
+        settings.stack.targets = targets;
+        clarity_gen::programs(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}")).iter().map(|p| p.target).collect::<Vec<_>>()
+    };
+    assert_eq!(program_of(vec![Target::Web]), [Target::Web]);
+    assert_eq!(program_of(vec![Target::Desktop, Target::Web]), [Target::Desktop]);
+    assert_eq!(program_of(vec![Target::Web, Target::Cli]), [Target::Web, Target::Cli]);
+}

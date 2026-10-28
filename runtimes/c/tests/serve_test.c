@@ -48,7 +48,7 @@ void the_server_serves_the_page_and_answers_its_commands(void) {
 
 void the_server_listens_where_it_is_told(void) {
     char* none[] = {"app"};
-    CHECK(strcmp(clarity_serve_address(1, none), "127.0.0.1:8080") == 0 || getenv("CLARITY_ADDRESS"));
+    CHECK(strcmp(clarity_serve_address(1, none, "127.0.0.1:9090"), "127.0.0.1:9090") == 0 || getenv("CLARITY_ADDRESS"));
     char* told[] = {"app", "--address", "0.0.0.0:9000"};
-    CHECK(strcmp(clarity_serve_address(3, told), "0.0.0.0:9000") == 0);
+    CHECK(strcmp(clarity_serve_address(3, told, "127.0.0.1:9090"), "0.0.0.0:9000") == 0);
 }

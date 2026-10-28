@@ -70,7 +70,8 @@ fn the_web_stacks_answer_tells_and_send_hears() {
 #[test]
 fn the_rust_shell_logs_the_engines_lines() {
     let files = files(Backend::Rust, Ui::Web);
-    let main = file(&files, "src/main.rs");
+    // The shell's commands are in the desktop module.
+    let main = file(&files, "src/desktop.rs");
     assert!(main.contains("fn log_line(line: String) {\n    eprintln!(\"{line}\");\n}"), "{main}");
     assert!(main.contains("            log_line,\n"), "{main}");
 }

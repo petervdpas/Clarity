@@ -58,6 +58,9 @@
       <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />
     {:else if icon === "build"}
       <path d="M4 7l8-4 8 4v10l-8 4-8-4z" /><path d="M4 7l8 4 8-4M12 11v10" />
+    {:else if icon === "globe"}
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9s1.3-6.3 3.8-9z" />
     {:else if icon === "stop"}
       <rect x="6" y="6" width="12" height="12" rx="1" />
     {:else if icon === "settings"}

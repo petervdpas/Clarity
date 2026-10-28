@@ -19,13 +19,25 @@ endif()
 
 # The shell, which shows the windows: only in a project whose runtime copy
 # has it, so a command-line program builds without a webview.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/service.c)
+  # The service answers the renderer's commands, and serves it to a browser
+  # (the web target): nothing of the desktop toolkit.
+  add_library(clarity_service STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/service.c ${CMAKE_CURRENT_LIST_DIR}/shell/serve.c)
+  target_include_directories(clarity_service PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(clarity_service PUBLIC clarity)
+  if(WIN32)
+    # Winsock for the server, the shell for links.
+    target_link_libraries(clarity_service PUBLIC ws2_32 shell32)
+  endif()
+endif()
+
 if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.c)
   # The webview draws with WebKitGTK on Linux, WebView2 on Windows and WebKit on macOS.
-  add_library(clarity_shell STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/shell.c ${CMAKE_CURRENT_LIST_DIR}/shell/serve.c ${CMAKE_CURRENT_LIST_DIR}/shell/parts.c ${CMAKE_CURRENT_LIST_DIR}/shell/webview.cc)
+  add_library(clarity_shell STATIC ${CMAKE_CURRENT_LIST_DIR}/shell/shell.c ${CMAKE_CURRENT_LIST_DIR}/shell/parts.c ${CMAKE_CURRENT_LIST_DIR}/shell/webview.cc)
   target_include_directories(clarity_shell PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/third_party)
   target_compile_definitions(clarity_shell PUBLIC WEBVIEW_STATIC)
   target_compile_features(clarity_shell PRIVATE cxx_std_11)
-  target_link_libraries(clarity_shell PUBLIC clarity)
+  target_link_libraries(clarity_shell PUBLIC clarity_service)
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET gtk+-3.0 webkit2gtk-4.1)
@@ -54,8 +66,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.c)
       file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/webview2.nupkg DESTINATION ${WEBVIEW2_DIR})
     endif()
     target_include_directories(clarity_shell PUBLIC ${WEBVIEW2_DIR}/build/native/include)
-    # Winsock for the web target's server (serve.c).
-    target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 version ws2_32)
+    target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 version)
   endif()
 endif()
 

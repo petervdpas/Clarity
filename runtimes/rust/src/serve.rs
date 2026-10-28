@@ -11,14 +11,12 @@ use serde_json::{Value, json};
 
 /// Where a page the server serves sends its commands.
 pub const INVOKE_PATH: &str = "/clarity/invoke";
-/// Where the server listens when nothing says otherwise.
-pub const DEFAULT_ADDRESS: &str = "127.0.0.1:8080";
 /// The largest request body the server reads: a command with a file in it.
 const LARGEST_BODY: usize = 64 * 1024 * 1024;
 
 /// Where the server listens: `--address host:port`, else the environment's
-/// CLARITY_ADDRESS, else DEFAULT_ADDRESS.
-pub fn address(args: &[String]) -> String {
+/// CLARITY_ADDRESS, else `project`, where the project file says (its port).
+pub fn address(args: &[String], project: &str) -> String {
     if let Some(at) = args.iter().position(|a| a == "--address")
         && let Some(address) = args.get(at + 1)
     {
@@ -26,7 +24,7 @@ pub fn address(args: &[String]) -> String {
     }
     match std::env::var("CLARITY_ADDRESS") {
         Ok(address) if !address.is_empty() => address,
-        _ => DEFAULT_ADDRESS.to_string(),
+        _ => project.to_string(),
     }
 }
 

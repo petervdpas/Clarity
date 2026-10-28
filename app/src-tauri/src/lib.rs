@@ -403,6 +403,12 @@ fn stop_app(app: AppHandle) {
     build::stop(&app);
 }
 
+/// The application Run started, while it runs: where a browser opens it.
+#[tauri::command]
+fn app_state(app: AppHandle) -> Option<build::AppRunning> {
+    build::running(&app)
+}
+
 /// The open directory and the canonical path of one of its spec files.
 fn spec_file_of(state: &WatchState, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let dir = open_dir_of(state)?;
@@ -819,6 +825,7 @@ pub fn run() {
             build_app,
             type_line,
             stop_app,
+            app_state,
             engines::engine_info,
             engines::engine_source_text,
             parts::part_files,

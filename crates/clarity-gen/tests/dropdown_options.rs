@@ -34,7 +34,7 @@ fn every_web_shell_gives_a_fields_values_and_the_fields_a_search_shows() {
     has(&go, "func (windows) Values(");
     has(&go, "Fields: map[string]any{\"name\": r.Name, \"city\": r.City}");
     let c = generated(Backend::C, Ui::Web);
-    has(&c, "static bool values(");
+    has(&c, "static bool windows_values(");
     has(&c, "cJSON_AddItemToObject(fields, \"city\", clarity_json_text(r->city));");
     let cpp = generated(Backend::Cpp, Ui::Web);
     has(&cpp, "std::vector<std::string> values(");

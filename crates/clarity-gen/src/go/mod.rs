@@ -52,39 +52,29 @@ struct Server {
     sql: Sql,
     /// The package that turns the driver on when it is imported.
     package: &'static str,
-    modules: &'static [&'static str],
 }
 
-/// The modules only the package secrets needs (DESIGN 5.27).
-pub(crate) const SECRET_MODULES: [&str; 2] = ["github.com/danieljoos/wincred", "github.com/zalando/go-keyring"];
 
 const SERVERS: [Server; 3] = [
     Server {
         sql: Sql::Postgres,
         package: "postgresql",
-        modules: &[
-            "github.com/jackc/pgpassfile",
-            "github.com/jackc/pgservicefile",
-            "github.com/jackc/pgx/v5",
-            "github.com/jackc/puddle/v2",
-            "golang.org/x/sync",
-        ],
     },
     Server {
         sql: Sql::Mysql,
         package: "mysql",
-        modules: &["filippo.io/edwards25519", "github.com/go-sql-driver/mysql"],
     },
     Server {
         sql: Sql::Mssql,
         package: "sqlserver",
-        modules: &["github.com/golang-sql/civil", "github.com/golang-sql/sqlexp", "github.com/microsoft/go-mssqldb"],
     },
 ];
 
 /// The runtime's module file, whose requirements the application takes over.
 const RUNTIME_MOD: &str = include_str!("../../../../runtimes/go/go.mod");
-const RUNTIME_SUM: &str = include_str!("../../../../runtimes/go/go.sum");
+/// The modules each group of the runtime's packages needs, with their sums,
+/// as go mod tidy picks them (recorded by a go_build test).
+const MODULES: &str = include_str!("modules.txt");
 
 /// The name of the generated module and program.
 pub fn module_name(settings: &Settings) -> String {
@@ -103,17 +93,11 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     let Some(main_window) = main_window(project) else {
         return Err(vec!["the project has no window to start with".to_string()]);
     };
-    let (servers, unused): (Vec<&Server>, Vec<&Server>) = SERVERS.iter().partition(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql));
-    let mut left_out: Vec<&str> = unused.iter().flat_map(|s| s.modules.iter().copied()).filter(|m| !servers.iter().any(|s| s.modules.contains(m))).collect();
-    // The protected store's modules only for secret settings (DESIGN 5.27).
-    if project.secret_settings().is_empty() {
-        left_out.extend(SECRET_MODULES);
-    }
-    // Engines (DESIGN 5.11) need wazero; an application without one leaves it out.
+    let servers: Vec<&Server> = SERVERS.iter().filter(|s| databases.iter().any(|(_, sql, _)| *sql == s.sql)).collect();
     let engines = crate::engines(project);
-    if engines.is_empty() {
-        left_out.extend(ENGINE_MODULES);
-    }
+    // A program served to a browser alone links nothing of the desktop toolkit.
+    let desktop = has_desktop(settings);
+    let groups = groups(project, &servers, desktop);
     let mut files = vec![text("model.json", crate::web::model_json(project))];
     files.extend(crate::web::renderer_files(project));
     let mut owners = Vec::new();
@@ -164,11 +148,14 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
     }
     files.push(text("main.go", main_go(project, settings, &databases, &servers, &owners, &main_window)));
     // The modules the code imports itself, which go.mod lists as direct.
-    let mut direct = vec![RUNTIME_MODULE, "github.com/wailsapp/wails/v3"];
+    let mut direct = vec![RUNTIME_MODULE];
+    if desktop {
+        direct.push("github.com/wailsapp/wails/v3");
+    }
     if files.iter().any(|f| f.path.ends_with(".go") && f.text.contains("\t\"github.com/shopspring/decimal\"\n")) {
         direct.push("github.com/shopspring/decimal");
     }
-    let mut go_mod_text = go_mod(&module, &left_out, &direct);
+    let mut go_mod_text = go_mod(&module, &groups, &direct);
     // Each library is a module of its own beside the program's, as each part is (DESIGN 5.21).
     let required: Vec<String> = go_mod_text.lines().filter_map(|l| l.trim().split_whitespace().next().map(String::from)).collect();
     let mut library_sums = String::new();
@@ -196,14 +183,12 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
         part_sums.push_str(&parts::sums_of(project, &part.name.name));
     }
     files.push(text("go.mod", go_mod_text));
-    files.push(text("go.sum", go_sum(&left_out) + &part_sums + &library_sums));
+    files.push(text("go.sum", go_sum(&groups) + &part_sums + &library_sums));
     Ok(files)
 }
 
 /// The modules only engines need, which an application without an engine
 /// leaves out of its go.mod and go.sum.
-const ENGINE_MODULES: [&str; 1] = ["github.com/tetratelabs/wazero"];
-
 /// The engines of the application (DESIGN 5.11): each embedded, loaded once,
 /// and checked when the application starts; a typed function for each of
 /// their functions, which code calls like any call that can fail.
@@ -279,44 +264,82 @@ fn text(path: &str, body: String) -> OutFile {
     }
 }
 
-/// The module file: the runtime module, and its requirements at the
-/// versions it is tested with, without the modules left out; those the code
-/// imports itself (`direct`) first, the rest marked indirect, as go mod tidy
-/// writes them.
-fn go_mod(module: &str, left_out: &[&str], direct: &[&str]) -> String {
+/// The groups of the runtime's packages a program imports, by the names
+/// modules.txt records them under: the base always; the desktop window,
+/// secret settings (DESIGN 5.27), engines (DESIGN 5.11) and each server
+/// database only when the program uses them.
+fn groups(project: &Project, servers: &[&Server], desktop: bool) -> Vec<&'static str> {
+    let mut groups = vec!["base"];
+    if desktop {
+        groups.push("desktop");
+    }
+    if !project.secret_settings().is_empty() {
+        groups.push("secrets");
+    }
+    if !crate::engines(project).is_empty() {
+        groups.push("engine");
+    }
+    groups.extend(servers.iter().map(|s| s.package));
+    groups
+}
+
+/// The recorded lines of `kind` (require or sum) of the groups.
+fn recorded<'a>(groups: &'a [&str], kind: &'a str) -> impl Iterator<Item = &'static str> + 'a {
+    MODULES.lines().filter_map(move |line| {
+        let mut words = line.splitn(3, ' ');
+        let (group, k, rest) = (words.next()?, words.next()?, words.next()?);
+        (k == kind && groups.contains(&group)).then_some(rest)
+    })
+}
+
+/// Whether version `a` is newer than `b`: by their numbers, then the rest.
+fn newer(a: &str, b: &str) -> bool {
+    let key = |v: &str| {
+        let v = v.trim_start_matches('v');
+        let (numbers, rest) = v.split_once('-').unwrap_or((v, ""));
+        (numbers.split('.').map(|n| n.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>(), rest.is_empty(), rest.to_string())
+    };
+    key(a) > key(b)
+}
+
+/// The module file: the runtime module, and the requirements of its
+/// package groups the program imports, each at the newest version a group
+/// needs; those the code imports itself (`direct`) first, the rest marked
+/// indirect, as go mod tidy writes them.
+fn go_mod(module: &str, groups: &[&str], direct: &[&str]) -> String {
     let go = RUNTIME_MOD.lines().find(|l| l.starts_with("go ")).unwrap_or("go 1.25");
-    let mut requirements: Vec<(&str, &str)> = RUNTIME_MOD
-        .lines()
-        .map(str::trim)
-        .filter(|l| l.contains(' ') && !l.starts_with("//") && !l.starts_with("module ") && !l.starts_with("go ") && !l.starts_with("require"))
-        .filter_map(|l| {
-            let mut words = l.split_whitespace();
-            Some((words.next()?, words.next()?))
-        })
-        .filter(|(m, _)| !left_out.contains(m))
-        .collect();
+    let mut requirements: Vec<(&str, &str)> = Vec::new();
+    for line in recorded(groups, "require") {
+        let Some((m, v)) = line.split_once(' ') else { continue };
+        match requirements.iter_mut().find(|(have, _)| *have == m) {
+            Some(found) if newer(v, found.1) => found.1 = v,
+            Some(_) => {}
+            None => requirements.push((m, v)),
+        }
+    }
     requirements.push((RUNTIME_MODULE, runtime_version()));
     requirements.sort();
-    let block = |lines: Vec<String>| if lines.is_empty() { String::new() } else { format!("\nrequire (\n{})\n", lines.concat()) };
+    // One requirement stands on its own line, as go mod tidy writes it; more go in a block.
+    let block = |lines: Vec<String>| match lines.as_slice() {
+        [] => String::new(),
+        [one] => format!("\nrequire {}", one.trim_start()),
+        _ => format!("\nrequire (\n{})\n", lines.concat()),
+    };
     let first = block(requirements.iter().filter(|(m, _)| direct.contains(m)).map(|(m, v)| format!("\t{m} {v}\n")).collect());
     let second = block(requirements.iter().filter(|(m, _)| !direct.contains(m)).map(|(m, v)| format!("\t{m} {v} // indirect\n")).collect());
     format!("// Code generated by Clarity. DO NOT EDIT: change the project in Clarity instead.\nmodule {module}\n\n{go}\n{first}{second}")
 }
 
-/// The sums of the runtime's modules, without the modules left out, and
+/// The sums of the modules of the package groups the program imports, and
 /// those of the runtime module itself once its version is published.
-fn go_sum(left_out: &[&str]) -> String {
+fn go_sum(groups: &[&str]) -> String {
     let runtime = format!("{RUNTIME_MODULE} {} ", runtime_version());
     let own = format!("{RUNTIME_MODULE} {}/go.mod ", runtime_version());
     let published = RUNTIME_PUBLISHED.lines().filter(|l| l.starts_with(&runtime) || l.starts_with(&own));
-    let mut lines: Vec<&str> = RUNTIME_SUM.lines().filter(|l| !left_out.contains(&module_of(l))).chain(published).collect();
+    let mut lines: Vec<&str> = recorded(groups, "sum").chain(published).collect();
     lines.sort();
+    lines.dedup();
     lines.iter().map(|l| format!("{l}\n")).collect()
-}
-
-/// The module a requirement or sum line is about.
-fn module_of(line: &str) -> &str {
-    line.split_whitespace().next().unwrap_or("")
 }
 
 /// A Go file of package main: its body and the imports it uses, as Go
@@ -431,11 +454,18 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     let register_parts = if parts::go_parts(project).is_empty() { "" } else { "\tregisterParts()\n" };
     // The runtime's packages and Wails, by path as gofmt keeps them; a server
     // database's package turns its driver on when it is imported.
-    let mut imports: Vec<(String, String)> = vec![
-        (format!("{RUNTIME_MODULE}/clarity"), String::new()),
-        (format!("{RUNTIME_MODULE}/shell"), String::new()),
-        ("github.com/wailsapp/wails/v3/pkg/application".to_string(), String::new()),
-    ];
+    let mut imports: Vec<(String, String)> = vec![(format!("{RUNTIME_MODULE}/clarity"), String::new()), (format!("{RUNTIME_MODULE}/shell"), String::new())];
+    // The desktop window and its Wails service; a program served to a browser alone has neither.
+    let desktop = has_desktop(settings);
+    if desktop {
+        imports.push((format!("{RUNTIME_MODULE}/desktop"), String::new()));
+        imports.push(("github.com/wailsapp/wails/v3/pkg/application".to_string(), String::new()));
+    }
+    let bind = if desktop {
+        "// Clarity is the service the renderer calls, as main.Clarity.Invoke.\ntype Clarity struct {\n\t*shell.Service\n}\n\n// bind makes the Wails service of the shell's service.\nfunc bind(s *shell.Service) application.Service {\n\treturn application.NewService(&Clarity{s})\n}\n\n"
+    } else {
+        ""
+    };
     imports.extend(servers.iter().map(|s| (format!("{RUNTIME_MODULE}/{}", s.package), "_ ".to_string())));
     // Secret settings (DESIGN 5.27): the system's protected store, set before anything reads a setting.
     let use_secrets = if project.secret_settings().is_empty() {
@@ -457,8 +487,13 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
         .join(", ");
     let ready = string(&format!("{}: the databases are ready.", pascal(&settings.name)));
     // The web target (DESIGN 7.3): a server, by itself or with `--serve` beside the desktop window.
-    let run = "\tif err := shell.Run(options, bind); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
-    let serve = "\tif err := shell.Serve(options, shell.Address(os.Args[1:])); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
+    let run = "\tif err := desktop.Run(options, bind); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n";
+    // Where it listens: the project's port, unless started with --address or CLARITY_ADDRESS.
+    let serve = format!(
+        "\tif err := shell.Serve(options, shell.Address(os.Args[1:], {})); err != nil {{\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}}\n",
+        string(&clarity_project::serve_address(settings))
+    );
+    let serve = serve.as_str();
     let targets = &settings.stack.targets;
     let serve = match (targets.contains(&clarity_project::Target::Web), targets.contains(&clarity_project::Target::Desktop)) {
         (true, false) => serve.to_string(),
@@ -693,17 +728,7 @@ func openDatabases() (*clarity.Db, error) {{
 \treturn db, nil
 }}
 
-// Clarity is the service the renderer calls, as main.Clarity.Invoke.
-type Clarity struct {{
-\t*shell.Service
-}}
-
-// bind makes the Wails service of the shell's service.
-func bind(s *shell.Service) application.Service {{
-\treturn application.NewService(&Clarity{{s}})
-}}
-
-// windows is what the shell asks of the application's windows.
+{bind}// windows is what the shell asks of the application's windows.
 type windows struct{{}}
 
 // Open is the state of window when it opens, with with filled in.
@@ -793,4 +818,10 @@ func main() {{
 {serve}}}
 "
     )
+}
+
+/// Whether the program has a desktop window: a program served to a browser
+/// alone (the web target) has none.
+fn has_desktop(settings: &Settings) -> bool {
+    settings.stack.targets.contains(&clarity_project::Target::Desktop)
 }

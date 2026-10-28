@@ -582,6 +582,7 @@ fn the_web_target_serves_in_rust() {
     let status = Command::new("cargo").args(["build", "--quiet"]).current_dir(&out).env("CARGO_TARGET_DIR", &target).status().unwrap();
     assert!(status.success(), "the generated project does not build; it is in {}", out.display());
     let program = target.join("debug").join(if cfg!(windows) { "music.exe" } else { "music" });
+    served::links_no_desktop_toolkit(&program);
     served::serves(&out, &program, &[], "127.0.0.1:18734");
     std::fs::remove_dir_all(&out).unwrap();
 }

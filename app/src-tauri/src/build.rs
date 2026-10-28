@@ -19,6 +19,30 @@ pub(crate) const BUILD_LINE: &str = "build-line";
 pub(crate) const BUILD_STARTED: &str = "build-started";
 /// The end of a build.
 pub(crate) const BUILD_DONE: &str = "build-done";
+/// The application Run started runs: an AppRunning.
+pub(crate) const APP_RUNNING: &str = "app-running";
+/// The application Run started has ended, by Stop or by itself.
+pub(crate) const APP_ENDED: &str = "app-ended";
+
+/// The application Run started, as the screen shows it: where a browser
+/// opens it, when it is served to one (the web target).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct AppRunning {
+    pub address: Option<String>,
+}
+
+/// Whether a web application Run starts can listen at `address`, the
+/// project's port: no other program may listen there already.
+pub fn can_serve_at(address: &str) -> Result<(), String> {
+    match std::net::TcpListener::bind(address) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            let port = address.rsplit(':').next().unwrap_or(address);
+            Err(format!("another program listens on port {port}; stop it, or set another port on the Project tab"))
+        }
+    }
+}
 
 
 #[derive(Default)]
@@ -26,6 +50,8 @@ pub struct BuildState {
     pub(crate) busy: AtomicBool,
     /// The application Run started, so Stop and the next Run can end it.
     running: Mutex<Option<Child>>,
+    /// Where a browser opens the application Run started, when it is served to one.
+    address: Mutex<Option<String>>,
     /// What the Output panel types to a command-line program Run started.
     input: Mutex<Option<ChildStdin>>,
     /// What the Output panel shows of the last build, for the agent.
@@ -187,7 +213,7 @@ pub fn generate_out(file: &Path, release: bool, cli: bool) -> Result<(PathBuf, c
     let (target, toolchain) = if cli {
         (clarity_project::Target::Cli, clarity_gen::cli_toolchain(&settings, release))
     } else {
-        (clarity_project::Target::Desktop, clarity_gen::toolchain(&settings, release))
+        (clarity_gen::windowed_target(&settings), clarity_gen::toolchain(&settings, release))
     };
     let toolchain = toolchain.ok_or_else(|| format!("{shown}: Clarity cannot build this stack yet"))?;
     Ok((clarity_project::target_dir(&out, target), toolchain, settings.stack))
@@ -283,6 +309,10 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
     begin_output(&app);
     // Generating works without the stack's tools; building needs them.
     let found = generate_out(&file, release, command_line.is_some()).and_then(|(out, toolchain, stack)| {
+        // A program served to a browser alone runs as a web server, at the project's port.
+        let serves = (command_line.is_none() && stack.has(clarity_project::Target::Web) && !stack.has(clarity_project::Target::Desktop))
+            .then(|| clarity_project::load(&file).settings.map(|s| clarity_project::serve_address(&s)))
+            .flatten();
         let tools = clarity_gen::tools::check(stack.backend, stack.ui, &clarity_gen::tools::System);
         // Native parts are built with CMake and a C++ compiler, whatever the stack.
         let parts = out.join(clarity_gen::parts::FOLDER).join("CMakeLists.txt").exists();
@@ -291,10 +321,10 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
             Some(why) => Err(why),
             None if tools_missing => Err(format!("the project is generated in {}; its custom parts need CMake and a C++ compiler", out.display())),
             // The native parts are built first, where the stack's own build does not build them.
-            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), out, toolchain)),
+            None => Ok((clarity_gen::parts::steps_before(&out, stack.backend), out, toolchain, serves)),
         }
     });
-    let (before, out, toolchain) = match found {
+    let (before, out, toolchain, serves) = match found {
         Ok(found) => found,
         Err(err) => {
             state.busy.store(false, Ordering::SeqCst);
@@ -310,7 +340,7 @@ pub fn start(app: AppHandle, file: PathBuf, release: bool, run: bool, command_li
         let done = match crate::engines::build_changed(&app, &dir) {
             Ok(()) => match before.iter().find_map(|step| run_step(&app, &out, step).err()) {
                 Some(message) => BuildDone { ok: false, message, binary: None },
-                None => build(&app, &out, &toolchain, run, command_line.as_deref()),
+                None => build(&app, &out, &toolchain, run, serves, command_line.as_deref()),
             },
             Err(message) => BuildDone { ok: false, message, binary: None },
         };
@@ -352,7 +382,7 @@ fn run_step(app: &AppHandle, out: &Path, step: &[String]) -> Result<(), String> 
     }
 }
 
-fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool, command_line: Option<&str>) -> BuildDone {
+fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: bool, serves: Option<String>, command_line: Option<&str>) -> BuildDone {
     let failed = |message: String| BuildDone {
         ok: false,
         message,
@@ -398,12 +428,20 @@ fn build(app: &AppHandle, out: &Path, toolchain: &clarity_gen::Toolchain, run: b
     }
     if run {
         stop(app);
-        match Command::new(&binary).current_dir(out).spawn() {
-            Ok(child) => {
-                if let Ok(mut running) = app.state::<BuildState>().running.lock() {
-                    *running = Some(child);
-                }
-            }
+        // A web application listens at the project's port, which no other program may hold.
+        if let Some(address) = &serves
+            && let Err(why) = can_serve_at(address)
+        {
+            return failed(why);
+        }
+        let address = serves;
+        let mut command = Command::new(&binary);
+        command.current_dir(out);
+        if let Some(address) = &address {
+            command.args(["--address", address]);
+        }
+        match command.spawn() {
+            Ok(child) => started(app, child, address.map(|a| format!("http://{a}"))),
             Err(err) => return failed(format!("cannot start {}: {err}", binary.display())),
         }
     }
@@ -494,13 +532,67 @@ pub fn type_line(app: &AppHandle, line: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The application Run started runs: it is kept for Stop, the screen is
+/// told, and when it ends by itself the screen is told that too.
+fn started(app: &AppHandle, child: Child, address: Option<String>) {
+    let state = app.state::<BuildState>();
+    let id = child.id();
+    if let Ok(mut running) = state.running.lock() {
+        *running = Some(child);
+    }
+    if let Ok(mut kept) = state.address.lock() {
+        kept.clone_from(&address);
+    }
+    let _ = app.emit(APP_RUNNING, AppRunning { address });
+    let app = app.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let state = app.state::<BuildState>();
+            let Ok(mut running) = state.running.lock() else { return };
+            match running.as_mut() {
+                // Stop or a new Run ended it, and said so.
+                Some(child) if child.id() != id => return,
+                None => return,
+                Some(child) => {
+                    if !matches!(child.try_wait(), Ok(None)) {
+                        running.take();
+                        drop(running);
+                        ended(&app);
+                        return;
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// The application Run started has ended: the screen is told.
+fn ended(app: &AppHandle) {
+    if let Ok(mut address) = app.state::<BuildState>().address.lock() {
+        *address = None;
+    }
+    let _ = app.emit(APP_ENDED, ());
+}
+
+/// The application Run started, while it runs.
+pub fn running(app: &AppHandle) -> Option<AppRunning> {
+    let state = app.state::<BuildState>();
+    let mut running = state.running.lock().ok()?;
+    let child = running.as_mut()?;
+    if !matches!(child.try_wait(), Ok(None)) {
+        return None;
+    }
+    Some(AppRunning { address: state.address.lock().ok()?.clone() })
+}
+
 /// Ends the application Run started, if it still runs.
 pub fn stop(app: &AppHandle) {
-    if let Ok(mut running) = app.state::<BuildState>().running.lock()
-        && let Some(mut child) = running.take()
-    {
+    let child = app.state::<BuildState>().running.lock().ok().and_then(|mut r| r.take());
+    if let Some(mut child) = child {
         let _ = child.kill();
         let _ = child.wait();
+        ended(app);
     }
 }
 
@@ -573,6 +665,16 @@ mod tests {
     }
 
     /// What the Output panel shows is kept, so the agent can read it.
+    #[test]
+    fn a_web_application_is_served_where_nothing_else_listens() {
+        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = held.local_addr().unwrap().to_string();
+        let port = held.local_addr().unwrap().port();
+        assert_eq!(can_serve_at(&address), Err(format!("another program listens on port {port}; stop it, or set another port on the Project tab")));
+        drop(held);
+        assert_eq!(can_serve_at(&address), Ok(()));
+    }
+
     #[test]
     fn the_output_is_kept_for_the_agent() {
         let mut output = Output::default();

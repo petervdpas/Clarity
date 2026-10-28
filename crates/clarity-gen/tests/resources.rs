@@ -118,7 +118,8 @@ fn no_resources_no_folder() {
 #[test]
 fn the_rust_shell_opens_links() {
     let files = files(Backend::Rust, Ui::Web);
-    let main = text(&files, "src/main.rs");
+    // The shell's commands are in the desktop module.
+    let main = text(&files, "src/desktop.rs");
     assert!(main.contains("fn open_link(address: String) -> std::result::Result<(), String> {"), "{main}");
     assert!(main.contains("[\"http://\", \"https://\", \"mailto:\"]"), "{main}");
     assert!(main.contains("            open_link,\n"), "{main}");

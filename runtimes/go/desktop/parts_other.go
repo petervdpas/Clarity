@@ -1,6 +1,6 @@
 //go:build (!linux || !cgo) && !windows
 
-package shell
+package desktop
 
 import "unsafe"
 

@@ -337,9 +337,9 @@ fn a_canvas_is_drawn_by_its_draw_handler() {
     // Left out: the text's color and size.
     has(code, "cJSON_AddStringToObject(shape3, \"color\", \"text\");\n    cJSON_AddNumberToObject(shape3, \"size\", 10);");
     let main = file(&files, "src/main.c");
-    has(main, "static bool redraw(ClarityDb* db, ClarityReply* reply) {");
+    has(main, "static bool windows_redraw(ClarityDb* db, ClarityReply* reply) {");
     has(main, "        clarity_ui_begin_drawing(ui, \"dial\");\n        if (!dial_window_draw_dial(db, ui, &w)) return false;");
-    has(main, "picture, redraw, answer, values};");
+    has(main, "windows_picture, windows_redraw, windows_answer, windows_values};");
 }
 
 /// An application with an engine gets the host and wasm3; one without, neither.
@@ -390,8 +390,16 @@ fn the_web_target_serves_the_renderer() {
     has(&desktop, "    int status = clarity_shell_run(&options);\n");
     assert!(!desktop.contains("clarity_serve("), "a desktop program serves nothing");
     let web = main_of(vec![Target::Web]);
-    has(&web, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv));\n");
+    has(&web, "    int status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n");
     assert!(!web.contains("clarity_shell_run"), "a web program opens no window");
+    // Nor does it link the desktop toolkit: only the service, without the webview.
+    let mut settings = settings();
+    settings.stack.targets = vec![Target::Web];
+    let files = generate(&project, &settings).unwrap();
+    has(file(&files, "CMakeLists.txt"), "target_link_libraries(shop PRIVATE clarity clarity_service)");
+    for path in ["clarity-runtime/shell/shell.c", "clarity-runtime/shell/webview.cc", "clarity-runtime/third_party/webview/webview.h"] {
+        assert!(!files.iter().any(|f| f.path == path), "{path}");
+    }
     let both = main_of(vec![Target::Desktop, Target::Web]);
-    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv));\n    else\n        status = clarity_shell_run(&options);\n");
+    has(&both, "    if (serving)\n        status = clarity_serve(&options, clarity_serve_address(argc, argv, \"127.0.0.1:8080\"));\n    else\n        status = clarity_shell_run(&options);\n");
 }

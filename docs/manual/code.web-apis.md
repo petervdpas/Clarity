@@ -97,6 +97,8 @@ datasource forms rest "https://forms.example.com/api"
 - `link` follows the address the service names as the next page in its `Link` header.
 - `items "data"` says where a page's items are in its JSON, with dots for deeper names; leave it out when a page is a list.
 
+The same line is set in the IDE: open the project settings, press **API...** on the data source and pick the kind under **Paging**. The form asks only for what that kind needs and writes the line for you.
+
 Then `http get "/templates" from forms every page` reads page after page until the last, and its reply's text is one JSON list of the items of every page, which `read list<Template> from json reply.text` reads. A page the service does not answer well is the reply, so the code sees why. Only `get` reads every page, from a source that pages. Paging stops after 1000 pages, with status 0.
 
 ## An OpenAPI description

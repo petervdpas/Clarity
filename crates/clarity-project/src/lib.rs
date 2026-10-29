@@ -533,6 +533,29 @@ fn has_password(url: &str) -> bool {
     })
 }
 
+/// What a `paging` line misses that its kind needs, as the IDE's form can
+/// leave it; the file's own lines are refused as they are read.
+fn paging_problem(p: &Paging) -> Option<&'static str> {
+    let sized = matches!(p.kind, PagingKind::Page | PagingKind::Offset);
+    if matches!(p.kind, PagingKind::Page | PagingKind::Offset | PagingKind::Cursor) && p.param.trim().is_empty() {
+        return Some(match p.kind {
+            PagingKind::Offset => "paging names the query parameter of the offset",
+            PagingKind::Cursor => "paging names the query parameter of the cursor",
+            _ => "paging names the query parameter of the page",
+        });
+    }
+    if sized && p.size_param.trim().is_empty() {
+        return Some("paging names the query parameter of the size");
+    }
+    if sized && p.size == 0 {
+        return Some("a page holds at least 1 item");
+    }
+    if p.kind == PagingKind::Cursor && p.next.trim().is_empty() {
+        return Some("paging says where the next cursor is in a page");
+    }
+    None
+}
+
 fn source_problem(source: &DataSource) -> Option<String> {
     let url = source.url.trim();
     if url.is_empty() {
@@ -543,6 +566,9 @@ fn source_problem(source: &DataSource) -> Option<String> {
     }
     if source.paging.is_some() && source.kind != SourceKind::Rest {
         return Some("only a web API pages".to_string());
+    }
+    if let Some(problem) = source.paging.as_ref().and_then(paging_problem) {
+        return Some(problem.to_string());
     }
     match source.kind {
         SourceKind::Sqlite if is_reference(url) || url.contains("://") => {

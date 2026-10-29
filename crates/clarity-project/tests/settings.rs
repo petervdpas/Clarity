@@ -702,4 +702,22 @@ fn a_web_api_says_how_it_pages() {
     // Only a web API pages.
     let settings = parse("project Shop\n    stack go web desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
     assert_eq!(validate(&settings), ["data source 'main': only a web API pages"]);
+    // Settings the IDE's form saves are checked as the file's lines are, so a file it writes always reads back.
+    let paged = |paging: Paging| {
+        let mut settings = parse(&file("paging link")).unwrap();
+        settings.datasources[0].paging = Some(paging);
+        validate(&settings)
+    };
+    let page = Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: String::new() };
+    for (paging, problem) in [
+        (Paging { size: 0, ..page.clone() }, "data source 'forms': a page holds at least 1 item"),
+        (Paging { param: " ".into(), ..page.clone() }, "data source 'forms': paging names the query parameter of the page"),
+        (Paging { size_param: String::new(), ..page.clone() }, "data source 'forms': paging names the query parameter of the size"),
+        (
+            Paging { kind: PagingKind::Cursor, param: "after".into(), size_param: String::new(), size: 0, next: String::new(), items: String::new() },
+            "data source 'forms': paging says where the next cursor is in a page",
+        ),
+    ] {
+        assert_eq!(paged(paging.clone()), [problem], "{paging:?}");
+    }
 }

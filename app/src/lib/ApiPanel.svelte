@@ -9,6 +9,9 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import type { ApiListing } from "./generated/ApiListing";
   import type { DataSource } from "./generated/DataSource";
+  import type { Paging } from "./generated/Paging";
+  import type { PagingKind } from "./generated/PagingKind";
+  import { PAGING_KINDS, pagingFields, withKind } from "./paging";
 
   let {
     source,
@@ -61,6 +64,17 @@
     }
   }
 
+  function setPaging(change: Partial<Paging>) {
+    if (source.paging) onsave({ paging: { ...source.paging, ...change } });
+  }
+
+  /** A size is saved only as a whole number above 0; anything else shows the saved one again. */
+  function setSize(input: HTMLInputElement) {
+    const size = Number(input.value);
+    if (Number.isInteger(size) && size > 0) setPaging({ size });
+    else input.value = String(source.paging?.size ?? "");
+  }
+
   function pickOperation(id: string, on: boolean) {
     const picks = on ? [...source.picks, id] : source.picks.filter((p) => p !== id);
     onsave({ picks });
@@ -94,6 +108,32 @@
   </div>
 
   {#if error}<p class="problem">{error}</p>{/if}
+
+  <div class="row paging">
+    <strong>Paging</strong>
+    <select
+      value={source.paging?.kind ?? ""}
+      title="How the API hands out a long list, so that http get ... every page reads all of it"
+      onchange={(e) => onsave({ paging: withKind(source.paging, e.currentTarget.value as PagingKind | "") })}
+    >
+      <option value="">None</option>
+      {#each PAGING_KINDS as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
+    </select>
+    {#if source.paging}
+      {@const fields = pagingFields(source.paging.kind)}
+      {#if fields.param}
+        <label>{fields.param}<input class="mono" value={source.paging.param} onchange={(e) => setPaging({ param: e.currentTarget.value.trim() })} /></label>
+      {/if}
+      {#if fields.size}
+        <label>Size parameter<input class="mono" value={source.paging.size_param} onchange={(e) => setPaging({ size_param: e.currentTarget.value.trim() })} /></label>
+        <label>Size<input class="size" type="number" min="1" step="1" value={source.paging.size} onchange={(e) => setSize(e.currentTarget)} /></label>
+      {/if}
+      {#if fields.next}
+        <label title="Where the next cursor is in a page's JSON, like meta.next">Next cursor at<input class="mono" value={source.paging.next} onchange={(e) => setPaging({ next: e.currentTarget.value.trim() })} /></label>
+      {/if}
+      <label title="Where a page's items are in its JSON, like data; empty when a page is the list itself">Items at<input class="mono" value={source.paging.items} placeholder="the page itself" onchange={(e) => setPaging({ items: e.currentTarget.value.trim() })} /></label>
+    {/if}
+  </div>
 
   {#if listing?.file}
     <div class="row">
@@ -149,6 +189,24 @@
 
   .head {
     justify-content: space-between;
+  }
+
+  .paging {
+    flex-wrap: wrap;
+  }
+
+  .paging label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .paging input {
+    width: 120px;
+  }
+
+  .paging input.size {
+    width: 70px;
   }
 
   .filter {

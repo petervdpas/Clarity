@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
@@ -46,6 +48,17 @@ func (c *cards) Dispatch(db *clarity.Db, state clarity.WindowState, handler stri
 		return clarity.Reply{}, clarity.Refuse(clarity.NewText("{name} is taken").With("name", clarity.SlotText("Ada")))
 	case "fail":
 		return clarity.Reply{}, &clarity.StorageError{What: "locked"}
+	case "plan":
+		// As a long engine call does: it says how far it is until it is stopped.
+		watch := clarity.CurrentWatch()
+		for day := int64(1); ; day++ {
+			watch.Progress(day, 365)
+			select {
+			case <-watch.Stop:
+				return clarity.Reply{}, &clarity.StorageError{What: "it was stopped"}
+			default:
+			}
+		}
 	}
 	return ui.Reply(state.Window, state.Data)
 }
@@ -364,5 +377,65 @@ func TestWithoutADesktopItsCommandsDoNothingOrSaySo(t *testing.T) {
 	}
 	if got := wire(t, call(t, c, "open_apart", `{"window":"Card"}`)); got != `{"error":"a window of its own needs the desktop"}` {
 		t.Fatal(got)
+	}
+}
+
+// screen keeps the scripts the shell runs on the screen.
+type screen struct {
+	mu      sync.Mutex
+	scripts []string
+}
+
+func (s *screen) Command(context.Context, string, Args) (Answer, bool) { return Answer{}, false }
+
+func (s *screen) Eval(_ context.Context, js string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.scripts = append(s.scripts, js)
+}
+
+// A long call on the screen (DESIGN 5.12): the handler's engine calls report
+// to the screen, at most ten times a second, until the handler ends; Stop
+// comes in while it runs, outside the lock the handler holds.
+func TestALongHandlerShowsHowFarItIsAndStops(t *testing.T) {
+	c := New(Options{Windows: &cards{}})
+	shown := &screen{}
+	c.SetDesktop(shown)
+	state := clarity.WindowState{Window: "Card", Data: map[string]any{"name": "Ada"}}
+	done := make(chan Answer)
+	go func() { done <- c.invoke(context.Background(), "dispatch_event", Args{State: state, Handler: "plan"}) }()
+	// Stop once the screen has heard of it.
+	for {
+		shown.mu.Lock()
+		heard := len(shown.scripts) > 0
+		shown.mu.Unlock()
+		if heard {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if a := c.invoke(context.Background(), "stop_call", Args{}); a.Error != nil {
+		t.Fatal(a.Error)
+	}
+	answer := <-done
+	if why, _ := answer.Error.(string); !strings.Contains(why, "it was stopped") {
+		t.Fatalf("answered %+v", answer)
+	}
+	shown.mu.Lock()
+	defer shown.mu.Unlock()
+	first, last := shown.scripts[0], shown.scripts[len(shown.scripts)-1]
+	if first != `window.dispatchEvent(new CustomEvent("clarity-progress", {detail: {"done":1,"total":365}}))` {
+		t.Errorf("first %s", first)
+	}
+	if last != `window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null}))` {
+		t.Errorf("last %s", last)
+	}
+	// A handler that reports nothing tells the screen nothing.
+	shown.scripts = nil
+	shown.mu.Unlock()
+	c.invoke(context.Background(), "dispatch_event", Args{State: state, Handler: "opened"})
+	shown.mu.Lock()
+	if len(shown.scripts) != 0 {
+		t.Errorf("told %v", shown.scripts)
 	}
 }

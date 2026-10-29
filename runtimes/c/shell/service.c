@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "clarity/db_internal.h"
 #include "clarity/record_file.h"
@@ -39,6 +40,8 @@ typedef struct {
 
 struct ClarityService {
     ClarityShellOptions options;
+    /// Set by stop_call, from any thread, to stop the handler that runs.
+    volatile int32_t stop;
     PartsWindow* parts_windows;
     size_t parts_window_count;
     Apart* apart;
@@ -167,7 +170,61 @@ static cJSON* replied(ClarityService* s, const ClarityWindowState* state, const 
     return on_event(s, state, event, &reply) ? value(clarity_reply_json(reply)) : failed();
 }
 
+static cJSON* answer_command(ClarityService* s, const char* command, const cJSON* args, ClarityDesktop* caller);
+
+void clarity_service_stop(ClarityService* service) { service->stop = 1; }
+
+bool clarity_service_watches(const char* command) {
+    static const char* const watched[] = {"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event"};
+    for (size_t i = 0; i < sizeof watched / sizeof *watched; ++i)
+        if (strcmp(command, watched[i]) == 0) return true;
+    return false;
+}
+
+static int64_t now_ms(void) {
+    struct timespec now;
+    timespec_get(&now, TIME_UTC);
+    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
+/// What a watched handler's engine calls report, on its way to the screen.
+typedef struct {
+    ClarityDesktop* caller;
+    int64_t last;
+    bool told;
+} Told;
+
+static void tell_screen(int64_t done, int64_t total, void* context) {
+    Told* t = context;
+    int64_t now = now_ms();
+    if (t->told && now - t->last < 100 && done < total) return;
+    t->last = now;
+    t->told = true;
+    char js[160];
+    snprintf(js, sizeof js, "window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: {\"done\":%lld,\"total\":%lld}}))", (long long)done, (long long)total);
+    t->caller->show(t->caller, js);
+}
+
 cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSON* args, ClarityDesktop* caller) {
+    // The person stops the handler that runs, from the screen's thread.
+    if (strcmp(command, "stop_call") == 0) {
+        clarity_service_stop(s);
+        return value(NULL);
+    }
+    if (!clarity_service_watches(command) || !caller || !caller->show) return answer_command(s, command, args, caller);
+    // The handler's engine calls say how far they are: to the screen at most
+    // ten times a second, and that it ended once it did.
+    s->stop = 0;
+    Told told = {caller, 0, false};
+    ClarityEngineWatch watch = {tell_screen, &told, &s->stop};
+    const ClarityEngineWatch* was = clarity_watching(&watch);
+    cJSON* answer = answer_command(s, command, args, caller);
+    clarity_watching(was);
+    if (told.told) caller->show(caller, "window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: null}))");
+    return answer;
+}
+
+static cJSON* answer_command(ClarityService* s, const char* command, const cJSON* args, ClarityDesktop* caller) {
     ClarityDb* db = s->options.db;
     const ClarityWindows* windows = s->options.windows;
     ClarityWindowState state = {.window = "", .data = cJSON_CreateObject()};

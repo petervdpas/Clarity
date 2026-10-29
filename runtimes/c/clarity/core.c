@@ -8,6 +8,14 @@
 #include "cjson/cJSON.h"
 #include "clarity/text.h"
 
+// Each thread has its own arena and last error: the desktop shell runs a
+// handler on a thread of its own, so the window keeps painting (DESIGN 5.12).
+#if defined(_MSC_VER) && !defined(__clang__)
+#define THREAD_LOCAL __declspec(thread)
+#else
+#define THREAD_LOCAL _Thread_local
+#endif
+
 // The scratch arena: blocks of memory handed out from the front. A reset
 // keeps the first block and frees the others.
 
@@ -20,8 +28,8 @@ typedef struct Block {
     _Alignas(16) unsigned char data[];
 } Block;
 
-static Block* first;
-static Block* current;
+static THREAD_LOCAL Block* first;
+static THREAD_LOCAL Block* current;
 
 static Block* block(size_t size) {
     Block* b = malloc(sizeof(Block) + size);
@@ -147,7 +155,7 @@ const char* clarity_buffer_text(const ClarityBuffer* buffer) { return buffer->da
 
 // The last error, as errno keeps it.
 
-static ClarityError last;
+static THREAD_LOCAL ClarityError last;
 
 const ClarityError* clarity_error(void) { return &last; }
 

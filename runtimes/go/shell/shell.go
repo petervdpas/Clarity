@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
@@ -109,8 +110,18 @@ type Desktop interface {
 	Command(ctx context.Context, command string, a Args) (Answer, bool)
 }
 
+// Screen is a desktop that runs a script on the screen of the window a
+// command came from: how a long call says how far it is (DESIGN 5.12).
+type Screen interface {
+	Eval(ctx context.Context, js string)
+}
+
 // Service answers the renderer's commands.
 type Service struct {
+	// stop is closed by stop_call to stop the handler that runs; each
+	// watched handler gets a new one. Not behind mu, which the handler holds.
+	stopMu sync.Mutex
+	stop   chan struct{}
 	options Options
 	desktop Desktop
 	// mu keeps one command at a time on the databases, as the Tauri shell does.
@@ -238,12 +249,66 @@ type Args struct {
 	Value    json.RawMessage `json:"value"`
 }
 
+// watched are the commands that run a handler, which may make a long engine call.
+var watched = map[string]bool{"start_app": true, "open_window": true, "close_window": true, "return_to": true, "dispatch_event": true, "answer_event": true}
+
+// progressScript tells the screen how far a long call is; none once it ended.
+func progressScript(done, total int64, ended bool) string {
+	if ended {
+		return `window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null}))`
+	}
+	return fmt.Sprintf(`window.dispatchEvent(new CustomEvent("clarity-progress", {detail: {"done":%d,"total":%d}}))`, done, total)
+}
+
 func (c *Service) invoke(ctx context.Context, command string, a Args) Answer {
 	if a.State.Data == nil {
 		a.State.Data = map[string]any{}
 	}
+	// The person stops the handler that runs, which holds mu.
+	if command == "stop_call" {
+		c.stopMu.Lock()
+		defer c.stopMu.Unlock()
+		if c.stop != nil {
+			close(c.stop)
+			c.stop = nil
+		}
+		return Answer{}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	screen, shows := c.desktop.(Screen)
+	if !watched[command] || !shows {
+		return c.answer(ctx, command, a)
+	}
+	// The handler's engine calls say how far they are: to the screen at
+	// most ten times a second, and that it ended once it did.
+	stop := make(chan struct{})
+	c.stopMu.Lock()
+	c.stop = stop
+	c.stopMu.Unlock()
+	var last time.Time
+	told := false
+	watch := clarity.Watch{Stop: stop, Progress: func(done, total int64) {
+		if now := time.Now(); !told || now.Sub(last) >= 100*time.Millisecond || done >= total {
+			last, told = now, true
+			screen.Eval(ctx, progressScript(done, total, false))
+		}
+	}}
+	var answer Answer
+	clarity.Watching(watch, func() { answer = c.answer(ctx, command, a) })
+	c.stopMu.Lock()
+	if c.stop == stop {
+		c.stop = nil
+	}
+	c.stopMu.Unlock()
+	if told {
+		screen.Eval(ctx, progressScript(0, 0, true))
+	}
+	return answer
+}
+
+// answer runs a command, holding mu.
+func (c *Service) answer(ctx context.Context, command string, a Args) Answer {
 	db := c.options.Db
 	switch command {
 	case "start":
@@ -364,7 +429,7 @@ func (c *Service) invoke(ctx context.Context, command string, a Args) Answer {
 	}
 	// Without a desktop (a web server), what belongs to one has nothing to do.
 	switch command {
-	case "set_title", "quit_app", "apart_start", "close_apart", "set_part", "hear_part", "close_parts", "place_part":
+	case "set_title", "quit_app", "stop_call", "apart_start", "close_apart", "set_part", "hear_part", "close_parts", "place_part":
 		return Answer{}
 	case "open_link":
 		return Answer{Error: "a link opens in the browser"}

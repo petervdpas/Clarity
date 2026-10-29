@@ -2,12 +2,17 @@
 // the Tauri and Wails shells.
 
 #include "check.hpp"
+#include "clarity/watch.hpp"
+#include "engine/engine.hpp"
 #include "shell/shell.hpp"
 
 using namespace clarity;
 using nlohmann::json;
 
 namespace {
+
+/// The service a long handler stops, as the person's Stop does while it runs.
+shell::Service* stopping = nullptr;
 
 class Cards final : public shell::Windows {
 public:
@@ -35,6 +40,15 @@ public:
         if (handler == "opened") ui.set_caption("title", Text::plain("Card of " + state.data["name"].get<std::string>()));
         if (handler == "save") refuse(Text("{name} is taken").with("name", slot_text("Ada")));
         if (handler == "fail") throw StorageError("locked");
+        if (handler == "plan") {
+            // As a long engine call does: it says how far it is until it is stopped.
+            const EngineWatch* watch = current_watch();
+            for (int64_t day = 1;; ++day) {
+                watch->progress(day, 365);
+                if (day == 3 && stopping) stopping->invoke("stop_call", json::object());
+                if (watch->stop->load()) throw EngineError("engine Planner failed in plan: it was stopped");
+            }
+        }
         return ui.reply(state.window, state.data);
     }
     /// Renames the card to the answer, after the values written for it.
@@ -182,4 +196,41 @@ TEST(an_unconnected_start_says_why_and_connects_later) {
     CHECK_EQ(service.invoke("connect", json::object()), json::parse(R"({"value":null})"));
     CHECK(!service.closes_to_screen());
     CHECK_EQ(service.invoke("start", json::object()), json::parse(R"({"value":{"model":{"project":{}},"main":"Card"}})"));
+}
+
+namespace {
+
+/// A window whose screen keeps the scripts the shell runs on it.
+class Shown final : public shell::Desktop {
+public:
+    std::vector<std::string> scripts;
+    std::string name() const override { return "main"; }
+    void set_title(const std::string&) override {}
+    void close() override {}
+    bool shows() const override { return true; }
+    void show(const std::string& js) override { scripts.push_back(js); }
+};
+
+}  // namespace
+
+// A long call on the screen (DESIGN 5.12): the handler's engine calls report
+// to the screen, at most ten times a second, until the handler ends; Stop
+// comes in while it runs.
+TEST(a_long_handler_shows_how_far_it_is_and_stops) {
+    Db db = Db::memory();
+    Cards cards;
+    shell::Service service({"shop", "Shop", "Card", R"({"project":{}})", "", &db, &cards});
+    stopping = &service;
+    Shown screen;
+    json state = {{"window", "Card"}, {"data", {{"name", "Ada"}}}};
+    json answer = service.invoke("dispatch_event", {{"state", state}, {"handler", "plan"}}, &screen);
+    CHECK_EQ(answer, json::parse(R"({"error":"engine Planner failed in plan: it was stopped"})"));
+    REQUIRE(screen.scripts.size() >= 2);
+    CHECK_EQ(screen.scripts.front(), std::string(R"(window.dispatchEvent(new CustomEvent("clarity-progress", {detail: {"done":1,"total":365}})))"));
+    CHECK_EQ(screen.scripts.back(), std::string(R"(window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null})))"));
+    // A handler that reports nothing tells the screen nothing.
+    screen.scripts.clear();
+    service.invoke("dispatch_event", {{"state", state}, {"handler", "opened"}}, &screen);
+    CHECK(screen.scripts.empty());
+    stopping = nullptr;
 }

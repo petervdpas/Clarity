@@ -287,3 +287,27 @@ void stop_ends_a_long_engine_call(void) {
     }
     clarity_engine_free(engine);
 }
+
+// The shell watches a handler, not each engine call: a call made while a
+// watch is current, as generated code makes it, reports to it and stops with it.
+void a_call_inside_a_watched_handler_is_watched(void) {
+    cJSON* file = conformance("progress.json");
+    ClarityEngine* engine = long_engine(file, cJSON_GetObjectItem(file, "uses"));
+    REQUIRE(engine);
+    Watched w = {.stop_at = -1};
+    ClarityEngineWatch watch = {watched, &w, &w.stop};
+    const ClarityEngineWatch* was = clarity_watching(&watch);
+    cJSON* got = NULL;
+    CHECK_OK(clarity_engine_call_in(engine, 0, "work", cJSON_Parse("[2]"), &got));
+    CHECK(w.count == 2);
+    clarity_watching(was);
+    // Outside it, nothing is watched.
+    CHECK_OK(clarity_engine_call_in(engine, 0, "work", cJSON_Parse("[1]"), &got));
+    CHECK(w.count == 2);
+    w.stop = 1;
+    clarity_watching(&watch);
+    CHECK_FAILS(CLARITY_ENGINE, clarity_engine_call_in(engine, 0, "work", cJSON_Parse("[5]"), &got));
+    CHECK_TEXT(clarity_error()->message, "engine Long failed in work: it was stopped");
+    clarity_watching(NULL);
+    clarity_engine_free(engine);
+}

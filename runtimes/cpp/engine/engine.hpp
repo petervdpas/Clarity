@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include "clarity/watch.hpp"
+
 #include <atomic>
 
 #include <cstdint>
@@ -74,15 +76,6 @@ struct EngineServices {
     std::function<std::optional<std::string>()> language;
 };
 
-/// What the screen sees of a long call and how the person stops it (`uses
-/// progress`, conformance/progress.json): every report of how far it is
-/// goes to `progress`, and once `stop` is set (from any thread) the call
-/// ends, failing with "it was stopped". Either may be empty.
-struct EngineWatch {
-    std::function<void(int64_t done, int64_t total)> progress;
-    std::shared_ptr<std::atomic<bool>> stop;
-};
-
 class Engine {
 public:
     /// Loads `bytes` as engine `name` as it is declared; throws
@@ -103,7 +96,11 @@ public:
 
     /// Calls `function` in open window `window`: for an engine with state
     /// per window, on that window's own instance.
-    nlohmann::json call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const { return call_watched(window, function, args, {}); }
+    nlohmann::json call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const {
+        static const EngineWatch none;
+        const EngineWatch* watch = current_watch();
+        return call_watched(window, function, args, watch ? *watch : none);
+    }
 
     /// call_in, telling `watch` how far the call is and stopping when it says so.
     nlohmann::json call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const;

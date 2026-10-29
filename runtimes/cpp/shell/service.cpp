@@ -5,8 +5,10 @@
 
 #include "shell/shell.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -71,8 +73,40 @@ Reply Service::dispatch(const WindowState& state, const std::string& handler) {
     return options_.windows->redraw(*options_.db, options_.windows->dispatch(*options_.db, state, handler));
 }
 
+bool Service::watches(const std::string& command) {
+    static const std::set<std::string> watched{"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event"};
+    return watched.contains(command);
+}
+
 json Service::invoke(const std::string& command, const json& args, Desktop* caller) {
+    // The person stops the handler that runs, which holds the lock.
+    if (command == "stop_call") {
+        stop();
+        return value(nullptr);
+    }
     std::lock_guard lock(mutex_);
+    if (!watches(command) || !caller || !caller->shows()) return answer(command, args, caller);
+    // The handler's engine calls say how far they are: to the screen at most
+    // ten times a second, and that it ended once it did.
+    stop_ = std::make_shared<std::atomic<bool>>(false);
+    std::optional<std::chrono::steady_clock::time_point> last;
+    EngineWatch watch{[&](int64_t done, int64_t total) {
+                          auto now = std::chrono::steady_clock::now();
+                          if (last && now - *last < std::chrono::milliseconds(100) && done < total) return;
+                          last = now;
+                          caller->show("window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: {\"done\":" + std::to_string(done) + ",\"total\":" + std::to_string(total) + "}}))");
+                      },
+                      stop_};
+    json answered;
+    {
+        Watching watching(watch);
+        answered = answer(command, args, caller);
+    }
+    if (last) caller->show("window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: null}))");
+    return answered;
+}
+
+json Service::answer(const std::string& command, const json& args, Desktop* caller) {
     Db& db = *options_.db;
     try {
         WindowState state = args.contains("state") ? args["state"].get<WindowState>() : WindowState{};

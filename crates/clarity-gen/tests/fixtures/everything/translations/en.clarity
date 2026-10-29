@@ -30,6 +30,8 @@ translation en
     overview "Overview"
     pick "Pick"
     play "Play"
+    plan "Plan"
+    stopCall "Stop"
     quit "Quit"
     ready "Ready"
     save "Save"

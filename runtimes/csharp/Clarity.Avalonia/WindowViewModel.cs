@@ -86,11 +86,18 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
             Remote.Command(this, command, args ?? []);
             return true;
         }
+        // While the screen waits for a long engine call, it takes no other handler.
+        if (LongCall.Waiting)
+            return false;
         running++;
         var ran = false;
         try
         {
-            handler();
+            // The outermost handler is watched: its engine calls show how far they are.
+            if (running == 1)
+                Watching.Run(LongCall.Start(), handler);
+            else
+                handler();
             ran = true;
             // The canvases show what the handler left, drawn anew.
             if (running == 1)
@@ -107,6 +114,8 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
         finally
         {
             running--;
+            if (running == 0)
+                LongCall.End();
         }
         if (running > 0)
             return ran;

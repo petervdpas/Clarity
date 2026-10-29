@@ -98,6 +98,15 @@ entity Album
     notes: text, label @albumNotes
     level: integer, label @albumLevel
 
+// A long engine call that says how far it is, which the window shows as a bar with Stop.
+engine Planner
+    uses progress
+
+    function plan(days: list<integer>, total: integer) -> integer
+        for day in days
+            progress(day, total)
+        return total
+
 settings
     language
     theme
@@ -319,6 +328,7 @@ page Gallery: window
     password name tokenBox at 1,16 span 6 bind settings.apiToken
     folder name scansBox at 1,17 span 6 bind settings.scansFolder
     button @play name playButton at 7,16 span 2 on click: playClicked
+    button @plan name planButton at 7,17 span 2 on click: planClicked
     sound name ding source "ding.wav" volume 80
     timer name clock every 1 on tick: sampled
 
@@ -347,6 +357,9 @@ code Gallery
 
     handler playClicked
         ding.play()
+
+    handler planClicked
+        album.level = Planner.plan([1, 2, 3], 3)
 
     handler gaugeChanged
         album.level = speed

@@ -456,7 +456,7 @@ void clarity_engine_close_window(ClarityEngine* engine, uint64_t window) {
 }
 
 bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, cJSON** out) {
-    return clarity_engine_call_watched(engine, window, function, args, NULL, out);
+    return clarity_engine_call_watched(engine, window, function, args, clarity_current_watch(), out);
 }
 
 bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out) {

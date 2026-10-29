@@ -97,6 +97,27 @@ impl Default for Services {
     }
 }
 
+thread_local! {
+    /// The watch of the handler running on this thread (`watching`).
+    static CURRENT: std::cell::RefCell<Option<Watch>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `run` with `watch` as the watch of every engine call it makes, as a
+/// shell runs a handler: the screen sees how far a long call is and the
+/// person can stop it, without the handler's code naming the watch.
+pub fn watching<T>(watch: &Watch, run: impl FnOnce() -> T) -> T {
+    let was = CURRENT.with(|c| c.replace(Some(watch.clone())));
+    struct Restore(Option<Watch>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            CURRENT.with(|c| *c.borrow_mut() = was);
+        }
+    }
+    let _restore = Restore(was);
+    run()
+}
+
 /// What a call's store holds: its memory limit and the state of its services.
 struct Data {
     limits: StoreLimits,
@@ -232,7 +253,8 @@ impl Engine {
     /// Calls `function` in open window `window`: for an engine with state
     /// per window, on that window's own instance.
     pub fn call_in(&self, window: u64, function: &str, args: Vec<Value>) -> Result<Value> {
-        self.call_watched(window, function, args, &Watch::default())
+        let watch = CURRENT.with(|c| c.borrow().clone()).unwrap_or_default();
+        self.call_watched(window, function, args, &watch)
     }
 
     /// Calls `function` in open window `window` as `call_in` does, telling

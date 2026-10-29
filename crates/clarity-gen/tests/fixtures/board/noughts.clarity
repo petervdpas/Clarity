@@ -3,7 +3,7 @@ module noughts
 // A game of noughts and crosses, one board for each open window, written
 // in Clarity: the noughts example's engine, as a test project.
 engine Board
-    uses random
+    uses random, progress
     state per window
     // Squares 1 to 9: 0 is empty, 1 your cross, 2 the computer's nought.
     keep squares: list<integer> = [0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -19,6 +19,8 @@ engine Board
         if squares[square] != 0
             refuse @thatSquareIsTaken
         squares[square] = 1
+        // How far the game is, which a long call would show as a bar.
+        progress(taken(), 9)
         if winner() == 0
             let answer = reply()
             if answer != 0

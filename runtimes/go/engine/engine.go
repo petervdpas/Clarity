@@ -68,15 +68,9 @@ var services = map[string]struct{ params, results []api.ValueType }{
 }
 
 // Watch is what the screen sees of a long call and how the person stops it
-// (`uses progress`, conformance/progress.json): every report of how far it
-// is goes to Progress, and once Stop is closed the call ends, failing with
-// "it was stopped".
-type Watch struct {
-	// Progress is told each report, done of total; nil drops them.
-	Progress func(done, total int64)
-	// Stop is closed to stop the call; nil never stops it.
-	Stop <-chan struct{}
-}
+// (`uses progress`): clarity.Watch, which a shell sets for the handler it
+// runs with clarity.Watching.
+type Watch = clarity.Watch
 
 // errStopped is the cause of a call's context when the person stopped it.
 var errStopped = errors.New("it was stopped")
@@ -274,7 +268,7 @@ func (e *Engine) CloseWindow(window uint64) {
 // CallIn calls function in open window window: for an engine with state
 // per window, on that window's own instance.
 func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error) {
-	return e.CallWatched(window, Watch{}, function, args...)
+	return e.CallWatched(window, clarity.CurrentWatch(), function, args...)
 }
 
 // CallWatched calls function in open window window as CallIn does, telling

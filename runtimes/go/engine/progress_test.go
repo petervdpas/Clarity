@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/petervdpas/Clarity/runtimes/go/clarity"
 )
 
 type progressCases struct {
@@ -135,4 +137,34 @@ func TestProgressIsAServiceTheEngineMustUse(t *testing.T) {
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// The shell watches a handler, not each engine call: a call made while
+// clarity.Watching runs, as generated code makes it, reports to that watch
+// and stops with it.
+func TestACallInsideAWatchedHandlerIsWatched(t *testing.T) {
+	cases, long := loadProgress(t)
+	e, err := Load(cases.Name, long, Declaration{Functions: cases.Functions, Uses: cases.Uses, Limits: cases.Limits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	watch, reports := watching(0)
+	var got any
+	clarity.Watching(watch, func() { got, err = e.CallIn(0, "work", 2) })
+	if err != nil || mustJSON(got) != "2" {
+		t.Fatalf("gave %v, %v", got, err)
+	}
+	if r := reports(); !reflect.DeepEqual(r, [][2]int64{{1, 2}, {2, 2}}) {
+		t.Errorf("reported %v", r)
+	}
+	// Outside it, nothing is watched.
+	if _, err := e.CallIn(0, "work", 1); err != nil || len(reports()) != 2 {
+		t.Errorf("outside: %v, %v", err, reports())
+	}
+	stopped := make(chan struct{})
+	close(stopped)
+	clarity.Watching(clarity.Watch{Stop: stopped}, func() { _, err = e.CallIn(0, "work", 5) })
+	if err == nil || err.Error() != "engine Long failed in work: it was stopped" {
+		t.Errorf("stopped with %v", err)
+	}
 }

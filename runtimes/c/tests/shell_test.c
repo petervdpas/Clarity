@@ -17,8 +17,20 @@ static const char* handler_of(const char* window, const char* event) {
     return strcmp(window, "Card") == 0 && strcmp(event, "open") == 0 ? "opened" : NULL;
 }
 
+/// The service a long handler stops, as the person's Stop does while it runs.
+static ClarityService* stopping;
+
 static bool dispatch(ClarityDb* db, const ClarityWindowState* state, const char* handler, ClarityReply** out) {
     (void)db;
+    if (strcmp(handler, "plan") == 0) {
+        // As a long engine call does: it says how far it is until it is stopped.
+        const ClarityEngineWatch* watch = clarity_current_watch();
+        for (int64_t day = 1;; ++day) {
+            watch->progress(day, 365, watch->context);
+            if (day == 3) clarity_service_invoke(stopping, "stop_call", cJSON_CreateObject(), NULL);
+            if (*watch->stop) return clarity_fail(CLARITY_ENGINE, "engine Planner failed in plan: it was stopped");
+        }
+    }
     ClarityUi* ui = clarity_ui(state);
     if (strcmp(handler, "opened") == 0) {
         const char* name = cJSON_GetObjectItem(state->data, "name")->valuestring;
@@ -242,4 +254,37 @@ void an_unconnected_start_says_why_and_connects_later(void) {
     CHECK(!clarity_service_closes_to_screen(s));
     CHECK_JSON(invoked(s, "start", "{}", NULL), "{\"value\":{\"model\":{\"project\":{}},\"main\":\"Card\"}}");
     clarity_service_free(s);
+}
+
+/// The scripts the shell ran on a window's screen.
+static const char* shown[16];
+static size_t shown_count;
+
+static void fake_show(ClarityDesktop* desktop, const char* js) {
+    (void)desktop;
+    if (shown_count < 16) shown[shown_count] = clarity_copy(js);
+    shown_count++;
+}
+
+// A long call on the screen (DESIGN 5.12): the handler's engine calls report
+// to the screen, at most ten times a second, until the handler ends; Stop
+// comes in while it runs.
+void a_long_handler_shows_how_far_it_is_and_stops(void) {
+    ClarityDb* db;
+    REQUIRE_OK(clarity_db_memory(&db));
+    ClarityShellOptions options = {"shop", "Shop", "Card", "{\"project\":{}}", "", db, &cards};
+    ClarityService* s = clarity_service_new(&options);
+    stopping = s;
+    Fake main = {{"main", fake_title, fake_close, .show = fake_show}, NULL, false, NULL, 0, 0};
+    cJSON* answer = invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{\"name\":\"Ada\"}},\"handler\":\"plan\"}", &main.desktop);
+    CHECK_TEXT(cJSON_GetObjectItem(answer, "error")->valuestring, "engine Planner failed in plan: it was stopped");
+    REQUIRE(shown_count >= 2);
+    CHECK_TEXT(shown[0], "window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: {\"done\":1,\"total\":365}}))");
+    CHECK_TEXT(shown[shown_count - 1 < 16 ? shown_count - 1 : 15], "window.dispatchEvent(new CustomEvent(\"clarity-progress\", {detail: null}))");
+    // A handler that reports nothing tells the screen nothing.
+    shown_count = 0;
+    invoked(s, "dispatch_event", "{\"state\":{\"window\":\"Card\",\"data\":{\"name\":\"Ada\"}},\"handler\":\"opened\"}", &main.desktop);
+    CHECK(shown_count == 0);
+    clarity_service_free(s);
+    clarity_db_close(db);
 }

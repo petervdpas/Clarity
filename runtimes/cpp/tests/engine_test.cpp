@@ -199,3 +199,29 @@ TEST(stop_ends_a_long_engine_call) {
         CHECK(std::equal(first.begin(), first.end(), reports.begin()));
     }
 }
+
+// The shell watches a handler, not each engine call: a call made while a
+// watch is current, as generated code makes it, reports to it and stops with it.
+TEST(a_call_inside_a_watched_handler_is_watched) {
+    json file = conformance("progress.json");
+    auto engine = Engine::load(file["name"], read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), file["uses"].get<std::vector<std::string>>(), limits(file)});
+    std::vector<std::array<int64_t, 2>> reports;
+    auto stop = std::make_shared<std::atomic<bool>>(false);
+    EngineWatch watch{[&](int64_t done, int64_t total) { reports.push_back({done, total}); }, stop};
+    {
+        Watching watching(watch);
+        CHECK(engine.call("work", json::array({2})) == json(2));
+    }
+    CHECK(reports.size() == 2);
+    // Outside it, nothing is watched.
+    engine.call("work", json::array({1}));
+    CHECK(reports.size() == 2);
+    *stop = true;
+    Watching watching(watch);
+    try {
+        engine.call("work", json::array({5}));
+        CHECK(false);
+    } catch (const EngineError& e) {
+        CHECK_EQ(std::string(e.what()), std::string("engine Long failed in work: it was stopped"));
+    }
+}

@@ -30,6 +30,7 @@
   import { Navigator } from "../lib/navigator";
   import AskDialog from "../lib/ui/AskDialog.svelte";
   import Dialog from "../lib/ui/Dialog.svelte";
+  import ProgressBar from "../lib/ui/ProgressBar.svelte";
   import { answerValues, type Ask } from "../lib/asks";
   import { CanvasHears } from "../lib/screenEngine";
   import { keptSettings, sameSettings, secretSettings, settingsDefaults, settingsEntity, settingsOf } from "../lib/settings";
@@ -533,6 +534,13 @@
 
   // A window opened elsewhere (`in new window`) has closed: this one is on top again.
   window.addEventListener("clarity-return", () => nav.returned());
+  // How far a long engine call is (DESIGN 5.12): the shell tells it while the
+  // handler runs, at most ten times a second, and tells none once it ended.
+  let longCall = $state<{ done: number; total: number } | null>(null);
+  window.addEventListener("clarity-progress", (e) => {
+    const detail = (e as CustomEvent<{ done: number; total: number } | null>).detail;
+    longCall = detail ? { done: detail.done, total: detail.total } : null;
+  });
   // The title bar's close, which the shell sends here while the databases are
   // not open (DESIGN 5.27): every window closes, and closing the last connects again.
   (globalThis as unknown as { clarityCloseRequested: () => void }).clarityCloseRequested = () => void nav.closeAll();
@@ -818,6 +826,14 @@
   {/if}
 
   <div class="messages" aria-live="polite">
+    {#if longCall}
+      <ProgressBar
+        done={longCall.done}
+        total={longCall.total}
+        words={{ stop: model ? ownWord(model, "Stop") : "Stop" }}
+        onstop={() => invoke("stop_call").catch((err) => say({ level: "error", text: errorText(err) }))}
+      />
+    {/if}
     {#each messages as m (m.id)}
       {@const close = model ? ownWord(model, "Dismiss") : "Dismiss"}
       <div class="message {m.level}">

@@ -7,6 +7,7 @@
 
 #include "clarity/db.h"
 #include "clarity/ui.h"
+#include "clarity/watch.h"
 
 /// What the shell asks of the program's windows.
 typedef struct {
@@ -73,10 +74,20 @@ struct ClarityDesktop {
     /// Opens the system's folder picker over the window, for a folder part:
     /// the folder chosen, in the scratch arena, or NULL when none was.
     const char* (*choose_folder)(ClarityDesktop* desktop, const char* title);
+    /// Runs a script on the window's screen, from any thread: how far a
+    /// long call is (DESIGN 5.12). NULL where there is no screen to tell.
+    void (*show)(ClarityDesktop* desktop, const char* js);
 };
+
 
 /// Answers the renderer's commands.
 typedef struct ClarityService ClarityService;
+/// Whether `command` runs a handler, which may make a long engine call: the
+/// desktop shell runs it off the screen's thread, so the window keeps painting.
+bool clarity_service_watches(const char* command);
+/// Stops the handler that runs at its engine call's next look, from any
+/// thread: the person's Stop (DESIGN 5.12).
+void clarity_service_stop(ClarityService* service);
 
 /// The desktop window an open window's custom parts are in, by the open
 /// window's number; NULL when none of its parts was placed.

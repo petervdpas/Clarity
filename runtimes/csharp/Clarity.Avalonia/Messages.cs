@@ -42,6 +42,9 @@ public sealed class MessageList : StackPanel
 
     public MessageList()
     {
+        // The bar of a long call shows while the list is on screen.
+        AttachedToVisualTree += (_, _) => LongCall.Changed += Rebuild;
+        DetachedFromVisualTree += (_, _) => LongCall.Changed -= Rebuild;
         Spacing = 8;
         MaxWidth = 420;
         HorizontalAlignment = HorizontalAlignment.Right;
@@ -78,6 +81,24 @@ public sealed class MessageList : StackPanel
     public void Rebuild()
     {
         Children.Clear();
+        // A long engine call: how far it is, and Stop (DESIGN 5.12).
+        if (LongCall.Current is { } call)
+        {
+            var stop = new Button { Content = Locale.Translate("stopCall", "Stop"), VerticalAlignment = VerticalAlignment.Center };
+            stop.Click += (_, _) =>
+            {
+                stop.IsEnabled = false;
+                LongCall.Stop();
+            };
+            var bar = new ProgressBar { Minimum = 0, Maximum = Math.Max(call.Total, 1), Value = call.Done, VerticalAlignment = VerticalAlignment.Center, MinWidth = 160 };
+            var row = new DockPanel();
+            DockPanel.SetDock(stop, Dock.Right);
+            row.Children.Add(stop);
+            row.Children.Add(bar);
+            var note = new Border { Child = row };
+            note.Classes.Add("message");
+            Children.Add(note);
+        }
         // Warnings and errors are said in the shell's dialog, not here.
         foreach (var message in (Messages ?? []).Where(m => m.Level == Level.Info))
         {

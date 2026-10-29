@@ -108,3 +108,12 @@ fn an_engine_says_how_far_a_long_call_is() {
     let handler = SCHEDULE.replace("        days = Planner.plan([1, 2, 3], 3)", "        progress(1, 2)");
     assert_has(&errors(&handler), "progress is a service of an engine");
 }
+
+/// The Stop button of a long call is Clarity's own word, only where an engine uses progress.
+#[test]
+fn stop_is_clarity_s_own_word() {
+    let project = clarity_spec::keyed::load_keyed([("plan.clarity", SCHEDULE)], &[], "en");
+    assert_eq!(project.translations["en"].get("stopCall").map(String::as_str), Some("Stop"));
+    let none = clarity_spec::keyed::load_keyed([("game.clarity", GAME)], &[], "en");
+    assert_eq!(none.translations["en"].get("stopCall"), None);
+}

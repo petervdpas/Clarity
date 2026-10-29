@@ -57,12 +57,6 @@ public sealed record EngineDeclaration(
 /// </summary>
 public sealed record EngineServices(long? Clock = null, ulong? Seed = null, Action<string>? Log = null, Func<string?>? Language = null);
 
-/// <summary>
-/// What the screen sees of a long call and how the person stops it (<c>uses progress</c>,
-/// conformance/progress.json): every report of how far it is goes to <paramref name="Progress"/>,
-/// and once <paramref name="Stop"/> is cancelled the call ends, failing with "it was stopped".
-/// </summary>
-public sealed record EngineWatch(Action<long, long>? Progress = null, CancellationToken Stop = default);
 
 public sealed class Engine
 {
@@ -197,12 +191,24 @@ public sealed class Engine
 
     /// Calls `function` in open window `window`, adding what its answer tells
     /// to `told` (an engine beside the screen, DESIGN 5.12).
-    public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args) => Run(window, function, told, null, args);
+    public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args) => Run(window, function, told, Watching.Current, args);
 
     /// <summary>Calls `function` in open window `window` as CallIn does, telling <paramref name="watch"/> how far it is and stopping when it says so.</summary>
     public JsonNode? CallWatched(long window, string function, EngineWatch watch, params object?[] args) => Run(window, function, null, watch, args);
 
     JsonNode? Run(long window, string function, List<ScreenTell>? told, EngineWatch? watch, object?[] args)
+    {
+        // A screen that keeps painting waits for the call its own way, while it runs on another thread.
+        if (watch?.Wait is { } wait)
+        {
+            var call = Task.Run(() => RunHere(window, function, told, watch, args));
+            wait(call);
+            return call.GetAwaiter().GetResult();
+        }
+        return RunHere(window, function, told, watch, args);
+    }
+
+    JsonNode? RunHere(long window, string function, List<ScreenTell>? told, EngineWatch? watch, object?[] args)
     {
         EngineException Failed(string why) => new($"engine {name} failed in {function}: {why}");
         if (watch?.Stop.IsCancellationRequested == true)

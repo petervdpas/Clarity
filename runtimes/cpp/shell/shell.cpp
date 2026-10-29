@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
 
 #if defined(__APPLE__)
 #include <objc/message.h>
@@ -37,14 +38,34 @@ public:
         view_.set_title(options.title);
         view_.set_size(size.width, size.height, WEBVIEW_HINT_NONE);
         // The renderer calls clarityInvoke(command, args); it answers like the Go shell.
-        view_.bind("clarityInvoke", [this, &service](const std::string& request) {
-            json args = json::parse(request);
-            return service.invoke(args.at(0).get<std::string>(), args.size() > 1 ? args.at(1) : json::object(), this).dump();
-        });
+        // A handler runs on a thread of its own (DESIGN 5.12), so the window keeps
+        // painting while a long engine call reports how far it is; resolve answers
+        // on the screen's thread, whichever thread calls it. Stop needs no turn.
+        view_.bind(
+            "clarityInvoke",
+            [this, &service](const std::string& id, const std::string& request, void*) {
+                json call = json::parse(request);
+                std::string command = call.at(0).get<std::string>();
+                json args = call.size() > 1 ? call.at(1) : json::object();
+                if (command == "stop_call") {
+                    service.stop();
+                    view_.resolve(id, 0, R"({"value":null})");
+                } else if (Service::watches(command)) {
+                    std::thread([this, &service, id, command, args] { view_.resolve(id, 0, service.invoke(command, args, this).dump()); }).detach();
+                } else {
+                    view_.resolve(id, 0, service.invoke(command, args, this).dump());
+                }
+            },
+            nullptr);
         view_.set_html(options.html);
     }
 
     std::string name() const override { return name_; }
+    bool shows() const override { return true; }
+    // A script for the screen, from any thread: on the screen's own.
+    void show(const std::string& js) override {
+        view_.dispatch([this, js] { view_.eval(js); });
+    }
     void set_title(const std::string& title) override { view_.set_title(title); }
 
     void close() override {

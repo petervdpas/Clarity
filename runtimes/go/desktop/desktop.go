@@ -49,6 +49,17 @@ func caller(ctx context.Context) application.Window {
 	return window
 }
 
+// The desktop shows how far a long call is.
+var _ shell.Screen = (*windows)(nil)
+
+// Eval runs a script on the screen of the window a command came from, such
+// as how far a long call is (shell.Screen); ExecJS is safe from any goroutine.
+func (d *windows) Eval(ctx context.Context, js string) {
+	if window := caller(ctx); window != nil {
+		window.ExecJS(js)
+	}
+}
+
 // Command answers the commands of a desktop window; the service holds its lock.
 func (d *windows) Command(ctx context.Context, command string, a shell.Args) (shell.Answer, bool) {
 	switch command {

@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::lexer::{Line, Token, TokenKind, lex, quote};
-use crate::translations::{CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
+use crate::translations::{CLI_KEYS, KEYS_WINDOW_KEYS, SCREEN_ENGINE_KEYS, SECRET_KEYS, UNCONNECTED_KEYS, FILE_KEYS, FOLDER_KEYS, PROGRESS_KEYS, LANGUAGE_PICKER_KEYS, PICTURE_KEYS, RENDERER_KEYS, PAGE_KEYS, STEP_KEYS, TAGS_KEYS, TREE_KEYS, THEME_PICKER_KEYS, has_letters};
 
 /// What making texts keys gives: the modules as rewritten, and each
 /// language's values by key, the default's first.
@@ -83,6 +83,7 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
         .chain(if wizards { STEP_KEYS.as_slice() } else { &[] })
         .chain(if files { FILE_KEYS.as_slice() } else { &[] })
         .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("folder "))) { FOLDER_KEYS.as_slice() } else { &[] })
+        .chain(if modules.iter().any(|(_, text)| text.lines().any(|l| l.trim_start().starts_with("uses ") && l.split([' ', ',']).any(|w| w == "progress"))) { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })

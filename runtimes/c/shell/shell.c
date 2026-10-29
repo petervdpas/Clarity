@@ -23,7 +23,10 @@
 #if defined(_WIN32)
 #define COBJMACROS
 #include <windows.h>
+#include <process.h>
 #include <shobjidl.h>
+#else
+#include <pthread.h>
 #endif
 
 // The desktop: a webview per window, all on the main loop of the first.
@@ -114,18 +117,134 @@ static cJSON* unnamed(void) {
     return answer;
 }
 
-// The renderer calls clarityInvoke(command, args); it answers like the other shells.
-static void on_invoke(const char* id, const char* request, void* arg) {
-    Window* w = arg;
+// One command at a time on the service and its databases: a handler runs on
+// a thread of its own (DESIGN 5.12), so the window keeps painting while a long
+// engine call reports how far it is, and the person can stop it.
+#if defined(_WIN32)
+static SRWLOCK turn = SRWLOCK_INIT;
+static void take_turn(void) { AcquireSRWLockExclusive(&turn); }
+static void give_turn(void) { ReleaseSRWLockExclusive(&turn); }
+#else
+static pthread_mutex_t turn = PTHREAD_MUTEX_INITIALIZER;
+static void take_turn(void) { pthread_mutex_lock(&turn); }
+static void give_turn(void) { pthread_mutex_unlock(&turn); }
+#endif
+
+typedef struct {
+    webview_t view;
+    char* js;
+} Shown;
+
+static void show_on_window(webview_t view, void* arg) {
+    Shown* s = arg;
+    webview_eval(view, s->js);
+    free(s->js);
+    free(s);
+}
+
+// A script for the window's screen, from any thread: on the screen's own.
+static void show(ClarityDesktop* desktop, const char* js) {
+    Shown* s = malloc(sizeof *s);
+    size_t size = strlen(js) + 1;
+    if (!s || !(s->js = malloc(size))) {
+        free(s);
+        return;
+    }
+    memcpy(s->js, js, size);
+    s->view = ((Window*)desktop)->view;
+    webview_dispatch(s->view, show_on_window, s);
+}
+
+/// A command with its answer still to come.
+typedef struct {
+    Window* window;
+    char* id;
+    char* request;
+} Call;
+
+/// Runs a command and answers it, holding the turn.
+static void answer_call(Window* w, const char* id, const char* request) {
+    take_turn();
     cJSON* call = cJSON_Parse(request);
     const cJSON* command = cJSON_GetArrayItem(call, 0);
     const cJSON* args = cJSON_GetArrayItem(call, 1);
     cJSON* empty = cJSON_CreateObject();
     cJSON* answer = cJSON_IsString(command) ? clarity_service_invoke(w->service, command->valuestring, cJSON_IsObject(args) ? args : empty, &w->desktop)
                                             : unnamed();
+    // webview_return answers on the screen's thread, whichever thread calls it.
     webview_return(w->view, id, 0, cJSON_PrintUnformatted(answer));
     // The command is answered: its values are done with.
     clarity_scratch_reset();
+    give_turn();
+}
+
+#if defined(_WIN32)
+static unsigned __stdcall run_call(void* arg) {
+#else
+static void* run_call(void* arg) {
+#endif
+    Call* c = arg;
+    answer_call(c->window, c->id, c->request);
+    free(c->id);
+    free(c->request);
+    free(c);
+    return 0;
+}
+
+static char* copied(const char* text) {
+    size_t size = strlen(text) + 1;
+    char* out = malloc(size);
+    if (out) memcpy(out, text, size);
+    return out;
+}
+
+/// Whether a request is the command `name`, read without the runtime, which
+/// the thread of a handler may be using.
+static bool is_command(const char* request, const char* name) {
+    char quoted[48];
+    snprintf(quoted, sizeof quoted, "[\"%s\"", name);
+    while (*request == ' ') ++request;
+    return strncmp(request, quoted, strlen(quoted)) == 0;
+}
+
+// The renderer calls clarityInvoke(command, args); it answers like the other shells.
+static void on_invoke(const char* id, const char* request, void* arg) {
+    Window* w = arg;
+    // Stop reaches the handler that runs, without waiting for its turn.
+    if (is_command(request, "stop_call")) {
+        clarity_service_stop(w->service);
+        webview_return(w->view, id, 0, "{\"value\":null}");
+        return;
+    }
+    // A handler runs on a thread of its own; the screen's thread goes on painting.
+    static const char* const handlers[] = {"start_app", "open_window", "close_window", "return_to", "dispatch_event", "answer_event"};
+    for (size_t i = 0; i < sizeof handlers / sizeof *handlers; ++i) {
+        if (!is_command(request, handlers[i])) continue;
+        Call* c = malloc(sizeof *c);
+        if (c && (c->id = copied(id)) && (c->request = copied(request))) {
+            c->window = w;
+#if defined(_WIN32)
+            uintptr_t thread = _beginthreadex(NULL, 0, run_call, c, 0, NULL);
+            if (thread) {
+                CloseHandle((HANDLE)thread);
+                return;
+            }
+#else
+            pthread_t thread;
+            if (pthread_create(&thread, NULL, run_call, c) == 0) {
+                pthread_detach(thread);
+                return;
+            }
+#endif
+        }
+        if (c) {
+            free(c->id);
+            free(c->request);
+            free(c);
+        }
+        break;
+    }
+    answer_call(w, id, request);
 }
 
 #if defined(__linux__) || defined(_WIN32)
@@ -147,6 +266,7 @@ static Window* open_window(Desktop* desktop, const char* name, int width, int he
     snprintf(w->desktop.name, sizeof w->desktop.name, "%s", name);
     w->desktop.set_title = set_title;
     w->desktop.close = close_window;
+    w->desktop.show = show;
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
     w->desktop.choose_folder = choose_folder;
 #endif

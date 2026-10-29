@@ -18,6 +18,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "clarity/watch.hpp"
+
 #include "clarity/db.hpp"
 #include "clarity/ui.hpp"
 
@@ -95,6 +97,10 @@ public:
     /// Opens the system's folder picker over the window, for a folder part:
     /// the folder chosen, or none when the person cancelled. A window
     /// without one says so.
+    /// Whether the window has a screen to run scripts on, such as how far a
+    /// long call is (DESIGN 5.12), and running one there, from any thread.
+    virtual bool shows() const { return false; }
+    virtual void show(const std::string& js) { (void)js; }
     virtual std::optional<std::string> choose_folder(const std::string& title) {
         (void)title;
         throw std::runtime_error("this window has no folder picker");
@@ -124,6 +130,12 @@ public:
     /// Runs a command: the same commands, with the same arguments, as the
     /// Tauri shell has. Answers `{"value": ...}` or `{"error": ...}`.
     nlohmann::json invoke(const std::string& command, const nlohmann::json& args, Desktop* caller = nullptr);
+    /// Whether `command` runs a handler, which may make a long engine call:
+    /// the desktop shell runs it off the screen's thread, so the window keeps painting.
+    static bool watches(const std::string& command);
+    /// Stops the handler that runs at its engine call's next look, from any
+    /// thread: the person's Stop (DESIGN 5.12).
+    void stop() { stop_->store(true); }
 
     /// Ends the program; set by `run`.
     std::function<void()> quit;
@@ -146,6 +158,8 @@ public:
     bool closes_to_screen() const { return to_screen_; }
 
 private:
+    /// Runs a command, holding the lock.
+    nlohmann::json answer(const std::string& command, const nlohmann::json& args, Desktop* caller);
     struct Apart {
         std::string window;
         nlohmann::json with;
@@ -155,6 +169,8 @@ private:
     /// The databases `connect` opened, which `options_.db` then points at.
     std::unique_ptr<Db> connected_;
     std::mutex mutex_;
+    /// The Stop flag of the handler that runs; each watched handler gets a new one.
+    std::shared_ptr<std::atomic<bool>> stop_ = std::make_shared<std::atomic<bool>>(false);
     std::map<std::string, Apart> apart_;
     std::map<uint64_t, std::string> parts_windows_;
     int next_ = 0;

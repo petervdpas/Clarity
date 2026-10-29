@@ -45,6 +45,7 @@
     X(code_texts_are_translated_as_every_runtime_does)            \
     X(a_window_opens_with_its_data_and_with)                      \
     X(the_shell_answers_the_renderers_commands)                   \
+    X(a_long_handler_shows_how_far_it_is_and_stops)              \
     X(the_server_serves_the_page_and_answers_its_commands)        \
     X(the_server_listens_where_it_is_told)                        \
     X(every_open_window_has_its_own_number)                       \
@@ -59,6 +60,7 @@
     X(a_call_keeps_to_the_limits_of_its_engine)                   \
     X(a_long_engine_call_reports_how_far_it_is)                   \
     X(stop_ends_a_long_engine_call)                               \
+    X(a_call_inside_a_watched_handler_is_watched)                 \
     X(an_engine_uses_the_services_it_declares)                    \
     X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
     X(an_engine_with_state_per_window_keeps_an_instance_for_each_window) \

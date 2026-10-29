@@ -303,6 +303,23 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 }
 
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String]) -> String {
+    // An engine that says how far a long call is (DESIGN 5.12): handlers run off
+    // the screen's thread, so the window keeps painting its bar, and Stop reaches the call.
+    let watches = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == clarity_spec::code::check::PROGRESS));
+    let (asynced, app_state, watch_params, watching, watched_end, stopping_manage, stop_command) = if watches {
+        (
+            "async ",
+            "tauri::State<'_, App>",
+            ", stopping: tauri::State<'_, Stopping>, webview: tauri::WebviewWindow",
+            "watched(&stopping, &webview, || ",
+            ")",
+            "\n        .manage(Stopping::default())",
+            "\n            stop_call,",
+        )
+    } else {
+        ("", "tauri::State<App>", "", "", "", "", "")
+    };
+    let watched_fn = if watches { WATCHED } else { "" };
     // The folder part's button opens the system's folder picker, from Tauri's dialog plugin.
     let folders = project.uses_part(clarity_spec::widgets::WidgetKind::Folder);
     let (choose_folder_fn, choose_folder_command, dialog_plugin) = if folders {
@@ -742,41 +759,43 @@ fn open_databases() -> Result<Db> {{
 
 //~desktop
 #[tauri::command]
-fn open_window(app: tauri::State<App>, window: String, with: Map<String, Value>) -> Answer<Reply> {{
-    locked(&app, |db| open(db, &window, with))
+{asynced}fn open_window(app: {app_state}{watch_params}, window: String, with: Map<String, Value>) -> Answer<Reply> {{
+    {watching}locked(&app, |db| open(db, &window, with)){watched_end}
 }}
 
 /// Runs a window's `on close` before the screen closes it.
 #[tauri::command]
-fn close_window(app: tauri::State<App>, state: WindowState) -> Answer<Reply> {{
+{asynced}fn close_window(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
     let instance = state.instance;
-    let reply = locked(&app, |db| on_event(db, state, "close"))?;
+    let reply = {watching}locked(&app, |db| on_event(db, state, "close")){watched_end}?;
     // The window has closed: what it had of an engine goes.
 {close_engines}    Ok(reply)
 }}
 
 /// Runs a window's `on return` when it is on top again.
 #[tauri::command]
-fn return_to(app: tauri::State<App>, state: WindowState) -> Answer<Reply> {{
-    locked(&app, |db| on_event(db, state, "return"))
+{asynced}fn return_to(app: {app_state}{watch_params}, state: WindowState) -> Answer<Reply> {{
+    {watching}locked(&app, |db| on_event(db, state, "return")){watched_end}
 }}
 
 /// Runs the app's `on start`, before its main window opens.
 #[tauri::command]
-fn start_app(app: tauri::State<App>) -> Answer<Reply> {{
-    locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start"))
+{asynced}fn start_app(app: {app_state}{watch_params}) -> Answer<Reply> {{
+    {watching}locked(&app, |db| on_event(db, WindowState::new("", Map::new()), "start")){watched_end}
 }}
 
 #[tauri::command]
-fn dispatch_event(app: tauri::State<App>, state: WindowState, handler: String) -> Answer<Reply> {{
-    locked(&app, |db| dispatch(db, state, &handler))
+{asynced}fn dispatch_event(app: {app_state}{watch_params}, state: WindowState, handler: String) -> Answer<Reply> {{
+    {watching}locked(&app, |db| dispatch(db, state, &handler)){watched_end}
 }}
 
 /// The answer to a question a handler asked: runs the handler it goes to.
 #[tauri::command]
-fn answer_event(app: tauri::State<App>, state: WindowState, handler: String, values: Vec<Value>) -> Answer<Reply> {{
-    locked(&app, |db| answer_to(db, state, &handler, values))
+{asynced}fn answer_event(app: {app_state}{watch_params}, state: WindowState, handler: String, values: Vec<Value>) -> Answer<Reply> {{
+    {watching}locked(&app, |db| answer_to(db, state, &handler, values)){watched_end}
 }}
+
+{watched_fn}
 
 #[tauri::command]
 fn ref_options(app: tauri::State<App>, entity: String) -> Answer<Vec<RefOption>> {{
@@ -872,7 +891,7 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
 /// Shows the application's desktop window and runs until it closes.
 pub(crate) fn run(db: Db{problem_param}) {{
 {parts_start}    tauri::Builder::default()
-        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}{dialog_plugin}
+        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}{dialog_plugin}{stopping_manage}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -887,7 +906,7 @@ pub(crate) fn run(db: Db{problem_param}) {{
             file_data,
             open_file,
             save_file,
-            store_file,{choose_folder_command}{apart_commands}{parts_commands}
+            store_file,{choose_folder_command}{stop_command}{apart_commands}{parts_commands}
             read_settings,
             keep_settings,{connect_command}
             set_language,
@@ -908,6 +927,47 @@ fn main() {{
 "#
     )
 }
+
+/// How a handler's long engine calls reach the screen (DESIGN 5.12): what
+/// they report goes to the window at most ten times a second, nothing once
+/// the handler ended, and Stop sets the flag the call looks at.
+const WATCHED: &str = r##"/// The Stop flag of the handler that runs.
+#[derive(Default)]
+struct Stopping(Mutex<std::sync::Arc<std::sync::atomic::AtomicBool>>);
+
+/// Stops the handler that runs, at its engine call's next look.
+#[tauri::command]
+fn stop_call(stopping: tauri::State<Stopping>) {
+    if let Ok(flag) = stopping.0.lock() {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Runs a handler with its engine calls watched: how far a long one is goes
+/// to the window, and Stop stops it.
+fn watched<T>(stopping: &Stopping, webview: &tauri::WebviewWindow, run: impl FnOnce() -> T) -> T {
+    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    if let Ok(mut current) = stopping.0.lock() {
+        *current = flag.clone();
+    }
+    let told = std::sync::Arc::new(Mutex::new((None::<std::time::Instant>, false)));
+    let (window, shown) = (webview.clone(), told.clone());
+    let progress = std::sync::Arc::new(move |done: i64, total: i64| {
+        let Ok(mut shown) = shown.lock() else { return };
+        let now = std::time::Instant::now();
+        if shown.0.is_none_or(|last| now.duration_since(last).as_millis() >= 100) || done >= total {
+            *shown = (Some(now), true);
+            let _ = window.eval(format!(r#"window.dispatchEvent(new CustomEvent("clarity-progress", {{detail: {{"done":{done},"total":{total}}}}}))"#));
+        }
+    });
+    let watch = clarity_runtime::engine::Watch { progress: Some(progress), stop: flag };
+    let out = clarity_runtime::engine::watching(&watch, run);
+    if told.lock().map(|t| t.1).unwrap_or(false) {
+        let _ = webview.eval(r#"window.dispatchEvent(new CustomEvent("clarity-progress", {detail: null}))"#);
+    }
+    out
+}
+"##;
 
 /// The commands of desktop windows of their own (`in new window`): the Clarity
 /// window each starts with, its data, and the window that opened it.

@@ -83,7 +83,7 @@
   }
 
   function setAuth(i: number, source: DataSource, kind: AuthKind | "") {
-    const auth = kind === "" ? null : { kind, secret: source.auth?.secret ?? "keychain:" + source.name };
+    const auth = kind === "" ? null : { kind, secret: source.auth?.secret ?? "setting:" + source.name };
     saveSource(i, { auth });
   }
 
@@ -172,7 +172,7 @@
     e.preventDefault();
     const name = newName.trim();
     if (!name || !project.settings) return;
-    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [] };
+    const source: DataSource = { name, kind: newKind, url: sourceInfo(newKind)?.urlExample ?? "", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [], paging: null };
     save({ datasources: [...project.settings.datasources, source] });
     newName = "";
   }
@@ -330,7 +330,7 @@
 
       <section>
         <h2>Data sources</h2>
-        <p class="intro">Where the data lives; entities use the first one unless they name another. Secrets stay out of the file: write <code>env:NAME</code> or <code>keychain:NAME</code>.</p>
+        <p class="intro">Where the data lives; entities use the first one unless they name another. Secrets stay out of the file: write <code>env:NAME</code> or <code>setting:name</code>, a secret setting the system's keychain keeps.</p>
         {#if settings.datasources.length > 0}
           <div class="table-wrap">
             <table use:resizableColumns={"clarity.columns.dataSources"}>

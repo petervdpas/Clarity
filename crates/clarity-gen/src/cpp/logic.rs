@@ -1061,7 +1061,7 @@ impl<'a> Emitter<'a> {
                 format!("clarity::json_read<{read}>({text}, {at}, {many}, {}, {{{}}}, {entity}{{}})", string(entity), fields.join(", "))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, from, body, headers, query } => {
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
                     Some(body) => self.value(body),
@@ -1072,6 +1072,7 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Get => "Get",
                     HttpMethod::Post => "Post",
                     HttpMethod::Put => "Put",
+                    HttpMethod::Patch => "Patch",
                     HttpMethod::Delete => "Delete",
                 };
                 if from.is_none() && query.is_empty() {
@@ -1086,6 +1087,25 @@ impl<'a> Emitter<'a> {
                     Some(("basic", s)) => ("Basic", s),
                     _ => ("None", ""),
                 };
+                // Every page, as the source's paging says (DESIGN 5.23).
+                if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
+                    let paging = match p.kind {
+                        clarity_spec::PagingKind::Page => "Page",
+                        clarity_spec::PagingKind::Offset => "Offset",
+                        clarity_spec::PagingKind::Cursor => "Cursor",
+                        clarity_spec::PagingKind::Link => "Link",
+                    };
+                    return format!(
+                        "clarity::http_pages(std::string({}), {url}, {query}, {headers}, clarity::HttpAuth::{kind}, std::string({}), clarity::HttpPaging{{clarity::PagingKind::{paging}, {}, {}, {}, {}, {}}})",
+                        string(base),
+                        string(secret),
+                        string(&p.param),
+                        string(&p.size_param),
+                        p.size,
+                        string(&p.next),
+                        string(&p.items)
+                    );
+                }
                 format!(
                     "clarity::http_call_at(clarity::HttpMethod::{method}, std::string({}), {url}, {query}, {body}, {headers}, clarity::HttpAuth::{kind}, std::string({}))",
                     string(base),

@@ -6,11 +6,14 @@ package clarity
 // runtime gives the same replies (conformance/http.json).
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -57,35 +60,65 @@ func HTTPHost(url string) string {
 	return host
 }
 
-// HTTP calls url with method (GET, POST, PUT or DELETE), sending body with
-// POST and PUT and each of headers, and gives the reply.
+// HTTP calls url with method (GET, POST, PUT, PATCH or DELETE), sending body
+// with POST, PUT and PATCH and each of headers, and gives the reply.
 func HTTP(method, url, body string, headers []Header) HttpReply {
+	reply, _ := httpFetch(method, url, body, headers)
+	return reply
+}
+
+// nextLink is the address a Link header names rel="next": <url>; rel="next".
+func nextLink(header string) string {
+	for _, part := range strings.Split(header, ",") {
+		address, params, found := strings.Cut(part, ";")
+		if !found {
+			continue
+		}
+		for _, p := range strings.Split(params, ";") {
+			p = strings.ReplaceAll(strings.TrimSpace(p), " ", "")
+			if strings.EqualFold(p, `rel="next"`) || strings.EqualFold(p, "rel=next") {
+				return strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(address), "<"), ">")
+			}
+		}
+	}
+	return ""
+}
+
+// httpFetch is a call as HTTP makes it, with the address its Link header
+// names next ("" without one).
+func httpFetch(method, url, body string, headers []Header) (HttpReply, string) {
 	scheme, _, _ := strings.Cut(url, "://")
 	if !strings.Contains(url, "://") || (!strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https")) {
-		return HttpReply{Text: "only http and https addresses are called, not " + url}
+		return HttpReply{Text: "only http and https addresses are called, not " + url}, ""
 	}
 	var sent io.Reader
-	if method == http.MethodPost || method == http.MethodPut {
+	if method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch {
 		sent = strings.NewReader(body)
 	}
 	request, err := http.NewRequest(method, url, sent)
 	if err != nil {
-		return HttpReply{Text: fmt.Sprintf("cannot reach %s: %v", HTTPHost(url), err)}
+		return HttpReply{Text: fmt.Sprintf("cannot reach %s: %v", HTTPHost(url), err)}, ""
 	}
 	for _, h := range headers {
 		request.Header.Add(h.Name, h.Value)
 	}
 	response, err := httpClient.Do(request)
 	if err != nil {
-		return HttpReply{Text: fmt.Sprintf("cannot reach %s: %v", HTTPHost(url), err)}
+		return HttpReply{Text: fmt.Sprintf("cannot reach %s: %v", HTTPHost(url), err)}, ""
 	}
 	defer response.Body.Close()
 	answer, err := io.ReadAll(response.Body)
 	if err != nil {
-		return HttpReply{Text: fmt.Sprintf("cannot read the answer of %s: %v", HTTPHost(url), err)}
+		return HttpReply{Text: fmt.Sprintf("cannot read the answer of %s: %v", HTTPHost(url), err)}, ""
 	}
 	status := int64(response.StatusCode)
-	return HttpReply{Status: status, Ok: status >= 200 && status < 300, Text: strings.ToValidUTF8(string(answer), "�")}
+	next := ""
+	for _, link := range response.Header.Values("Link") {
+		if next = nextLink(link); next != "" {
+			break
+		}
+	}
+	return HttpReply{Status: status, Ok: status >= 200 && status < 300, Text: strings.ToValidUTF8(string(answer), "�")}, next
 }
 
 // HTTPAuth is how a web API data source signs its calls: the project
@@ -128,6 +161,118 @@ func URLPart(text string) string {
 // the query parameters, encoded and in order, and the source's auth, as
 // `http get "/orders" from shop query "status": s` does.
 func HTTPAt(method, base, path string, query []Header, body string, headers []Header, auth HTTPAuth) HttpReply {
+	reply, _ := httpFetchAt(method, base, path, query, body, headers, auth)
+	return reply
+}
+
+// HTTPPaging is how a web API hands out a long list (DESIGN 5.23, paging):
+// the project file's paging line. Kind is "page", "offset", "cursor" or
+// "link"; Items is where a page's items are in its JSON, "" when a page is
+// a list.
+type HTTPPaging struct {
+	Kind      string `json:"kind"`
+	Param     string `json:"param"`
+	SizeParam string `json:"size_param"`
+	Size      int    `json:"size"`
+	Next      string `json:"next"`
+	Items     string `json:"items"`
+}
+
+// HTTPMostPages is how many pages are read at most.
+const HTTPMostPages = 1000
+
+// jsonAt is the JSON at a dotted path of value: meta.next; value itself for "".
+func jsonAt(value json.RawMessage, path string) (json.RawMessage, bool) {
+	if path == "" {
+		return value, true
+	}
+	for _, step := range strings.Split(path, ".") {
+		var object map[string]json.RawMessage
+		if json.Unmarshal(value, &object) != nil {
+			return nil, false
+		}
+		found, ok := object[step]
+		if !ok {
+			return nil, false
+		}
+		value = found
+	}
+	return value, true
+}
+
+// HTTPPages gets path of the web API at base page after page, as paging
+// says, as `http get "/orders" from shop every page` does: one reply whose
+// text is one JSON list of the items of every page (conformance/http.json).
+func HTTPPages(base, path string, query []Header, headers []Header, auth HTTPAuth, paging HTTPPaging) HttpReply {
+	var items []string
+	cursor, link := "", ""
+	for n := 0; n < HTTPMostPages; n++ {
+		sent := append([]Header{}, query...)
+		switch paging.Kind {
+		case "page":
+			sent = append(sent, Header{Name: paging.Param, Value: strconv.Itoa(n + 1)}, Header{Name: paging.SizeParam, Value: strconv.Itoa(paging.Size)})
+		case "offset":
+			sent = append(sent, Header{Name: paging.Param, Value: strconv.Itoa(n * paging.Size)}, Header{Name: paging.SizeParam, Value: strconv.Itoa(paging.Size)})
+		case "cursor":
+			if cursor != "" {
+				sent = append(sent, Header{Name: paging.Param, Value: cursor})
+			}
+		}
+		var reply HttpReply
+		var next string
+		if link != "" {
+			// A next link is a whole address, with its own query.
+			reply, next = httpFetchAt(http.MethodGet, "", link, nil, "", headers, auth)
+		} else {
+			reply, next = httpFetchAt(http.MethodGet, base, path, sent, "", headers, auth)
+		}
+		if !reply.Ok {
+			return reply
+		}
+		var list []json.RawMessage
+		found, ok := jsonAt(json.RawMessage(reply.Text), paging.Items)
+		if !ok || json.Unmarshal(found, &list) != nil || bytes.HasPrefix(bytes.TrimSpace(found), []byte("null")) {
+			place := paging.Items
+			if place == "" {
+				place = "the top"
+			}
+			return HttpReply{Text: fmt.Sprintf("page %d of %s has no list at %s", n+1, path, place)}
+		}
+		for _, item := range list {
+			var compact bytes.Buffer
+			json.Compact(&compact, item)
+			items = append(items, compact.String())
+		}
+		done := false
+		switch paging.Kind {
+		case "page", "offset":
+			done = len(list) < paging.Size
+		case "cursor":
+			cursor = ""
+			if value, ok := jsonAt(json.RawMessage(reply.Text), paging.Next); ok {
+				var text string
+				var number json.Number
+				if json.Unmarshal(value, &text) == nil {
+					cursor = text
+				} else if json.Unmarshal(value, &number) == nil {
+					cursor = number.String()
+				}
+			}
+			done = cursor == ""
+		case "link":
+			link = next
+			done = link == ""
+		}
+		if done {
+			return HttpReply{Status: reply.Status, Ok: true, Text: "[" + strings.Join(items, ",") + "]"}
+		}
+	}
+	return HttpReply{Text: fmt.Sprintf("stopped after %d pages of %s", HTTPMostPages, path)}
+}
+
+// httpFetchAt is a call as HTTPAt makes it, with the address its Link
+// header names next.
+func httpFetchAt(method, base, path string, query []Header, body string, headers []Header, auth HTTPAuth) (HttpReply, string) {
 	url := path
 	if base != "" && !strings.Contains(path, "://") {
 		url = strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
@@ -148,5 +293,5 @@ func HTTPAt(method, base, path string, query []Header, body string, headers []He
 	case "basic":
 		all = append(all, Header{Name: "Authorization", Value: "Basic " + base64.StdEncoding.EncodeToString([]byte(secretAt(auth.Secret)))})
 	}
-	return HTTP(method, url, body, all)
+	return httpFetch(method, url, body, all)
 }

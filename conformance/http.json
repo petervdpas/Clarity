@@ -1,5 +1,5 @@
 {
-  "about": "HTTP calls from code (DESIGN 5.23): every runtime starts the test server below on a free port of 127.0.0.1, makes each call against it, and gives the reply the case names. A path is called on that server; a url is called as it is. The reply's status is 0 when no answer came, ok is true for a status from 200 to 299, and text is what the server answered, or why no answer came. A case with text_starts checks only the start of the text, which goes on with the system's own reason. A case with base calls its path at that address, as `http get \"/orders\" from shop` calls the source's (the server's own address stands for it, written {server}); its query parameters are added in order, each name and value percent-encoded (only letters, digits and - . _ ~ stay as they are); its auth is the source's: bearer sends `Authorization: Bearer <secret>`, api-key `X-Api-Key: <secret>`, basic `Authorization: Basic <base64 of the secret>`, where the secret is read from the environment variable env names. The test sets env before the calls.",
+  "about": "HTTP calls from code (DESIGN 5.23): every runtime starts the test server below on a free port of 127.0.0.1, makes each call against it, and gives the reply the case names. A path is called on that server; a url is called as it is. The reply's status is 0 when no answer came, ok is true for a status from 200 to 299, and text is what the server answered, or why no answer came. A case with text_starts checks only the start of the text, which goes on with the system's own reason. A case with base calls its path at that address, as `http get \"/orders\" from shop` calls the source's (the server's own address stands for it, written {server}); its query parameters are added in order, each name and value percent-encoded (only letters, digits and - . _ ~ stay as they are); its auth is the source's: bearer sends `Authorization: Bearer <secret>`, api-key `X-Api-Key: <secret>`, basic `Authorization: Basic <base64 of the secret>`, where the secret is read from the environment variable env names. The test sets env before the calls. A case with paging reads every page (DESIGN 5.23, paging): kind page sends param = 1, 2, ... and size_param = size; offset sends param = 0, size, 2*size, ... and size_param = size; cursor sends no param first, then param = the text at next in the page before (a number as its digits); link calls the address the Link header names rel=\"next\". Items are a page's JSON list, or the list at items (a path as read's at). It stops at a page with fewer items than size (page, offset), without a next cursor (missing, null or \"\") or without a next link, and after 1000 pages: status 0, ok false, text \"stopped after 1000 pages of <path>\". The reply's text is one JSON list of every item, in order, written compactly; its status is the last page's. A page that is not ok is the reply. A page without a list where items says gives status 0, ok false and \"page N of <path> has no list at <items>\" (\"at the top\" without items).",
   "server": {
     "about": "Answers with status and text as each route says, as text/plain in UTF-8.",
     "routes": [
@@ -32,6 +32,36 @@
         "path": "/auth",
         "status": 200,
         "text": "the request's Authorization header, or its X-Api-Key header when it has no Authorization"
+      },
+      {
+        "path": "/paged",
+        "status": 200,
+        "text": "the numbers from (page - 1) * size + 1 up to page * size and at most 5, as a JSON list, for the query's page and size"
+      },
+      {
+        "path": "/offset",
+        "status": 200,
+        "text": "{\"data\": the numbers from offset + 1 up to offset + limit and at most 5}, for the query's offset and limit"
+      },
+      {
+        "path": "/cursor",
+        "status": 200,
+        "text": "{\"data\": [after + 1, after + 2], at most 5, \"meta\": {\"next\": the text of after + 2, or null when that reaches 5}}, after being the query's after, 0 without it"
+      },
+      {
+        "path": "/linked",
+        "status": 200,
+        "text": "the numbers (page - 1) * 2 + 1 and the next, at most 5, as a JSON list, for the query's page (1 without it); while more follow, the header Link: <{server}/linked?page=page + 1>; rel=\"next\""
+      },
+      {
+        "path": "/broken",
+        "status": 200,
+        "text": "[1,2] for the query's page 1; for any other page status 500 and the text down"
+      },
+      {
+        "path": "/endless",
+        "status": 200,
+        "text": "[the query's page], as a JSON list, for every page"
       }
     ]
   },
@@ -69,6 +99,15 @@
       "status": 200,
       "ok": true,
       "text": "PUT twice"
+    },
+    {
+      "name": "patch sends its body",
+      "method": "PATCH",
+      "path": "/echo",
+      "body": "half",
+      "status": 200,
+      "ok": true,
+      "text": "PATCH half"
     },
     {
       "name": "delete sends none",
@@ -190,6 +229,125 @@
       "status": 200,
       "ok": true,
       "text": "Basic czNjcmV0OnBhJCQ="
+    },
+    {
+      "name": "every page by number",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/paged",
+      "paging": {
+        "kind": "page",
+        "param": "page",
+        "size_param": "size",
+        "size": 2,
+        "next": "",
+        "items": ""
+      },
+      "status": 200,
+      "ok": true,
+      "text": "[1,2,3,4,5]"
+    },
+    {
+      "name": "every page by offset, its items inside",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/offset",
+      "paging": {
+        "kind": "offset",
+        "param": "offset",
+        "size_param": "limit",
+        "size": 2,
+        "next": "",
+        "items": "data"
+      },
+      "status": 200,
+      "ok": true,
+      "text": "[1,2,3,4,5]"
+    },
+    {
+      "name": "every page by cursor",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/cursor",
+      "paging": {
+        "kind": "cursor",
+        "param": "after",
+        "size_param": "",
+        "size": 0,
+        "next": "meta.next",
+        "items": "data"
+      },
+      "status": 200,
+      "ok": true,
+      "text": "[1,2,3,4,5]"
+    },
+    {
+      "name": "every page by link",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/linked",
+      "paging": {
+        "kind": "link",
+        "param": "",
+        "size_param": "",
+        "size": 0,
+        "next": "",
+        "items": ""
+      },
+      "status": 200,
+      "ok": true,
+      "text": "[1,2,3,4,5]"
+    },
+    {
+      "name": "a page that fails is the reply",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/broken",
+      "paging": {
+        "kind": "page",
+        "param": "page",
+        "size_param": "size",
+        "size": 2,
+        "next": "",
+        "items": ""
+      },
+      "status": 500,
+      "ok": false,
+      "text": "down"
+    },
+    {
+      "name": "a page without its list",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/paged",
+      "paging": {
+        "kind": "page",
+        "param": "page",
+        "size_param": "size",
+        "size": 2,
+        "next": "",
+        "items": "data"
+      },
+      "status": 0,
+      "ok": false,
+      "text": "page 1 of /paged has no list at data"
+    },
+    {
+      "name": "at most 1000 pages",
+      "method": "GET",
+      "base": "{server}",
+      "path": "/endless",
+      "paging": {
+        "kind": "page",
+        "param": "page",
+        "size_param": "size",
+        "size": 1,
+        "next": "",
+        "items": ""
+      },
+      "status": 0,
+      "ok": false,
+      "text": "stopped after 1000 pages of /endless"
     }
   ],
   "env": {

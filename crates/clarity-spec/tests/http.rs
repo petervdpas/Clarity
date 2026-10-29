@@ -103,13 +103,18 @@ fn a_data_event_cannot_call_out() {
 }
 
 #[test]
-fn post_and_put_send_a_body_get_and_delete_do_not() {
+fn post_put_and_patch_send_a_body_get_and_delete_do_not() {
     let errs = errors(&with("http put \"https://api.example.com/orders/1\" with \"done\"", "http put \"https://api.example.com/orders/1\""));
     assert!(errs.iter().any(|e| e.contains("http put sends a body: write 'with' and the text")), "{errs:?}");
+    // Patch changes part of a record: it sends what changes.
+    let errs = errors(&with("http put \"https://api.example.com/orders/1\" with \"done\"", "http patch \"https://api.example.com/orders/1\" with \"done\""));
+    assert_eq!(errs, Vec::<String>::new());
+    let errs = errors(&with("http put \"https://api.example.com/orders/1\" with \"done\"", "http patch \"https://api.example.com/orders/1\""));
+    assert!(errs.iter().any(|e| e.contains("http patch sends a body: write 'with' and the text")), "{errs:?}");
     let errs = errors(&with("http get \"https://status.example.com/api/now\"", "http get \"https://status.example.com/api/now\" with \"x\""));
-    assert!(errs.iter().any(|e| e.contains("http get sends no body")), "{errs:?}");
+    assert!(errs.iter().any(|e| e.contains("http get sends no body; post, put and patch do")), "{errs:?}");
     let errs = errors(&with("http delete \"https://api.example.com/orders/1\"", "http fetch \"https://api.example.com/orders/1\""));
-    assert!(errs.iter().any(|e| e.contains("get, post, put or delete")), "{errs:?}");
+    assert!(errs.iter().any(|e| e.contains("get, post, put, patch or delete")), "{errs:?}");
 }
 
 #[test]

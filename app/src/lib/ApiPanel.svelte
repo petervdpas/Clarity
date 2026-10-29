@@ -104,8 +104,8 @@
     <ul class="list">
       {#each shown as o (o.id)}
         <li>
-          <label class:off={!o.callable} title={o.callable ? "" : "Clarity does not call a patch yet"}>
-            <input type="checkbox" disabled={!o.callable} checked={o.picked} onchange={(e) => pickOperation(o.id, e.currentTarget.checked)} />
+          <label>
+            <input type="checkbox" checked={o.picked} onchange={(e) => pickOperation(o.id, e.currentTarget.checked)} />
             <span class="method">{o.method.toUpperCase()}</span>
             <span class="mono">{o.path}</span>
             <span class="mono muted">{o.id}</span>
@@ -171,10 +171,6 @@
     display: flex;
     gap: 8px;
     align-items: baseline;
-  }
-
-  .list label.off {
-    opacity: 0.6;
   }
 
   .method {

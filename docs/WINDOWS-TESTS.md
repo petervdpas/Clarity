@@ -129,3 +129,5 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [x] Upload NuGet 0.53.0: an SVG picture drawn by Skia into a bitmap, so it fits its cell (section 5).
 - [x] Upload NuGet 0.54.0: eight packages now, `Clarity.Runtime.Sqlite` new (SQLite as a package of its own, which a program in a browser does not carry); each theme compiled as a class; a custom part's starter that shows a number.
 - [x] Release the VS Code extension (0.1.16 on the Marketplace; Open VSX has no token): its grammar knows record, tell, beside, engines, const and picture.
+- [ ] Tag crate 0.32.0 and Go runtime v0.35.0, then record the Go sums; upload NuGet 0.55.0: `http patch` and every page of a web API (DESIGN 5.23, paging). Release the VS Code extension 0.1.17 (its grammar knows patch, every page and the paging lines).
+- [ ] Paging on Windows: run `cargo test -p clarity-gen --test http_build -- --ignored` (each stack reads every page of a local server).

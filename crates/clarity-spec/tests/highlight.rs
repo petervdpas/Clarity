@@ -164,3 +164,20 @@ fn the_editor_grammar_is_the_highlighters() {
         assert!(grammar.contains(&format!("|{word}|")) || grammar.contains(&format!("({word}|")) || grammar.contains(&format!("|{word})")), "{word}");
     }
 }
+
+/// Web APIs (DESIGN 5.23): the calls, every page, and the lines under a
+/// web API data source.
+#[test]
+fn web_api_calls_and_their_paging() {
+    let call = "    let reply = http patch \"/orders/1\" from shop with body\n    let all = http get \"/orders\" from shop every page\n";
+    for word in ["http", "patch", "from", "with", "get", "every", "page"] {
+        has(call, word, PieceKind::Keyword);
+    }
+    let lines = "    datasource forms rest \"https://forms.example.com/api\"\n        paging cursor \"after\" next \"meta.next\" items \"data\"\n        openapi \"forms.yaml\"\n        pick schema \"Entry\"\n";
+    for word in ["paging", "cursor", "next", "items", "openapi", "pick", "schema"] {
+        has(lines, word, PieceKind::Keyword);
+    }
+    for word in ["page", "offset", "link"] {
+        has(&format!("        paging {word}\n"), word, PieceKind::Keyword);
+    }
+}

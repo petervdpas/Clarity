@@ -44,8 +44,21 @@ public sealed class HttpTests : IDisposable
             var request = context.Request;
             using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
             var body = reader.ReadToEnd();
+            int Number(string name, int otherwise) => int.TryParse(request.QueryString[name], out var n) ? n : otherwise;
+            // The numbers from `from` up to `to`, and at most 5, as a JSON list.
+            static string Numbers(int from, int to) => "[" + string.Join(",", Enumerable.Range(from, Math.Max(0, Math.Min(to, 5) - from + 1))) + "]";
+            var page = Number("page", 1);
+            if (request.Url!.AbsolutePath == "/linked" && page * 2 < 5)
+                context.Response.AddHeader("Link", $"<{server}/linked?page={page + 1}>; rel=\"next\"");
             var (status, text) = request.Url!.AbsolutePath switch
             {
+                "/paged" => (200, Numbers((page - 1) * Number("size", 5) + 1, page * Number("size", 5))),
+                "/offset" => (200, $"{{\"data\":{Numbers(Number("offset", 0) + 1, Number("offset", 0) + Number("limit", 5))}}}"),
+                "/cursor" => (200, $"{{\"data\":{Numbers(Number("after", 0) + 1, Number("after", 0) + 2)},\"meta\":{{\"next\":{(Number("after", 0) + 2 >= 5 ? "null" : $"\"{Number("after", 0) + 2}\"")}}}}}"),
+                "/linked" => (200, Numbers((page - 1) * 2 + 1, page * 2)),
+                "/broken" when page == 1 => (200, "[1,2]"),
+                "/broken" => (500, "down"),
+                "/endless" => (200, $"[{page}]"),
                 "/hello" => (200, "hello"),
                 "/echo" => (200, $"{request.HttpMethod} {body}"),
                 "/header" => (200, request.Headers["X-Test"] ?? ""),
@@ -76,7 +89,12 @@ public sealed class HttpTests : IDisposable
             var url = c.TryGetProperty("url", out var u) ? u.GetString()! : server + c.GetProperty("path").GetString();
             var headers = c.TryGetProperty("headers", out var h) ? h.EnumerateObject().Select(p => (p.Name, p.Value.GetString()!)).ToArray() : [];
             var body = c.TryGetProperty("body", out var b) ? b.GetString()! : null;
-            var reply = c.TryGetProperty("base", out var at)
+            var query = c.TryGetProperty("query", out var qs) ? qs.EnumerateArray().Select(p => (p[0].GetString()!, p[1].GetString()!)).ToArray() : [];
+            var reply = c.TryGetProperty("paging", out var paging)
+                ? Http.Pages(c.GetProperty("base").GetString()!.Replace("{server}", server), c.GetProperty("path").GetString()!, query, headers, null, null,
+                    new HttpPaging(paging.GetProperty("kind").GetString()!, paging.GetProperty("param").GetString()!, paging.GetProperty("size_param").GetString()!,
+                        paging.GetProperty("size").GetInt32(), paging.GetProperty("next").GetString()!, paging.GetProperty("items").GetString()!))
+                : c.TryGetProperty("base", out var at)
                 ? Http.At(c.GetProperty("method").GetString()!, at.GetString()!.Replace("{server}", server), c.GetProperty("path").GetString()!,
                     c.TryGetProperty("query", out var q) ? q.EnumerateArray().Select(p => (p[0].GetString()!, p[1].GetString()!)).ToArray() : [],
                     body, headers,
@@ -86,6 +104,7 @@ public sealed class HttpTests : IDisposable
             {
                 "POST" => Http.Post(url, body!, headers),
                 "PUT" => Http.Put(url, body!, headers),
+                "PATCH" => Http.Patch(url, body!, headers),
                 "DELETE" => Http.Delete(url, headers),
                 _ => Http.Get(url, headers),
             };

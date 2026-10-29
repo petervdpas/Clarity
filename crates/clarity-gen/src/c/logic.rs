@@ -1678,7 +1678,7 @@ impl<'a> Emitter<'a> {
                 }
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, from, body, headers, query } => {
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = bare(self.value(url, pre));
                 let body = match body {
                     Some(body) => bare(self.value(body, pre)),
@@ -1690,6 +1690,7 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Get => "CLARITY_HTTP_GET",
                     HttpMethod::Post => "CLARITY_HTTP_POST",
                     HttpMethod::Put => "CLARITY_HTTP_PUT",
+                    HttpMethod::Patch => "CLARITY_HTTP_PATCH",
                     HttpMethod::Delete => "CLARITY_HTTP_DELETE",
                 };
                 if from.is_none() && query.is_empty() {
@@ -1703,6 +1704,24 @@ impl<'a> Emitter<'a> {
                     Some(("basic", s)) => ("CLARITY_AUTH_BASIC", string(s)),
                     _ => ("CLARITY_AUTH_NONE", "NULL".to_string()),
                 };
+                // Every page, as the source's paging says (DESIGN 5.23).
+                if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
+                    let paging = match p.kind {
+                        clarity_spec::PagingKind::Page => "CLARITY_PAGING_PAGE",
+                        clarity_spec::PagingKind::Offset => "CLARITY_PAGING_OFFSET",
+                        clarity_spec::PagingKind::Cursor => "CLARITY_PAGING_CURSOR",
+                        clarity_spec::PagingKind::Link => "CLARITY_PAGING_LINK",
+                    };
+                    return format!(
+                        "clarity_http_pages({}, {url}, {query_pairs}, {headers}, {kind}, {secret}, (ClarityHttpPaging){{{paging}, {}, {}, {}, {}, {}}})",
+                        string(base),
+                        string(&p.param),
+                        string(&p.size_param),
+                        p.size,
+                        string(&p.next),
+                        string(&p.items)
+                    );
+                }
                 format!("clarity_http_call_at({method}, {}, {url}, {query_pairs}, {body}, {headers}, {kind}, {secret})", string(base))
             }
             // A function of a library, through its adapter (DESIGN 5.21).

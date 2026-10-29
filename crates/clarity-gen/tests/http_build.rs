@@ -22,6 +22,18 @@ fn files(backend: Backend, server: &str) -> Vec<clarity_gen::OutFile> {
         clarity_spec::SourceRef::web("shop").at(server, Some(("bearer", "env:CALLS_TOKEN"))),
         // Signed with a secret setting, from the system's protected store (DESIGN 5.27).
         clarity_spec::SourceRef::web("vault").at(server, Some(("bearer", "setting:apiToken"))),
+        // Hands out its lists two at a time (DESIGN 5.23, paging).
+        clarity_spec::SourceRef {
+            paging: Some(clarity_spec::Paging {
+                kind: clarity_spec::PagingKind::Page,
+                param: "page".into(),
+                size_param: "size".into(),
+                size: 2,
+                next: String::new(),
+                items: String::new(),
+            }),
+            ..clarity_spec::SourceRef::web("paged").at(server, None)
+        },
     ];
     // Order lives in the database and has its step; Item lives in the web API and needs none.
     let step = "migration \"Orders\"\n    add entity Order\n        number: text(20)\n        total: money\n        lines: integer\n        paid: bool\n        kind: Kind\n        placed: date\n        tags: list<text>\n";
@@ -81,6 +93,13 @@ fn serve() -> String {
             let _ = reader.read_exact(&mut body);
             let (status, text) = match path.as_str() {
                 "/hello" => (200, "hello".to_string()),
+                // The numbers 1 to 5, `size` to a page, as conformance/http.json's /paged.
+                "/paged" => {
+                    let number = |name: &str, otherwise: i64| query.split('&').find_map(|p| p.strip_prefix(&format!("{name}="))).and_then(|v| v.parse().ok()).unwrap_or(otherwise);
+                    let (page, size) = (number("page", 1), number("size", 5));
+                    let shown: Vec<String> = ((page - 1) * size + 1..=(page * size).min(5)).map(|n| n.to_string()).collect();
+                    (200, format!("[{}]", shown.join(",")))
+                }
                 "/echo" => (200, format!("{method} {}", String::from_utf8_lossy(&body))),
                 "/header" => (200, test),
                 "/query" => (200, query.clone()),
@@ -122,6 +141,8 @@ fn the_calls_come_back(program: &Path, dir: &Path, server: &str) {
     assert_eq!(printed(program, dir, &["send", &format!("{server}/echo"), "done"]), "200");
     assert_eq!(printed(program, dir, &["replace", &format!("{server}/echo"), "twice"]), "PUT twice");
     assert_eq!(printed(program, dir, &["remove", &format!("{server}/echo")]), "DELETE");
+    assert_eq!(printed(program, dir, &["amend", &format!("{server}/echo"), "half"]), "PATCH half");
+    assert_eq!(printed(program, dir, &["numbers"]), "[1,2,3,4,5]");
     let refused = printed(program, dir, &["fetch", "http://127.0.0.1:1/"]);
     assert!(refused.starts_with("0 no cannot reach 127.0.0.1: "), "{refused}");
     // JSON (DESIGN 5.23): a service's list read into records, a record sent as Clarity's JSON.

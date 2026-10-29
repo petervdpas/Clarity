@@ -14,7 +14,7 @@ project Shop
 
     // The payment provider.
     datasource payments rest "https://api.example.com/v2"
-        auth bearer "keychain:payments"
+        auth bearer "setting:payments"
 "#;
 
 fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
@@ -28,6 +28,7 @@ fn source(name: &str, kind: SourceKind, url: &str) -> DataSource {
         openapi: None,
         picks: Vec::new(),
         pick_schemas: Vec::new(),
+        paging: None,
     }
 }
 
@@ -45,7 +46,7 @@ fn shop() -> Settings {
             DataSource {
                 auth: Some(Auth {
                     kind: AuthKind::Bearer,
-                    secret: "keychain:payments".into(),
+                    secret: "setting:payments".into(),
                 }),
                 ..source("payments", SourceKind::Rest, "https://api.example.com/v2")
             },
@@ -207,7 +208,7 @@ fn secrets_stay_out_of_the_project_file() {
     let problems = problems_of(|s| s.datasources[0].url = "postgres://shop:hunter2@localhost/shop".into());
     assert_eq!(
         problems,
-        ["data source 'main': the connection contains a password; put it in an environment variable (env:NAME), the keychain (keychain:NAME) or a secret setting (setting:name)"]
+        ["data source 'main': the connection contains a password; put it in an environment variable (env:NAME) or a secret setting (setting:name), which the system's keychain keeps"]
     );
     let problems = problems_of(|s| s.datasources[0].url = "Server=db;Database=shop;Password=hunter2".into());
     assert_eq!(problems.len(), 1, "{problems:?}");
@@ -216,8 +217,18 @@ fn secrets_stay_out_of_the_project_file() {
     let problems = problems_of(|s| s.datasources[1].auth.as_mut().unwrap().secret = "abc123".into());
     assert_eq!(
         problems,
-        ["data source 'payments': the secret must be a reference (env:NAME, keychain:NAME or setting:name), not the secret itself"]
+        ["data source 'payments': the secret must be a reference (env:NAME or setting:name), not the secret itself"]
     );
+}
+
+/// The system's keychain is reached through a secret setting (DESIGN 5.27),
+/// which the person keeps; `keychain:` is no way of its own.
+#[test]
+fn a_keychain_reference_is_a_secret_setting() {
+    let problems = problems_of(|s| s.datasources[1].auth.as_mut().unwrap().secret = "keychain:payments".into());
+    assert_eq!(problems, ["data source 'payments': the keychain is reached through a secret setting: write setting:payments and add payments: secret to the settings"]);
+    let problems = problems_of(|s| s.datasources[0].url = "keychain:shopDb".into());
+    assert_eq!(problems, ["data source 'main': the keychain is reached through a secret setting: write setting:shopDb and add shopDb: secret to the settings"]);
 }
 
 #[test]
@@ -571,7 +582,7 @@ fn a_web_api_signs_with_a_secret_setting() {
 fn a_database_connects_with_a_secret_setting() {
     assert!(problems_of(|s| s.datasources[0].url = "setting:shopDb".into()).is_empty());
     let problems = problems_of(|s| s.datasources[0].url = "setting:".into());
-    assert_eq!(problems, ["data source 'main': the connection names no variable, keychain entry or setting after its prefix"]);
+    assert_eq!(problems, ["data source 'main': the connection names no variable or setting after its prefix"]);
     let problems = problems_of(|s| {
         s.datasources[0].kind = SourceKind::Sqlite;
         s.datasources[0].url = "setting:shopDb".into();
@@ -652,4 +663,43 @@ fn the_project_says_which_port_it_serves_on() {
     assert!(!off.contains("port"), "{off}");
     assert_eq!(parse(&format!("{SHOP}    port 0\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
     assert_eq!(parse(&format!("{SHOP}    port web\n")).unwrap_err(), "line 11: write 'port' and a number from 1 to 65535: where the web application listens");
+}
+
+/// How a web API hands out a long list, said once under its data source
+/// (DESIGN 5.23, paging): each kind reads and writes back as written.
+#[test]
+fn a_web_api_says_how_it_pages() {
+    use clarity_project::{Paging, PagingKind};
+    let file = |paging: &str| format!("project Forms\n    stack go web desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        {paging}\n");
+    let cases = [
+        ("paging page \"page\" size \"per_page\" 100 items \"data\"", Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: "data".into() }),
+        ("paging offset \"offset\" size \"limit\" 50", Paging { kind: PagingKind::Offset, param: "offset".into(), size_param: "limit".into(), size: 50, next: String::new(), items: String::new() }),
+        ("paging cursor \"after\" next \"meta.next\" items \"data\"", Paging { kind: PagingKind::Cursor, param: "after".into(), size_param: String::new(), size: 0, next: "meta.next".into(), items: "data".into() }),
+        ("paging link", Paging { kind: PagingKind::Link, param: String::new(), size_param: String::new(), size: 0, next: String::new(), items: String::new() }),
+    ];
+    for (line, paging) in cases {
+        let text = file(line);
+        let settings = parse(&text).unwrap_or_else(|e| panic!("{line}: {e}"));
+        assert_eq!(settings.datasources[0].paging.as_ref(), Some(&paging), "{line}");
+        assert!(validate(&settings).is_empty(), "{line}: {:?}", validate(&settings));
+        assert_eq!(write(Some(&text), &settings).unwrap(), text, "{line}");
+        assert_eq!(write(None, &settings).unwrap().lines().last().unwrap().trim(), line, "{line}");
+    }
+    // Wrong lines say what to write.
+    for (line, problem) in [
+        ("paging pages", "line 4: the paging kinds are page, offset, cursor and link, not 'pages'"),
+        ("paging page \"page\"", "line 4: write paging page \"page\" size \"per_page\" 100"),
+        ("paging page \"page\" size \"per_page\" 0", "line 4: write paging page \"page\" size \"per_page\" 100"),
+        ("paging cursor \"after\"", "line 4: write paging cursor \"after\" next \"meta.next\""),
+        ("paging link items", "line 4: write items and where a page's items are, like: items \"data\""),
+    ] {
+        assert_eq!(parse(&file(line)).unwrap_err(), problem, "{line}");
+    }
+    // Written under the auth line, before the description and its picks.
+    let text = "project Forms\n    stack go web desktop\n    datasource forms rest \"https://forms.example.com/api\"\n        auth bearer \"env:FORMS_TOKEN\"\n        paging link\n        openapi \"forms.yaml\"\n        pick \"listForms\"\n";
+    let settings = parse(text).unwrap();
+    assert_eq!(write(None, &settings).unwrap(), text.replace("desktop\n", "desktop\n    output \"out\"\n"));
+    // Only a web API pages.
+    let settings = parse("project Shop\n    stack go web desktop\n    datasource main sqlite \"data/shop.db\"\n        paging link\n").unwrap();
+    assert_eq!(validate(&settings), ["data source 'main': only a web API pages"]);
 }

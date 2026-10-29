@@ -51,10 +51,7 @@ fn databases(project: &Project, settings: &Settings) -> Result<Databases, Vec<St
         // A web API keeps its own records (DESIGN 5.23): its entities are not stored.
         let Some(sql) = Sql::of(source.kind) else { continue };
         if source.url.starts_with("keychain:") {
-            return Err(vec![format!(
-                "data source '{}': a generated application reads its connection from 'env:NAME' for now, not from the keychain",
-                source.name
-            )]);
+            return Err(vec![format!("data source '{}': {}", source.name, clarity_project::keychain_problem(&source.url))]);
         }
         databases.push((source.name.clone(), sql, source.url.clone()));
     }
@@ -987,8 +984,21 @@ pub(crate) fn web_source<'p>(project: &'p Project, name: &str) -> Option<(&'p st
     Some((source.address.as_str(), source.auth.as_ref().map(|(kind, secret)| (kind.as_str(), secret.as_str()))))
 }
 
-/// Why a generated application cannot sign the calls of its web API sources:
-/// it reads a secret from `env:NAME`, not yet from the keychain.
+/// How a web API data source pages, which `every page` follows (DESIGN 5.23).
+pub(crate) fn web_paging<'p>(project: &'p Project, name: &str) -> Option<&'p clarity_spec::Paging> {
+    project.sources.iter().find(|s| s.name == name && !s.sql)?.paging.as_ref()
+}
+
+/// The word of a paging kind as the runtimes name it: `page`, `offset`, `cursor`, `link`.
+pub(crate) fn paging_word(kind: clarity_spec::PagingKind) -> &'static str {
+    match kind {
+        clarity_spec::PagingKind::Page => "page",
+        clarity_spec::PagingKind::Offset => "offset",
+        clarity_spec::PagingKind::Cursor => "cursor",
+        clarity_spec::PagingKind::Link => "link",
+    }
+}
+
 /// A custom part drawn by a native library, a crate or a Go package draws in
 /// a native window of the desktop (DESIGN 6.5), which a program served to a
 /// browser alone has not. A .NET part is a control of the page, as any.
@@ -1008,12 +1018,14 @@ fn check_parts_in_browser(project: &Project, settings: &Settings) -> Result<(), 
     if found.is_empty() { Ok(()) } else { Err(found) }
 }
 
+/// Why a generated application cannot sign the calls of its web API sources:
+/// a secret named as a keychain entry, which is reached through a setting.
 fn check_web_secrets(project: &Project) -> Result<(), Vec<String>> {
     let found: Vec<String> = project
         .sources
         .iter()
-        .filter(|s| s.auth.as_ref().is_some_and(|(_, secret)| secret.starts_with("keychain:")))
-        .map(|s| format!("data source '{}': a generated application reads its secret from 'env:NAME' for now, not from the keychain", s.name))
+        .filter_map(|s| s.auth.as_ref().filter(|(_, secret)| secret.starts_with("keychain:")).map(|(_, secret)| (s, secret)))
+        .map(|(s, secret)| format!("data source '{}': {}", s.name, clarity_project::keychain_problem(secret)))
         .collect();
     if found.is_empty() { Ok(()) } else { Err(found) }
 }

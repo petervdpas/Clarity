@@ -63,6 +63,25 @@ static void http_test_header(const char* request, const char* name, char* value,
     }
 }
 
+/// The server's own address, for the links it hands out.
+static char http_test_address[64];
+
+/// The number query parameter `name` holds in `query`, else `otherwise`.
+static int http_test_number(const char* query, const char* name, int otherwise) {
+    size_t length = strlen(name);
+    for (const char* at = query; at && *at; at = strchr(at, '&') ? strchr(at, '&') + 1 : NULL) {
+        if (strncmp(at, name, length) == 0 && at[length] == '=') return atoi(at + length + 1);
+    }
+    return otherwise;
+}
+
+/// The numbers from `from` up to `to`, and at most 5, as a JSON list, into `out`.
+static void http_test_numbers(int from, int to, char* out, size_t room) {
+    size_t used = (size_t)snprintf(out, room, "[");
+    for (int n = from; n <= (to < 5 ? to : 5); n++) used += (size_t)snprintf(out + used, room - used, n == from ? "%d" : ",%d", n);
+    snprintf(out + used, room - used, "]");
+}
+
 static void http_test_answer(http_test_socket client) {
     static char request[65536];
     size_t got = http_test_read(client, request, sizeof request);
@@ -78,8 +97,37 @@ static void http_test_answer(http_test_socket client) {
     const char* end = strstr(request, "\r\n\r\n");
     const char* body = end ? end + 4 : "";
     static char text[65536];
+    char list[256];
+    char link[256] = {0};
     int status = 200;
-    if (strcmp(path, "/hello") == 0) {
+    int page = http_test_number(query, "page", 1);
+    if (strcmp(path, "/paged") == 0) {
+        int size = http_test_number(query, "size", 5);
+        http_test_numbers((page - 1) * size + 1, page * size, text, sizeof text);
+    } else if (strcmp(path, "/offset") == 0) {
+        int offset = http_test_number(query, "offset", 0), limit = http_test_number(query, "limit", 5);
+        http_test_numbers(offset + 1, offset + limit, list, sizeof list);
+        snprintf(text, sizeof text, "{\"data\":%s}", list);
+    } else if (strcmp(path, "/cursor") == 0) {
+        int after = http_test_number(query, "after", 0);
+        char next[32];
+        if (after + 2 >= 5) snprintf(next, sizeof next, "null");
+        else snprintf(next, sizeof next, "\"%d\"", after + 2);
+        http_test_numbers(after + 1, after + 2, list, sizeof list);
+        snprintf(text, sizeof text, "{\"data\":%s,\"meta\":{\"next\":%s}}", list, next);
+    } else if (strcmp(path, "/linked") == 0) {
+        if (page * 2 < 5) snprintf(link, sizeof link, "Link: <%s/linked?page=%d>; rel=\"next\"\r\n", http_test_address, page + 1);
+        http_test_numbers((page - 1) * 2 + 1, page * 2, text, sizeof text);
+    } else if (strcmp(path, "/broken") == 0) {
+        if (page == 1) {
+            snprintf(text, sizeof text, "[1,2]");
+        } else {
+            status = 500;
+            snprintf(text, sizeof text, "down");
+        }
+    } else if (strcmp(path, "/endless") == 0) {
+        snprintf(text, sizeof text, "[%d]", page);
+    } else if (strcmp(path, "/hello") == 0) {
         snprintf(text, sizeof text, "hello");
     } else if (strcmp(path, "/echo") == 0) {
         snprintf(text, sizeof text, "%s %s", method, body);
@@ -95,8 +143,9 @@ static void http_test_answer(http_test_socket client) {
         snprintf(text, sizeof text, "no such page");
     }
     static char reply[70000];
-    int length = snprintf(reply, sizeof reply, "HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
-                          status, status == 200 ? "OK" : "Not Found", strlen(text), text);
+    const char* reason = status == 200 ? "OK" : status == 500 ? "Internal Server Error" : "Not Found";
+    int length = snprintf(reply, sizeof reply, "HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\n%sContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+                          status, reason, link, strlen(text), text);
     send(client, reply, length, 0);
 }
 
@@ -121,7 +170,7 @@ static void* http_test_serve(void* listening) {
 /// Starts the server; gives its address, as `http://127.0.0.1:port`.
 static const char* http_test_start(void) {
     static http_test_socket server;
-    static char address[64];
+    char* address = http_test_address;
 #ifdef _WIN32
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -136,7 +185,7 @@ static const char* http_test_start(void) {
     listen(server, 8);
     socklen_t size = sizeof at;
     getsockname(server, (struct sockaddr*)&at, &size);
-    snprintf(address, sizeof address, "http://127.0.0.1:%d", ntohs(at.sin_port));
+    snprintf(address, sizeof http_test_address, "http://127.0.0.1:%d", ntohs(at.sin_port));
 #ifdef _WIN32
     CreateThread(NULL, 0, http_test_serve, &server, 0, NULL);
 #else

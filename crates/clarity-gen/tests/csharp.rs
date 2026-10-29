@@ -344,6 +344,7 @@ fn an_external_source_keeps_its_names_and_is_never_migrated() {
         openapi: None,
         picks: Vec::new(),
         pick_schemas: Vec::new(),
+        paging: None,
     });
     let files = generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"));
     has(file(&files, "Program.cs"), "(\"erp\", Dialect.Mssql, \"env:ERP_DATABASE\")");

@@ -392,7 +392,7 @@ fn each_data_source_gets_its_own_database() {
     );
     assert!(project.diagnostics.iter().all(|d| d.severity == clarity_spec::Severity::Warning), "{:#?}", project.diagnostics);
     let mut settings = shop();
-    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new() });
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new(), paging: None });
     // Without steps yet, generating is refused for both.
     assert_eq!(generate(&project, &settings).unwrap_err().len(), 2);
 
@@ -428,6 +428,7 @@ fn an_external_source_is_opened_but_never_migrated() {
         openapi: None,
         picks: Vec::new(),
         pick_schemas: Vec::new(),
+        paging: None,
     });
     let files = generate(&project, &settings).unwrap();
     let main = &program(&files);
@@ -458,7 +459,7 @@ fn a_taken_over_database_keeps_its_names() {
     );
     assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
     let mut settings = shop();
-    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new() });
+    settings.datasources.push(DataSource { name: "erp".into(), kind: SourceKind::Sqlite, url: "data/erp.db".into(), auth: None, external: false, readonly: false, openapi: None, picks: Vec::new(), pick_schemas: Vec::new(), paging: None });
     let files = generate(&project, &settings).unwrap();
     let schema = file(&files, "src/schema.rs");
     // The baseline creates only what is missing, under the old names.

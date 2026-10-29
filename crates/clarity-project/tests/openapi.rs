@@ -69,6 +69,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Template" }
+    patch:
+      operationId: renameTemplate
+      parameters:
+        - { name: templateId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Template" }
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Template" }
     delete:
       operationId: deleteTemplate
       parameters:
@@ -84,6 +98,18 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+  /entry-pages:
+    get:
+      operationId: listEntryPages
+      parameters:
+        - { name: after, in: query, schema: { type: string } }
+        - { name: template, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: A page of entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryPage" }
 components:
   schemas:
     Template:
@@ -105,6 +131,11 @@ components:
         id: { type: integer }
         template: { type: integer }
         filledOn: { type: string, format: date }
+    EntryPage:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+        next: { type: string }
     User:
       type: object
       properties:
@@ -177,9 +208,9 @@ fn a_description_reads_alike_from_yaml_and_json() {
     let yaml = openapi::read(FORMS).unwrap();
     assert_eq!((yaml.title.as_str(), yaml.version.as_str()), ("Formidable", "2.1.0"));
     let ids: Vec<&str> = yaml.operations.iter().map(|o| o.id.as_str()).collect();
-    assert_eq!(ids, ["listTemplates", "createTemplate", "getTemplate", "deleteTemplate", "listEntries"]);
+    assert_eq!(ids, ["listTemplates", "createTemplate", "getTemplate", "renameTemplate", "deleteTemplate", "listEntries", "listEntryPages"]);
     let names: Vec<&str> = yaml.schemas.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["Template", "Entry", "User", "Section"]);
+    assert_eq!(names, ["Template", "Entry", "EntryPage", "User", "Section"]);
     // The same description written as JSON, in the same order.
     let json = openapi::json_of(FORMS).unwrap();
     assert!(serde_json::from_str::<serde_json::Value>(&json).is_ok(), "{json}");
@@ -189,7 +220,7 @@ fn a_description_reads_alike_from_yaml_and_json() {
 #[test]
 fn the_module_holds_what_the_picks_need() {
     let description = openapi::read(FORMS).unwrap();
-    let written = openapi::module("forms", "forms.yaml", &description, &["listTemplates".into(), "getTemplate".into(), "createTemplate".into()], &[]);
+    let written = openapi::module("forms", "forms.yaml", &description, &["listTemplates".into(), "getTemplate".into(), "createTemplate".into()], &[], None);
     assert!(written.warnings.is_empty(), "{:?}", written.warnings);
     let text = &written.text;
     // Only the schemas the picked operations take and give, and those they hold.
@@ -295,4 +326,68 @@ fn the_picking_lists_the_description() {
     assert_eq!(clarity_project::add_api_file(&file, &elsewhere).unwrap(), "other.json");
     assert!(file.with_extension("").join("apis/other.json").is_file());
     assert!(clarity_project::add_api_file(&file, &file).unwrap_err().contains("no OpenAPI"));
+}
+
+/// A patch changes part of a record: picked as any operation, it sends its
+/// body (DESIGN 5.23).
+#[test]
+fn a_patch_is_picked_as_any_operation() {
+    let description = openapi::read(FORMS).unwrap();
+    let written = openapi::module("forms", "forms.yaml", &description, &["renameTemplate".into()], &[], None);
+    assert!(written.warnings.is_empty(), "{:?}", written.warnings);
+    for line in [
+        "action rename_template(template_id: integer, template: Template) -> Template",
+        "    let reply = http patch \"/templates/{template_id}\" from forms with json of template header \"Content-Type\": \"application/json\"",
+    ] {
+        assert!(written.text.contains(line), "no {line:?} in\n{}", written.text);
+    }
+}
+
+/// On a source that pages, a picked get that lists reads every page, and the
+/// parameters paging sends are not the action's (DESIGN 5.23, paging).
+#[test]
+fn a_list_on_a_source_that_pages_reads_every_page() {
+    use clarity_project::{Paging, PagingKind};
+    let description = openapi::read(FORMS).unwrap();
+    // A page is a list, numbered, its size in `limit`.
+    let numbered = Paging { kind: PagingKind::Page, param: "page".into(), size_param: "limit".into(), size: 100, next: String::new(), items: String::new() };
+    let written = openapi::module("forms", "forms.yaml", &description, &["listTemplates".into(), "getTemplate".into()], &[], Some(&numbered));
+    assert!(written.warnings.is_empty(), "{:?}", written.warnings);
+    for line in [
+        "action list_templates(status: text, sort: text = \"name\", archived: bool = false) -> list<Template>",
+        "    let reply = http get \"/templates\" from forms every page query \"status\": status query \"sort\": sort when sort != \"name\" query \"archived\": \"true\" when archived",
+        "    return read list<Template> from json reply.text",
+        // One record is no list: read as it is.
+        "    let reply = http get \"/templates/{template_id}\" from forms\n",
+    ] {
+        assert!(written.text.contains(line), "no {line:?} in\n{}", written.text);
+    }
+    // A page holds its items under `data`, with the next cursor beside them.
+    let cursor = Paging { kind: PagingKind::Cursor, param: "after".into(), size_param: String::new(), size: 0, next: "next".into(), items: "data".into() };
+    let written = openapi::module("forms", "forms.yaml", &description, &["listEntryPages".into()], &[], Some(&cursor));
+    for line in [
+        "action list_entry_pages(template: integer = 0) -> list<Entry>",
+        "    let reply = http get \"/entry-pages\" from forms every page query \"template\": \"{template}\" when template != 0",
+        "    return read list<Entry> from json reply.text",
+        "entity Entry\n",
+    ] {
+        assert!(written.text.contains(line), "no {line:?} in\n{}", written.text);
+    }
+    // The page itself is no entity: its items are.
+    assert!(!written.text.contains("entity EntryPage"), "{}", written.text);
+}
+
+/// A source that pages, its picked list written to read every page, checks
+/// clean as the project loads it (DESIGN 5.23, paging).
+#[test]
+fn a_paged_module_checks_clean() {
+    let paged = PROJECT.replace("        pick \"listTemplates\"", "        paging page \"page\" size \"limit\" 100\n        pick \"listTemplates\"");
+    let file = project("paged", FORMS, &paged);
+    let warnings = clarity_project::refresh_apis(&file).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let written = std::fs::read_to_string(file.with_extension("").join("apis/forms.clarity")).unwrap();
+    assert!(written.contains("from forms every page"), "{written}");
+    let project = clarity_project::load_modules(&clarity_project::module_dir(&file)).unwrap();
+    let errors: Vec<&str> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| d.message.as_str()).collect();
+    assert!(errors.is_empty(), "{errors:?}\n{written}");
 }

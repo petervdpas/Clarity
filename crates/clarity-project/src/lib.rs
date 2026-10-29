@@ -14,7 +14,9 @@ use clarity_spec::widgets::is_identifier;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use file::{parse, write};
+pub use file::{paging_line, parse, write};
+/// How a web API pages lives with the data sources the checker knows.
+pub use clarity_spec::{Paging, PagingKind};
 pub use folders::{out_dir_in, Folders};
 
 /// The extension of project files, the same as module files.
@@ -94,8 +96,8 @@ impl Stack {
 #[ts(export)]
 pub struct Auth {
     pub kind: AuthKind,
-    /// Where the secret is kept: `env:NAME`, `keychain:NAME`, or `setting:name`,
-    /// a secret setting of the person (DESIGN 5.27).
+    /// Where the secret is kept: `env:NAME`, or `setting:name`, a secret
+    /// setting of the person, which the system's keychain keeps (DESIGN 5.27).
     pub secret: String,
 }
 
@@ -136,6 +138,9 @@ pub struct DataSource {
     /// Schemas the project uses beside those its operations need.
     #[serde(default)]
     pub pick_schemas: Vec<String>,
+    /// How a web API hands out a long list, a page at a time.
+    #[serde(default)]
+    pub paging: Option<Paging>,
 }
 
 /// The settings of a project, as the Project tab shows them. The first data
@@ -318,6 +323,7 @@ pub fn starter(name: &str, module: &str) -> Settings {
             openapi: None,
             picks: Vec::new(),
             pick_schemas: Vec::new(),
+            paging: None,
         }],
         language: None,
         currency: None,
@@ -495,9 +501,19 @@ pub fn validate(settings: &Settings) -> Vec<String> {
     problems
 }
 
+/// The prefix of a keychain entry named on its own, which Clarity does not
+/// read: the keychain is reached through a secret setting (DESIGN 5.27).
+const KEYCHAIN: &str = "keychain:";
+
+/// Why `keychain:NAME` is refused, and what to write instead.
+pub fn keychain_problem(reference: &str) -> String {
+    let name = reference.strip_prefix(KEYCHAIN).unwrap_or(reference).trim();
+    format!("the keychain is reached through a secret setting: write setting:{name} and add {name}: secret to the settings")
+}
+
 fn is_reference(text: &str) -> bool {
     // setting:name is a secret setting of the person (DESIGN 5.27).
-    ["env:", "keychain:", "setting:"]
+    ["env:", "setting:"]
         .iter()
         .any(|prefix| text.strip_prefix(prefix).is_some_and(|rest| !rest.trim().is_empty()))
 }
@@ -525,6 +541,9 @@ fn source_problem(source: &DataSource) -> Option<String> {
     if source.auth.is_some() && source.kind != SourceKind::Rest {
         return Some("only web API sources have auth".to_string());
     }
+    if source.paging.is_some() && source.kind != SourceKind::Rest {
+        return Some("only a web API pages".to_string());
+    }
     match source.kind {
         SourceKind::Sqlite if is_reference(url) || url.contains("://") => {
             Some("a SQLite source is a file path, like data/shop.db".to_string())
@@ -532,16 +551,18 @@ fn source_problem(source: &DataSource) -> Option<String> {
         SourceKind::Rest if !(url.starts_with("http://") || url.starts_with("https://")) => {
             Some("the base URL must start with http:// or https://".to_string())
         }
-        _ if ["env:", "keychain:", "setting:"].iter().any(|prefix| url.strip_prefix(prefix).is_some_and(|rest| rest.trim().is_empty())) => {
-            Some("the connection names no variable, keychain entry or setting after its prefix".to_string())
+        _ if url.starts_with(KEYCHAIN) => Some(keychain_problem(url)),
+        _ if ["env:", "setting:"].iter().any(|prefix| url.strip_prefix(prefix).is_some_and(|rest| rest.trim().is_empty())) => {
+            Some("the connection names no variable or setting after its prefix".to_string())
         }
         _ if has_password(url) => Some(
-            "the connection contains a password; put it in an environment variable (env:NAME), the keychain (keychain:NAME) or a secret setting (setting:name)"
+            "the connection contains a password; put it in an environment variable (env:NAME) or a secret setting (setting:name), which the system's keychain keeps"
                 .to_string(),
         ),
         _ => match &source.auth {
+            Some(auth) if auth.secret.trim().starts_with(KEYCHAIN) => Some(keychain_problem(auth.secret.trim())),
             Some(auth) if !is_reference(auth.secret.trim()) => Some(
-                "the secret must be a reference (env:NAME, keychain:NAME or setting:name), not the secret itself".to_string(),
+                "the secret must be a reference (env:NAME or setting:name), not the secret itself".to_string(),
             ),
             _ => None,
         },
@@ -662,7 +683,10 @@ pub fn source_refs(settings: &Settings) -> Vec<clarity_spec::SourceRef> {
         .datasources
         .iter()
         .map(|s| match s.kind {
-            SourceKind::Rest => clarity_spec::SourceRef::web(&s.name).at(&s.url, s.auth.as_ref().map(|a| (auth_word(a.kind), a.secret.as_str()))),
+            SourceKind::Rest => clarity_spec::SourceRef {
+                paging: s.paging.clone(),
+                ..clarity_spec::SourceRef::web(&s.name).at(&s.url, s.auth.as_ref().map(|a| (auth_word(a.kind), a.secret.as_str())))
+            },
             _ => clarity_spec::SourceRef {
                 external: s.external,
                 readonly: s.readonly,
@@ -1049,7 +1073,7 @@ pub fn refresh_apis(project_file: &Path) -> Result<Vec<String>, String> {
                 continue;
             }
         };
-        let written = openapi::module(&source.name, file, &description, &source.picks, &source.pick_schemas);
+        let written = openapi::module(&source.name, file, &description, &source.picks, &source.pick_schemas, source.paging.as_ref());
         warnings.extend(written.warnings);
         let target = apis.join(format!("{}.{}", source.name, clarity_spec::SPEC_EXTENSION));
         // Its labels and messages are read by people: keys, with their texts in
@@ -1080,8 +1104,6 @@ pub struct ApiOperation {
     pub summary: Option<String>,
     /// The project file picks it.
     pub picked: bool,
-    /// Clarity calls it: not a patch.
-    pub callable: bool,
 }
 
 /// A schema of a web API's description, as the picking shows it.
@@ -1127,10 +1149,9 @@ pub fn api_listing(project_file: &Path, source: &str) -> Result<ApiListing, Stri
             path: o.path.clone(),
             summary: o.summary.clone(),
             picked: found.picks.contains(&o.id),
-            callable: o.method != "patch",
         })
         .collect();
-    let written = openapi::module(source, file, &description, &found.picks, &[]);
+    let written = openapi::module(source, file, &description, &found.picks, &[], found.paging.as_ref());
     let schemas = description
         .schemas
         .iter()

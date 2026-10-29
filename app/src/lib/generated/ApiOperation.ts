@@ -7,8 +7,4 @@ export type ApiOperation = { id: string, method: string, path: string, summary: 
 /**
  * The project file picks it.
  */
-picked: boolean, 
-/**
- * Clarity calls it: not a patch.
- */
-callable: boolean, };
+picked: boolean, };

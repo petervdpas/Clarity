@@ -59,7 +59,9 @@ const KEYWORDS: &[&str] = &[
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
     "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit",
     // HTTP calls (DESIGN 5.23).
-    "http", "get", "post", "put", "header", "json", "query", "when",
+    "http", "get", "post", "put", "patch", "header", "json", "query", "when", "every",
+    // A web API data source: its paging and its OpenAPI description.
+    "paging", "offset", "cursor", "next", "items", "link", "openapi", "pick", "schema",
     // Custom parts (DESIGN 5.19).
     "native", "crate", "go", "nuget", "dll", "binds", "tells", "hears", "preview", "library", "cmake",
     // Engines beside the screen and written in Clarity (DESIGN 5.12).

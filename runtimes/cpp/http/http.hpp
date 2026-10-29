@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,7 +15,7 @@
 namespace clarity {
 
 /// The kind of call.
-enum class HttpMethod { Get, Post, Put, Delete };
+enum class HttpMethod { Get, Post, Put, Patch, Delete };
 
 /// What a web API answered: its status (0 when no answer came), whether it
 /// is ok (200 to 299), and its text, or why no answer came.
@@ -40,6 +41,30 @@ enum class HttpAuth { None, Bearer, ApiKey, Basic };
 /// `http get "/orders" from shop query "status": s` does.
 HttpReply http_call_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
                        const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret);
+
+/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// file's `paging` line.
+enum class PagingKind { Page, Offset, Cursor, Link };
+
+/// A `paging` line: the query parameters it sends, the size of a page, where
+/// the next cursor is and where a page's items are (empty when a page is a list).
+struct HttpPaging {
+    PagingKind kind = PagingKind::Page;
+    std::string param;
+    std::string size_param;
+    int size = 0;
+    std::string next;
+    std::string items;
+};
+
+/// At most this many pages are read.
+inline constexpr int HTTP_MOST_PAGES = 1000;
+
+/// Gets `path` of the web API at `base` page after page, as `paging` says, as
+/// `http get "/orders" from shop every page` does: one reply whose text is
+/// one JSON list of the items of every page (conformance/http.json).
+HttpReply http_pages(const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                     const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret, const HttpPaging& paging);
 
 /// Text as a part of a url: letters, digits and `- . _ ~` as they are, every
 /// other byte of its UTF-8 as `%XX`.

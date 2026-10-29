@@ -402,13 +402,16 @@ pub enum ExprKind {
         at: Option<Box<Expr>>,
     },
     /// `http post url with body header "Accept": "text/plain"`: a call to a
-    /// web API, giving its reply (DESIGN 5.23). Only post and put send a body.
+    /// web API, giving its reply (DESIGN 5.23). Only post, put and patch send a body.
     /// `from shop` calls a path of that web API data source, at its address
     /// and with its auth; `query "status": s` adds an encoded query parameter.
+    /// `every page` reads a long list a page at a time, as the source's
+    /// `paging` line says, giving one JSON list of every page's items.
     Http {
         method: HttpMethod,
         url: Box<Expr>,
         from: Option<Ident>,
+        pages: bool,
         body: Option<Box<Expr>>,
         headers: Vec<HttpPair>,
         query: Vec<HttpPair>,
@@ -423,12 +426,13 @@ pub enum HttpMethod {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
 impl HttpMethod {
     /// Every method, as code writes it.
-    pub const ALL: [HttpMethod; 4] = [HttpMethod::Get, HttpMethod::Post, HttpMethod::Put, HttpMethod::Delete];
+    pub const ALL: [HttpMethod; 5] = [HttpMethod::Get, HttpMethod::Post, HttpMethod::Put, HttpMethod::Patch, HttpMethod::Delete];
 
     /// As code writes it: `get`.
     pub fn word(self) -> &'static str {
@@ -436,6 +440,7 @@ impl HttpMethod {
             HttpMethod::Get => "get",
             HttpMethod::Post => "post",
             HttpMethod::Put => "put",
+            HttpMethod::Patch => "patch",
             HttpMethod::Delete => "delete",
         }
     }
@@ -446,13 +451,14 @@ impl HttpMethod {
             HttpMethod::Get => "GET",
             HttpMethod::Post => "POST",
             HttpMethod::Put => "PUT",
+            HttpMethod::Patch => "PATCH",
             HttpMethod::Delete => "DELETE",
         }
     }
 
-    /// Whether the call sends a body: post and put do.
+    /// Whether the call sends a body: post, put and patch do.
     pub fn sends_body(self) -> bool {
-        matches!(self, HttpMethod::Post | HttpMethod::Put)
+        matches!(self, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch)
     }
 }
 

@@ -833,7 +833,7 @@ impl<'a> Emitter<'a> {
                 )
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, from, body, headers, query } => {
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let body = match body {
                     Some(body) => format!("Some(({}).as_str())", self.value(body)),
@@ -844,6 +844,7 @@ impl<'a> Emitter<'a> {
                     HttpMethod::Get => "Get",
                     HttpMethod::Post => "Post",
                     HttpMethod::Put => "Put",
+                    HttpMethod::Patch => "Patch",
                     HttpMethod::Delete => "Delete",
                 };
                 if from.is_none() && query.is_empty() {
@@ -858,6 +859,19 @@ impl<'a> Emitter<'a> {
                     _ => "clarity_runtime::http::Auth::None".to_string(),
                 };
                 let query = self.http_pairs(query);
+                // Every page, as the source's paging says (DESIGN 5.23).
+                if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
+                    let kind = match p.kind {
+                        clarity_spec::PagingKind::Page => "Page",
+                        clarity_spec::PagingKind::Offset => "Offset",
+                        clarity_spec::PagingKind::Cursor => "Cursor",
+                        clarity_spec::PagingKind::Link => "Link",
+                    };
+                    return format!(
+                        "clarity_runtime::http::pages_at({base:?}, &{url}, {query}, {headers}, {auth}, &clarity_runtime::http::Paging {{ kind: clarity_runtime::http::PagingKind::{kind}, param: {:?}, size_param: {:?}, size: {}, next: {:?}, items: {:?} }})",
+                        p.param, p.size_param, p.size, p.next, p.items
+                    );
+                }
                 format!("clarity_runtime::http::call_at(clarity_runtime::http::Method::{method}, {base:?}, &{url}, {query}, {body}, {headers}, {auth})")
             }
             ExprKind::ReadBytes { file } => format!("db.read_bytes(&{})?", self.object(file)),

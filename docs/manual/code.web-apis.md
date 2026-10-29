@@ -16,14 +16,15 @@ code Status
             message "The status service answered {reply.status}"
 ```
 
-There are four calls:
+There are five calls:
 
 - `http get url`, to read something;
 - `http post url with body`, to send something new;
 - `http put url with body`, to replace something;
+- `http patch url with body`, to change part of something;
 - `http delete url`, to remove something.
 
-The url and the body are text, so a slot puts a value in: `http get "https://api.example.com/orders/{order.number}"`. Only post and put send a body.
+The url and the body are text, so a slot puts a value in: `http get "https://api.example.com/orders/{order.number}"`. Only post, put and patch send a body.
 
 The reply has three details, which code reads and does not set:
 
@@ -80,6 +81,24 @@ datasource forms rest "https://forms.example.com/api"
 
 `http get "/templates" from forms` calls a path of it: at its address, signed with its key. `query "status": status` adds a query parameter, encoded, as many as needed. `when` after a header or query pair leaves it out when its condition does not hold, which suits an optional value: `query "limit": "{limit}" when limit != 0`. A module with `source forms` holds the records the service keeps: they are not stored in a database, so no migration covers them, and `find`, `save` and `delete` do not reach them. Its actions read and send them.
 
+## Every page of a list
+
+A web API often hands out a long list a page at a time, each API in its own way. Say once how, under the data source:
+
+```
+datasource forms rest "https://forms.example.com/api"
+    auth bearer "env:FORMS_TOKEN"
+    paging page "page" size "per_page" 100 items "data"
+```
+
+- `page "page" size "per_page" 100` asks for page 1, 2, 3 and so on, 100 items each.
+- `offset "offset" size "limit" 100` asks from item 0, 100, 200 and so on.
+- `cursor "after" next "meta.next"` asks for the first page, then for the one each page names at `meta.next` in its JSON.
+- `link` follows the address the service names as the next page in its `Link` header.
+- `items "data"` says where a page's items are in its JSON, with dots for deeper names; leave it out when a page is a list.
+
+Then `http get "/templates" from forms every page` reads page after page until the last, and its reply's text is one JSON list of the items of every page, which `read list<Template> from json reply.text` reads. A page the service does not answer well is the reply, so the code sees why. Only `get` reads every page, from a source that pages. Paging stops after 1000 pages, with status 0.
+
 ## An OpenAPI description
 
 A service that describes itself with OpenAPI (Swagger) does not need these actions written by hand. Put its description, a YAML or JSON file, in the project's `apis` folder, or choose it with **Choose file...** where the web API opens from the project tree (or **API...** beside the data source in the project settings). Then pick what the application uses:
@@ -91,13 +110,15 @@ datasource forms rest "https://forms.example.com/api"
     pick "listTemplates", "getTemplate", "createTemplate"
 ```
 
+Clarity's agent can pick too: ask it to build something on the API, and it reads what the description offers and picks the operations it needs.
+
 - Clarity writes the module `apis/forms.clarity` from the description: an action for each picked operation (`list_templates(status: text) -> list<Template>`), and an entity for each schema they take or give. `pick schema "Entry"` makes a schema an entity on its own.
 - Only what is picked is written, so a service with many operations and schemas gives the application just what it uses. **API...** lists them all with a box to pick each.
 - The module is Clarity's: do not edit it. Clarity writes it again when the description or the picks change, so a new revision of the description updates the entities and actions. A pick the new revision no longer has is a warning.
 - Your own modules use it with `use forms`, and call its actions as any others: `templates = list_templates("published")`.
 - An optional parameter of an operation is an optional parameter of its action, with the description's default or else `""`, `0` or `false`, and it is sent only when it differs: `list_templates(status: text, limit: integer = 0)`, called as `list_templates("published")` or `list_templates("published", limit: 10)`. A yes-or-no value goes to the service as `true` or `false`.
 - A nested object is a record inside the record (`owner: User`), and a list of objects a list of them (`sections: list<Section>`); the schemas they name are written as entities too. One that would make a record hold itself, and an object without a schema of its own, are named in a comment above the field instead.
-- Not yet read: patch operations.
+- On a source that pages, a picked list reads every page: its action calls `http get ... every page` and gives the whole list, and the parameters paging sends are not the action's.
 
 ## Where code calls out
 

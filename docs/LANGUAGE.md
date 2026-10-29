@@ -82,7 +82,8 @@ project Shop
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
 | `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine. |
-| `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"`, `"keychain:NAME"` or `"setting:name"`; it is never written into the file itself. A generated application reads it from `env:NAME` or from the secret setting `name` (see [Secret settings](#secret-settings)). |
+| `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"setting:name"`, a secret setting the system's keychain keeps; it is never written into the file itself. A generated application reads it from `env:NAME` or from the secret setting `name` (see [Secret settings](#secret-settings)). |
+| `paging kind ...` | no | Indented under a web API's `datasource` line: how it hands out a long list, for `every page`. `paging page "page" size "per_page" 100` sends page numbers from 1, `paging offset "offset" size "limit" 100` offsets from 0, `paging cursor "after" next "meta.next"` the cursor each page names at that path, and `paging link` follows the `Link` header's next address. `items "data"` at the end says where a page's items are in its JSON. |
 | `openapi "file"` | no | Indented under a web API's `datasource` line: its OpenAPI (Swagger) description, a YAML or JSON file of the `apis` folder. Clarity writes the module `apis/<source>.clarity` from it, for what the project picks, and writes it again when the file or the picks change. |
 | `pick "operationId", ...` | no | Indented under a web API with an `openapi` line: the operations the application uses. Each becomes an action, and the schemas it takes or gives entities. `pick schema "Name", ...` makes schemas entities on their own. A pick the description does not have is a warning. |
 
@@ -417,7 +418,7 @@ datasource main postgres "env:SHOP_DATABASE"
 | `mysql` | a URL | `mysql://shop@db.example.com:3306/shop` |
 | `mssql` | an ADO.NET connection string | `server=tcp:db.example.com,1433;database=shop;user=shop;TrustServerCertificate=true` |
 
-A connection that needs a password is written as `"env:NAME"`: the generated application reads it from that environment variable when it starts, so the password is never in the project. The `keychain:` form is for web APIs only for now.
+A connection that needs a password is written as `"env:NAME"`: the generated application reads it from that environment variable when it starts, so the password is never in the project. It may also be a [secret setting](#secret-settings), `"setting:name"`, which the system's keychain keeps.
 
 How fields are stored:
 
@@ -1793,12 +1794,13 @@ code Status
         statusText = reply.text
 ```
 
-- `http get url`, `http delete url`, `http post url with body` and `http put url with body`. The url and the body are text; only post and put send a body. `header "Name": value` adds a header, as many as needed.
+- `http get url`, `http delete url`, `http post url with body`, `http put url with body` and `http patch url with body`. The url and the body are text; only post, put and patch send a body. `header "Name": value` adds a header, as many as needed.
 - The reply has `status` (200, 404, and 0 when no answer came), `ok` (true for a status from 200 to 299) and `text` (what the service answered, or why no answer came). Its type is `http reply`; its details are read, not set.
 - A call does not stop the code: a server that is not there, a wrong name or a timeout of 30 seconds is a reply with status 0, so the code decides what a failure means. Only `http` and `https` addresses are called; redirects are followed.
 - Calling out is the effect `net`, which an action declares. Handlers and commands call out as they are; a function, an engine and a data event cannot.
 - `http get "/orders" from shop` calls a path of the web API data source `shop`: at its address, signed with its `auth` (`bearer` sends `Authorization: Bearer <secret>`, `api-key` `X-Api-Key: <secret>`, `basic` `Authorization: Basic ...`). `query "status": status` adds a query parameter, encoded, as many as needed.
 - `when` after a header or query pair leaves it out of the call when its condition does not hold: `query "limit": "{limit}" when limit != 0`. With a default, it sends an optional value only when one is given.
+- `http get "/orders" from shop every page` reads a long list a page at a time, as the source's `paging` line says, and gives one reply: its text is one JSON list of the items of every page. Only `get` reads every page, and only from a source that pages. A page that is not ok is the reply; after 1000 pages the reply has status 0.
 - **Records inside records.** An entity of a web API holds the records its service nests: `owner: User` holds one, `lines: list<Line>` several, and code reads them as any record and list (`order.owner.name`, `for line in order.lines`); `json of` writes them nested too. What it holds lives in the web API as well, and a record never holds itself, through any number of records: a list may, as it can be empty. A stored entity refers to another with `ref User` instead, and keeps its lists in their own table.
 - A key does not belong in the code: a header named `Authorization`, or one that holds `key`, `token` or `secret`, with a plain text as its value is a warning. Keep the key in a setting and put it in with a slot.
 - `json of value` is the JSON of a record, a list of records or a value, as Clarity writes values everywhere: names as the fields are named, decimals and money as exact text, enums by name, dates as `2026-10-25`. A post sends a record with `http post url with json of order header "Content-Type": "application/json"`.

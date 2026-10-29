@@ -3,4 +3,4 @@
 /**
  * The kind of an HTTP call.
  */
-export type HttpMethod = "get" | "post" | "put" | "delete";
+export type HttpMethod = "get" | "post" | "put" | "patch" | "delete";

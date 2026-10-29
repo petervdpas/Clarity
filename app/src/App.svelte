@@ -464,7 +464,7 @@
     }
     await saveSettings({
       ...settings,
-      datasources: [...settings.datasources, { name: trimmed, kind: "rest", url: "https://", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [] }],
+      datasources: [...settings.datasources, { name: trimmed, kind: "rest", url: "https://", auth: null, external: false, readonly: false, openapi: null, picks: [], pick_schemas: [], paging: null }],
     });
     select({ kind: "api", name: trimmed });
     tab = "project";

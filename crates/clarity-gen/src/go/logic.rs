@@ -1368,7 +1368,7 @@ impl<'a> Emitter<'a> {
                 self.lift(format!("clarity.{read}({text}, {at}, {}, []clarity.JSONField{{{}}}, New{entity}())", string(entity), fields.join(", ")), pre)
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, from, body, headers, query } => {
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = bare(self.value(url, pre));
                 let body = match body {
                     Some(body) => bare(self.value(body, pre)),
@@ -1385,6 +1385,19 @@ impl<'a> Emitter<'a> {
                     Some((kind, secret)) => format!("clarity.HTTPAuth{{Kind: {}, Secret: {}}}", string(kind), string(secret)),
                     None => "clarity.HTTPAuth{}".to_string(),
                 };
+                // Every page, as the source's paging says (DESIGN 5.23).
+                if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
+                    return format!(
+                        "clarity.HTTPPages({}, {url}, {query}, {headers}, {auth}, clarity.HTTPPaging{{Kind: {}, Param: {}, SizeParam: {}, Size: {}, Next: {}, Items: {}}})",
+                        string(base),
+                        string(crate::paging_word(p.kind)),
+                        string(&p.param),
+                        string(&p.size_param),
+                        p.size,
+                        string(&p.next),
+                        string(&p.items)
+                    );
+                }
                 format!("clarity.HTTPAt({}, {}, {url}, {query}, {body}, {headers}, {auth})", string(method.verb()), string(base))
             }
             // A function of a library, through its package (DESIGN 5.21).

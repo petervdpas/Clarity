@@ -376,6 +376,68 @@ impl ProjectTools {
         Ok(format!("Wrote {path}. {}", self.problems()?))
     }
 
+    /// What a web API's description offers, and what the project picks
+    /// (DESIGN 5.23), as the API... panel shows it.
+    fn api(&self, source: &str) -> Result<String, String> {
+        let (file, _) = self.open()?;
+        let listing = clarity_project::api_listing(file, source)?;
+        let Some(description) = &listing.file else {
+            return Err(format!("data source '{source}' names no OpenAPI description; add openapi \"file.yaml\" under it, a file of the apis folder"));
+        };
+        let settings = clarity_project::load(file).settings.ok_or("the project file cannot be read")?;
+        let paging = settings.datasources.iter().find(|s| s.name == source).and_then(|s| s.paging.as_ref());
+        let mark = |picked: bool| if picked { "[x]" } else { "[ ]" };
+        let mut out = format!("{description} ({} {})", listing.title, listing.version);
+        match paging {
+            Some(p) => out.push_str(&format!("; the source pages: {}\n", clarity_project::paging_line(p))),
+            None => out.push_str("; the source does not page\n"),
+        }
+        out.push_str("Operations, [x] picked:\n");
+        for o in &listing.operations {
+            let summary = o.summary.as_ref().map(|s| format!(": {s}")).unwrap_or_default();
+            out.push_str(&format!("{} {} {} {}{summary}\n", mark(o.picked), o.id, o.method.to_uppercase(), o.path));
+        }
+        out.push_str("Schemas, [x] picked on their own, (needed) by a picked operation:\n");
+        for s in &listing.schemas {
+            out.push_str(&format!("{} {}{}\n", mark(s.picked), s.name, if s.needed { " (needed)" } else { "" }));
+        }
+        Ok(out)
+    }
+
+    /// Picks what the application uses of a web API's description: the
+    /// operations and the schemas on their own, in place of what was picked,
+    /// written into the project file; Clarity writes the API's module again.
+    fn pick_api(&mut self, input: &Value) -> Result<String, String> {
+        let source = input["source"].as_str().unwrap_or_default().to_string();
+        let names = |key: &str| -> Vec<String> { input[key].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default() };
+        let (operations, schemas) = (names("operations"), names("schemas"));
+        let (file, _) = self.open()?.clone();
+        let listing = clarity_project::api_listing(&file, &source)?;
+        let description = listing.file.clone().ok_or_else(|| format!("data source '{source}' names no OpenAPI description"))?;
+        let all: Vec<&str> = listing.operations.iter().map(|o| o.id.as_str()).collect();
+        if let Some(missing) = operations.iter().find(|o| !all.contains(&o.as_str())) {
+            return Err(format!("{description} has no operation {missing}; it has {}", listed(&all)));
+        }
+        let all: Vec<&str> = listing.schemas.iter().map(|s| s.name.as_str()).collect();
+        if let Some(missing) = schemas.iter().find(|s| !all.contains(&s.as_str())) {
+            return Err(format!("{description} has no schema {missing}; it has {}", listed(&all)));
+        }
+        let old = std::fs::read_to_string(&file).map_err(|err| format!("cannot read the project file: {err}"))?;
+        let mut settings = clarity_project::parse(&old)?;
+        let found = settings.datasources.iter_mut().find(|s| s.name == source).ok_or_else(|| format!("there is no data source '{source}'"))?;
+        found.picks = operations;
+        found.pick_schemas = schemas;
+        let text = clarity_project::write(Some(&old), &settings)?;
+        self.write("project", &text)?;
+        let warnings = clarity_project::refresh_apis(&file)?;
+        let mut out = format!("Picked; Clarity wrote apis/{source}.clarity. ");
+        for w in warnings {
+            out.push_str(&format!("Warning: {w}. "));
+        }
+        out.push_str(&self.problems()?);
+        Ok(out)
+    }
+
     /// The Data model: an ERD Clarity writes from the data dictionary.
     fn diagram_view(&self) -> Result<String, String> {
         let (_, dir) = self.open()?;
@@ -567,6 +629,15 @@ impl ProjectTools {
     }
 }
 
+/// Names as a sentence: "a, b and c".
+fn listed(names: &[&str]) -> String {
+    match names.split_last() {
+        Some((last, [])) => last.to_string(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+        None => "nothing".to_string(),
+    }
+}
+
 /// How much of one generated file the agent reads.
 const GENERATED_LIMIT: usize = 60_000;
 
@@ -622,6 +693,23 @@ impl Tools for ProjectTools {
                 schema(json!({ "path": { "type": "string" }, "text": { "type": "string", "description": "The whole file." } }), &["path", "text"]),
             ),
             tool("check", "Checks the whole project and gives its problems.", schema(json!({}), &[])),
+            tool(
+                "api",
+                "What a web API data source's OpenAPI description offers: its operations and schemas, which the project picks, and how the source pages. Read it before you pick.",
+                schema(json!({ "source": { "type": "string", "description": "The data source, like forms." } }), &["source"]),
+            ),
+            tool(
+                "pick_api",
+                "Picks what the application uses of a web API's description, in place of what was picked: each operation becomes an action and the schemas it takes and gives entities, which Clarity writes into apis/<source>.clarity. Gives the project's problems after.",
+                schema(
+                    json!({
+                        "source": { "type": "string", "description": "The data source, like forms." },
+                        "operations": { "type": "array", "items": { "type": "string" }, "description": "Operation ids, as api lists them." },
+                        "schemas": { "type": "array", "items": { "type": "string" }, "description": "Optional: schemas the application uses on their own." }
+                    }),
+                    &["source", "operations"],
+                ),
+            ),
             tool(
                 "migrate",
                 "Writes the changes of the data dictionary since the last migration step as the next step, so the database follows. Use it after adding or changing entities, when check warns that they are not in a migration yet.",
@@ -721,6 +809,8 @@ impl Tools for ProjectTools {
             "read_file" => self.read(&text("path")),
             "write_file" => self.write(&text("path"), &text("text")),
             "check" => self.problems(),
+            "api" => self.api(&text("source")),
+            "pick_api" => self.pick_api(input),
             "parts" => serde_json::to_string(&clarity_spec::widgets::catalog()).map_err(|err| err.to_string()),
             "design" => section(DESIGN, "design document", &text("section")),
             "manual" => manual_topic(&text("topic")),
@@ -1014,6 +1104,40 @@ mod tests {
         (root, file, dir)
     }
 
+    /// An OpenAPI description in the project (DESIGN 5.23): the agent reads
+    /// what it offers and picks what the application uses, as the API...
+    /// panel does, through the project file, so one Undo takes it back.
+    #[test]
+    fn the_agent_reads_an_api_and_picks_what_it_uses() {
+        let (root, file, dir) = project("api");
+        let description = "openapi: 3.0.3\ninfo: { title: Forms, version: 1.0.0 }\npaths:\n  /templates:\n    get:\n      operationId: listTemplates\n      summary: Lists the templates\n      responses:\n        \"200\":\n          description: The templates\n          content:\n            application/json:\n              schema: { type: array, items: { $ref: \"#/components/schemas/Template\" } }\n    post:\n      operationId: createTemplate\n      responses: { \"201\": { description: Made } }\ncomponents:\n  schemas:\n    Template:\n      type: object\n      properties:\n        name: { type: string }\n";
+        std::fs::create_dir_all(dir.join("apis")).unwrap();
+        std::fs::write(dir.join("apis/forms.yaml"), description).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, format!("{text}    datasource forms rest \"https://forms.example.com/api\"\n        paging page \"page\" size \"per_page\" 50\n        openapi \"forms.yaml\"\n")).unwrap();
+        let mut tools = ProjectTools::new(Some((file.clone(), dir.clone())), root.clone());
+
+        let listed = tools.call("api", &json!({"source": "forms"}));
+        assert!(!listed.is_error, "{}", listed.text);
+        for line in ["forms.yaml (Forms 1.0.0)", "paging page \"page\" size \"per_page\" 50", "[ ] listTemplates GET /templates: Lists the templates", "[ ] createTemplate POST /templates", "[ ] Template"] {
+            assert!(listed.text.contains(line), "no {line:?} in\n{}", listed.text);
+        }
+
+        let picked = tools.call("pick_api", &json!({"source": "forms", "operations": ["listTemplates"]}));
+        assert!(!picked.is_error, "{}", picked.text);
+        assert!(std::fs::read_to_string(&file).unwrap().contains("        pick \"listTemplates\"\n"));
+        let module = std::fs::read_to_string(dir.join("apis/forms.clarity")).unwrap();
+        assert!(module.contains("action list_templates() -> list<Template>") && module.contains("every page"), "{module}");
+        assert!(picked.text.contains("No problems."), "{}", picked.text);
+        assert!(tools.call("api", &json!({"source": "forms"})).text.contains("[x] listTemplates"));
+        // One change of the project file, for Undo.
+        assert_eq!(tools.written.iter().filter(|w| w.file == file).count(), 1);
+
+        let wrong = tools.call("pick_api", &json!({"source": "forms", "operations": ["listForms"]}));
+        assert!(wrong.is_error && wrong.text.contains("forms.yaml has no operation listForms; it has listTemplates and createTemplate"), "{}", wrong.text);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[test]
     fn the_tools_read_write_and_check_the_project() {
         let (root, file, dir) = project("tools");
@@ -1137,10 +1261,10 @@ mod tests {
         names.sort();
         let allowed = [
             // Reading.
-            "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file",
+            "api", "build_output", "check", "design", "diagram_proposals", "diagram_view", "manual", "parts", "project_overview", "read_file",
             "read_generated", "reference",
             // Writing project files, checked at once and undone with one Undo.
-            "apply_diagram", "migrate", "new_project", "write_diagram", "write_file",
+            "apply_diagram", "migrate", "new_project", "pick_api", "write_diagram", "write_file",
             // Showing a window in Preview or a diagram, which draw without running anything.
             "show_diagram", "show_window",
             // Running or building, only after the person allows it.

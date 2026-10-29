@@ -19,6 +19,7 @@ typedef enum {
     CLARITY_HTTP_GET,
     CLARITY_HTTP_POST,
     CLARITY_HTTP_PUT,
+    CLARITY_HTTP_PATCH,
     CLARITY_HTTP_DELETE,
 } ClarityHttpMethod;
 
@@ -58,6 +59,35 @@ typedef enum {
 /// auth, as `http get "/orders" from shop query "status": s` does.
 ClarityHttpReply clarity_http_call_at(ClarityHttpMethod method, const char* base, const char* path, const ClarityHttpHeader* query, size_t query_count, const char* body,
                                       const ClarityHttpHeader* headers, size_t count, ClarityAuthKind auth, const char* secret);
+
+/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// file's `paging` line.
+typedef enum {
+    CLARITY_PAGING_PAGE,
+    CLARITY_PAGING_OFFSET,
+    CLARITY_PAGING_CURSOR,
+    CLARITY_PAGING_LINK,
+} ClarityPagingKind;
+
+/// A `paging` line: the query parameters it sends, the size of a page, where
+/// the next cursor is and where a page's items are ("" when a page is a list).
+typedef struct {
+    ClarityPagingKind kind;
+    const char* param;
+    const char* size_param;
+    int size;
+    const char* next;
+    const char* items;
+} ClarityHttpPaging;
+
+/// At most this many pages are read.
+#define CLARITY_HTTP_MOST_PAGES 1000
+
+/// Gets `path` of the web API at `base` page after page, as `paging` says, as
+/// `http get "/orders" from shop every page` does: one reply whose text is
+/// one JSON list of the items of every page (conformance/http.json).
+ClarityHttpReply clarity_http_pages(const char* base, const char* path, const ClarityHttpHeader* query, size_t query_count, const ClarityHttpHeader* headers,
+                                    size_t count, ClarityAuthKind auth, const char* secret, ClarityHttpPaging paging);
 
 /// Text as a part of a url: letters, digits and `- . _ ~` as they are, every
 /// other byte of its UTF-8 as `%XX`; in the scratch arena.

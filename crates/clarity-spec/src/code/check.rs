@@ -2574,7 +2574,7 @@ impl<'a> BodyChecker<'_, 'a> {
             (true, None) => self.error(format!("http {} sends a body: write 'with' and the text", method.word()), span),
             (false, Some(body)) => {
                 self.expr(body, None);
-                self.error(format!("http {} sends no body; post and put do", method.word()), body.span);
+                self.error(format!("http {} sends no body; post, put and patch do", method.word()), body.span);
             }
             (false, None) => {}
         }
@@ -4086,16 +4086,28 @@ pub(crate) fn check_web_sources(project: &mut crate::model::Project) {
                 ExprKind::Find { entity, .. } if web.contains(&entity.name.as_str()) => {
                     found.push(Diagnostic::error(not_stored(&entity.name), entity.span).in_file(&file.path));
                 }
-                ExprKind::Http { from: Some(source), .. } => {
+                ExprKind::Http { from: Some(source), pages, method, .. } => {
                     let message = match project.sources.iter().find(|s| s.name == source.name) {
                         None => {
                             let names: Vec<&str> = project.sources.iter().map(|s| s.name.as_str()).collect();
                             format!("unknown data source '{}'; the project has {}", source.name, crate::check::listed(&names))
                         }
                         Some(s) if s.sql => format!("'{}' is no web API: 'from' names a rest data source of the project", source.name),
+                        // `every page` follows the source's paging (DESIGN 5.23).
+                        Some(s) if *pages && s.paging.is_none() => format!(
+                            "data source '{}' does not page: say how under its datasource line, like: paging page \"page\" size \"per_page\" 100",
+                            source.name
+                        ),
+                        Some(_) if *pages && *method != HttpMethod::Get => "only http get reads every page".to_string(),
                         Some(_) => return,
                     };
-                    found.push(Diagnostic::error(message, source.span).in_file(&file.path));
+                    found.push(Diagnostic::error(message, expr.span).in_file(&file.path));
+                }
+                ExprKind::Http { from: None, pages: true, .. } => {
+                    found.push(
+                        Diagnostic::error("every page reads a web API data source: write 'from' and its name before it", expr.span)
+                            .in_file(&file.path),
+                    );
                 }
                 _ => {}
             });

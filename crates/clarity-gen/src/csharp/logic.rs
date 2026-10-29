@@ -923,7 +923,7 @@ impl<'a> Emitter<'a> {
                 format!("JsonValues.{read}({text}, {at}, {}, [{}], new {entity}())", string(entity), fields.join(", "))
             }
             // A call to a web API (DESIGN 5.23): it never fails, its reply says how it went.
-            ExprKind::Http { method, url, from, body, headers, query } => {
+            ExprKind::Http { method, url, from, pages, body, headers, query } => {
                 let url = self.value(url);
                 let headers = self.http_pairs(headers);
                 if from.is_some() || !query.is_empty() {
@@ -932,6 +932,19 @@ impl<'a> Emitter<'a> {
                     let query = self.http_pairs(query);
                     let body = body.as_ref().map_or("null".to_string(), |b| self.value(b));
                     let (kind, secret) = auth.map_or(("null".to_string(), "null".to_string()), |(k, s)| (string(k), string(s)));
+                    // Every page, as the source's paging says (DESIGN 5.23).
+                    if let Some(p) = from.as_ref().filter(|_| *pages).and_then(|f| crate::web_paging(self.project, &f.name)) {
+                        return format!(
+                            "Http.Pages({}, {url}, {query}, {headers}, {kind}, {secret}, new HttpPaging({}, {}, {}, {}, {}, {}))",
+                            string(base),
+                            string(crate::paging_word(p.kind)),
+                            string(&p.param),
+                            string(&p.size_param),
+                            p.size,
+                            string(&p.next),
+                            string(&p.items)
+                        );
+                    }
                     return format!("Http.At({}, {}, {url}, {query}, {body}, {headers}, {kind}, {secret})", string(method.verb()), string(base));
                 }
                 let call = pascal(method.word());

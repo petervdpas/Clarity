@@ -14,6 +14,7 @@ namespace {
 HttpMethod method_of(const std::string& word) {
     if (word == "POST") return HttpMethod::Post;
     if (word == "PUT") return HttpMethod::Put;
+    if (word == "PATCH") return HttpMethod::Patch;
     if (word == "DELETE") return HttpMethod::Delete;
     return HttpMethod::Get;
 }
@@ -47,8 +48,16 @@ TEST(every_http_call_gives_the_reply_the_cases_name) {
             }
             std::string kind = c.contains("auth") ? c["auth"]["kind"].get<std::string>() : "";
             HttpAuth auth = kind == "bearer" ? HttpAuth::Bearer : kind == "api-key" ? HttpAuth::ApiKey : kind == "basic" ? HttpAuth::Basic : HttpAuth::None;
-            reply = http_call_at(method_of(c["method"].get<std::string>()), base, c["path"].get<std::string>(), query, body, headers, auth,
-                                 c.contains("auth") ? c["auth"]["secret"].get<std::string>() : std::string());
+            std::string secret = c.contains("auth") ? c["auth"]["secret"].get<std::string>() : std::string();
+            if (c.contains("paging")) {
+                const auto& p = c["paging"];
+                std::string word = p["kind"].get<std::string>();
+                PagingKind paged = word == "page" ? PagingKind::Page : word == "offset" ? PagingKind::Offset : word == "cursor" ? PagingKind::Cursor : PagingKind::Link;
+                HttpPaging how{paged, p["param"].get<std::string>(), p["size_param"].get<std::string>(), p["size"].get<int>(), p["next"].get<std::string>(), p["items"].get<std::string>()};
+                reply = http_pages(base, c["path"].get<std::string>(), query, headers, auth, secret, how);
+            } else {
+                reply = http_call_at(method_of(c["method"].get<std::string>()), base, c["path"].get<std::string>(), query, body, headers, auth, secret);
+            }
         }
         CHECK_EQ(reply.status, c["status"].get<int64_t>());
         CHECK_EQ(reply.ok, c["ok"].get<bool>());

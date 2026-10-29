@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.17
+
+- Colors `http patch`, `every page`, and the lines under a web API data source: `paging` with `page`, `offset`, `cursor`, `next`, `link` and `items`, `openapi`, `pick` and `schema`.
+
 ## 0.1.16
 
 - Colors `record`, `const`, the `picture` type, `tell`, `beside` (engines beside the screen) and the project line `engines compiled` or `engines interpreted`.

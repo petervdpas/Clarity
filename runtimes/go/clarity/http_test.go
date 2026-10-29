@@ -5,10 +5,12 @@ package clarity
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -33,15 +35,59 @@ func TestEveryCallGivesTheReplyTheCasesName(t *testing.T) {
 			Base       string            `json:"base"`
 			Query      [][2]string       `json:"query"`
 			Auth       HTTPAuth          `json:"auth"`
+			Paging     *HTTPPaging       `json:"paging"`
 		} `json:"cases"`
 		Env map[string]string `json:"env"`
 	}
 	if err := json.Unmarshal(text, &file); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		number := func(name string, otherwise int) int {
+			if n, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil {
+				return n
+			}
+			return otherwise
+		}
+		// The numbers from `from` up to `to`, and at most 5, as a JSON list.
+		numbers := func(from, to int) string {
+			var out []string
+			for n := from; n <= min(to, 5); n++ {
+				out = append(out, strconv.Itoa(n))
+			}
+			return "[" + strings.Join(out, ",") + "]"
+		}
 		switch r.URL.Path {
+		case "/paged":
+			page, size := number("page", 1), number("size", 5)
+			io.WriteString(w, numbers((page-1)*size+1, page*size))
+		case "/offset":
+			offset, limit := number("offset", 0), number("limit", 5)
+			io.WriteString(w, `{"data":`+numbers(offset+1, offset+limit)+`}`)
+		case "/cursor":
+			after := number("after", 0)
+			next := "null"
+			if after+2 < 5 {
+				next = fmt.Sprintf(`"%d"`, after+2)
+			}
+			io.WriteString(w, `{"data":`+numbers(after+1, after+2)+`,"meta":{"next":`+next+`}}`)
+		case "/linked":
+			page := number("page", 1)
+			if page*2 < 5 {
+				w.Header().Set("Link", fmt.Sprintf(`<%s/linked?page=%d>; rel="next"`, server.URL, page+1))
+			}
+			io.WriteString(w, numbers((page-1)*2+1, page*2))
+		case "/broken":
+			if number("page", 1) == 1 {
+				io.WriteString(w, "[1,2]")
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				io.WriteString(w, "down")
+			}
+		case "/endless":
+			io.WriteString(w, fmt.Sprintf("[%d]", number("page", 1)))
 		case "/hello":
 			io.WriteString(w, "hello")
 		case "/echo":
@@ -81,7 +127,12 @@ func TestEveryCallGivesTheReplyTheCasesName(t *testing.T) {
 			for _, q := range c.Query {
 				query = append(query, Header{Name: q[0], Value: q[1]})
 			}
-			reply = HTTPAt(c.Method, strings.ReplaceAll(c.Base, "{server}", server.URL), c.Path, query, c.Body, headers, c.Auth)
+			base := strings.ReplaceAll(c.Base, "{server}", server.URL)
+			if c.Paging != nil {
+				reply = HTTPPages(base, c.Path, query, headers, c.Auth, *c.Paging)
+			} else {
+				reply = HTTPAt(c.Method, base, c.Path, query, c.Body, headers, c.Auth)
+			}
 		}
 		if reply.Status != c.Status || reply.Ok != c.Ok {
 			t.Errorf("%s: status %d ok %v, want %d %v (%s)", c.Name, reply.Status, reply.Ok, c.Status, c.Ok, reply.Text)

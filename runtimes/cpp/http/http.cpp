@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
 #include "clarity/settings.hpp"
 
@@ -50,8 +51,52 @@ std::string http_host(const std::string& url) {
     return host.substr(0, host.find(':'));
 }
 
+namespace {
+
+/// The address a `Link` header line names `rel="next"`; empty without one.
+std::string next_link(std::string line) {
+    std::string lower = line;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lower.rfind("link:", 0) != 0) return "";
+    size_t at = 5;
+    while (at < line.size()) {
+        auto open = line.find('<', at);
+        auto close = open == std::string::npos ? std::string::npos : line.find('>', open);
+        if (close == std::string::npos) return "";
+        auto end = line.find(',', close);
+        std::string params;
+        for (char c : lower.substr(close, end == std::string::npos ? std::string::npos : end - close)) {
+            if (c != ' ') params += c;
+        }
+        if (params.find(";rel=\"next\"") != std::string::npos || params.find(";rel=next") != std::string::npos) return line.substr(open + 1, close - open - 1);
+        if (end == std::string::npos) return "";
+        at = end + 1;
+    }
+    return "";
+}
+
+/// Keeps the address a `Link` header names next, as curl hands each header line.
+size_t heard(char* data, size_t size, size_t count, void* into) {
+    auto found = next_link(std::string(data, size * count));
+    if (!found.empty()) *static_cast<std::string*>(into) = found;
+    return size * count;
+}
+
+/// A call as `http_call` makes it; `next` takes the address its `Link`
+/// header names next, or empty.
+HttpReply fetch(HttpMethod method, const std::string& url, const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, std::string* next);
+
+}  // namespace
+
 HttpReply http_call(HttpMethod method, const std::string& url, const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers) {
+    return fetch(method, url, body, headers, nullptr);
+}
+
+namespace {
+
+HttpReply fetch(HttpMethod method, const std::string& url, const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, std::string* next) {
     static Started started;
+    std::string linked;
     if (!called(url)) return none("only http and https addresses are called, not " + url);
     CURL* curl = curl_easy_init();
     if (!curl) return none("cannot reach " + http_host(url) + ": libcurl did not start");
@@ -65,6 +110,8 @@ HttpReply http_call(HttpMethod method, const std::string& url, const std::string
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, keep);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &answer);
     if (sent) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, sent);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, heard);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &linked);
     switch (method) {
         case HttpMethod::Get:
             break;
@@ -74,7 +121,8 @@ HttpReply http_call(HttpMethod method, const std::string& url, const std::string
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
             break;
         case HttpMethod::Put:
-            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+        case HttpMethod::Patch:
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method == HttpMethod::Put ? "PUT" : "PATCH");
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
             break;
@@ -88,8 +136,11 @@ HttpReply http_call(HttpMethod method, const std::string& url, const std::string
     curl_slist_free_all(sent);
     curl_easy_cleanup(curl);
     if (done != CURLE_OK) return none("cannot reach " + http_host(url) + ": " + curl_easy_strerror(done));
+    if (next) *next = linked;
     return HttpReply{status, status >= 200 && status < 300, std::move(answer)};
 }
+
+}  // namespace
 
 std::string url_part(const std::string& text) {
     std::string out;
@@ -144,8 +195,100 @@ std::string base64_of(const std::string& text) {
 
 }  // namespace
 
+namespace {
+
+/// A call as `http_call_at` makes it; `next` takes the address its `Link`
+/// header names next, or empty.
+HttpReply fetch_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                   const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret, std::string* next);
+
+/// The JSON at a dotted path of `value`: `meta.next`; `value` itself for "".
+const nlohmann::json* json_at(const nlohmann::json& value, const std::string& path) {
+    const nlohmann::json* at = &value;
+    size_t start = 0;
+    while (!path.empty() && start <= path.size()) {
+        auto dot = path.find('.', start);
+        auto step = path.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
+        if (!at->is_object() || !at->contains(step)) return nullptr;
+        at = &(*at)[step];
+        if (dot == std::string::npos) break;
+        start = dot + 1;
+    }
+    return at;
+}
+
+}  // namespace
+
 HttpReply http_call_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
                        const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret) {
+    return fetch_at(method, base, path, query, body, headers, auth, secret, nullptr);
+}
+
+HttpReply http_pages(const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                     const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret, const HttpPaging& paging) {
+    std::vector<std::string> items;
+    std::optional<std::string> cursor;
+    std::string link;
+    for (int n = 0; n < HTTP_MOST_PAGES; ++n) {
+        auto sent = query;
+        switch (paging.kind) {
+            case PagingKind::Page:
+                sent.emplace_back(paging.param, std::to_string(n + 1));
+                sent.emplace_back(paging.size_param, std::to_string(paging.size));
+                break;
+            case PagingKind::Offset:
+                sent.emplace_back(paging.param, std::to_string(n * paging.size));
+                sent.emplace_back(paging.size_param, std::to_string(paging.size));
+                break;
+            case PagingKind::Cursor:
+                if (cursor) sent.emplace_back(paging.param, *cursor);
+                break;
+            case PagingKind::Link:
+                break;
+        }
+        std::string next;
+        // A next link is a whole address, with its own query.
+        HttpReply reply = !link.empty() ? fetch_at(HttpMethod::Get, "", link, {}, std::string(), headers, auth, secret, &next)
+                                        : fetch_at(HttpMethod::Get, base, path, sent, std::string(), headers, auth, secret, &next);
+        if (!reply.ok) return reply;
+        auto page = nlohmann::json::parse(reply.text, nullptr, false);
+        const nlohmann::json* list = page.is_discarded() ? nullptr : json_at(page, paging.items);
+        if (!list || !list->is_array()) {
+            return none("page " + std::to_string(n + 1) + " of " + path + " has no list at " + (paging.items.empty() ? std::string("the top") : paging.items));
+        }
+        for (const auto& item : *list) items.push_back(item.dump());
+        bool done = false;
+        switch (paging.kind) {
+            case PagingKind::Page:
+            case PagingKind::Offset:
+                done = static_cast<int>(list->size()) < paging.size;
+                break;
+            case PagingKind::Cursor: {
+                const nlohmann::json* at = json_at(page, paging.next);
+                cursor.reset();
+                if (at && at->is_string() && !at->get<std::string>().empty()) cursor = at->get<std::string>();
+                else if (at && at->is_number()) cursor = at->dump();
+                done = !cursor;
+                break;
+            }
+            case PagingKind::Link:
+                link = next;
+                done = link.empty();
+                break;
+        }
+        if (done) {
+            std::string text = "[";
+            for (size_t i = 0; i < items.size(); ++i) text += (i ? "," : "") + items[i];
+            return HttpReply{reply.status, true, text + "]"};
+        }
+    }
+    return none("stopped after " + std::to_string(HTTP_MOST_PAGES) + " pages of " + path);
+}
+
+namespace {
+
+HttpReply fetch_at(HttpMethod method, const std::string& base, const std::string& path, const std::vector<std::pair<std::string, std::string>>& query,
+                   const std::string& body, const std::vector<std::pair<std::string, std::string>>& headers, HttpAuth auth, const std::string& secret, std::string* next) {
     std::string url = path;
     if (!base.empty() && path.find("://") == std::string::npos) {
         std::string trimmed = base;
@@ -162,7 +305,9 @@ HttpReply http_call_at(HttpMethod method, const std::string& base, const std::st
         case HttpAuth::Basic: all.emplace_back("Authorization", "Basic " + base64_of(secret_at(secret))); break;
         case HttpAuth::None: break;
     }
-    return http_call(method, url, body, all);
+    return fetch(method, url, body, all, next);
 }
+
+}  // namespace
 
 }  // namespace clarity

@@ -254,6 +254,39 @@ fn resolve_data(files: &mut [model::SpecFile]) {
     }
 }
 
+/// How a web API hands out a long list (DESIGN 5.23, paging).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum PagingKind {
+    /// Page numbers from 1, and the size of a page.
+    Page,
+    /// The offset of the first item from 0, and the size of a page.
+    Offset,
+    /// No cursor first, then the one each page's JSON has at `next`.
+    Cursor,
+    /// The address the `Link` header names `rel="next"`.
+    Link,
+}
+
+/// The project file's `paging` line under a web API data source: how its
+/// lists are read a page at a time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize, TS)]
+#[ts(export)]
+pub struct Paging {
+    pub kind: PagingKind,
+    /// The query parameter of the page, the offset or the cursor; empty for link.
+    pub param: String,
+    /// The query parameter of the size, for page and offset; else empty.
+    pub size_param: String,
+    /// The size of a page, for page and offset; else 0.
+    pub size: u32,
+    /// Where the next cursor is in a page's JSON, for cursor; else empty.
+    pub next: String,
+    /// Where a page's items are in its JSON; empty when a page is a list.
+    pub items: String,
+}
+
 /// A data source of the project, as the checker needs to know it. The
 /// project file declares them; `clarity-project` hands them in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,6 +305,8 @@ pub struct SourceRef {
     /// A web API's auth: its kind as the project file writes it (`bearer`,
     /// `api-key`, `basic`) and where its secret is (`env:NAME`).
     pub auth: Option<(String, String)>,
+    /// How a web API hands out a long list, which `every page` follows.
+    pub paging: Option<Paging>,
 }
 
 impl SourceRef {
@@ -283,6 +318,7 @@ impl SourceRef {
             readonly: false,
             address: String::new(),
             auth: None,
+            paging: None,
         }
     }
 
@@ -294,6 +330,7 @@ impl SourceRef {
             readonly: false,
             address: String::new(),
             auth: None,
+            paging: None,
         }
     }
 

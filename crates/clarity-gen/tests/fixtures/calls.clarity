@@ -54,6 +54,17 @@ command replace(url: text, body: text)
     let reply = http put url with body
     print reply.text
 
+command amend(url: text, body: text)
+    help "Patches a text and prints the answer"
+    let reply = http patch url with body
+    print reply.text
+
+// Every page of a list a web API hands out a page at a time (DESIGN 5.23, paging).
+command numbers()
+    help "Reads every page of the numbers and prints them as one list"
+    let reply = http get "/paged" from paged every page
+    print reply.text
+
 command remove(url: text)
     help "Deletes and prints the answer"
     let reply = http delete url

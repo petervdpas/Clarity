@@ -11,6 +11,8 @@
 
 use yaml_rust2::{Yaml, YamlLoader};
 
+use crate::{Paging, PagingKind};
+
 /// A description, as far as Clarity reads it: in the order it is written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Description {
@@ -355,16 +357,43 @@ fn field_of(entity: &str, property: &str, shape: &Shape) -> FieldOf {
     }
 }
 
+/// What a picked `get` gives when its source pages (DESIGN 5.23, paging):
+/// the list of a schema it answers with, directly when a page is a list, or
+/// under the paging's `items` in the schema a page is. None when the
+/// operation does not read pages.
+fn paged_result(op: &Operation, description: &Description, paging: Option<&Paging>) -> Option<Shape> {
+    let paging = paging?;
+    if op.method != "get" {
+        return None;
+    }
+    let mut shape = op.result.clone()?;
+    for step in paging.items.split('.').filter(|s| !s.is_empty()) {
+        let Shape::Named(name) = &shape else { return None };
+        let schema = description.schemas.iter().find(|s| &s.name == name)?;
+        shape = schema.properties.iter().find(|(p, _)| p == step)?.1.clone();
+    }
+    matches!(&shape, Shape::List(item) if matches!(item.as_ref(), Shape::Named(_))).then_some(shape)
+}
+
+/// The query parameters paging sends itself, which an action does not take.
+fn paging_params(paging: Option<&Paging>) -> Vec<&str> {
+    match paging {
+        Some(p) if matches!(p.kind, PagingKind::Page | PagingKind::Offset) => vec![p.param.as_str(), p.size_param.as_str()],
+        Some(p) if p.kind == PagingKind::Cursor => vec![p.param.as_str()],
+        _ => Vec::new(),
+    }
+}
+
 /// The module `apis/<source>.clarity` for what data source `source` picks
 /// from `description` (its file `file`): the operations `picks` names, the
-/// schemas they take and give, and the schemas `pick_schemas` names.
-pub fn module(source: &str, file: &str, description: &Description, picks: &[String], pick_schemas: &[String]) -> Written {
+/// schemas they take and give, and the schemas `pick_schemas` names. On a
+/// source that pages as `paging` says, a picked list reads every page.
+pub fn module(source: &str, file: &str, description: &Description, picks: &[String], pick_schemas: &[String], paging: Option<&Paging>) -> Written {
     let mut warnings = Vec::new();
     let about = format!("{file} ({} {})", description.title, description.version).replace(" )", ")");
     let mut operations = Vec::new();
     for pick in picks {
         match description.operations.iter().find(|o| &o.id == pick) {
-            Some(op) if op.method == "patch" => warnings.push(format!("data source '{source}' picks '{pick}', a patch, which Clarity does not call yet")),
             Some(op) => operations.push(op),
             None => warnings.push(format!("data source '{source}' picks '{pick}', which {about} does not have")),
         }
@@ -385,7 +414,9 @@ pub fn module(source: &str, file: &str, description: &Description, picks: &[Stri
         }
     };
     for op in &operations {
-        op.body.iter().chain(&op.result).for_each(&mut want);
+        // A page read whole gives its items, not the page.
+        let result = paged_result(op, description, paging).or_else(|| op.result.clone());
+        op.body.iter().chain(&result).for_each(&mut want);
     }
     for pick in pick_schemas {
         if description.schemas.iter().any(|s| &s.name == pick) {
@@ -481,7 +512,8 @@ pub fn module(source: &str, file: &str, description: &Description, picks: &[Stri
     }
     for op in operations {
         out.push('\n');
-        out.push_str(&action(source, op));
+        let pages = paged_result(op, description, paging);
+        out.push_str(&action(source, op, pages.as_ref(), &paging_params(paging)));
     }
     Written { text: out, warnings }
 }
@@ -539,8 +571,9 @@ fn pairs_of(at: &str, wire: &str, name: &str, ty: &str, slotted: bool, default: 
     }
 }
 
-/// The action that calls `op`.
-fn action(source: &str, op: &Operation) -> String {
+/// The action that calls `op`; with `pages`, the list it gives when it reads
+/// every page, without the query parameters paging sends (`paged`).
+fn action(source: &str, op: &Operation, pages: Option<&Shape>, paged: &[&str]) -> String {
     let mut out = String::new();
     if let Some(summary) = &op.summary {
         out.push_str(&format!("// {}\n", summary.lines().next().unwrap_or_default()));
@@ -552,6 +585,9 @@ fn action(source: &str, op: &Operation) -> String {
     let mut clauses = String::new();
     let mut unpassed = Vec::new();
     for p in &op.parameters {
+        if pages.is_some() && p.at == "query" && paged.contains(&p.name.as_str()) {
+            continue;
+        }
         let name = snake(&p.name);
         let (ty, slotted) = parameter_type(&p.shape);
         match p.at.as_str() {
@@ -585,7 +621,8 @@ fn action(source: &str, op: &Operation) -> String {
         None => {}
     }
     params.extend(optional);
-    let (returns, read) = match &op.result {
+    let result = pages.cloned().or_else(|| op.result.clone());
+    let (returns, read) = match &result {
         Some(Shape::Named(schema)) => (format!(" -> {}", pascal(schema)), Some(format!("read {} from json reply.text", pascal(schema)))),
         Some(Shape::List(item)) if matches!(item.as_ref(), Shape::Named(_)) => {
             let Shape::Named(schema) = item.as_ref() else { unreachable!() };
@@ -598,7 +635,8 @@ fn action(source: &str, op: &Operation) -> String {
         out.push_str(line);
     }
     out.push_str(&format!("action {}({}){returns}\n    effects net\n", snake(&op.id), params.join(", ")));
-    out.push_str(&format!("    let reply = http {} \"{path}\" from {source}{body}{clauses}\n", op.method));
+    let every = if pages.is_some() { " every page" } else { "" };
+    out.push_str(&format!("    let reply = http {} \"{path}\" from {source}{every}{body}{clauses}\n", op.method));
     out.push_str(&format!("    if not reply.ok\n        refuse \"{source} {} answered {{reply.status}}: {{reply.text}}\"\n", op.id));
     if let Some(read) = read {
         out.push_str(&format!("    return {read}\n"));

@@ -11,6 +11,7 @@
 static ClarityHttpMethod method_of(const char* word) {
     if (strcmp(word, "POST") == 0) return CLARITY_HTTP_POST;
     if (strcmp(word, "PUT") == 0) return CLARITY_HTTP_PUT;
+    if (strcmp(word, "PATCH") == 0) return CLARITY_HTTP_PATCH;
     if (strcmp(word, "DELETE") == 0) return CLARITY_HTTP_DELETE;
     return CLARITY_HTTP_GET;
 }
@@ -53,8 +54,20 @@ void every_http_call_gives_the_reply_the_cases_name(void) {
             const cJSON* auth = cJSON_GetObjectItem(c, "auth");
             const char* kind = auth ? cJSON_GetObjectItem(auth, "kind")->valuestring : "";
             ClarityAuthKind signed_by = strcmp(kind, "bearer") == 0 ? CLARITY_AUTH_BEARER : strcmp(kind, "api-key") == 0 ? CLARITY_AUTH_API_KEY : strcmp(kind, "basic") == 0 ? CLARITY_AUTH_BASIC : CLARITY_AUTH_NONE;
-            reply = clarity_http_call_at(method_of(cJSON_GetObjectItem(c, "method")->valuestring), at, cJSON_GetObjectItem(c, "path")->valuestring, query, query_count,
-                                         cJSON_IsString(body) ? body->valuestring : NULL, headers, count, signed_by, auth ? cJSON_GetObjectItem(auth, "secret")->valuestring : NULL);
+            const char* secret = auth ? cJSON_GetObjectItem(auth, "secret")->valuestring : NULL;
+            const cJSON* paging = cJSON_GetObjectItem(c, "paging");
+            if (cJSON_IsObject(paging)) {
+                const char* kind_word = cJSON_GetObjectItem(paging, "kind")->valuestring;
+                ClarityPagingKind paged = strcmp(kind_word, "page") == 0 ? CLARITY_PAGING_PAGE : strcmp(kind_word, "offset") == 0 ? CLARITY_PAGING_OFFSET
+                                        : strcmp(kind_word, "cursor") == 0 ? CLARITY_PAGING_CURSOR : CLARITY_PAGING_LINK;
+                ClarityHttpPaging how = {paged, cJSON_GetObjectItem(paging, "param")->valuestring, cJSON_GetObjectItem(paging, "size_param")->valuestring,
+                                         (int)cJSON_GetObjectItem(paging, "size")->valuedouble, cJSON_GetObjectItem(paging, "next")->valuestring,
+                                         cJSON_GetObjectItem(paging, "items")->valuestring};
+                reply = clarity_http_pages(at, cJSON_GetObjectItem(c, "path")->valuestring, query, query_count, headers, count, signed_by, secret, how);
+            } else {
+                reply = clarity_http_call_at(method_of(cJSON_GetObjectItem(c, "method")->valuestring), at, cJSON_GetObjectItem(c, "path")->valuestring, query, query_count,
+                                             cJSON_IsString(body) ? body->valuestring : NULL, headers, count, signed_by, secret);
+            }
         }
         CHECK_INT(reply.status, (int64_t)cJSON_GetObjectItem(c, "status")->valuedouble);
         CHECK(reply.ok == cJSON_IsTrue(cJSON_GetObjectItem(c, "ok")));

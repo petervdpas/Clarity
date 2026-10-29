@@ -39,10 +39,13 @@ pub fn expr(e: &Expr) -> String {
             let at = at.as_deref().map(|a| format!(" at {}", expr(a))).unwrap_or_default();
             format!("read {read} from json {}{at}", expr(text))
         }
-        ExprKind::Http { method, url, from, body, headers, query } => {
+        ExprKind::Http { method, url, from, pages, body, headers, query } => {
             let mut text = format!("http {} {}", method.word(), expr(url));
             if let Some(from) = from {
                 text.push_str(&format!(" from {}", from.name));
+            }
+            if *pages {
+                text.push_str(" every page");
             }
             if let Some(body) = body {
                 text.push_str(&format!(" with {}", expr(body)));

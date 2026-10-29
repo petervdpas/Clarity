@@ -80,3 +80,35 @@ fn a_call_from_a_source_names_a_web_api() {
     let errs = errors(&[("shop.clarity", &SHOP.replace("query \"limit\": \"50\"", "query \"limit\": 50"))]);
     assert!(errs.iter().any(|e| e == "the query parameter 'limit' is text, not integer"), "{errs:?}");
 }
+
+/// `every page` reads a long list a page at a time, as the source's `paging`
+/// line says (DESIGN 5.23, paging); only `get` reads pages, from a source
+/// that pages.
+#[test]
+fn every_page_reads_a_source_that_pages() {
+    use clarity_spec::{Paging, PagingKind};
+    let paged = |paging: Option<Paging>| {
+        let shop = SourceRef { paging, ..SourceRef::web("shop") };
+        move |text: &str| -> Vec<String> {
+            load_in([("shop.clarity", text)], [], &[SourceRef::sql("main"), shop.clone()])
+                .diagnostics
+                .iter()
+                .filter(|d| d.severity == Severity::Error)
+                .map(|d| d.message.clone())
+                .collect()
+        }
+    };
+    let pages = Paging { kind: PagingKind::Page, param: "page".into(), size_param: "per_page".into(), size: 100, next: String::new(), items: "data".into() };
+    let every = SHOP.replace("from shop query \"status\": status query \"limit\": \"50\"", "from shop every page query \"status\": status");
+    let (file, diagnostics) = clarity_spec::parser::parse(&every, "shop.clarity");
+    assert!(diagnostics.is_empty(), "{diagnostics:#?}");
+    let StmtKind::Let { value, .. } = &file.functions[0].body[0].kind else { panic!() };
+    let ExprKind::Http { pages: every_page, .. } = &value.kind else { panic!("{value:#?}") };
+    assert!(*every_page);
+    assert_eq!(paged(Some(pages.clone()))(&every), Vec::<String>::new());
+    assert_eq!(paged(None)(&every), ["data source 'shop' does not page: say how under its datasource line, like: paging page \"page\" size \"per_page\" 100"]);
+    let posted = every.replace("http get \"/orders\"", "http post \"/orders\"").replace("every page query \"status\": status", "every page with \"x\"");
+    assert!(paged(Some(pages.clone()))(&posted).contains(&"only http get reads every page".to_string()), "{:?}", paged(Some(pages.clone()))(&posted));
+    let unsourced = every.replace("http get \"/orders\" from shop every page", "http get \"https://shop.example.com/orders\" every page");
+    assert!(paged(Some(pages))(&unsourced).contains(&"every page reads a web API data source: write 'from' and its name before it".to_string()));
+}

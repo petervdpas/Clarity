@@ -10,7 +10,7 @@
 //!     datasource main sqlite "data/shop.db"
 //!     datasource payments rest "https://api.example.com/v2"
 //!     datasource erp sqlite "legacy/erp.db" external readonly
-//!         auth bearer "keychain:payments"
+//!         auth bearer "setting:payments"
 //!     filestore photos "env:PHOTO_FOLDER"
 //! ```
 //!
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use clarity_spec::lexer::{Token, TokenKind, lex, quote};
 
 use crate::{
-    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, auth_word, currency_problem,
+    AUTH_KINDS, Auth, BACKENDS, DEFAULT_OUT, DataSource, FileStore, Paging, PagingKind, SOURCE_KINDS, Settings, Stack, TARGETS, Target, UIS, auth_word, currency_problem,
     language_problem,
     backend_word, source_word, target_word, ui_word, usual_ui,
 };
@@ -92,6 +92,72 @@ pub fn kept_problem(name: &str) -> Option<String> {
     None
 }
 
+/// The words of the paging kinds, as the project file writes them.
+const PAGING_KINDS: [(PagingKind, &str); 4] =
+    [(PagingKind::Page, "page"), (PagingKind::Offset, "offset"), (PagingKind::Cursor, "cursor"), (PagingKind::Link, "link")];
+
+fn paging_word(kind: PagingKind) -> &'static str {
+    PAGING_KINDS.iter().find(|(k, _)| *k == kind).map(|(_, w)| *w).unwrap_or("page")
+}
+
+/// A `paging` line under a web API (DESIGN 5.23): `page "p" size "s" N`,
+/// `offset "o" size "s" N`, `cursor "c" next "path"` or `link`, then
+/// `items "path"` when a page's items are inside its JSON.
+fn paging(line: u32, a: &[&Token]) -> Result<Paging, String> {
+    let kind_word = a.first().and_then(|t| word(t)).unwrap_or("");
+    let Some(kind) = PAGING_KINDS.iter().find(|(_, w)| *w == kind_word).map(|(k, _)| *k) else {
+        return Err(format!("line {line}: the paging kinds are page, offset, cursor and link, not '{kind_word}'"));
+    };
+    let mut rest = &a[1..];
+    // `items "data"` at the end, on every kind.
+    let mut items = String::new();
+    if let Some(at) = rest.iter().position(|t| word(t) == Some("items")) {
+        match &rest[at + 1..] {
+            [t] if t.kind == TokenKind::Str => items = t.text.clone(),
+            _ => return Err(format!("line {line}: write items and where a page's items are, like: items \"data\"")),
+        }
+        rest = &rest[..at];
+    }
+    let text = |t: &Token| (t.kind == TokenKind::Str).then(|| t.text.clone());
+    let none = String::new;
+    let paging = match (kind, rest) {
+        (PagingKind::Page | PagingKind::Offset, [param, size_word, size_param, size])
+            if word(size_word) == Some("size") && text(param).is_some() && text(size_param).is_some() && size.kind == TokenKind::Number =>
+        {
+            let size: u32 = size.text.parse().unwrap_or(0);
+            (size > 0).then(|| Paging { kind, param: param.text.clone(), size_param: size_param.text.clone(), size, next: none(), items: items.clone() })
+        }
+        (PagingKind::Cursor, [param, next_word, next]) if word(next_word) == Some("next") && text(param).is_some() && text(next).is_some() => {
+            Some(Paging { kind, param: param.text.clone(), size_param: none(), size: 0, next: next.text.clone(), items: items.clone() })
+        }
+        (PagingKind::Link, []) => Some(Paging { kind, param: none(), size_param: none(), size: 0, next: none(), items: items.clone() }),
+        _ => None,
+    };
+    paging.ok_or_else(|| {
+        let example = match kind {
+            PagingKind::Page => "paging page \"page\" size \"per_page\" 100",
+            PagingKind::Offset => "paging offset \"offset\" size \"limit\" 100",
+            PagingKind::Cursor => "paging cursor \"after\" next \"meta.next\"",
+            PagingKind::Link => "paging link",
+        };
+        format!("line {line}: write {example}")
+    })
+}
+
+/// The `paging` line as the project file writes it.
+pub fn paging_line(p: &Paging) -> String {
+    let mut out = format!("paging {}", paging_word(p.kind));
+    match p.kind {
+        PagingKind::Page | PagingKind::Offset => out.push_str(&format!(" {} size {} {}", quote(&p.param), quote(&p.size_param), p.size)),
+        PagingKind::Cursor => out.push_str(&format!(" {} next {}", quote(&p.param), quote(&p.next))),
+        PagingKind::Link => {}
+    }
+    if !p.items.is_empty() {
+        out.push_str(&format!(" items {}", quote(&p.items)));
+    }
+    out
+}
+
 fn string(line: u32, token: Option<&&Token>, what: &str) -> Result<String, String> {
     match token {
         Some(t) if t.kind == TokenKind::Str => Ok(t.text.clone()),
@@ -131,6 +197,16 @@ pub fn parse(text: &str) -> Result<Settings, String> {
         }
         // `openapi "forms.yaml"`, `pick "listTemplates", ...` and `pick schema
         // "Entry"` under a web API data source (DESIGN 5.23).
+        if entry.indent > setting_indent && keyword == "paging" {
+            let Some(source) = datasources.last_mut() else {
+                return Err(format!("line {line}: 'paging' belongs under a datasource line, indented"));
+            };
+            if source.paging.is_some() {
+                return Err(format!("line {line}: write 'paging' once per data source"));
+            }
+            source.paging = Some(paging(line, &args(entry))?);
+            continue;
+        }
         if entry.indent > setting_indent && (keyword == "openapi" || keyword == "pick") {
             let Some(source) = datasources.last_mut() else {
                 return Err(format!("line {line}: '{keyword}' belongs under a datasource line, indented"));
@@ -324,6 +400,7 @@ pub fn parse(text: &str) -> Result<Settings, String> {
                     openapi: None,
                     picks: Vec::new(),
                     pick_schemas: Vec::new(),
+                    paging: None,
                 });
             }
             "filestore" => {
@@ -382,6 +459,7 @@ fn key(entry: &Entry, current_source: Option<&str>) -> String {
         "filestore" => format!("filestore {}", entry.tokens.get(1).map(|t| t.text.as_str()).unwrap_or("")),
         "auth" => format!("auth {}", current_source.unwrap_or("")),
         "openapi" => format!("openapi {}", current_source.unwrap_or("")),
+        "paging" => format!("paging {}", current_source.unwrap_or("")),
         "pick" if entry.tokens.get(1).map(|t| t.text.as_str()) == Some("schema") => format!("pick schema {}", current_source.unwrap_or("")),
         "pick" => format!("pick {}", current_source.unwrap_or("")),
         // The two kinds of output line: where it is, and what it keeps.
@@ -488,6 +566,9 @@ pub fn write(existing: Option<&str>, settings: &Settings) -> Result<String, Stri
                 2,
                 format!("auth {} {}", auth_word(auth.kind), quote(&auth.secret)),
             ));
+        }
+        if let Some(paging) = &source.paging {
+            lines.push((format!("paging {}", source.name), 2, paging_line(paging)));
         }
         if let Some(openapi) = &source.openapi {
             lines.push((format!("openapi {}", source.name), 2, format!("openapi {}", quote(openapi))));

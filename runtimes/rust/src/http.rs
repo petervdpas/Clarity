@@ -14,6 +14,7 @@ pub enum Method {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -44,12 +45,26 @@ fn host_of(url: &str) -> &str {
     host.split(':').next().unwrap_or(host)
 }
 
-/// Calls `url` with `method`, sending `body` with post and put and each of
+/// Calls `url` with `method`, sending `body` with post, put and patch and each of
 /// `headers`, and gives the reply.
 pub fn call(method: Method, url: &str, body: Option<&str>, headers: &[(&str, &str)]) -> Reply {
+    fetch(method, url, body, headers).0
+}
+
+/// The address a `Link` header names `rel="next"`: `<url>; rel="next"`.
+fn next_link(header: &str) -> Option<String> {
+    header.split(',').find_map(|part| {
+        let (address, params) = part.split_once(';')?;
+        let next = params.split(';').any(|p| p.trim().replace(' ', "").eq_ignore_ascii_case("rel=\"next\"") || p.trim().eq_ignore_ascii_case("rel=next"));
+        next.then(|| address.trim().trim_start_matches('<').trim_end_matches('>').to_string())
+    })
+}
+
+/// A call as `call` makes it, with the address its `Link` header names next.
+fn fetch(method: Method, url: &str, body: Option<&str>, headers: &[(&str, &str)]) -> (Reply, Option<String>) {
     let scheme = url.split_once("://").map(|(scheme, _)| scheme.to_ascii_lowercase());
     if !matches!(scheme.as_deref(), Some("http" | "https")) {
-        return Reply::none(format!("only http and https addresses are called, not {url}"));
+        return (Reply::none(format!("only http and https addresses are called, not {url}")), None);
     }
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(TIMEOUT)).http_status_as_error(false).build().into();
     let answer = match method {
@@ -60,8 +75,12 @@ pub fn call(method: Method, url: &str, body: Option<&str>, headers: &[(&str, &st
             }
             request.call()
         }
-        Method::Post | Method::Put => {
-            let mut request = if method == Method::Post { agent.post(url) } else { agent.put(url) };
+        Method::Post | Method::Put | Method::Patch => {
+            let mut request = match method {
+                Method::Post => agent.post(url),
+                Method::Put => agent.put(url),
+                _ => agent.patch(url),
+            };
             for (name, value) in headers {
                 request = request.header(*name, *value);
             }
@@ -70,13 +89,15 @@ pub fn call(method: Method, url: &str, body: Option<&str>, headers: &[(&str, &st
     };
     let mut response = match answer {
         Ok(response) => response,
-        Err(err) => return Reply::none(format!("cannot reach {}: {err}", host_of(url))),
+        Err(err) => return (Reply::none(format!("cannot reach {}: {err}", host_of(url))), None),
     };
     let status = i64::from(response.status().as_u16());
-    match response.body_mut().read_to_vec() {
+    let next = response.headers().get_all("link").iter().filter_map(|v| v.to_str().ok()).find_map(next_link);
+    let reply = match response.body_mut().read_to_vec() {
         Ok(bytes) => Reply { status, ok: (200..300).contains(&status), text: String::from_utf8_lossy(&bytes).into_owned() },
         Err(err) => Reply::none(format!("cannot read the answer of {}: {err}", host_of(url))),
-    }
+    };
+    (reply, next)
 }
 
 /// How a web API data source signs its calls: the project file's `auth`
@@ -127,6 +148,98 @@ fn joined(base: &str, path: &str) -> String {
 /// query parameters, encoded and in order, and the source's auth, as
 /// `http get "/orders" from shop query "status": s` does.
 pub fn call_at(method: Method, base: &str, path: &str, query: &[(&str, &str)], body: Option<&str>, headers: &[(&str, &str)], auth: Auth) -> Reply {
+    fetch_at(method, base, path, query, body, headers, auth).0
+}
+
+/// How a web API hands out a long list (DESIGN 5.23, paging): the project
+/// file's `paging` line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PagingKind {
+    Page,
+    Offset,
+    Cursor,
+    Link,
+}
+
+/// A `paging` line: the query parameters it sends, the size of a page,
+/// where the next cursor is and where a page's items are (empty when a page
+/// is a list).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Paging<'a> {
+    pub kind: PagingKind,
+    pub param: &'a str,
+    pub size_param: &'a str,
+    pub size: u32,
+    pub next: &'a str,
+    pub items: &'a str,
+}
+
+/// At most this many pages are read.
+pub const MOST_PAGES: usize = 1000;
+
+/// The value at a dotted path of `value`: `meta.next`; the value itself for "".
+fn at_path<'v>(value: &'v serde_json::Value, path: &str) -> Option<&'v serde_json::Value> {
+    if path.is_empty() {
+        return Some(value);
+    }
+    path.split('.').try_fold(value, |v, step| v.get(step))
+}
+
+/// Gets `path` of the web API at `base` page after page, as `paging` says,
+/// as `http get "/orders" from shop every page` does: one reply whose text
+/// is one JSON list of the items of every page (conformance/http.json).
+pub fn pages_at(base: &str, path: &str, query: &[(&str, &str)], headers: &[(&str, &str)], auth: Auth, paging: &Paging) -> Reply {
+    let mut items: Vec<String> = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut link: Option<String> = None;
+    for n in 0..MOST_PAGES {
+        let mut sent: Vec<(String, String)> = query.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let size = paging.size as usize;
+        match paging.kind {
+            PagingKind::Page => sent.extend([(paging.param.to_string(), (n + 1).to_string()), (paging.size_param.to_string(), size.to_string())]),
+            PagingKind::Offset => sent.extend([(paging.param.to_string(), (n * size).to_string()), (paging.size_param.to_string(), size.to_string())]),
+            PagingKind::Cursor => sent.extend(cursor.take().map(|c| (paging.param.to_string(), c))),
+            PagingKind::Link => {}
+        }
+        let sent: Vec<(&str, &str)> = sent.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        // A next link is a whole address, with its own query.
+        let (reply, next_link) = match link.take() {
+            Some(address) => fetch_at(Method::Get, "", &address, &[], None, headers, auth),
+            None => fetch_at(Method::Get, base, path, &sent, None, headers, auth),
+        };
+        if !reply.ok {
+            return reply;
+        }
+        let page: Option<serde_json::Value> = serde_json::from_str(&reply.text).ok();
+        let Some(list) = page.as_ref().and_then(|p| at_path(p, paging.items)).and_then(|l| l.as_array()) else {
+            let place = if paging.items.is_empty() { "the top" } else { paging.items };
+            return Reply::none(format!("page {} of {path} has no list at {place}", n + 1));
+        };
+        items.extend(list.iter().map(|item| item.to_string()));
+        let done = match paging.kind {
+            PagingKind::Page | PagingKind::Offset => list.len() < size,
+            PagingKind::Cursor => {
+                cursor = match page.as_ref().and_then(|p| at_path(p, paging.next)) {
+                    Some(serde_json::Value::String(text)) if !text.is_empty() => Some(text.clone()),
+                    Some(serde_json::Value::Number(number)) => Some(number.to_string()),
+                    _ => None,
+                };
+                cursor.is_none()
+            }
+            PagingKind::Link => {
+                link = next_link;
+                link.is_none()
+            }
+        };
+        if done {
+            return Reply { status: reply.status, ok: true, text: format!("[{}]", items.join(",")) };
+        }
+    }
+    Reply::none(format!("stopped after {MOST_PAGES} pages of {path}"))
+}
+
+/// A call as `call_at` makes it, with the address its `Link` header names next.
+fn fetch_at(method: Method, base: &str, path: &str, query: &[(&str, &str)], body: Option<&str>, headers: &[(&str, &str)], auth: Auth) -> (Reply, Option<String>) {
     let mut url = joined(base, path);
     for (i, (name, value)) in query.iter().enumerate() {
         let joint = if i == 0 && !url.contains('?') { '?' } else { '&' };
@@ -145,7 +258,7 @@ pub fn call_at(method: Method, base: &str, path: &str, query: &[(&str, &str)], b
     if let Some((name, value)) = &signed {
         all.push((name, value.as_str()));
     }
-    call(method, &url, body, &all)
+    fetch(method, &url, body, &all)
 }
 
 #[cfg(test)]

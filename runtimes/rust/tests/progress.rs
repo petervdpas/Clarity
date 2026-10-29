@@ -75,3 +75,22 @@ fn progress_is_a_service_the_engine_must_use() {
     let refused = load(&cases, &[]).err().unwrap();
     assert_eq!(refused.to_string(), cases["refused"]["message"].as_str().unwrap());
 }
+
+/// The shell watches a handler, not each engine call: a call made while
+/// `watching` runs, as generated code makes it, reports to that watch and
+/// stops with it.
+#[test]
+fn a_call_inside_a_watched_handler_is_watched() {
+    let cases = cases();
+    let engine = load(&cases, &["progress"]).unwrap();
+    let (watch, reports) = watch(0);
+    let got = clarity_runtime::engine::watching(&watch, || engine.call("work", vec![json!(2)]));
+    assert_eq!(got.unwrap(), json!(2));
+    assert_eq!(*reports.lock().unwrap(), [(1, 2), (2, 2)]);
+    // Outside it, nothing is watched.
+    assert_eq!(engine.call("work", vec![json!(1)]).unwrap(), json!(1));
+    assert_eq!(reports.lock().unwrap().len(), 2);
+    watch.stop.store(true, Ordering::SeqCst);
+    let stopped = clarity_runtime::engine::watching(&watch, || engine.call("work", vec![json!(5)]));
+    assert_eq!(stopped.unwrap_err().to_string(), "engine Long failed in work: it was stopped");
+}

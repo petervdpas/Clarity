@@ -12,3 +12,5 @@ translation nl
     ok "OK"
     cancel "Annuleren"
     dismiss "Sluiten"
+    simulateCaption "Een miljoen keer gooien"
+    stopCall "Stoppen"

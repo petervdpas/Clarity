@@ -16,12 +16,21 @@ part Dice
     hears roll
     size 8 x 10
 
+// Rolls the dice many times and counts how often each total comes up: a
+// million rolls take a while, so the window shows how far it is, with Stop.
+// Its source is in engines/odds.
+engine Odds from "odds.wasm"
+    uses random, progress
+    limit 120 seconds
+    function simulate(dice: integer, rolls: integer) -> list<integer>
+
 page Table: window
     title @tableTitle
     size 980 x 640
     data rolls: list<Roll>
     data count: integer, default 2
     data shown: integer
+    data odds: list<integer>
     sound name rattle source "roll.wav" volume 80
     sound name fanfare volume 60
     Dice name board at 1,1 span 8 rows 12 count 2 on landed: diceLanded
@@ -30,7 +39,9 @@ page Table: window
     label @shownLabel name shownLabel at 9,3 span 4
     display name shownBox at 9,4 span 4 rows 2 bind shown digits 2
     button @rollCaption name rollButton at 9,6 span 4 on click: rollClicked
-    table name history at 9,7 span 4 rows 6 bind rolls columns rolled, faces, total order by rolled desc
+    table name history at 9,7 span 4 rows 3 bind rolls columns rolled, faces, total order by rolled desc
+    button @simulateCaption name simulateButton at 9,10 span 4 on click: simulateClicked
+    chart bar name oddsChart at 9,11 span 4 rows 2 bind odds
 
 code Table
     handler diceLanded(total: integer, faces: text)
@@ -52,3 +63,7 @@ code Table
     handler rollClicked
         rattle.play()
         board.roll()
+
+    // How often each total comes up in a million rolls of the dice on the table.
+    handler simulateClicked
+        odds = Odds.simulate(count, 1000000)

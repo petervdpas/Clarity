@@ -1,0 +1,22 @@
+# The Odds engine of the dice example: rolls the dice many times and counts
+# how often each total comes up, saying how far it is as it goes. Built to
+# ../odds.wasm by examples/build-engines.sh.
+[package]
+name = "odds"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clarity-engine = { path = "../../../../runtimes/rust-engine" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+[workspace]

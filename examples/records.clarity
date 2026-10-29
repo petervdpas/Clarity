@@ -10,4 +10,4 @@ project Records
     theme Classic Midnight
     datasource main sqlite "data/records.db"
     filestore photos "data/photos"
-    filestore exports "data/exports"
+    filestore exports "setting:exportsFolder"

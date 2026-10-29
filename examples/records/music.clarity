@@ -146,6 +146,7 @@ page AlbumForm: window
                 tab @albumFormCoverTab
                     image name cover at 1,1 span 12 rows 6 bind album.cover
                     help name coverHelp at 1,7 span 12 for cover
+                    button @useAsArtistPhotoCaption name useAsArtistPhoto at 9,8 span 4 on click: useAsArtistPhotoClicked
                 tab @albumFormNotesTab
                     memo name albumNotes at 1,1 span 12 rows 7 bind album.notes
     button @saveCaption name save at 9,11 span 2 style primary key "Ctrl+S" default on click: saveClicked
@@ -256,6 +257,16 @@ code AlbumForm
 
     handler trackOpened
         open TrackDialog with album = album, track = trackGrid.selected
+
+    // The cover, kept in the database, copied as the artist's photo, which the photos folder keeps.
+    handler useAsArtistPhotoClicked
+        if album.cover == none
+            message warning @theAlbumHasNoCover
+            return
+        let player = album.artist
+        player.photo = album.cover
+        save player
+        message @theCoverIsNowThePhoto(name = player.name)
 
     handler addTrackClicked
         if album.title == ""

@@ -12,3 +12,5 @@ translation en
     ok "OK"
     cancel "Cancel"
     dismiss "Dismiss"
+    simulateCaption "Roll a million times"
+    stopCall "Stop"

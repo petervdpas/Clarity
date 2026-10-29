@@ -146,7 +146,7 @@ int64_t Db::store_record(const std::string& source, const std::string& table, co
         if (!exists()) throw NotFoundError(table, id);
         return id;
     }
-    params.push_back(id);
+    params.emplace_back(id);
     std::string sql = "UPDATE " + quote(dialect, table) + " SET " + sets + " WHERE " + quote(dialect, key) + " = " + mark(dialect, int(params.size()));
     // MySQL counts only the rows whose values changed, so an update that
     // changes nothing is told apart from a missing record.

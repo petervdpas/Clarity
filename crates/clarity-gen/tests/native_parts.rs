@@ -432,6 +432,18 @@ fn a_dotnet_part_has_its_package_its_adapter_and_its_generated_half() {
     assert!(view.contains("<parts:Notes ") && view.contains("xmlns:parts=\"using:ClarityParts\""), "{view}");
 }
 
+/// A Rust part's starter uses every value a hear brings without a warning:
+/// one alone as it is, several as a tuple (found by the every-part project).
+#[test]
+fn a_rust_parts_starter_builds_without_a_warning() {
+    let text = GAME.replace("native \"parts/Arena\"", "crate \"parts/Arena\"");
+    let p = load_keyed([("game.clarity", text.as_str())], &[], "en");
+    let lib = parts::starter_for(&p.files[0].parts[0]).into_iter().find(|(path, _)| path == "src/lib.rs").unwrap().1;
+    assert!(lib.contains("let _ = level;"), "{lib}");
+    assert!(lib.contains("let _ = (words, loud);"), "{lib}");
+    assert!(!lib.contains("let _ = (level);"), "{lib}");
+}
+
 /// The adapter's starter shows the value as text, whatever its type: a
 /// number has no `?.` (found by the every-part project).
 #[test]

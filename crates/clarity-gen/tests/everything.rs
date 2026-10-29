@@ -123,9 +123,10 @@ const STACKS: [&str; 10] = [
 #[test]
 fn the_every_part_project_checks_and_generates_on_every_stack() {
     for stack in STACKS {
-        let (_, project, settings) = everything_project::prepare(&format!("everything-{}", stack.replace(' ', "-")), stack);
+        let (file, project, settings) = everything_project::prepare(&format!("everything-{}", stack.replace(' ', "-")), stack);
         let errors: Vec<_> = project.diagnostics.iter().filter(|d| d.severity == clarity_spec::Severity::Error).map(|d| format!("{}: {}", d.span.line, d.message)).collect();
         assert!(errors.is_empty(), "{stack}:\n{}", errors.join("\n"));
         clarity_gen::programs(&project, &settings).unwrap_or_else(|e| panic!("{stack}: {e:?}"));
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 }

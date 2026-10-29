@@ -293,7 +293,12 @@ impl {n}Part for {n} {{
     }
     for hear in &part.hears {
         let names: Vec<String> = hear.params.iter().map(|p| snake(&p.name.name)).collect();
-        let quiet = if names.is_empty() { String::new() } else { format!("\n        let _ = ({});", names.join(", ")) };
+        // Each value used, so the starter builds without a warning: one as it is, several as a tuple.
+        let quiet = match names.as_slice() {
+            [] => String::new(),
+            [one] => format!("\n        let _ = {one};"),
+            many => format!("\n        let _ = ({});", many.join(", ")),
+        };
         let _ = write!(lib, "\n    fn {}(&mut self{}) {{{quiet}\n    }}\n", snake(&hear.name.name), params(&hear.params, false));
     }
     lib.push_str("}\n");

@@ -33,8 +33,8 @@ Do not edit these files. Change the project in Clarity; it writes the folder aga
 The generated project carries no runtime sources. It references NuGet packages from nuget.org, at one shared version:
 
 - `Clarity.Avalonia.Desktop`: what only a desktop program has: the platform's windows, the shell, sound through the speakers, quitting and the keys window. It brings `Clarity.Avalonia`.
-- `Clarity.Avalonia`: the windows and parts, without anything native, so a program served to browsers takes it alone. It brings `Clarity.Runtime`, which stores records in SQLite.
-- `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per server database, added only when a data source uses it.
+- `Clarity.Avalonia`: the windows and parts, without anything native, so a program served to browsers takes it alone. It brings `Clarity.Runtime`: records, queries and migrations, without a database driver.
+- `Clarity.Runtime.Sqlite`, `Clarity.Runtime.PostgreSql`, `Clarity.Runtime.MySql` and `Clarity.Runtime.SqlServer`: one per kind of database, added only when a data source uses it. In a program served to browsers the server takes them, and the browser program none.
 - `Clarity.Runtime.Engines`: runs [engines](code.engines.md) with Wasmtime, added only when the project has one.
 
 To build on the runtime's own projects in Clarity's repository instead (while you work on the runtime itself), name their folder:

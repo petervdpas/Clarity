@@ -127,5 +127,5 @@ Built and tried on Linux only. `cargo test -p clarity-gen --test go_build -- --i
 - [x] Upload NuGet 0.51.0: the web server over a plain socket (Windows), and the icon with the sparks on every package.
 - [x] Upload NuGet 0.52.0: the engine fix of 2026-10-28 (section 1), a new store's epoch deadline.
 - [x] Upload NuGet 0.53.0: an SVG picture drawn by Skia into a bitmap, so it fits its cell (section 5).
-- [ ] Upload NuGet 0.54.0: eight packages now, `Clarity.Runtime.Sqlite` new (SQLite as a package of its own, which a program in a browser does not carry); each theme compiled as a class; a custom part's starter that shows a number.
+- [x] Upload NuGet 0.54.0: eight packages now, `Clarity.Runtime.Sqlite` new (SQLite as a package of its own, which a program in a browser does not carry); each theme compiled as a class; a custom part's starter that shows a number.
 - [x] Release the VS Code extension (0.1.16 on the Marketplace; Open VSX has no token): its grammar knows record, tell, beside, engines, const and picture.

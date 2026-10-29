@@ -32,7 +32,7 @@ pub fn snake(name: &str) -> String {
 /// The Rust type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => "String".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "String".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "i64".into(),
         FieldType::Decimal { .. } | FieldType::Money => "Decimal".into(),
         FieldType::Bool => "bool".into(),

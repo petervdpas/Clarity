@@ -57,6 +57,13 @@ public sealed record EngineDeclaration(
 /// </summary>
 public sealed record EngineServices(long? Clock = null, ulong? Seed = null, Action<string>? Log = null, Func<string?>? Language = null);
 
+/// <summary>
+/// What the screen sees of a long call and how the person stops it (<c>uses progress</c>,
+/// conformance/progress.json): every report of how far it is goes to <paramref name="Progress"/>,
+/// and once <paramref name="Stop"/> is cancelled the call ends, failing with "it was stopped".
+/// </summary>
+public sealed record EngineWatch(Action<long, long>? Progress = null, CancellationToken Stop = default);
+
 public sealed class Engine
 {
     readonly string name;
@@ -92,6 +99,7 @@ public sealed class Engine
         ["random"] = ([], [Wasmtime.ValueKind.Int64]),
         ["log"] = ([Wasmtime.ValueKind.Int32, Wasmtime.ValueKind.Int32], []),
         ["language"] = ([Wasmtime.ValueKind.Int32, Wasmtime.ValueKind.Int32], [Wasmtime.ValueKind.Int32]),
+        ["progress"] = ([Wasmtime.ValueKind.Int64, Wasmtime.ValueKind.Int64], []),
     };
 
     /// <summary>The language the screen picked, as its tag (<c>nl</c>); null for the texts as written. The application sets it.</summary>
@@ -189,9 +197,16 @@ public sealed class Engine
 
     /// Calls `function` in open window `window`, adding what its answer tells
     /// to `told` (an engine beside the screen, DESIGN 5.12).
-    public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args)
+    public JsonNode? CallIn(long window, string function, List<ScreenTell>? told, object?[] args) => Run(window, function, told, null, args);
+
+    /// <summary>Calls `function` in open window `window` as CallIn does, telling <paramref name="watch"/> how far it is and stopping when it says so.</summary>
+    public JsonNode? CallWatched(long window, string function, EngineWatch watch, params object?[] args) => Run(window, function, null, watch, args);
+
+    JsonNode? Run(long window, string function, List<ScreenTell>? told, EngineWatch? watch, object?[] args)
     {
         EngineException Failed(string why) => new($"engine {name} failed in {function}: {why}");
+        if (watch?.Stop.IsCancellationRequested == true)
+            throw Failed("it was stopped");
         // An engine with state keeps its instance, unless a call fails or runs
         // past its limit: then its memory may be half changed, so the next
         // call starts a new one. Its calls take turns.
@@ -213,11 +228,22 @@ public sealed class Engine
                     if (!call.Done)
                         engine.IncrementEpoch();
             }, null, TimeSpan.FromSeconds(limits.Seconds), Timeout.InfiniteTimeSpan))
+            // Stop moves the epoch as the timer does, and says why.
+            using (watch?.Stop.Register(() =>
+            {
+                lock (call)
+                    if (!call.Done)
+                    {
+                        call.Stopped = true;
+                        engine.IncrementEpoch();
+                    }
+            }))
             using (call.Finish())
             {
                 try
                 {
                     live ??= Instance();
+                    live.Serving.Progress = watch?.Progress;
                     output = Invoke(live, function, args);
                 }
                 catch (Exception e)
@@ -227,6 +253,7 @@ public sealed class Engine
                     {
                         OpenFailed open => Failed(open.Message),
                         EngineException => e,
+                        Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } when call.Stopped => Failed("it was stopped"),
                         Wasmtime.TrapException { Type: Wasmtime.TrapCode.Interrupt } => Failed($"it ran longer than {limits.Seconds} second{(limits.Seconds == 1 ? "" : "s")}"),
                         _ => Failed(e.Message),
                     };
@@ -289,6 +316,9 @@ public sealed class Engine
     sealed class Serving
     {
         public ulong Random;
+
+        /// <summary>Where the call running now reports how far it is.</summary>
+        public Action<long, long>? Progress;
     }
 
     /// A new instance of the module with its services, opened when the engine has `on open`.
@@ -363,6 +393,8 @@ public sealed class Engine
                 log($"engine {name}: {memory.ReadString(at, len, Encoding.UTF8)}");
             });
         }
+        if (uses.Contains("progress"))
+            linker.DefineFunction("clarity", "progress", (long done, long total) => serving.Progress?.Invoke(done, total));
         if (uses.Contains("language"))
         {
             // The language as it is at the call, written into the engine's room.
@@ -399,6 +431,9 @@ public sealed class Engine
     sealed class Running
     {
         public bool Done;
+
+        /// <summary>Whether the person stopped the call, rather than its time running out.</summary>
+        public bool Stopped;
 
         /// Marks the call ended when disposed, after its timer.
         public IDisposable Finish() => new Ending(this);

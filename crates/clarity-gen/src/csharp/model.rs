@@ -72,8 +72,8 @@ fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 /// The initial value of a field, when it has one beyond C#'s own default.
 fn initial(field: &Field) -> Option<String> {
     match (&field.ty, field.modifiers.default.as_ref()) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => Some(string(s)),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => Some("\"\"".into()),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => Some(format!("{n}L")),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => Some(format!("{n}m")),
         (FieldType::Bool, Some(Literal::Bool(true))) => Some("true".into()),
@@ -251,7 +251,7 @@ fn to_sql(entity: &str, field: &Field) -> String {
 
 fn from_sql(field: &Field) -> String {
     let read = match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => "GetText".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "GetText".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "GetInteger".into(),
         FieldType::Decimal { .. } | FieldType::Money => "GetDecimal".into(),
         FieldType::Bool => "GetBoolean".into(),

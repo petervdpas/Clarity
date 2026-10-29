@@ -172,3 +172,44 @@ void a_picture_in_a_file_store_is_a_file_named_by_its_bytes(void) {
     clarity_db_close(db);
     remove_tree(store);
 }
+
+// Another record's picture, copied in code (album.cover = other.cover): one
+// in hand is copied as it is, a stored one is read first, and one of a file
+// store stays linked only in the same store.
+void a_picture_is_copied_from_another_record(void) {
+    const char* store = scratch("copied");
+    ClarityDb* db;
+    REQUIRE_OK(albums(store, &db));
+    Album first = {0, "Blue Train", clarity_picture_new(png), clarity_picture_new(jpg)};
+    REQUIRE_OK(clarity_save(db, &album, &first));
+    Album read;
+    REQUIRE_OK(clarity_get(db, &album, first.id, &read));
+    ClarityPicture* got = NULL;
+    // A stored picture: its bytes, from the database or from the store.
+    CHECK_OK(clarity_copied_picture(db, &album, read.cover, read.id, "cover", NULL, NULL, &got));
+    CHECK(clarity_picture_same(got, clarity_picture_new(png)));
+    CHECK_OK(clarity_copied_picture(db, &album, read.photo, read.id, "photo", "photos", NULL, &got));
+    CHECK(clarity_picture_same(got, clarity_picture_new(jpg)));
+    // One in hand, and none, as they are.
+    CHECK_OK(clarity_copied_picture(db, &album, first.cover, first.id, "cover", NULL, NULL, &got));
+    CHECK(clarity_picture_same(got, clarity_picture_new(png)));
+    CHECK_OK(clarity_copied_picture(db, &album, NULL, first.id, "cover", NULL, NULL, &got));
+    CHECK(!got);
+    // A file of the store: linked in the same store, else its bytes.
+    const char* name;
+    REQUIRE_OK(clarity_picture_file_name(jpg, &name));
+    ClarityPicture* linked = clarity_picture_in_store(name);
+    CHECK_OK(clarity_copied_picture(db, &album, linked, first.id, "photo", "photos", "photos", &got));
+    CHECK(clarity_picture_same(got, linked));
+    CHECK_OK(clarity_copied_picture(db, &album, linked, first.id, "photo", "photos", NULL, &got));
+    CHECK(clarity_picture_same(got, clarity_picture_new(jpg)));
+    // Saved into the other field, the copy is kept there.
+    Album second = {0, "Copy", NULL, NULL};
+    REQUIRE_OK(clarity_copied_picture(db, &album, read.cover, read.id, "cover", NULL, "photos", &second.photo));
+    CHECK_OK(clarity_save(db, &album, &second));
+    ClarityBytes kept;
+    CHECK_OK(clarity_picture(db, &album, second.id, "photo", &kept));
+    CHECK(same(kept, png));
+    clarity_db_close(db);
+    remove_tree(store);
+}

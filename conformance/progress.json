@@ -1,0 +1,17 @@
+{
+  "about": "Progress of a long engine call and Stop (DESIGN 5.12), alike on every host. The engine `Long` (engines/long, built to engines/long.wasm) uses only the service `progress`: the function of module `clarity` named `progress`, which takes two i64 (done, total) and gives nothing. `work(steps)` does a little work per step and reports `progress(step, steps)` after each; it gives the number of steps. A host hands every report to the call's progress sink, in order (the shell, not the host, sends at most ten a second to the screen). Stop is a flag the call is given: the host looks at it where it looks at the clock for the time limit, and once it is set the call fails with `engine <Name> failed in <function>: it was stopped`; set before the call, the call stops at once. `stopAt` is the report at which a test sets the flag (0: before the call). An engine with state drops its instance after a stopped call, as after any failure. `refused` is the message for an engine that imports `progress` without `uses progress`.",
+  "engine": "engines/long.wasm",
+  "name": "Long",
+  "functions": ["work"],
+  "uses": ["progress"],
+  "limits": { "seconds": 60, "megabytes": 16 },
+  "reported": [
+    { "function": "work", "args": [4], "gives": 4, "progress": [[1, 4], [2, 4], [3, 4], [4, 4]] },
+    { "function": "work", "args": [0], "gives": 0, "progress": [] }
+  ],
+  "stopped": [
+    { "function": "work", "args": [1000000000], "stopAt": 3, "firstReports": [[1, 1000000000], [2, 1000000000], [3, 1000000000]], "fails": "engine Long failed in work: it was stopped" },
+    { "function": "work", "args": [1000000000], "stopAt": 0, "firstReports": [], "fails": "engine Long failed in work: it was stopped" }
+  ],
+  "refused": { "uses": [], "message": "engine Long imports clarity.progress; an engine imports only the services it uses" }
+}

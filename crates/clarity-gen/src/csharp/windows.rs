@@ -1391,6 +1391,13 @@ impl<'a> Window<'a> {
                     remove = self.text("@removeTag"),
                 );
             }
+            // A folder setting's path, typed or chosen with the system's folder picker.
+            WidgetKind::Folder => {
+                let value = bound.as_deref().map(|path| format!(" Value=\"{{Binding {path}}}\"")).unwrap_or_default();
+                let read_only = if p.readonly && named.is_none() { " IsReadOnly=\"True\"" } else { "" };
+                let choose = self.text("@chooseFolder");
+                let _ = writeln!(out, "{pad}<c:FolderInput {at}{value} ChooseText=\"{choose}\"{read_only}{text_state}{extra} />");
+            }
             // A record's file, which the view model fetches to open it or save a copy.
             WidgetKind::File => {
                 let (data, field) = p.bind.as_deref().and_then(|b| b.split_once('.')).unwrap_or_default();
@@ -1525,6 +1532,7 @@ impl<'a> Window<'a> {
                         | WidgetKind::Slider
                         | WidgetKind::Color
                         | WidgetKind::File
+                        | WidgetKind::Folder
                         | WidgetKind::Tags
                         | WidgetKind::Checkbox
                         | WidgetKind::Switch

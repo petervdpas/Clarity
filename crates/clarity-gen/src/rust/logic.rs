@@ -217,6 +217,22 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}{place} = Some(db.{made}(&{file}, {store})?);\n"));
                     return;
                 }
+                // Another record's picture or file: copied, its bytes read when it is only stored.
+                if let Some(copy) = crate::copied(self.project, |e| self.types.type_of(e), target, value) {
+                    let place = self.place(target);
+                    let object = self.object(copy.object);
+                    let made = if copy.file { "copied_file" } else { "copied_picture" };
+                    let store = |s: Option<String>| s.map_or("None".to_string(), |s| format!("Some({s:?})"));
+                    out.push_str(&format!(
+                        "{pad}{place} = {{\n{pad}    let other = &{object};\n{pad}    db.{made}::<{}>(&other.{}, other.id, {:?}, {}, {})?\n{pad}}};\n",
+                        copy.entity,
+                        ident(&copy.field),
+                        copy.column,
+                        store(copy.from),
+                        store(copy.to)
+                    ));
+                    return;
+                }
                 // A list position: the position and value first, so they may read the list.
                 if let ExprKind::Index { list, index } = &target.kind {
                     let at = self.value(index);
@@ -1131,7 +1147,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => {
                 format!("sql::decimal({})", coerce(self.value(value), &from, &TypeInfo::Decimal))

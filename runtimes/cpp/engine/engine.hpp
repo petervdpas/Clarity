@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -72,6 +74,15 @@ struct EngineServices {
     std::function<std::optional<std::string>()> language;
 };
 
+/// What the screen sees of a long call and how the person stops it (`uses
+/// progress`, conformance/progress.json): every report of how far it is
+/// goes to `progress`, and once `stop` is set (from any thread) the call
+/// ends, failing with "it was stopped". Either may be empty.
+struct EngineWatch {
+    std::function<void(int64_t done, int64_t total)> progress;
+    std::shared_ptr<std::atomic<bool>> stop;
+};
+
 class Engine {
 public:
     /// Loads `bytes` as engine `name` as it is declared; throws
@@ -92,7 +103,10 @@ public:
 
     /// Calls `function` in open window `window`: for an engine with state
     /// per window, on that window's own instance.
-    nlohmann::json call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const;
+    nlohmann::json call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const { return call_watched(window, function, args, {}); }
+
+    /// call_in, telling `watch` how far the call is and stopping when it says so.
+    nlohmann::json call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const;
 
     /// Drops the instance window `window` had, when it closes.
     void close_window(uint64_t window) const;

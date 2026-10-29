@@ -8,3 +8,4 @@ project Everything
     output "out"
     language "en"
     datasource main sqlite "data/everything.db"
+    filestore scans "setting:scansFolder"

@@ -292,12 +292,21 @@ impl Source {
     }
 }
 
+/// Where a file store keeps its files.
+enum StorePlace {
+    /// A folder, found once.
+    Folder(std::path::PathBuf),
+    /// A folder setting of `program`, read again at every use (`filestore
+    /// photos "setting:photosFolder"`), and the setting's default.
+    Setting { program: String, setting: String, default: String },
+}
+
 /// The databases of an application: one per data source.
 pub struct Db {
     /// By data source name; the first is the default.
     sources: Vec<Source>,
-    /// The folders of the file stores, by name.
-    stores: Vec<(String, std::path::PathBuf)>,
+    /// The file stores, by name.
+    stores: Vec<(String, StorePlace)>,
 }
 
 impl Db {
@@ -338,16 +347,35 @@ impl Db {
         let folder = std::path::PathBuf::from(store::location(location)?);
         std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
         self.stores.retain(|(n, _)| n != name);
-        self.stores.push((name.to_string(), folder));
+        self.stores.push((name.to_string(), StorePlace::Folder(folder)));
         Ok(())
     }
 
-    fn store_folder(&self, name: &str) -> Result<&std::path::Path> {
-        self.stores
-            .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, f)| f.as_path())
-            .ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))
+    /// Adds the file store `name` whose folder is the folder setting
+    /// `setting` of `program` (`filestore photos "setting:photosFolder"`),
+    /// or `default` while it is not kept; read again at every use, so a
+    /// folder chosen while the application runs takes effect at once.
+    pub fn add_store_setting(&mut self, name: &str, program: &str, setting: &str, default: &str) -> Result<()> {
+        self.stores.retain(|(n, _)| n != name);
+        let place = StorePlace::Setting { program: program.to_string(), setting: setting.to_string(), default: default.to_string() };
+        self.stores.push((name.to_string(), place));
+        self.store_folder(name).map(|_| ())
+    }
+
+    /// The folder of the file store `name`, made when it is not there yet.
+    fn store_folder(&self, name: &str) -> Result<std::path::PathBuf> {
+        let place = self.stores.iter().find(|(n, _)| n == name).map(|(_, p)| p).ok_or_else(|| Error::Storage(format!("there is no file store '{name}'")))?;
+        match place {
+            StorePlace::Folder(folder) => Ok(folder.clone()),
+            StorePlace::Setting { program, setting, default } => {
+                let file = settings::file(program).ok_or_else(|| Error::Storage("this system names no folder for application settings".into()))?;
+                let settings_folder = file.parent().map(|f| f.display().to_string()).unwrap_or_default();
+                let kept = settings::read(program).remove(setting.as_str()).unwrap_or_default();
+                let folder = std::path::PathBuf::from(settings::store_folder_in(settings::OS, &settings_folder, name, &kept, default));
+                std::fs::create_dir_all(&folder).map_err(|e| Error::Storage(format!("cannot make the file store {}: {e}", folder.display())))?;
+                Ok(folder)
+            }
+        }
     }
 
     /// The values of a record as they are saved: a new picture checked, and
@@ -366,7 +394,7 @@ impl Db {
                         _ => None,
                     });
                     let path = record_file::store_path(bytes, name.as_deref().unwrap_or(""));
-                    let file = picture::in_store(self.store_folder(store)?, &path)?;
+                    let file = picture::in_store(&self.store_folder(store)?, &path)?;
                     if !file.exists() {
                         if let Some(folder) = file.parent() {
                             std::fs::create_dir_all(folder).map_err(|e| Error::Storage(format!("cannot make {}: {e}", folder.display())))?;
@@ -408,12 +436,37 @@ impl Db {
             (_, SqlValue::Null) => Ok(None),
             (None, SqlValue::Blob(bytes)) => Ok(Some(bytes)),
             (Some(store), SqlValue::Text(path)) if !path.is_empty() => {
-                let file = picture::in_store(self.store_folder(store)?, &path)?;
+                let file = picture::in_store(&self.store_folder(store)?, &path)?;
                 std::fs::read(&file).map(Some).map_err(|e| Error::Storage(format!("cannot read {}: {e}", file.display())))
             }
             (_, SqlValue::Text(_)) => Ok(None),
             (_, other) => Err(Error::Storage(format!("{column}: {other:?} is no picture"))),
         }
+    }
+
+    /// Another record's picture for a field kept in `to` (none: the
+    /// database), as code copies it (`album.cover = other.cover`). `value` is
+    /// field `column` of record `id`, kept in `from`. A picture in hand is
+    /// copied as it is, a stored one is read first, and a file of a store
+    /// stays linked only in that same store.
+    pub fn copied_picture<R: Record>(&self, value: &Option<Picture>, id: Id, column: &str, from: Option<&str>, to: Option<&str>) -> Result<Option<Picture>> {
+        Ok(match value {
+            None => None,
+            Some(Picture::New(bytes)) => Some(Picture::New(bytes.clone())),
+            Some(Picture::Stored) => self.picture::<R>(id, column)?.map(Picture::New),
+            Some(Picture::InStore(path)) => match from {
+                Some(store) if Some(store) == to => Some(Picture::InStore(path.clone())),
+                Some(store) => Some(Picture::New(self.store_file(store, path)?)),
+                None => return Err(Error::Storage(format!("{column} is kept in the database, not in a file store"))),
+            },
+        })
+    }
+
+    /// Another record's file, with its name, as `copied_picture` copies a picture.
+    pub fn copied_file<R: Record>(&self, value: &Option<RecordFile>, id: Id, column: &str, from: Option<&str>, to: Option<&str>) -> Result<Option<RecordFile>> {
+        let Some(file) = value else { return Ok(None) };
+        let content = self.copied_picture::<R>(&Some(file.content.clone()), id, column, from, to)?;
+        Ok(content.map(|content| RecordFile { name: file.name.clone(), content }))
     }
 
     /// The data source `source`. With one database, every record is in it.

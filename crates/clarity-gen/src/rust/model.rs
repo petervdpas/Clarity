@@ -53,8 +53,8 @@ pub fn stored(entity: &Entity) -> impl Iterator<Item = &Field> {
 fn default_value(project: &Project, field: &Field) -> String {
     let literal = field.modifiers.default.as_ref();
     match (&field.ty, literal) {
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => format!("String::from({s:?})"),
-        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => "String::new()".into(),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, Some(Literal::Str(s))) => format!("String::from({s:?})"),
+        (FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret, _) => "String::new()".into(),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, Some(Literal::Number(n))) => format!("{n}i64"),
         (FieldType::Integer | FieldType::Id | FieldType::Duration, _) => "0".into(),
         (FieldType::Decimal { .. } | FieldType::Money, Some(Literal::Number(n))) => decimal(n),
@@ -76,7 +76,7 @@ fn default_value(project: &Project, field: &Field) -> String {
 fn to_sql(field: &Field) -> String {
     let value = format!("self.{}", ident(&field.name.name));
     match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{value})"),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("sql::text(&{value})"),
         FieldType::Integer | FieldType::Id | FieldType::Duration => format!("sql::integer({value})"),
         FieldType::Decimal { .. } | FieldType::Money => format!("sql::decimal({value})"),
         FieldType::Bool => format!("sql::boolean({value})"),
@@ -94,7 +94,7 @@ fn to_sql(field: &Field) -> String {
 
 fn from_sql(field: &Field) -> &'static str {
     match &field.ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => "get_text",
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "get_text",
         FieldType::Integer | FieldType::Id | FieldType::Duration => "get_integer",
         FieldType::Decimal { .. } | FieldType::Money => "get_decimal",
         FieldType::Bool => "get_boolean",

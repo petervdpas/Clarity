@@ -94,6 +94,7 @@ An engine reaches nothing by itself. `uses` names the services of Clarity it may
 | `random` | A random number. Every call starts a fresh random sequence; the sequence is the same on every stack for the same start. |
 | `log` | A line in the application's log, written as `engine Pricing: <the line>` to the standard error. |
 | `language` | The language the person picked, as its tag such as `nl`; none for the texts as the project writes them. With `clarity-engine`, call `clarity_engine::language()`. |
+| `progress` | Says how far a long call is: `progress(day, total)` in Clarity, `clarity_engine::progress(done, total)` with `clarity-engine`. A call can be stopped, and then fails with `it was stopped`. |
 
 There is no service for the database, files or the network, and there won't be: an engine that needs data gets it as a value from your code.
 

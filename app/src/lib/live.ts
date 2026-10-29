@@ -117,6 +117,8 @@ export interface Live {
   openFile(name: string, data: string): Promise<void>;
   /** Saves a copy of a file in the person's Downloads folder, and says so. */
   saveFile(name: string, data: string): Promise<void>;
+  /** Opens the system's folder picker with a title: the folder chosen, or null. None where there is no picker, as in a browser. */
+  chooseFolder?: (title: string) => Promise<string | null>;
 }
 
 export function provideLive(live: Live) {

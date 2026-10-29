@@ -62,6 +62,20 @@ func (d *windows) Command(ctx context.Context, command string, a shell.Args) (sh
 		}
 	case "quit_app":
 		d.app.Quit()
+	case "choose_folder":
+		// The system's folder picker, for a folder part: the folder chosen, or none.
+		dialog := d.app.Dialog.OpenFile().CanChooseFiles(false).CanChooseDirectories(true).SetTitle(a.Title)
+		if window := caller(ctx); window != nil {
+			dialog = dialog.AttachToWindow(window)
+		}
+		folder, err := dialog.PromptForSingleSelection()
+		if err != nil {
+			return shell.Answer{Error: fmt.Sprintf("cannot choose a folder: %v", err)}, true
+		}
+		if folder == "" {
+			return shell.Answer{}, true
+		}
+		return shell.Answer{Value: folder}, true
 	case "open_apart":
 		return d.openApart(caller(ctx), a.Window, a.With, a.Width, a.Height), true
 	case "apart_start":

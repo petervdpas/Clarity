@@ -205,6 +205,22 @@ func (db *Db) RecordFileFrom(file FileEntry, fieldStore string) (*RecordFile, er
 	return &RecordFile{Name: file.Name, Content: NewPicture(b)}, nil
 }
 
+// CopiedFile is another record's file, with its name, as CopiedPicture
+// copies a picture.
+func CopiedFile[T any, P interface {
+	*T
+	Record
+}](db *Db, value *RecordFile, id int64, column, from, to string) (*RecordFile, error) {
+	if value == nil {
+		return nil, nil
+	}
+	content, err := CopiedPicture[T, P](db, value.Content, id, column, from, to)
+	if err != nil || content == nil {
+		return nil, err
+	}
+	return &RecordFile{Name: value.Name, Content: content}, nil
+}
+
 type recordFileWire struct {
 	Name   string `json:"name"`
 	Stored bool   `json:"stored,omitempty"`

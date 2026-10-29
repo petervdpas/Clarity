@@ -51,6 +51,8 @@ pub enum WidgetKind {
     Color,
     /// A file of a record: chosen, opened, saved as a copy, removed.
     File,
+    /// A folder setting's path: typed, or chosen with the system's folder picker.
+    Folder,
     /// A list of values as chips: typed or picked, and removed.
     Tags,
     /// A number between a lowest and a highest value, dragged along a bar.
@@ -521,6 +523,7 @@ const ENTRIES: &[Entry] = &[
     input(WidgetKind::Date, "date", "Date", (3, 1), &["date", "dateTime"], &[Event::Change], PICKED),
     // A file of a record (U1c): its name, with buttons to choose, open, save a copy of and remove it.
     input(WidgetKind::File, "file", "File", (6, 1), &["file"], &[Event::Change], PICKED),
+    input(WidgetKind::Folder, "folder", "Folder", (6, 1), &["folder"], INPUT_EVENTS, TYPED),
     // A list field of values (U1c): its items as chips, a typed item or an enum's value added, one removed.
     input(WidgetKind::Tags, "tags", "Tags", (6, 1), &["values"], &[Event::Change], PICKED),
     // A color (U1c): typed as #rrggbb, or picked from the palette every renderer shares.
@@ -1086,6 +1089,7 @@ pub fn field_type_tag(ty: &FieldType) -> &'static str {
         FieldType::Url => "url",
         FieldType::Color => "color",
         FieldType::Secret => "secret",
+        FieldType::Folder => "folder",
         FieldType::Language => "language",
         FieldType::Theme => "theme",
         FieldType::Id => "id",

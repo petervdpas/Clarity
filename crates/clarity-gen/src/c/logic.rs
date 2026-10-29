@@ -753,6 +753,29 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "{place} = {picture};");
                     return;
                 }
+                // Another record's picture or file: copied, its bytes read when it is only stored.
+                if let Some(copy) = crate::copied(self.project, |e| self.types.type_of(e), target, value) {
+                    let store = |s: Option<String>| s.map_or_else(|| "NULL".to_string(), |s| string(&s));
+                    let object = self.place(copy.object, &mut pre);
+                    let call = format!(
+                        "db, &{}_entity, {}, {}, {}, {}, {}, {{out}}",
+                        prefix(&copy.entity),
+                        arrow(&object, &ident(&copy.field)),
+                        arrow(&object, "id"),
+                        string(&copy.column),
+                        store(copy.from),
+                        store(copy.to)
+                    );
+                    let copied = if copy.file {
+                        self.lift("ClarityRecordFile*", &format!("clarity_copied_file({call})"), &mut pre)
+                    } else {
+                        self.lift("ClarityPicture*", &format!("clarity_copied_picture({call})"), &mut pre)
+                    };
+                    let place = self.place(target, &mut pre);
+                    out.push_str(&pre);
+                    let _ = writeln!(out, "{place} = {copied};");
+                    return;
+                }
                 // A list position, counted from 1.
                 if let ExprKind::Index { list, index } = &target.kind
                     && let TypeInfo::Values(item) = self.types.type_of(list)
@@ -2065,7 +2088,7 @@ impl<'a> Emitter<'a> {
     /// A value compared with a field of type `ty`, as the runtime takes it.
     fn sql_value(&mut self, ty: &FieldType, value: &Expr, pre: &mut String) -> String {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({})", bare(self.value(value, pre))),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity_text_value({})", bare(self.value(value, pre))),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity_integer_value({})", bare(self.value(value, pre))),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity_decimal_value({})", bare(self.decimal(value, pre))),
             FieldType::Bool => format!("clarity_bool_value({})", bare(self.value(value, pre))),

@@ -64,7 +64,9 @@ fn code_reads_a_files_name_and_empties_it() {
     let size = errors(SHOP, &CODE.replace("product.manual.name", "product.manual.modified"));
     assert!(size.iter().any(|m| m.contains("a file of a record has name and extension")), "{size:#?}");
     let copied = errors(SHOP, &CODE.replace("product.manual = none", "product.manual = product.sheet"));
-    assert!(copied.iter().any(|m| m.contains("a file cannot be copied from one record to another yet")), "{copied:#?}");
+    assert!(copied.is_empty(), "{copied:#?}");
+    let named = errors(SHOP, &CODE.replace("product.manual = none", "product.manual = product.manual.name"));
+    assert!(named.iter().any(|m| m == "a record's file is set to another record's file, a file of a file store, or none"), "{named:#?}");
 }
 
 #[test]

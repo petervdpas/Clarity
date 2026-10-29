@@ -141,3 +141,59 @@ fn a_linked_picture_shows_from_its_store_before_it_is_saved() {
     has(view, "Fetch=\"{Binding AlbumPhotoPicture}\" FetchFile=\"{Binding AlbumPhotoFile}\"");
     assert!(!view.contains("AlbumCoverFile"), "a picture kept in the database has no store file");
 }
+
+const COPIES: &str = "module music
+
+entity Album
+    title: text(120)
+    cover: image
+    photo: image, store photos
+    booklet: file
+
+page AlbumForm: window
+    data album: Album
+    data other: Album
+    image name cover at 1,1 span 3 rows 3 bind album.cover
+    button \"Copy\" name copyButton at 1,4 span 2 on click: copyClicked
+
+code AlbumForm
+    handler copyClicked
+        album.photo = other.cover
+        album.booklet = other.booklet
+";
+
+fn copies(backend: Backend, ui: Ui) -> Vec<OutFile> {
+    let mut project = clarity_spec::keyed::load_keyed([("music.clarity", COPIES)], &[], "en");
+    clarity_spec::attach_stores(&mut project, vec!["photos".into()]);
+    assert!(project.diagnostics.is_empty(), "{:#?}", project.diagnostics);
+    let mut settings = starter("Records", "records");
+    settings.stack.backend = backend;
+    settings.stack.ui = ui;
+    settings.filestores.push(FileStore { name: "photos".into(), location: "env:PHOTO_FOLDER".into() });
+    generate(&project, &settings).unwrap_or_else(|e| panic!("{e:#?}"))
+}
+
+fn all(files: &[OutFile]) -> String {
+    files.iter().map(|f| f.text.as_str()).collect::<Vec<_>>().join("\n")
+}
+
+/// Another record's picture or file, copied in code: the runtime reads a
+/// stored one's bytes, so it needs the record, the column and both stores.
+#[test]
+fn code_copies_a_picture_and_a_file_from_another_record() {
+    let rust = all(&copies(Backend::Rust, Ui::Web));
+    has(&rust, "db.copied_picture::<Album>(&other.cover, other.id, \"cover\", None, Some(\"photos\"))?");
+    has(&rust, "db.copied_file::<Album>(&other.booklet, other.id, \"booklet\", None, None)?");
+    let go = all(&copies(Backend::Go, Ui::Web));
+    has(&go, "clarity.CopiedPicture[Album](db, w.Other.Cover, w.Other.ID, \"cover\", \"\", \"photos\")");
+    has(&go, "clarity.CopiedFile[Album](db, w.Other.Booklet, w.Other.ID, \"booklet\", \"\", \"\")");
+    let csharp = all(&copies(Backend::Csharp, Ui::Avalonia));
+    has(&csharp, "Album.Photo = Db.CopiedPicture<Album>(Other.Cover, Other.Id, \"cover\", null, \"photos\");");
+    has(&csharp, "Album.Booklet = Db.CopiedFile<Album>(Other.Booklet, Other.Id, \"booklet\", null, null);");
+    let c = all(&copies(Backend::C, Ui::Web));
+    has(&c, "clarity_copied_picture(db, &album_entity, w->other.cover, w->other.id, \"cover\", NULL, \"photos\", &");
+    has(&c, "clarity_copied_file(db, &album_entity, w->other.booklet, w->other.id, \"booklet\", NULL, NULL, &");
+    let cpp = all(&copies(Backend::Cpp, Ui::Web));
+    has(&cpp, "album.photo = db.copied_picture<Album>(other.cover, other.id, \"cover\", std::nullopt, \"photos\");");
+    has(&cpp, "album.booklet = db.copied_file<Album>(other.booklet, other.id, \"booklet\", std::nullopt, std::nullopt);");
+}

@@ -90,6 +90,8 @@ pub enum Stmt {
     Tell(String, Vec<Expr>),
     /// A call for what it does.
     Eval(Expr),
+    /// `progress(done, total)`: how far a long call is, told to the host.
+    Progress(Expr, Expr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

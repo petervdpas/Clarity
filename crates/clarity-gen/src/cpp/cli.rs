@@ -198,7 +198,13 @@ fn main_cpp(project: &Project, settings: &Settings, space: &str, databases: &[(S
     };
     let commands = crate::commands::commands(project);
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
-    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
+    let stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("        db.add_store_setting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let listed: String = commands.iter().map(command).collect();
@@ -279,7 +285,7 @@ clarity::cli::Program program() {{
 {start}        clarity::Db db({space}::databases);
         for (const auto& s : {space}::sources()) db.migrate_source(s.source, s.steps);
         for (const auto& [name, at] : {space}::stores) db.add_store(name, at);
-        const int code = clarity::cli::run({space}::program(), argc, argv, [&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
+{folder_stores}        const int code = clarity::cli::run({space}::program(), argc, argv, [&](clarity::cli::Session& cli, size_t command, const std::vector<std::optional<std::string>>& values) {{
             switch (command) {{
 {dispatch}            }}
             return 2;

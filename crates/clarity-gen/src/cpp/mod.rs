@@ -385,7 +385,16 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         ("#include \"secrets/secrets.hpp\"\n\n".to_string(), "    clarity::secrets_use();\n".to_string())
     };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("{{{}, clarity::Dialect::Sqlite, {}}}", string(name), string(at))).collect();
-    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
+    let stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("{{{}, {}}}", string(&s.name), string(&s.location))).collect();
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_store = |db: &str| -> String {
+        crate::folder_stores(project, settings)
+            .iter()
+            .map(|(name, setting, default)| format!("        {db}add_store_setting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+            .collect()
+    };
+
     let windows: Vec<&logic::Owner> = owners.iter().filter(|o| !o.is_app).collect();
     let apps: Vec<&logic::Owner> = owners.iter().filter(|o| o.is_app).collect();
 
@@ -461,7 +470,7 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
     }
     let (open_db, unconnected_options) = match &unconnected {
         None => (
-            format!("        clarity::Db db({program}::databases);\n        for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);\n        for (const auto& [name, at] : {program}::stores) db.add_store(name, at);\n"),
+            format!("        clarity::Db db({program}::databases);\n        for (const auto& s : {program}::sources()) db.migrate_source(s.source, s.steps);\n        for (const auto& [name, at] : {program}::stores) db.add_store(name, at);\n{}", folder_store("db.")),
             String::new(),
         ),
         Some(u) => (
@@ -476,9 +485,12 @@ fn main_cpp(project: &Project, settings: &Settings, program: &str, databases: &[
         ),
     };
     let open_function = if unconnected.is_some() {
-        "\n/// Opens every database, brings it up to date and adds its file stores.\nstd::unique_ptr<clarity::Db> open_databases() {\n    auto db = std::make_unique<clarity::Db>(databases);\n    for (const auto& s : sources()) db->migrate_source(s.source, s.steps);\n    for (const auto& [name, at] : stores) db->add_store(name, at);\n    return db;\n}\n"
+        format!(
+            "\n/// Opens every database, brings it up to date and adds its file stores.\nstd::unique_ptr<clarity::Db> open_databases() {{\n    auto db = std::make_unique<clarity::Db>(databases);\n    for (const auto& s : sources()) db->migrate_source(s.source, s.steps);\n    for (const auto& [name, at] : stores) db->add_store(name, at);\n{}    return db;\n}}\n",
+            folder_store("db->")
+        )
     } else {
-        ""
+        String::new()
     };
     let mut dispatch = String::new();
     for w in windows.iter().filter(|w| !w.handlers.is_empty() || !w.calls.is_empty()) {

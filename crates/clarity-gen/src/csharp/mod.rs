@@ -156,7 +156,7 @@ fn generate_desktop(project: &Project, settings: &Settings, ui: &str) -> Result<
         return Err(errors);
     }
     files.push(text("Schema.cs", schema_cs(project, &name, &owned)?));
-    files.push(text("Program.cs", program_cs(&name, &databases, &drivers, settings, engines)));
+    files.push(text("Program.cs", program_cs(project, &name, &databases, &drivers, settings, engines)));
     if engines {
         files.extend(crate::engine_files(project, "Engines"));
         files.push(text("Engines.cs", engines_cs(project, &name)));
@@ -409,10 +409,16 @@ fn check_engines(engines: bool) -> &'static str {
 }
 
 /// The databases of the data sources and the file stores, and `method`, which opens them.
-fn opening(databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, method: &str) -> String {
+fn opening(project: &Project, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, method: &str) -> String {
     // Each kind of database, turned on by its package before the databases open.
     let turned_on: String = drivers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
-    let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    let stores = crate::fixed_stores(settings).iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .collect();
     let databases = databases
         .iter()
         .map(|(source, sql, at)| format!("({}, {}, {})", string(source), dialect(*sql), string(at)))
@@ -433,15 +439,15 @@ fn opening(databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &
             db.MigrateSource(source, steps);
         foreach (var (name, at) in Stores)
             db.AddStore(name, at);
-        return db;
+{folder_stores}        return db;
     }}
 "
     )
 }
 
-fn program_cs(name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
+fn program_cs(project: &Project, name: &str, databases: &[(String, Sql, String)], drivers: &[&Driver], settings: &Settings, engines: bool) -> String {
     let check_engines = check_engines(engines);
-    let opening = opening(databases, drivers, settings, "OpenDatabases");
+    let opening = opening(project, databases, drivers, settings, "OpenDatabases");
     format!(
         "{HEADER}
 using Avalonia;

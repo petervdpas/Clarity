@@ -67,6 +67,7 @@ translation en
     albumNotes "Notes"
     albumLevel "Level"
     settingsApiToken "Api token"
+    settingsScansFolder "Scans folder"
     settingsShowToolbar "Show toolbar"
     settingsPageSize "Page size"
     formatVinyl "Vinyl"

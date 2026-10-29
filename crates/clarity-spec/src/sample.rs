@@ -138,7 +138,7 @@ fn sample_value(project: &Project, field: &Field, i: usize) -> Value {
         FieldType::Language => Value::String(project.locale.language.clone().unwrap_or_default()),
         FieldType::Theme => Value::String(project.themes.first().cloned().unwrap_or_default()),
         // The palette's middle row: clear colors.
-        FieldType::Secret => Value::String(String::new()),
+        FieldType::Secret | FieldType::Folder => Value::String(String::new()),
         FieldType::Color => Value::String(crate::colors::PALETTE[3][i % 10].to_string()),
         FieldType::Enum { name } => match project.enum_decl(&name.name) {
             Some(decl) if !decl.variants.is_empty() => {

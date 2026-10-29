@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // SettingsFileIn is where program keeps its settings on system goos
@@ -36,6 +37,41 @@ func SettingsFileIn(goos string, env func(string) string, program string) (strin
 	}
 	return folder + "/" + program + "/settings.json", true
 }
+
+// settingsOS is this machine's system, as the cases name it.
+func settingsOS() string {
+	if runtime.GOOS == "darwin" {
+		return "macos"
+	}
+	return runtime.GOOS
+}
+
+// StoreFolderIn is the folder of file store store when a folder setting
+// names it, on system goos: the kept value when it is text that is not
+// empty, else def, else a folder named after the store; a relative folder
+// is in settingsFolder, the folder of the settings file.
+func StoreFolderIn(goos, settingsFolder, store string, kept any, def string) string {
+	chosen, _ := kept.(string)
+	if chosen == "" {
+		chosen = def
+	}
+	if chosen == "" {
+		chosen = store
+	}
+	var absolute bool
+	if goos == "windows" {
+		absolute = strings.HasPrefix(chosen, `\\`) || strings.HasPrefix(chosen, "//") ||
+			(len(chosen) > 2 && isLetter(chosen[0]) && chosen[1] == ':' && (chosen[2] == '/' || chosen[2] == '\\'))
+	} else {
+		absolute = strings.HasPrefix(chosen, "/")
+	}
+	if absolute {
+		return chosen
+	}
+	return settingsFolder + "/" + chosen
+}
+
+func isLetter(b byte) bool { return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') }
 
 // SettingsFile is where program keeps its settings on this machine.
 func SettingsFile(program string) (string, bool) {

@@ -139,7 +139,13 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
 fn main_rs(project: &Project, settings: &Settings, databases: &[(String, crate::ddl::Sql, String)]) -> String {
     let commands = crate::commands::commands(project);
     let databases = databases.iter().map(|(name, sql, at)| format!("({name:?}, {}, {at:?})", sql.runtime())).collect::<Vec<_>>().join(", ");
-    let stores: String = settings.filestores.iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
+    let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("    if let Err(err) = db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?}) {{\n        eprintln!(\"{{err}}\");\n        return std::process::ExitCode::from(1);\n    }}\n"))
+        .collect();
     let languages: Vec<String> = project.translations.keys().map(|l| format!("{l:?}.to_string()")).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let listed: String = commands.iter().map(command).collect();
@@ -252,7 +258,7 @@ fn main() -> std::process::ExitCode {{
             return std::process::ExitCode::from(1);
         }}
     }}
-    let code = clarity_runtime::cli::run_program(&program(), |cli, command, values| match command {{
+{folder_stores}    let code = clarity_runtime::cli::run_program(&program(), |cli, command, values| match command {{
 {dispatch}        _ => Ok(2),
     }});
 {keep}    code

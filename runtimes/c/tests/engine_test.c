@@ -212,3 +212,78 @@ void an_engine_with_state_per_window_keeps_an_instance_for_each_window(void) {
     }
     clarity_engine_free(engine);
 }
+
+// Progress of a long call and Stop, against the cases every host shares
+// (conformance/progress.json).
+
+typedef struct {
+    int64_t reports[64][2];
+    size_t count;
+    int64_t stop_at;
+    volatile int32_t stop;
+} Watched;
+
+static void watched(int64_t done, int64_t total, void* context) {
+    Watched* w = context;
+    if (w->count < 64) {
+        w->reports[w->count][0] = done;
+        w->reports[w->count][1] = total;
+    }
+    w->count++;
+    if (done == w->stop_at) w->stop = 1;
+}
+
+static ClarityEngine* long_engine(const cJSON* file, const cJSON* used_list) {
+    ClarityBytes bytes = test_engine(file);
+    size_t count;
+    const char** functions = names(cJSON_GetObjectItem(file, "functions"), &count);
+    size_t used;
+    const char** uses = names(used_list, &used);
+    ClarityEngine* engine = NULL;
+    clarity_engine_load(cJSON_GetObjectItem(file, "name")->valuestring, bytes.data, bytes.size, (ClarityEngineDeclaration){count, functions, used, uses, limits(file)}, &engine);
+    return engine;
+}
+
+void a_long_engine_call_reports_how_far_it_is(void) {
+    cJSON* file = conformance("progress.json");
+    ClarityEngine* engine = long_engine(file, cJSON_GetObjectItem(file, "uses"));
+    REQUIRE(engine);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(file, "reported")) {
+        Watched w = {.stop_at = -1};
+        ClarityEngineWatch watch = {watched, &w, &w.stop};
+        cJSON* got = NULL;
+        CHECK_OK(clarity_engine_call_watched(engine, 0, cJSON_GetObjectItem(c, "function")->valuestring, cJSON_Duplicate(cJSON_GetObjectItem(c, "args"), 1), &watch, &got));
+        CHECK(got && got->valuedouble == cJSON_GetObjectItem(c, "gives")->valuedouble);
+        const cJSON* expected = cJSON_GetObjectItem(c, "progress");
+        CHECK(w.count == (size_t)cJSON_GetArraySize(expected));
+        for (size_t i = 0; i < w.count && i < 64; ++i) {
+            CHECK(w.reports[i][0] == (int64_t)cJSON_GetArrayItem(cJSON_GetArrayItem(expected, (int)i), 0)->valuedouble);
+            CHECK(w.reports[i][1] == (int64_t)cJSON_GetArrayItem(cJSON_GetArrayItem(expected, (int)i), 1)->valuedouble);
+        }
+    }
+    clarity_engine_free(engine);
+    // Without `uses progress`, an engine that reports is refused.
+    const cJSON* refused = cJSON_GetObjectItem(file, "refused");
+    CHECK(!long_engine(file, cJSON_GetObjectItem(refused, "uses")));
+    CHECK_TEXT(clarity_error()->message, cJSON_GetObjectItem(refused, "message")->valuestring);
+}
+
+void stop_ends_a_long_engine_call(void) {
+    cJSON* file = conformance("progress.json");
+    ClarityEngine* engine = long_engine(file, cJSON_GetObjectItem(file, "uses"));
+    REQUIRE(engine);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(file, "stopped")) {
+        int64_t stop_at = (int64_t)cJSON_GetObjectItem(c, "stopAt")->valuedouble;
+        Watched w = {.stop_at = stop_at == 0 ? -1 : stop_at, .stop = stop_at == 0};
+        ClarityEngineWatch watch = {watched, &w, &w.stop};
+        cJSON* got = NULL;
+        CHECK_FAILS(CLARITY_ENGINE, clarity_engine_call_watched(engine, 0, cJSON_GetObjectItem(c, "function")->valuestring, cJSON_Duplicate(cJSON_GetObjectItem(c, "args"), 1), &watch, &got));
+        CHECK_TEXT(clarity_error()->message, cJSON_GetObjectItem(c, "fails")->valuestring);
+        const cJSON* first = cJSON_GetObjectItem(c, "firstReports");
+        CHECK(w.count >= (size_t)cJSON_GetArraySize(first));
+        for (int i = 0; i < cJSON_GetArraySize(first); ++i) CHECK(w.reports[i][0] == (int64_t)cJSON_GetArrayItem(cJSON_GetArrayItem(first, i), 0)->valuedouble);
+    }
+    clarity_engine_free(engine);
+}

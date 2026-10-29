@@ -25,6 +25,9 @@ public sealed partial class Db : IDisposable
     /// <summary>The folders of the file stores, by name.</summary>
     readonly Dictionary<string, string> stores = [];
 
+    /// <summary>The file stores whose folder is a folder setting, by name.</summary>
+    readonly Dictionary<string, (string Program, string Setting, string Fallback)> storeSettings = [];
+
     Db(List<SourceDb> sources) => this.sources = sources;
 
     /// <summary>One database, used for every record: what Sqlite.Open and Sqlite.Memory give.</summary>
@@ -63,10 +66,42 @@ public sealed partial class Db : IDisposable
         {
             throw new StorageException($"cannot make the file store {folder}: {e.Message}", e);
         }
+        storeSettings.Remove(name);
         stores[name] = folder;
     }
 
-    string StoreFolder(string name) => stores.TryGetValue(name, out var folder) ? folder : throw new StorageException($"there is no file store '{name}'");
+    /// <summary>
+    /// Adds the file store <paramref name="name"/> whose folder is the folder setting
+    /// <paramref name="setting"/> of <paramref name="program"/>, or <paramref name="fallback"/>
+    /// (the setting's default) while it is not kept; read again at every use, so a folder
+    /// chosen while the application runs takes effect at once.
+    /// </summary>
+    public void AddStoreSetting(string name, string program, string setting, string fallback)
+    {
+        stores.Remove(name);
+        storeSettings[name] = (program, setting, fallback);
+        StoreFolder(name);
+    }
+
+    string StoreFolder(string name)
+    {
+        if (storeSettings.TryGetValue(name, out var s))
+        {
+            var file = KeptSettings.File(s.Program) ?? throw new StorageException("this system names no folder for application settings");
+            var settingsFolder = Path.GetDirectoryName(file)!.Replace('\\', '/');
+            var folder = KeptSettings.StoreFolderIn(KeptSettings.Os, settingsFolder, name, KeptSettings.Read(s.Program)[s.Setting], s.Fallback);
+            try
+            {
+                Directory.CreateDirectory(folder);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new StorageException($"cannot make the file store {folder}: {e.Message}", e);
+            }
+            return folder;
+        }
+        return stores.TryGetValue(name, out var found) ? found : throw new StorageException($"there is no file store '{name}'");
+    }
 
     /// <summary>
     /// The values of a record as they are saved: a new picture checked, and
@@ -157,6 +192,32 @@ public sealed partial class Db : IDisposable
                 throw new StorageException($"{column}: {other} is no picture");
         }
     }
+
+    /// <summary>
+    /// Another record's picture for a field kept in <paramref name="to"/> (null: the
+    /// database), as code copies it (album.cover = other.cover). <paramref name="value"/> is
+    /// field <paramref name="column"/> of record <paramref name="id"/>, kept in
+    /// <paramref name="from"/>. A picture in hand is copied as it is, a stored one is read
+    /// first, and a file of a store stays linked only in that same store.
+    /// </summary>
+    public Picture? CopiedPicture<R>(Picture? value, long id, string column, string? from, string? to) where R : IRecord<R>
+    {
+        if (value is null)
+            return null;
+        if (value.Bytes is { } bytes)
+            return Picture.New(bytes);
+        if (value.FilePath is { } path)
+        {
+            if (from is null)
+                throw new StorageException($"{column} is kept in the database, not in a file store");
+            return from == to ? Picture.InStore(path) : Picture.New(StoreFile(from, path));
+        }
+        return PictureOf<R>(id, column) is { } read ? Picture.New(read) : null;
+    }
+
+    /// <summary>Another record's file, with its name, as <see cref="CopiedPicture{R}"/> copies a picture.</summary>
+    public RecordFile? CopiedFile<R>(RecordFile? value, long id, string column, string? from, string? to) where R : IRecord<R> =>
+        value is null ? null : CopiedPicture<R>(value.Content, id, column, from, to) is { } content ? new RecordFile(value.Name, content) : null;
 
     /// <summary>
     /// Runs <paramref name="run"/> in a transaction of <paramref name="source"/>, or in

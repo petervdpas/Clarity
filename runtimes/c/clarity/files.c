@@ -14,22 +14,40 @@
 #include "clarity/db_internal.h"
 #include "clarity/disk.h"
 
-bool clarity_add_store(ClarityDb* db, const char* name, const char* at) {
-    const char* folder = NULL;
-    if (!clarity_location(at, &folder) || !clarity_make_folders(folder)) return false;
+static bool add(ClarityDb* db, ClarityStore store) {
     ClarityStore* more = realloc(db->stores, (db->store_count + 1) * sizeof *more);
     if (!more) return clarity_fail(CLARITY_STORAGE, "out of memory");
     db->stores = more;
-    db->stores[db->store_count++] = (ClarityStore){clarity_lasting(name), clarity_lasting(folder)};
+    db->stores[db->store_count++] = store;
     return true;
 }
 
+bool clarity_add_store(ClarityDb* db, const char* name, const char* at) {
+    const char* folder = NULL;
+    if (!clarity_location(at, &folder) || !clarity_make_folders(folder)) return false;
+    return add(db, (ClarityStore){clarity_lasting(name), clarity_lasting(folder), NULL, NULL, NULL});
+}
+
+bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* program, const char* setting, const char* fallback) {
+    const char* folder = NULL;
+    return add(db, (ClarityStore){clarity_lasting(name), NULL, clarity_lasting(program), clarity_lasting(setting), clarity_lasting(fallback)}) && clarity_store_folder(db, name, &folder);
+}
+
 bool clarity_store_folder(ClarityDb* db, const char* name, const char** out) {
-    for (size_t i = 0; i < db->store_count; ++i) {
-        if (strcmp(db->stores[i].name, name) == 0) {
-            *out = db->stores[i].folder;
+    // The last one added under a name is the one in use.
+    for (size_t i = db->store_count; i-- > 0;) {
+        const ClarityStore* store = &db->stores[i];
+        if (strcmp(store->name, name) != 0) continue;
+        if (store->folder) {
+            *out = store->folder;
             return true;
         }
+        const char* file = clarity_settings_file(store->program);
+        if (!file) return clarity_fail(CLARITY_STORAGE, "this system names no folder for application settings");
+        cJSON* kept = clarity_read_settings(store->program);
+        *out = clarity_store_folder_in(clarity_settings_os(), clarity_parent(file), name, cJSON_GetObjectItemCaseSensitive(kept, store->setting), store->fallback);
+        cJSON_Delete(kept);
+        return clarity_make_folders(*out);
     }
     return clarity_fail(CLARITY_STORAGE, "there is no file store '%s'", name);
 }
@@ -142,3 +160,37 @@ bool clarity_record_file_from(ClarityDb* db, const ClarityFile* file, const char
 }
 
 bool clarity_store_file(ClarityDb* db, const char* store, const char* path, ClarityBytes* out) { return read_in_store(db, store, path, out); }
+
+bool clarity_copied_picture(ClarityDb* db, const ClarityEntity* entity, const ClarityPicture* value, int64_t id, const char* column, const char* from, const char* to, ClarityPicture** out) {
+    *out = NULL;
+    if (!value) return true;
+    ClarityBytes bytes = {0};
+    switch (value->state) {
+    case CLARITY_PICTURE_NEW:
+        *out = clarity_picture_new(value->bytes);
+        return true;
+    case CLARITY_PICTURE_IN_STORE:
+        if (!from) return clarity_fail(CLARITY_STORAGE, "%s is kept in the database, not in a file store", column);
+        if (to && strcmp(from, to) == 0) {
+            *out = clarity_picture_in_store(value->path);
+            return true;
+        }
+        if (!read_in_store(db, from, value->path, &bytes)) return false;
+        *out = clarity_picture_new(bytes);
+        return true;
+    case CLARITY_PICTURE_STORED:
+        if (!clarity_picture(db, entity, id, column, &bytes)) return false;
+        if (bytes.data) *out = clarity_picture_new(bytes);
+        return true;
+    }
+    return true;
+}
+
+bool clarity_copied_file(ClarityDb* db, const ClarityEntity* entity, const ClarityRecordFile* value, int64_t id, const char* column, const char* from, const char* to, ClarityRecordFile** out) {
+    *out = NULL;
+    if (!value) return true;
+    ClarityPicture* content = NULL;
+    if (!clarity_copied_picture(db, entity, value->content, id, column, from, to, &content)) return false;
+    if (content) *out = clarity_record_file(value->name, content);
+    return true;
+}

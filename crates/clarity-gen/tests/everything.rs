@@ -44,6 +44,7 @@ fn type_name(ty: &FieldType) -> &'static str {
         FieldType::Url => "url",
         FieldType::Color => "color",
         FieldType::Secret => "secret",
+        FieldType::Folder => "folder",
         FieldType::Language => "language",
         FieldType::Theme => "theme",
         FieldType::Id => "id",
@@ -57,8 +58,8 @@ fn type_name(ty: &FieldType) -> &'static str {
 
 /// Every field type, by name. `record` is only a web API's (DESIGN 5.25),
 /// which the project meets when it has one (D2).
-const TYPES: [&str; 21] = [
-    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "secret", "language", "theme", "id", "enum", "ref", "list", "values",
+const TYPES: [&str; 22] = [
+    "text", "integer", "decimal", "money", "bool", "date", "datetime", "duration", "image", "file", "email", "url", "color", "secret", "folder", "language", "theme", "id", "enum", "ref", "list", "values",
 ];
 
 fn page_kind(kind: &PageKind) -> &'static str {

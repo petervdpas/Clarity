@@ -504,6 +504,22 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "{place} = db.{made}({file}, {store});");
                     return;
                 }
+                // Another record's picture or file: copied, its bytes read when it is only stored.
+                if let Some(copy) = crate::copied(self.project, |e| self.types.type_of(e), target, value) {
+                    let made = if copy.file { "copied_file" } else { "copied_picture" };
+                    let store = |s: Option<String>| s.map_or("std::nullopt".to_string(), |s| string(&s));
+                    let (place, object) = (self.place(target), self.place(copy.object));
+                    let _ = writeln!(
+                        out,
+                        "{place} = db.{made}<{}>({object}.{}, {object}.id, {}, {}, {});",
+                        copy.entity,
+                        ident(&copy.field),
+                        string(&copy.column),
+                        store(copy.from),
+                        store(copy.to)
+                    );
+                    return;
+                }
                 let (place, code) = (self.place(target), self.value(value));
                 let _ = writeln!(out, "{place} = {code};");
                 if let ExprKind::Name { name } = &target.kind {
@@ -1396,7 +1412,7 @@ impl<'a> Emitter<'a> {
     fn sql_value(&mut self, ty: &FieldType, value: &Expr) -> String {
         let from = self.types.type_of(value);
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({})", self.value(value)),
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => format!("clarity::sql::text({})", self.value(value)),
             FieldType::Integer | FieldType::Id | FieldType::Duration => format!("clarity::sql::integer({})", self.value(value)),
             FieldType::Decimal { .. } | FieldType::Money => format!("clarity::sql::decimal(clarity::Decimal({}))", self.value(value)),
             FieldType::Bool => format!("clarity::sql::boolean({})", self.value(value)),

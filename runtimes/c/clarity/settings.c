@@ -32,15 +32,29 @@ static const char* from_system(const char* name, void* context) {
     return getenv(name);
 }
 
-const char* clarity_settings_file(const char* program) {
+const char* clarity_settings_os(void) {
 #if defined(_WIN32)
-    const char* os = "windows";
+    return "windows";
 #elif defined(__APPLE__)
-    const char* os = "macos";
+    return "macos";
 #else
-    const char* os = "linux";
+    return "linux";
 #endif
-    return clarity_settings_file_in(os, from_system, NULL, program);
+}
+
+const char* clarity_settings_file(const char* program) { return clarity_settings_file_in(clarity_settings_os(), from_system, NULL, program); }
+
+const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback) {
+    const char* chosen = cJSON_IsString(kept) && kept->valuestring[0] ? kept->valuestring : fallback;
+    if (!chosen || !*chosen) chosen = store;
+    bool absolute;
+    if (strcmp(os, "windows") == 0) {
+        bool drive = strlen(chosen) > 2 && ((chosen[0] >= 'a' && chosen[0] <= 'z') || (chosen[0] >= 'A' && chosen[0] <= 'Z')) && chosen[1] == ':' && (chosen[2] == '/' || chosen[2] == '\\');
+        absolute = drive || strncmp(chosen, "\\\\", 2) == 0 || strncmp(chosen, "//", 2) == 0;
+    } else {
+        absolute = chosen[0] == '/';
+    }
+    return absolute ? clarity_format("%s", chosen) : clarity_format("%s/%s", settings_folder, chosen);
 }
 
 cJSON* clarity_read_settings(const char* program) {

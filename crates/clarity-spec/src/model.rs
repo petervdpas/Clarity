@@ -209,6 +209,10 @@ pub enum FieldType {
     /// A setting kept in the system's protected store, per person and per
     /// application, never in settings.json (DESIGN 5.27): a web API's token.
     Secret,
+    /// A folder on the person's machine, a setting kept in settings.json:
+    /// where a file store keeps its files (`filestore photos
+    /// "setting:photosFolder"`), chosen while the application runs.
+    Folder,
     /// The language shown, a setting of Clarity's own (`language` in `settings`).
     Language,
     /// The theme shown, a setting of Clarity's own (`theme` in `settings`).
@@ -304,7 +308,7 @@ impl FieldType {
     }
 
     pub fn is_textual(&self) -> bool {
-        matches!(self, Self::Text { .. } | Self::Email | Self::Url | Self::Color | Self::Language | Self::Theme)
+        matches!(self, Self::Text { .. } | Self::Email | Self::Url | Self::Color | Self::Folder | Self::Language | Self::Theme)
     }
 }
 
@@ -973,6 +977,16 @@ impl Project {
     /// The settings kept in the system's protected store (DESIGN 5.27), by name.
     pub fn secret_settings(&self) -> Vec<&str> {
         self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Secret).map(|f| f.name.name.as_str()).collect()
+    }
+
+    /// Whether any window has a part of `kind`, inside containers too.
+    pub fn uses_part(&self, kind: crate::widgets::WidgetKind) -> bool {
+        self.files.iter().flat_map(|f| &f.pages).any(|p| crate::translations::any_widget(&p.widgets, &|w| w.props.kind == kind))
+    }
+
+    /// The settings that name a folder, where a file store may keep its files, by name.
+    pub fn folder_settings(&self) -> Vec<&str> {
+        self.entities().filter(|e| e.settings).flat_map(|e| &e.fields).filter(|f| f.ty == FieldType::Folder).map(|f| f.name.name.as_str()).collect()
     }
 
     /// The secret settings a database connects with (DESIGN 5.27): its

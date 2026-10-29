@@ -59,7 +59,7 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/shell/shell.cpp)
       file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/webview2.nupkg DESTINATION ${WEBVIEW2_DIR})
     endif()
     target_include_directories(clarity_shell PUBLIC ${WEBVIEW2_DIR}/build/native/include)
-    target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 version)
+    target_link_libraries(clarity_shell PUBLIC advapi32 ole32 shell32 shlwapi user32 uuid version)
   endif()
 endif()
 

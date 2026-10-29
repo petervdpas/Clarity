@@ -6,7 +6,7 @@ name = "clarity-engine"
 description = "Write engines for Clarity in Rust: the engine interface, typed functions, the services and bytes"
 # Its own version, released on its own (tag runtimes/rust-engine/vX.Y.Z,
 # then cargo publish); new engines Clarity writes require this version.
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 license = "MIT"
 repository = "https://github.com/petervdpas/Clarity"

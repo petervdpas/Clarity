@@ -2,8 +2,8 @@
 //! IR, which the engine's file carries as data, with the values of
 //! `values` and the call, kept values and answer of the compiled engines.
 //! Each export of the engine's file calls `rt_run` with the place of the
-//! IR, which function, the call's arguments and the function-table entry of
-//! the host's `random` (-1 when the engine does not use it).
+//! IR, which function, the call's arguments and the function-table entries
+//! of the host's `random` and `progress` (-1 when the engine does not use one).
 
 use std::cell::OnceCell;
 
@@ -38,11 +38,11 @@ fn failed(value: Result<Value, String>) -> Run<Value> {
 
 /// Runs function `index` of the engine whose IR is at `at`.
 #[unsafe(no_mangle)]
-pub extern "C" fn rt_run(ir_at: i32, ir_len: i32, index: i32, at: i32, len: i32, random: i32) -> i64 {
+pub extern "C" fn rt_run(ir_at: i32, ir_len: i32, index: i32, at: i32, len: i32, random: i32, progress: i32) -> i64 {
     ENGINE.with(|engine| {
         let engine = engine.get_or_init(|| serde_json::from_str(&text_at(ir_at, ir_len)).expect("the engine's IR"));
         rt_begin(at, len);
-        let machine = Machine { engine, random };
+        let machine = Machine { engine, random, progress };
         let _ = machine.call(index as usize);
         rt_finish()
     })
@@ -51,6 +51,8 @@ pub extern "C" fn rt_run(ir_at: i32, ir_len: i32, index: i32, at: i32, len: i32,
 struct Machine<'a> {
     engine: &'a ir::Engine,
     random: i32,
+    /// The function-table entry of the host's `progress`; -1 when the engine does not use it.
+    progress: i32,
 }
 
 impl Machine<'_> {
@@ -189,6 +191,13 @@ impl Machine<'_> {
             }
             ir::Stmt::Eval(call) => {
                 self.expr(call, locals)?;
+            }
+            ir::Stmt::Progress(done, total) => {
+                let (done, total) = (self.expr(done, locals)?.int(), self.expr(total, locals)?.int());
+                if self.progress >= 0 {
+                    let tell: extern "C" fn(i64, i64) = unsafe { std::mem::transmute(self.progress as usize) };
+                    tell(done, total);
+                }
             }
         }
         Ok(Flow::Next)

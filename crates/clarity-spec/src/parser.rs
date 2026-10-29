@@ -646,6 +646,7 @@ fn parse_type_of(cursor: &mut Cursor, value: bool) -> ParseResult<FieldType> {
         "url" => FieldType::Url,
         "color" => FieldType::Color,
         "secret" => FieldType::Secret,
+        "folder" => FieldType::Folder,
         "file" => FieldType::File,
         "id" => FieldType::Id,
         "ref" => FieldType::Ref {

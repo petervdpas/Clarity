@@ -85,6 +85,19 @@ bool clarity_engine_call(ClarityEngine* engine, const char* function, cJSON* arg
 /// window, on that window's own instance.
 bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, cJSON** out);
 
+/// What the screen sees of a long call and how the person stops it (`uses
+/// progress`, conformance/progress.json): every report of how far it is
+/// goes to `progress`, with `context`; once `*stop` is not 0 (set from any
+/// thread) the call ends, failing with "it was stopped". Either may be NULL.
+typedef struct {
+    void (*progress)(int64_t done, int64_t total, void* context);
+    void* context;
+    const volatile int32_t* stop;
+} ClarityEngineWatch;
+
+/// clarity_engine_call_in, telling `watch` how far the call is and stopping when it says so.
+bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out);
+
 /// Drops the instance window `window` had, when it closes.
 void clarity_engine_close_window(ClarityEngine* engine, uint64_t window);
 

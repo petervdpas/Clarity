@@ -70,6 +70,9 @@ struct ClarityDesktop {
     /// The native window custom parts draw in (DESIGN 6.5): on Linux the X11
     /// window of the webview; NULL or 0 where there is none.
     uintptr_t (*part_parent)(ClarityDesktop* desktop);
+    /// Opens the system's folder picker over the window, for a folder part:
+    /// the folder chosen, in the scratch arena, or NULL when none was.
+    const char* (*choose_folder)(ClarityDesktop* desktop, const char* title);
 };
 
 /// Answers the renderer's commands.

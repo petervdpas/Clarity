@@ -34,13 +34,33 @@ image name cover at 1,1 span 4 rows 6 bind album.cover
 
 A table or list does not show a picture column. Reading records never carries their pictures; the screen fetches each one when it shows it. Any file that is not a picture is refused.
 
+In code, a picture is set to `none`, to a file of a file store (see below), or to another record's picture, which copies it, also from the database into a file store or back:
+
+```clarity
+album.cover = other.cover
+artist.photo = album.cover
+```
+
+A file field is copied the same way, with its name: `product.manual = other.manual`.
+
 ## File stores
 
-A file store is a folder that the project file names with a `filestore` line. A relative folder is in the project's folder; `"env:NAME"` takes it from an environment variable, for a folder that differs per machine.
+A file store is a folder that the project file names with a `filestore` line. A relative folder is in the project's folder; `"env:NAME"` takes it from an environment variable, for a folder that differs per machine; `"setting:name"` takes it from a folder setting that each person chooses while the application runs.
 
 ```clarity
 filestore photos "data/photos"
 filestore exports "env:SHOP_EXPORTS"
+filestore scans "setting:scansFolder"
+```
+
+A folder setting is a setting of type `folder`, shown in a settings window by a folder part: the path, and a button that opens the system's folder picker (in a browser the path is typed). Until the person chooses a folder, the store is in the setting's `default`, and a relative folder is in the folder of the person's settings file. A folder chosen while the application runs is used at once for the next file.
+
+```clarity
+settings
+    scansFolder: folder, default "scans", label @scansFolderSetting
+
+page Preferences: dialog
+    folder name scansBox at 1,1 span 6 bind settings.scansFolder
 ```
 
 You can also manage them in the **File stores** section of **Settings** on the Project tab. In the entity editor, the **Store** column of an image field picks **database** or one of the stores.

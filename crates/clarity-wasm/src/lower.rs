@@ -12,7 +12,7 @@ use clarity_spec::code::{BinaryOp, ConstDecl, EngineBody, EngineDecl, Expr, Expr
 use clarity_spec::model::{Entity, Field, FieldType, Literal};
 
 /// The services of Clarity an engine may import.
-pub const SERVICES: [&str; 4] = ["clock", "random", "log", "language"];
+pub const SERVICES: [&str; 5] = ["clock", "random", "log", "language", "progress"];
 
 fn kind_of(ty: &TypeInfo) -> Result<Kind, String> {
     match ty {
@@ -224,6 +224,11 @@ impl<'l, 'a> Scope<'l, 'a> {
                 self.scopes.pop();
                 ir::Stmt::For { var: local, item, list, body: body? }
             }
+            // `progress(day, total)`: the host's service, for an engine that uses it.
+            StmtKind::Call { call } if self.progress_call(call).is_some() => {
+                let (done, total) = self.progress_call(call).expect("a progress call");
+                ir::Stmt::Progress(self.expr_as(done, Kind::Int)?, self.expr_as(total, Kind::Int)?)
+            }
             StmtKind::Call { call } => ir::Stmt::Eval(self.call(call)?),
             StmtKind::Tell { tell, args } => ir::Stmt::Tell(tell.name.clone(), args.iter().map(|a| self.expr(a)).collect::<Result<_, _>>()?),
             StmtKind::Refuse { text } => ir::Stmt::Refuse(self.expr(text)?),
@@ -387,6 +392,15 @@ impl<'l, 'a> Scope<'l, 'a> {
     }
 
     /// A call: a function of Clarity's, or one of the engine's own.
+    /// The two values of `progress(done, total)`, when `expr` is that call of an engine that uses progress.
+    fn progress_call<'e>(&self, expr: &'e Expr) -> Option<(&'e Expr, &'e Expr)> {
+        let ExprKind::Call { function, args, .. } = &expr.kind else { return None };
+        match args.as_slice() {
+            [done, total] if function.name == "progress" && self.lower.services.iter().any(|s| s == "progress") => Some((done, total)),
+            _ => None,
+        }
+    }
+
     fn call(&mut self, expr: &Expr) -> Result<ir::Expr, String> {
         let ExprKind::Call { function, args, .. } = &expr.kind else { return Err("only a call stands on its own line".into()) };
         let name = function.name.as_str();

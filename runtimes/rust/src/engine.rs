@@ -56,12 +56,25 @@ pub struct Declaration<'a> {
 
 /// The services an engine may use, each a function of module `clarity`
 /// with its parameters and results.
-const SERVICES: [(&str, &[ValType], &[ValType]); 4] = [
+const SERVICES: [(&str, &[ValType], &[ValType]); 5] = [
     ("clock", &[], &[ValType::I64]),
     ("random", &[], &[ValType::I64]),
     ("log", &[ValType::I32, ValType::I32], &[]),
     ("language", &[ValType::I32, ValType::I32], &[ValType::I32]),
+    ("progress", &[ValType::I64, ValType::I64], &[]),
 ];
+
+/// What the screen sees of a long call and how the person stops it
+/// (`uses progress`, conformance/progress.json): every report of how far
+/// it is goes to `progress`, and once `stop` is set the call ends at the
+/// next look at the clock, failing with `it was stopped`.
+#[derive(Clone, Default)]
+pub struct Watch {
+    /// Told each report, done of total; none to drop them.
+    pub progress: Option<Arc<dyn Fn(i64, i64) + Send + Sync>>,
+    /// Set to stop the call.
+    pub stop: Arc<std::sync::atomic::AtomicBool>,
+}
 
 /// What the services give: the system's clock, a fresh seed for every call
 /// and the standard error, unless a test fixes the clock or the seed, or
@@ -93,6 +106,8 @@ struct Data {
     random: u64,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     language: Arc<dyn Fn() -> Option<String> + Send + Sync>,
+    /// The watch of the call running now.
+    watch: Watch,
 }
 
 /// The next number of splitmix64.
@@ -137,6 +152,8 @@ struct Live {
 enum Stop {
     /// It ran past its time limit.
     Late,
+    /// The person stopped it.
+    Stopped,
     Failed(String),
 }
 
@@ -215,12 +232,18 @@ impl Engine {
     /// Calls `function` in open window `window`: for an engine with state
     /// per window, on that window's own instance.
     pub fn call_in(&self, window: u64, function: &str, args: Vec<Value>) -> Result<Value> {
+        self.call_watched(window, function, args, &Watch::default())
+    }
+
+    /// Calls `function` in open window `window` as `call_in` does, telling
+    /// `watch` how far it is and stopping when it says so.
+    pub fn call_watched(&self, window: u64, function: &str, args: Vec<Value>, watch: &Watch) -> Result<Value> {
         // The interpreter runs on a thread of its own with room to spare, so a
         // deep engine never overflows the caller's stack (a debug build needs it).
         std::thread::scope(|scope| {
             std::thread::Builder::new()
                 .stack_size(16 << 20)
-                .spawn_scoped(scope, || self.run(window, function, args))
+                .spawn_scoped(scope, || self.run(window, function, args, watch))
                 .map_err(|e| Error::Engine(format!("engine {} could not start {function}: {e}", self.name)))?
                 .join()
                 .unwrap_or_else(|_| Err(Error::Engine(format!("engine {} failed in {function}", self.name))))
@@ -234,12 +257,13 @@ impl Engine {
         }
     }
 
-    fn run(&self, window: u64, function: &str, args: Vec<Value>) -> Result<Value> {
+    fn run(&self, window: u64, function: &str, args: Vec<Value>, watch: &Watch) -> Result<Value> {
         let failed = |why: String| Error::Engine(format!("engine {} failed in {function}: {why}", self.name));
         let seconds = self.limits.seconds;
         let until = Instant::now() + Duration::from_secs(u64::from(seconds));
         let stopped = |stop| match stop {
             Stop::Late => failed(format!("it ran longer than {seconds} second{}", if seconds == 1 { "" } else { "s" })),
+            Stop::Stopped => failed("it was stopped".into()),
             Stop::Failed(why) => failed(why),
         };
         // An engine with state keeps its instance, unless a call fails or runs
@@ -255,6 +279,7 @@ impl Engine {
             Some(live) => live,
             None => self.instance(until).map_err(stopped)?,
         };
+        live.store.data_mut().watch = watch.clone();
         let output = invoke(&mut live, function, args, until, self.services.seed).map_err(stopped)?;
         // The engine answered, even with a refusal, so its memory is whole.
         if let (Some(key), Some(kept)) = (key, kept.as_mut()) {
@@ -285,6 +310,7 @@ impl Engine {
             random: 0,
             log: self.services.log.clone(),
             language: self.services.language.clone(),
+            watch: Watch::default(),
         };
         let mut store = Store::new(&self.engine, data);
         store.limiter(|data: &mut Data| &mut data.limits);
@@ -347,6 +373,13 @@ impl Engine {
                 Ok(())
             })?;
         }
+        if uses("progress") {
+            linker.func_wrap("clarity", "progress", |caller: Caller<'_, Data>, done: i64, total: i64| {
+                if let Some(progress) = &caller.data().watch.progress {
+                    progress(done, total);
+                }
+            })?;
+        }
         if uses("language") {
             // The language as it is at the call, written into the engine's room.
             linker.func_wrap("clarity", "language", |mut caller: Caller<'_, Data>, at: i32, room: i32| -> std::result::Result<i32, wasmi::Error> {
@@ -365,11 +398,18 @@ impl Engine {
 /// Runs `func` a slice of fuel at a time until it ends, or stops it once
 /// `until` has passed.
 fn timed<P: WasmParams, R: WasmResults>(store: &mut Store<Data>, func: &TypedFunc<P, R>, params: P, until: Instant) -> std::result::Result<R, Stop> {
+    let stopped = |store: &Store<Data>| store.data().watch.stop.load(std::sync::atomic::Ordering::SeqCst);
+    if stopped(store) {
+        return Err(Stop::Stopped);
+    }
     let mut call = func.call_resumable(&mut *store, params)?;
     loop {
         match call {
             TypedResumableCall::Finished(results) => return Ok(results),
             TypedResumableCall::OutOfFuel(paused) => {
+                if stopped(store) {
+                    return Err(Stop::Stopped);
+                }
                 if Instant::now() >= until {
                     return Err(Stop::Late);
                 }

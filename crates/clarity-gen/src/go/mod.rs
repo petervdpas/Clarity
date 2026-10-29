@@ -506,7 +506,14 @@ fn main_go(project: &Project, settings: &Settings, databases: &[(String, Sql, St
     } else {
         "\tif err := checkEngines(); err != nil {\n\t\tfmt.Fprintln(os.Stderr, err)\n\t\tos.Exit(1)\n\t}\n".to_string()
     };
-    let stores = settings.filestores.iter().map(|s| format!("{}: {}", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    let stores = crate::fixed_stores(settings).iter().map(|s| format!("{}: {}", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("\tif err := db.AddStoreSetting({}, {}, {}, {}); err != nil {{\n\t\tdb.Close()\n\t\treturn nil, err\n\t}}\n", string(name), string(&program_name), string(setting), string(default)))
+        .collect();
+
     let cases: String = crate::picture_fields(project)
         .iter()
         .map(|(e, f)| {
@@ -725,7 +732,7 @@ func openDatabases() (*clarity.Db, error) {{
 \t\t\treturn nil, err
 \t\t}}
 \t}}
-\treturn db, nil
+{folder_stores}\treturn db, nil
 }}
 
 {bind}// windows is what the shell asks of the application's windows.

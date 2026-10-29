@@ -59,7 +59,7 @@ impl Db {
     pub fn files(&self, store: &str) -> Result<Vec<FileEntry>> {
         let root = self.store_folder(store)?;
         let mut out = Vec::new();
-        walk(store, root, "", &mut out)?;
+        walk(store, &root, "", &mut out)?;
         out.sort_by(|a, b| a.path.as_bytes().cmp(b.path.as_bytes()));
         Ok(out)
     }
@@ -67,13 +67,13 @@ impl Db {
     /// The bytes of the file `path` of a store: a picture linked from a file
     /// before its record is saved.
     pub fn store_file(&self, store: &str, path: &str) -> Result<Vec<u8>> {
-        let file = picture::in_store(self.store_folder(store)?, path)?;
+        let file = picture::in_store(&self.store_folder(store)?, path)?;
         std::fs::read(&file).map_err(|e| failed("read", &file, e))
     }
 
     /// The text a file holds.
     pub fn read_text(&self, file: &FileEntry) -> Result<String> {
-        let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+        let path = picture::in_store(&self.store_folder(&file.store)?, &file.path)?;
         let bytes = std::fs::read(&path).map_err(|e| failed("read", &path, e))?;
         String::from_utf8(bytes).map_err(|_| Error::Invalid(format!("{} is not text", file.path)))
     }
@@ -85,13 +85,13 @@ impl Db {
 
     /// The contents of a file as they are.
     pub fn read_bytes(&self, file: &FileEntry) -> Result<Vec<u8>> {
-        let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+        let path = picture::in_store(&self.store_folder(&file.store)?, &file.path)?;
         std::fs::read(&path).map_err(|e| failed("read", &path, e))
     }
 
     /// Writes `bytes` as they are as the file `path` of a store, making its folders.
     pub fn write_bytes(&self, store: &str, path: &str, bytes: &[u8]) -> Result<()> {
-        let file = picture::in_store(self.store_folder(store)?, path)?;
+        let file = picture::in_store(&self.store_folder(store)?, path)?;
         if let Some(folder) = file.parent() {
             std::fs::create_dir_all(folder).map_err(|e| failed("make", folder, e))?;
         }
@@ -101,7 +101,7 @@ impl Db {
     /// A file as the picture of a field kept in `field_store` (none: in the
     /// database): the file itself when it is in that store, else a copy.
     pub fn picture_from(&self, file: &FileEntry, field_store: Option<&str>) -> Result<Picture> {
-        let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+        let path = picture::in_store(&self.store_folder(&file.store)?, &file.path)?;
         let bytes = std::fs::read(&path).map_err(|e| failed("read", &path, e))?;
         picture::checked(&bytes)?;
         Ok(match field_store {
@@ -116,7 +116,7 @@ impl Db {
         let content = match field_store {
             Some(store) if store == file.store => Picture::InStore(file.path.clone()),
             _ => {
-                let path = picture::in_store(self.store_folder(&file.store)?, &file.path)?;
+                let path = picture::in_store(&self.store_folder(&file.store)?, &file.path)?;
                 Picture::New(std::fs::read(&path).map_err(|e| failed("read", &path, e))?)
             }
         };

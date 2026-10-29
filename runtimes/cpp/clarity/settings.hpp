@@ -19,6 +19,13 @@ namespace clarity {
 std::optional<std::string> settings_file_in(const std::string& os, const std::function<std::optional<std::string>(const std::string&)>& env, const std::string& program);
 /// Where `program` keeps its settings on this machine.
 std::optional<std::string> settings_file(const std::string& program);
+/// This machine's system, as the cases name it: "windows", "macos" or "linux".
+std::string settings_os();
+/// The folder of file store `store` when a folder setting names it, on
+/// system `os`: the `kept` value when it is text that is not empty, else
+/// `fallback` (the setting's default), else a folder named after the store;
+/// a relative folder is in `settings_folder`, the folder of the settings file.
+std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback);
 /// The settings `program` kept; an empty object when it kept none, or they cannot be read.
 nlohmann::json read_settings(const std::string& program);
 /// Keeps `values` as the settings of `program`, written whole and then put in place.

@@ -21,7 +21,9 @@
 #endif
 
 #if defined(_WIN32)
+#define COBJMACROS
 #include <windows.h>
+#include <shobjidl.h>
 #endif
 
 // The desktop: a webview per window, all on the main loop of the first.
@@ -48,6 +50,62 @@ static void close_window(ClarityDesktop* desktop) {
     (void)desktop;
 #endif
 }
+
+// The system's folder picker over a window, for a folder part: the folder
+// chosen, or NULL when the person cancelled.
+#if defined(__linux__)
+static const char* choose_folder(ClarityDesktop* desktop, const char* title) {
+    GtkWindow* parent = GTK_WINDOW(webview_get_window(((Window*)desktop)->view));
+    GtkWidget* dialog = gtk_file_chooser_dialog_new(title, parent, GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, "_Cancel", GTK_RESPONSE_CANCEL, "_Select", GTK_RESPONSE_ACCEPT, NULL);
+    const char* chosen = NULL;
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char* folder = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        if (folder) chosen = clarity_format("%s", folder);
+        g_free(folder);
+    }
+    gtk_widget_destroy(dialog);
+    return chosen;
+}
+#elif defined(_WIN32)
+static const char* choose_folder(ClarityDesktop* desktop, const char* title) {
+    IFileOpenDialog* dialog = NULL;
+    if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog, (void**)&dialog))) return NULL;
+    FILEOPENDIALOGOPTIONS options = 0;
+    IFileOpenDialog_GetOptions(dialog, &options);
+    IFileOpenDialog_SetOptions(dialog, options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+    wchar_t wide[512];
+    if (MultiByteToWideChar(CP_UTF8, 0, title, -1, wide, 512) > 0) IFileOpenDialog_SetTitle(dialog, wide);
+    const char* chosen = NULL;
+    if (SUCCEEDED(IFileOpenDialog_Show(dialog, (HWND)webview_get_window(((Window*)desktop)->view)))) {
+        IShellItem* item = NULL;
+        PWSTR path = NULL;
+        if (SUCCEEDED(IFileOpenDialog_GetResult(dialog, &item)) && SUCCEEDED(IShellItem_GetDisplayName(item, SIGDN_FILESYSPATH, &path))) {
+            char utf8[4096];
+            if (WideCharToMultiByte(CP_UTF8, 0, path, -1, utf8, sizeof utf8, NULL, NULL) > 0) chosen = clarity_format("%s", utf8);
+            CoTaskMemFree(path);
+        }
+        if (item) IShellItem_Release(item);
+    }
+    IFileOpenDialog_Release(dialog);
+    return chosen;
+}
+#elif defined(__APPLE__)
+static const char* choose_folder(ClarityDesktop* desktop, const char* title) {
+    (void)desktop;
+    id panel = ((id (*)(Class, SEL))objc_msgSend)(objc_getClass("NSOpenPanel"), sel_registerName("openPanel"));
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(panel, sel_registerName("setCanChooseDirectories:"), YES);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(panel, sel_registerName("setCanChooseFiles:"), NO);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(panel, sel_registerName("setAllowsMultipleSelection:"), NO);
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(panel, sel_registerName("setCanCreateDirectories:"), YES);
+    id message = ((id (*)(Class, SEL, const char*))objc_msgSend)(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), title);
+    ((void (*)(id, SEL, id))objc_msgSend)(panel, sel_registerName("setMessage:"), message);
+    // NSModalResponseOK.
+    if (((long (*)(id, SEL))objc_msgSend)(panel, sel_registerName("runModal")) != 1) return NULL;
+    id url = ((id (*)(id, SEL))objc_msgSend)(panel, sel_registerName("URL"));
+    const char* path = ((const char* (*)(id, SEL))objc_msgSend)(url, sel_registerName("fileSystemRepresentation"));
+    return path ? clarity_format("%s", path) : NULL;
+}
+#endif
 
 /// The answer to a call without a command's name.
 static cJSON* unnamed(void) {
@@ -89,6 +147,9 @@ static Window* open_window(Desktop* desktop, const char* name, int width, int he
     snprintf(w->desktop.name, sizeof w->desktop.name, "%s", name);
     w->desktop.set_title = set_title;
     w->desktop.close = close_window;
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
+    w->desktop.choose_folder = choose_folder;
+#endif
 #if defined(__linux__) || defined(_WIN32)
     w->desktop.part_parent = part_parent;
 #endif

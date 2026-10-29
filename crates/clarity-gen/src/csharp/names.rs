@@ -144,7 +144,7 @@ pub fn backing(name: &str) -> String {
 /// The C# type of a stored field.
 pub fn field_type(ty: &FieldType) -> String {
     match ty {
-        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => "string".into(),
+        FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => "string".into(),
         FieldType::Integer | FieldType::Id | FieldType::Duration => "long".into(),
         FieldType::Decimal { .. } | FieldType::Money => "decimal".into(),
         FieldType::Bool => "bool".into(),

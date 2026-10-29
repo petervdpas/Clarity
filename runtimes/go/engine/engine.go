@@ -64,7 +64,22 @@ var services = map[string]struct{ params, results []api.ValueType }{
 	"random":   {nil, []api.ValueType{api.ValueTypeI64}},
 	"log":      {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, nil},
 	"language": {[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI32}},
+	"progress": {[]api.ValueType{api.ValueTypeI64, api.ValueTypeI64}, nil},
 }
+
+// Watch is what the screen sees of a long call and how the person stops it
+// (`uses progress`, conformance/progress.json): every report of how far it
+// is goes to Progress, and once Stop is closed the call ends, failing with
+// "it was stopped".
+type Watch struct {
+	// Progress is told each report, done of total; nil drops them.
+	Progress func(done, total int64)
+	// Stop is closed to stop the call; nil never stops it.
+	Stop <-chan struct{}
+}
+
+// errStopped is the cause of a call's context when the person stopped it.
+var errStopped = errors.New("it was stopped")
 
 // State is whether an engine keeps an instance from call to call.
 type State int
@@ -114,6 +129,7 @@ type live struct {
 
 // call is the state of the services during one call.
 type call struct {
+	progress func(done, total int64)
 	name     string
 	clock    *int64
 	random   uint64
@@ -163,6 +179,11 @@ func serve(ctx context.Context, runtime wazero.Runtime) error {
 		}
 		return uint32(len(language))
 	}).Export("language").
+		NewFunctionBuilder().WithFunc(func(ctx context.Context, done, total int64) {
+		if p := state(ctx).progress; p != nil {
+			p(done, total)
+		}
+	}).Export("progress").
 		Instantiate(ctx)
 	return err
 }
@@ -253,7 +274,13 @@ func (e *Engine) CloseWindow(window uint64) {
 // CallIn calls function in open window window: for an engine with state
 // per window, on that window's own instance.
 func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error) {
-	state := &call{name: e.name, clock: e.services.Clock, random: rand.Uint64(), log: e.services.Log}
+	return e.CallWatched(window, Watch{}, function, args...)
+}
+
+// CallWatched calls function in open window window as CallIn does, telling
+// watch how far it is and stopping when it says so.
+func (e *Engine) CallWatched(window uint64, watch Watch, function string, args ...any) (any, error) {
+	state := &call{name: e.name, clock: e.services.Clock, random: rand.Uint64(), log: e.services.Log, progress: watch.Progress}
 	if e.services.Seed != nil {
 		state.random = *e.services.Seed
 	}
@@ -264,10 +291,29 @@ func (e *Engine) CallIn(window uint64, function string, args ...any) (any, error
 	if state.language == nil {
 		state.language = clarity.Language
 	}
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), callKey{}, state), time.Duration(e.limits.Seconds)*time.Second)
+	timed, cancel := context.WithTimeout(context.WithValue(context.Background(), callKey{}, state), time.Duration(e.limits.Seconds)*time.Second)
 	defer cancel()
+	// Stop ends the call as its time limit does, with a cause of its own.
+	ctx, stop := context.WithCancelCause(timed)
+	defer stop(nil)
+	if watch.Stop != nil {
+		select {
+		case <-watch.Stop:
+			return nil, &Error{What: fmt.Sprintf("engine %s failed in %s: %s", e.name, function, errStopped)}
+		default:
+		}
+		go func() {
+			select {
+			case <-watch.Stop:
+				stop(errStopped)
+			case <-ctx.Done():
+			}
+		}()
+	}
 	failed := func(why string) error {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(context.Cause(ctx), errStopped) {
+			why = errStopped.Error()
+		} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			unit := "seconds"
 			if e.limits.Seconds == 1 {
 				unit = "second"

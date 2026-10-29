@@ -18,11 +18,12 @@ fn val(kind: Kind) -> ValType {
 }
 
 /// The services of Clarity an engine may import, with their types.
-pub(crate) const SERVICES: [(&str, &[ValType], &[ValType]); 4] = [
+pub(crate) const SERVICES: [(&str, &[ValType], &[ValType]); 5] = [
     ("clock", &[], &[ValType::I64]),
     ("random", &[], &[ValType::I64]),
     ("log", &[ValType::I32, ValType::I32], &[]),
     ("language", &[ValType::I32, ValType::I32], &[ValType::I32]),
+    ("progress", &[ValType::I64, ValType::I64], &[]),
 ];
 
 /// The engine's functions: an inner one and an export per function, one
@@ -348,6 +349,12 @@ impl<'w, 'a> Body<'w, 'a> {
                 if self.expr(call).is_some() {
                     self.code.push(I::Drop);
                 }
+            }
+            ir::Stmt::Progress(done, total) => {
+                let service = self.world.engine.services.iter().position(|s| s == "progress").expect("progress is imported");
+                self.expr(done);
+                self.expr(total);
+                self.code.push(I::Call(service as u32));
             }
             // `tell finished(time)`: its values as a list, in the call's answer.
             ir::Stmt::Tell(name, args) => {

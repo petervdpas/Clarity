@@ -47,7 +47,7 @@ pub(super) fn generate(project: &Project, settings: &Settings, desktop: Vec<OutF
         }
     }
     // The databases open on the server, which alone carries their drivers.
-    files.push(text("Server/Databases.cs", databases_cs(&name, &opening(&databases, &drivers, settings, "Open"))));
+    files.push(text("Server/Databases.cs", databases_cs(&name, &opening(project, &databases, &drivers, settings, "Open"))));
     files.push(text(&format!("Server/{name}.Server.csproj"), server_csproj(&name, &drivers)));
     // The person's settings, which their browser keeps and each request brings (DESIGN 7.6).
     let kept = project.entities().find(|e| e.settings).map(|e| e.name.name.clone());

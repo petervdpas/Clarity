@@ -33,6 +33,8 @@ type Db struct {
 	sources []*sourceDb
 	// stores are the folders of the file stores, by name.
 	stores map[string]string
+	// storeSettings are the file stores whose folder is a folder setting, by name.
+	storeSettings map[string]storeSetting
 }
 
 // Connect opens a database per data source.

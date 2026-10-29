@@ -42,11 +42,29 @@ public static partial class KeptSettings
         return folder is null ? null : $"{folder}/{program}/settings.json";
     }
 
+    /// <summary>This machine's system, as the cases name it.</summary>
+    public static string Os => OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
+
     /// <summary>Where <paramref name="program"/> keeps its settings on this machine.</summary>
-    public static string? File(string program)
+    public static string? File(string program) => FileIn(Os, Environment.GetEnvironmentVariable, program);
+
+    /// <summary>
+    /// The folder of file store <paramref name="store"/> when a folder setting names it, on
+    /// system <paramref name="os"/>: the kept value when it is text that is not empty, else
+    /// <paramref name="fallback"/> (the setting's default), else a folder named after the
+    /// store; a relative folder is in <paramref name="settingsFolder"/>, the folder of the
+    /// settings file.
+    /// </summary>
+    public static string StoreFolderIn(string os, string settingsFolder, string store, JsonNode? kept, string fallback)
     {
-        var os = OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
-        return FileIn(os, Environment.GetEnvironmentVariable, program);
+        var chosen = kept is JsonValue v && v.TryGetValue<string>(out var text) && text.Length > 0 ? text : fallback;
+        if (chosen.Length == 0)
+            chosen = store;
+        var absolute = os == "windows"
+            ? chosen.StartsWith(@"\\", StringComparison.Ordinal) || chosen.StartsWith("//", StringComparison.Ordinal)
+                || (chosen.Length > 2 && char.IsAsciiLetter(chosen[0]) && chosen[1] == ':' && chosen[2] is '/' or '\\')
+            : chosen.StartsWith('/');
+        return absolute ? chosen : $"{settingsFolder}/{chosen}";
     }
 
     /// <summary>The settings <paramref name="program"/> kept; none when it kept none, or they cannot be read.</summary>

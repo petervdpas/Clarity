@@ -147,7 +147,7 @@ fn body(lines: &[String]) -> String {
 fn input_width(kind: WidgetKind, ty: &FieldType, room: u32) -> u32 {
     let wide = match ty {
         FieldType::Text { max_length } => max_length.is_none_or(|n| n > 40),
-        FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme => true,
+        FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme => true,
         _ => false,
     };
     let width = if wide { 6 } else { widgets::default_size(kind).0 };

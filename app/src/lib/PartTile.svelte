@@ -122,6 +122,9 @@
       <path d="M8 5 h10 l5 5 v13 h-15 z" />
       <path d="M18 5 v5 h5" />
       <rect x="27" y="10" width="15" height="8" rx="2" class="fill" />
+    {:else if kind === "folder"}
+      <path d="M6 9 h8 l2 2 h12 v10 h-22 z" />
+      <rect x="31" y="10" width="11" height="8" rx="2" class="fill" />
     {:else if kind === "chart"}
       <line x1="8" y1="4" x2="8" y2="24" />
       <line x1="8" y1="24" x2="42" y2="24" />

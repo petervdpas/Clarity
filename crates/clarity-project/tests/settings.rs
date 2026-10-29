@@ -517,13 +517,19 @@ fn a_file_store_is_found_from_the_project_folder() {
     settings.filestores = vec![
         FileStore { name: "photos".into(), location: "data/photos".into() },
         FileStore { name: "scans".into(), location: "env:SCAN_FOLDER".into() },
+        FileStore { name: "prints".into(), location: "setting:printsFolder".into() },
     ];
+    assert_eq!(validate(&settings), Vec::<String>::new());
     // A folder this system calls absolute, and paths compared as paths: the
     // separator between them is the system's own.
     let dir = std::path::absolute("/projects/shop").unwrap();
     let built = clarity_project::build_settings(&dir, &settings);
     assert_eq!(Path::new(&built.filestores[0].location), dir.join("data/photos"));
     assert_eq!(built.filestores[1].location, "env:SCAN_FOLDER");
+    // A folder setting is the person's, found while the application runs.
+    assert_eq!(built.filestores[2].location, "setting:printsFolder");
+    settings.filestores[2].location = "setting: ".into();
+    assert_eq!(validate(&settings), ["file store 'prints': the location names no variable or setting after its prefix"]);
 }
 
 #[test]

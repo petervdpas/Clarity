@@ -103,7 +103,7 @@ pub struct Auth {
 
 /// A folder that keeps the pictures of image fields with `store <name>` as
 /// files, such as a folder of photos a catalog shows. Where it is differs
-/// per installation, like a data source: a folder, or `env:NAME`.
+/// per installation, like a data source: a folder, `env:NAME`, or `setting:name`, a folder setting each person chooses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct FileStore {
@@ -496,6 +496,8 @@ pub fn validate(settings: &Settings) -> Vec<String> {
         }
         if store.location.trim().is_empty() {
             problems.push(format!("file store '{}' needs a folder", store.name));
+        } else if ["env:", "setting:"].iter().any(|prefix| store.location.strip_prefix(prefix).is_some_and(|rest| rest.trim().is_empty())) {
+            problems.push(format!("file store '{}': the location names no variable or setting after its prefix", store.name));
         }
     }
     problems
@@ -774,6 +776,8 @@ fn hand_over(dir: &Path, project: &mut clarity_spec::Project) {
     let themes = settings.as_ref().map(|s| s.themes.clone()).unwrap_or_default();
     if let Some(settings) = &settings {
         clarity_spec::attach_stores(project, settings.filestores.iter().map(|s| s.name.clone()).collect());
+        let locations: Vec<(String, String)> = settings.filestores.iter().map(|s| (s.name.clone(), s.location.clone())).collect();
+        clarity_spec::check_store_folders(project, &locations);
     }
     if let Some(settings) = &settings {
         let found = target_problems(settings, project, &file.display().to_string());
@@ -934,7 +938,8 @@ pub fn build_settings(dir: &Path, settings: &Settings) -> Settings {
     for source in built.datasources.iter_mut().filter(|s| s.kind == SourceKind::Sqlite) {
         source.url = slashed(&sqlite_path(dir, source));
     }
-    for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:")) {
+    // A folder setting is found while the application runs, in the person's settings.
+    for store in built.filestores.iter_mut().filter(|s| !s.location.starts_with("env:") && !s.location.starts_with("setting:")) {
         let path = Path::new(&store.location);
         let joined = if path.is_absolute() { path.to_path_buf() } else { dir.join(path) };
         store.location = slashed(&std::path::absolute(&joined).unwrap_or(joined));

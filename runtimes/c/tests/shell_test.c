@@ -81,6 +81,11 @@ typedef struct {
 
 static void fake_title(ClarityDesktop* desktop, const char* title) { ((Fake*)desktop)->title = clarity_copy(title); }
 static void fake_close(ClarityDesktop* desktop) { ((Fake*)desktop)->closed = true; }
+// The system's folder picker: the person chooses a folder, or cancels.
+static const char* fake_folder(ClarityDesktop* desktop, const char* title) {
+    (void)desktop;
+    return strcmp(title, "Choose a folder") == 0 ? "/home/ada/Pictures" : NULL;
+}
 
 static void fake_open(void* context, ClarityDesktop* opener, const char* name, int width, int height) {
     (void)opener;
@@ -155,6 +160,11 @@ void the_shell_answers_the_renderers_commands(void) {
     Fake main = {{"main", fake_title, fake_close}, NULL, false, NULL, 0, 0};
     invoked(s, "set_title", "{\"title\":\"Customer card\"}", &main.desktop);
     CHECK_TEXT(main.title, "Customer card");
+    // A folder part's button opens the folder picker of the window it is in: the folder chosen, or none.
+    CHECK_JSON(invoked(s, "choose_folder", "{\"title\":\"Choose a folder\"}", &main.desktop), "{\"error\":\"this window has no folder picker\"}");
+    main.desktop.choose_folder = fake_folder;
+    CHECK_JSON(invoked(s, "choose_folder", "{\"title\":\"Choose a folder\"}", &main.desktop), "{\"value\":\"/home/ada/Pictures\"}");
+    CHECK_JSON(invoked(s, "choose_folder", "{\"title\":\"Cancelled\"}", &main.desktop), "{\"value\":null}");
     clarity_service_on_desktop(s, NULL, fake_open, &main);
     invoked(s, "open_apart", "{\"window\":\"Card\",\"with\":{\"name\":\"Linus\"}}", &main.desktop);
     CHECK_TEXT(main.opened, "apart-1");

@@ -48,6 +48,9 @@ void clarity_db_close(ClarityDb* db) {
     for (size_t i = 0; i < db->store_count; ++i) {
         free(db->stores[i].name);
         free(db->stores[i].folder);
+        free(db->stores[i].program);
+        free(db->stores[i].setting);
+        free(db->stores[i].fallback);
     }
     free(db->sources);
     free(db->stores);

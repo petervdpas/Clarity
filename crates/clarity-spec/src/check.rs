@@ -509,6 +509,18 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        // A folder is the person's too, kept with their settings.
+        for (file, f) in files.iter().enumerate() {
+            for entity in f.entities.iter().filter(|e| !e.settings) {
+                for field in entity.fields.iter().filter(|f| f.ty == FieldType::Folder) {
+                    self.error(
+                        file,
+                        format!("a folder is a setting of the person, where a file store keeps its files; entity {} cannot keep '{}' as one", entity.name.name, field.name.name),
+                        field.span,
+                    );
+                }
+            }
+        }
         let blocks: Vec<(usize, &Entity)> = files.iter().enumerate().flat_map(|(i, f)| f.entities.iter().filter(|e| e.settings).map(move |e| (i, e))).collect();
         for (file, extra) in blocks.iter().skip(1) {
             self.error(*file, "a project has one 'settings' block", extra.name.span);

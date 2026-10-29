@@ -206,7 +206,14 @@ fn program_cs(project: &Project, settings: &Settings, name: &str, databases: &[(
     let commands = crate::commands::commands(project);
     let check_engines = if engines { "        try\n        {\n            Engines.Check();\n        }\n        catch (EngineException e)\n        {\n            Console.Error.WriteLine(e.Message);\n            return 1;\n        }\n" } else { "" };
     let turned_on: String = drivers.iter().map(|s| format!("        {}.Use();\n", s.class)).collect();
-    let stores = settings.filestores.iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    let stores = crate::fixed_stores(settings).iter().map(|s| format!("({}, {})", string(&s.name), string(&s.location))).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("        db.AddStoreSetting({}, {}, {}, {});\n", string(name), string(&program_name), string(setting), string(default)))
+        .collect();
+
     let databases = databases.iter().map(|(source, sql, at)| format!("({}, {}, {})", string(source), dialect(*sql), string(at))).collect::<Vec<_>>().join(", ");
     let currency = settings.currency.as_deref().map_or("null".to_string(), string);
     let listed: String = commands.iter().map(command).collect();
@@ -247,7 +254,7 @@ public static class Program
             db.MigrateSource(source, steps);
         foreach (var (store, at) in Stores)
             db.AddStore(store, at);
-        return db;
+{folder_stores}        return db;
     }}
 
     /// <summary>The program and its commands, as the command line reads them.</summary>

@@ -213,6 +213,7 @@ func pictureColumn(r Record, column string) (PictureColumn, bool) {
 // AddStore adds the file store name at a place, a folder (made when it is
 // not there yet); env:NAME takes it from that environment variable.
 func (db *Db) AddStore(name, at string) error {
+	delete(db.storeSettings, name)
 	folder, err := location(at)
 	if err != nil {
 		return err
@@ -227,7 +228,37 @@ func (db *Db) AddStore(name, at string) error {
 	return nil
 }
 
+// storeSetting is a file store whose folder is the folder setting setting
+// of program (filestore photos "setting:photosFolder"), or def while it is
+// not kept.
+type storeSetting struct{ program, setting, def string }
+
+// AddStoreSetting adds the file store name whose folder is the folder
+// setting setting of program, or def while it is not kept; read again at
+// every use, so a folder chosen while the application runs takes effect at
+// once.
+func (db *Db) AddStoreSetting(name, program, setting, def string) error {
+	delete(db.stores, name)
+	if db.storeSettings == nil {
+		db.storeSettings = map[string]storeSetting{}
+	}
+	db.storeSettings[name] = storeSetting{program, setting, def}
+	_, err := db.storeFolder(name)
+	return err
+}
+
 func (db *Db) storeFolder(name string) (string, error) {
+	if s, ok := db.storeSettings[name]; ok {
+		file, ok := SettingsFile(s.program)
+		if !ok {
+			return "", &StorageError{What: "this system names no folder for application settings"}
+		}
+		folder := filepath.FromSlash(StoreFolderIn(settingsOS(), filepath.ToSlash(filepath.Dir(file)), name, ReadSettings(s.program)[s.setting], s.def))
+		if err := os.MkdirAll(folder, 0o755); err != nil {
+			return "", &StorageError{What: "cannot make the file store " + folder + ": " + err.Error(), Err: err}
+		}
+		return folder, nil
+	}
 	folder, ok := db.stores[name]
 	if !ok {
 		return "", &StorageError{What: "there is no file store '" + name + "'"}
@@ -337,6 +368,40 @@ func PictureOf[T any, P interface {
 	default:
 		return nil, &StorageError{What: column + " holds no picture"}
 	}
+}
+
+// CopiedPicture is another record's picture for a field kept in store to
+// ("" for the database), as code copies it (album.cover = other.cover).
+// value is field column of record id, kept in store from. A picture in hand
+// is copied as it is, a stored one is read first, and a file of a store
+// stays linked only in that same store.
+func CopiedPicture[T any, P interface {
+	*T
+	Record
+}](db *Db, value *Picture, id int64, column, from, to string) (*Picture, error) {
+	switch {
+	case value == nil:
+		return nil, nil
+	case value.Bytes != nil:
+		return NewPicture(value.Bytes), nil
+	case value.Path != "":
+		if from == "" {
+			return nil, &StorageError{What: column + " is kept in the database, not in a file store"}
+		}
+		if from == to {
+			return &Picture{Path: value.Path}, nil
+		}
+		b, err := db.StoreFile(from, value.Path)
+		if err != nil {
+			return nil, err
+		}
+		return NewPicture(b), nil
+	}
+	b, err := PictureOf[T, P](db, id, column)
+	if err != nil || b == nil {
+		return nil, err
+	}
+	return NewPicture(b), nil
 }
 
 func (db *Db) readStored(store, path string) ([]byte, error) {

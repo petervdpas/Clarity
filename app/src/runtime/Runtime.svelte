@@ -4,7 +4,7 @@
   // renderer, with every event sent to the backend. The backend owns the
   // behavior; this page only shows state and reports what the user does.
 
-  import { invoke } from "../lib/backend";
+  import { invoke, transport } from "../lib/backend";
   import FrameView from "../lib/FrameView.svelte";
   import GridBox from "../lib/GridBox.svelte";
   import { frameForPage } from "../lib/frame";
@@ -688,6 +688,15 @@
     forgetPicture(entity: string, id: number, field: string) {
       delete pictures[pictureKey(entity, id, field)];
     },
+    // A desktop shell opens the system's folder picker; a browser has none, so a folder is typed there.
+    chooseFolder:
+      transport(globalThis) === "server"
+        ? undefined
+        : (title: string) =>
+            invoke<string | null>("choose_folder", { title }).catch((err) => {
+              say({ level: "error", text: errorText(err) });
+              return null;
+            }),
   });
 
   // The language and theme the person chose with the `language` and `theme`

@@ -37,6 +37,8 @@ pub const RENDERER_KEYS: [(&str, &str); 5] = [("yes", "Yes"), ("no", "No"), ("ok
 /// Clarity's words on the buttons of a wizard, the `steps` part.
 pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("finish", "Finish")];
 /// Clarity's words heading the pickers of the click targets `language` and `theme`.
+/// Clarity's word of a folder part: its button that chooses a folder.
+pub const FOLDER_KEYS: [(&str, &str); 1] = [("chooseFolder", "Choose a folder")];
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
 /// Clarity's words of a file part bound to a file field: its empty state,
@@ -127,6 +129,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&PICTURE_KEYS)
         .chain(&STEP_KEYS)
         .chain(&FILE_KEYS)
+        .chain(&FOLDER_KEYS)
         .chain(&TAGS_KEYS)
         .chain(&PAGE_KEYS)
         .chain(&TREE_KEYS)
@@ -495,6 +498,7 @@ fn shown(project: &Project) -> Shown {
     let bound_file = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::File && w.props.bind.is_some()
     }));
+    let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
     let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
     let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
@@ -514,6 +518,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if bound_picture { PICTURE_KEYS.as_slice() } else { &[] })
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
+        .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })
         .chain(if trees { TREE_KEYS.as_slice() } else { &[] })
@@ -867,6 +872,6 @@ pub fn table(project: &Project) -> TranslationTable {
 }
 
 /// Whether any part in `widgets`, inside containers too, is one `test` picks.
-fn any_widget(widgets: &[Widget], test: &impl Fn(&Widget) -> bool) -> bool {
+pub(crate) fn any_widget(widgets: &[Widget], test: &impl Fn(&Widget) -> bool) -> bool {
     widgets.iter().any(|w| test(w) || any_widget(&w.children, test) || w.pages.iter().any(|p| any_widget(&p.children, test)))
 }

@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "clarity/db.hpp"
+#include "clarity/settings.hpp"
 
 namespace clarity {
 
@@ -20,10 +21,28 @@ void Db::add_store(const std::string& name, const std::string& at) {
     std::error_code error;
     fs::create_directories(folder, error);
     if (error) throw StorageError("cannot make the file store " + folder.string() + ": " + error.message());
+    store_settings_.erase(name);
     stores_[name] = folder;
 }
 
-const fs::path& Db::store_folder(const std::string& name) {
+void Db::add_store_setting(const std::string& name, const std::string& program, const std::string& setting, const std::string& fallback) {
+    stores_.erase(name);
+    store_settings_[name] = {program, setting, fallback};
+    store_folder(name);
+}
+
+fs::path Db::store_folder(const std::string& name) {
+    if (auto setting = store_settings_.find(name); setting != store_settings_.end()) {
+        auto file = settings_file(setting->second.program);
+        if (!file) throw StorageError("this system names no folder for application settings");
+        nlohmann::json kept = read_settings(setting->second.program);
+        std::string settings_folder = fs::path(*file).parent_path().generic_string();
+        fs::path folder = store_folder_in(settings_os(), settings_folder, name, kept.contains(setting->second.setting) ? kept[setting->second.setting] : nlohmann::json(), setting->second.fallback);
+        std::error_code error;
+        fs::create_directories(folder, error);
+        if (error) throw StorageError("cannot make the file store " + folder.string() + ": " + error.message());
+        return folder;
+    }
     auto found = stores_.find(name);
     if (found == stores_.end()) throw StorageError("there is no file store '" + name + "'");
     return found->second;

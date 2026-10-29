@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <stdexcept>
+
 #include <atomic>
 #include <functional>
 #include <map>
@@ -90,6 +92,13 @@ public:
     /// The native window custom parts draw in (DESIGN 6.5): on Linux the
     /// X11 window of the webview; 0 where there is none.
     virtual uintptr_t part_parent() { return 0; }
+    /// Opens the system's folder picker over the window, for a folder part:
+    /// the folder chosen, or none when the person cancelled. A window
+    /// without one says so.
+    virtual std::optional<std::string> choose_folder(const std::string& title) {
+        (void)title;
+        throw std::runtime_error("this window has no folder picker");
+    }
 };
 
 /// Opens a link in the person's browser; whether it could.

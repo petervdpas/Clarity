@@ -129,6 +129,25 @@ func TestAFileIsKeptWithItsNameInTheDatabaseOrItsStore(t *testing.T) {
 	if again.Manual != nil {
 		t.Errorf("emptied, still %+v", again.Manual)
 	}
+
+	// Copied to another record (product.manual = other.sheet): with its name, the bytes read when stored.
+	copied, err := CopiedFile[product](db, again.Sheet, again.ID, "sheet", "documents", "")
+	must(t, err)
+	if copied == nil || copied.Name != "sheet.pdf" || !bytes.Equal(copied.Content.Bytes, pdf) {
+		t.Fatalf("copied %+v", copied)
+	}
+	none, err := CopiedFile[product](db, again.Manual, again.ID, "manual", "", "")
+	must(t, err)
+	if none != nil {
+		t.Errorf("copied none as %+v", none)
+	}
+	other := &product{Manual: copied}
+	must(t, Save(db, other))
+	got, err = PictureOf[product](db, other.ID, "manual")
+	must(t, err)
+	if !bytes.Equal(got, pdf) {
+		t.Errorf("the copy kept %q", got)
+	}
 }
 
 func TestAFileTravelsWithItsName(t *testing.T) {

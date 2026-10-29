@@ -129,7 +129,7 @@ fn an_engine_declares_the_services_it_uses() {
 
     // The test engine imports all four, so leaving one out is an error.
     assert_has(&errors(&source("    uses clock, log, language\n"), test_engine()), "imports clarity.random; an engine imports only the services it uses");
-    assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random, log or language");
+    assert_has(&errors(&source("    uses clock, teleport\n"), test_engine()), "'teleport' is no service; an engine uses clock, random, log, language or progress");
     assert_has(&errors(&source("    uses clock, clock, random, log, language\n"), test_engine()), "uses clock twice");
 }
 

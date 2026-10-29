@@ -135,6 +135,37 @@ public class PictureTests
         Directory.Delete(store, true);
     }
 
+    /// <summary>
+    /// Another record's picture, copied in code (album.cover = other.cover): one in hand is
+    /// copied as it is, a stored one is read first, and one of a file store stays linked
+    /// only in the same store.
+    /// </summary>
+    [Fact]
+    public void APictureIsCopiedFromAnotherRecord()
+    {
+        var store = Scratch("copied");
+        using var cleanup = new Cleanup(store);
+        using var db = Albums(store);
+        var first = new Album { Title = "Blue Train", Cover = Picture.New(Png), Photo = Picture.New(Jpg) };
+        db.Save(first);
+        var read = db.Get<Album>(first.Id);
+        // A stored picture: its bytes, from the database or from the store.
+        Assert.Equal(Picture.New(Png), db.CopiedPicture<Album>(read.Cover, read.Id, "cover", null, null));
+        Assert.Equal(Picture.New(Jpg), db.CopiedPicture<Album>(read.Photo, read.Id, "photo", "photos", null));
+        // One in hand, and none, as they are.
+        Assert.Equal(Picture.New(Png), db.CopiedPicture<Album>(first.Cover, first.Id, "cover", null, null));
+        Assert.Null(db.CopiedPicture<Album>(null, first.Id, "cover", null, null));
+        // A file of the store: linked in the same store, else its bytes.
+        var linked = Picture.InStore(Pictures.FileName(Jpg));
+        Assert.Equal(linked, db.CopiedPicture<Album>(linked, first.Id, "photo", "photos", "photos"));
+        Assert.Equal(Picture.New(Jpg), db.CopiedPicture<Album>(linked, first.Id, "photo", "photos", null));
+
+        // Saved into the other field, the copy is kept there.
+        var second = new Album { Title = "Copy", Photo = db.CopiedPicture<Album>(read.Cover, read.Id, "cover", null, "photos") };
+        db.Save(second);
+        Assert.Equal(Png, db.PictureOf<Album>(second.Id, "photo"));
+    }
+
     [Fact]
     public void AStoreComesFromItsPlaceOrTheEnvironment()
     {

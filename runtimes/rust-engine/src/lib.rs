@@ -140,6 +140,8 @@ unsafe extern "C" {
     fn clarity_log(at: *const u8, len: i32);
     #[link_name = "language"]
     fn clarity_language(at: *mut u8, room: i32) -> i32;
+    #[link_name = "progress"]
+    fn clarity_progress(done: i64, total: i64);
 }
 
 /// The time, in milliseconds since 1970-01-01 UTC (`uses clock`).
@@ -165,6 +167,21 @@ pub fn random() -> u64 {
     #[cfg(not(target_arch = "wasm32"))]
     {
         0
+    }
+}
+
+/// How far a long call is, `done` of `total`, which the screen shows as a
+/// bar with a Stop button (`uses progress`). A call the person stops ends
+/// at the host's next look, failing with "it was stopped".
+pub fn progress(done: i64, total: i64) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        // SAFETY: a service of the host, which takes plain numbers.
+        unsafe { clarity_progress(done, total) }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (done, total);
     }
 }
 

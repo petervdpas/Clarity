@@ -11,7 +11,7 @@
 #include "wasm3/wasm3.h"
 
 /// How many services an engine may use.
-#define SERVICE_COUNT 4
+#define SERVICE_COUNT 5
 
 struct ClarityEngine {
     char* name;
@@ -56,6 +56,8 @@ static void keep(ClarityEngine* engine, uint64_t window, IM3Runtime runtime) {
 
 /// Why a call stopped when it ran past its time limit.
 static const char LATE[] = "clarity: the call ran past its time limit";
+/// Why a call stopped when the person stopped it.
+static const char STOPPED[] = "clarity: the call was stopped";
 
 /// When the call running on this thread must end, in milliseconds; 0 when none runs.
 static THREAD_LOCAL int64_t deadline;
@@ -71,6 +73,8 @@ static int64_t now_ms(void) {
 /// The engine whose call runs on this thread, and the state of its random sequence.
 static THREAD_LOCAL const ClarityEngine* serving;
 static THREAD_LOCAL uint64_t sequence;
+/// The watch of the call running on this thread; NULL when none watches it.
+static THREAD_LOCAL const ClarityEngineWatch* watching;
 
 /// The next number of splitmix64, the random sequence every host gives alike.
 static int64_t splitmix(uint64_t* state) {
@@ -142,6 +146,17 @@ static m3ApiRawFunction(language_service) {
     m3ApiReturn((int32_t)length);
 }
 
+// How far the call is: told to its watch.
+static m3ApiRawFunction(progress_service) {
+    (void)_ctx;
+    (void)_mem;
+    (void)runtime;
+    m3ApiGetArg(int64_t, done);
+    m3ApiGetArg(int64_t, total);
+    if (watching && watching->progress) watching->progress(done, total, watching->context);
+    m3ApiSuccess();
+}
+
 /// The services an engine may use: functions of module `clarity`, with their
 /// types as wasm3 writes signatures.
 static const struct {
@@ -153,10 +168,12 @@ static const struct {
     {"random", "I()", random_service},
     {"log", "v(ii)", log_service},
     {"language", "i(ii)", language_service},
+    {"progress", "v(II)", progress_service},
 };
 
 /// Asked by wasm3 at every call and every turn of a loop.
 static M3Result watch(void) {
+    if (watching && watching->stop && *watching->stop) return STOPPED;
     if (deadline == 0 || ++turns % 4096 != 0) return m3Err_none;
     return now_ms() >= deadline ? LATE : m3Err_none;
 }
@@ -405,8 +422,8 @@ static M3Result instance(ClarityEngine* engine, IM3Runtime* out) {
         cJSON* opened = NULL;
         M3Result open_failed = invoke(runtime, "clarity_open", "[]", &opened);
         const cJSON* why = cJSON_GetObjectItemCaseSensitive(opened, "error");
-        if (open_failed == LATE) {
-            failed = LATE;
+        if (open_failed == LATE || open_failed == STOPPED) {
+            failed = open_failed;
         } else if (open_failed || !opened) {
             failed = "its on open gave no answer";
         } else if (cJSON_IsString(why)) {
@@ -439,6 +456,12 @@ void clarity_engine_close_window(ClarityEngine* engine, uint64_t window) {
 }
 
 bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, cJSON** out) {
+    return clarity_engine_call_watched(engine, window, function, args, NULL, out);
+}
+
+bool clarity_engine_call_watched(ClarityEngine* engine, uint64_t window, const char* function, cJSON* args, const ClarityEngineWatch* watch, cJSON** out) {
+    if (watch && watch->stop && *watch->stop) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it was stopped", engine->name, function);
+    watching = watch;
     const char* input = cJSON_PrintUnformatted(args);
     serving = engine;
     sequence = engine->services.fixed_seed ? engine->services.seed : fresh_seed();
@@ -453,6 +476,7 @@ bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* 
     cJSON* answer = NULL;
     if (!failed) failed = invoke(runtime, function, input, &answer);
     deadline = 0;
+    watching = NULL;
     if (failed) {
         if (runtime) m3_FreeRuntime(runtime);
     } else if (engine->state != CLARITY_ENGINE_NO_STATE) {
@@ -461,6 +485,7 @@ bool clarity_engine_call_in(ClarityEngine* engine, uint64_t window, const char* 
     } else {
         m3_FreeRuntime(runtime);
     }
+    if (failed == STOPPED) return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it was stopped", engine->name, function);
     if (failed == LATE) {
         uint32_t seconds = engine->limits.seconds;
         return clarity_fail(CLARITY_ENGINE, "engine %s failed in %s: it ran longer than %u second%s", engine->name, function, seconds, seconds == 1 ? "" : "s");

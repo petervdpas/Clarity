@@ -62,4 +62,41 @@ public class SettingsCaseTests
         Assert.True(JsonNode.DeepEquals(values, KeptSettings.Read(program)));
         Directory.Delete(folder, recursive: true);
     }
+
+    [Fact]
+    public void A_folder_setting_is_where_every_runtime_puts_a_store()
+    {
+        foreach (var c in File["folders"]!.AsArray())
+        {
+            var found = KeptSettings.StoreFolderIn(c!["os"]!.GetValue<string>(), c["settingsFolder"]!.GetValue<string>(), c["store"]!.GetValue<string>(), c["kept"], c["default"]!.GetValue<string>());
+            Assert.True(found == c["folder"]!.GetValue<string>(), $"{c.ToJsonString()}: {found}");
+        }
+    }
+
+    /// <summary>
+    /// A store whose folder is a setting (filestore photos "setting:photosFolder") keeps its
+    /// files where the person's settings say, read again at every use, so choosing another
+    /// folder takes effect at once.
+    /// </summary>
+    [Fact]
+    public void A_store_keeps_its_files_in_a_folder_setting()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"clarity-folder-setting-{Environment.ProcessId}");
+        Environment.SetEnvironmentVariable(OperatingSystem.IsWindows() ? "APPDATA" : "XDG_CONFIG_HOME", home);
+        Environment.SetEnvironmentVariable("HOME", OperatingSystem.IsMacOS() ? home : Environment.GetEnvironmentVariable("HOME"));
+        const string program = "clarity-folder-test";
+        var settingsFolder = Path.GetDirectoryName(KeptSettings.File(program))!;
+        using (var db = Sqlite.Memory())
+        {
+            db.AddStoreSetting("photos", program, "photosFolder", "photos");
+            db.WriteText("photos", "first.txt", "first");
+            Assert.Equal("first", System.IO.File.ReadAllText(Path.Combine(settingsFolder, "photos", "first.txt")));
+            // Chosen while the program runs: the next file goes there.
+            var chosen = Path.Combine(home, "chosen");
+            KeptSettings.Keep(program, new JsonObject { ["photosFolder"] = chosen });
+            db.WriteText("photos", "second.txt", "second");
+            Assert.Equal("second", System.IO.File.ReadAllText(Path.Combine(chosen, "second.txt")));
+        }
+        Directory.Delete(home, recursive: true);
+    }
 }

@@ -384,6 +384,26 @@ pub fn attach_stores(project: &mut Project, stores: Vec<String>) {
     project.stores = Some(stores);
 }
 
+/// Checks the file stores' locations, as (name, location) from the project
+/// settings: one written `setting:name` keeps its files in that folder
+/// setting, so the setting must be one.
+pub fn check_store_folders(project: &mut Project, stores: &[(String, String)]) {
+    let folders: Vec<String> = project.folder_settings().into_iter().map(str::to_string).collect();
+    let path = project.files.first().map(|f| f.path.clone()).unwrap_or_default();
+    for (store, location) in stores {
+        let Some(name) = location.strip_prefix("setting:") else { continue };
+        if !folders.iter().any(|f| f == name) {
+            project.diagnostics.push(
+                diagnostic::Diagnostic::error(
+                    format!("file store {store} keeps its files in setting '{name}', which is no folder setting; add it to settings as {name}: folder"),
+                    Default::default(),
+                )
+                .in_file(&path),
+            );
+        }
+    }
+}
+
 /// The data source of a project loaded without its project file.
 pub const DEFAULT_SOURCE: &str = "main";
 

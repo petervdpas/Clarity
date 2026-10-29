@@ -1,7 +1,10 @@
 // Engines hosted by the C++ runtime, against the cases every host shares
 // (conformance/engines.json).
 
+#include <array>
+#include <atomic>
 #include <fstream>
+#include <memory>
 #include <iterator>
 
 #include "check.hpp"
@@ -145,5 +148,54 @@ TEST(an_engine_with_state_per_window_keeps_an_instance_for_each_window) {
             continue;
         }
         CHECK_EQ(json({{"value", engine.call_in(step["window"].get<uint64_t>(), step["function"], json::array())}}), step["gives"]);
+    }
+}
+
+// Progress of a long call and Stop, against the cases every host shares
+// (conformance/progress.json).
+
+TEST(a_long_engine_call_reports_how_far_it_is) {
+    json file = conformance("progress.json");
+    auto load = [&](const json& used) {
+        return Engine::load(file["name"], read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), used.get<std::vector<std::string>>(), limits(file)});
+    };
+    auto engine = load(file["uses"]);
+    for (const auto& c : file["reported"]) {
+        std::vector<std::array<int64_t, 2>> reports;
+        EngineWatch watch{[&](int64_t done, int64_t total) { reports.push_back({done, total}); }, nullptr};
+        CHECK(engine.call_watched(0, c["function"], c["args"], watch) == c["gives"]);
+        auto expected = c["progress"].get<std::vector<std::array<int64_t, 2>>>();
+        CHECK(reports == expected);
+    }
+    // Without `uses progress`, an engine that reports is refused.
+    try {
+        load(file["refused"]["uses"]);
+        CHECK(false);
+    } catch (const EngineError& e) {
+        CHECK_EQ(std::string(e.what()), file["refused"]["message"].get<std::string>());
+    }
+}
+
+TEST(stop_ends_a_long_engine_call) {
+    json file = conformance("progress.json");
+    auto engine = Engine::load(file["name"], read_bytes(file["engine"]), {file["functions"].get<std::vector<std::string>>(), file["uses"].get<std::vector<std::string>>(), limits(file)});
+    for (const auto& c : file["stopped"]) {
+        int64_t stop_at = c["stopAt"];
+        auto stop = std::make_shared<std::atomic<bool>>(stop_at == 0);
+        std::vector<std::array<int64_t, 2>> reports;
+        EngineWatch watch{[&](int64_t done, int64_t total) {
+                              reports.push_back({done, total});
+                              if (done == stop_at) *stop = true;
+                          },
+                          stop};
+        try {
+            engine.call_watched(0, c["function"], c["args"], watch);
+            CHECK(false);
+        } catch (const EngineError& e) {
+            CHECK_EQ(std::string(e.what()), c["fails"].get<std::string>());
+        }
+        auto first = c["firstReports"].get<std::vector<std::array<int64_t, 2>>>();
+        CHECK(reports.size() >= first.size());
+        CHECK(std::equal(first.begin(), first.end(), reports.begin()));
     }
 }

@@ -76,3 +76,35 @@ fn the_keys_an_engine_in_clarity_names_are_used() {
     let play = keys.iter().find(|k| k.key == "yourMove").expect("yourMove is used");
     assert!(play.places.iter().any(|p| p.contains("engine Board, function play")), "{:?}", play.places);
 }
+
+const SCHEDULE: &str = "module plan
+
+engine Planner
+    uses progress
+
+    function plan(days: list<integer>, total: integer) -> integer
+        for day in days
+            progress(day, total)
+        return total
+
+page Plans: window
+    data days: integer
+    button \"Plan\" name planButton at 1,1 span 2 on click: planClicked
+
+code Plans
+    handler planClicked
+        days = Planner.plan([1, 2, 3], 3)
+";
+
+/// A long engine call says how far it is (DESIGN 5.12): `progress(done, total)`
+/// in an engine that uses progress, which the screen shows as a bar.
+#[test]
+fn an_engine_says_how_far_a_long_call_is() {
+    assert_eq!(errors(SCHEDULE), Vec::<String>::new());
+    assert_has(&errors(&SCHEDULE.replace("    uses progress\n", "")), "progress needs 'uses progress' in engine Planner");
+    assert_has(&errors(&SCHEDULE.replace("progress(day, total)", "progress(day)")), "progress takes how far it is and of how many, as in progress(day, total)");
+    assert_has(&errors(&SCHEDULE.replace("progress(day, total)", "let x = progress(day, total)")), "progress says how far a call is and gives no value");
+    // Only an engine runs long enough for it.
+    let handler = SCHEDULE.replace("        days = Planner.plan([1, 2, 3], 3)", "        progress(1, 2)");
+    assert_has(&errors(&handler), "progress is a service of an engine");
+}

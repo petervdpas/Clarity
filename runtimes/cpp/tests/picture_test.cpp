@@ -126,3 +126,33 @@ TEST(a_picture_in_a_file_store_is_a_file_named_by_its_bytes) {
     CHECK_THROWS(StorageError, Db::memory().add_store("photos", "env:CLARITY_NO_SUCH_STORE"));
     std::filesystem::remove_all(store);
 }
+
+// Another record's picture, copied in code (album.cover = other.cover): one
+// in hand is copied as it is, a stored one is read first, and one of a file
+// store stays linked only in the same store.
+TEST(a_picture_is_copied_from_another_record) {
+    auto store = scratch("copied");
+    Db db = albums(store);
+    Album first{0, "Blue Train", Picture::of(png), Picture::of(jpg)};
+    db.save(first);
+    Album read = db.get<Album>(first.id);
+    // A stored picture: its bytes, from the database or from the store.
+    CHECK(db.copied_picture<Album>(read.cover, read.id, "cover", std::nullopt, std::nullopt) == Picture::of(png));
+    CHECK(db.copied_picture<Album>(read.photo, read.id, "photo", "photos", std::nullopt) == Picture::of(jpg));
+    // One in hand, and none, as they are.
+    CHECK(db.copied_picture<Album>(first.cover, first.id, "cover", std::nullopt, std::nullopt) == Picture::of(png));
+    CHECK(!db.copied_picture<Album>(std::nullopt, first.id, "cover", std::nullopt, std::nullopt));
+    // A file of the store: linked in the same store, else its bytes.
+    Picture linked = Picture::in_store(file_name(jpg));
+    CHECK(db.copied_picture<Album>(linked, first.id, "photo", "photos", "photos") == linked);
+    CHECK(db.copied_picture<Album>(linked, first.id, "photo", "photos", std::nullopt) == Picture::of(jpg));
+    // A record's file goes with its name.
+    std::optional<RecordFile> booklet = RecordFile{"booklet.pdf", Picture::of(png)};
+    CHECK(db.copied_file<Album>(booklet, first.id, "cover", std::nullopt, std::nullopt) == booklet);
+    CHECK(!db.copied_file<Album>(std::nullopt, first.id, "cover", std::nullopt, std::nullopt));
+    // Saved into the other field, the copy is kept there.
+    Album second{0, "Copy", std::nullopt, db.copied_picture<Album>(read.cover, read.id, "cover", std::nullopt, "photos")};
+    db.save(second);
+    CHECK(db.picture<Album>(second.id, "photo") == png);
+    std::filesystem::remove_all(store);
+}

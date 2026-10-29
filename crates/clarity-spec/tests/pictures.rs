@@ -92,7 +92,12 @@ fn a_picture_shows_in_an_image_part_only() {
 #[test]
 fn code_empties_a_picture_and_tests_for_one() {
     let copy = with("            album.cover = none", "            album.cover = other.cover");
-    assert_eq!(errors(&load(&copy, Some(&["photos"]))), ["a picture cannot be copied from one record to another yet"]);
+    assert_eq!(errors(&load(&copy, Some(&["photos"]))), Vec::<String>::new());
+    // Between the database and a file store too: the picture's bytes go along.
+    let into_store = with("            album.cover = none", "            album.photo = other.cover");
+    assert_eq!(errors(&load(&into_store, Some(&["photos"]))), Vec::<String>::new());
+    let text = with("            album.cover = none", "            album.cover = other.title");
+    assert_eq!(errors(&load(&text, Some(&["photos"]))), ["a picture is set to another picture, a file of a file store, or none"]);
     let slot = with("            album.cover = none", "            message \"{album.cover}\"");
     let found = errors(&load(&slot, Some(&["photos"])));
     assert!(found.iter().any(|e| e.contains("album.cover")), "{found:#?}");

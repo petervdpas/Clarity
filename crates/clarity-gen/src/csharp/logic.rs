@@ -316,6 +316,22 @@ impl<'a> Emitter<'a> {
                     out.push_str(&format!("{pad}{place} = {db}.{made}({file}, {store});\n"));
                     return;
                 }
+                // Another record's picture or file: copied, its bytes read when it is only stored.
+                if let Some(copy) = crate::copied(self.project, |e| self.types.type_of(e), target, value) {
+                    let made = if copy.file { "CopiedFile" } else { "CopiedPicture" };
+                    let store = |s: Option<String>| s.map_or("null".to_string(), |s| string(&s));
+                    let place = self.place(target);
+                    let object = self.value(copy.object);
+                    out.push_str(&format!(
+                        "{pad}{place} = {db}.{made}<{}>({object}.{}, {object}.Id, {}, {}, {});\n",
+                        copy.entity,
+                        property(&copy.entity, &copy.field),
+                        string(&copy.column),
+                        store(copy.from),
+                        store(copy.to)
+                    ));
+                    return;
+                }
                 // A list position, counted from 1.
                 if let ExprKind::Index { list, index } = &target.kind {
                     let (list, at, value) = (self.list_ref(list), self.value(index), self.value(value));

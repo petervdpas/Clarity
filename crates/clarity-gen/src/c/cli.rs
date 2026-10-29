@@ -231,7 +231,12 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
     };
     let commands = crate::commands::commands(project);
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("    {{{}, CLARITY_SQLITE, {}}},", string(name), string(at))).collect();
-    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return failed(db);", string(&s.name), string(&s.location))).collect();
+    let mut stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return failed(db);", string(&s.name), string(&s.location))).collect();
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    stores.extend(crate::folder_stores(project, settings).iter().map(|(name, setting, default)| {
+        format!("    if (!clarity_add_store_setting(db, {}, {}, {}, {})) return failed(db);", string(name), string(&program_name), string(setting), string(default))
+    }));
     let languages: Vec<String> = project.translations.keys().map(|l| string(l)).collect();
     let base = project.locale.language.clone().unwrap_or_else(|| "en".to_string());
     let mut described = String::new();

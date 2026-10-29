@@ -155,6 +155,12 @@ json Service::invoke(const std::string& command, const json& args, Desktop* call
             set_language(args.contains("language") && args["language"].is_string() ? std::optional(args["language"].get<std::string>()) : std::nullopt);
             return value(nullptr);
         }
+        if (command == "choose_folder") {
+            // A folder part's button: the system's folder picker over the window it is in.
+            if (!caller) return json{{"error", "this window has no folder picker"}};
+            auto folder = caller->choose_folder(text_of(args, "title"));
+            return value(folder ? json(*folder) : json(nullptr));
+        }
         if (command == "set_title") {
             if (caller) caller->set_title(text_of(args, "title"));
             return value(nullptr);

@@ -92,6 +92,7 @@ pub fn generate(project: &Project, settings: &Settings) -> Result<Vec<OutFile>, 
             cargo_toml(
                 &crate_name,
                 desktop,
+                project.uses_part(clarity_spec::widgets::WidgetKind::Folder),
                 &features,
                 &rust_parts.iter().map(|p| (parts::package_of(project, &p.name.name), p.name.name.clone())).collect::<Vec<_>>(),
                 &crate::libraries::libraries(project).iter().map(|l| (crate::libraries::rust_package(project, &l.name.name), l.name.name.clone())).collect::<Vec<_>>(),
@@ -243,9 +244,11 @@ fn main_window(project: &Project) -> Option<String> {
 
 /// The manifest of the application, with the runtime features of the
 /// databases its data sources are.
-fn cargo_toml(name: &str, desktop: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
+fn cargo_toml(name: &str, desktop: bool, folders: bool, features: &[&str], parts: &[(String, String)], libraries: &[(String, String)]) -> String {
     // Tauri, for the desktop window; a program served to a browser alone has none.
     let (tauri, build) = if desktop { ("tauri = { version = \"2\", features = [] }\n", "[build-dependencies]\ntauri-build = { version = \"2\", features = [] }\n\n") } else { ("", "") };
+    // Tauri's dialogs, for the folder part's button that opens the system's folder picker.
+    let tauri = if desktop && folders { format!("{tauri}tauri-plugin-dialog = \"2\"\n") } else { tauri.to_string() };
     let features = features.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>().join(", ");
     // Each custom part's crate, and the webview's GTK window, which the parts draw in, as Tauri's own GTK crates give it.
     let crates: String = parts.iter().map(|(package, part)| format!("{package} = {{ path = \"parts/{part}\" }}\n")).collect();
@@ -300,6 +303,17 @@ fn display_field(entity: &clarity_spec::model::Entity) -> Option<String> {
 }
 
 fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: &[(String, Sql, String)], main_window: &str, ui: &[String]) -> String {
+    // The folder part's button opens the system's folder picker, from Tauri's dialog plugin.
+    let folders = project.uses_part(clarity_spec::widgets::WidgetKind::Folder);
+    let (choose_folder_fn, choose_folder_command, dialog_plugin) = if folders {
+        (
+            "/// Opens the system's folder picker: the folder chosen, or none.\n#[tauri::command]\nasync fn choose_folder(app: tauri::AppHandle, title: String) -> Answer<Option<String>> {\n    use tauri_plugin_dialog::DialogExt;\n    let chosen = app.dialog().file().set_title(title).blocking_pick_folder();\n    Ok(chosen.and_then(|folder| folder.into_path().ok()).map(|path| path.display().to_string()))\n}\n\n",
+            "\n            choose_folder,",
+            "\n        .plugin(tauri_plugin_dialog::init())",
+        )
+    } else {
+        ("", "", "")
+    };
     let title = &clarity_project::title(settings);
     let program = crate::settings_program(settings);
     // Secret settings (DESIGN 5.27) are kept in the system's protected store, never in the file.
@@ -562,7 +576,13 @@ fn main_rs(project: &Project, settings: &Settings, owners: &[Owner], databases: 
         .iter()
         .map(|(entity, field)| format!("        ({entity:?}, {field:?}) => db.all::<{}::{entity}>()?.into_iter().map(|r| r.{}).collect(),\n", module_of(entity), names::ident(field)))
         .collect();
-    let stores: String = settings.filestores.iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
+    let stores: String = crate::fixed_stores(settings).iter().map(|s| format!("({:?}, {:?})", s.name, s.location)).collect::<Vec<_>>().join(", ");
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    let folder_stores: String = crate::folder_stores(project, settings)
+        .iter()
+        .map(|(name, setting, default)| format!("    db.add_store_setting({name:?}, {program_name:?}, {setting:?}, {default:?})?;\n"))
+        .collect();
     let pictures: String = crate::picture_fields(project)
         .iter()
         .map(|(e, f)| {
@@ -717,7 +737,7 @@ fn open_databases() -> Result<Db> {{
     for (name, at) in STORES {{
         db.add_store(name, at)?;
     }}
-    Ok(db)
+{folder_stores}    Ok(db)
 }}
 
 //~desktop
@@ -780,7 +800,7 @@ fn file_data(app: tauri::State<App>, entity: String, id: i64, field: String) -> 
     locked(&app, |db| Ok(picture_of(db, &entity, id, &field)?.map(|bytes| clarity_runtime::record_file::data(&bytes))))
 }}
 
-/// Opens a file in the program the system uses for its kind.
+{choose_folder_fn}/// Opens a file in the program the system uses for its kind.
 #[tauri::command]
 fn open_file(name: String, data: String) -> Answer<()> {{
     let bytes = decoded(&data)?;
@@ -852,7 +872,7 @@ fn set_title(window: tauri::WebviewWindow, title: String) {{
 /// Shows the application's desktop window and runs until it closes.
 pub(crate) fn run(db: Db{problem_param}) {{
 {parts_start}    tauri::Builder::default()
-        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}
+        .manage(App(Mutex::new(db))){connecting_manage}{apart_manage}{window_events}{parts_manage}{dialog_plugin}
         .invoke_handler(tauri::generate_handler![
             start,
             start_app,
@@ -867,7 +887,7 @@ pub(crate) fn run(db: Db{problem_param}) {{
             file_data,
             open_file,
             save_file,
-            store_file,{apart_commands}{parts_commands}
+            store_file,{choose_folder_command}{apart_commands}{parts_commands}
             read_settings,
             keep_settings,{connect_command}
             set_language,

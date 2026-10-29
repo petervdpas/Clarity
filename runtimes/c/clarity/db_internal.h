@@ -15,7 +15,13 @@ typedef struct {
 
 typedef struct {
     char* name;
+    /// The folder, found once; NULL when a folder setting names it.
     char* folder;
+    /// The folder setting of `program` that names the folder, read again
+    /// at every use, and its default.
+    char* program;
+    char* setting;
+    char* fallback;
 } ClarityStore;
 
 struct ClarityDb {

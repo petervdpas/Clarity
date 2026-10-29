@@ -172,3 +172,71 @@ fn a_store_comes_from_its_place_or_the_environment() {
 fn a_picture_shows_as_a_data_url() {
     assert_eq!(picture::data_url(&PNG).unwrap(), "data:image/png;base64,iVBORw0KGgo=");
 }
+
+/// Another record's picture, copied in code (`album.cover = other.cover`):
+/// one in hand is copied as it is, a stored one is read first, and one of a
+/// file store stays linked only in the same store.
+#[test]
+fn a_picture_is_copied_from_another_record() {
+    let store = scratch("copied");
+    let db = albums(&store);
+    let mut first = Album { title: "Blue Train".into(), cover: Some(Picture::New(PNG.to_vec())), photo: Some(Picture::New(JPG.to_vec())), ..Album::default() };
+    db.save(&mut first).unwrap();
+    let read: Album = db.get(first.id).unwrap();
+    // A stored picture: its bytes, from the database or from the store.
+    assert_eq!(db.copied_picture::<Album>(&read.cover, read.id, "cover", None, None).unwrap(), Some(Picture::New(PNG.to_vec())));
+    assert_eq!(db.copied_picture::<Album>(&read.photo, read.id, "photo", Some("photos"), None).unwrap(), Some(Picture::New(JPG.to_vec())));
+    // One in hand, and none, as they are.
+    assert_eq!(db.copied_picture::<Album>(&first.cover, first.id, "cover", None, None).unwrap(), Some(Picture::New(PNG.to_vec())));
+    assert_eq!(db.copied_picture::<Album>(&None, first.id, "cover", None, None).unwrap(), None);
+    // A file of the store: linked in the same store, else its bytes.
+    let name = picture::file_name(&JPG).unwrap();
+    let linked = Some(Picture::InStore(name.clone()));
+    assert_eq!(db.copied_picture::<Album>(&linked, first.id, "photo", Some("photos"), Some("photos")).unwrap(), linked);
+    assert_eq!(db.copied_picture::<Album>(&linked, first.id, "photo", Some("photos"), None).unwrap(), Some(Picture::New(JPG.to_vec())));
+
+    // Saved into the other field, the copy is kept there.
+    let mut second = Album { title: "Copy".into(), ..Album::default() };
+    second.photo = db.copied_picture::<Album>(&read.cover, read.id, "cover", None, Some("photos")).unwrap();
+    db.save(&mut second).unwrap();
+    assert_eq!(db.picture::<Album>(second.id, "photo").unwrap(), Some(PNG.to_vec()));
+    std::fs::remove_dir_all(&store).unwrap();
+}
+
+/// A store whose folder is a setting (`filestore photos
+/// "setting:photosFolder"`) keeps its files where the person's settings say,
+/// read again at every use, so choosing another folder takes effect at once.
+#[test]
+fn a_store_keeps_its_files_in_a_folder_setting() {
+    let home = scratch("setting");
+    let variable = if cfg!(target_os = "windows") {
+        "APPDATA"
+    } else if cfg!(target_os = "macos") {
+        "HOME"
+    } else {
+        "XDG_CONFIG_HOME"
+    };
+    // SAFETY: this test alone sets the variable in this program, before it reads it.
+    unsafe { std::env::set_var(variable, &home) };
+    let program = "clarity-folder-test";
+    let settings_folder = clarity_runtime::settings::file(program).unwrap().parent().unwrap().to_path_buf();
+    let mut db = Db::memory().unwrap();
+    db.migrate(&[&["CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"]]).unwrap();
+    db.add_store_setting("photos", program, "photosFolder", "photos").unwrap();
+    let name = picture::file_name(&JPG).unwrap();
+
+    // Not chosen yet: the default, in the settings' folder.
+    let mut first = Album { title: "First".into(), photo: Some(Picture::New(JPG.to_vec())), ..Album::default() };
+    db.save(&mut first).unwrap();
+    assert_eq!(std::fs::read(settings_folder.join("photos").join(&name)).unwrap(), JPG);
+
+    // Chosen while the program runs: the next save keeps its file there.
+    let chosen = home.join("chosen");
+    let values = serde_json::json!({ "photosFolder": chosen.display().to_string() }).as_object().unwrap().clone();
+    clarity_runtime::settings::keep(program, &values).unwrap();
+    let mut second = Album { title: "Second".into(), photo: Some(Picture::New(PNG.to_vec())), ..Album::default() };
+    db.save(&mut second).unwrap();
+    assert_eq!(std::fs::read(chosen.join(picture::file_name(&PNG).unwrap())).unwrap(), PNG);
+    assert_eq!(db.picture::<Album>(second.id, "photo").unwrap(), Some(PNG.to_vec()));
+    std::fs::remove_dir_all(&home).unwrap();
+}

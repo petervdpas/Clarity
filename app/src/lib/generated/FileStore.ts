@@ -3,6 +3,6 @@
 /**
  * A folder that keeps the pictures of image fields with `store <name>` as
  * files, such as a folder of photos a catalog shows. Where it is differs
- * per installation, like a data source: a folder, or `env:NAME`.
+ * per installation, like a data source: a folder, `env:NAME`, or `setting:name`, a folder setting each person chooses.
  */
 export type FileStore = { name: string, location: string, };

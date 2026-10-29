@@ -48,6 +48,8 @@ constexpr uint32_t engine_stack = 1u << 20;
 
 /// Why a call stopped when it ran past its time limit.
 constexpr char late[] = "clarity: the call ran past its time limit";
+/// Why a call stopped when the person stopped it.
+constexpr char stopped[] = "clarity: the call was stopped";
 
 using Clock = std::chrono::steady_clock;
 
@@ -56,8 +58,12 @@ thread_local std::optional<Clock::time_point> deadline;
 /// Yields since the clock was last read: reading it at every turn would slow loops down.
 thread_local uint32_t turns = 0;
 
+/// The watch of the call running on this thread; none when none watches it.
+thread_local const EngineWatch* watching = nullptr;
+
 /// Asked by wasm3 at every call and every turn of a loop.
 M3Result watch() {
+    if (watching && watching->stop && watching->stop->load()) return stopped;
     if (!deadline || ++turns % 4096 != 0) return m3Err_none;
     return Clock::now() >= *deadline ? late : m3Err_none;
 }
@@ -130,6 +136,17 @@ m3ApiRawFunction(language_service) {
     m3ApiReturn(static_cast<int32_t>(language.size()));
 }
 
+// How far the call is: told to its watch.
+m3ApiRawFunction(progress_service) {
+    (void)_ctx;
+    (void)_mem;
+    (void)runtime;
+    m3ApiGetArg(int64_t, done);
+    m3ApiGetArg(int64_t, total);
+    if (watching && watching->progress) watching->progress(done, total);
+    m3ApiSuccess();
+}
+
 /// The services an engine may use: functions of module `clarity`, with
 /// their types as wasm3 writes signatures.
 struct Service {
@@ -142,6 +159,7 @@ constexpr Service services[] = {
     {"random", "I()", random_service},
     {"log", "v(ii)", log_service},
     {"language", "i(ii)", language_service},
+    {"progress", "v(II)", progress_service},
 };
 
 /// Sets the deadline of a call while it runs.
@@ -360,7 +378,7 @@ static Runtime instance(IM3Environment environment, const std::vector<uint8_t>& 
         try {
             opened = invoke(runtime.get(), "clarity_open", "[]");
         } catch (const Failed& f) {
-            if (f.why == late) throw;
+            if (f.why == late || f.why == stopped) throw;
             throw Failed{"its on open gave no answer"};
         }
         if (opened.contains("error") && opened["error"].is_string()) throw Failed{"its on open refused: " + opened["error"].get<std::string>()};
@@ -375,18 +393,24 @@ void Engine::close_window(uint64_t window) const {
     loaded_->kept.erase(window);
 }
 
-nlohmann::json Engine::call_in(uint64_t window, const std::string& function, const nlohmann::json& args) const {
+nlohmann::json Engine::call_watched(uint64_t window, const std::string& function, const nlohmann::json& args, const EngineWatch& watch) const {
     auto seconds = loaded_->limits.seconds;
     auto failed = [&](const std::string& why) {
+        if (why == stopped) return EngineError("engine " + name_ + " failed in " + function + ": it was stopped");
         if (why == late) return EngineError("engine " + name_ + " failed in " + function + ": it ran longer than " + std::to_string(seconds) + " second" + (seconds == 1 ? "" : "s"));
         return EngineError("engine " + name_ + " failed in " + function + ": " + why);
     };
     std::random_device fresh;
     uint64_t seed = services_.seed ? *services_.seed : (static_cast<uint64_t>(fresh()) << 32) ^ fresh();
+    if (watch.stop && watch.stop->load()) throw failed(stopped);
     Serving state{&name_, &services_, seed};
     serving = &state;
+    watching = &watch;
     struct Unserve {
-        ~Unserve() { serving = nullptr; }
+        ~Unserve() {
+            serving = nullptr;
+            watching = nullptr;
+        }
     } unserve;
     Timed timed(seconds);
     // An engine with state keeps its instance, unless a call fails or runs

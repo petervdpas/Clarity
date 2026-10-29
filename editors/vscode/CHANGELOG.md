@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.18
+
+- Colors the setting type `folder` and the `folder` part.
+
 ## 0.1.17
 
 - Colors `http patch`, `every page`, and the lines under a web API data source: `paging` with `page`, `offset`, `cursor`, `next`, `link` and `items`, `openapi`, `pick` and `schema`.

@@ -59,6 +59,18 @@ public:
     std::string name() const override { return "main"; }
     void set_title(const std::string& t) override { title = t; }
     void close() override { closed = true; }
+    // The system's folder picker: the person chooses a folder, or cancels.
+    std::optional<std::string> choose_folder(const std::string& title) override {
+        if (title == "Choose a folder") return "/home/ada/Pictures";
+        return std::nullopt;
+    }
+};
+
+class NoPicker final : public shell::Desktop {
+public:
+    std::string name() const override { return "main"; }
+    void set_title(const std::string&) override {}
+    void close() override {}
 };
 
 }  // namespace
@@ -109,6 +121,11 @@ TEST(the_shell_answers_the_renderers_commands) {
     Fake main;
     service.invoke("set_title", {{"title", "Customer card"}}, &main);
     CHECK_EQ(main.title, "Customer card");
+    // A folder part's button opens the folder picker of the window it is in: the folder chosen, or none.
+    CHECK_EQ(service.invoke("choose_folder", {{"title", "Choose a folder"}}, &main), json::parse(R"({"value":"/home/ada/Pictures"})"));
+    CHECK_EQ(service.invoke("choose_folder", {{"title", "Cancelled"}}, &main), json::parse(R"({"value":null})"));
+    NoPicker plain;
+    CHECK_EQ(service.invoke("choose_folder", {{"title", "Choose a folder"}}, &plain), json::parse(R"({"error":"this window has no folder picker"})"));
     std::string opened_name;
     shell::Size opened_size{};
     service.open_desktop = [&](shell::Desktop&, const std::string& name, shell::Size size) {

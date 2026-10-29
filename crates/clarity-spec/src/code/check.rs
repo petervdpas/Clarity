@@ -691,7 +691,7 @@ impl<'a> Env<'a> {
 
     fn field_type(&self, ty: &FieldType) -> Ty<'a> {
         match ty {
-            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
+            FieldType::Text { .. } | FieldType::Email | FieldType::Url | FieldType::Color | FieldType::Folder | FieldType::Language | FieldType::Theme | FieldType::Secret => Ty::Text,
             FieldType::Integer | FieldType::Id => Ty::Integer,
             FieldType::Decimal { .. } => Ty::Decimal,
             FieldType::Money => Ty::Money,
@@ -1325,7 +1325,9 @@ fn check_engines(env: &Env, file: &SpecFile, out: &mut Output) {
         let mut used: Vec<&str> = Vec::new();
         for service in &engine.uses {
             if !crate::engines::SERVICES.contains(&service.name.as_str()) {
-                out.push(Diagnostic::error(format!("'{}' is no service; an engine uses clock, random, log or language", service.name), service.span));
+                out.push(Diagnostic::error(format!("'{}' is no service; an engine uses clock, random, log, language or progress", service.name), service.span));
+            } else if service.name == PROGRESS && engine.beside {
+                out.push(Diagnostic::error("an engine beside the screen draws as it goes; progress is for a long call on the backend", service.span));
             } else if used.contains(&service.name.as_str()) {
                 out.push(Diagnostic::error(format!("engine {} uses {} twice", engine.name.name, service.name), service.span));
             }
@@ -1655,6 +1657,8 @@ pub const RECORD_ID: &str = "id";
 
 /// A random number from 1 to its argument, in an engine that uses random.
 pub const RANDOM: &str = "random";
+/// The service a long engine call says how far it is with (DESIGN 5.12).
+pub const PROGRESS: &str = "progress";
 
 /// The built-in calls of the clock: the date, and the date and time, where
 /// the application runs.
@@ -2718,18 +2722,17 @@ impl<'a> BodyChecker<'_, 'a> {
         if let Err(message) = writable {
             self.error(message, target.span);
         }
-        // A file of a store becomes a record's file; another record's cannot be copied yet.
+        // A file of a store, or another record's file, becomes a record's file.
         if matches!(ty, Ty::RecordFile) && !matches!(value.kind, ExprKind::Empty) {
-            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::Unknown) {
-                self.error("a file cannot be copied from one record to another yet", value.span);
+            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::RecordFile | Ty::Unknown) {
+                self.error("a record's file is set to another record's file, a file of a file store, or none", value.span);
             }
             return;
         }
+        // A file of a file store, or another record's picture, becomes the picture.
         if matches!(ty, Ty::Image) && !matches!(value.kind, ExprKind::Empty) {
-            // A file of a file store becomes the picture; another record's
-            // picture cannot be copied yet.
-            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::Unknown) {
-                self.error("a picture cannot be copied from one record to another yet", value.span);
+            if !matches!(self.expr(value, Some(ty)), Ty::File | Ty::Image | Ty::Unknown) {
+                self.error("a picture is set to another picture, a file of a file store, or none", value.span);
             }
             return;
         }
@@ -3363,6 +3366,24 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.error("random takes the highest number it may give, as in random(6)", expr.span);
             }
             return Some(Ty::Integer);
+        }
+        // `progress(day, total)`: how far a long call is, for an engine that uses progress.
+        if function.name == PROGRESS && self.env.function(PROGRESS).is_none() {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, Some(Ty::Integer))).collect();
+            match self.engine {
+                Some(engine) if !engine.uses.iter().any(|u| u.name == PROGRESS) => {
+                    self.error(format!("progress needs 'uses progress' in engine {}", engine.name.name), function.span)
+                }
+                Some(_) => {}
+                None => self.error("progress is a service of an engine: a long engine call says how far it is", function.span),
+            }
+            if !matches!(tys.as_slice(), [Ty::Integer | Ty::Unknown, Ty::Integer | Ty::Unknown]) {
+                self.error("progress takes how far it is and of how many, as in progress(day, total)", expr.span);
+            }
+            if !statement {
+                self.error("progress says how far a call is and gives no value", expr.span);
+            }
+            return None;
         }
         // An engine's own functions call each other by name.
         let own = self.engine.and_then(|e| e.body.as_ref()).and_then(|b| b.functions.iter().find(|f| f.name.name == function.name));

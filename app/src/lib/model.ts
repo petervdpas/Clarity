@@ -89,6 +89,8 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   "Save a copy": { key: "saveFileCopy", written: "Save a copy" },
   "Remove the file": { key: "removeFile", written: "Remove the file" },
   "A copy is in your Downloads folder": { key: "fileCopySaved", written: "A copy is in your Downloads folder" },
+  // A folder part's button.
+  "Choose a folder": { key: "chooseFolder", written: "Choose a folder" },
   // The page bar of a table shown a page at a time.
   "First page": { key: "firstPage", written: "First page" },
   "Previous page": { key: "previousPage", written: "Previous page" },

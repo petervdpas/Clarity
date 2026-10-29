@@ -17,6 +17,14 @@ typedef const char* (*ClarityEnv)(const char* name, void* context);
 const char* clarity_settings_file_in(const char* os, ClarityEnv env, void* context, const char* program);
 /// Where `program` keeps its settings on this machine, or NULL.
 const char* clarity_settings_file(const char* program);
+/// This machine's system, as the cases name it: "windows", "macos" or "linux".
+const char* clarity_settings_os(void);
+/// The folder of file store `store` when a folder setting names it, on
+/// system `os`, in the scratch arena: the `kept` value when it is text that
+/// is not empty, else `fallback` (the setting's default), else a folder
+/// named after the store; a relative folder is in `settings_folder`, the
+/// folder of the settings file.
+const char* clarity_store_folder_in(const char* os, const char* settings_folder, const char* store, const cJSON* kept, const char* fallback);
 /// The settings `program` kept, as a new object the caller deletes; empty
 /// when it kept none, or they cannot be read.
 cJSON* clarity_read_settings(const char* program);

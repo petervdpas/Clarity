@@ -39,6 +39,10 @@ command album add(title: text)
     let made = new Album
     made.title = title
     made.copies = copies
+    // The newest album takes the cover and the booklet of the others, copied.
+    for other in find a in Album order by a.title
+        made.cover = other.cover
+        made.booklet = other.booklet
     save made
     print @albumSaved(title = made.title)
 
@@ -98,6 +102,7 @@ settings
     language
     theme
     apiToken: secret, label @settingsApiToken
+    scansFolder: folder, default "scans", label @settingsScansFolder
     showToolbar: bool, default true, label @settingsShowToolbar
     pageSize: integer, min 10, max 200, default 50, label @settingsPageSize
 
@@ -312,6 +317,7 @@ page Gallery: window
     canvas name dial at 1,12 span 6 rows 4 units 200 x 100 on draw: drawDial
     Gauge name gauge at 7,12 span 4 rows 3 bind speed speed 5 title @speed on change: gaugeChanged on reached: gaugeReached
     password name tokenBox at 1,16 span 6 bind settings.apiToken
+    folder name scansBox at 1,17 span 6 bind settings.scansFolder
     button @play name playButton at 7,16 span 2 on click: playClicked
     sound name ding source "ding.wav" volume 80
     timer name clock every 1 on tick: sampled

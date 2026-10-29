@@ -74,6 +74,16 @@ public class RecordFileTests
         read.Manual = null;
         db.Save(read);
         Assert.Null(db.Get<Product>(product.Id).Manual);
+
+        // Copied to another record (product.manual = other.sheet): with its name, the bytes read when stored.
+        var again = db.Get<Product>(product.Id);
+        var copied = db.CopiedFile<Product>(again.Sheet, again.Id, "sheet", "documents", null);
+        Assert.Equal("sheet.pdf", copied?.Name);
+        Assert.Equal(Picture.New(pdf), copied?.Content);
+        Assert.Null(db.CopiedFile<Product>(again.Manual, again.Id, "manual", null, null));
+        var other = new Product { Manual = copied };
+        db.Save(other);
+        Assert.Equal(pdf, db.PictureOf<Product>(other.Id, "manual"));
         Directory.Delete(store, recursive: true);
     }
 }

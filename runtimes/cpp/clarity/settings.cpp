@@ -1,5 +1,6 @@
 #include "clarity/settings.hpp"
 
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -27,15 +28,31 @@ std::optional<std::string> settings_file_in(const std::string& os, const std::fu
     return *folder + "/" + program + "/settings.json";
 }
 
-std::optional<std::string> settings_file(const std::string& program) {
+std::string settings_os() {
 #if defined(_WIN32)
-    const std::string os = "windows";
+    return "windows";
 #elif defined(__APPLE__)
-    const std::string os = "macos";
+    return "macos";
 #else
-    const std::string os = "linux";
+    return "linux";
 #endif
-    return settings_file_in(os, [](const std::string& name) -> std::optional<std::string> {
+}
+
+std::string store_folder_in(const std::string& os, const std::string& settings_folder, const std::string& store, const nlohmann::json& kept, const std::string& fallback) {
+    std::string chosen = kept.is_string() && !kept.get<std::string>().empty() ? kept.get<std::string>() : fallback;
+    if (chosen.empty()) chosen = store;
+    bool absolute;
+    if (os == "windows") {
+        bool drive = chosen.size() > 2 && std::isalpha(static_cast<unsigned char>(chosen[0])) && chosen[1] == ':' && (chosen[2] == '/' || chosen[2] == '\\');
+        absolute = drive || chosen.starts_with("\\\\") || chosen.starts_with("//");
+    } else {
+        absolute = chosen.starts_with('/');
+    }
+    return absolute ? chosen : settings_folder + "/" + chosen;
+}
+
+std::optional<std::string> settings_file(const std::string& program) {
+    return settings_file_in(settings_os(), [](const std::string& name) -> std::optional<std::string> {
         const char* value = std::getenv(name.c_str());
         return value ? std::optional<std::string>(value) : std::nullopt;
     }, program);

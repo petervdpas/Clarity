@@ -13,8 +13,8 @@ use crate::model::Project;
 pub const ENGINES_DIR: &str = "engines";
 
 /// The services of Clarity an engine may use (`uses clock, random, log,
-/// language`): functions of module `clarity` its file may import.
-pub const SERVICES: [&str; 4] = ["clock", "random", "log", "language"];
+/// language, progress`): functions of module `clarity` its file may import.
+pub const SERVICES: [&str; 5] = ["clock", "random", "log", "language", "progress"];
 
 /// How long one call of an engine may run when its declaration says nothing.
 pub const DEFAULT_SECONDS: u32 = 5;

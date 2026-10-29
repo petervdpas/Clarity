@@ -1,7 +1,8 @@
 //! Where an application keeps its settings, as every runtime finds it
-//! (conformance/settings.json, `file`), and keeping them.
+//! (conformance/settings.json, `file`), keeping them, and the folder a file
+//! store keeps its files in when a folder setting names it (`folders`).
 
-use clarity_runtime::settings::file_in;
+use clarity_runtime::settings::{file_in, store_folder_in};
 use serde_json::{Map, Value, json};
 
 #[test]
@@ -35,4 +36,13 @@ fn settings_kept_are_read_back() {
     clarity_runtime::settings::keep(program, &values).unwrap();
     assert_eq!(clarity_runtime::settings::read(program), values);
     let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_folder_setting_is_where_every_runtime_puts_a_store() {
+    let cases: Value = serde_json::from_str(include_str!("../../../conformance/settings.json")).unwrap();
+    for c in cases["folders"].as_array().unwrap() {
+        let found = store_folder_in(c["os"].as_str().unwrap(), c["settingsFolder"].as_str().unwrap(), c["store"].as_str().unwrap(), &c["kept"], c["default"].as_str().unwrap());
+        assert_eq!(found, c["folder"].as_str().unwrap(), "{c}");
+    }
 }

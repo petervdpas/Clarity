@@ -298,6 +298,12 @@ cJSON* clarity_service_invoke(ClarityService* s, const char* command, const cJSO
         clarity_set_language(cJSON_IsString(language) ? language->valuestring : NULL);
         return value(NULL);
     }
+    if (strcmp(command, "choose_folder") == 0) {
+        // A folder part's button: the system's folder picker over the window it is in.
+        if (!caller || !caller->choose_folder) return error_text("this window has no folder picker");
+        const char* folder = caller->choose_folder(caller, text_of(args, "title"));
+        return value(folder ? cJSON_CreateString(folder) : NULL);
+    }
     if (strcmp(command, "set_title") == 0) {
         if (caller) caller->set_title(caller, text_of(args, "title"));
         return value(NULL);

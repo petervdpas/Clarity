@@ -91,6 +91,81 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
 
 /// Every engine the project declares (DESIGN 5.11).
 /// What a `TypeRef` names, as a checker type.
+/// The file stores whose folder is a folder setting (`filestore photos
+/// "setting:photosFolder"`): the store, the setting and the setting's
+/// default ("" without one). Each runtime reads the setting at every use.
+pub(crate) fn folder_stores(project: &Project, settings: &clarity_project::Settings) -> Vec<(String, String, String)> {
+    let default_of = |setting: &str| {
+        project
+            .entities()
+            .filter(|e| e.settings)
+            .flat_map(|e| &e.fields)
+            .find(|f| f.name.name == setting)
+            .and_then(|f| match &f.modifiers.default {
+                Some(clarity_spec::model::Literal::Str(text)) => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    };
+    settings
+        .filestores
+        .iter()
+        .filter_map(|s| s.location.strip_prefix("setting:").map(|setting| (s.name.clone(), setting.to_string(), default_of(setting))))
+        .collect()
+}
+
+/// The file stores at a folder or `env:NAME`, found once when the program starts.
+pub(crate) fn fixed_stores(settings: &clarity_project::Settings) -> Vec<&clarity_project::FileStore> {
+    settings.filestores.iter().filter(|s| !s.location.starts_with("setting:")).collect()
+}
+
+/// Another record's picture or file copied in code (`album.cover =
+/// other.cover`): the record it comes from, which field, and where both
+/// fields are kept. Every stack's runtime copies it alike: a picture in hand
+/// as it is, a stored one read first, a file of a store linked only in the
+/// same store.
+pub(crate) struct Copied<'e> {
+    /// The record the value is a field of.
+    pub object: &'e clarity_spec::code::Expr,
+    pub entity: String,
+    pub field: String,
+    pub column: String,
+    /// The value's file store, none for the database.
+    pub from: Option<String>,
+    /// The target field's file store.
+    pub to: Option<String>,
+    /// A `file` field's file, rather than a picture.
+    pub file: bool,
+}
+
+pub(crate) fn copied<'e>(
+    project: &Project,
+    type_of: impl Fn(&clarity_spec::code::Expr) -> clarity_spec::code::check::TypeInfo,
+    target: &clarity_spec::code::Expr,
+    value: &'e clarity_spec::code::Expr,
+) -> Option<Copied<'e>> {
+    use clarity_spec::code::ExprKind;
+    use clarity_spec::code::check::TypeInfo;
+    let kind = type_of(value);
+    if !matches!(kind, TypeInfo::Image | TypeInfo::RecordFile) {
+        return None;
+    }
+    let field_of = |expr: &'e clarity_spec::code::Expr| -> Option<(&'e clarity_spec::code::Expr, String, String)> {
+        let ExprKind::Member { object, member } = &expr.kind else { return None };
+        let TypeInfo::Record(owner) = type_of(object) else { return None };
+        Some((object.as_ref(), owner, member.name.clone()))
+    };
+    let store = |owner: &str, field: &str| project.entity(owner).and_then(|e| e.field(field)).and_then(|f| f.modifiers.store.clone());
+    let (object, entity, field) = field_of(value)?;
+    let ExprKind::Member { object: target_object, member: target_field } = &target.kind else { return None };
+    let to = match type_of(target_object) {
+        TypeInfo::Record(owner) => store(&owner, &target_field.name),
+        _ => None,
+    };
+    let column = project.entity(&entity).map_or_else(|| field.clone(), |e| e.column_of(&field).to_string());
+    Some(Copied { object, from: store(&entity, &field), to, column, entity, field, file: kind == TypeInfo::RecordFile })
+}
+
 pub(crate) fn type_ref_info(project: &Project, ty: &clarity_spec::code::TypeRef) -> clarity_spec::code::check::TypeInfo {
     use clarity_spec::code::TypeRefKind;
     use clarity_spec::code::check::{TypeInfo, ValueItem};

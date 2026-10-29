@@ -11,6 +11,7 @@
   import SliderInput from "./ui/SliderInput.svelte";
   import ColorInput from "./ui/ColorInput.svelte";
   import FileInput, { type RecordFileValue } from "./ui/FileInput.svelte";
+  import FolderInput from "./ui/FolderInput.svelte";
   import TagsInput from "./ui/TagsInput.svelte";
   import TypeAheadInput from "./ui/TypeAheadInput.svelte";
   import ChartView from "./ui/ChartView.svelte";
@@ -584,6 +585,25 @@
         }}
         onopen={() => withFileData(kept, (name, data) => live?.openFile(name, data))}
         onsave={() => withFileData(kept, (name, data) => live?.saveFile(name, data))}
+      />
+    {:else if p.kind === "folder"}
+      <FolderInput
+        {id}
+        value={bound ? value : shown}
+        words={{ choose: ownWord(preview, "Choose a folder") }}
+        choose={design ? undefined : live?.chooseFolder}
+        tabindex={p.tabOrder ?? undefined}
+        {describedBy}
+        invalid={error !== null}
+        {disabled}
+        {readonly}
+        onchange={(next) => {
+          if (bound) setValue(next);
+          else setText(next);
+          fire("change");
+        }}
+        onfocus={() => fire("enter")}
+        onblur={() => fire("leave")}
       />
     {:else if p.kind === "tags"}
       {@const type = bound?.field.type}

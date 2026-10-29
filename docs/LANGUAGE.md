@@ -81,7 +81,7 @@ project Shop
 | `engines interpreted` | no | How the engines written in Clarity run: `engines compiled` (the default, without the line) turns their code into WebAssembly; `engines interpreted` carries their code in the file and runs it with Clarity's interpreter. Both give the same answers on every stack. |
 | `theme Name...` | no | The themes the application offers, declared in modules, the first being the one it starts with: `theme Shop Night`. People switch with the click target `theme`. Without any, the application looks as Clarity does, and parts cannot have a `style`. See [Themes](#themes). |
 | `datasource name kind "where"` | no | A data source. Kinds: `sqlite`, `postgres`, `mysql`, `mssql`, `rest`. "Where" is a file path for SQLite (relative to the project's folder, for Clarity and for the generated application), a connection string or URL for the other databases (see Databases in section 4), and the base URL of a web API. `external` after it marks a database Clarity does not own, and `readonly` one whose records are only read. |
-| `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine. |
+| `filestore name "folder"` | no | A file store: the folder that keeps the pictures of `image` fields with `store name`. A relative folder is in the project's folder, as a SQLite file is; `"env:NAME"` takes it from that environment variable, for a folder that differs per machine; `"setting:name"` takes it from a folder setting each person chooses while the application runs (see [Folder settings](#folder-settings)). |
 | `auth kind "secret"` | no | Indented under a `datasource` line, for web APIs. Kinds: `bearer`, `api-key`, `basic`. The secret names where to find it, such as `"env:NAME"` or `"setting:name"`, a secret setting the system's keychain keeps; it is never written into the file itself. A generated application reads it from `env:NAME` or from the secret setting `name` (see [Secret settings](#secret-settings)). |
 | `paging kind ...` | no | Indented under a web API's `datasource` line: how it hands out a long list, for `every page`. `paging page "page" size "per_page" 100` sends page numbers from 1, `paging offset "offset" size "limit" 100` offsets from 0, `paging cursor "after" next "meta.next"` the cursor each page names at that path, and `paging link` follows the `Link` header's next address. `items "data"` at the end says where a page's items are in its JSON. |
 | `openapi "file"` | no | Indented under a web API's `datasource` line: its OpenAPI (Swagger) description, a YAML or JSON file of the `apis` folder. Clarity writes the module `apis/<source>.clarity` from it, for what the project picks, and writes it again when the file or the picks change. |
@@ -309,7 +309,7 @@ entity Artist
 - Reading records never carries their pictures, so a list of thousands stays light; the screen fetches each picture on its own when it shows.
 - A picture is a png, jpg, gif, bmp or webp file, told by its first bytes; any other file is refused.
 - In a file store, a picture's file is named after the SHA-256 of its bytes, so the same picture is kept once. Files are never deleted: a store can be a folder of photos that are not the application's alone.
-- In code, a picture is compared with `none` and set to `none`: `if album.cover != none`, `album.cover = none`. Copying a picture from one record to another comes later. A query can find the records with or without one: `where a.cover == none`.
+- In code, a picture is compared with `none` and set to `none`: `if album.cover != none`, `album.cover = none`. It is set to another record's picture as well, `album.cover = other.cover`, between the database and a file store too: the picture's bytes go along, and saving keeps them where the field keeps its pictures. A query can find the records with or without one: `where a.cover == none`.
 - A table or list does not show a picture column; an image part does.
 - Moving a field's pictures between the database and a file store, or between `image` and another type, is a change that can lose data: pictures do not move by themselves.
 
@@ -326,7 +326,7 @@ entity Product
 - **Where it is kept.** Without `store`, the file is in the database: its bytes in the field's column and its name in a column beside it, `manual_name`, which migrations add, rename and remove with the field. With `store`, it is a file of that file store, in a folder named by its contents and under its own name (`3fa9c1.../datasheet.pdf`); the column holds that path, and the name column is there too. A field cannot become a file or stop being one; remove it and add a new field.
 - **The file part** shows the file's name, or Clarity's word `noFile`, with buttons to choose a file, open it in the program the system uses for its kind, save a copy, and remove it: `file name manualBox at 1,1 span 8 bind product.manual`. Choosing and removing are its `change`. A copy goes to the person's Downloads folder under the file's name (with ` (2)` and on when that name is taken there), and the part says so in Clarity's word `fileCopySaved`. Its buttons are Clarity's words `chooseFile`, `openFile`, `saveFileCopy` and `removeFile`.
 - **Reading records never carries the file itself,** only its name; the file comes on its own when it is opened or copied.
-- **In code,** `product.manual.name` and `product.manual.extension` read its name and extension, a file is compared with and set to `none`, and set to a file of a store, as `files f in documents` finds them (see [Files](#files)). A file cannot be unique or have a default, and a table or list does not show a file column; a file part does.
+- **In code,** `product.manual.name` and `product.manual.extension` read its name and extension, a file is compared with and set to `none`, set to a file of a store, as `files f in documents` finds them (see [Files](#files)), and set to another record's file, `product.manual = other.manual`, which keeps its name. A file cannot be unique or have a default, and a table or list does not show a file column; a file part does.
 
 ### Lists in records
 
@@ -492,7 +492,7 @@ settings
     pageSize: integer, min 10, max 200, default 50
 ```
 
-- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color, an enum or a secret (see [Secret settings](#secret-settings)). A reference, a list, a picture or an id is no setting.
+- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color, an enum, a secret (see [Secret settings](#secret-settings)) or a folder (see [Folder settings](#folder-settings)). A reference, a list, a picture or an id is no setting.
 - **Clarity's own.** `language` and `theme` take no type: they are the language and the theme shown, labeled with Clarity's words `languagePicker` and `themePicker`. Setting either switches the language or the theme, as the pickers of the click targets `language` and `theme` do, and those pickers change the same settings.
 - **Kept per person.** Settings are never in the database. Each person's are kept on their machine, as `settings.json` in a folder named after the application, in the folder for application settings of their system (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere). A setting not kept yet has its `default`; a kept value that no longer fits (a setting removed, an enum value gone, a number past its ends) is dropped.
 - **In every window.** Every window and the app have `settings` as their data without a `data` line. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
@@ -514,6 +514,30 @@ settings
 - **In code it is text.** `settings.apiToken = value` keeps it, and `settings.apiToken = ""` forgets it.
 - **Only in settings.** An entity's field cannot be a secret.
 - **Signing and connecting.** The project file names it as `"setting:apiToken"`: a web API signs its calls with it (`auth bearer "setting:apiToken"`), and a server database connects with it (`datasource main postgres "setting:shopDb"`). While it is not kept, the database does not open: the application then shows the window where the secret is entered, saying why, and connects once it is kept and that window closes. The app's `on unconnected` handler can show something else instead (see [App settings](#app-settings)). A secret connection needs one of the two.
+
+#### Folder settings
+
+The folder a file store keeps its files in can be each person's own choice, chosen while the application runs: a setting of type `folder`.
+
+```clarity
+settings
+    photosFolder: folder, default "photos", label @photosFolderSetting
+
+page Preferences: dialog
+    folder name photosBox at 1,1 span 6 bind settings.photosFolder
+```
+
+```clarity
+// records.clarity, the project file
+    filestore photos "setting:photosFolder"
+```
+
+- **Kept with the settings,** in `settings.json`, like any other setting. Until the person chooses one, the store is in its `default`; without a default, in a folder named after the store.
+- **A relative folder** is in the folder the settings file is in (such as `~/.config/records/photos`); an absolute one is used as it is.
+- **Read at every use.** A folder chosen while the application runs is where the next file goes, at once. Files already in the old folder stay there: moving them is the person's choice.
+- **The folder part shows it:** a text field with the path and a button, in Clarity's word `chooseFolder`, that opens the system's folder picker. In a browser there is no picker, so the path is typed. Only a folder part shows a folder setting.
+- **In code it is text:** `settings.photosFolder = "/mnt/photos"`.
+- **Only in settings,** and only a folder setting can be a store's `setting:name`; anything else is an error that says to add it as `name: folder`.
 
 ## 5. Windows
 
@@ -631,6 +655,7 @@ Properties may be written in any order. The designer writes them in a fixed orde
 | `date` | date, datetime | `readonly`, `taborder` | `change` |
 | `color` | color | `readonly`, `taborder` | `change` |
 | `file` | file | `readonly`, `taborder` | `change` |
+| `folder` | a folder setting (a path typed, or chosen with the system's folder picker) | `readonly`, `taborder` | `change`, `enter`, `leave` |
 | `tags` | a list of values (`list<text>`, `list<Genre>`) | `readonly`, `taborder` | `change` |
 | `slider` | integer, decimal, money | `min`, `max`, `step`, `readonly`, `taborder` | `change` |
 | `spinbox` | integer, decimal, money (a number with up and down arrows) | `min`, `max`, `step`, `placeholder`, `readonly`, `taborder` | `change`, `enter`, `leave` |
@@ -1500,6 +1525,7 @@ engine Board
 - **A call changes nothing when it fails.** A function works on a copy of what the engine keeps, which it keeps only when the call succeeds; a refusal or an error leaves the values as they were.
 - **Its functions** are written as functions are, with `require` and `ensure` if wanted, and call each other by name (`answer()`). Code outside calls them as `Board.play(5)`.
 - **It keeps to itself.** An engine has no window, data, parts or database: `message`, `open`, `save`, `find` and the like are errors in it. It returns what the screen should show, and its texts are keys, translated like the project's own.
+- **`uses progress`** gives it `progress(done, total)`, on a line of its own: how far a long call is, such as `progress(day, total)` in a loop over the days of a year. The call can be stopped; it then fails with `it was stopped`. An engine beside the screen draws as it goes and has no progress.
 - **`uses random`** gives it `random(n)`: a whole number from 1 to `n`. No other service is needed in Clarity: the language the person picked is already how its texts show.
 
 - **Beside the screen** too: an engine written in Clarity has no words of its own for frames. Its frames are functions of the interface's names, what it draws is a list of records it returns, a hear is a function of its name, and `tell finished(time)` puts a tell in the answer of the call it is in:

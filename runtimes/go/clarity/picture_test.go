@@ -192,6 +192,41 @@ func TestAPictureInAFileStoreIsAFileNamedByItsBytes(t *testing.T) {
 	}
 }
 
+// Another record's picture, copied in code (album.cover = other.cover): one
+// in hand is copied as it is, a stored one is read first, and one of a file
+// store stays linked only in the same store.
+func TestAPictureIsCopiedFromAnotherRecord(t *testing.T) {
+	db := albums(t, t.TempDir())
+	first := &album{Title: "Blue Train", Cover: NewPicture(pngBytes), Photo: NewPicture(jpgBytes)}
+	must(t, Save(db, first))
+	read, err := Get[album](db, first.ID)
+	must(t, err)
+	copied := func(value *Picture, column, from, to string) *Picture {
+		t.Helper()
+		got, err := CopiedPicture[album](db, value, read.ID, column, from, to)
+		must(t, err)
+		return got
+	}
+	// A stored picture: its bytes, from the database or from the store.
+	equal(t, copied(read.Cover, "cover", "", ""), NewPicture(pngBytes))
+	equal(t, copied(read.Photo, "photo", "photos", ""), NewPicture(jpgBytes))
+	// One in hand, and none, as they are.
+	equal(t, copied(first.Cover, "cover", "", ""), NewPicture(pngBytes))
+	equal(t, copied(nil, "cover", "", ""), (*Picture)(nil))
+	// A file of the store: linked in the same store, else its bytes.
+	name, _ := FileName(jpgBytes)
+	linked := &Picture{Path: name}
+	equal(t, copied(linked, "photo", "photos", "photos"), linked)
+	equal(t, copied(linked, "photo", "photos", ""), NewPicture(jpgBytes))
+
+	// Saved into the other field, the copy is kept there.
+	second := &album{Title: "Copy", Photo: copied(read.Cover, "cover", "", "photos")}
+	must(t, Save(db, second))
+	got, err := PictureOf[album](db, second.ID, "photo")
+	must(t, err)
+	equal(t, got, pngBytes)
+}
+
 func TestAStoreComesFromItsPlaceOrTheEnvironment(t *testing.T) {
 	db, err := Memory()
 	must(t, err)
@@ -210,4 +245,43 @@ func TestAPictureShowsAsADataURL(t *testing.T) {
 	url, err := DataURL(pngBytes)
 	must(t, err)
 	equal(t, url, "data:image/png;base64,iVBORw0KGgo=")
+}
+
+// A store whose folder is a setting (filestore photos "setting:photosFolder")
+// keeps its files where the person's settings say, read again at every use,
+// so choosing another folder takes effect at once.
+func TestAStoreKeepsItsFilesInAFolderSetting(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("APPDATA", home)
+	t.Setenv("HOME", home)
+	program := "clarity-folder-test"
+	file, _ := SettingsFile(program)
+	settingsFolder := filepath.Dir(file)
+	db, err := Memory()
+	must(t, err)
+	t.Cleanup(func() { db.Close() })
+	_, err = db.Migrate([][]string{{"CREATE TABLE album (id INTEGER PRIMARY KEY, title TEXT NOT NULL, cover BLOB, photo TEXT)"}})
+	must(t, err)
+	must(t, db.AddStoreSetting("photos", program, "photosFolder", "photos"))
+
+	// Not chosen yet: the default, in the settings' folder.
+	must(t, Save(db, &album{Title: "First", Photo: NewPicture(jpgBytes)}))
+	name, _ := FileName(jpgBytes)
+	written, err := os.ReadFile(filepath.Join(settingsFolder, "photos", name))
+	must(t, err)
+	equal(t, written, jpgBytes)
+
+	// Chosen while the program runs: the next save keeps its file there.
+	chosen := filepath.Join(home, "chosen")
+	must(t, KeepSettings(program, map[string]any{"photosFolder": chosen}))
+	second := &album{Title: "Second", Photo: NewPicture(pngBytes)}
+	must(t, Save(db, second))
+	name, _ = FileName(pngBytes)
+	written, err = os.ReadFile(filepath.Join(chosen, name))
+	must(t, err)
+	equal(t, written, pngBytes)
+	got, err := PictureOf[album](db, second.ID, "photo")
+	must(t, err)
+	equal(t, got, pngBytes)
 }

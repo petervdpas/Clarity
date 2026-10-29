@@ -55,3 +55,28 @@ func TestSettingsKeptAreReadBack(t *testing.T) {
 		t.Errorf("read back %v, wanted %v", got, values)
 	}
 }
+
+func TestAFolderSettingIsWhereEveryRuntimePutsAStore(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/settings.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct {
+		Folders []struct {
+			OS             string `json:"os"`
+			SettingsFolder string `json:"settingsFolder"`
+			Store          string `json:"store"`
+			Kept           any    `json:"kept"`
+			Default        string `json:"default"`
+			Folder         string `json:"folder"`
+		} `json:"folders"`
+	}
+	if err := json.Unmarshal(text, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases.Folders {
+		if found := StoreFolderIn(c.OS, c.SettingsFolder, c.Store, c.Kept, c.Default); found != c.Folder {
+			t.Errorf("%v: found %q, wanted %q", c, found, c.Folder)
+		}
+	}
+}

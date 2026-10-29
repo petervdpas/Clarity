@@ -105,5 +105,14 @@ fn a_file_is_kept_with_its_name_in_the_database_or_its_store() {
     again.manual = None;
     db.save(&mut again).unwrap();
     assert_eq!(db.get::<Product>(product.id).unwrap().manual, None);
+
+    // Copied to another record (`product.sheet = other.manual`): with its name, the bytes read when stored.
+    let read: Product = db.get(product.id).unwrap();
+    let copied = db.copied_file::<Product>(&read.sheet, read.id, "sheet", Some("documents"), None).unwrap();
+    assert_eq!(copied, Some(RecordFile { name: "sheet.pdf".into(), content: Picture::New(b"%PDF-1.7 not a picture".to_vec()) }));
+    assert_eq!(db.copied_file::<Product>(&read.manual, read.id, "manual", None, None).unwrap(), None);
+    let mut other = Product { manual: copied, ..Product::default() };
+    db.save(&mut other).unwrap();
+    assert_eq!(db.picture::<Product>(other.id, "manual").unwrap(), Some(b"%PDF-1.7 not a picture".to_vec()));
     let _ = std::fs::remove_dir_all(&store);
 }

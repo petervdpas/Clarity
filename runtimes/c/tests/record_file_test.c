@@ -105,6 +105,19 @@ void a_file_is_kept_with_its_name_in_the_database_or_its_store(void) {
     Product again;
     CHECK_OK(clarity_get(db, &product, p.id, &again));
     CHECK(!again.manual);
+    // Copied to another record (product.manual = other.sheet): with its name, the bytes read when stored.
+    ClarityRecordFile* copied = NULL;
+    CHECK_OK(clarity_copied_file(db, &product, again.sheet, again.id, "sheet", "documents", NULL, &copied));
+    REQUIRE(copied);
+    CHECK_TEXT(copied->name, "sheet.pdf");
+    CHECK(clarity_picture_same(copied->content, clarity_picture_new(pdf)));
+    ClarityRecordFile* none = NULL;
+    CHECK_OK(clarity_copied_file(db, &product, again.manual, again.id, "manual", NULL, NULL, &none));
+    CHECK(!none);
+    Product other = {0, copied, NULL};
+    CHECK_OK(clarity_save(db, &product, &other));
+    CHECK_OK(clarity_picture(db, &product, other.id, "manual", &got));
+    CHECK(got.size == pdf.size && memcmp(got.data, pdf.data, pdf.size) == 0);
     CHECK_JSON(clarity_file_json(clarity_record_file("C:\\docs\\a.pdf", clarity_picture_stored())), "{\"stored\":true,\"name\":\"a.pdf\"}");
     clarity_db_close(db);
     remove_tree(store);

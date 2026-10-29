@@ -14,6 +14,7 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#include <shobjidl.h>
 #endif
 
 #include "shell/parts.hpp"
@@ -67,6 +68,65 @@ public:
         return reinterpret_cast<uintptr_t>(window.value());
 #else
         return 0;
+#endif
+    }
+
+    std::optional<std::string> choose_folder(const std::string& title) override {
+#if defined(__linux__)
+        auto native = view_.window();
+        GtkWindow* parent = native.ok() ? GTK_WINDOW(native.value()) : nullptr;
+        GtkWidget* dialog = gtk_file_chooser_dialog_new(title.c_str(), parent, GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, "_Cancel", GTK_RESPONSE_CANCEL, "_Select", GTK_RESPONSE_ACCEPT, nullptr);
+        std::optional<std::string> chosen;
+        if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+            if (char* folder = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog))) {
+                chosen = folder;
+                g_free(folder);
+            }
+        }
+        gtk_widget_destroy(dialog);
+        return chosen;
+#elif defined(_WIN32)
+        IFileOpenDialog* dialog = nullptr;
+        if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) return std::nullopt;
+        FILEOPENDIALOGOPTIONS options = 0;
+        dialog->GetOptions(&options);
+        dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+        std::wstring wide(MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, nullptr, 0), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, wide.data(), static_cast<int>(wide.size()));
+        dialog->SetTitle(wide.c_str());
+        std::optional<std::string> chosen;
+        auto window = view_.window();
+        if (SUCCEEDED(dialog->Show(window.ok() ? static_cast<HWND>(window.value()) : nullptr))) {
+            IShellItem* item = nullptr;
+            PWSTR path = nullptr;
+            if (SUCCEEDED(dialog->GetResult(&item)) && SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                std::string utf8(WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr), '\0');
+                WideCharToMultiByte(CP_UTF8, 0, path, -1, utf8.data(), static_cast<int>(utf8.size()), nullptr, nullptr);
+                utf8.resize(utf8.empty() ? 0 : utf8.size() - 1);
+                chosen = utf8;
+                CoTaskMemFree(path);
+            }
+            if (item) item->Release();
+        }
+        dialog->Release();
+        return chosen;
+#elif defined(__APPLE__)
+        id panel = reinterpret_cast<id (*)(Class, SEL)>(objc_msgSend)(objc_getClass("NSOpenPanel"), sel_registerName("openPanel"));
+        auto flag = reinterpret_cast<void (*)(id, SEL, BOOL)>(objc_msgSend);
+        flag(panel, sel_registerName("setCanChooseDirectories:"), YES);
+        flag(panel, sel_registerName("setCanChooseFiles:"), NO);
+        flag(panel, sel_registerName("setAllowsMultipleSelection:"), NO);
+        flag(panel, sel_registerName("setCanCreateDirectories:"), YES);
+        id message = reinterpret_cast<id (*)(Class, SEL, const char*)>(objc_msgSend)(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), title.c_str());
+        reinterpret_cast<void (*)(id, SEL, id)>(objc_msgSend)(panel, sel_registerName("setMessage:"), message);
+        // NSModalResponseOK.
+        if (reinterpret_cast<long (*)(id, SEL)>(objc_msgSend)(panel, sel_registerName("runModal")) != 1) return std::nullopt;
+        id url = reinterpret_cast<id (*)(id, SEL)>(objc_msgSend)(panel, sel_registerName("URL"));
+        const char* path = reinterpret_cast<const char* (*)(id, SEL)>(objc_msgSend)(url, sel_registerName("fileSystemRepresentation"));
+        if (!path) return std::nullopt;
+        return std::string(path);
+#else
+        return Desktop::choose_folder(title);
 #endif
     }
 

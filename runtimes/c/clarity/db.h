@@ -102,6 +102,10 @@ bool clarity_load(ClarityDb* db, const ClarityEntity* entity, int64_t reference,
 /// Adds the file store `name` at a folder (made when it is not there
 /// yet); `env:NAME` takes it from that environment variable.
 bool clarity_add_store(ClarityDb* db, const char* name, const char* at);
+/// Adds the file store `name` whose folder is the folder setting `setting`
+/// of `program`, or `fallback` while it is not kept; read again at every
+/// use, so a folder chosen while the application runs takes effect at once.
+bool clarity_add_store_setting(ClarityDb* db, const char* name, const char* program, const char* setting, const char* fallback);
 /// The picture of field `column` of record `id`, read from the database
 /// or from its file store; `out->data` is NULL when the record has none.
 bool clarity_picture(ClarityDb* db, const ClarityEntity* entity, int64_t id, const char* column, ClarityBytes* out);
@@ -126,3 +130,11 @@ bool clarity_record_file_from(ClarityDb* db, const ClarityFile* file, const char
 /// The bytes of the file `path` of a store: a picture linked from a file
 /// before its record is saved.
 bool clarity_store_file(ClarityDb* db, const char* store, const char* path, ClarityBytes* out);
+/// Another record's picture for a field kept in `to` (NULL: the database),
+/// as code copies it (album.cover = other.cover); `*out` is NULL for none.
+/// `value` is field `column` of record `id`, kept in `from`. A picture in
+/// hand is copied as it is, a stored one is read first, and a file of a
+/// store stays linked only in that same store.
+bool clarity_copied_picture(ClarityDb* db, const ClarityEntity* entity, const ClarityPicture* value, int64_t id, const char* column, const char* from, const char* to, ClarityPicture** out);
+/// Another record's file, with its name, as clarity_copied_picture copies a picture.
+bool clarity_copied_file(ClarityDb* db, const ClarityEntity* entity, const ClarityRecordFile* value, int64_t id, const char* column, const char* from, const char* to, ClarityRecordFile** out);

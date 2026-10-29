@@ -504,7 +504,12 @@ fn main_c(project: &Project, settings: &Settings, databases: &[(String, Sql, Str
         ("#include \"secrets/secrets.h\"\n\n".to_string(), "    clarity_secrets_use();\n".to_string())
     };
     let sources: Vec<String> = databases.iter().map(|(name, _, at)| format!("    {{{}, CLARITY_SQLITE, {}}},", string(name), string(at))).collect();
-    let stores: Vec<String> = settings.filestores.iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return closed(db);", string(&s.name), string(&s.location))).collect();
+    let mut stores: Vec<String> = crate::fixed_stores(settings).iter().map(|s| format!("    if (!clarity_add_store(db, {}, {})) return closed(db);", string(&s.name), string(&s.location))).collect();
+    // A store whose folder is a folder setting follows the person's settings.
+    let program_name = crate::settings_program(settings);
+    stores.extend(crate::folder_stores(project, settings).iter().map(|(name, setting, default)| {
+        format!("    if (!clarity_add_store_setting(db, {}, {}, {}, {})) return closed(db);", string(name), string(&program_name), string(setting), string(default))
+    }));
     let windows: Vec<&logic::Owner> = owners.iter().filter(|o| !o.is_app).collect();
     let apps: Vec<&logic::Owner> = owners.iter().filter(|o| o.is_app).collect();
 

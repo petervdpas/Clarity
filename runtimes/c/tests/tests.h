@@ -20,6 +20,8 @@
     X(dates_and_times_read_and_write_as_text)                     \
     X(the_settings_file_is_where_every_runtime_puts_it)           \
     X(settings_kept_are_read_back)                               \
+    X(a_folder_setting_is_where_every_runtime_puts_a_store)      \
+    X(a_store_keeps_its_files_in_a_folder_setting)               \
     X(a_file_in_a_store_is_kept_under_its_name_in_a_folder_of_its_contents) \
     X(a_copy_goes_to_the_downloads_folder_under_a_free_name)     \
     X(a_file_is_kept_with_its_name_in_the_database_or_its_store) \
@@ -31,6 +33,7 @@
     X(a_picture_travels_to_the_renderer_as_every_runtime_sends_it) \
     X(a_picture_is_kept_in_the_database_and_fetched_on_its_own)   \
     X(a_picture_in_a_file_store_is_a_file_named_by_its_bytes)     \
+    X(a_picture_is_copied_from_another_record)                     \
     X(a_store_lists_its_files_as_every_runtime_does)              \
     X(events_run_around_a_save)                                   \
     X(a_failing_event_keeps_nothing)                              \
@@ -54,6 +57,8 @@
     X(every_engine_call_gives_what_every_host_gives)              \
     X(a_module_that_is_no_engine_is_refused_when_it_loads)        \
     X(a_call_keeps_to_the_limits_of_its_engine)                   \
+    X(a_long_engine_call_reports_how_far_it_is)                   \
+    X(stop_ends_a_long_engine_call)                               \
     X(an_engine_uses_the_services_it_declares)                    \
     X(an_engine_with_state_keeps_its_instance_from_call_to_call)  \
     X(an_engine_with_state_per_window_keeps_an_instance_for_each_window) \

@@ -9,6 +9,9 @@ module github.com/petervdpas/Clarity/runtimes/go
 
 go 1.25.0
 
+// v0.35.0 was tagged on the commit before its changes; v0.36.0 holds them.
+retract v0.35.0
+
 require (
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9

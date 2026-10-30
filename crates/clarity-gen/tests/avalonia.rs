@@ -550,7 +550,7 @@ code Calc
         word = \"x\"
 ";
 
-/// A function that returns texts, plain and with a slot: both are translated.
+/// A function that returns texts, plain and with a slot.
 const VERDICT: &str = "
 function verdict(n: integer) -> text
     if n > 2
@@ -574,12 +574,14 @@ fn a_window_holds_plain_values() {
     has(vm, "        Fresh = false;\n");
     has(vm, "        Pending = OrderStatus.Approved;\n");
     // A text value shows its text in the person's language.
-    has(vm, "        Word = Locale.Show(Text.Of(\"x\"));\n");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    has(vm, "        Word = Locale.Show(Text.Plain(\"x\"));\n");
     has(file(&files, "Windows/CalcView.axaml"), "Text=\"{Binding Shown, Converter={x:Static local:Shown.Converter}}\"");
-    // The texts code makes are translated.
+    // A slot is still filled in.
     let code: String = files.iter().filter(|f| f.path.ends_with(".cs")).map(|f| f.text.as_str()).collect();
-    has(&code, "Locale.Show(Text.Of(\"draw\"))");
-    has(&code, "Locale.Show(Text.Of(\"turnN\").With(\"n\", ");
+    has(&code, "return \"Draw\";");
+    has(&code, "new Text(\"Turn {n}\").With(\"n\", ");
 }
 
 /// A character key (`7`, `+`) is what is typed, from the keyboard or the

@@ -206,5 +206,18 @@ fn record(project: &Project, entity: &Entity) -> String {
         let function = local(&format!("{}_{}", event.word(), record_name(name)));
         let _ = write!(out, "func (r *{name}) {}(db *clarity.Db) error {{\n\treturn {function}(db, r)\n}}\n\n", pascal(event.word()));
     }
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = crate::cascades(project, name);
+    if !cascades.is_empty() {
+        let _ = writeln!(out, "// Cascade deletes the records that refer to this one with `cascade`, first.\nfunc (r *{name}) Cascade(db *clarity.Db) error {{");
+        for (child, _, column) in &cascades {
+            let _ = writeln!(
+                out,
+                "\t{{\n\t\tchildren, err := clarity.Find[{}](db, clarity.Query{{}}.Filter(clarity.Compare({column:?}, clarity.Eq, r.ID)))\n\t\tif err != nil {{\n\t\t\treturn err\n\t\t}}\n\t\tfor i := range children {{\n\t\t\tif err := clarity.Delete(db, &children[i]); err != nil {{\n\t\t\t\treturn err\n\t\t\t}}\n\t\t}}\n\t}}",
+                child.name.name
+            );
+        }
+        let _ = write!(out, "\treturn nil\n}}\n\n");
+    }
     out
 }

@@ -166,3 +166,105 @@ void events_run_around_a_delete(void) {
     CHECK_TEXT(logged(db), "saved Ada with 10; saved Ada with 0; deleted Ada");
     clarity_db_close(db);
 }
+
+// Cascading deletes: a record whose records refer to it with `cascade`
+// deletes them first, each with its own cascades and data events, all in
+// the transaction of its delete (runtimes/rust/tests/cascade.rs).
+
+typedef struct {
+    int64_t id;
+    const char* name;
+} Plan;
+
+typedef struct {
+    int64_t id;
+    int64_t plan;
+    const char* title;
+} PlanTask;
+
+static const char* const plan_columns[] = {"name"};
+static const char* const task_columns[] = {"plan", "title"};
+static void plan_values(const void* record, ClarityValue* out) { out[0] = clarity_text_value(((const Plan*)record)->name); }
+static bool plan_from_values(int64_t id, const ClarityValue* v, void* record) {
+    Plan* r = record;
+    r->id = id;
+    return clarity_get_text("name", v[0], &r->name);
+}
+static void task_values(const void* record, ClarityValue* out) {
+    const PlanTask* r = record;
+    out[0] = clarity_integer_value(r->plan);
+    out[1] = clarity_text_value(r->title);
+}
+static bool task_from_values(int64_t id, const ClarityValue* v, void* record) {
+    PlanTask* r = record;
+    r->id = id;
+    return clarity_get_integer("plan", v[0], &r->plan) && clarity_get_text("title", v[1], &r->title);
+}
+static const char* deleted_tasks;
+static bool task_before_delete(ClarityDb* db, void* record) {
+    (void)db;
+    PlanTask* t = record;
+    if (strcmp(t->title, "locked") == 0) return clarity_refuse(clarity_plain_text("This task is locked"));
+    deleted_tasks = deleted_tasks ? clarity_format("%s %s", deleted_tasks, t->title) : t->title;
+    return true;
+}
+static const ClarityEntity plan_task = {
+    .name = "PlanTask", .table = "plan_task", .key = "id", .source = "", .columns = task_columns, .column_count = 2,
+    .size = sizeof(PlanTask), .id_at = offsetof(PlanTask, id), .values = task_values, .from_values = task_from_values,
+    .before_delete = task_before_delete,
+};
+// As generated code writes it: the tasks of the plan, each deleted as any record is.
+static bool plan_cascade(ClarityDb* db, int64_t id) {
+    void* items;
+    size_t count;
+    if (!clarity_find(db, &plan_task, clarity_where(clarity_query(), clarity_compare("plan", CLARITY_EQ, clarity_integer_value(id))), &items, &count)) return false;
+    for (size_t i = 0; i < count; ++i)
+        if (!clarity_delete(db, &plan_task, (char*)items + i * plan_task.size)) return false;
+    return true;
+}
+static const ClarityEntity plan = {
+    .name = "Plan", .table = "plan", .key = "id", .source = "", .columns = plan_columns, .column_count = 1,
+    .size = sizeof(Plan), .id_at = offsetof(Plan, id), .values = plan_values, .from_values = plan_from_values, .cascade = plan_cascade,
+};
+
+static bool planned(ClarityDb** db, Plan* out) {
+    static const char* const create[] = {"CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+                                         "CREATE TABLE plan_task (id INTEGER PRIMARY KEY, plan INTEGER REFERENCES plan(id), title TEXT NOT NULL)"};
+    ClarityStep step = {create, 2};
+    if (!clarity_db_memory(db) || !clarity_migrate(*db, "", &step, 1, NULL)) return false;
+    *out = (Plan){0, "Model"};
+    if (!clarity_save(*db, &plan, out)) return false;
+    PlanTask draw = {0, out->id, "Draw"}, write = {0, out->id, "Write"};
+    return clarity_save(*db, &plan_task, &draw) && clarity_save(*db, &plan_task, &write);
+}
+
+static size_t counted(ClarityDb* db, const ClarityEntity* entity) {
+    void* items;
+    size_t count = 0;
+    clarity_find(db, entity, clarity_query(), &items, &count);
+    return count;
+}
+
+void deleting_a_record_deletes_what_cascades_from_it_first(void) {
+    ClarityDb* db;
+    Plan p;
+    REQUIRE_OK(planned(&db, &p));
+    deleted_tasks = NULL;
+    CHECK_OK(clarity_delete(db, &plan, &p));
+    CHECK_INT(counted(db, &plan), 0);
+    CHECK_INT(counted(db, &plan_task), 0);
+    CHECK_TEXT(deleted_tasks, "Draw Write");
+    clarity_db_close(db);
+}
+
+void a_refused_child_keeps_all_of_it(void) {
+    ClarityDb* db;
+    Plan p;
+    REQUIRE_OK(planned(&db, &p));
+    PlanTask locked = {0, p.id, "locked"};
+    REQUIRE_OK(clarity_save(db, &plan_task, &locked));
+    CHECK_TEXT(refusal(clarity_delete(db, &plan, &p)), "This task is locked");
+    CHECK_INT(counted(db, &plan), 1);
+    CHECK_INT(counted(db, &plan_task), 3);
+    clarity_db_close(db);
+}

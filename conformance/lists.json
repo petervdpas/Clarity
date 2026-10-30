@@ -1,5 +1,5 @@
 {
-  "about": "Lists of values in code (`list<integer>`, `list<text>`, `list<decimal>`, `list<bool>`), as every runtime gives them. `xs[i]` reads or sets item i, counted from 1. A position outside the list fails with exactly `there is no item <i> in a list of <n>`. `random(max)` is an engine's, compiled to WebAssembly: see conformance/clarity-engines.json.",
+  "about": "Lists of values in code (`list<integer>`, `list<text>`, `list<decimal>`, `list<bool>`), as every runtime gives them. `xs[i]` reads or sets item i, counted from 1. A position outside the list fails with exactly `there is no item <i> in a list of <n>`. `random(max)` is an engine's, compiled to WebAssembly: see conformance/clarity-engines.json. `ranges`: `from to to` is the whole numbers from `from` to `to`, both counted, as a list; none when `to` is below `from`. `joins`: `join(texts, separator)` is the texts in order with the separator between each two; an empty list joins to empty text.",
   "items": [
     { "list": [10, 20, 30], "at": 1, "gives": 10 },
     { "list": [10, 20, 30], "at": 3, "gives": 30 },
@@ -7,5 +7,17 @@
     { "list": [10, 20, 30], "at": 4, "fails": "there is no item 4 in a list of 3" },
     { "list": [], "at": 1, "fails": "there is no item 1 in a list of 0" },
     { "list": [10, 20, 30], "at": -1, "fails": "there is no item -1 in a list of 3" }
+  ],
+  "ranges": [
+    { "from": 1, "to": 3, "gives": [1, 2, 3] },
+    { "from": -2, "to": 1, "gives": [-2, -1, 0, 1] },
+    { "from": 5, "to": 5, "gives": [5] },
+    { "from": 3, "to": 1, "gives": [] }
+  ],
+  "joins": [
+    { "texts": ["a", "b", "c"], "separator": ", ", "gives": "a, b, c" },
+    { "texts": ["one"], "separator": "-", "gives": "one" },
+    { "texts": [], "separator": ", ", "gives": "" },
+    { "texts": ["x", "y"], "separator": "", "gives": "xy" }
   ]
 }

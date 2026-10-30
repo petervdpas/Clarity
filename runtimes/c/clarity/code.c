@@ -135,3 +135,28 @@ bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value) {
     return true;
 }
 
+
+ClarityIntegers clarity_range(int64_t from, int64_t to) {
+    size_t count = to < from ? 0 : (size_t)(to - from) + 1;
+    ClarityIntegers list = {clarity_alloc(sizeof(int64_t) * (count ? count : 1)), count};
+    for (size_t i = 0; i < count; ++i) list.items[i] = from + (int64_t)i;
+    return list;
+}
+
+const char* clarity_joined(ClarityTexts texts, const char* separator) {
+    size_t gap = strlen(separator), size = 1;
+    for (size_t i = 0; i < texts.count; ++i) size += strlen(texts.items[i]) + (i ? gap : 0);
+    char* out = clarity_alloc(size);
+    char* at = out;
+    for (size_t i = 0; i < texts.count; ++i) {
+        if (i) {
+            memcpy(at, separator, gap);
+            at += gap;
+        }
+        size_t length = strlen(texts.items[i]);
+        memcpy(at, texts.items[i], length);
+        at += length;
+    }
+    *at = '\0';
+    return out;
+}

@@ -247,7 +247,7 @@ code Calc
         word = \"x\"
 ";
 
-/// A function that returns texts, plain and with a slot: both are translated.
+/// A function that returns texts, plain and with a slot.
 const VERDICT: &str = "
 function verdict(n: integer) -> text
     if n > 2
@@ -267,11 +267,11 @@ fn a_window_holds_plain_values() {
     let sales = file(&files, "src/modules/sales.cpp");
     has(sales, "    fresh = false;\n");
     has(sales, "    pending = OrderStatus::Approved;\n");
-    // A text value shows its text in the person's language.
-    has(sales, "ui.set_shown(\"word\", clarity::Text::key(\"x\"));\n");
-    // A key in code takes its value in the language the screen picked.
-    has(sales, "clarity::Text::key(\"draw\").show()");
-    has(sales, "clarity::Text::key(\"turnN\").with(\"n\", ");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    has(sales, "ui.set_shown(\"word\", clarity::Text::plain(\"x\"));\n");
+    has(sales, "return std::string(\"Draw\");");
+    has(sales, "clarity::Text(\"Turn {n}\").with(\"n\", ");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

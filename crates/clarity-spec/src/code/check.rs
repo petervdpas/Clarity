@@ -1657,6 +1657,8 @@ pub const RECORD_ID: &str = "id";
 
 /// A random number from 1 to its argument, in an engine that uses random.
 pub const RANDOM: &str = "random";
+/// `join(texts, separator)`: a list of texts put together.
+pub const JOIN: &str = "join";
 /// The service a long engine call says how far it is with (DESIGN 5.12).
 pub const PROGRESS: &str = "progress";
 
@@ -3128,6 +3130,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 result
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right),
+            ExprKind::Range { from, to } => {
+                let tys = [self.expr(from, Some(Ty::Integer)), self.expr(to, Some(Ty::Integer))];
+                if tys.iter().any(|t| !matches!(t, Ty::Integer | Ty::Unknown)) {
+                    self.error("'to' counts from one whole number to another, as in 1 to 10", expr.span);
+                }
+                Ty::Values(Item::Integer)
+            }
             ExprKind::In { value, options } => {
                 let ty = self.typed_pair(value, options.first());
                 for option in options {
@@ -3273,7 +3282,7 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(self.expr(expr, None));
         };
         // Only functions and actions take values by name.
-        let built_in = ["count", SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
+        let built_in = ["count", JOIN, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
             for n in named {
@@ -3290,6 +3299,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 _ => self.error("'count' takes one list", expr.span),
             }
             return Some(Ty::Integer);
+        }
+        if function.name == JOIN && self.env.function(JOIN).is_none() {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            if !matches!(tys.as_slice(), [Ty::Values(Item::Text) | Ty::Unknown, Ty::Text | Ty::Unknown]) {
+                self.error("'join' takes a list of texts and the text between them, as in join(names, \", \")", expr.span);
+            }
+            return Some(Ty::Text);
         }
         if function.name == SIN || function.name == COS {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
@@ -3969,7 +3985,7 @@ fn mentions(expr: &Expr, var: &str) -> bool {
         ExprKind::Name { name } => name == var,
         ExprKind::Member { object, .. } => mentions(object, var),
         ExprKind::Unary { operand, .. } => mentions(operand, var),
-        ExprKind::Binary { left, right, .. } => mentions(left, var) || mentions(right, var),
+        ExprKind::Binary { left, right, .. } | ExprKind::Range { from: left, to: right } => mentions(left, var) || mentions(right, var),
         ExprKind::In { value, options } => mentions(value, var) || options.iter().any(|o| mentions(o, var)),
         ExprKind::Call { args, named, .. } => args.iter().chain(named.iter().map(|n| &n.value)).any(|a| mentions(a, var)),
         ExprKind::EngineCall { args, .. } => args.iter().any(|a| mentions(a, var)),
@@ -4429,7 +4445,7 @@ fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
         // A member path is one value; its inner paths are not visited.
         ExprKind::Member { .. } => {}
         ExprKind::Unary { operand, .. } => each_expr(operand, found),
-        ExprKind::Binary { left, right, .. } => {
+        ExprKind::Binary { left, right, .. } | ExprKind::Range { from: left, to: right } => {
             each_expr(left, found);
             each_expr(right, found);
         }

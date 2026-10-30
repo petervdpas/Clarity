@@ -44,7 +44,7 @@ pub fn function(project: &Project, name: &str) -> String {
 const TAKEN: [&str; 1] = ["db"];
 
 /// Members every record has, which a field cannot be called.
-const RECORD_MEMBERS: [&str; 21] = [
+const RECORD_MEMBERS: [&str; 23] = [
     "Id",
     // The settings' own members (model::settings_class).
     "Current",
@@ -58,6 +58,8 @@ const RECORD_MEMBERS: [&str; 21] = [
     "KeyColumn",
     "ColumnNames",
     "HasEvents",
+    "HasCascades",
+    "Cascade",
     "ToValues",
     "FromValues",
     "BeforeSave",

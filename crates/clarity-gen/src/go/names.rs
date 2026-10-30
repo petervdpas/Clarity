@@ -19,8 +19,8 @@ const RESERVED: [&str; 62] = [
 const TAKEN: [&str; 12] = ["db", "err", "result", "body", "read", "r", "w", "ui", "app", "clarity", "decimal", "slices"];
 
 /// Members every record has, which a field cannot be called.
-const RECORD_MEMBERS: [&str; 13] =
-    ["ID", "Table", "Columns", "GetID", "SetID", "Values", "Load", "Source", "Key", "BeforeSave", "AfterSave", "BeforeDelete", "AfterDelete"];
+const RECORD_MEMBERS: [&str; 14] =
+    ["ID", "Table", "Columns", "GetID", "SetID", "Values", "Load", "Source", "Key", "BeforeSave", "AfterSave", "BeforeDelete", "AfterDelete", "Cascade"];
 
 /// `credit_limit` and `My shop` as `CreditLimit` and `MyShop`: exported.
 pub fn pascal(name: &str) -> String {

@@ -102,7 +102,7 @@ fn the_rules_of_settings() {
         assert!(found.iter().any(|m| m.contains(wanted)), "{wanted}: {found:#?}");
     };
     says(format!("{SHOP}\nsettings\n    other: text\n"), "a project has one 'settings' block");
-    says(SHOP.replace("    density: Density, default roomy", "    density: Density, default roomy\n    favourite: ref Customer"), "a setting is a plain value; 'favourite' cannot be ref Customer");
+    says(SHOP.replace("    density: Density, default roomy", "    density: Density, default roomy\n    favourites: list<Customer>"), "a setting is a plain value or a reference; 'favourites' cannot be list<Customer>");
     says(SHOP.replace("entity Customer\n", "entity Settings\n    note: text\n\nentity Customer\n"), "'Settings' is the name of the project's settings");
     says(SHOP.replace("    data customer: Customer\n", "    data customer: Customer\n    data settings: Customer\n"), "every window has 'settings' of its own");
     says(SHOP.replace("    data customer: Customer\n", "    data customer: Customer\n    data mine: Settings\n"), "every window has the settings as 'settings'; bind that");
@@ -134,4 +134,24 @@ fn the_settings_window_template_writes_a_form_of_every_setting() {
     assert!(found.is_empty(), "{found:#?}");
     let none = project(&SHOP.replace("settings\n    language\n    theme\n    showToolbar: bool, default true, label \"Show the toolbar\"\n    pageSize: integer, min 10, max 200, default 50\n    density: Density, default roomy\n\n", ""), "");
     assert!(page_from_template(&none, "Options", &PageTemplate::Settings).is_err(), "without settings there is nothing to show");
+}
+
+/// A setting can refer to a record: it keeps the record's id, as a `ref`
+/// field does, and a dropdown bound to it offers the entity's records.
+#[test]
+fn a_setting_can_refer_to_a_record() {
+    let page = SHOP
+        .replace("    density: Density, default roomy", "    density: Density, default roomy\n    favourite: ref Customer")
+        .replace("        radio name densityRadio at 4,5 span 4 bind settings.density", "        radio name densityRadio at 4,5 span 4 bind settings.density\n        dropdown name favouriteBox at 4,6 span 4 bind settings.favourite");
+    let code = "
+code Card
+    handler fewerClicked
+        if settings.favourite != none
+            let favourite = settings.favourite
+            message favourite.name
+            settings.favourite = none
+        else
+            settings.favourite = customer
+";
+    assert_eq!(errors(&page, code), Vec::<String>::new());
 }

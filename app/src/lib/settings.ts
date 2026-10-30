@@ -52,6 +52,9 @@ export function fits(setting: Setting, value: unknown): boolean {
       return typeof value === "string" && (setting.themes ?? []).includes(value);
     case "color":
       return typeof value === "string" && KEPT_COLOR.test(value);
+    // A reference is kept as the record's id.
+    case "ref":
+      return typeof value === "number" && Number.isInteger(value) && value > 0;
     default:
       return typeof value === "string";
   }
@@ -129,6 +132,10 @@ export function settingsDefaults(preview: Preview, language: string, theme: stri
       case "date":
       case "dateTime":
         value = given?.kind === "str" ? given.value : null;
+        break;
+      // No record until the person picks one.
+      case "ref":
+        value = null;
         break;
       default:
         value = given?.kind === "str" ? given.value : "";

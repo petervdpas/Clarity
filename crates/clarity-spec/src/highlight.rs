@@ -51,7 +51,7 @@ const KEYWORDS: &[&str] = &[
     "module", "use", "source", "enum", "entity", "settings", "page", "app", "theme", "code", "function", "action", "engine", "handler", "project",
     "stack", "output", "datasource", "filestore", "language", "currency", "auth", "external", "readonly", "translation", "migration",
     "baseline", "title", "main", "data", "size", "grid", "columns", "label", "help", "column", "table", "key", "default", "format",
-    "pattern", "min", "max", "required", "unique", "owned", "computed", "search", "store", "from", "uses", "says", "state", "per", "window",
+    "pattern", "min", "max", "required", "unique", "owned", "computed", "search", "cascade", "store", "from", "uses", "says", "state", "per", "window",
     "keep", "limit", "seconds", "MB", "open", "mode", "color", "font", "radius", "padding", "border", "shadow", "part", "style",
     "background", "weight", "align", "dark", "light", "system", "x", "units", "add", "remove", "rename", "change", "map", "field",
     // Code.

@@ -754,6 +754,8 @@ impl<'a> Emitter<'a> {
                 format!("{{ let mut joined = {}; joined.extend({}); joined }}", self.value(left), self.value(right))
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
+            // `1 to n`: the whole numbers from one to the other.
+            ExprKind::Range { from, to } => format!("({}..={}).collect::<Vec<i64>>()", self.value(from), self.value(to)),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);
                 let common = if is_decimal(&value_ty) || options.iter().any(|o| is_decimal(&self.types.type_of(o))) {
@@ -1270,6 +1272,10 @@ impl<'a> Emitter<'a> {
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
             return format!("round({})", values.join(", "));
+        }
+        if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let (list, separator) = (args.first().map(|a| self.value(a)).unwrap_or_default(), args.get(1).map(|a| self.value(a)).unwrap_or_default());
+            return format!("{list}.join({separator}.as_str())");
         }
         if name == "count" {
             let list = match args.first() {

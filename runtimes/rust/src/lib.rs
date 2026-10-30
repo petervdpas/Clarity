@@ -205,6 +205,14 @@ pub trait Record: Sized + Clone {
     /// with its events in one transaction: when an event fails, nothing
     /// of it is kept.
     const EVENTS: bool = false;
+    /// Whether records refer to this one with `cascade`: deleting it deletes
+    /// them first (`cascade`), in the transaction of its delete.
+    const CASCADES: bool = false;
+    /// Deletes the records that refer to record `id` with `cascade`, each as
+    /// any record is deleted: with its own cascades and data events.
+    fn cascade(_db: &Db, _id: Id) -> Result<()> {
+        Ok(())
+    }
 
     fn before_save(&mut self, _db: &Db) -> Result<()> {
         Ok(())
@@ -615,12 +623,14 @@ impl Db {
 
     /// Removes a stored record, with the entity's data events around it.
     pub fn delete<R: Record>(&self, record: &R) -> Result<()> {
-        if !R::EVENTS {
+        if !R::EVENTS && !R::CASCADES {
             return self.remove(record);
         }
         let mut record = record.clone();
         self.atomic(R::SOURCE, || {
             record.before_delete(self)?;
+            // What cascades from it goes first, so no reference is left behind.
+            R::cascade(self, record.id())?;
             self.remove(&record)?;
             record.after_delete(self)
         })

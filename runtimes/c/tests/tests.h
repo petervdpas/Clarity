@@ -7,6 +7,7 @@
     X(decimals_add_multiply_divide_and_compare_by_value)          \
     X(every_rounding_case_rounds_as_every_runtime_does)          \
     X(an_item_is_read_by_its_position_from_1)                    \
+    X(ranges_and_joins_are_as_every_runtime_gives_them)          \
     X(an_item_is_set_by_its_position_from_1)                     \
     X(sin_and_cos_take_degrees_as_every_runtime_does)            \
     X(a_draw_starts_an_empty_drawing_that_travels_with_the_part)  \
@@ -36,6 +37,8 @@
     X(a_picture_is_copied_from_another_record)                     \
     X(a_store_lists_its_files_as_every_runtime_does)              \
     X(events_run_around_a_save)                                   \
+    X(deleting_a_record_deletes_what_cascades_from_it_first)      \
+    X(a_refused_child_keeps_all_of_it)                            \
     X(a_failing_event_keeps_nothing)                              \
     X(events_run_around_a_delete)                                 \
     X(the_server_scenario_on_sqlite)                              \

@@ -143,6 +143,8 @@ pub(crate) struct Cursor<'a> {
     tokens: &'a [Token],
     pos: usize,
     line_span: Span,
+    /// Whether `to` makes a range here: not in what `write ... to` writes.
+    pub(crate) ranges: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -151,6 +153,7 @@ impl<'a> Cursor<'a> {
             tokens: &line.tokens,
             pos: 0,
             line_span: line.span,
+            ranges: true,
         }
     }
 
@@ -705,6 +708,7 @@ fn parse_modifier(cursor: &mut Cursor, modifiers: &mut Modifiers) -> ParseResult
         "owned" => flag(&mut modifiers.owned, duplicate),
         "computed" => flag(&mut modifiers.computed, duplicate),
         "search" => flag(&mut modifiers.search, duplicate),
+        "cascade" => flag(&mut modifiers.cascade, duplicate),
         "min" => set(&mut modifiers.min, parse_literal(cursor)?, duplicate),
         "max" => set(&mut modifiers.max, parse_literal(cursor)?, duplicate),
         "default" => set(&mut modifiers.default, parse_literal(cursor)?, duplicate),

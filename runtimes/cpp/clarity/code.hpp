@@ -71,6 +71,25 @@ public:
 };
 
 /// `xs[i]` in code: item i of a list, counted from 1.
+/// `from to to` in code: the whole numbers from `from` to `to`, both counted;
+/// none when `to` is below `from` (conformance/lists.json, `ranges`).
+inline std::vector<int64_t> range(int64_t from, int64_t to) {
+    std::vector<int64_t> list;
+    for (int64_t i = from; i <= to; ++i) list.push_back(i);
+    return list;
+}
+
+/// `join(texts, separator)` in code: the texts in order with the separator
+/// between each two (conformance/lists.json, `joins`).
+inline std::string joined(const std::vector<std::string>& texts, const std::string& separator) {
+    std::string out;
+    for (size_t i = 0; i < texts.size(); ++i) {
+        if (i) out += separator;
+        out += texts[i];
+    }
+    return out;
+}
+
 template <typename T>
 const T& at(const std::vector<T>& list, int64_t position) {
     if (position < 1 || position > int64_t(list.size()))

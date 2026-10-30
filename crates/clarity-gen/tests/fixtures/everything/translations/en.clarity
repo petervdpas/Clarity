@@ -70,6 +70,7 @@ translation en
     albumLevel "Level"
     settingsApiToken "Api token"
     settingsScansFolder "Scans folder"
+    settingsFavouriteFriend "Favourite friend"
     settingsShowToolbar "Show toolbar"
     settingsPageSize "Page size"
     formatVinyl "Vinyl"

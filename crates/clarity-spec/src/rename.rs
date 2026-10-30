@@ -224,7 +224,7 @@ fn expr(e: &Expr, name: &str, found: &mut Vec<Span>) {
         ExprKind::Name { name: n } if n == name => found.push(e.span),
         ExprKind::Member { object, .. } => expr(object, name, found),
         ExprKind::Unary { operand, .. } => expr(operand, name, found),
-        ExprKind::Binary { left, right, .. } => {
+        ExprKind::Binary { left, right, .. } | ExprKind::Range { from: left, to: right } => {
             expr(left, name, found);
             expr(right, name, found);
         }

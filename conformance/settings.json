@@ -1,5 +1,5 @@
 {
-  "about": "Settings (DESIGN 5.17), kept per person as JSON on their machine. A kept value is taken back only when it still fits its setting; one that does not (a setting removed, an enum value gone, a number past its `min` or `max`, a value of another type) is dropped, and the setting has its default. `fits` gives whether a kept value fits a setting: its type (`text`, `email`, `url`, `color`, `folder`, `integer`, `duration`, `decimal`, `money`, `bool`, `date`, `datetime`, `enum` with its `values`, `language` with the project's `languages`, `theme` with the offered `themes`), and `min` and `max` for numbers. Decimals and money are kept as text, so they stay exact; dates as `2026-10-23`, moments as `2026-10-23T14:30:00`. `kept` gives the settings a start takes from what was kept: only the settings there are, and only values that fit. `file` gives where an application keeps them, for its system (`windows`, `macos`, or another, `linux`) and its environment: in the folder for application settings (`APPDATA` on Windows; `Library/Application Support` in `HOME` on macOS; `XDG_CONFIG_HOME`, else `.config` in `HOME`, elsewhere), in a folder of the program's name, as `settings.json`; nowhere (null) when the environment names no such folder. Paths are written with `/`. `folders` gives the folder a file store keeps its files in when the project file names a folder setting (`filestore photos \"setting:photosFolder\"`): the kept value when it is text that is not empty, else the setting's `default`; nothing at all is a folder named after the store; a relative folder is in the folder of the settings file (`settingsFolder`); an absolute one is as it is, told by the system (`/` first, or on Windows a drive letter and `:` or `\\\\`). Each runtime reads it again at every use, so a change while the application runs takes effect at once.",
+  "about": "Settings (DESIGN 5.17), kept per person as JSON on their machine. A kept value is taken back only when it still fits its setting; one that does not (a setting removed, an enum value gone, a number past its `min` or `max`, a value of another type) is dropped, and the setting has its default. `fits` gives whether a kept value fits a setting: its type (`text`, `email`, `url`, `color`, `folder`, `integer`, `duration`, `decimal`, `money`, `bool`, `date`, `datetime`, `enum` with its `values`, `language` with the project's `languages`, `theme` with the offered `themes`, `ref` for a record), and `min` and `max` for numbers. A reference is kept as the record's id, a whole number above 0; without a record it is not kept. Decimals and money are kept as text, so they stay exact; dates as `2026-10-23`, moments as `2026-10-23T14:30:00`. `kept` gives the settings a start takes from what was kept: only the settings there are, and only values that fit. `file` gives where an application keeps them, for its system (`windows`, `macos`, or another, `linux`) and its environment: in the folder for application settings (`APPDATA` on Windows; `Library/Application Support` in `HOME` on macOS; `XDG_CONFIG_HOME`, else `.config` in `HOME`, elsewhere), in a folder of the program's name, as `settings.json`; nowhere (null) when the environment names no such folder. Paths are written with `/`. `folders` gives the folder a file store keeps its files in when the project file names a folder setting (`filestore photos \"setting:photosFolder\"`): the kept value when it is text that is not empty, else the setting's `default`; nothing at all is a folder named after the store; a relative folder is in the folder of the settings file (`settingsFolder`); an absolute one is as it is, told by the system (`/` first, or on Windows a drive letter and `:` or `\\\\`). Each runtime reads it again at every use, so a change while the application runs takes effect at once.",
   "fits": [
     {
       "setting": {
@@ -217,6 +217,41 @@
         "type": "folder"
       },
       "value": 3,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "ref"
+      },
+      "value": 12,
+      "fits": true
+    },
+    {
+      "setting": {
+        "type": "ref"
+      },
+      "value": "12",
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "ref"
+      },
+      "value": 0,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "ref"
+      },
+      "value": -3,
+      "fits": false
+    },
+    {
+      "setting": {
+        "type": "ref"
+      },
+      "value": 1.5,
       "fits": false
     }
   ],

@@ -182,6 +182,19 @@ fn record(project: &Project, entity: &Entity) -> String {
     } else {
         format!("    const PICTURES: &'static [PictureColumn] = &[{}];\n", pictures.join(", "))
     };
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = crate::cascades(project, name);
+    if !cascades.is_empty() {
+        hooks.push_str("\n    const CASCADES: bool = true;\n\n    fn cascade(db: &Db, id: Id) -> Result<()> {\n");
+        for (child, file, column) in &cascades {
+            let module = file.module.as_ref().map(|m| super::names::snake(&m.name)).unwrap_or_default();
+            hooks.push_str(&format!(
+                "        for child in db.find::<crate::modules::{module}::{}>(&clarity_runtime::query::Query::new().filter(clarity_runtime::query::Cond::compare({column:?}, clarity_runtime::query::Op::Eq, SqlValue::Integer(id))))? {{\n            db.delete(&child)?;\n        }}\n",
+                child.name.name
+            ));
+        }
+        hooks.push_str("        Ok(())\n    }\n");
+    }
     if !events.is_empty() {
         hooks.push_str("\n    const EVENTS: bool = true;\n");
         for event in events {

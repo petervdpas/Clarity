@@ -7,7 +7,7 @@ settings
     language
     exportsFolder: folder, default "exports", label @settingsExportsFolderLabel
     codeFolder: folder, default "code", label @settingsCodeFolderLabel
-    openProject: text(80), label @settingsOpenProjectLabel
+    openProject: ref Project, label @settingsOpenProjectLabel
 
 app Modelling
     title @modellingTitle
@@ -205,10 +205,11 @@ code Projects
         projects = find p in Project where p matches projectSearch.text order by p.name
 
     handler showOpen
-        if settings.openProject == ""
+        if settings.openProject == none
             openNow.caption = @noProjectIsOpenYet
         else
-            openNow.caption = @openOpenProject(openProject = settings.openProject)
+            let open = settings.openProject
+            openNow.caption = @openOpenProject(openProject = open.name)
 
     handler projectSelected
         current = projectList.selected
@@ -230,7 +231,7 @@ code Projects
         if current.id == 0
             message warning @chooseAProjectToOpen
             return
-        settings.openProject = current.name
+        settings.openProject = current
         showOpen()
         open Types
 
@@ -240,24 +241,11 @@ code Projects
         ask @deleteNameWithEverythingIn(name = current.name) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
-        for t in find t in ClassType where t.project == current
-            for p in find p in Parameter where p.owner == t
-                delete p
-        for a in find a in Association where a.project == current
-            delete a
-        for t in find t in ClassType where t.project == current
-            delete t
-        for e in find e in DataEntity where e.project == current
-            for c in find c in Column where c.owner == e
-                delete c
-        for r in find r in Relationship where r.project == current
-            delete r
-        for e in find e in DataEntity where e.project == current
-            delete e
-        for v in find v in Version where v.project == current
-            delete v
-        if settings.openProject == current.name
-            settings.openProject = ""
+        // Its types, entities and versions go with it (cascade).
+        if settings.openProject != none
+            let open = settings.openProject
+            if open.id == current.id
+                settings.openProject = none
         delete current
         current = new Project
         showProjects()
@@ -265,11 +253,10 @@ code Projects
 
 code Types
     handler typesOpened
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         showTypes()
 
     handler showTypes
@@ -302,8 +289,6 @@ code Types
         ask @deleteNameAndItsParameters(name = current.name) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
-        for p in parameters
-            delete p
         delete current
         current = new ClassType
         parameters = find p in Parameter where p.owner == current
@@ -331,11 +316,10 @@ code Types
 
 code Entities
     handler entitiesOpened
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         showEntities()
 
     handler showEntities
@@ -368,8 +352,6 @@ code Entities
         ask @deleteNameAndItsColumns(name = current.name) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
-        for c in columns
-            delete c
         delete current
         current = new DataEntity
         columns = find c in Column where c.owner == current
@@ -397,11 +379,10 @@ code Entities
 
 code Relations
     handler relationsOpened
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         showRelations()
 
     handler showRelations
@@ -450,11 +431,10 @@ code Relations
 
 code Diagrams
     handler diagramsOpened
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         types = find t in ClassType where t.project == project order by t.name
         entities = find e in DataEntity where e.project == project order by e.name
     // Every type as a box with its parameters, four to a row, and the lines between them.
@@ -563,11 +543,10 @@ code Diagrams
 
 code Output
     handler showOutput
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         classText = class_diagram(project)
         erdText = erd_diagram(project)
         apiText = openapi(project, latest_version(project))
@@ -596,11 +575,10 @@ code Output
 
 code Versions
     handler versionsOpened
-        let open = find p in Project where p.name == settings.openProject
-        if count(open) == 0
+        if settings.openProject == none
             message warning @openAProjectFirst
             return
-        project = open[1]
+        project = settings.openProject
         versions = find v in Version where v.project == project order by v.number desc
 
     handler versionSelected

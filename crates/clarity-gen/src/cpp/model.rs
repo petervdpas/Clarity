@@ -199,11 +199,30 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     for event in &events {
         let _ = writeln!(methods, "    void {}(clarity::Db& db);", event.word());
     }
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = crate::cascades(project, name);
+    if !cascades.is_empty() {
+        methods.push_str("    void cascade(clarity::Db& db) const;\n");
+    }
     let header = format!(
         "struct {name} {{\n    int64_t id = 0;\n{fields}\n{statics}{methods}}};\nvoid to_json(nlohmann::json& out, const {name}& r);\nvoid from_json(const nlohmann::json& in, {name}& r);\n\n"
     );
 
-    let mut source = format!(
+    let mut source = String::new();
+    if !cascades.is_empty() {
+        let _ = writeln!(source, "void {name}::cascade(clarity::Db& db) const {{");
+        for (child, _, column) in &cascades {
+            let _ = writeln!(
+                source,
+                "    for (const auto& child : db.find<{}>(clarity::Query().filter(clarity::Cond::compare({}, clarity::Op::Eq, clarity::sql::integer(id))))) db.remove(child);",
+                child.name.name,
+                string(column)
+            );
+        }
+        source.push_str("}\n\n");
+    }
+    let _ = write!(
+        source,
         "const std::vector<std::string>& {name}::columns() {{\n    static const std::vector<std::string> names{{{}}};\n    return names;\n}}\n\n",
         columns.join(", ")
     );

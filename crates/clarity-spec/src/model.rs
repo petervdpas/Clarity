@@ -323,6 +323,10 @@ pub struct Modifiers {
     /// `where a matches x` looks in (text and lists of text).
     #[serde(default)]
     pub search: bool,
+    /// `cascade`, on a reference: deleting the record it refers to deletes
+    /// this one first, with its data events, in the same transaction.
+    #[serde(default)]
+    pub cascade: bool,
     pub min: Option<Literal>,
     pub max: Option<Literal>,
     pub pattern: Option<String>,
@@ -982,6 +986,15 @@ impl Project {
     /// Whether any window has a part of `kind`, inside containers too.
     pub fn uses_part(&self, kind: crate::widgets::WidgetKind) -> bool {
         self.files.iter().flat_map(|f| &f.pages).any(|p| crate::translations::any_widget(&p.widgets, &|w| w.props.kind == kind))
+    }
+
+    /// The fields that cascade from `entity`: deleting one of its records
+    /// deletes the records whose field refers to it first (`cascade`).
+    pub fn cascades(&self, entity: &str) -> Vec<(&Entity, &Field)> {
+        self.entities()
+            .flat_map(|e| e.fields.iter().map(move |f| (e, f)))
+            .filter(|(_, f)| f.modifiers.cascade && matches!(&f.ty, FieldType::Ref { entity: target } if target.name == entity))
+            .collect()
     }
 
     /// The settings that name a folder, where a file store may keep its files, by name.

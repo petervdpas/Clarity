@@ -1047,6 +1047,8 @@ impl<'a> Emitter<'a> {
                 self.value(right)
             ),
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty),
+            // `1 to n`: the whole numbers from one to the other.
+            ExprKind::Range { from, to } => format!("clarity::range({}, {})", self.value(from), self.value(to)),
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);
                 let common = if is_decimal(&value_ty) || options.iter().any(|o| is_decimal(&self.types.type_of(o))) { TypeInfo::Decimal } else { value_ty };
@@ -1277,6 +1279,11 @@ impl<'a> Emitter<'a> {
         if name == "count" {
             let list = args.first().map(|a| self.value(a)).unwrap_or_default();
             return format!("int64_t({list}.size())");
+        }
+        if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let list = args.first().map(|a| self.value(a)).unwrap_or_default();
+            let separator = args.get(1).map(|a| self.value(a)).unwrap_or_default();
+            return format!("clarity::joined({list}, {separator})");
         }
         let Some(callee) = self.project.files.iter().flat_map(|f| &f.functions).find(|f| f.name.name == name) else {
             self.errors.push(format!("unknown function '{name}'"));

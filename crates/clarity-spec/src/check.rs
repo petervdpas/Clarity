@@ -538,9 +538,10 @@ impl<'a> Checker<'a> {
                 if field.ty == FieldType::Secret && field.modifiers.default.is_some() {
                     self.error(file, format!("a secret has no default: it is the person's own ('{}')", field.name.name), field.span);
                 }
-                let plain = !matches!(field.ty, FieldType::Ref { .. } | FieldType::List { .. } | FieldType::Image | FieldType::File | FieldType::Id);
+                // A reference keeps the record's id, as a `ref` field does.
+                let plain = !matches!(field.ty, FieldType::List { .. } | FieldType::Image | FieldType::File | FieldType::Id);
                 if !plain {
-                    self.error(file, format!("a setting is a plain value; '{}' cannot be {}", field.name.name, field.type_text), field.span);
+                    self.error(file, format!("a setting is a plain value or a reference; '{}' cannot be {}", field.name.name, field.type_text), field.span);
                 }
             }
         }
@@ -1679,6 +1680,9 @@ impl<'a> Checker<'a> {
             )
         {
             self.error(file, format!("only text and lists of text can be searched ('{name}')"), field.span);
+        }
+        if m.cascade && !matches!(field.ty, FieldType::Ref { .. }) {
+            self.error(file, format!("only a reference cascades: deleting the record it refers to deletes this one ('{name}')"), field.span);
         }
         if field.ty == FieldType::File {
             if m.unique {

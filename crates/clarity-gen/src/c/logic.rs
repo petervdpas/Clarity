@@ -1614,6 +1614,11 @@ impl<'a> Emitter<'a> {
                 format!("{}_join({left}, {right})", values_prefix(item))
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty, pre),
+            // `1 to n`: the whole numbers from one to the other.
+            ExprKind::Range { from, to } => {
+                let (from, to) = (bare(self.value(from, pre)), bare(self.value(to, pre)));
+                format!("clarity_range({from}, {to})")
+            }
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);
                 let decimals = is_decimal(&value_ty) || options.iter().any(|o| is_decimal(&self.types.type_of(o)));
@@ -1950,6 +1955,11 @@ impl<'a> Emitter<'a> {
             let value = args.first().map(|a| bare(self.decimal(a, pre))).unwrap_or_default();
             let places = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
             return format!("clarity_decimal_round({value}, (int){places})");
+        }
+        if name == clarity_spec::code::check::JOIN && self.callee(name).is_none() {
+            let list = args.first().map(|a| self.list_ref(a, pre)).unwrap_or_default();
+            let separator = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            return format!("clarity_joined({list}, {separator})");
         }
         if name == "count" {
             let list = match args.first() {

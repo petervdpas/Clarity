@@ -809,7 +809,7 @@ code Calc
         word = \"x\"
 ";
 
-/// A function that returns texts, plain and with a slot: both are translated.
+/// A function that returns texts, plain and with a slot.
 const VERDICT: &str = "
 function verdict(n: integer) -> text
     if n > 2
@@ -834,11 +834,11 @@ fn a_window_holds_plain_values() {
     }
     assert!(sales.contains("w.fresh = false;"), "{sales}");
     assert!(sales.contains("w.pending = OrderStatus::Approved;"), "{sales}");
-    // A text value shows its text in the person's language.
-    assert!(sales.contains("ui.set_shown(\"word\", Text::key(\"x\"));"), "{sales}");
-    // A key in code takes its value in the language the screen picked.
-    assert!(sales.contains("Text::key(\"draw\").show()"), "{sales}");
-    assert!(sales.contains("Text::key(\"turnN\").with(\"n\", "), "{sales}");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    assert!(sales.contains("ui.set_shown(\"word\", Text::plain(\"x\"));"), "{sales}");
+    assert!(sales.contains("return Ok(String::from(\"Draw\"));"), "{sales}");
+    assert!(sales.contains("Text::new(\"Turn {n}\").with(\"n\", "), "{sales}");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

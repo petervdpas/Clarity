@@ -34,4 +34,13 @@ public class ListTests
         Assert.Equal([10L, 99L, 30L], list);
         Assert.Equal("there is no item 4 in a list of 3", Assert.Throws<ValueException>(() => Lists.Set(list, 4, 1L)).Message);
     }
+
+    [Fact]
+    public void Ranges_and_joins_are_as_every_runtime_gives_them()
+    {
+        foreach (var c in Cases().GetProperty("ranges").EnumerateArray())
+            Assert.Equal(c.GetProperty("gives").EnumerateArray().Select(n => n.GetInt64()), Lists.Range(c.GetProperty("from").GetInt64(), c.GetProperty("to").GetInt64()));
+        foreach (var c in Cases().GetProperty("joins").EnumerateArray())
+            Assert.Equal(c.GetProperty("gives").GetString(), string.Join(c.GetProperty("separator").GetString(), c.GetProperty("texts").EnumerateArray().Select(t => t.GetString())));
+    }
 }

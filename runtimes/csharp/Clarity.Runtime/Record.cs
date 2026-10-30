@@ -29,6 +29,12 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     /// </summary>
     static virtual bool HasEvents => false;
 
+    /// <summary>
+    /// Whether records refer to this one with <c>cascade</c>: deleting it deletes them
+    /// first (<see cref="Cascade"/>), in the transaction of its delete.
+    /// </summary>
+    static virtual bool HasCascades => false;
+
     /// <summary>The key of a stored record; 0 until it is saved for the first time.</summary>
     long Id { get; set; }
 
@@ -44,4 +50,7 @@ public interface IRecord<TSelf> where TSelf : IRecord<TSelf>
     void BeforeDelete(Db db) { }
 
     void AfterDelete(Db db) { }
+
+    /// <summary>Deletes the records that refer to this one with <c>cascade</c>, each as any record is deleted.</summary>
+    void Cascade(Db db) { }
 }

@@ -295,6 +295,20 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
             ident(&format!("{word}_{record_word}"))
         );
     }
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = crate::cascades(project, name);
+    if !cascades.is_empty() {
+        let _ = write!(source, "static bool {p}_cascade(ClarityDb* db, int64_t id) {{\n");
+        for (child, _, column) in &cascades {
+            let c = prefix(&child.name.name);
+            let _ = write!(
+                source,
+                "    {{\n        extern const ClarityEntity {c}_entity;\n        void* items = NULL;\n        size_t count = 0;\n        if (!clarity_find(db, &{c}_entity, clarity_where(clarity_query(), clarity_compare({}, CLARITY_EQ, clarity_integer_value(id))), &items, &count)) return false;\n        for (size_t i = 0; i < count; ++i)\n            if (!clarity_delete(db, &{c}_entity, (char*)items + i * {c}_entity.size)) return false;\n    }}\n",
+                string(column)
+            );
+        }
+        source.push_str("    return true;\n}\n\n");
+    }
     let source_name = project.source_of(name).unwrap_or_default();
     let source_name = if source_name.is_empty() || source_name == project.default_source() { "" } else { source_name };
     let mut descriptor = format!(
@@ -313,6 +327,9 @@ fn record(project: &Project, entity: &Entity) -> (String, String) {
     let _ = writeln!(descriptor, "    .size = sizeof({name}),\n    .id_at = offsetof({name}, id),\n    .values = {p}_values,\n    .from_values = {p}_from_values,");
     for event in &events {
         let _ = writeln!(descriptor, "    .{word} = {p}_{word},", word = event.word());
+    }
+    if !cascades.is_empty() {
+        let _ = writeln!(descriptor, "    .cascade = {p}_cascade,");
     }
     descriptor.push_str("};\n\n");
     source.push_str(&descriptor);

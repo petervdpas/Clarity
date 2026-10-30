@@ -147,6 +147,8 @@ public static partial class KeptSettings
             "datetime" => Text() is { } t && Moment().IsMatch(t),
             "enum" or "language" or "theme" => Text() is { } t && (setting.Values ?? []).Contains(t),
             "color" => Text() is { } t && KeptColor().IsMatch(t),
+            // A reference is kept as the record's id.
+            "ref" => kind == JsonValueKind.Number && v.TryGetValue<long>(out var id) && id > 0,
             _ => Text() is not null,
         };
     }

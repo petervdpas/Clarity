@@ -91,6 +91,19 @@ pub(crate) fn window_size(project: &Project, name: &str) -> (u32, u32) {
 
 /// Every engine the project declares (DESIGN 5.11).
 /// What a `TypeRef` names, as a checker type.
+/// What cascades from `entity` (`cascade`): each child entity, the module
+/// file it is in, and the column of its field that refers to `entity`.
+pub(crate) fn cascades<'p>(project: &'p Project, entity: &str) -> Vec<(&'p clarity_spec::model::Entity, &'p clarity_spec::model::SpecFile, String)> {
+    project
+        .cascades(entity)
+        .into_iter()
+        .filter_map(|(child, field)| {
+            let file = project.files.iter().find(|f| f.entities.iter().any(|e| e.name.name == child.name.name))?;
+            Some((child, file, child.column_of(&field.name.name).to_string()))
+        })
+        .collect()
+}
+
 /// The file stores whose folder is a folder setting (`filestore photos
 /// "setting:photosFolder"`): the store, the setting and the setting's
 /// default ("" without one). Each runtime reads the setting at every use.

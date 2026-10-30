@@ -6,7 +6,12 @@ export type Modifiers = { required: boolean, unique: boolean, owned: boolean, co
  * `search`: the field is in its record's full-text index, which
  * `where a matches x` looks in (text and lists of text).
  */
-search: boolean, min: Literal | null, max: Literal | null, pattern: string | null, default: Literal | null, label: string | null, help: string | null, format: string | null, 
+search: boolean, 
+/**
+ * `cascade`, on a reference: deleting the record it refers to deletes
+ * this one first, with its data events, in the same transaction.
+ */
+cascade: boolean, min: Literal | null, max: Literal | null, pattern: string | null, default: Literal | null, label: string | null, help: string | null, format: string | null, 
 /**
  * `column "InvNo"`: the existing column a field of an external entity
  * is stored in.

@@ -258,7 +258,7 @@ code Calc
         word = \"x\"
 ";
 
-/// A function that returns texts, plain and with a slot: both are translated.
+/// A function that returns texts, plain and with a slot.
 const VERDICT: &str = "
 function verdict(n: integer) -> text
     if n > 2
@@ -285,11 +285,11 @@ fn a_window_holds_plain_values() {
     has(sales, "if (pending_name) w->pending = order_status_from(pending_name);");
     has(sales, "w->fresh = false;\n");
     has(sales, "w->pending = ORDER_STATUS_APPROVED;\n");
-    // A text value shows its text in the person's language.
-    has(sales, "clarity_ui_set_shown(ui, \"word\", clarity_key_text(\"x\"));\n");
-    // A key in code takes its value in the language the screen picked.
-    has(sales, "clarity_text_show(clarity_key_text(\"draw\"))");
-    has(sales, "clarity_text_show(clarity_text_with(clarity_key_text(\"turnN\"), \"n\", clarity_slot_integer(n, NULL)))");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    has(sales, "clarity_ui_set_shown(ui, \"word\", clarity_plain_text(\"x\"));\n");
+    has(sales, "*result = \"Draw\";");
+    has(sales, "clarity_text_show(clarity_text_with(clarity_text(\"Turn {n}\"), \"n\", clarity_slot_integer(n, NULL)))");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

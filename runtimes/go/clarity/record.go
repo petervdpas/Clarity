@@ -41,6 +41,9 @@ type (
 	AfterSaver    interface{ AfterSave(db *Db) error }
 	BeforeDeleter interface{ BeforeDelete(db *Db) error }
 	AfterDeleter  interface{ AfterDelete(db *Db) error }
+	// Cascader is a record that records refer to with `cascade`: Delete
+	// deletes them first, in the transaction of its delete.
+	Cascader interface{ Cascade(db *Db) error }
 )
 
 func sourceOf(r Record) string {
@@ -59,7 +62,7 @@ func keyOf(r Record) string {
 
 func hasEvents(r Record) bool {
 	switch r.(type) {
-	case BeforeSaver, AfterSaver, BeforeDeleter, AfterDeleter:
+	case BeforeSaver, AfterSaver, BeforeDeleter, AfterDeleter, Cascader:
 		return true
 	}
 	return false

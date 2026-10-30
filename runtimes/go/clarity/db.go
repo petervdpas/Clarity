@@ -295,6 +295,12 @@ func Delete[R Record](db *Db, record R) error {
 				return err
 			}
 		}
+		// What cascades from it goes first, so no reference is left behind.
+		if c, ok := any(record).(Cascader); ok {
+			if err := c.Cascade(db); err != nil {
+				return err
+			}
+		}
 		if err := remove(db, record); err != nil {
 			return err
 		}

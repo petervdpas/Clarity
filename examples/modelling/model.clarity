@@ -42,7 +42,7 @@ entity Project
 // A type of the domain: a box of the class diagram, and a schema of the
 // OpenAPI description.
 entity ClassType
-    project: ref Project, required, label @classTypeProjectLabel
+    project: ref Project, required, cascade, label @classTypeProjectLabel
     name: text(80), required, search, label @classTypeNameLabel
     namespace: text(120), search, label @classTypeNamespaceLabel, help @classTypeNamespaceHelp
     kind: TypeKind, default Class, label @classTypeKindLabel, help @classTypeKindHelp
@@ -56,23 +56,23 @@ entity ClassType
 
 // A parameter of a type's primary constructor: its type and name.
 entity Parameter
-    owner: ref ClassType, required, label @parameterOwnerLabel
+    owner: ref ClassType, required, cascade, label @parameterOwnerLabel
     position: integer, min 1, default 1, label @parameterPositionLabel
     type: text(60), required, label @parameterTypeLabel
     name: text(60), required, label @parameterNameLabel
 
 // A line between two types of the class diagram.
 entity Association
-    project: ref Project, required, label @associationProjectLabel
-    source: ref ClassType, required, label @associationSourceLabel
-    target: ref ClassType, required, label @associationTargetLabel
+    project: ref Project, required, cascade, label @associationProjectLabel
+    source: ref ClassType, required, cascade, label @associationSourceLabel
+    target: ref ClassType, required, cascade, label @associationTargetLabel
     link: Link, default Association, label @associationLinkLabel
     label: text(60), label @associationLabelLabel
     multiplicity: text(12), label @associationMultiplicityLabel, help @associationMultiplicityHelp
 
 // An entity of the entity relationship diagram: a table of the database.
 entity DataEntity
-    project: ref Project, required, label @dataEntityProjectLabel
+    project: ref Project, required, cascade, label @dataEntityProjectLabel
     name: text(80), required, search, label @dataEntityNameLabel
     summary: text, search, label @dataEntitySummaryLabel
     created: datetime, label @dataEntityCreatedLabel
@@ -80,7 +80,7 @@ entity DataEntity
 
 // A column of an entity.
 entity Column
-    owner: ref DataEntity, required, label @columnOwnerLabel
+    owner: ref DataEntity, required, cascade, label @columnOwnerLabel
     position: integer, min 1, default 1, label @columnPositionLabel
     name: text(60), required, label @columnNameLabel
     type: text(40), required, label @columnTypeLabel
@@ -89,16 +89,16 @@ entity Column
 
 // A line between two entities of the ERD, with how many are on each side.
 entity Relationship
-    project: ref Project, required, label @relationshipProjectLabel
-    source: ref DataEntity, required, label @relationshipSourceLabel
-    target: ref DataEntity, required, label @relationshipTargetLabel
+    project: ref Project, required, cascade, label @relationshipProjectLabel
+    source: ref DataEntity, required, cascade, label @relationshipSourceLabel
+    target: ref DataEntity, required, cascade, label @relationshipTargetLabel
     source_side: Cardinality, default ExactlyOne, label @relationshipSourceSideLabel
     target_side: Cardinality, default ZeroOrMore, label @relationshipTargetSideLabel
     label: text(60), label @relationshipLabelLabel
 
 // The model as it was when the modeller saved a version.
 entity Version
-    project: ref Project, required, label @versionProjectLabel
+    project: ref Project, required, cascade, label @versionProjectLabel
     number: integer, label @versionNumberLabel
     note: text, label @versionNoteLabel
     saved: datetime, label @versionSavedLabel

@@ -15,6 +15,7 @@ pub fn expr(e: &Expr) -> String {
         ExprKind::Unary { op: UnaryOp::Not, operand } => format!("not {}", expr(operand)),
         ExprKind::Unary { op: UnaryOp::Neg, operand } => format!("-{}", expr(operand)),
         ExprKind::Binary { op, left, right } => format!("{} {} {}", expr(left), op.symbol(), expr(right)),
+        ExprKind::Range { from, to } => format!("{} to {}", expr(from), expr(to)),
         ExprKind::In { value, options } => format!(
             "{} in [{}]",
             expr(value),

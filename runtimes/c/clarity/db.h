@@ -42,6 +42,9 @@ typedef struct {
     bool (*after_save)(ClarityDb* db, void* record);
     bool (*before_delete)(ClarityDb* db, void* record);
     bool (*after_delete)(ClarityDb* db, void* record);
+    /// Deletes the records that refer to record `id` with `cascade`, each as
+    /// any record is deleted; NULL when nothing cascades from the entity.
+    bool (*cascade)(ClarityDb* db, int64_t id);
 } ClarityEntity;
 
 /// The database of one data source: its name, its kind and where it is (a

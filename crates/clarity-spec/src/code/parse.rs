@@ -654,7 +654,10 @@ fn parse_stmt(node: &Node, diagnostics: &mut Vec<Diagnostic>) -> ParseResult<Stm
         }
         Some("write") => {
             cursor.next();
+            // What it writes ends at `to`, which names the store.
+            cursor.ranges = false;
             let text = parse_expr(&mut cursor)?;
+            cursor.ranges = true;
             if !cursor.eat_keyword("to") {
                 return Err(cursor.error_here("expected 'to', a file store and a path, as in 'write lines to photos \"list.txt\"'"));
             }
@@ -1122,6 +1125,16 @@ fn comparison_op(kind: TokenKind) -> Option<BinaryOp> {
 
 fn parse_comparison(cursor: &mut Cursor) -> ParseResult<Expr> {
     let left = parse_additive(cursor)?;
+    if cursor.ranges && cursor.eat_keyword("to") {
+        let right = parse_additive(cursor)?;
+        return Ok(Expr {
+            span: join(left.span, right.span),
+            kind: ExprKind::Range {
+                from: Box::new(left),
+                to: Box::new(right),
+            },
+        });
+    }
     if cursor.eat_keyword("contains") {
         let right = parse_additive(cursor)?;
         return Ok(binary(BinaryOp::Contains, left, right));

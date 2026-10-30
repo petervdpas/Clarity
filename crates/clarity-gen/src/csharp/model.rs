@@ -130,7 +130,7 @@ fn settings_class(project: &Project, entity: &Entity, program: &str, cli: bool) 
             bound(&f.modifiers.max)
         ));
         let read = match &f.ty {
-            FieldType::Integer | FieldType::Duration => "v.GetValue<long>()".to_string(),
+            FieldType::Integer | FieldType::Duration | FieldType::Ref { .. } => "v.GetValue<long>()".to_string(),
             FieldType::Decimal { .. } | FieldType::Money => "decimal.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)".into(),
             FieldType::Bool => "v.GetValue<bool>()".into(),
             FieldType::Date => "DateOnly.ParseExact(v.GetValue<string>(), \"yyyy-MM-dd\", CultureInfo.InvariantCulture)".into(),
@@ -308,6 +308,18 @@ fn record(project: &Project, entity: &Entity) -> String {
         .flat_map(|b| b.events.iter().map(|e| e.event))
         .collect();
     let mut hooks = String::new();
+    // What cascades from it is deleted first, each child as any record is.
+    let cascades = crate::cascades(project, name);
+    if !cascades.is_empty() {
+        hooks.push_str("\n    public static bool HasCascades => true;\n\n    public void Cascade(Db db)\n    {\n");
+        for (child, _, column) in &cascades {
+            hooks.push_str(&format!(
+                "        foreach (var child in db.Find<{}>(new Query().Filter(Cond.Compare({column:?}, Op.Eq, Id))))\n            db.Delete(child);\n",
+                child.name.name
+            ));
+        }
+        hooks.push_str("    }\n");
+    }
     if !events.is_empty() {
         hooks.push_str("\n    public static bool HasEvents => true;\n");
         for event in events {

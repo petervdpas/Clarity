@@ -572,7 +572,7 @@ code Calc
         word = \"x\"
 ";
 
-/// A function that returns texts, plain and with a slot: both are translated.
+/// A function that returns texts, plain and with a slot.
 const VERDICT: &str = "
 function verdict(n: integer) -> text
     if n > 2
@@ -597,11 +597,11 @@ fn a_window_holds_plain_values() {
     }
     has(&code, "w.Fresh = false\n");
     has(&code, "w.Pending = OrderStatusApproved\n");
-    // A text value shows its text in the person's language.
-    has(&code, "ui.SetShown(\"word\", clarity.KeyText(\"x\"))\n");
-    // A key in code takes its value in the language the screen picked.
-    has(&code, "clarity.KeyText(\"draw\").Show()");
-    has(&code, "clarity.KeyText(\"turnN\").With(\"n\", ");
+    // A text that code only keeps or returns is no key: the checker asks one
+    // only for a text shown as written (a message, a caption).
+    has(&code, "ui.SetShown(\"word\", clarity.PlainText(\"x\"))\n");
+    has(&code, "return \"Draw\", nil");
+    has(&code, "clarity.NewText(\"Turn {n}\").With(\"n\", ");
 }
 
 /// round(value, places) rounds through the runtime, as every stack does.

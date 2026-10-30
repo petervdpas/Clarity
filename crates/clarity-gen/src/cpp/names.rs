@@ -20,7 +20,7 @@ const RESERVED: [&str; 97] = [
 
 /// A Clarity name as a C++ name.
 pub fn ident(name: &str) -> String {
-    if RESERVED.contains(&name) || ["columns", "values", "pictures", "from_values", "load"].contains(&name) { format!("{name}_") } else { name.to_string() }
+    if RESERVED.contains(&name) || ["columns", "values", "pictures", "from_values", "load", "cascade"].contains(&name) { format!("{name}_") } else { name.to_string() }
 }
 
 /// `order_status` and `My shop` as `OrderStatus` and `MyShop`.

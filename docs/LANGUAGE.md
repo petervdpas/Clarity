@@ -282,6 +282,7 @@ A field is `name: type`, followed by modifiers separated by commas. Every record
 | `help @key` | A help text, by its key, shown next to the field's input in windows. |
 | `format name` | How the value is shown, by name; see [Formats](#formats). |
 | `owned` | For a `list<...>`: the listed records live and die with this record. |
+| `cascade` | For a `ref Entity`: deleting the record it refers to deletes this one first, with its own cascades and data events, all in the transaction of that delete. When one of them refuses, nothing is deleted. |
 | `computed` | The value is computed, not entered. Accepted, but not used by the generated application yet. |
 | `column "Name"` | The existing column the field is stored in, for an entity of an external database. |
 | `store name` | For an `image`: its pictures are files in that file store of the project settings, not in the database. |
@@ -492,7 +493,8 @@ settings
     pageSize: integer, min 10, max 200, default 50
 ```
 
-- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color, an enum, a secret (see [Secret settings](#secret-settings)) or a folder (see [Folder settings](#folder-settings)). A reference, a list, a picture or an id is no setting.
+- **Fields.** A setting is written as a field of an entity: a name, a type and the modifiers `default`, `min`, `max`, `label`, `help` and `format`. Its type is a plain one: text, a number, money, bool, a date or moment, a duration, email, url, color, an enum, a secret (see [Secret settings](#secret-settings)) a folder (see [Folder settings](#folder-settings)) or a reference to a record (`openProject: ref Project`). A list, a picture or an id is no setting.
+- **References.** A `ref` setting keeps the record's id, and is empty until the person picks one. Code reads it as a `ref` field: `settings.openProject != none`, `let open = settings.openProject`, `settings.openProject = project`. A dropdown bound to it offers the entity's records. A kept id that is not a whole number above 0 is dropped; when its record is deleted, loading it fails as for any reference, so code that deletes the record clears the setting.
 - **Clarity's own.** `language` and `theme` take no type: they are the language and the theme shown, labeled with Clarity's words `languagePicker` and `themePicker`. Setting either switches the language or the theme, as the pickers of the click targets `language` and `theme` do, and those pickers change the same settings.
 - **Kept per person.** Settings are never in the database. Each person's are kept on their machine, as `settings.json` in a folder named after the application, in the folder for application settings of their system (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` elsewhere). A setting not kept yet has its `default`; a kept value that no longer fits (a setting removed, an enum value gone, a number past its ends) is dropped.
 - **In every window.** Every window and the app have `settings` as their data without a `data` line. A part binds `settings.pageSize`, a form binds `settings`, and code reads and sets `settings.pageSize`. A change takes effect at once and is kept, and every window sees it. A dropdown bound to `settings.language` offers the project's languages by their own names, and one bound to `settings.theme` the offered themes by their titles.
@@ -1640,7 +1642,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `let name: type = expr` | A local with a declared type. | everywhere |
 | `target = expr` | Sets a local, a data field (`customer.credit_limit`), an item of a list (`squares[3] = 1`) or a part property (`save.enabled`). | everywhere; part properties in handlers |
 | `if expr` / `else if expr` / `else` | Runs a block when the condition, which must be bool, is true. | everywhere |
-| `for item in list` | Runs the block once per item of a list. | everywhere |
+| `for item in list` | Runs the block once per item of a list. `for i in 1 to n` counts from 1 to n, as `1 to n` is that list. | everywhere |
 | `name(args)` | Calls a function or action on its own line. | everywhere |
 | `handler_name()`, `handler_name(values)` | Runs another handler of the same window or app, with values for its parameters. | handlers |
 | `canvas.shape(values)` | Draws a shape on a canvas; see [Drawing on a canvas](#drawing-on-a-canvas). | its draw handler |
@@ -1672,13 +1674,14 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `squares[3]` | an item of a list, counted from 1; a position outside the list is an error |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
-| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `join(texts, separator)` the texts of a `list<text>` in order with the separator between each two (`join(names, ", ")`), `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
 | `(expr)` | grouping |
 | `-x` | negation |
 | `a * b`, `a / b` | multiplication and division |
 | `a + b`, `a - b` | addition and subtraction; `+` also joins text |
 | `a == b`, `a != b`, `a < b`, `a <= b`, `a > b`, `a >= b` | comparison |
 | `x in [a, b, c]` | whether `x` equals one of the values |
+| `a to b` | the whole numbers from `a` to `b`, both counted, as a `list<integer>`; empty when `b` is below `a`: `for i in 1 to count(names)` |
 | `a contains b` | whether text `a` contains text `b`, ignoring case; for a list, whether it holds item `b` |
 | `find c in Entity where ... order by ...` | the records that meet a condition; see [Queries](#queries) |
 | `ask question yes a no b`, `ask question for type ...` | in a command, the answer typed on the terminal: a bool for yes or no, or a value of the type; see [Commands](#commands) |
@@ -1689,7 +1692,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `not a` | negation of a bool |
 | `a and b`, `a or b` | both, either |
 
-From tightest to loosest: member access (`.`) and items (`[i]`), unary `-`, `*` and `/`, `+` and `-`, comparisons, `in`, `contains` and `matches`, `not`, `and`, `or`.
+From tightest to loosest: member access (`.`) and items (`[i]`), unary `-`, `*` and `/`, `+` and `-`, `to`, comparisons, `in`, `contains` and `matches`, `not`, `and`, `or`. In `write text to store "path"`, the `to` belongs to `write`. An engine written in Clarity has no `to` or `join` yet.
 
 ### Texts by key
 
@@ -1977,7 +1980,7 @@ entity        = "entity" Name
                     (name ":" type ("," modifier)*)+
 type          = "text" ["(" n ")"] | "decimal" "(" p "," s ")" | "integer" | "money" | "bool"
               | "date" | "datetime" | "email" | "url" | "id" | Enum | "ref" Entity | "list" "<" Entity ">"
-modifier      = "required" | "unique" | "owned" | "computed"
+modifier      = "required" | "unique" | "owned" | "cascade" | "computed"
               | ("min" | "max" | "default") value | ("pattern" | "label" | "help" | "column") String | "format" name
 
 page          = "page" Name ":" ("window" | "dialog" ["gives" type] | "view")

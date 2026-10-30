@@ -73,6 +73,7 @@ pub fn field_line(spec: &FieldSpec) -> String {
         (m.owned, "owned"),
         (m.computed, "computed"),
         (m.search, "search"),
+        (m.cascade, "cascade"),
     ] {
         if on {
             parts.push(word.to_string());

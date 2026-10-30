@@ -5,7 +5,8 @@
 // A record is a plain struct with its `id`, the `table`, `columns()`,
 // `values()` and `from_values()` of its entity, and, when the entity has
 // them, its `source`, `key`, `pictures()` and data events (`before_save`,
-// `after_save`, `before_delete`, `after_delete`).
+// `after_save`, `before_delete`, `after_delete`), and `cascade` when records
+// refer to it with `cascade`: they are removed first, in the same transaction.
 
 #pragma once
 
@@ -82,7 +83,8 @@ std::vector<PictureColumn> pictures_of() {
 
 template <typename R>
 constexpr bool has_events = requires(R r, Db& db) { r.before_save(db); } || requires(R r, Db& db) { r.after_save(db); } ||
-                            requires(R r, Db& db) { r.before_delete(db); } || requires(R r, Db& db) { r.after_delete(db); };
+                            requires(R r, Db& db) { r.before_delete(db); } || requires(R r, Db& db) { r.after_delete(db); } ||
+                            requires(R r, Db& db) { r.cascade(db); };
 
 }  // namespace detail
 
@@ -138,6 +140,8 @@ public:
             R copy = record;
             atomic(detail::source_of<R>(), [&] {
                 if constexpr (requires { copy.before_delete(*this); }) copy.before_delete(*this);
+                // What cascades from it goes first, so no reference is left behind.
+                if constexpr (requires { copy.cascade(*this); }) copy.cascade(*this);
                 remove_record(detail::source_of<R>(), R::table, detail::key_of<R>(), copy.id);
                 if constexpr (requires { copy.after_delete(*this); }) copy.after_delete(*this);
             });

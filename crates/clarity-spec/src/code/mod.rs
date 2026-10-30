@@ -335,6 +335,11 @@ pub enum ExprKind {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    /// `1 to 10`: the whole numbers from one to the other, as a list; `for i in 1 to n` counts.
+    Range {
+        from: Box<Expr>,
+        to: Box<Expr>,
+    },
     /// `value in [a, b]`
     In {
         value: Box<Expr>,
@@ -1020,7 +1025,7 @@ pub fn each_expr(expr: &Expr, found: &mut impl FnMut(&Expr)) {
     match &expr.kind {
         ExprKind::Member { object, .. } => each_expr(object, found),
         ExprKind::Unary { operand, .. } => each_expr(operand, found),
-        ExprKind::Binary { left, right, .. } => {
+        ExprKind::Binary { left, right, .. } | ExprKind::Range { from: left, to: right } => {
             each_expr(left, found);
             each_expr(right, found);
         }
@@ -1142,7 +1147,7 @@ pub fn each_expr_mut(expr: &mut Expr, found: &mut impl FnMut(&mut Expr)) {
     match &mut expr.kind {
         ExprKind::Member { object, .. } => each_expr_mut(object, found),
         ExprKind::Unary { operand, .. } => each_expr_mut(operand, found),
-        ExprKind::Binary { left, right, .. } => {
+        ExprKind::Binary { left, right, .. } | ExprKind::Range { from: left, to: right } => {
             each_expr_mut(left, found);
             each_expr_mut(right, found);
         }

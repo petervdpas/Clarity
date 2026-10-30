@@ -111,3 +111,40 @@ fn a_key_is_renamed_everywhere() {
     let en = "// English.\ntranslation en\n    cardTitle \"Card\"\n    saveCaption \"Save\"\n";
     assert_eq!(keyed::rename_key_in_language(en, "saveCaption", "storeCaption"), "// English.\ntranslation en\n    cardTitle \"Card\"\n    storeCaption \"Save\"\n");
 }
+
+/// Only the texts people read become keys, as the checker tells them: text
+/// a function returns to build a file, such as Mermaid's arrows, and text
+/// a local holds stay as they are, since translating them would break what
+/// they build.
+#[test]
+fn only_the_texts_people_read_become_keys() {
+    let source = "module diagram
+
+page Main: window
+    data shown: text
+    button \"Draw\" name draw at 1,1 span 2 on click: drawClick
+
+code Main
+    handler drawClick
+        shown = \"Drawn\"
+        message \"Drew {shown}\"
+
+function arrow(dashed: bool) -> text
+    if dashed
+        return \"..>\"
+    return \"-->\"
+
+action file() -> text
+    let line = \"classDiagram\"
+    line = \"has\"
+    return line + arrow(true)
+";
+    let made = keyed::make_keys(&[("diagram.clarity", source)], &[], "en");
+    let module = &made.modules[0].1;
+    for kept in ["\"..>\"", "\"-->\"", "\"classDiagram\"", "line = \"has\""] {
+        assert!(module.contains(kept), "{kept} stays as it is:\n{module}");
+    }
+    for keyed in ["button @drawCaption", "message @drewShown(shown = shown)"] {
+        assert!(module.contains(keyed), "{keyed}:\n{module}");
+    }
+}

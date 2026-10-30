@@ -30,3 +30,9 @@ TEST(an_item_is_set_by_its_position_from_1) {
     CHECK(list == (std::vector<int64_t>{10, 99, 30}));
     CHECK_THROWS(ValueError, at(list, 4) = 1);
 }
+
+TEST(ranges_and_joins_are_as_every_runtime_gives_them) {
+    auto file = conformance("lists.json");
+    for (const auto& c : file["ranges"]) CHECK(range(c["from"].get<int64_t>(), c["to"].get<int64_t>()) == c["gives"].get<std::vector<int64_t>>());
+    for (const auto& c : file["joins"]) CHECK_EQ(joined(c["texts"].get<std::vector<std::string>>(), c["separator"].get<std::string>()), c["gives"].get<std::string>());
+}

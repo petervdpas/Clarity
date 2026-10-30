@@ -395,3 +395,21 @@ void a_custom_parts_values_and_hears_are_as_every_runtime_says(void) {
     }
     cJSON_Delete(file);
 }
+
+void ranges_and_joins_are_as_every_runtime_gives_them(void) {
+    cJSON* file = conformance("lists.json");
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "ranges")) {
+        ClarityIntegers got = clarity_range((int64_t)cJSON_GetObjectItem(c, "from")->valuedouble, (int64_t)cJSON_GetObjectItem(c, "to")->valuedouble);
+        const cJSON* gives = cJSON_GetObjectItem(c, "gives");
+        CHECK(got.count == (size_t)cJSON_GetArraySize(gives));
+        for (size_t i = 0; i < got.count && i < (size_t)cJSON_GetArraySize(gives); ++i) CHECK(got.items[i] == (int64_t)cJSON_GetArrayItem(gives, (int)i)->valuedouble);
+    }
+    cJSON_ArrayForEach(c, cJSON_GetObjectItemCaseSensitive(file, "joins")) {
+        const cJSON* texts = cJSON_GetObjectItem(c, "texts");
+        size_t count = (size_t)cJSON_GetArraySize(texts);
+        const char** items = clarity_alloc(sizeof *items * (count + 1));
+        for (size_t i = 0; i < count; ++i) items[i] = cJSON_GetArrayItem(texts, (int)i)->valuestring;
+        CHECK_TEXT(clarity_joined(clarity_texts(count, items), cJSON_GetObjectItem(c, "separator")->valuestring), cJSON_GetObjectItem(c, "gives")->valuestring);
+    }
+}

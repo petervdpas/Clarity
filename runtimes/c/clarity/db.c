@@ -282,13 +282,14 @@ bool clarity_save(ClarityDb* db, const ClarityEntity* entity, void* record) {
 
 bool clarity_delete(ClarityDb* db, const ClarityEntity* entity, const void* record) {
     int64_t id = *id_of(entity, (void*)record);
-    if (!has_events(entity)) return remove_record(db, entity, id);
+    if (!has_events(entity) && !entity->cascade) return remove_record(db, entity, id);
     // The events work on a copy, as the record itself is not changed by deleting it.
     void* copy = clarity_alloc(entity->size);
     memcpy(copy, record, entity->size);
     ClaritySourceDb* s = NULL;
     if (!begin(db, entity->source, &s)) return false;
-    bool ok = (!entity->before_delete || entity->before_delete(db, copy)) && remove_record(db, entity, id) &&
+    // What cascades from it goes first, so no reference is left behind.
+    bool ok = (!entity->before_delete || entity->before_delete(db, copy)) && (!entity->cascade || entity->cascade(db, id)) && remove_record(db, entity, id) &&
               (!entity->after_delete || entity->after_delete(db, copy));
     return end(s, ok);
 }

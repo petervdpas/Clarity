@@ -52,3 +52,35 @@ func TestAnItemIsSetByItsPositionFrom1(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestRangesAndJoinsAreAsEveryRuntimeGivesThem(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/lists.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct {
+		Ranges []struct {
+			From  int64   `json:"from"`
+			To    int64   `json:"to"`
+			Gives []int64 `json:"gives"`
+		} `json:"ranges"`
+		Joins []struct {
+			Texts     []string `json:"texts"`
+			Separator string   `json:"separator"`
+			Gives     string   `json:"gives"`
+		} `json:"joins"`
+	}
+	if err := json.Unmarshal(text, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases.Ranges {
+		if got := Range(c.From, c.To); !slices.Equal(got, c.Gives) {
+			t.Errorf("%d to %d: %v", c.From, c.To, got)
+		}
+	}
+	for _, c := range cases.Joins {
+		if got := Join(c.Texts, c.Separator); got != c.Gives {
+			t.Errorf("%v: %q", c.Texts, got)
+		}
+	}
+}

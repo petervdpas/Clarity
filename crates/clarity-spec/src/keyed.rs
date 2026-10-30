@@ -54,8 +54,12 @@ pub fn make_keys_beside(modules: &[(&str, &str)], translations: &[(&str, &str)],
     for (key, value) in existing {
         maker.keys.insert(key.clone(), Made { text: value.clone(), was: value.clone(), slots: Vec::new() });
     }
+    // Code's texts become keys only where the checker says people read them:
+    // a text a function builds a file with stays as it is.
+    let places = crate::translations::literal_places(&crate::load_sources(modules.iter().copied()));
     let mut rewritten = Vec::new();
     for (path, text) in modules {
+        maker.read = places.iter().filter(|(p, _)| p == path).map(|(_, at)| *at).collect();
         rewritten.push((path.to_string(), maker.module(text)));
     }
     // Clarity's own words; an image part bound to a picture has its own, and a wizard.
@@ -145,6 +149,8 @@ struct Made {
 struct Maker {
     keys: BTreeMap<String, Made>,
     order: Vec<String>,
+    /// Where code's texts people read start, as the checker finds them, in the module being made keyed.
+    read: Vec<u32>,
 }
 
 /// Where a line is: the block it is in, and its name.
@@ -375,7 +381,7 @@ impl Maker {
 
     /// A text of code people read, made a key with its slots filled by name.
     fn code_text(&mut self, token: &Token, edits: &mut Vec<(usize, usize, String)>) {
-        if token.kind != TokenKind::Str || !has_letters(&token.text) {
+        if token.kind != TokenKind::Str || !has_letters(&token.text) || !self.read.contains(&token.span.start) {
             return;
         }
         let slots = slot_names(&token.text);

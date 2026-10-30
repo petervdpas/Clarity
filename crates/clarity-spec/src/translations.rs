@@ -390,6 +390,12 @@ pub fn engine_keys(body: &crate::code::EngineBody) -> Vec<String> {
     keys
 }
 
+/// Where the texts people read are written as they are, in the files of
+/// `project`: by file and by where each starts. Making keys keys exactly these.
+pub(crate) fn literal_places(project: &Project) -> Vec<(String, u32)> {
+    shown(project).literals.into_iter().map(|(_, path, span)| (path, span.start)).collect()
+}
+
 fn shown(project: &Project) -> Shown {
     let mut shown = Shown::default();
     for file in &project.files {

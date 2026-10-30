@@ -369,7 +369,7 @@ public sealed partial class Db : IDisposable
     /// <summary>Removes a stored record, with the entity's data events around it.</summary>
     public void Delete<R>(R record) where R : IRecord<R>
     {
-        if (!R.HasEvents)
+        if (!R.HasEvents && !R.HasCascades)
         {
             Remove(record);
             return;
@@ -377,6 +377,8 @@ public sealed partial class Db : IDisposable
         Atomic(R.SourceName, () =>
         {
             record.BeforeDelete(this);
+            // What cascades from it goes first, so no reference is left behind.
+            record.Cascade(this);
             Remove(record);
             record.AfterDelete(this);
         });

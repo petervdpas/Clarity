@@ -1345,6 +1345,11 @@ impl<'a> Emitter<'a> {
                 format!("append({copy}, {right}...)")
             }
             ExprKind::Binary { op, left, right } => self.binary(*op, left, right, &ty, pre),
+            // `1 to n`: the whole numbers from one to the other.
+            ExprKind::Range { from, to } => {
+                let (from, to) = (bare(self.value(from, pre)), bare(self.value(to, pre)));
+                format!("clarity.Range({from}, {to})")
+            }
             ExprKind::In { value, options } => {
                 let value_ty = self.types.type_of(value);
                 if is_decimal(&value_ty) || options.iter().any(|o| is_decimal(&self.types.type_of(o))) {
@@ -1602,6 +1607,11 @@ impl<'a> Emitter<'a> {
         if name == clarity_spec::code::check::ROUND {
             let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
             return format!("clarity.Round({})", values.join(", "));
+        }
+        if name == clarity_spec::code::check::JOIN && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let list = args.first().map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            let separator = args.get(1).map(|a| bare(self.value(a, pre))).unwrap_or_default();
+            return format!("clarity.Join({list}, {separator})");
         }
         if name == "count" {
             let list = args.first().map(|a| self.list_ref(a, pre)).unwrap_or_default();

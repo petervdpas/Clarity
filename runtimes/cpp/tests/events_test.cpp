@@ -74,6 +74,57 @@ std::string refusal(auto run) {
     return "(not refused)";
 }
 
+// Cascading deletes: a record whose records refer to it with `cascade`
+// deletes them first, each with its own cascades and data events, all in the
+// transaction of its delete (runtimes/rust/tests/cascade.rs).
+std::vector<std::string> deleted_tasks;
+
+struct PlanTask {
+    int64_t id = 0;
+    std::optional<int64_t> plan;
+    std::string title;
+    static constexpr const char* table = "plan_task";
+    static const std::vector<std::string>& columns() {
+        static const std::vector<std::string> names{"plan", "title"};
+        return names;
+    }
+    std::vector<SqlValue> values() const { return {sql::reference(plan), sql::text(title)}; }
+    static PlanTask from_values(int64_t id, const Row& v) { return {id, sql::get_reference("plan", v[0]), sql::get_text("title", v[1])}; }
+    void before_delete(Db&) {
+        if (title == "locked") refuse(Text::plain("This task is locked"));
+        deleted_tasks.push_back(title);
+    }
+};
+
+struct Plan {
+    int64_t id = 0;
+    std::string name;
+    static constexpr const char* table = "plan";
+    static const std::vector<std::string>& columns() {
+        static const std::vector<std::string> names{"name"};
+        return names;
+    }
+    std::vector<SqlValue> values() const { return {sql::text(name)}; }
+    static Plan from_values(int64_t id, const Row& v) { return {id, sql::get_text("name", v[0])}; }
+    // As generated code writes it: the tasks of the plan, each deleted as any record is.
+    void cascade(Db& db) const {
+        for (const auto& task : db.find<PlanTask>(Query().filter(Cond::compare("plan", Op::Eq, sql::integer(id))))) db.remove(task);
+    }
+};
+
+std::pair<Db, Plan> planned() {
+    Db db = Db::memory();
+    db.migrate({{"CREATE TABLE plan (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+                 "CREATE TABLE plan_task (id INTEGER PRIMARY KEY, plan INTEGER REFERENCES plan(id), title TEXT NOT NULL)"}});
+    Plan plan{0, "Model"};
+    db.save(plan);
+    for (std::string title : {"Draw", "Write"}) {
+        PlanTask task{0, plan.id, title};
+        db.save(task);
+    }
+    return {std::move(db), plan};
+}
+
 }  // namespace
 
 TEST(events_run_around_a_save) {
@@ -113,4 +164,22 @@ TEST(events_run_around_a_delete) {
     db.remove(ada);
     CHECK(db.all<Account>().empty());
     CHECK(logged(db) == (std::vector<std::string>{"saved Ada with 10", "saved Ada with 0", "deleted Ada"}));
+}
+
+TEST(deleting_a_record_deletes_what_cascades_from_it_first) {
+    auto [db, plan] = planned();
+    deleted_tasks.clear();
+    db.remove(plan);
+    CHECK(db.all<Plan>().empty());
+    CHECK(db.all<PlanTask>().empty());
+    CHECK((deleted_tasks == std::vector<std::string>{"Draw", "Write"}));
+}
+
+TEST(a_refused_child_keeps_all_of_it) {
+    auto [db, plan] = planned();
+    PlanTask locked{0, plan.id, "locked"};
+    db.save(locked);
+    CHECK_EQ(refusal([&] { db.remove(plan); }), std::string("This task is locked"));
+    CHECK_EQ(db.all<Plan>().size(), size_t(1));
+    CHECK_EQ(db.all<PlanTask>().size(), size_t(3));
 }

@@ -38,11 +38,17 @@ classDiagram
             +summary: text, search
             +created: datetime
         }
+        class Domain {
+            +name: text(80), required, search
+            +color: color, default "#3b82f6", help @domainColorHelp
+            +summary: text, search
+        }
         class ClassType {
             +name: text(80), required, search
             +namespace: text(120), search, help @classTypeNamespaceHelp
             +kind: TypeKind, default Class, help @classTypeKindHelp
             +ontology: Ontology, default Entity, help @classTypeOntologyHelp
+            +base_via: list<integer>
             +interfaces: list<text>, help @classTypeInterfacesHelp
             +summary: text, search
             +tags: list<text>, search
@@ -60,6 +66,7 @@ classDiagram
             +link: Link, default Association
             +label: text(60)
             +multiplicity: text(12), help @associationMultiplicityHelp
+            +via: list<integer>
         }
         class DataEntity {
             +name: text(80), required, search
@@ -80,6 +87,7 @@ classDiagram
             +source_side: Cardinality, default ExactlyOne
             +target_side: Cardinality, default ZeroOrMore
             +label: text(60)
+            +via: list<integer>
         }
         class Version {
             +number: integer
@@ -117,13 +125,17 @@ classDiagram
         +place_of(names: list<text>, name: text) integer
         +latest_version(project: Project) text
     }
+    Domain "*" --> "1" Project : project
     ClassType "*" --> "1" Project : project
+    ClassType "*" --> "0..1" Domain : domain
     ClassType "*" --> "0..1" ClassType : base
     Parameter "*" --> "1" ClassType : owner
     Association "*" --> "1" Project : project
     Association "*" --> "1" ClassType : source
     Association "*" --> "1" ClassType : target
     DataEntity "*" --> "1" Project : project
+    DataEntity "*" --> "0..1" ClassType : type
+    DataEntity "*" --> "0..1" Domain : domain
     Column "*" --> "1" DataEntity : owner
     Relationship "*" --> "1" Project : project
     Relationship "*" --> "1" DataEntity : source
@@ -158,4 +170,3 @@ classDiagram
     %% clarity: Version at 91,920
     %% clarity: model at 585,1162
     %% clarity: modelling at 40,1282
-    %% clarity: Association -> ClassType : source via 375,249

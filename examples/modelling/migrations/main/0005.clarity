@@ -1,0 +1,11 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Domains, and the type an entity keeps"
+    add entity Domain
+        project: ref Project
+        name: text(80), search
+        color: color, default "#3b82f6"
+        summary: text, search
+    add field ClassType.domain: ref Domain
+    add field DataEntity.type: ref ClassType
+    add field DataEntity.domain: ref Domain

@@ -39,12 +39,21 @@ entity Project
     summary: text, search, label @projectSummaryLabel
     created: datetime, label @projectCreatedLabel
 
+// A part of the business the model covers, as Sales or Shipping: its types
+// and entities are drawn in its color.
+entity Domain
+    project: ref Project, required, cascade, label @domainProjectLabel
+    name: text(80), required, search, label @domainNameLabel
+    color: color, default "#3b82f6", label @domainColorLabel, help @domainColorHelp
+    summary: text, search, label @domainSummaryLabel
+
 // A type of the domain: a box of the class diagram, and a schema of the
 // OpenAPI description.
 entity ClassType
     project: ref Project, required, cascade, label @classTypeProjectLabel
     name: text(80), required, search, label @classTypeNameLabel
     namespace: text(120), search, label @classTypeNamespaceLabel, help @classTypeNamespaceHelp
+    domain: ref Domain, label @classTypeDomainLabel, help @classTypeDomainHelp
     kind: TypeKind, default Class, label @classTypeKindLabel, help @classTypeKindHelp
     ontology: Ontology, default Entity, label @classTypeOntologyLabel, help @classTypeOntologyHelp
     base: ref ClassType, label @classTypeBaseLabel, help @classTypeBaseHelp
@@ -81,6 +90,9 @@ entity Association
 entity DataEntity
     project: ref Project, required, cascade, label @dataEntityProjectLabel
     name: text(80), required, search, label @dataEntityNameLabel
+    // The class type whose records it keeps: the table of that type.
+    type: ref ClassType, label @dataEntityTypeLabel, help @dataEntityTypeHelp
+    domain: ref Domain, label @dataEntityDomainLabel, help @dataEntityDomainHelp
     summary: text, search, label @dataEntitySummaryLabel
     created: datetime, label @dataEntityCreatedLabel
     updated: datetime, label @dataEntityUpdatedLabel
@@ -235,6 +247,11 @@ action class_diagram(project: Project) -> text
         if a.label != ""
             line = line + " : " + a.label
         out = out + line + "\n"
+    // A type of a domain is filled with its domain's color, as the app draws it.
+    for t in types
+        if t.domain != none
+            let domain = t.domain
+            out = out + "    style " + t.name + " fill:" + domain.color + ",stroke:" + domain.color + ",color:#ffffff\n"
     return out
 
 // Every entity with its columns and relationships, as a Mermaid entity relationship diagram.
@@ -256,6 +273,19 @@ action erd_diagram(project: Project) -> text
         if label == ""
             label = "has"
         out = out + "    " + source.name + " " + left_end(r.source_side) + "--" + right_end(r.target_side) + " " + target.name + " : \"" + label + "\"\n"
+    // An entity has its domain's color, or else the domain of the type it keeps.
+    for e in entities
+        let color = ""
+        if e.domain != none
+            let domain = e.domain
+            color = domain.color
+        else if e.type != none
+            let type = e.type
+            if type.domain != none
+                let domain = type.domain
+                color = domain.color
+        if color != ""
+            out = out + "    style " + e.name + " fill:" + color + ",stroke:" + color + ",color:#ffffff\n"
     return out
 
 // Every type as a schema of an OpenAPI 3 description, its parameters as properties.

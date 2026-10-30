@@ -23,20 +23,22 @@ app Modelling
         item @fileItem name fileItem
             item @projectsItem name projectsItem key "Ctrl+0" on click -> Projects
             separator
-            item @typesItem name typesItem key "Ctrl+1" on click -> Types
-            item @entitiesItem name entitiesItem key "Ctrl+2" on click -> Entities
-            item @relationsItem name relationsItem key "Ctrl+3" on click -> Relations
+            item @domainsItem name domainsItem key "Ctrl+1" on click -> Domains
+            item @typesItem name typesItem key "Ctrl+2" on click -> Types
+            item @entitiesItem name entitiesItem key "Ctrl+3" on click -> Entities
+            item @relationsItem name relationsItem key "Ctrl+4" on click -> Relations
             separator
             item @settingsItem name settingsItem on click -> Preferences
             item @languageItem name languageItem on click -> language
             item @quitItem name quitItem key "Ctrl+Q" on click -> quit
         item @modelItem name modelItem
-            item @diagramsItem name diagramsItem key "Ctrl+4" on click -> Diagrams
-            item @outputItem name outputItem key "Ctrl+5" on click -> Output
-            item @versionsItem name versionsItem key "Ctrl+6" on click -> Versions
+            item @diagramsItem name diagramsItem key "Ctrl+5" on click -> Diagrams
+            item @outputItem name outputItem key "Ctrl+6" on click -> Output
+            item @versionsItem name versionsItem key "Ctrl+7" on click -> Versions
     toolbar name mainToolbar
         button @projectsButtonCaption name projectsButton icon "folder-open" on click -> Projects
         separator
+        button @domainsButtonCaption name domainsButton icon "palette" on click -> Domains
         button @typesButtonCaption name typesButton icon "box" on click -> Types
         button @entitiesButtonCaption name entitiesButton icon "database" on click -> Entities
         button @relationsButtonCaption name relationsButton icon "git-merge" on click -> Relations
@@ -65,6 +67,27 @@ page Projects: window
     button @deleteProjectCaption name deleteProject at 9,11 span 2 on click: deleteProjectClicked
     button @openProjectButtonCaption name openProjectButton at 11,11 span 2 on click: openClicked
 
+// The domains of the open project, each with the color its types and entities are drawn in.
+page Domains: window
+    title @domainsTitle
+    size 900 x 560
+    data project: Project
+    data domains: list<Domain>
+    data current: Domain
+    on open: domainsOpened
+    on return: domainsOpened
+
+    text name domainsProject at 1,1 span 4 bind project.name
+    textbox name domainSearch at 1,2 span 4 placeholder @domainSearchPlaceholder on change: showDomains
+    list name domainList at 1,3 span 4 rows 8 bind domains show name on select: domainSelected
+    form name domainForm at 5,1 span 8 rows 4 bind current labels 2
+        textbox name domainName at 3,1 span 6 bind current.name
+        color name domainColor at 3,2 span 3 bind current.color
+        memo name domainSummary at 3,3 span 6 rows 2 bind current.summary
+    button @newDomainCaption name newDomain at 5,11 span 2 on click: newDomainClicked
+    button @saveDomainCaption name saveDomain at 7,11 span 2 key "Ctrl+S" default on click: saveDomainClicked
+    button @deleteDomainCaption name deleteDomain at 9,11 span 2 on click: deleteDomainClicked
+
 // The types of the domain: the list on the left, the type on the right.
 page Types: window
     title @typesTitle
@@ -79,15 +102,16 @@ page Types: window
     text name typesProject at 1,1 span 4 bind project.name
     textbox name typeSearch at 1,2 span 4 placeholder @typeSearchPlaceholder on change: showTypes
     list name typeList at 1,3 span 4 rows 10 bind types show name, namespace on select: typeSelected
-    form name typeForm at 5,1 span 8 rows 7 bind current labels 2
+    form name typeForm at 5,1 span 8 rows 8 bind current labels 2
         textbox name typeName at 3,1 span 6 bind current.name
         textbox name typeNamespace at 3,2 span 6 bind current.namespace
-        dropdown name typeKind at 3,3 span 3 bind current.kind
-        radio name typeOntology at 3,4 span 4 bind current.ontology horizontal
-        dropdown name typeBase at 3,5 span 6 bind current.base
-        tags name typeInterfaces at 3,6 span 6 bind current.interfaces
-        textbox name typeSummary at 3,7 span 6 bind current.summary
-    table name parameterGrid at 5,8 span 8 rows 4 bind parameters columns position 60, type, name edit position, type, name on change: parameterChanged
+        dropdown name typeDomain at 3,3 span 6 bind current.domain
+        dropdown name typeKind at 3,4 span 3 bind current.kind
+        radio name typeOntology at 3,5 span 4 bind current.ontology horizontal
+        dropdown name typeBase at 3,6 span 6 bind current.base
+        tags name typeInterfaces at 3,7 span 6 bind current.interfaces
+        textbox name typeSummary at 3,8 span 6 bind current.summary
+    table name parameterGrid at 5,9 span 8 rows 3 bind parameters columns position 60, type, name edit position, type, name on change: parameterChanged
     button @addParameterCaption name addParameter at 5,12 span 2 on click: addParameterClicked
     button @removeParameterCaption name removeParameter at 7,12 span 2 on click: removeParameterClicked
     text name typeUpdated at 9,12 span 4 bind current.updated
@@ -109,10 +133,12 @@ page Entities: window
     text name entitiesProject at 1,1 span 4 bind project.name
     textbox name entitySearch at 1,2 span 4 placeholder @entitySearchPlaceholder on change: showEntities
     list name entityList at 1,3 span 4 rows 10 bind entities show name on select: entitySelected
-    form name entityForm at 5,1 span 8 rows 2 bind current labels 2
+    form name entityForm at 5,1 span 8 rows 4 bind current labels 2
         textbox name entityName at 3,1 span 6 bind current.name
-        textbox name entitySummary at 3,2 span 6 bind current.summary
-    table name columnGrid at 5,3 span 8 rows 8 bind columns columns position 60, name, type, key, mandatory 80 edit position, name, type, key, mandatory on change: columnChanged
+        dropdown name entityType at 3,2 span 6 bind current.type
+        dropdown name entityDomain at 3,3 span 6 bind current.domain
+        textbox name entitySummary at 3,4 span 6 bind current.summary
+    table name columnGrid at 5,5 span 8 rows 6 bind columns columns position 60, name, type, key, mandatory 80 edit position, name, type, key, mandatory on change: columnChanged
     button @addColumnCaption name addColumn at 5,12 span 2 on click: addColumnClicked
     button @removeColumnCaption name removeColumn at 7,12 span 2 on click: removeColumnClicked
     text name entityUpdated at 9,12 span 4 bind current.updated
@@ -274,6 +300,53 @@ code Projects
         showProjects()
         showOpen()
 
+code Domains
+    handler domainsOpened
+        if settings.openProject == none
+            message warning @openAProjectFirst
+            return
+        project = settings.openProject
+        showDomains()
+
+    handler showDomains
+        domains = find d in Domain where d.project == project and d matches domainSearch.text order by d.name
+
+    handler domainSelected
+        current = domainList.selected
+
+    handler newDomainClicked
+        current = new Domain
+
+    handler saveDomainClicked
+        domainName.error = ""
+        if project.id == 0
+            message warning @openAProjectFirst
+            return
+        if current.name == ""
+            domainName.error = @aDomainNeedsAName
+            return
+        current.project = project
+        save current
+        showDomains()
+        message @savedName(name = current.name)
+
+    handler deleteDomainClicked
+        if current.id == 0
+            return
+        ask @deleteDomainName(name = current.name) yes @delete no @keep then deleteConfirmed
+
+    // Its types and entities stay, without a domain.
+    handler deleteConfirmed
+        for t in find t in ClassType where t.domain == current
+            t.domain = none
+            save t
+        for e in find e in DataEntity where e.domain == current
+            e.domain = none
+            save e
+        delete current
+        current = new Domain
+        showDomains()
+
 code Types
     handler typesOpened
         if settings.openProject == none
@@ -281,6 +354,8 @@ code Types
             return
         project = settings.openProject
         showTypes()
+        // Only the parameters of the type on the right; none before one is chosen.
+        parameters = find p in Parameter where p.owner == current order by p.position
 
     handler showTypes
         types = find t in ClassType where t.project == project and t matches typeSearch.text order by t.name
@@ -312,6 +387,10 @@ code Types
         ask @deleteNameAndItsParameters(name = current.name) yes @delete no @keep then deleteConfirmed
 
     handler deleteConfirmed
+        // The entities that keep its records stay, without a type.
+        for e in find e in DataEntity where e.type == current
+            e.type = none
+            save e
         delete current
         current = new ClassType
         parameters = find p in Parameter where p.owner == current
@@ -344,6 +423,7 @@ code Entities
             return
         project = settings.openProject
         showEntities()
+        columns = find c in Column where c.owner == current order by c.position
 
     handler showEntities
         entities = find e in DataEntity where e.project == project and e matches entitySearch.text order by e.name
@@ -578,9 +658,16 @@ code Diagrams
         for t in types
             let x = xs[i]
             let y = ys[i]
-            classCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, "border")
+            // A type of a domain has its domain's color: its edge and its title bar.
+            let edge = "border"
+            let head = "accent"
+            if t.domain != none
+                let domain = t.domain
+                edge = domain.color
+                head = domain.color
+            classCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, edge)
             classCanvas.rect(x, y, 260, heights[i], "raised")
-            classCanvas.rect(x, y, 260, 28, "accent")
+            classCanvas.rect(x, y, 260, 28, head)
             classCanvas.text(x + 130, y + 14, t.name, "#ffffff", 13)
             let parameters = find p in Parameter where p.owner == t order by p.position
             let line = 0
@@ -647,9 +734,22 @@ code Diagrams
         for e in entities
             let x = xs[i]
             let y = ys[i]
-            erdCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, "border")
+            // An entity has its domain's color, or else the domain of the type it keeps.
+            let edge = "border"
+            let head = "accent"
+            if e.domain != none
+                let domain = e.domain
+                edge = domain.color
+                head = domain.color
+            else if e.type != none
+                let type = e.type
+                if type.domain != none
+                    let domain = type.domain
+                    edge = domain.color
+                    head = domain.color
+            erdCanvas.rect(x - 2, y - 2, 264, heights[i] + 4, edge)
             erdCanvas.rect(x, y, 260, heights[i], "raised")
-            erdCanvas.rect(x, y, 260, 28, "accent")
+            erdCanvas.rect(x, y, 260, 28, head)
             erdCanvas.text(x + 130, y + 14, e.name, "#ffffff", 13)
             let columns = find c in Column where c.owner == e order by c.position
             let line = 0

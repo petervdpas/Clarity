@@ -80,7 +80,7 @@ std::string Ui::error(const std::string& part) const {
 
 Reply Ui::reply(const std::string& window, nlohmann::json data) const {
     if (!data.is_object()) data = nlohmann::json::object();
-    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_, hears_};
+    return Reply{WindowState{window, std::move(data), parts_, selected_, instance_}, messages_, shown_, open_, close_, asks_, result_, hears_, copied_};
 }
 
 std::optional<nlohmann::json> Ui::part_value(const std::string& part, const std::string& name) const {
@@ -201,6 +201,7 @@ void to_json(nlohmann::json& out, const Reply& r) {
         out["shown"] = shown;
     }
     if (r.result) out["result"] = *r.result;
+    if (r.copy) out["copy"] = *r.copy;
     if (!r.asks.empty()) {
         nlohmann::json asks = nlohmann::json::array();
         for (const auto& a : r.asks) asks.push_back({{"question", a.question}, {"form", a.form}, {"handler", a.handler}, {"values", a.values}});

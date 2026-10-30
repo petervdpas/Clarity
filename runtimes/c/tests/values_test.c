@@ -455,3 +455,15 @@ void a_canvas_keeps_the_grid_and_snap_code_sets(void) {
     CHECK_INT(clarity_ui_dot_size(ui, "sheet", 2), 3);
     CHECK_TEXT(clarity_ui_dot_color(ui, "sheet", ""), "muted");
 }
+
+// `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
+void a_handler_copies_the_last_text_it_copies(void) {
+    ClarityWindowState state = {0};
+    ClarityUi* ui = clarity_ui(&state);
+    clarity_ui_copy(ui, clarity_plain_text("first"));
+    clarity_ui_copy(ui, clarity_plain_text("classDiagram"));
+    cJSON* reply = clarity_reply_json(clarity_ui_reply(ui, "Main", cJSON_CreateObject()));
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(reply, "copy"), "\"classDiagram\"");
+    ClarityUi* quiet = clarity_ui(&state);
+    CHECK(cJSON_GetObjectItemCaseSensitive(clarity_reply_json(clarity_ui_reply(quiet, "Main", cJSON_CreateObject())), "copy") == NULL);
+}

@@ -855,6 +855,11 @@ impl<'a> Emitter<'a> {
                 out.push_str(&pre);
                 out.push_str(&format!("ui.Draw({}, map[string]any{{{}}})\n", string(&canvas.name), fields.join(", ")));
             }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text, &mut pre);
+                out.push_str(&pre);
+                out.push_str(&format!("ui.Copy({text})\n"));
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",

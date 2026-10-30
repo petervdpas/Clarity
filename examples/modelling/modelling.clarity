@@ -171,17 +171,21 @@ page Output: window
     data apiText: text
     on open: showOutput
 
-    tabs name outputTabs at 1,1 span 12 rows 11
+    // The buttons stand at the top: a small window cuts off the end of the text, which scrolls, never a button.
+    button @refreshOutputCaption name refreshOutput at 1,1 span 2 on click: showOutput
+    button @exportOutputCaption name exportOutput at 3,1 span 2 on click: exportClicked
+    button @writeCsharpCaption name writeCsharp at 5,1 span 2 on click: writeCsharpClicked
+    button @saveVersionButtonCaption name saveVersionButton at 11,1 span 2 on click: saveVersionClicked
+    tabs name outputTabs at 1,2 span 12 rows 11
         tab @outputClassDiagramMermaidTab
-            memo name classMemo at 1,1 span 12 rows 10 bind classText readonly
+            button @copyOutputCaption name copyClassButton at 11,1 span 2 on click: copyOutput(1)
+            memo name classMemo at 1,2 span 12 rows 9 bind classText readonly
         tab @outputERDMermaidTab
-            memo name erdMemo at 1,1 span 12 rows 10 bind erdText readonly
+            button @copyOutputCaption name copyErdButton at 11,1 span 2 on click: copyOutput(2)
+            memo name erdMemo at 1,2 span 12 rows 9 bind erdText readonly
         tab @outputOpenAPITab
-            memo name apiMemo at 1,1 span 12 rows 10 bind apiText readonly
-    button @refreshOutputCaption name refreshOutput at 1,12 span 2 on click: showOutput
-    button @exportOutputCaption name exportOutput at 3,12 span 2 on click: exportClicked
-    button @writeCsharpCaption name writeCsharp at 5,12 span 2 on click: writeCsharpClicked
-    button @saveVersionButtonCaption name saveVersionButton at 11,12 span 2 on click: saveVersionClicked
+            button @copyOutputCaption name copyApiButton at 11,1 span 2 on click: copyOutput(3)
+            memo name apiMemo at 1,2 span 12 rows 9 bind apiText readonly
 
 // The versions kept, and what the model was in each.
 page Versions: window
@@ -698,6 +702,16 @@ code Diagrams
         entities = find e in DataEntity where e.project == project order by e.name
 
 code Output
+    // Copy puts the tab's text on the clipboard, to paste where Mermaid or OpenAPI is read.
+    handler copyOutput(which: integer)
+        if which == 1
+            copy classText
+        else if which == 2
+            copy erdText
+        else
+            copy apiText
+        message @copiedToTheClipboard
+
     handler showOutput
         if settings.openProject == none
             message warning @openAProjectFirst

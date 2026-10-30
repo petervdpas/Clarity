@@ -140,6 +140,8 @@ translation en
     outputOpenAPITab "OpenAPI"
     refreshOutputCaption "Refresh"
     exportOutputCaption "Export"
+    copyOutputCaption "Copy"
+    copiedToTheClipboard "Copied to the clipboard"
     saveVersionButtonCaption "Save version"
     versionsTitle "Versions"
     versionsClassDiagramTab "Class diagram"

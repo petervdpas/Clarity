@@ -57,7 +57,7 @@ const KEYWORDS: &[&str] = &[
     // Code.
     "before", "after", "save", "delete", "let", "if", "else", "for", "in", "return", "message", "info", "warning", "error", "with",
     "close", "refuse", "reload", "write", "to", "find", "where", "order", "by", "desc", "files", "read", "of", "new", "and", "or",
-    "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit",
+    "not", "contains", "matches", "require", "ensure", "effects", "quit", "cli", "command", "option", "print", "exit", "copy",
     // HTTP calls (DESIGN 5.23).
     "http", "get", "post", "put", "patch", "header", "json", "query", "when", "every",
     // A web API data source: its paging and its OpenAPI description.

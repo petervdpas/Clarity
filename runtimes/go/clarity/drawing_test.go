@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -368,5 +369,28 @@ func TestACanvasKeepsTheGridAndSnapCodeSets(t *testing.T) {
 	ui.SetDotColor("sheet", "muted")
 	if ui.DotSize("sheet", 2) != 3 || ui.DotColor("sheet", "") != "muted" {
 		t.Fatal("the dots code set")
+	}
+}
+
+// Copy hands the text to the screen for its clipboard; of several, the last.
+func TestAHandlerCopiesTheLastTextItCopies(t *testing.T) {
+	ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{}})
+	ui.Copy(PlainText("first"))
+	ui.Copy(PlainText("classDiagram"))
+	reply, err := ui.Reply("Main", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := json.Marshal(reply)
+	var sent map[string]any
+	_ = json.Unmarshal(text, &sent)
+	// Plain text travels as a string, as a message's does.
+	if sent["copy"] != "classDiagram" {
+		t.Errorf("copy is %v", sent["copy"])
+	}
+	quiet, _ := NewUi(WindowState{Window: "Main"}).Reply("Main", nil)
+	text, _ = json.Marshal(quiet)
+	if strings.Contains(string(text), `"copy"`) {
+		t.Errorf("a reply without a copy says nothing of the clipboard: %s", text)
 	}
 }

@@ -164,6 +164,8 @@ type Reply struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	// Hears are the hears given to custom parts, in order.
 	Hears []Hear `json:"hears,omitempty"`
+	// Copy is the text the handler copied (copy text), for the screen to put on the clipboard.
+	Copy *Text `json:"copy,omitempty"`
 }
 
 // RefOption is a record a reference field can point at, as a dropdown shows it.
@@ -185,6 +187,7 @@ type Ui struct {
 	asks     []Ask
 	result   json.RawMessage
 	hears    []Hear
+	copied   *Text
 	close    bool
 	err      error
 }
@@ -487,6 +490,10 @@ func (u *Ui) Deselect(part string) { delete(u.selected, part) }
 
 func (u *Ui) Message(level Level, text Text) { u.messages = append(u.messages, Message{level, text}) }
 
+// Copy is copy text: the screen puts it, as it shows, on the clipboard when
+// the handler is done; the last copy counts.
+func (u *Ui) Copy(text Text) { u.copied = &text }
+
 // SetShown says the text value data shows text, translated and formatted by
 // the screen.
 func (u *Ui) SetShown(data string, text Text) {
@@ -537,6 +544,7 @@ func (u *Ui) Reply(window string, data any) (Reply, error) {
 		Asks:     u.asks,
 		Result:   u.result,
 		Hears:    u.hears,
+		Copy:     u.copied,
 	}, nil
 }
 

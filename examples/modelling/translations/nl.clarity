@@ -141,6 +141,8 @@ translation nl
     outputOpenAPITab "OpenAPI"
     refreshOutputCaption "Vernieuwen"
     exportOutputCaption "Exporteren"
+    copyOutputCaption "Kopiëren"
+    copiedToTheClipboard "Gekopieerd naar het klembord"
     saveVersionButtonCaption "Versie opslaan"
     versionsTitle "Versies"
     versionsClassDiagramTab "Klassendiagram"

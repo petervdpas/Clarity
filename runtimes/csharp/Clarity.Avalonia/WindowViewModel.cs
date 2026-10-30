@@ -50,6 +50,12 @@ public abstract class WindowViewModel(Db? db) : ObservableObject
 
     public void Say(Level level, Text text) => Messages.Add(new Message(level, text));
 
+    /// <summary>Asks the shell to put a text on the clipboard: <c>copy text</c>.</summary>
+    public event Action<Text>? CopyRequested;
+
+    /// <summary><c>copy text</c>: the text, as it shows, goes on the clipboard; the last copy counts.</summary>
+    public void Copy(Text text) => CopyRequested?.Invoke(text);
+
     /// <summary>
     /// Runs the app's <c>on unconnected</c> on this window, which is not shown
     /// (DESIGN 5.27): what it says and the windows it opens go to <paramref name="unconnecting"/>.

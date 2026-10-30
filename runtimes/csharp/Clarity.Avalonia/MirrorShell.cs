@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Clarity.Runtime;
@@ -186,6 +187,9 @@ public sealed class MirrorShell : UserControl, IRemote
             over.Children.Add(Framed(ViewOf(dialog)));
         foreach (var said in reply["said"]?.AsArray() ?? [])
             Say(new Message(Enum.Parse<Level>(said!["level"]!.GetValue<string>()), said["text"].Deserialize<Text>(Snapshot.Options)!));
+        // What a handler on the server copied goes on the browser's clipboard, as it shows.
+        if (reply["copy"].Deserialize<Text>(Snapshot.Options) is { } copied)
+            _ = TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync(Locale.Show(copied));
         foreach (var asked in reply["asked"]?.AsArray() ?? [])
             Ask(asked!["question"]!.GetValue<long>(), asked["text"].Deserialize<Text>(Snapshot.Options)!, Snapshot.Form(asked["form"]));
     }

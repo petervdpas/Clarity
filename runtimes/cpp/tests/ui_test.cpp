@@ -267,3 +267,14 @@ TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
     CHECK_EQ(ui.dot_size("sheet", 2), int64_t{3});
     CHECK_EQ(ui.dot_color("sheet", ""), std::string("muted"));
 }
+
+// `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
+TEST(a_handler_copies_the_last_text_it_copies) {
+    clarity::Ui ui(clarity::WindowState{});
+    ui.copy(clarity::Text::plain("first"));
+    ui.copy(clarity::Text::plain("classDiagram"));
+    nlohmann::json reply = ui.reply("Main", nlohmann::json::object());
+    CHECK_EQ(reply["copy"], nlohmann::json("classDiagram"));
+    nlohmann::json quiet = clarity::Ui(clarity::WindowState{}).reply("Main", nlohmann::json::object());
+    CHECK(!quiet.contains("copy"));
+}

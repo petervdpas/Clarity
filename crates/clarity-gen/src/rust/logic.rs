@@ -367,6 +367,10 @@ impl<'a> Emitter<'a> {
                 }
                 out.push_str(&format!("{pad}ui.draw({:?}, serde_json::json!({{{}}}));\n", canvas.name, fields.join(", ")));
             }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}ui.copy({text});\n"));
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",

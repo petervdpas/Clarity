@@ -11,6 +11,7 @@
 
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 
 namespace Clarity.Avalonia;
 
@@ -131,6 +132,8 @@ public sealed class Shell : Window
         };
         model.CloseRequested += () => Close(model);
         model.AskRequested += question => Ask(model, question);
+        // What a handler copied goes on the clipboard, as it shows in the person's language and format.
+        model.CopyRequested += text => _ = Clipboard?.SetTextAsync(Locale.Show(text));
     }
 
     void ShowTop()

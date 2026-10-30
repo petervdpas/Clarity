@@ -18,6 +18,7 @@ struct ClarityUi {
     size_t ask_count, ask_room;
     cJSON* result;
     cJSON* hears;
+    const ClarityText* copied;
     bool close;
 };
 
@@ -347,6 +348,8 @@ void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* te
     ui->messages[ui->message_count++] = (ClarityMessage){level, text};
 }
 
+void clarity_ui_copy(ClarityUi* ui, const ClarityText* text) { ui->copied = text; }
+
 void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* text) {
     for (size_t i = 0; i < ui->shown_count; ++i) {
         if (strcmp(ui->shown[i].data, data) == 0) {
@@ -419,6 +422,7 @@ ClarityReply* clarity_ui_reply(const ClarityUi* ui, const char* window, cJSON* d
     r->ask_count = ui->ask_count;
     r->result = ui->result;
     r->hears = ui->hears;
+    r->copy = ui->copied;
     return r;
 }
 
@@ -570,6 +574,7 @@ cJSON* clarity_reply_json(const ClarityReply* r) {
     cJSON_AddBoolToObject(out, "close", r->close);
     if (r->result) cJSON_AddItemToObject(out, "result", cJSON_Duplicate(r->result, true));
     if (r->hears) cJSON_AddItemToObject(out, "hears", cJSON_Duplicate(r->hears, true));
+    if (r->copy) cJSON_AddItemToObject(out, "copy", clarity_text_json(r->copy));
     if (r->ask_count > 0) {
         cJSON* asks = cJSON_AddArrayToObject(out, "asks");
         for (size_t i = 0; i < r->ask_count; ++i) {

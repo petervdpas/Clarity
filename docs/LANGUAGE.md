@@ -1681,6 +1681,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `return` | Leaves the handler or action. | handlers, actions without a result |
 | `return expr` | Leaves with a result. | functions and actions with a result |
 | `message expr` | Shows a message. `message info`, `message warning` and `message error` set its level; the default is info. An info message is a note that goes away by itself (or by its small x); a warning or an error shows in Clarity's dialog and is closed with OK. In a command it writes a line to standard error. | handlers, commands |
+| `copy expr` | Puts the text (or value), as it shows in the person's language and format, on the system's clipboard once the handler has run, for the person to paste anywhere; of several copies, the last counts. On the web the page uses the clipboard of the browser or the desktop window it runs in. Pair it with a message, as `message @copied`, so the person knows. | handlers |
 | `ask question ... then handler(values)` | Asks the person in Clarity's dialog when the handler has finished; the answer runs the handler after `then`. See [Asking the person](#asking-the-person). | handlers |
 | `open Window` | Opens a window. | handlers |
 | `open Window with name = expr, ...` | Opens a window and fills its data by name. | handlers |

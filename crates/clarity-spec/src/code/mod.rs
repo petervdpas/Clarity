@@ -226,6 +226,11 @@ pub enum StmtKind {
         value: Expr,
         columns: Vec<Ident>,
     },
+    /// `copy text`: puts the text, as it shows, on the system's clipboard
+    /// once the handler has run; of several, the last.
+    Copy {
+        text: Expr,
+    },
     /// `exit code`: ends a command-line program with that exit code.
     Exit {
         code: Expr,
@@ -988,7 +993,7 @@ pub fn each_expr_in(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
             }
             StmtKind::Call { call } => each_expr(call, found),
             StmtKind::Draw { args, .. } | StmtKind::Hear { args, .. } | StmtKind::Tell { args, .. } => args.iter().for_each(|a| each_expr(a, found)),
-            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => each_expr(text, found),
             StmtKind::Open { with, .. } => with.iter().for_each(|a| each_expr(&a.value, found)),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
@@ -1089,6 +1094,7 @@ pub fn each_expr_in_mut(body: &mut [Stmt], found: &mut impl FnMut(&mut Expr)) {
             | StmtKind::CloseWith { value }
             | StmtKind::Message { text: value, .. }
             | StmtKind::Refuse { text: value }
+            | StmtKind::Copy { text: value }
             | StmtKind::Print { value, .. }
             | StmtKind::Exit { code: value }
             | StmtKind::Call { call: value } => each_expr_mut(value, found),

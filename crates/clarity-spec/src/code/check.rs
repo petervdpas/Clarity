@@ -2207,6 +2207,14 @@ impl<'a> BodyChecker<'_, 'a> {
                     self.error(format!("a message is text or a value, not {}", ty.name()), text.span);
                 }
             }
+            StmtKind::Copy { text } => {
+                // The clipboard is the screen's: a handler of a window copies.
+                self.ui_only("copy", stmt.span);
+                let ty = self.shown_text(text);
+                if !ty.is_value() {
+                    self.error(format!("copy takes text or a value, not {}", ty.name()), text.span);
+                }
+            }
             StmtKind::Ask { .. } if self.command.is_some() => {
                 self.error("in a command, ask gives its answer, as in 'let answer = ask ...' or 'if ask ...'", stmt.span);
             }
@@ -4441,7 +4449,7 @@ fn each_stmt_expr(body: &[Stmt], found: &mut impl FnMut(&Expr)) {
                     each_expr(arg, found);
                 }
             }
-            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => each_expr(text, found),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => each_expr(text, found),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
                     each_expr(question, found);

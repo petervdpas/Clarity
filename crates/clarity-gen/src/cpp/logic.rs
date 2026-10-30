@@ -649,6 +649,10 @@ impl<'a> Emitter<'a> {
                 }
                 let _ = writeln!(out, "ui.draw({}, nlohmann::json{{{}}});", string(&canvas.name), fields.join(", "));
             }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text);
+                let _ = writeln!(out, "ui.copy({text});");
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",

@@ -141,6 +141,8 @@ typedef struct {
     /// The hears given to custom parts, in order: an array of {part, hear,
     /// values} (NULL: none).
     cJSON* hears;
+    /// The text the handler copied (`copy text`), for the screen to put on the clipboard; NULL: none.
+    const ClarityText* copy;
 } ClarityReply;
 
 /// What a handler can do to the screen.
@@ -239,6 +241,8 @@ bool clarity_ui_selected(const ClarityUi* ui, const char* part, size_t count, si
 void clarity_ui_deselect(ClarityUi* ui, const char* part);
 
 void clarity_ui_message(ClarityUi* ui, ClarityLevel level, const ClarityText* text);
+/// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
+void clarity_ui_copy(ClarityUi* ui, const ClarityText* text);
 /// The text value `data` shows `text`, translated and formatted by the screen.
 void clarity_ui_set_shown(ClarityUi* ui, const char* data, const ClarityText* text);
 /// Asks the screen to open `window` with its data filled by name, as the values are now.

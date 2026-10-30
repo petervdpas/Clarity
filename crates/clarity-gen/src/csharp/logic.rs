@@ -452,6 +452,10 @@ impl<'a> Emitter<'a> {
                 }
                 out.push_str(&format!("{pad}{}.Draw(new Shape.{record}({}));\n", member(&canvas.name), values.join(", ")));
             }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text);
+                out.push_str(&format!("{pad}Copy({text});\n"));
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "Info",

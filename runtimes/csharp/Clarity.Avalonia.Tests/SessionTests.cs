@@ -26,6 +26,13 @@ sealed partial class ShelfViewModel(Db? db) : WindowViewModel(db)
     void Greet() => Handle(() => Say(Level.Info, Text.Plain("Hello " + Name.Text)));
 
     [RelayCommand]
+    void CopyName() => Handle(() =>
+    {
+        Copy(Text.Plain("first"));
+        Copy(Text.Plain("Name: " + Name.Text));
+    });
+
+    [RelayCommand]
     void Detail() => Handle(() => Open(new BookViewModel(Db)));
 
     [RelayCommand]
@@ -189,6 +196,23 @@ public class SessionTests
         sessions.Answer(Request("""{"do": "start"}"""));
         Assert.Equal("the session has ended; start again", Run(sessions, session, Windows(start)[0], "Greet")["error"]!.GetValue<string>());
     }
+
+    /// A command that copies sends the text it copied last with the answer, for the browser's clipboard; once.
+    [Fact]
+    public void A_copy_goes_to_the_browser_with_the_answer()
+    {
+        using var db = Sqlite.Memory();
+        var sessions = new Sessions(() => new ShelfViewModel(db));
+        var start = sessions.Answer(Request("""{"do": "start"}"""));
+        var session = start["session"]!.GetValue<string>();
+        var main = Windows(start)[0];
+        Assert.Null(start["copy"]);
+        var state = start["windows"]![0]!["state"]!.DeepClone().AsObject();
+        state["parts"]!["Name"]!["text"] = "Ada";
+        var reply = Run(sessions, session, main, "CopyName", state: state);
+        Assert.Equal("Name: Ada", reply["copy"]!["template"]!.GetValue<string>());
+        Assert.Null(Run(sessions, session, main, "Greet")["copy"]);
+    }
 }
 
 static class JsonObjectExtensions
@@ -216,4 +240,5 @@ public class SessionSettingsTests
         Assert.Equal(7, reply["windows"]![0]!["state"]!["data"]!["Seen"]!.GetValue<int>());
         Assert.Equal(8, reply["settings"]!["speed"]!.GetValue<int>());
     }
+
 }

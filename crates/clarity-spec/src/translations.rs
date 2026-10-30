@@ -327,7 +327,8 @@ impl Shown {
     fn shown_as_written(&mut self, body: &[Stmt]) {
         for stmt in body {
             match &stmt.kind {
-                StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Print { value: text, .. } => self.written(text),
+                // A copied text is read where it is pasted.
+                StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Print { value: text, .. } | StmtKind::Copy { text } => self.written(text),
                 StmtKind::Ask { question, form, .. } => {
                     if let Some(question) = question {
                         self.written(question);

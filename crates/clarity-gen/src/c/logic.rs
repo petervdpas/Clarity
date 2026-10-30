@@ -975,6 +975,11 @@ impl<'a> Emitter<'a> {
                     let _ = writeln!(out, "{line}");
                 }
             }
+            StmtKind::Copy { text } => {
+                let text = self.shown(text, &mut pre);
+                out.push_str(&pre);
+                let _ = writeln!(out, "clarity_ui_copy(ui, {text});");
+            }
             StmtKind::Message { level, text } => {
                 let level = match level {
                     MessageLevel::Info => "CLARITY_INFO",

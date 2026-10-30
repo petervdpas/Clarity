@@ -20,6 +20,7 @@
   import { languageChoice } from "../lib/i18n.svelte";
   import { languageName, languagesOf, rememberedChoice } from "../lib/translate";
   import { errorText, type ShownText } from "../lib/format";
+  import { copyText } from "../lib/clipboard";
   import { allParts, findPage, valueEntry, windowSize, type PageData } from "../lib/pages";
   import { handlerCall } from "../lib/calls";
   import type { Place } from "../lib/customParts";
@@ -114,6 +115,13 @@
     // The desktop window shows it too; the designer's Preview has no such command.
     invoke("set_title", { title }).catch(() => {});
   });
+
+  /** What a handler copied (`copy text`) goes on the clipboard, as it shows in the person's language and format. */
+  function copied(raw: unknown) {
+    const given = raw as ShownText;
+    const text = model ? shownText(model, given) : typeof given === "string" ? given : "key" in given ? given.key : given.text;
+    void copyText(text);
+  }
 
   /** Shows a message: information as a note that goes away by itself, a warning or an error in Clarity's dialog. */
   function say(message: Message) {
@@ -403,6 +411,7 @@
       dialogsAsked.delete(state.instance!);
       void answer({ kind: "ask", ask: asked.ask, window: asked.window }, result as JsonValue);
     },
+    copied,
   );
 
   /** The dialogs a question opened, by the number of their open window: the question, and the place of the window that asked. */

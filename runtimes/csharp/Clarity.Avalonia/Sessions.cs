@@ -132,6 +132,8 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
         readonly List<long> asked = [];
         readonly System.Collections.ObjectModel.ObservableCollection<Message> messages = [];
         readonly List<Message> said = [];
+        /// The text a handler copied since the last reply, for the browser's clipboard.
+        Text? copied;
         bool listening;
 
         IEnumerable<WindowViewModel> Open => stack.Concat(dialogs);
@@ -159,6 +161,7 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
                 questions[at] = (model.Instance, question);
                 asked.Add(at);
             };
+            model.CopyRequested += text => copied = text;
         }
 
         void Said(object? sender, NotifyCollectionChangedEventArgs e) => said.AddRange(e.NewItems?.OfType<Message>() ?? []);
@@ -260,6 +263,9 @@ public sealed class Sessions(Func<WindowViewModel> main, TimeSpan? quiet = null,
             said.Clear();
             messages.Clear();
             var reply = new JsonObject { ["session"] = Id, ["windows"] = windows, ["asked"] = questionsAsked, ["said"] = saidNow, ["ended"] = Ended };
+            if (copied is { } text)
+                reply["copy"] = JsonSerializer.SerializeToNode(text, Snapshot.Options);
+            copied = null;
             asked.Clear();
             return reply;
         }

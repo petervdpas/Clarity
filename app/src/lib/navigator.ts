@@ -18,6 +18,8 @@ export type NavReply<S, M, A = never> = {
   asks?: A[];
   /** What a dialog closes with (`close with value`), for the handler that asked for it. */
   result?: unknown;
+  /** The text its handler copied (`copy text`), for the clipboard. */
+  copy?: unknown;
 };
 
 /** The backend calls that open and close windows. */
@@ -44,6 +46,7 @@ export class Navigator<S, M, A = never> {
   private readonly fail: (err: unknown) => void;
   private readonly ask: (question: A, window: number) => void;
   private readonly gave: (state: S, result: unknown) => void;
+  private readonly copy: (text: unknown) => void;
 
   /**
    * `ask` gets each question a reply asks, with the place in the stack of the
@@ -57,6 +60,7 @@ export class Navigator<S, M, A = never> {
     fail: (err: unknown) => void,
     ask: (question: A, window: number) => void = () => {},
     gave: (state: S, result: unknown) => void = () => {},
+    copy: (text: unknown) => void = () => {},
   ) {
     this.stack = stack;
     this.backend = backend;
@@ -64,6 +68,7 @@ export class Navigator<S, M, A = never> {
     this.fail = fail;
     this.ask = ask;
     this.gave = gave;
+    this.copy = copy;
   }
 
   /** Opens a window on top. */
@@ -156,6 +161,7 @@ export class Navigator<S, M, A = never> {
    */
   async follow(reply: NavReply<S, M, A>, window: number): Promise<void> {
     reply.messages.forEach(this.say);
+    if (reply.copy !== undefined && reply.copy !== null) this.copy(reply.copy);
     if (reply.close) {
       await this.close();
       if (reply.result !== undefined) this.gave(reply.state, reply.result);

@@ -230,3 +230,17 @@ fn a_canvas_keeps_the_grid_and_snap_code_sets() {
     ui.set_dot_color("sheet", "muted".into());
     assert_eq!((ui.dot_size("sheet", 2), ui.dot_color("sheet", "")), (3, "muted".to_string()));
 }
+
+/// `copy text`: the reply hands the text to the screen for its clipboard; of several, the last.
+#[test]
+fn a_handler_copies_the_last_text_it_copies() {
+    use clarity_runtime::ui::{Ui, WindowState};
+    let mut ui = Ui::from_state(&WindowState::default());
+    ui.copy("first".into());
+    ui.copy("classDiagram".into());
+    let reply = serde_json::to_value(ui.reply("Main", serde_json::Map::new())).unwrap();
+    assert_eq!(reply["copy"], serde_json::to_value(clarity_runtime::ui::Text::from("classDiagram")).unwrap());
+    // A reply without a copy says nothing of the clipboard.
+    let quiet = serde_json::to_value(Ui::from_state(&WindowState::default()).reply("Main", serde_json::Map::new())).unwrap();
+    assert!(quiet.get("copy").is_none());
+}

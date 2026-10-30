@@ -141,6 +141,8 @@ struct Reply {
     std::optional<nlohmann::json> result;
     /// The hears given to custom parts, in order.
     std::vector<Hear> hears;
+    /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
+    std::optional<Text> copy;
 };
 
 /// A record a reference field can point at, as a dropdown shows it.
@@ -241,6 +243,8 @@ public:
     }
 
     void message(Level level, Text text) { messages_.push_back({level, std::move(text)}); }
+    /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
+    void copy(Text text) { copied_ = std::move(text); }
     /// The text value `data` shows `text`, translated and formatted by the screen.
     void set_shown(const std::string& data, Text text) { shown_[data] = std::move(text); }
     /// Asks the screen to open `window` with its data filled by name, as the values are now.
@@ -278,6 +282,7 @@ private:
     std::optional<nlohmann::json> result_;
     std::vector<Ask> asks_;
     std::vector<Hear> hears_;
+    std::optional<Text> copied_;
     std::map<std::string, PartState> parts_;
     std::map<std::string, int> selected_;
     uint64_t instance_ = 0;

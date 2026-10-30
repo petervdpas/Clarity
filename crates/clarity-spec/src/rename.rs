@@ -190,7 +190,7 @@ fn stmts(body: &[Stmt], name: &str, found: &mut Vec<Span>) {
                     expr(arg, name, found);
                 }
             }
-            StmtKind::Message { text, .. } | StmtKind::Refuse { text } => expr(text, name, found),
+            StmtKind::Message { text, .. } | StmtKind::Refuse { text } | StmtKind::Copy { text } => expr(text, name, found),
             StmtKind::Ask { question, form, args, .. } => {
                 if let Some(question) = question {
                     expr(question, name, found);

@@ -455,6 +455,9 @@ pub struct Reply {
     /// The hears given to custom parts, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hears: Vec<Hear>,
+    /// The text the handler copied (`copy text`), for the screen to put on the clipboard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<Text>,
 }
 
 /// What a handler can do to the screen.
@@ -469,6 +472,7 @@ pub struct Ui {
     asks: Vec<Ask>,
     result: Option<Value>,
     hears: Vec<Hear>,
+    copied: Option<Text>,
     pub close: bool,
 }
 
@@ -715,6 +719,11 @@ impl Ui {
         self.messages.push(Message { level, text });
     }
 
+    /// `copy text`: the screen puts it, as it shows, on the clipboard when the handler is done; the last copy counts.
+    pub fn copy(&mut self, text: Text) {
+        self.copied = Some(text);
+    }
+
     /// The text value `data` shows `text`, translated and formatted by the screen.
     pub fn set_shown(&mut self, data: &str, text: Text) {
         self.shown.insert(data.to_string(), text);
@@ -755,6 +764,7 @@ impl Ui {
             asks: self.asks,
             result: self.result,
             hears: self.hears,
+            copy: self.copied,
         }
     }
 

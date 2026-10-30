@@ -216,6 +216,8 @@ code Albums
             let before = settings.favouriteFriend
             message before.name
         settings.favouriteFriend = friend
+        // Who has it now, ready to paste.
+        copy friend.name
 
     handler copiesClicked
         ask @howManyCopies for integer default album.copies then setCopies

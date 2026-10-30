@@ -153,3 +153,28 @@ test("the title bar's close closes every window from the top, each told, then th
   assert.deepEqual(app.first.stack, []);
   assert.equal(app.ended(), true);
 });
+
+test("a reply that copies hands its text to the clipboard, once", async () => {
+  type Reply = NavReply<string, string, string>;
+  const copied: unknown[] = [];
+  let stack: string[] = [];
+  const nav = new Navigator<string, string, string>(
+    { get: () => stack, set: (next) => (stack = next) },
+    {
+      open: async (window): Promise<Reply> => ({ state: window, messages: [], open: [], close: false }),
+      close: async (state): Promise<Reply> => ({ state, messages: [], open: [], close: false }),
+      returnTo: async (state): Promise<Reply> => ({ state, messages: [], open: [], close: false }),
+      openApart: async () => {},
+      quit: async () => {},
+    },
+    () => {},
+    (err) => assert.fail(String(err)),
+    () => {},
+    () => {},
+    (text) => copied.push(text),
+  );
+  await nav.open("Main");
+  assert.deepEqual(copied, []);
+  await nav.apply(0, { state: "Main", messages: [], open: [], close: false, copy: "classDiagram" });
+  assert.deepEqual(copied, ["classDiagram"]);
+});

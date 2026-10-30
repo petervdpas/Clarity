@@ -48,6 +48,8 @@ entity ClassType
     kind: TypeKind, default Class, label @classTypeKindLabel, help @classTypeKindHelp
     ontology: Ontology, default Entity, label @classTypeOntologyLabel, help @classTypeOntologyHelp
     base: ref ClassType, label @classTypeBaseLabel, help @classTypeBaseHelp
+    // Where the line to its base bends on the class diagram, x, y, x, y, ...; empty: straight.
+    base_via: list<integer>, label @classTypeBaseViaLabel
     interfaces: list<text>, label @classTypeInterfacesLabel, help @classTypeInterfacesHelp
     summary: text, search, label @classTypeSummaryLabel
     tags: list<text>, search, label @classTypeTagsLabel
@@ -72,6 +74,8 @@ entity Association
     link: Link, default Association, label @associationLinkLabel
     label: text(60), label @associationLabelLabel
     multiplicity: text(12), label @associationMultiplicityLabel, help @associationMultiplicityHelp
+    // Where its line bends on the class diagram, x, y, x, y, ...; empty: straight.
+    via: list<integer>, label @associationViaLabel
 
 // An entity of the entity relationship diagram: a table of the database.
 entity DataEntity
@@ -101,6 +105,8 @@ entity Relationship
     source_side: Cardinality, default ExactlyOne, label @relationshipSourceSideLabel
     target_side: Cardinality, default ZeroOrMore, label @relationshipTargetSideLabel
     label: text(60), label @relationshipLabelLabel
+    // Where its line bends on the entity relationship diagram.
+    via: list<integer>, label @relationshipViaLabel
 
 // The model as it was when the modeller saved a version.
 entity Version

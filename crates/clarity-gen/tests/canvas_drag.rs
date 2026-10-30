@@ -11,12 +11,14 @@ page Main: window
     data boxX: integer, default 20
     data boxY: integer, default 20
     data moved: integer
-    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom grid 20 snap background panel dots 3 muted on draw: drawSheet on drag: dragged on drop: dropped
+    data route: list<integer>
+    canvas name sheet at 1,1 span 12 rows 8 units 3000 x 2000 zoom grid 20 snap background panel dots 3 muted on draw: drawSheet on drag: dragged on drop: dropped on bend: bentLine
 
 code Main
     handler drawSheet
         sheet.clear(\"panel\")
         sheet.rect(boxX, boxY, 200, 100, \"raised\")
+        sheet.link(\"a-b\", 10, 10, 200, 10, route, \"border\", 2)
 
     handler dragged
         boxX = boxX + sheet.x - sheet.fromX
@@ -33,6 +35,10 @@ code Main
         sheet.dotColor = \"text\"
         if sheet.background == \"panel\"
             moved = 0
+
+    handler bentLine
+        if sheet.bent == \"a-b\"
+            route = sheet.via
 ";
 
 fn generated(backend: Backend, ui: Ui) -> String {
@@ -53,6 +59,9 @@ fn has(text: &str, expected: &str) {
 fn every_stack_reads_where_a_drag_started() {
     let rust = generated(Backend::Rust, Ui::Web);
     has(&rust, "ui.from_x(\"sheet\")");
+    has(&rust, "\"op\": \"link\"");
+    has(&rust, "ui.bent(\"sheet\")");
+    has(&rust, "ui.via(\"sheet\")");
     has(&rust, "clarity_runtime::snapped(");
     has(&rust, "ui.snap(\"sheet\", true)");
     has(&rust, "ui.grid(\"sheet\", 20)");
@@ -64,6 +73,8 @@ fn every_stack_reads_where_a_drag_started() {
     has(&rust, "ui.set_dot_color(\"sheet\", ");
     let go = generated(Backend::Go, Ui::Web);
     has(&go, "ui.FromX(\"sheet\")");
+    has(&go, "\"op\": \"link\"");
+    has(&go, "ui.Via(\"sheet\")");
     has(&go, "clarity.Snapped(");
     has(&go, "ui.Snap(\"sheet\", true)");
     has(&go, "ui.SetGrid(\"sheet\", ");
@@ -71,6 +82,8 @@ fn every_stack_reads_where_a_drag_started() {
     has(&go, "ui.DotSize(\"sheet\", 3)");
     let c = generated(Backend::C, Ui::Web);
     has(&c, "clarity_ui_from_x(ui, \"sheet\")");
+    has(&c, "clarity_json_integers(");
+    has(&c, "clarity_ui_via(ui, \"sheet\")");
     has(&c, "clarity_snapped(");
     has(&c, "clarity_ui_snap(ui, \"sheet\", true)");
     has(&c, "clarity_ui_set_grid(ui, \"sheet\", ");
@@ -78,6 +91,8 @@ fn every_stack_reads_where_a_drag_started() {
     has(&c, "clarity_ui_set_dot_size(ui, \"sheet\", ");
     let cpp = generated(Backend::Cpp, Ui::Web);
     has(&cpp, "ui.from_x(\"sheet\")");
+    has(&cpp, "{\"op\", \"link\"}");
+    has(&cpp, "ui.bent(\"sheet\")");
     has(&cpp, "clarity::snapped(");
     has(&cpp, "ui.snap(\"sheet\", true)");
     has(&cpp, "ui.set_grid(\"sheet\", ");
@@ -94,4 +109,7 @@ fn every_stack_reads_where_a_drag_started() {
     has(&csharp, " DragCommand=\"{Binding DragAt_SheetCommand}\"");
     has(&csharp, " DropCommand=\"{Binding DropAt_SheetCommand}\"");
     has(&csharp, "Sheet.FromX");
+    has(&csharp, "new Shape.Link(");
+    has(&csharp, "Sheet.Via");
+    has(&csharp, " BendCommand=\"{Binding BendAt_SheetCommand}\"");
 }

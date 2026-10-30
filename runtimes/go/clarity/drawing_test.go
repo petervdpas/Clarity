@@ -5,6 +5,7 @@ package clarity
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -70,6 +71,8 @@ func TestACanvasSaysWhereItWasClickedAsEveryRuntimeDoes(t *testing.T) {
 			Y     int64           `json:"y"`
 			FromX int64           `json:"fromX"`
 			FromY int64           `json:"fromY"`
+			Bent  string          `json:"bent"`
+			Via   []int64         `json:"via"`
 		} `json:"points"`
 	}
 	if err := json.Unmarshal(text, &file); err != nil || len(file.Points) == 0 {
@@ -86,6 +89,9 @@ func TestACanvasSaysWhereItWasClickedAsEveryRuntimeDoes(t *testing.T) {
 		}
 		if x, y := ui.FromX("board"), ui.FromY("board"); x != c.FromX || y != c.FromY {
 			t.Errorf("%s: from %d,%d, want %d,%d", c.Part, x, y, c.FromX, c.FromY)
+		}
+		if bent, via := ui.Bent("board"), ui.Via("board"); bent != c.Bent || fmt.Sprint(via) != fmt.Sprint(c.Via) {
+			t.Errorf("%s: bent %q via %v, want %q via %v", c.Part, bent, via, c.Bent, c.Via)
 		}
 		// What the pointer holds besides x and y travels back unchanged.
 		reply, _ := ui.Reply("Main", map[string]any{})

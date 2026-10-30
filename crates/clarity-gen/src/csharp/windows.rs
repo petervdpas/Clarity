@@ -1480,6 +1480,9 @@ impl<'a> Window<'a> {
                 if Self::handler(widget, Event::Drop).is_some() {
                     let _ = write!(click, " DropCommand=\"{{Binding DropAt_{name}Command}}\"");
                 }
+                if Self::handler(widget, Event::Bend).is_some() {
+                    let _ = write!(click, " BendCommand=\"{{Binding BendAt_{name}Command}}\"");
+                }
                 let _ = writeln!(
                     out,
                     "{pad}<c:CanvasView {at} Drawing=\"{{Binding {name}.Drawing}}\" UnitsWidth=\"{width}\" UnitsHeight=\"{height}\"{click}{plain_state}{extra} />",
@@ -1913,7 +1916,7 @@ public partial class {name}View : UserControl
         // A click, a drag or a drop on a canvas: where it was, then its handler.
         for widget in self.parts.iter().filter(|w| w.props.kind == WidgetKind::Canvas) {
             let Some(canvas) = &widget.props.name else { continue };
-            for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt")] {
+            for (event, command) in [(Event::Click, "ClickAt"), (Event::Drag, "DragAt"), (Event::Drop, "DropAt"), (Event::Bend, "BendAt")] {
                 let Some(handler) = Self::handler(widget, event) else { continue };
                 let _ = write!(
                     events,

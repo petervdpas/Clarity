@@ -180,6 +180,9 @@ public:
     /// Where a drag on a canvas started: `canvas.fromX`, `canvas.fromY`; 0 without one.
     int64_t from_x(const std::string& part) const { return pointer(part, "fromX"); }
     int64_t from_y(const std::string& part) const { return pointer(part, "fromY"); }
+    /// The name of the link a person bent on a canvas (`canvas.bent`, "" without one), and its bend points now (`canvas.via`).
+    std::string bent(const std::string& part) const;
+    std::vector<int64_t> via(const std::string& part) const;
     /// The message a handler set on an input, or empty text.
     std::string error(const std::string& part) const;
     void set_error(const std::string& part, Text value) { parts_[part].error = std::move(value); }

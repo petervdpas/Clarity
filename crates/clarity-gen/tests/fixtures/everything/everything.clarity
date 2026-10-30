@@ -305,6 +305,7 @@ page Gallery: window
     data load: decimal
     data readings: list<decimal>
     data speed: integer
+    data needle: list<integer>
     on open: galleryOpened
     heading @gallery name galleryHeading at 1,1 span 6
     image source "logo.svg" name logo at 7,1 span 1 rows 1
@@ -330,7 +331,7 @@ page Gallery: window
     display name screen at 1,10 span 4 rows 1 bind shown digits 10
     trend name loadTrend at 5,10 span 4 rows 2 bind load points 30 max 100
     chart line name history at 9,10 span 4 rows 2 bind readings points 30 max 100
-    canvas name dial at 1,12 span 6 rows 4 units 200 x 100 zoom grid 10 snap background panel dots 3 muted on draw: drawDial on drag: dialDragged on drop: dialDropped
+    canvas name dial at 1,12 span 6 rows 4 units 200 x 100 zoom grid 10 snap background panel dots 3 muted on draw: drawDial on bend: dialBent on drag: dialDragged on drop: dialDropped
     Gauge name gauge at 7,12 span 4 rows 3 bind speed speed 5 title @speed on change: gaugeChanged on reached: gaugeReached
     password name tokenBox at 1,16 span 6 bind settings.apiToken
     folder name scansBox at 1,17 span 6 bind settings.scansFolder
@@ -353,6 +354,11 @@ code Gallery
             album = albumList.selected
 
     // Dragging across the dial turns it; letting go reads where it ended.
+    // Bending the needle line keeps its points.
+    handler dialBent
+        if dial.bent == "needle"
+            needle = dial.via
+
     handler dialDragged
         load = load + dial.x - dial.fromX
 
@@ -377,6 +383,7 @@ code Gallery
 
     handler drawDial
         dial.clear("panel")
+        dial.link("needle", 10, 90, 190, 90, needle, "accent", 2)
         dial.ring(50, 50, 42, "border", 3)
         dial.line(50, 50, 50 + 34 * cos(load), 50 - 34 * sin(load), "accent", 3)
 

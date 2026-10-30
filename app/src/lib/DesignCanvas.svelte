@@ -77,7 +77,7 @@
 
   // Boxes stand where the diagram has them; only the one being moved follows the pointer.
   const laid = $derived(
-    boxes(shapes, measure).map((b) => {
+    boxes(shapes, measure, links).map((b) => {
       if (moving && b.name === moving.name) return { ...b, x: moving.x, y: moving.y };
       if (shifting && b.group === shifting.group) return { ...b, x: b.x + shifting.dx, y: b.y + shifting.dy };
       return b;
@@ -86,6 +86,12 @@
   const framed = $derived(frames(laid));
   const byName = $derived(new Map(laid.map((b) => [b.name, b])));
   const meetings = $derived(ends(laid, shownLinks));
+
+  /** Lays every box out again in layers, as boxes without a place are, in one edit. */
+  function arrange() {
+    const fresh = boxes(shapes.map((s) => ({ ...s, x: null, y: null })), measure, links);
+    edit({ op: "moveAll", moves: fresh.map((b) => ({ name: b.name, x: b.x, y: b.y })) });
+  }
 
   function edit(change: CanvasEdit) {
     const pick = onedit(change, laid);
@@ -348,6 +354,9 @@
     <button onclick={() => setZoom(zoom / 1.2)} aria-label="Zoom out" title="Zoom out (Ctrl+wheel)">-</button>
     <button class="level" onclick={() => ((zoom = 1), (pan = { x: 0, y: 0 }))} title="Back to 100%">{Math.round(zoom * 100)}%</button>
     <button onclick={() => setZoom(zoom * 1.2)} aria-label="Zoom in" title="Zoom in (Ctrl+wheel)">+</button>
+    {#if !readonly}
+      <button onclick={arrange} title="Lay every box out again: what is referred to above what refers to it">Arrange</button>
+    {/if}
   </div>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->

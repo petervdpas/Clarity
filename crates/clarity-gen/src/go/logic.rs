@@ -846,8 +846,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("float64({})", bare(self.value(arg, &mut pre))),
                         },
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
-                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => bare(self.value(arg, &mut pre)),
-                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => bare(self.value(arg, &mut pre)),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg, &mut pre),
                     };
                     fields.push(format!("{}: {value}", string(key)));
@@ -1292,6 +1292,8 @@ impl<'a> Emitter<'a> {
             "x" => format!("ui.X({quoted})"),
             "y" => format!("ui.Y({quoted})"),
             "fromX" => format!("ui.FromX({quoted})"),
+            "bent" => format!("ui.Bent({quoted})"),
+            "via" => format!("ui.Via({quoted})"),
             "fromY" => format!("ui.FromY({quoted})"),
             "selected" => match info.bind {
                 Some(bind) => self.lift(format!("clarity.Selected(ui, {quoted}, w.{})", pascal(&bind)), pre),

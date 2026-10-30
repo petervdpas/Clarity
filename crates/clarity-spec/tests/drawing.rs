@@ -60,7 +60,7 @@ fn a_canvas_has_units_and_a_draw_handler() {
 #[test]
 fn a_draw_handler_draws_the_shapes_a_canvas_has() {
     let with = |line: &str| errors(&DIAL.replace("        dial.rect(0, 95, 200, 5, \"muted\")\n", &format!("        {line}\n")));
-    assert_has(&with("dial.wobble(1)"), "a canvas draws clear, line, rect, circle, ring, text and image, not 'wobble'");
+    assert_has(&with("dial.wobble(1)"), "a canvas draws clear, line, rect, circle, ring, text, link and image, not 'wobble'");
     assert_has(&with("dial.line(1, 2, 3)"), "'line' takes x1, y1, x2, y2, color and width (width can be left out)");
     assert_has(&with("dial.circle(\"a\", 1, 2, \"x\")"), "x of 'circle' is a number, not text");
     assert_has(&with("dial.clear(3)"), "color of 'clear' is text, not integer");
@@ -303,4 +303,35 @@ code Main
     assert_eq!(widget_line(&file.pages[0].widgets[0].props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 dots 3 \"#888888\" on draw: drawSheet");
     assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
     assert_has(&errors(&sheet.replace("dots 3 muted", "dots 0")), "a grid's dots are 1 to 20 pixels");
+}
+
+/// A canvas draws a line people bend: `link(name, x1, y1, x2, y2, via, color,
+/// width)` goes from one point to another through its bend points (a list of
+/// whole numbers, x, y, x, y, ...). Bent and let go, `on bend` runs, reading
+/// which line (`canvas.bent`, its name) and its points now (`canvas.via`).
+#[test]
+fn a_canvas_draws_lines_people_bend() {
+    let sheet = "module diagram
+
+page Main: window
+    data points: list<integer>
+    data bent: text
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet on bend: bentLine
+
+code Main
+    handler drawSheet
+        sheet.clear()
+        sheet.link(\"a-b\", 100, 100, 600, 400, points, \"border\", 2)
+        sheet.link(\"b-c\", 600, 400, 900, 100, [], \"border\")
+
+    handler bentLine
+        bent = sheet.bent
+        points = sheet.via
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    assert_eq!(file.pages[0].widgets[0].props.handlers[1].event, Event::Bend);
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert_has(&errors(&sheet.replace("points, \"border\", 2)", "\"x\", \"border\", 2)")), "via of 'link' is a list of whole numbers");
+    assert_has(&errors(&sheet.replace("        points = sheet.via\n", "        sheet.via = points\n")), "sheet.via is read, not set");
 }

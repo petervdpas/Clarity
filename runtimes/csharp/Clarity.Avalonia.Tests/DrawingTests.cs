@@ -179,6 +179,17 @@ public class DrawingTests
         Assert.Equal(("120,150", 2), (vm.Clicked, vm.Draws));
     }
 
+    /// A bend gives the name of the link bent and its points, which code reads from the part.
+    [Fact]
+    public void A_bend_says_which_link_and_its_points()
+    {
+        var sheet = new PartState("sheet");
+        Assert.Equal(("", 0), (sheet.Bent, sheet.Via.Count));
+        sheet.Pointer = new Pointer(0, 0) { Bent = "a-b", Via = [500, 200] };
+        Assert.Equal("a-b", sheet.Bent);
+        Assert.Equal([500L, 200L], sheet.Via);
+    }
+
     /// A drag gives where the pointer is and where it was pressed; a click has no start.
     [AvaloniaFact]
     public void ADragOnACanvasSaysWhereItStarted()

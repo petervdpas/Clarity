@@ -533,6 +533,17 @@ impl Ui {
         self.pointer(part, "fromY")
     }
 
+    /// The name of the link a person bent on a canvas: `canvas.bent`; empty without one.
+    pub fn bent(&self, part: &str) -> String {
+        self.parts.get(part).and_then(|p| p.pointer.as_ref()).and_then(|p| p.get("bent")).and_then(|v| v.as_str()).unwrap_or_default().to_string()
+    }
+
+    /// The bend points of that link now, x, y, x, y, ...: `canvas.via`.
+    pub fn via(&self, part: &str) -> Vec<i64> {
+        let points = self.parts.get(part).and_then(|p| p.pointer.as_ref()).and_then(|p| p.get("via")).and_then(|v| v.as_array());
+        points.map(|all| all.iter().filter_map(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f.round() as i64))).collect()).unwrap_or_default()
+    }
+
     fn pointer(&self, part: &str, key: &str) -> i64 {
         let value = self.parts.get(part).and_then(|p| p.pointer.as_ref()).and_then(|p| p.get(key));
         value.and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f.floor() as i64))).unwrap_or(0)

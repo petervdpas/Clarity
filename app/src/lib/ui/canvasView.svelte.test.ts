@@ -223,3 +223,48 @@ test("a grid's dots have the size and color the canvas says, the same whatever t
   expect([usual.getAttribute("r"), usual.getAttribute("fill")]).toEqual(["2.5", "var(--border)"]);
   plain.done();
 });
+
+test("a link bends: a press on it adds a point there, dragging moves it, letting go gives its name and points", () => {
+  const bends: { name: string; via: number[] }[] = [];
+  // 0.4 pixels a unit: a link from 100,100 to 900,100 runs along y 40 on screen, from x 40 to 360.
+  const drawing = [{ op: "link", name: "a-b", x1: 100, y1: 100, x2: 900, y2: 100, via: [], color: "border", width: 2 }] as never[];
+  const { holder, svg, done } = canvas({ drawing, onbend: (b: { name: string; via: number[] }) => bends.push(b) });
+  svg.dispatchEvent(pointer("pointerdown", 200, 40));
+  svg.dispatchEvent(pointer("pointermove", 200, 80));
+  flushSync();
+  // While it is dragged, the line goes through the point, and the point shows.
+  expect(holder.querySelector("polyline")!.getAttribute("points")).toBe("100,100 500,200 900,100");
+  expect(holder.querySelectorAll("circle.bend").length).toBe(1);
+  svg.dispatchEvent(pointer("pointerup", 200, 80));
+  expect(bends).toEqual([{ name: "a-b", via: [500, 200] }]);
+  done();
+});
+
+test("a double click on a bend point takes it away", () => {
+  const bends: { name: string; via: number[] }[] = [];
+  const drawing = [{ op: "link", name: "a-b", x1: 100, y1: 100, x2: 900, y2: 100, via: [500, 200], color: "border" }] as never[];
+  const { svg, done } = canvas({ drawing, onbend: (b: { name: string; via: number[] }) => bends.push(b) });
+  // A press on the point puts the link in hand; a double click there takes the point away.
+  svg.dispatchEvent(pointer("pointerdown", 200, 80));
+  svg.dispatchEvent(pointer("pointerup", 200, 80));
+  svg.dispatchEvent(new MouseEvent("dblclick", { clientX: 200, clientY: 80, bubbles: true }));
+  expect(bends).toEqual([{ name: "a-b", via: [] }]);
+  done();
+});
+
+test("a press on a shape drawn over a link is not a bend", () => {
+  const bends: { name: string; via: number[] }[] = [];
+  const drags: Pointer[] = [];
+  // A box drawn over the link's middle, from 400,50 to 600,150 (160 to 240 across, 20 to 60 down on screen).
+  const drawing = [
+    { op: "link", name: "a-b", x1: 100, y1: 100, x2: 900, y2: 100, via: [], color: "border" },
+    { op: "rect", x: 400, y: 50, width: 200, height: 100, color: "raised" },
+  ] as never[];
+  const { svg, done } = canvas({ drawing, onbend: (b: { name: string; via: number[] }) => bends.push(b), ondrag: (p: Pointer) => (drags.push(p), Promise.resolve()) });
+  svg.dispatchEvent(pointer("pointerdown", 200, 40));
+  svg.dispatchEvent(pointer("pointermove", 200, 80));
+  svg.dispatchEvent(pointer("pointerup", 200, 80));
+  expect(bends).toEqual([]);
+  expect(drags.length).toBe(1);
+  done();
+});

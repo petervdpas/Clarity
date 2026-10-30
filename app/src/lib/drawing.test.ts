@@ -23,7 +23,10 @@ test("a color is the theme's by name, or written out", () => {
 test("each shape the backend sends is an SVG element", () => {
   const picture = (name: string) => `resources/${name}`;
   const tags = cases.shapes.map((c) => svgOf(c.sends, { width: 200, height: 100 }, (t) => String(t), picture).tag);
-  assert.deepEqual(tags, ["rect", "line", "line", "rect", "circle", "circle", "circle", "text", "text", "image"]);
+  assert.deepEqual(tags, ["rect", "line", "line", "rect", "circle", "circle", "circle", "text", "text", "image", "polyline"]);
+  // A line people bend goes through its points; it is named for the canvas to tell it apart.
+  const link = svgOf(cases.shapes[10].sends, { width: 200, height: 100 }, String);
+  assert.deepEqual(link.attrs, { points: "10,20 50,60 90,20", fill: "none", stroke: "var(--border)", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "data-link": "a-b" });
   // A picture of the resources folder, stretched to fill its box.
   const image = svgOf(cases.shapes[9].sends, { width: 200, height: 100 }, String, picture);
   assert.deepEqual(image.attrs, { x: 10, y: 20, width: 30, height: 15, href: "resources/pill.svg", preserveAspectRatio: "none" });

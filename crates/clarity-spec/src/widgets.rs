@@ -143,6 +143,8 @@ pub enum Event {
     Drag,
     /// The pointer is let go on a canvas after a drag.
     Drop,
+    /// A person bent a line of a canvas, and let it go.
+    Bend,
     /// Next is pressed in a wizard, before it moves on; a refusal keeps the step.
     Next,
     /// Finish is pressed on a wizard's last step.
@@ -156,7 +158,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 19] = [
+pub const ALL_EVENTS: [Event; 20] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -172,6 +174,7 @@ pub const ALL_EVENTS: [Event; 19] = [
     Event::Draw,
     Event::Drag,
     Event::Drop,
+    Event::Bend,
     Event::Next,
     Event::Finish,
     Event::Tick,
@@ -201,6 +204,7 @@ impl Event {
             Event::Draw => "draw",
             Event::Drag => "drag",
             Event::Drop => "drop",
+            Event::Bend => "bend",
             Event::Next => "next",
             Event::Finish => "finish",
             Event::Tick => "tick",
@@ -225,6 +229,7 @@ impl Event {
             "draw" => Some(Event::Draw),
             "drag" => Some(Event::Drag),
             "drop" => Some(Event::Drop),
+            "bend" => Some(Event::Bend),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
             "tick" => Some(Event::Tick),
@@ -923,7 +928,7 @@ const ENTRIES: &[Entry] = &[
         // Drawn by its draw handler (`on draw`);
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
-        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Pointer, Event::Key],
+        events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Bend, Event::Pointer, Event::Key],
         properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Background, WidgetProperty::Dots, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two

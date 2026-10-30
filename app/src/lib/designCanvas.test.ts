@@ -130,3 +130,36 @@ test("a line that bends meets each box facing its nearest point, not the other b
   const [bent] = ends([a, b], [{ left: "A", right: "B", via: [{ x: 50, y: 200 }, { x: 350, y: 200 }] }]);
   assert.deepEqual(bent, [{ x: 50, y: 50 }, { x: 350, y: 50 }]);
 });
+
+/** A line of `left` referring to `right`, as an ERD draws it: many of the first, one of the second. */
+const refers = (left: string, right: string) => ({ left, right, leftEnd: { kind: "count", count: "zeroOrMore" }, rightEnd: { kind: "count", count: "exactlyOne" } }) as const;
+const unplaced = (name: string) => ({ name, x: null, y: null, rows: [["text", "name"]] });
+
+test("boxes without a place stand in layers: what is referred to above what refers to it", () => {
+  const laid = boxes([unplaced("Track"), unplaced("Artist"), unplaced("Album"), unplaced("Loose")], measure, [refers("Track", "Album"), refers("Album", "Artist")]);
+  const at = Object.fromEntries(laid.map((b) => [b.name, b]));
+  assert.ok(at.Artist.y < at.Album.y && at.Album.y < at.Track.y, "Artist, then Album, then Track");
+  // A box no line reaches stands in a row of its own, below.
+  assert.ok(at.Loose.y > at.Track.y);
+  // Each layer is centred on the widest.
+  assert.equal(at.Artist.x + at.Artist.w / 2, at.Album.x + at.Album.w / 2);
+});
+
+test("a whole stands above its parts, as a diamond at its end says", () => {
+  const owns = { left: "Order", right: "Line", leftEnd: { kind: "uml", head: "filledDiamond", text: "1" }, rightEnd: { kind: "uml", head: "none", text: "*" } } as const;
+  const laid = boxes([unplaced("Line"), unplaced("Order")], measure, [owns]);
+  const at = Object.fromEntries(laid.map((b) => [b.name, b]));
+  assert.ok(at.Order.y < at.Line.y);
+});
+
+test("a layer is ordered by where its neighbours are, so lines do not cross", () => {
+  // Two parents and a child of each: the children follow their parents' order.
+  const laid = boxes([unplaced("ChildOfB"), unplaced("ChildOfA"), unplaced("A"), unplaced("B")], measure, [refers("ChildOfA", "A"), refers("ChildOfB", "B")]);
+  const at = Object.fromEntries(laid.map((b) => [b.name, b]));
+  assert.equal(at.A.x < at.B.x, at.ChildOfA.x < at.ChildOfB.x);
+});
+
+test("lines that go round in a circle still lay out, each box once", () => {
+  const laid = boxes([unplaced("A"), unplaced("B"), unplaced("C")], measure, [refers("A", "B"), refers("B", "C"), refers("C", "A"), refers("A", "A")]);
+  assert.equal(new Set(laid.map((b) => `${b.x},${b.y}`)).size, 3);
+});

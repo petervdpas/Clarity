@@ -1092,6 +1092,13 @@
               return fire("drag");
             }
           : null}
+        onbend={live && p.name && !design && p.handlers.some((h) => h.event === "bend")
+          ? (bend) => {
+              // Which link was bent and its points now go with the part's state, for the handler to read.
+              if (live && p.name) live.setPointer(p.name, { x: 0, y: 0, bent: bend.name, via: bend.via });
+              fire("bend");
+            }
+          : null}
         ondrop={live && p.name && !design && p.handlers.some((h) => h.event === "drop")
           ? (point) => {
               if (live && p.name) live.setPointer(p.name, point);

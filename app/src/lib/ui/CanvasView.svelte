@@ -13,8 +13,11 @@
   // when it is let go. A drag that moves nothing (the drawing stays the same
   // after the handler's first call), and any drag without `ondrag`, pans.
   // With `grid` it shows a dot every so many units over the whole view, after
-  // the drawing's clear (conformance/drawing.json, grids).
-  import { colorOf, gridEvery, pointIn, scrolled, svgOf, wholeView, zoomed, type Shape, type View } from "../drawing";
+  // the drawing's clear (conformance/drawing.json, grids). With `onbend` its
+  // links bend: a press on one adds a point there or takes the point under it,
+  // dragging moves that point, a double click on a point takes it away, and
+  // letting go gives the link's name and its points (as the IDE's designer).
+  import { colorOf, gridEvery, linkPoints, pointIn, scrolled, svgOf, wholeView, zoomed, type Shape, type View } from "../drawing";
   import type { ShownText } from "../format";
   import type { Pointer } from "../live";
   import { pictureUrl } from "../pictures.svelte";
@@ -33,6 +36,7 @@
     onpoint = null,
     ondrag = null,
     ondrop = null,
+    onbend = null,
   }: {
     drawing: Shape[];
     units: { width: number; height: number };
@@ -55,12 +59,35 @@
     ondrag?: ((point: Pointer) => Promise<unknown>) | null;
     /** The pointer let go after a drag. */
     ondrop?: ((point: Pointer) => void) | null;
+    /** A link bent and let go: its name, and its bend points as whole numbers, x, y, x, y, .... */
+    onbend?: ((bend: { name: string; via: number[] }) => void) | null;
   } = $props();
 
+  /** A link being bent: its points as the pointer has them, until the drawing comes back with them. */
+  let bending = $state<{ name: string; via: { x: number; y: number }[] } | null>(null);
+  /** The link last pressed, whose bend points show. */
+  let inHand = $state<string | null>(null);
+  // A drawing that comes back after a bend has the points: the canvas stops showing its own.
+  $effect.pre(() => {
+    void drawing;
+    bending = null;
+  });
+  /** The drawing's shapes, a link being bent with the points the pointer gives it. */
+  const shapesShown = $derived(
+    drawing.map((shape) =>
+      bending && shape.op === "link" && shape.name === bending.name ? { ...shape, via: bending.via.flatMap((p) => [p.x, p.y]) } : shape,
+    ),
+  );
   // A clear without a color is the canvas's background.
   const drawn = $derived(
-    drawing.map((shape) => svgOf(shape.op === "clear" && !shape.color ? { ...shape, color: background || "panel" } : shape, units, shown, pictureUrl)),
+    shapesShown.map((shape) => svgOf(shape.op === "clear" && !shape.color ? { ...shape, color: background || "panel" } : shape, units, shown, pictureUrl)),
   );
+  /** The bend points of the link in hand, to drag or take away. */
+  const handles = $derived.by(() => {
+    if (!onbend || !inHand) return [];
+    const link = shapesShown.find((shape) => shape.op === "link" && shape.name === inHand);
+    return link ? linkPoints(link).slice(1, -1) : [];
+  });
 
   let svg: SVGSVGElement | undefined = $state();
   // The part's size: the whole canvas is fitted to it, and the view fills it.
@@ -135,8 +162,74 @@
     return { x: edge(v[1] + at.x / v[0], units.width), y: edge(v[2] + at.y / v[0], units.height) };
   }
 
+  /** A press on a link, bending it: which link, its bend points, the one in hand, and where it started. */
+  let bendPress: { id: number; name: string; via: { x: number; y: number }[]; point: number; start: { x: number; y: number }; at: { x: number; y: number }; moved: boolean } | null = null;
+
+  /** The unit under a pixel, not rounded. */
+  function unitAt(at: { x: number; y: number }) {
+    const v = viewNow();
+    return { x: v[1] + at.x / v[0], y: v[2] + at.y / v[0] };
+  }
+
+  function distanceToSegment(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = dx * dx + dy * dy;
+    const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+
+  const n = (value: unknown) => (typeof value === "number" ? value : Number(value) || 0);
+
+  /** The link under a press, the topmost first: its bend point there, else a new one on the segment pressed. */
+  function linkAt(p: { x: number; y: number }) {
+    const near = 8 / viewNow()[0];
+    // A shape drawn over the press, a box above a line, takes it: the link under it is not pressed.
+    const covers = (shape: Shape) => shape.op === "rect" && p.x >= n(shape.x) && p.x <= n(shape.x) + n(shape.width) && p.y >= n(shape.y) && p.y <= n(shape.y) + n(shape.height);
+    for (let i = shapesShown.length - 1; i >= 0; i--) {
+      const shape = shapesShown[i];
+      if (covers(shape)) return null;
+      if (shape.op !== "link") continue;
+      const all = linkPoints(shape);
+      const via = all.slice(1, -1);
+      const onPoint = via.findIndex((v) => Math.hypot(v.x - p.x, v.y - p.y) <= near);
+      if (onPoint >= 0) return { name: String(shape.name ?? ""), via, point: onPoint };
+      for (let i = 0; i < all.length - 1; i++) {
+        if (distanceToSegment(p, all[i], all[i + 1]) <= near) return { name: String(shape.name ?? ""), via: [...via.slice(0, i), p, ...via.slice(i)], point: i };
+      }
+    }
+    return null;
+  }
+
+  /** A double click on a bend point of the link in hand takes it away. */
+  function unbend(e: MouseEvent) {
+    if (!onbend || !inHand) return;
+    const p = unitAt(offset(e));
+    const near = 8 / viewNow()[0];
+    const point = handles.findIndex((v) => Math.hypot(v.x - p.x, v.y - p.y) <= near);
+    if (point < 0) return;
+    const via = handles.filter((_, i) => i !== point);
+    bending = { name: inHand, via };
+    onbend({ name: inHand, via: flat(via) });
+  }
+
+  /** The bend points as a handler reads them: whole numbers, x, y, x, y, .... */
+  const flat = (via: { x: number; y: number }[]) => via.flatMap((p) => [Math.round(p.x), Math.round(p.y)]);
+
   function down(e: PointerEvent) {
-    if (!e.isPrimary || e.button !== 0 || !(onpoint || ondrag || zoom)) return;
+    if (!e.isPrimary || e.button !== 0) return;
+    if (onbend) {
+      const at = offset(e);
+      const found = linkAt(unitAt(at));
+      if (found) {
+        inHand = found.name;
+        bendPress = { id: e.pointerId, ...found, start: found.via[found.point], at, moved: false };
+        (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+        return;
+      }
+      inHand = null;
+    }
+    if (!(onpoint || ondrag || zoom)) return;
     const at = offset(e);
     const viewAt = viewNow();
     pressed = { id: e.pointerId, at, from: pointIn(units, viewAt, at), moved: false, viewAt, moves: ondrag ? "unknown" : "view", now: at };
@@ -144,6 +237,16 @@
   }
 
   function move(e: PointerEvent) {
+    if (bendPress && bendPress.id === e.pointerId) {
+      const at = offset(e);
+      if (!bendPress.moved && Math.hypot(at.x - bendPress.at.x, at.y - bendPress.at.y) < STILL) return;
+      bendPress.moved = true;
+      const scale = viewNow()[0];
+      const via = [...bendPress.via];
+      via[bendPress.point] = { x: bendPress.start.x + (at.x - bendPress.at.x) / scale, y: bendPress.start.y + (at.y - bendPress.at.y) / scale };
+      bending = { name: bendPress.name, via };
+      return;
+    }
     if (!pressed || pressed.id !== e.pointerId) return;
     const at = offset(e);
     if (!pressed.moved && Math.hypot(at.x - pressed.at.x, at.y - pressed.at.y) < STILL) return;
@@ -186,6 +289,12 @@
   }
 
   async function up(e: PointerEvent) {
+    if (bendPress && bendPress.id === e.pointerId) {
+      const was = bendPress;
+      bendPress = null;
+      if (was.moved && bending) onbend?.({ name: was.name, via: flat(bending.via) });
+      return;
+    }
     if (!pressed || pressed.id !== e.pointerId) return;
     const was = pressed;
     pressed = null;
@@ -244,7 +353,8 @@
     onpointerdown={down}
     onpointermove={move}
     onpointerup={up}
-    onpointercancel={() => (pressed = null)}
+    onpointercancel={() => ((pressed = null), (bendPress = null))}
+    ondblclick={unbend}
   >
     {#if dots}
       <defs>
@@ -260,6 +370,9 @@
     {#each elements as element, i (i)}
       <svelte:element this={element.tag} {...element.attrs}>{element.text ?? ""}</svelte:element>
       {#if dots && i === gridAfter}{@render gridShown()}{/if}
+    {/each}
+    {#each handles as point, p (p)}
+      <circle class="bend" cx={point.x} cy={point.y} r={5 / view[0]} />
     {/each}
   </svg>
   {#if zoom}
@@ -302,6 +415,15 @@
   .grid {
     opacity: 0.5;
     pointer-events: none;
+  }
+
+  /* The bend points of the link in hand: drag one to move it, double-click it to take it away. */
+  .bend {
+    fill: var(--panel);
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+    cursor: move;
   }
 
   .zoom {

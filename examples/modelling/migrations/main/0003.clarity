@@ -1,0 +1,5 @@
+// Written by Clarity from the changes in the data dictionary. Check it
+// before it runs; once a step has run on a database, it never changes.
+migration "Bent lines on the diagrams"
+    add field Association.via: list<integer>
+    add field Relationship.via: list<integer>

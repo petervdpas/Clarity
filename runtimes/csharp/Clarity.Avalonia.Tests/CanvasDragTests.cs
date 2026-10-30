@@ -175,4 +175,55 @@ public class CanvasDragTests
         Assert.Equal((255, 0, 0), (pixels[middle], pixels[middle + 1], pixels[middle + 2]));
         window.Close();
     }
+
+    /// A link bends: a press on it adds a point there, dragging moves it, and letting go
+    /// runs the bend command with the link's name and its points; a double click takes a point away.
+    [AvaloniaFact]
+    public void ALinkBendsAndTheBendCommandHearsItsPoints()
+    {
+        var bends = new List<Pointer>();
+        // 0.4 pixels a unit: a link from 100,100 to 900,100 runs along y 40, from x 40 to 360.
+        var (window, canvas) = Shown(new CanvasView
+        {
+            Drawing = [new Shape.Link("a-b", 100, 100, 900, 100, [], "border", 2)],
+            BendCommand = new RelayCommand<Pointer>(p => bends.Add(p!)),
+        });
+        window.MouseDown(new Point(200, 40), MouseButton.Left);
+        window.MouseMove(new Point(200, 80));
+        window.MouseUp(new Point(200, 80), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(bends);
+        Assert.Equal("a-b", bends[0].Bent);
+        Assert.Equal([500L, 200L], bends[0].Via);
+        // The drawing comes back with the point; a double click on it takes it away.
+        canvas.Drawing = [new Shape.Link("a-b", 100, 100, 900, 100, [500, 200], "border", 2)];
+        window.MouseDown(new Point(200, 80), MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(new Point(200, 80), MouseButton.Left);
+        canvas.Unbend(new Point(200, 80));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("a-b", bends[^1].Bent);
+        Assert.Empty(bends[^1].Via);
+        window.Close();
+    }
+
+    /// A press on a shape drawn over a link is not a bend: the box above the line takes it.
+    [AvaloniaFact]
+    public void APressOnAShapeDrawnOverALinkIsNotABend()
+    {
+        var bends = new List<Pointer>();
+        var drags = new List<Pointer>();
+        var (window, _) = Shown(new CanvasView
+        {
+            Drawing = [new Shape.Link("a-b", 100, 100, 900, 100, [], "border"), new Shape.Rect(400, 50, 200, 100, "raised")],
+            BendCommand = new RelayCommand<Pointer>(p => bends.Add(p!)),
+            DragCommand = new RelayCommand<Pointer>(p => drags.Add(p!)),
+        });
+        window.MouseDown(new Point(200, 40), MouseButton.Left);
+        window.MouseMove(new Point(200, 80));
+        window.MouseUp(new Point(200, 80), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(bends);
+        Assert.Single(drags);
+        window.Close();
+    }
 }

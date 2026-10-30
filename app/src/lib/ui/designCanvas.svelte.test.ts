@@ -61,3 +61,15 @@ test("dragging a bend point moves it, and a double click takes it away", () => {
   expect(edits.at(-1)).toEqual({ op: "bend", index: 0, via: [] });
   done();
 });
+
+test("Arrange lays every box out again in layers, in one edit", () => {
+  const { holder, edits, done } = designer([]);
+  const arrange = [...holder.querySelectorAll(".zoom button")].find((b) => b.textContent === "Arrange") as HTMLButtonElement;
+  arrange.click();
+  flushSync();
+  const moves = (edits.at(-1) as Extract<CanvasEdit, { op: "moveAll" }>).moves;
+  const at = Object.fromEntries(moves.map((m) => [m.name, m]));
+  // The line's one end is B, which A refers to: B stands above A.
+  expect(at.B.y).toBeLessThan(at.A.y);
+  done();
+});

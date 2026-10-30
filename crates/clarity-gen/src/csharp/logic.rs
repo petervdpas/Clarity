@@ -185,6 +185,8 @@ fn part_property(property: &str) -> Option<&'static str> {
         "x" => "X",
         "y" => "Y",
         "fromX" => "FromX",
+        "bent" => "Bent",
+        "via" => "Via",
         "fromY" => "FromY",
         "grid" => "Grid",
         "snap" => "Snap",
@@ -432,6 +434,7 @@ impl<'a> Emitter<'a> {
                     "circle" => "Circle",
                     "ring" => "Ring",
                     "image" => "Image",
+                    "link" => "Link",
                     _ => "Words",
                 };
                 let mut values = Vec::new();
@@ -442,8 +445,8 @@ impl<'a> Emitter<'a> {
                             _ => format!("(double)({})", self.value(arg)),
                         },
                         (ShapeValue::Number, Err(default)) => default.to_string(),
-                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name | ShapeValue::Points, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => self.shown(arg),
                     });
                 }

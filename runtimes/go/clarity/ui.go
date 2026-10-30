@@ -424,6 +424,24 @@ func (u *Ui) FromX(part string) int64 { return u.pointer(part, "fromX") }
 // FromY is where a drag on a canvas started, down: canvas.fromY.
 func (u *Ui) FromY(part string) int64 { return u.pointer(part, "fromY") }
 
+// Bent is the name of the link a person bent on a canvas: canvas.bent; empty without one.
+func (u *Ui) Bent(part string) string {
+	name, _ := u.parts[part].Pointer["bent"].(string)
+	return name
+}
+
+// Via is the bend points of that link now, x, y, x, y, ...: canvas.via.
+func (u *Ui) Via(part string) []int64 {
+	points, _ := u.parts[part].Pointer["via"].([]any)
+	out := make([]int64, 0, len(points))
+	for _, p := range points {
+		if at, ok := p.(float64); ok {
+			out = append(out, int64(math.Round(at)))
+		}
+	}
+	return out
+}
+
 func (u *Ui) pointer(part, key string) int64 {
 	if at, ok := u.parts[part].Pointer[key].(float64); ok {
 		return int64(math.Floor(at))

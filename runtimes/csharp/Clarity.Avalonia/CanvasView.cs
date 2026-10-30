@@ -18,6 +18,10 @@
 // nothing (the drawing stays the same after its first run), and any drag
 // without DragCommand, pans. With Grid it shows a dot every so many units
 // over the whole view, after the drawing's clear (conformance/drawing.json, grids).
+// With BendCommand its links bend: a press on one adds a point there or takes
+// the point under it, dragging moves that point, a double click on a point
+// takes it away, and letting go runs BendCommand with the link's name and its
+// points (Pointer.Bent and Pointer.Via), as the web canvas does.
 
 using System.Globalization;
 using System.Windows.Input;
@@ -102,6 +106,114 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
 
     public static readonly StyledProperty<ICommand?> DragCommandProperty =
         AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(DragCommand));
+
+    public static readonly StyledProperty<ICommand?> BendCommandProperty =
+        AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(BendCommand));
+
+    /// <summary>What runs when a person bent a link and let it go, given its name and its points.</summary>
+    public ICommand? BendCommand
+    {
+        get => GetValue(BendCommandProperty);
+        set => SetValue(BendCommandProperty, value);
+    }
+
+    /// A link being bent: its points as the pointer has them, until the drawing comes back with them.
+    (string Name, List<Point> Via)? bending;
+    /// The link last pressed, whose bend points show.
+    string? inHand;
+    /// A press on a link: which, its bend points, the one in hand, where it started, and whether it moved.
+    (IPointer Pointer, string Name, List<Point> Via, int Point, Point Start, Point At, bool Moved)? bendPress;
+
+    /// The drawing's shapes, a link being bent with the points the pointer gives it.
+    IEnumerable<Shape> ShapesShown => Drawing.Select(shape => bending is { } b && shape is Shape.Link link && link.Name == b.Name
+        ? link with { Via = [.. b.Via.SelectMany(p => new[] { (long)Math.Round(p.X), (long)Math.Round(p.Y) })] }
+        : shape);
+
+    /// <summary>The points a link goes through: its start, its bend points, its end.</summary>
+    public static List<Point> LinkPoints(Shape.Link link)
+    {
+        var all = new List<Point> { new(link.X1, link.Y1) };
+        for (var i = 0; i + 1 < link.Via.Count; i += 2)
+            all.Add(new Point(link.Via[i], link.Via[i + 1]));
+        all.Add(new Point(link.X2, link.Y2));
+        return all;
+    }
+
+    /// The unit under a pixel, not rounded.
+    Point UnitAt(Point at)
+    {
+        var v = Viewport;
+        return new Point(v.X + at.X / v.Scale, v.Y + at.Y / v.Scale);
+    }
+
+    static double DistanceToSegment(Point p, Point a, Point b)
+    {
+        var d = b - a;
+        var length = d.X * d.X + d.Y * d.Y;
+        var t = length == 0 ? 0 : Math.Clamp(((p.X - a.X) * d.X + (p.Y - a.Y) * d.Y) / length, 0, 1);
+        return Math.Sqrt(Math.Pow(p.X - (a.X + t * d.X), 2) + Math.Pow(p.Y - (a.Y + t * d.Y), 2));
+    }
+
+    /// The link under a unit, the topmost first: its bend point there, else a new one on the segment pressed.
+    (string Name, List<Point> Via, int Point)? LinkAt(Point p)
+    {
+        var near = 8 / Viewport.Scale;
+        // A shape drawn over the press, a box above a line, takes it: the link under it is not pressed.
+        foreach (var shape in ShapesShown.Reverse())
+        {
+            if (shape is Shape.Rect r && p.X >= r.X && p.X <= r.X + r.Width && p.Y >= r.Y && p.Y <= r.Y + r.Height)
+                return null;
+            if (shape is not Shape.Link link)
+                continue;
+            var all = LinkPoints(link);
+            var via = all.Skip(1).Take(all.Count - 2).ToList();
+            var onPoint = via.FindIndex(v => Math.Sqrt(Math.Pow(v.X - p.X, 2) + Math.Pow(v.Y - p.Y, 2)) <= near);
+            if (onPoint >= 0)
+                return (link.Name, via, onPoint);
+            for (var i = 0; i < all.Count - 1; i++)
+            {
+                if (DistanceToSegment(p, all[i], all[i + 1]) <= near)
+                {
+                    via.Insert(i, p);
+                    return (link.Name, via, i);
+                }
+            }
+        }
+        return null;
+    }
+
+    /// The bend points of the link in hand.
+    List<Point> Handles()
+    {
+        if (BendCommand is null || inHand is null || ShapesShown.OfType<Shape.Link>().FirstOrDefault(l => l.Name == inHand) is not { } link)
+            return [];
+        var all = LinkPoints(link);
+        return all.Skip(1).Take(all.Count - 2).ToList();
+    }
+
+    void Bent(string name, List<Point> via)
+    {
+        bending = (name, via);
+        InvalidateVisual();
+        var told = new Pointer(0, 0) { Bent = name, Via = [.. via.SelectMany(p => new[] { (long)Math.Round(p.X), (long)Math.Round(p.Y) })] };
+        if (BendCommand?.CanExecute(told) == true)
+            BendCommand.Execute(told);
+    }
+
+    /// <summary>A double click on a bend point of the link in hand takes it away.</summary>
+    public void Unbend(Point at)
+    {
+        if (BendCommand is null || inHand is not { } name)
+            return;
+        var p = UnitAt(at);
+        var near = 8 / Viewport.Scale;
+        var handles = Handles();
+        var point = handles.FindIndex(v => Math.Sqrt(Math.Pow(v.X - p.X, 2) + Math.Pow(v.Y - p.Y, 2)) <= near);
+        if (point < 0)
+            return;
+        handles.RemoveAt(point);
+        Bent(name, handles);
+    }
 
     public static readonly StyledProperty<ICommand?> DropCommandProperty =
         AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(DropCommand));
@@ -212,6 +324,19 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         // A zoom button says what it does, in Clarity's words.
         var button = ZoomButtonAt(e.GetPosition(this));
         ToolTip.SetTip(this, button is null ? null : ZoomWord(button));
+        if (bendPress is { } press && press.Pointer == e.Pointer)
+        {
+            var at = e.GetPosition(this);
+            if (!press.Moved && Math.Sqrt(Math.Pow(at.X - press.At.X, 2) + Math.Pow(at.Y - press.At.Y, 2)) < Still)
+                return;
+            bendPress = press with { Moved = true };
+            var via = new List<Point>(press.Via);
+            var scale = Viewport.Scale;
+            via[press.Point] = new Point(press.Start.X + (at.X - press.At.X) / scale, press.Start.Y + (at.Y - press.At.Y) / scale);
+            bending = (press.Name, via);
+            InvalidateVisual();
+            return;
+        }
         if (pressed)
         {
             Dragged(e);
@@ -292,6 +417,8 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         // The theme's colors may change after a drawing: light or dark, or another theme.
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
         ResourcesChanged += (_, _) => InvalidateVisual();
+        // A double click on a bend point takes it away.
+        DoubleTapped += (_, e) => Unbend(e.GetPosition(this));
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -299,6 +426,9 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         base.OnPropertyChanged(change);
         if (change.Property == CommandProperty)
             Cursor = Command is null ? null : new Cursor(StandardCursorType.Hand);
+        // A drawing that comes back after a bend has the points: the canvas stops showing its own.
+        if (change.Property == DrawingProperty)
+            bending = null;
         // Only a canvas of other units starts over: a redraw keeps the view.
         if (change.Property == UnitsWidthProperty || change.Property == UnitsHeightProperty)
             panned = null;
@@ -349,6 +479,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         a.Count == b.Count && a.Zip(b).All(p => p switch
         {
             (Shape.Words x, Shape.Words y) => (x.X, x.Y, x.Color, x.Size, Locale.Show(x.Text)) == (y.X, y.Y, y.Color, y.Size, Locale.Show(y.Text)),
+            (Shape.Link x, Shape.Link y) => (x.Name, x.X1, x.Y1, x.X2, x.Y2, x.Color, x.Width) == (y.Name, y.X1, y.Y1, y.X2, y.Y2, y.Color, y.Width) && x.Via.SequenceEqual(y.Via),
             var (x, y) => Equals(x, y),
         });
 
@@ -464,6 +595,20 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                 ZoomBy(button == "zoomIn" ? 1.2 : 1 / 1.2);
             return;
         }
+        if (BendCommand is not null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var at = e.GetPosition(this);
+            if (LinkAt(UnitAt(at)) is { } found)
+            {
+                inHand = found.Name;
+                bendPress = (e.Pointer, found.Name, found.Via, found.Point, found.Via[found.Point], at, false);
+                e.Pointer.Capture(this);
+                e.Handled = true;
+                InvalidateVisual();
+                return;
+            }
+            inHand = null;
+        }
         pressed = (Command is not null || DragCommand is not null || Zoom) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
         if (!pressed)
             return;
@@ -527,6 +672,15 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                 loop?.Pointer("up", released.X, released.Y);
             e.Pointer.Capture(null);
             e.Handled = true;
+            return;
+        }
+        if (bendPress is { } bent && bent.Pointer == e.Pointer)
+        {
+            bendPress = null;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+            if (bent.Moved && bending is { } shown)
+                Bent(bent.Name, shown.Via);
             return;
         }
         if (!pressed)
@@ -616,7 +770,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         var gridDrawn = !Drawing.OfType<Shape.Clear>().Any();
         if (gridDrawn)
             DrawGrid(context, scale, At);
-        foreach (var shape in Drawing)
+        foreach (var shape in ShapesShown)
         {
             switch (shape)
             {
@@ -642,6 +796,18 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                 case Shape.Ring ring:
                     context.DrawEllipse(null, new Pen(BrushOf(ring.Color), ring.Width * scale), At(ring.X, ring.Y), ring.R * scale, ring.R * scale);
                     break;
+                case Shape.Link link:
+                    var route = LinkPoints(link);
+                    var geometry = new StreamGeometry();
+                    using (var g = geometry.Open())
+                    {
+                        g.BeginFigure(At(route[0].X, route[0].Y), false);
+                        foreach (var p in route.Skip(1))
+                            g.LineTo(At(p.X, p.Y));
+                        g.EndFigure(false);
+                    }
+                    context.DrawGeometry(null, new Pen(BrushOf(link.Color), link.Width * scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
+                    break;
                 case Shape.Image image when ResourcePictures.Of(image.Picture) is { } picture:
                     context.DrawImage(picture, new Rect(At(image.X, image.Y), new Size(image.Width * scale, image.Height * scale)));
                     break;
@@ -652,6 +818,9 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                     break;
             }
         }
+        // The bend points of the link in hand: drag one to move it, double-click it to take it away.
+        foreach (var handle in Handles())
+            context.DrawEllipse(BrushOf("panel"), new Pen(BrushOf("accent"), 1.5), At(handle.X, handle.Y), 5, 5);
         if (Zoom && Runs is null)
             DrawZoomButtons(context);
     }

@@ -16,7 +16,7 @@ const LIVE = Symbol("clarity-live");
 
 /** A pointer's event on a canvas, in the canvas's units. */
 /** Where a canvas was clicked or dragged, in its units; a drag also where it was pressed. */
-export type Pointer = { x: number; y: number; fromX?: number; fromY?: number };
+export type Pointer = { x: number; y: number; fromX?: number; fromY?: number; bent?: string; via?: number[] };
 
 /** What a handler set on a part; anything unset keeps the design. */
 export type PartState = {

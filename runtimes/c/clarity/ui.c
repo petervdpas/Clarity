@@ -1,3 +1,4 @@
+#include "clarity/code.h"
 #include "clarity/ui.h"
 
 #include <stdarg.h>
@@ -127,6 +128,25 @@ int64_t clarity_ui_x(const ClarityUi* ui, const char* part) { return pointer_at(
 int64_t clarity_ui_y(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "y"); }
 
 int64_t clarity_ui_from_x(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "fromX"); }
+
+const char* clarity_ui_bent(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    const cJSON* name = p && p->pointer ? cJSON_GetObjectItemCaseSensitive(p->pointer, "bent") : NULL;
+    return cJSON_IsString(name) ? name->valuestring : "";
+}
+
+ClarityIntegers clarity_ui_via(const ClarityUi* ui, const char* part) {
+    const ClarityPart* p = found(ui, part);
+    const cJSON* points = p && p->pointer ? cJSON_GetObjectItemCaseSensitive(p->pointer, "via") : NULL;
+    int count = cJSON_IsArray(points) ? cJSON_GetArraySize(points) : 0;
+    int64_t* items = clarity_alloc(sizeof(int64_t) * (size_t)(count ? count : 1));
+    int n = 0;
+    const cJSON* at;
+    cJSON_ArrayForEach(at, points) {
+        if (cJSON_IsNumber(at)) items[n++] = (int64_t)(at->valuedouble < 0 ? at->valuedouble - 0.5 : at->valuedouble + 0.5);
+    }
+    return clarity_integers((size_t)n, items);
+}
 
 int64_t clarity_ui_from_y(const ClarityUi* ui, const char* part) { return pointer_at(ui, part, "fromY"); }
 

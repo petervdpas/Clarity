@@ -706,7 +706,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `background color`; `dots N color`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `background color`; `dots N color`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `bend`, `pointer`, `key` |
 
 **Media**
 
@@ -1326,6 +1326,7 @@ code Main
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
 | `canvas.ring(x, y, r, color, width)` | width 1 when left out | A circle's outline. |
 | `canvas.text(x, y, text, color, size)` | color `"text"` and size 10 when left out | Text centered on x, y; slots are filled in the person's format, like a message. |
+| `canvas.link(name, x1, y1, x2, y2, via, color, width)` | width 1 when left out | A line people bend, from x1, y1 through its bend points to x2, y2. `via` is a `list<integer>` of the points, x, y, x, y, ... (`[]` for straight); `name` is plain text the code knows it by, as `"a{association.id}"`. See `on bend` below. |
 | `canvas.image(x, y, width, height, picture)` | | A picture of the resources folder by its name (`"pill.svg"`, or a picture constant), stretched to fill the box whose top left corner is x, y. |
 
 - A color is a color of the theme by name (`"accent"`, `"text"`, a color the theme declares) or written out (`"#101810"`); a name the theme does not have is its text color.
@@ -1358,6 +1359,7 @@ code Game
 - `grid 20` shows a dot every 20 of the canvas's units over the whole view, behind the shapes: after the drawing's `clear`, first when it has none, in the theme's `border` color. Zoomed out, dots closer than 8 pixels are thinned to every second, fourth and so on. `snap` (with a grid) says that what is moved lands on the grid; the pointer itself stays free, and code puts the moved thing on the grid with `snapped(value, step)`, the multiple of step nearest to value (a half rounds up; a step of 0 gives the value): `boxX = snapped(sheet.x - grabX, sheet.grid)`. Code reads and sets both while the app runs: `sheet.grid` (0 for none) and `sheet.snap`, as the line says until a handler sets them, so an app can offer Show grid and Snap to grid.
 - `background panel` (a theme color by name, or written out: `background "#f5f0e1"`) is what `clear()` without a color fills the canvas with; without it, the theme's `panel`. Code reads and sets it as `canvas.background`, as the line says until a handler sets it; an empty one is the theme's panel again. A person's chosen color can so reach a canvas through a setting: `sheet.background = settings.diagramColor`.
 - `dots 3 muted` says how many pixels across a grid's dots are (1 to 20; 2 without it) and their color (a theme color by name, or written out; the theme's `border` without it, and the color can be left out: `dots 3`). They are the same size whatever the zoom. Code reads and sets them as `canvas.dotSize` and `canvas.dotColor`, as the line says until a handler sets them; an empty color is the theme's border again.
+- `on bend: handler` lets people bend the canvas's links, as Clarity's diagram designer does: a press on a link adds a point there (or takes the point under it), dragging moves that point, and a double click on a point takes it away; the points of the link in hand show while it is. When the person lets go, the handler runs and reads which link (`canvas.bent`, its name) and its points now (`canvas.via`, a `list<integer>`), to keep them: `association.via = sheet.via` and `save association`. The canvas draws the link with those points until the drawing comes back with them. A press on a shape drawn over a link (a box above its line) is not a bend, and a press on no link is a click or a drag as before.
 
 ```clarity
 page Sheet: window

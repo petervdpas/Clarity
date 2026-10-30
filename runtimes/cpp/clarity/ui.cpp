@@ -43,6 +43,24 @@ int64_t Ui::open_section(const std::string& part) const { return part_or(parts_,
 bool Ui::checked(const std::string& part) const { return part_or(parts_, part, &PartState::checked, false); }
 std::string Ui::text(const std::string& part) const { return part_or(parts_, part, &PartState::text, std::string()); }
 
+std::string Ui::bent(const std::string& part) const {
+    auto found = parts_.find(part);
+    if (found == parts_.end() || !found->second.pointer) return "";
+    auto name = found->second.pointer->find("bent");
+    return name != found->second.pointer->end() && name->is_string() ? name->get<std::string>() : "";
+}
+
+std::vector<int64_t> Ui::via(const std::string& part) const {
+    std::vector<int64_t> out;
+    auto found = parts_.find(part);
+    if (found == parts_.end() || !found->second.pointer) return out;
+    auto points = found->second.pointer->find("via");
+    if (points == found->second.pointer->end() || !points->is_array()) return out;
+    for (const auto& at : *points)
+        if (at.is_number()) out.push_back(static_cast<int64_t>(std::llround(at.get<double>())));
+    return out;
+}
+
 int64_t Ui::pointer(const std::string& part, const char* key) const {
     auto found = parts_.find(part);
     if (found == parts_.end() || !found->second.pointer) return 0;

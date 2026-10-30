@@ -79,6 +79,12 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>Where a drag on a canvas started, down: <c>canvas.fromY</c>.</summary>
     public long FromY => Pointer?.FromY ?? 0;
 
+    /// <summary>The name of the link a person bent on a canvas: <c>canvas.bent</c>; empty without one.</summary>
+    public string Bent => Pointer?.Bent ?? "";
+
+    /// <summary>That link's bend points now, x, y, x, y, ...: <c>canvas.via</c>.</summary>
+    public List<long> Via => [.. Pointer?.Via ?? []];
+
     /// <summary>A canvas's grid in its units, 0 for none: <c>canvas.grid</c>, as its line says until a handler sets it.</summary>
     public long Grid
     {

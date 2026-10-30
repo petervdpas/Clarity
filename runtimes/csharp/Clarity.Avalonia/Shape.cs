@@ -26,6 +26,10 @@ public abstract record Shape
     /// <summary>A picture of the resources folder by its name, stretched to fill its box.</summary>
     public sealed record Image(double X, double Y, double Width, double Height, string Picture) : Shape;
 
+    /// <summary>A line people bend, named so code knows which: from X1, Y1 through its bend points
+    /// (<paramref name="Via"/>, x, y, x, y, ...) to X2, Y2.</summary>
+    public sealed record Link(string Name, double X1, double Y1, double X2, double Y2, IReadOnlyList<long> Via, string Color, double Width = 1) : Shape;
+
     /// <summary>A shape as a draw handler or an engine sends it (conformance/drawing.json).</summary>
     public static Shape Of(JsonNode sent)
     {
@@ -44,6 +48,9 @@ public abstract record Shape
             "ring" => new Ring(N("x"), N("y"), N("r"), T("color", "text"), N("width", 1)),
             "text" => new Words(N("x"), N("y"), Text.Plain(T("text", "")), T("color", "text"), N("size", 10)),
             "image" => new Image(N("x"), N("y"), N("width"), N("height"), T("picture", "")),
+            "link" => new Link(T("name", ""), N("x1"), N("y1"), N("x2"), N("y2"),
+                sent["via"] is JsonArray via ? [.. via.Select(v => v is JsonValue n && n.TryGetValue<double>(out var d) ? (long)Math.Round(d) : 0L)] : [],
+                T("color", "text"), N("width", 1)),
             var op => throw new EngineException($"'{op}' is no shape: {sent.ToJsonString()}"),
         };
     }

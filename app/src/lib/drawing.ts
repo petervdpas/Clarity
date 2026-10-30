@@ -75,6 +75,20 @@ export function svgOf(
         attrs: { x: n(shape.x), y: n(shape.y), fill: color, "font-size": n(shape.size ?? 10), "text-anchor": "middle", "dominant-baseline": "central" },
         text: shown(shape.text as ShownText),
       };
+    // A line people bend: from its start through its bend points to its end, named for the canvas to tell it apart.
+    case "link":
+      return {
+        tag: "polyline",
+        attrs: {
+          points: linkPoints(shape).map((p) => `${p.x},${p.y}`).join(" "),
+          fill: "none",
+          stroke: color,
+          "stroke-width": n(shape.width ?? 1),
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+          "data-link": String(shape.name ?? ""),
+        },
+      };
     // A picture of the resources folder, stretched to fill its box; one that is not there draws nothing.
     case "image": {
       const href = picture(String(shape.picture ?? ""));
@@ -84,6 +98,13 @@ export function svgOf(
     default:
       return { tag: "g", attrs: {} };
   }
+}
+
+/** The points a link goes through: its start, its bend points, its end. */
+export function linkPoints(shape: Shape): { x: number; y: number }[] {
+  const via = Array.isArray(shape.via) ? (shape.via as unknown[]).map(n) : [];
+  const bends = Array.from({ length: Math.floor(via.length / 2) }, (_, i) => ({ x: via[2 * i], y: via[2 * i + 1] }));
+  return [{ x: n(shape.x1), y: n(shape.y1) }, ...bends, { x: n(shape.x2), y: n(shape.y2) }];
 }
 
 /**

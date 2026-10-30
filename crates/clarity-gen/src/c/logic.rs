@@ -963,8 +963,9 @@ impl<'a> Emitter<'a> {
                             format!("cJSON_AddNumberToObject({json}, {key}, {value});")
                         }
                         (ShapeValue::Number, Err(default)) => format!("cJSON_AddNumberToObject({json}, {key}, {default});"),
-                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
-                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name, Ok(arg)) => format!("cJSON_AddStringToObject({json}, {key}, {});", bare(self.value(arg, &mut pre))),
+                        (ShapeValue::Points, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_json_integers({}));", bare(self.value(arg, &mut pre))),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => format!("cJSON_AddStringToObject({json}, {key}, {});", string(default)),
                         (ShapeValue::Text, Ok(arg)) => format!("cJSON_AddItemToObject({json}, {key}, clarity_text_json({}));", self.shown(arg, &mut pre)),
                     });
                 }
@@ -1518,6 +1519,8 @@ impl<'a> Emitter<'a> {
         match property.as_str() {
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("clarity_ui_{property}(ui, {quoted})"),
             "fromX" => format!("clarity_ui_from_x(ui, {quoted})"),
+            "bent" => format!("clarity_ui_bent(ui, {quoted})"),
+            "via" => format!("clarity_ui_via(ui, {quoted})"),
             "fromY" => format!("clarity_ui_from_y(ui, {quoted})"),
             "caption" => format!("clarity_ui_caption(ui, {quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("clarity_ui_readonly(ui, {quoted}, {})", info.readonly),

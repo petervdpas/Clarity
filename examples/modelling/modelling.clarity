@@ -157,9 +157,9 @@ page Diagrams: window
 
     tabs name diagramTabs at 1,1 span 12 rows 12
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped
+            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped on bend: classBent
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped
+            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped on bend: entityBent
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
 page Output: window
@@ -555,16 +555,21 @@ code Diagrams
             if t.base != none
                 let base = t.base
                 let to = place_of(names, base.name)
-                classCanvas.line(xs[from] + 130, ys[from], xs[to] + 130, ys[to] + heights[to], "accent", 3)
+                // The line to its base bends too, named after the type: its own points keep where.
+                classCanvas.link("b{t.id}", xs[from] + 130, ys[from], xs[to] + 130, ys[to] + heights[to], t.base_via, "accent", 3)
         let associations = find a in Association where a.project == project
         for a in associations
             let source = a.source
             let target = a.target
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
-            classCanvas.line(xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, "border", 2)
+            // A line people bend, named after its association, so a bend says which.
+            classCanvas.link("a{a.id}", xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, a.via, "border", 2)
             if a.label != ""
-                classCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
+                if count(a.via) >= 2
+                    classCanvas.text(a.via[1], a.via[2] - 8, a.label, "text", 11)
+                else
+                    classCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, a.label, "text", 11)
         let i = 1
         for t in types
             let x = xs[i]
@@ -628,9 +633,12 @@ code Diagrams
             let target = r.target
             let from = place_of(names, source.name)
             let to = place_of(names, target.name)
-            erdCanvas.line(xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, "border", 2)
+            erdCanvas.link("r{r.id}", xs[from] + 130, ys[from] + heights[from] / 2, xs[to] + 130, ys[to] + heights[to] / 2, r.via, "border", 2)
             let ends = left_end(r.source_side) + "--" + right_end(r.target_side)
-            erdCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
+            if count(r.via) >= 2
+                erdCanvas.text(r.via[1], r.via[2] - 8, "{ends} {r.label}", "text", 11)
+            else
+                erdCanvas.text((xs[from] + xs[to]) / 2 + 130, (ys[from] + ys[to] + heights[from] / 2 + heights[to] / 2) / 2 - 8, "{ends} {r.label}", "text", 11)
         let i = 1
         for e in entities
             let x = xs[i]
@@ -646,6 +654,24 @@ code Diagrams
                 erdCanvas.text(x + 130, y + 44 + line * 18, "{c.type} {c.name}{mark}", "text", 11)
                 line = line + 1
             i = i + 1
+
+    // A bent line keeps its points: the association it stands for saves them.
+    handler classBent
+        for a in find a in Association where a.project == project
+            if "a{a.id}" == classCanvas.bent
+                a.via = classCanvas.via
+                save a
+        for t in types
+            if "b{t.id}" == classCanvas.bent
+                t.base_via = classCanvas.via
+                save t
+        types = find t in ClassType where t.project == project order by t.name
+
+    handler entityBent
+        for r in find r in Relationship where r.project == project
+            if "r{r.id}" == erdCanvas.bent
+                r.via = erdCanvas.via
+                save r
 
     handler entityDragged
         if movingId == 0

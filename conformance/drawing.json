@@ -1,5 +1,5 @@
 {
-  "about": "A canvas drawn by code (DESIGN 5.7, backend renderer). The draw handler of a canvas runs when its window opens and after every other handler of the window; each run starts an empty drawing, which the backend sends as the canvas part's `drawing`, a list of shapes in the canvas's own units (`units W x H`, 100 x 100 without it, x to the right and y down). A renderer scales the units to fit the part, keeping their proportion, centered, and draws the shapes in order. A color is a color of the theme by name (`accent`, `text`) or written out (`#rrggbb`); a name the theme does not have is its text color. Widths and sizes are in units too. `text` is centered on its point, horizontally and vertically, its text filled in the person's format like any shown text. `image` draws a picture of the project's resources folder by its name (`picture`: a .png, .jpg, .gif, .bmp, .webp or .svg file) stretched to fill its box, `x` and `y` its top left corner; a picture that is not there draws nothing. `shapes` gives the code each shape is drawn by and what it sends. `angles` gives sin and cos of degrees, rounded to 10 decimals, as every runtime computes them. A canvas can be clicked (`on click`): the renderer finds where in the canvas's units, rounded down, from where in the part the click was (clicks: the part's size and the click in pixels, the drawing fitted as it is drawn, whole and centred), sets it in the part's `pointer` and runs the handler, which reads `canvas.x` and `canvas.y` (points: a part's state and what they read, 0 without a pointer). A drag (`on drag`, while the pointer moves with its button down) and a drop (`on drop`, when it is let go) set the pointer the same way, with `fromX` and `fromY` where it was pressed, which the handler reads as `canvas.fromX` and `canvas.fromY` (0 when the pointer has none). The pointer is a record that grows: it holds `x`, `y`, `fromX` and `fromY` now, and a runtime keeps any other field it is sent without failing on it. A click beside the drawing, where the part shows none of it, runs nothing.",
+  "about": "A canvas drawn by code (DESIGN 5.7, backend renderer). The draw handler of a canvas runs when its window opens and after every other handler of the window; each run starts an empty drawing, which the backend sends as the canvas part's `drawing`, a list of shapes in the canvas's own units (`units W x H`, 100 x 100 without it, x to the right and y down). A renderer scales the units to fit the part, keeping their proportion, centered, and draws the shapes in order. A color is a color of the theme by name (`accent`, `text`) or written out (`#rrggbb`); a name the theme does not have is its text color. Widths and sizes are in units too. `text` is centered on its point, horizontally and vertically, its text filled in the person's format like any shown text. `link` draws a line people bend, named so code knows which: from `x1`, `y1` to `x2`, `y2` through its bend points `via` (whole numbers, x, y, x, y, ...); a person drags it to add a point, drags a point to move it, and double-clicks one to take it away, and when they let go the canvas's `on bend` runs with its `bent` (the name) and `via` (its points now). `image` draws a picture of the project's resources folder by its name (`picture`: a .png, .jpg, .gif, .bmp, .webp or .svg file) stretched to fill its box, `x` and `y` its top left corner; a picture that is not there draws nothing. `shapes` gives the code each shape is drawn by and what it sends. `angles` gives sin and cos of degrees, rounded to 10 decimals, as every runtime computes them. A canvas can be clicked (`on click`): the renderer finds where in the canvas's units, rounded down, from where in the part the click was (clicks: the part's size and the click in pixels, the drawing fitted as it is drawn, whole and centred), sets it in the part's `pointer` and runs the handler, which reads `canvas.x` and `canvas.y` (points: a part's state and what they read, 0 without a pointer). A drag (`on drag`, while the pointer moves with its button down) and a drop (`on drop`, when it is let go) set the pointer the same way, with `fromX` and `fromY` where it was pressed, which the handler reads as `canvas.fromX` and `canvas.fromY` (0 when the pointer has none). A bend (`on bend`) sets it with `bent`, the name of the link a person bent, and `via`, its bend points now, which the handler reads as `canvas.bent` and `canvas.via` (empty when the pointer has none). The pointer is a record that grows: it holds `x`, `y`, `fromX` and `fromY` now, and a runtime keeps any other field it is sent without failing on it. A click beside the drawing, where the part shows none of it, runs nothing.",
   "shapes": [
     {
       "code": "dial.clear(\"#101810\")",
@@ -106,6 +106,23 @@
         "width": 30,
         "height": 15,
         "picture": "pill.svg"
+      }
+    },
+    {
+      "code": "dial.link(\"a-b\", 10, 20, 90, 20, [50, 60], \"border\", 2)",
+      "sends": {
+        "op": "link",
+        "name": "a-b",
+        "x1": 10,
+        "y1": 20,
+        "x2": 90,
+        "y2": 20,
+        "via": [
+          50,
+          60
+        ],
+        "color": "border",
+        "width": 2
       }
     }
   ],
@@ -243,7 +260,9 @@
       "x": 120,
       "y": 150,
       "fromX": 0,
-      "fromY": 0
+      "fromY": 0,
+      "bent": "",
+      "via": []
     },
     {
       "part": {
@@ -257,7 +276,35 @@
       "x": 900,
       "y": 410,
       "fromX": 860,
-      "fromY": 400
+      "fromY": 400,
+      "bent": "",
+      "via": []
+    },
+    {
+      "part": {
+        "pointer": {
+          "x": 0,
+          "y": 0,
+          "bent": "a-b",
+          "via": [
+            500,
+            200,
+            640,
+            200
+          ]
+        }
+      },
+      "x": 0,
+      "y": 0,
+      "fromX": 0,
+      "fromY": 0,
+      "bent": "a-b",
+      "via": [
+        500,
+        200,
+        640,
+        200
+      ]
     },
     {
       "part": {
@@ -271,14 +318,18 @@
       "x": 7,
       "y": 3,
       "fromX": 0,
-      "fromY": 0
+      "fromY": 0,
+      "bent": "",
+      "via": []
     },
     {
       "part": {},
       "x": 0,
       "y": 0,
       "fromX": 0,
-      "fromY": 0
+      "fromY": 0,
+      "bent": "",
+      "via": []
     }
   ],
   "views": {

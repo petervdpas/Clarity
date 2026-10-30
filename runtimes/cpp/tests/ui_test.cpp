@@ -127,6 +127,8 @@ TEST(a_canvas_says_where_it_was_clicked_as_every_runtime_does) {
         CHECK_EQ(ui.y("board"), c["y"].get<int64_t>());
         CHECK_EQ(ui.from_x("board"), c["fromX"].get<int64_t>());
         CHECK_EQ(ui.from_y("board"), c["fromY"].get<int64_t>());
+        CHECK_EQ(ui.bent("board"), c["bent"].get<std::string>());
+        CHECK((ui.via("board") == c["via"].get<std::vector<int64_t>>()));
         // What the pointer holds besides x and y travels back unchanged.
         CHECK_EQ(json(ui.reply("Main", json::object()).state)["parts"]["board"], c["part"]);
     }

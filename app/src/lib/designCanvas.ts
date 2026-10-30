@@ -15,7 +15,6 @@ export const FOOT = 6;
 const PAD = 12;
 const GAP = 14;
 /** How boxes without a place are laid out: at most this many in a row, this far apart. */
-const GRID_COLUMNS = 4;
 const GRID_GAP = 60;
 
 export type Point = { x: number; y: number };
@@ -79,7 +78,10 @@ function cellWidths(rows: string[][], measure: (text: string) => number): number
 }
 
 /** Each shape's box: its size from its text, its place as given or the next free place of the layout. */
-export function boxes(shapes: Shape[], measure: (text: string) => number): Box[] {
+/** A line as the layout reads it: its two ends, and what is drawn at each, which says which is the whole. */
+export type LaidLine = { left: string; right: string; leftEnd?: EndStyle; rightEnd?: EndStyle };
+
+export function boxes(shapes: Shape[], measure: (text: string) => number, lines: LaidLine[] = []): Box[] {
   const sized = shapes.map((shape) => {
     const widths = cellWidths(shape.rows, measure);
     const used = widths.filter((w) => w > 0);
@@ -91,7 +93,7 @@ export function boxes(shapes: Shape[], measure: (text: string) => number): Box[]
     const h = title + ROW * shape.rows.length + FOOT;
     return { shape, w, h, title, stereotype };
   });
-  const places = layout(sized.map(({ shape, w, h }) => ({ shape, w, h })));
+  const places = layout(sized.map(({ shape, w, h }) => ({ shape, w, h })), lines);
   return sized.map(({ shape, w, h, title, stereotype }) => {
     const base = { name: shape.name, rows: shape.rows, stereotype, tone: shape.tone ?? "entity", cells: shape.cells ?? [], group: shape.group ?? null, title, w, h };
     if (shape.x !== null && shape.y !== null) return { ...base, x: shape.x, y: shape.y, placed: true };
@@ -103,10 +105,10 @@ export function boxes(shapes: Shape[], measure: (text: string) => number): Box[]
 /**
  * Places for the shapes without one, beside the placed ones: a group at a
  * time in the order the groups are first met (boxes without a group last),
- * rows of at most GRID_COLUMNS boxes, each group starting a row of its own
- * far enough below the one above for both frames.
+ * each group laid out in layers (`layered`) and starting far enough below
+ * the one above for both frames.
  */
-function layout(items: { shape: Shape; w: number; h: number }[]): Map<string, Point> {
+function layout(items: { shape: Shape; w: number; h: number }[], lines: LaidLine[]): Map<string, Point> {
   const placed = items.filter(({ shape }) => shape.x !== null && shape.y !== null);
   const startX = placed.length > 0 ? Math.max(...placed.map(({ shape, w }) => (shape.x ?? 0) + w)) + GRID_GAP : 40;
   const open = items.filter(({ shape }) => shape.x === null || shape.y === null);
@@ -115,21 +117,109 @@ function layout(items: { shape: Shape; w: number; h: number }[]): Map<string, Po
   let y = 40;
   for (const group of order) {
     const members = open.filter(({ shape }) => (shape.group ?? null) === group);
-    for (let i = 0; i < members.length; i += GRID_COLUMNS) {
-      const row = members.slice(i, i + GRID_COLUMNS);
-      let x = startX;
-      for (const { shape, w } of row) {
-        places.set(shape.name, { x, y });
-        x += w + GRID_GAP;
-      }
-      y += Math.max(...row.map(({ h }) => h)) + GRID_GAP;
+    const laid = layered(members.map(({ shape, w, h }) => ({ name: shape.name, w, h })), lines);
+    let bottom = y;
+    for (const [name, at] of laid) {
+      const member = members.find(({ shape }) => shape.name === name)!;
+      places.set(name, { x: startX + at.x, y: y + at.y });
+      bottom = Math.max(bottom, y + at.y + member.h);
     }
-    y += 2 * FRAME_PAD + FRAME_LABEL;
+    y = bottom + GRID_GAP + 2 * FRAME_PAD + FRAME_LABEL;
   }
   return places;
 }
 
-/** The room between a frame and the boxes in it, and the height of its name above them. */
+/** The space between layers, and between boxes in a layer. */
+const LAYER_GAP = 90;
+
+/** Whether an end is the whole of what the line owns or lists: a diamond, as UML draws it. */
+const isWhole = (end?: EndStyle) => end?.kind === "uml" && (end.head === "filledDiamond" || end.head === "diamond");
+
+/**
+ * Places for boxes in layers, from (0, 0): what is referred to stands above
+ * what refers to it, and a whole above its parts. Lines that go round in a
+ * circle are cut where they close it. Each layer is ordered by where the
+ * boxes' neighbours are, swept down and up a few times, so lines cross
+ * less; each is a row, centred on the widest. Boxes no line reaches stand
+ * in a row of their own, below.
+ */
+export function layered(items: { name: string; w: number; h: number }[], lines: LaidLine[]): Map<string, Point> {
+  const names = new Set(items.map((i) => i.name));
+  // Each line once, from the box above to the box below.
+  const edges: [string, string][] = [];
+  for (const l of lines) {
+    if (l.left === l.right || !names.has(l.left) || !names.has(l.right)) continue;
+    edges.push(isWhole(l.leftEnd) ? [l.left, l.right] : [l.right, l.left]);
+  }
+  const below = new Map<string, string[]>(items.map((i) => [i.name, []]));
+  // Lines that close a circle are left out, found by walking down from each box in the order given.
+  const state = new Map<string, "walking" | "done">();
+  const kept: [string, string][] = [];
+  const walk = (name: string) => {
+    state.set(name, "walking");
+    for (const [up, down] of edges) {
+      if (up !== name) continue;
+      if (state.get(down) === "walking") continue;
+      kept.push([up, down]);
+      if (!state.has(down)) walk(down);
+    }
+    state.set(name, "done");
+  };
+  for (const { name } of items) if (!state.has(name)) walk(name);
+  for (const [up, down] of kept) below.get(up)!.push(down);
+  // A box's layer is the longest way down to it from a box nothing is above.
+  const layer = new Map<string, number>();
+  const above = new Map<string, string[]>(items.map((i) => [i.name, []]));
+  for (const [up, down] of kept) above.get(down)!.push(up);
+  const layerOf = (name: string): number => {
+    if (layer.has(name)) return layer.get(name)!;
+    layer.set(name, 0);
+    const at = Math.max(-1, ...above.get(name)!.map(layerOf)) + 1;
+    layer.set(name, at);
+    return at;
+  };
+  const connected = new Set(kept.flat());
+  const linked = items.filter((i) => connected.has(i.name));
+  const loose = items.filter((i) => !connected.has(i.name));
+  for (const { name } of linked) layerOf(name);
+  const count = Math.max(0, ...linked.map((i) => layer.get(i.name)!)) + 1;
+  const rows: string[][] = Array.from({ length: count }, () => []);
+  for (const { name } of linked) rows[layer.get(name)!].push(name);
+  // Order each layer by the mean place of its neighbours in the layer above, then below.
+  const neighbours = (name: string) => [...above.get(name)!, ...below.get(name)!];
+  const placeOf = () => new Map(rows.flatMap((row) => row.map((name, i) => [name, i / Math.max(1, row.length - 1)] as const)));
+  const sweep = (from: number, to: number, step: number) => {
+    for (let r = from; r !== to; r += step) {
+      const at = placeOf();
+      const mean = (name: string) => {
+        const near = neighbours(name).filter((n) => layer.get(n) === r - step);
+        return near.length ? near.reduce((sum, n) => sum + at.get(n)!, 0) / near.length : at.get(name)!;
+      };
+      rows[r].sort((a, b) => mean(a) - mean(b));
+    }
+  };
+  for (let pass = 0; pass < 4; pass++) {
+    sweep(1, count, 1);
+    sweep(count - 2, -1, -1);
+  }
+  if (loose.length > 0) rows.push(loose.map((i) => i.name));
+  // Each row centred on the widest, the rows one below the other.
+  const size = new Map(items.map((i) => [i.name, i]));
+  const width = (row: string[]) => row.reduce((sum, n) => sum + size.get(n)!.w, 0) + LAYER_GAP * Math.max(0, row.length - 1);
+  const widest = Math.max(0, ...rows.map(width));
+  const places = new Map<string, Point>();
+  let y = 0;
+  for (const row of rows) {
+    let x = (widest - width(row)) / 2;
+    for (const name of row) {
+      places.set(name, { x: Math.round(x), y });
+      x += size.get(name)!.w + LAYER_GAP;
+    }
+    y += Math.max(0, ...row.map((n) => size.get(n)!.h)) + LAYER_GAP;
+  }
+  return places;
+}
+
 export const FRAME_PAD = 16;
 export const FRAME_LABEL = 20;
 

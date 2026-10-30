@@ -640,8 +640,9 @@ impl<'a> Emitter<'a> {
                             _ => format!("double({})", self.value(arg)),
                         },
                         (ShapeValue::Number, Err(default)) => format!("{default}.0"),
-                        (ShapeValue::Color | ShapeValue::Picture, Ok(arg)) => self.value(arg),
-                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text, Err(default)) => string(default),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name, Ok(arg)) => self.value(arg),
+                        (ShapeValue::Points, Ok(arg)) => format!("nlohmann::json({})", self.value(arg)),
+                        (ShapeValue::Color | ShapeValue::Picture | ShapeValue::Text | ShapeValue::Name | ShapeValue::Points, Err(default)) => string(default),
                         (ShapeValue::Text, Ok(arg)) => format!("nlohmann::json({})", self.shown(arg)),
                     };
                     fields.push(format!("{{{}, {value}}}", string(key)));
@@ -990,6 +991,8 @@ impl<'a> Emitter<'a> {
         match property.as_str() {
             "visible" | "enabled" | "error" | "text" | "checked" | "x" | "y" => format!("ui.{property}({quoted})"),
             "fromX" => format!("ui.from_x({quoted})"),
+            "bent" => format!("ui.bent({quoted})"),
+            "via" => format!("ui.via({quoted})"),
             "fromY" => format!("ui.from_y({quoted})"),
             "caption" => format!("ui.caption({quoted}, {})", string(info.caption.as_deref().unwrap_or_default())),
             "readonly" => format!("ui.readonly({quoted}, {})", info.readonly),

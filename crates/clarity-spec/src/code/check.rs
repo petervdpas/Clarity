@@ -1688,6 +1688,10 @@ pub enum ShapeValue {
     Text,
     /// A picture of the resources folder, by its name.
     Picture,
+    /// Text as it is, not shown: a name the code knows a shape by.
+    Name,
+    /// Points as whole numbers, x, y, x, y, ...: a list<integer>.
+    Points,
 }
 
 /// A shape a draw handler draws on its canvas: its name and its values, in
@@ -1697,7 +1701,7 @@ pub struct Shape {
     pub values: &'static [(&'static str, ShapeValue, Option<&'static str>)],
 }
 
-pub const SHAPES: [Shape; 7] = [
+pub const SHAPES: [Shape; 8] = [
     // Without a color, the canvas's background.
     Shape { name: "clear", values: &[("color", ShapeValue::Color, Some(""))] },
     Shape {
@@ -1743,6 +1747,20 @@ pub const SHAPES: [Shape; 7] = [
             ("text", ShapeValue::Text, None),
             ("color", ShapeValue::Color, Some("text")),
             ("size", ShapeValue::Number, Some("10")),
+        ],
+    },
+    // A line people bend, from one point to another through its points; named, so `on bend` says which.
+    Shape {
+        name: "link",
+        values: &[
+            ("name", ShapeValue::Name, None),
+            ("x1", ShapeValue::Number, None),
+            ("y1", ShapeValue::Number, None),
+            ("x2", ShapeValue::Number, None),
+            ("y2", ShapeValue::Number, None),
+            ("via", ShapeValue::Points, None),
+            ("color", ShapeValue::Color, None),
+            ("width", ShapeValue::Number, Some("1")),
         ],
     },
     Shape {
@@ -2016,11 +2034,13 @@ impl<'a> BodyChecker<'_, 'a> {
         for (arg, (name, kind, _)) in args.iter().zip(found.values.iter()) {
             let ty = match kind {
                 ShapeValue::Text => self.shown_text(arg),
+                ShapeValue::Points => self.expr(arg, Some(Ty::Values(Item::Integer))),
                 _ => self.expr(arg, None),
             };
             let problem = match kind {
                 ShapeValue::Number if !matches!(ty, Ty::Integer | Ty::Decimal | Ty::Money | Ty::Unknown) => Some("a number"),
-                ShapeValue::Color | ShapeValue::Picture if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
+                ShapeValue::Color | ShapeValue::Picture | ShapeValue::Name if !matches!(ty, Ty::Text | Ty::Unknown) => Some("text"),
+                ShapeValue::Points if !matches!(ty, Ty::Values(Item::Integer) | Ty::Unknown) => Some("a list of whole numbers"),
                 ShapeValue::Text if !ty.is_value() => Some("text or a value"),
                 _ => None,
             };
@@ -2927,6 +2947,13 @@ impl<'a> BodyChecker<'_, 'a> {
             // Where a drag on a canvas started, in its own units.
             "fromX" | "fromY" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
                 Some(Place::Value { ty: Ty::Integer, writable: Err(format!("{name}.{property} is read, not set: it is where a drag on the canvas started")) })
+            }
+            // The line a person bent on a canvas: its name, and its points now.
+            "bent" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
+                Some(Place::Value { ty: Ty::Text, writable: Err(format!("{name}.{property} is read, not set: it is the line a person bent")) })
+            }
+            "via" if matches!(part, Part::Widget(props) if props.kind == WidgetKind::Canvas) => {
+                Some(Place::Value { ty: Ty::Values(Item::Integer), writable: Err(format!("{name}.{property} is read, not set: it is where the line a person bent bends now")) })
             }
             "selected" => {
                 let Part::Widget(props) = part else { return None };

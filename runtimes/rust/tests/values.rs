@@ -59,6 +59,8 @@ fn a_canvas_says_where_it_was_clicked_as_every_runtime_does() {
         let ui = Ui::from_state(&state);
         assert_eq!((ui.x("board"), ui.y("board")), (case["x"].as_i64().unwrap(), case["y"].as_i64().unwrap()), "{case}");
         assert_eq!((ui.from_x("board"), ui.from_y("board")), (case["fromX"].as_i64().unwrap(), case["fromY"].as_i64().unwrap()), "{case}");
+        let via: Vec<i64> = case["via"].as_array().unwrap().iter().map(|v| v.as_i64().unwrap()).collect();
+        assert_eq!((ui.bent("board"), ui.via("board")), (case["bent"].as_str().unwrap().to_string(), via), "{case}");
         // What the pointer holds besides x and y travels back unchanged.
         let reply = ui.reply("Main", serde_json::Map::new());
         assert_eq!(serde_json::to_value(&reply.state.parts["board"]).unwrap(), case["part"], "{case}");

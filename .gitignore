@@ -12,5 +12,6 @@ obj/
 # Settings folders older secrets tests left beside where they ran.
 /clarity-secret-settings-*/
 
-# Each person's own editor settings, with paths of their own machine.
+# Each person's own editor and assistant settings, with paths of their own machine.
 /.vscode/
+/.claude/

@@ -47,7 +47,17 @@ public class ColorInput : UserControl, IInput
     public ColorInput()
     {
         Classes.Add("color");
-        Swatch = new Button { Classes = { "swatch" }, Padding = new Thickness(3), Content = shown, Width = 32, VerticalAlignment = VerticalAlignment.Stretch };
+        // The color fills the button, whatever a theme says about what buttons hold.
+        Swatch = new Button
+        {
+            Classes = { "swatch" },
+            Padding = new Thickness(3),
+            Content = shown,
+            Width = 32,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+        };
         shown.MinHeight = 14;
         var grid = new UniformGrid { Columns = 10 };
         foreach (var color in Palette.Rows.SelectMany(row => row))

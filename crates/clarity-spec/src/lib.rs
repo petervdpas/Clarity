@@ -90,7 +90,8 @@ pub fn load_sources<'a>(sources: impl IntoIterator<Item = (&'a str, &'a str)>) -
 /// A form's label column (`labels 3`): a label part for each input in it,
 /// in the first columns of the input's row, showing the field's label and
 /// named after the input (`nameBoxLabel`), as the designer would write one.
-/// A checkbox, a switch and a toggle label themselves.
+/// A checkbox, a switch and a toggle label themselves: one without a caption
+/// shows its field's label as its caption.
 fn make_form_labels(files: &mut [model::SpecFile]) {
     use widgets::WidgetKind;
     let entities: BTreeMap<String, model::Entity> = files.iter().flat_map(|f| &f.entities).map(|e| (e.name.name.clone(), e.clone())).collect();
@@ -107,13 +108,20 @@ fn make_form_labels(files: &mut [model::SpecFile]) {
                     .and_then(|d| d.entity())
                     .and_then(|e| entities.get(&e.name));
                 let mut made = Vec::new();
-                for child in &widget.children {
+                for child in &mut widget.children {
+                    let field_of = |p: &model::WidgetProps| p.bind.as_deref().and_then(|b| b.split_once('.')).and_then(|(_, f)| entity.and_then(|e| e.field(f)));
+                    let labels_itself = matches!(child.props.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle);
+                    // One without a caption of its own shows its field's label.
+                    if labels_itself && child.props.caption.is_none()
+                        && let Some(field) = field_of(&child.props)
+                    {
+                        child.props.caption = Some(field.modifiers.label.clone().unwrap_or_else(|| model::default_label(&field.name.name)));
+                    }
                     let p = &child.props;
-                    let labels_itself = matches!(p.kind, WidgetKind::Checkbox | WidgetKind::Switch | WidgetKind::Toggle);
                     if !widgets::info(p.kind).input || labels_itself || p.made {
                         continue;
                     }
-                    let (Some(name), Some(field)) = (&p.name, p.bind.as_deref().and_then(|b| b.split_once('.')).and_then(|(_, f)| entity.and_then(|e| e.field(f)))) else { continue };
+                    let (Some(name), Some(field)) = (&p.name, field_of(p)) else { continue };
                     let mut label = widgets::new_props(WidgetKind::Label, 1, p.row);
                     label.width = columns;
                     label.caption = Some(field.modifiers.label.clone().unwrap_or_else(|| model::default_label(&field.name.name)));

@@ -1074,8 +1074,11 @@
         units={p.units ?? { width: DEFAULT_UNITS, height: DEFAULT_UNITS }}
         shown={(text) => shownText(preview, text)}
         zoom={p.zoom && !design}
-        grid={p.grid}
-        snap={p.snap}
+        grid={partState?.grid ?? p.grid}
+        background={partState?.background ?? p.background}
+        dotSize={partState?.dotSize ?? p.dotSize}
+        dotColor={partState?.dotColor ?? p.dotColor}
+        words={{ zoomOut: ownWord(preview, "Zoom out"), zoomWhole: ownWord(preview, "Show it whole"), zoomIn: ownWord(preview, "Zoom in") }}
         onpoint={live && p.name && !design && p.handlers.some((h) => h.event === "click")
           ? (point) => {
               // Where it was clicked goes with the part's state, for the handler to read.

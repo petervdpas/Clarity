@@ -136,6 +136,13 @@ bool clarity_texts_set(ClarityTexts list, int64_t position, const char* value) {
 }
 
 
+int64_t clarity_snapped(int64_t value, int64_t step) {
+    if (step <= 0) return value;
+    int64_t n = 2 * value + step, q = n / (2 * step);
+    if (n % (2 * step) != 0 && n < 0) --q;
+    return q * step;
+}
+
 ClarityIntegers clarity_range(int64_t from, int64_t to) {
     size_t count = to < from ? 0 : (size_t)(to - from) + 1;
     ClarityIntegers list = {clarity_alloc(sizeof(int64_t) * (count ? count : 1)), count};

@@ -12,6 +12,8 @@
     X(sin_and_cos_take_degrees_as_every_runtime_does)            \
     X(a_draw_starts_an_empty_drawing_that_travels_with_the_part)  \
     X(a_canvas_says_where_it_was_clicked_as_every_runtime_does)   \
+    X(snapped_rounds_to_its_step_as_every_runtime_does)           \
+    X(a_canvas_keeps_the_grid_and_snap_code_sets)                 \
     X(a_foldable_part_is_folded_as_every_runtime_says)           \
     X(a_sidebar_is_collapsed_and_maximized_as_every_runtime_says) \
     X(a_ribbons_open_tab_is_as_every_runtime_says)               \

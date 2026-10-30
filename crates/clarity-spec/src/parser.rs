@@ -1541,6 +1541,14 @@ fn parse_widget_page(
     })
 }
 
+/// The words a part's line is written with, which a color after `dots 3` is not.
+const LINE_WORDS: [&str; 60] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "edit", "show", "surface", "renderer", "source", "for",
+    "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
+    "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly",
+    "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
+];
+
 fn parse_widget_props(
     cursor: &mut Cursor,
     kind: WidgetKind,
@@ -1578,6 +1586,9 @@ fn parse_widget_props(
         zoom: false,
         grid: None,
         snap: false,
+        background: None,
+        dot_size: None,
+        dot_color: None,
         runs: None,
         tooltip: None,
         icon: None,
@@ -1973,6 +1984,24 @@ fn parse_widget_props(
             "snap" => {
                 applies(WidgetProperty::Snap)?;
                 props.snap = true;
+            }
+            "dots" => {
+                applies(WidgetProperty::Dots)?;
+                props.dot_size = Some(cursor.expect_number("the dots' size in pixels, as in dots 3")?);
+                // Their color, when it follows: a string, or a name that is no word of the line.
+                props.dot_color = match cursor.peek_kind() {
+                    Some(TokenKind::Str) => Some(cursor.expect_string("a color")?),
+                    Some(TokenKind::Ident) if cursor.peek().is_some_and(|t| !LINE_WORDS.contains(&t.text.as_str())) => Some(cursor.expect_ident("a color")?.name),
+                    _ => None,
+                };
+            }
+            "background" => {
+                applies(WidgetProperty::Background)?;
+                props.background = Some(if matches!(cursor.peek_kind(), Some(TokenKind::Str)) {
+                    cursor.expect_string("a color, as in background panel or background \"#101810\"")?
+                } else {
+                    cursor.expect_ident("a color, as in background panel or background \"#101810\"")?.name
+                });
             }
             "to" => {
                 applies(WidgetProperty::To)?;

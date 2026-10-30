@@ -41,6 +41,9 @@ pub const STEP_KEYS: [(&str, &str); 3] = [("back", "Back"), ("next", "Next"), ("
 pub const PROGRESS_KEYS: [(&str, &str); 1] = [("stopCall", "Stop")];
 /// Clarity's word of a folder part: its button that chooses a folder.
 pub const FOLDER_KEYS: [(&str, &str); 1] = [("chooseFolder", "Choose a folder")];
+
+/// The buttons of a canvas that zooms: out, back to whole, in.
+pub const ZOOM_KEYS: [(&str, &str); 3] = [("zoomOut", "Zoom out"), ("zoomWhole", "Show it whole"), ("zoomIn", "Zoom in")];
 pub const LANGUAGE_PICKER_KEYS: [(&str, &str); 1] = [("languagePicker", "Language")];
 pub const THEME_PICKER_KEYS: [(&str, &str); 1] = [("themePicker", "Theme")];
 /// Clarity's words of a file part bound to a file field: its empty state,
@@ -132,6 +135,7 @@ pub fn own_words() -> impl Iterator<Item = &'static (&'static str, &'static str)
         .chain(&STEP_KEYS)
         .chain(&FILE_KEYS)
         .chain(&FOLDER_KEYS)
+        .chain(&ZOOM_KEYS)
         .chain(&PROGRESS_KEYS)
         .chain(&TAGS_KEYS)
         .chain(&PAGE_KEYS)
@@ -510,6 +514,7 @@ fn shown(project: &Project) -> Shown {
     let progress = project.files.iter().flat_map(|f| &f.engines).any(|e| e.uses.iter().any(|u| u.name == crate::code::check::PROGRESS));
     let folders = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.kind == crate::widgets::WidgetKind::Folder));
     let paged = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.page.is_some()));
+    let zooms = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| w.props.zoom));
     let trees = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| matches!(w.props.kind, crate::widgets::WidgetKind::Tree | crate::widgets::WidgetKind::TreeTable)));
     let bound_tags = project.files.iter().flat_map(|f| &f.pages).any(|p| any_widget(&p.widgets, &|w| {
         w.props.kind == crate::widgets::WidgetKind::Tags && w.props.bind.is_some()
@@ -529,6 +534,7 @@ fn shown(project: &Project) -> Shown {
         .chain(if wizard { STEP_KEYS.as_slice() } else { &[] })
         .chain(if bound_file { FILE_KEYS.as_slice() } else { &[] })
         .chain(if folders { FOLDER_KEYS.as_slice() } else { &[] })
+        .chain(if zooms { ZOOM_KEYS.as_slice() } else { &[] })
         .chain(if progress { PROGRESS_KEYS.as_slice() } else { &[] })
         .chain(if bound_tags { TAGS_KEYS.as_slice() } else { &[] })
         .chain(if paged { PAGE_KEYS.as_slice() } else { &[] })

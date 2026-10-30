@@ -211,6 +211,14 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
+    pub grid: u32,
+    pub snap: bool,
+    /// A canvas's background as its line says; empty is the theme's panel.
+    pub background: String,
+    /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
+    pub dot_size: u32,
+    pub dot_color: String,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
@@ -234,7 +242,7 @@ impl WindowCtx {
         for widget in widgets {
             if let Some(name) = &widget.props.name {
                 let custom = widget.props.part.clone().map(|kind| (kind, widget.props.values.clone()));
-                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, custom };
+                let info = PartInfo { bind: widget.props.bind.clone(), caption: widget.props.caption.clone(), readonly: widget.props.readonly, folded: widget.props.folded, collapsed: false, grid: widget.props.grid.unwrap_or(0), snap: widget.props.snap, background: widget.props.background.clone().unwrap_or_default(), dot_size: widget.props.dot_size.unwrap_or(2), dot_color: widget.props.dot_color.clone().unwrap_or_default(), custom };
                 self.parts.insert(name.clone(), info);
             }
             self.widgets(&widget.children);
@@ -707,7 +715,9 @@ impl<'a> Emitter<'a> {
                 }
                 if let Some((part, property)) = self.part_property(target) {
                     let function = match property.as_str() {
-                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" => format!("clarity_ui_set_{property}"),
+                        "caption" | "error" | "visible" | "enabled" | "readonly" | "text" | "checked" | "folded" | "collapsed" | "maximized" | "tab" | "step" | "grid" | "snap" | "background" => format!("clarity_ui_set_{property}"),
+                        "dotSize" => "clarity_ui_set_dot_size".to_string(),
+                        "dotColor" => "clarity_ui_set_dot_color".to_string(),
                         "open" => "clarity_ui_set_open_section".to_string(),
                         other => {
                             self.errors.push(format!("'{other}' of a part cannot be set"));
@@ -1513,6 +1523,11 @@ impl<'a> Emitter<'a> {
             "readonly" => format!("clarity_ui_readonly(ui, {quoted}, {})", info.readonly),
             "folded" => format!("clarity_ui_folded(ui, {quoted}, {})", info.folded),
             "collapsed" => format!("clarity_ui_collapsed(ui, {quoted}, {})", info.collapsed),
+            "grid" => format!("clarity_ui_grid(ui, {quoted}, {})", info.grid),
+            "snap" => format!("clarity_ui_snap(ui, {quoted}, {})", info.snap),
+            "background" => format!("clarity_ui_background(ui, {quoted}, {})", string(&info.background)),
+            "dotSize" => format!("clarity_ui_dot_size(ui, {quoted}, {})", info.dot_size),
+            "dotColor" => format!("clarity_ui_dot_color(ui, {quoted}, {})", string(&info.dot_color)),
             "maximized" => format!("clarity_ui_maximized(ui, {quoted})"),
             "tab" => format!("clarity_ui_tab(ui, {quoted})"),
             "step" => format!("clarity_ui_step(ui, {quoted})"),
@@ -1949,6 +1964,10 @@ impl<'a> Emitter<'a> {
         }
         // round(value, places), as every runtime rounds (conformance/rounding.json).
         // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SNAPPED && self.callee(name).is_none() {
+            let values: Vec<String> = args.iter().map(|a| bare(self.value(a, pre))).collect();
+            return format!("clarity_snapped({})", values.join(", "));
+        }
         if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
             let value = args.first().map(|a| bare(self.decimal(a, pre))).unwrap_or_default();
             return format!("clarity_decimal_{name}({value})");

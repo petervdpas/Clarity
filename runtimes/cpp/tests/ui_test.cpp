@@ -4,6 +4,7 @@
 
 #include "check.hpp"
 #include "conformance.hpp"
+#include "clarity/code.hpp"
 #include "clarity/ui.hpp"
 
 using namespace clarity;
@@ -238,4 +239,29 @@ TEST(a_closed_window_is_reported_to_what_listens) {
     listening.reset();
     window_closed(8);
     CHECK_EQ(heard, uint64_t(7));
+}
+
+// `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps (conformance/drawing.json, grids).
+TEST(snapped_rounds_to_its_step_as_every_runtime_does) {
+    auto file = conformance("drawing.json");
+    CHECK(!file["grids"]["snapped"].empty());
+    for (const auto& c : file["grids"]["snapped"]) CHECK_EQ(clarity::snapped(c["value"].get<int64_t>(), c["step"].get<int64_t>()), c["result"].get<int64_t>());
+}
+
+// A canvas's grid and snap are as its line says until code sets them.
+TEST(a_canvas_keeps_the_grid_and_snap_code_sets) {
+    clarity::Ui ui(clarity::WindowState{});
+    CHECK_EQ(ui.grid("sheet", 20), int64_t{20});
+    CHECK(ui.snap("sheet", true));
+    ui.set_grid("sheet", 0);
+    ui.set_snap("sheet", false);
+    CHECK_EQ(ui.grid("sheet", 20), int64_t{0});
+    CHECK(!ui.snap("sheet", true));
+    CHECK_EQ(ui.background("sheet", "panel"), std::string("panel"));
+    ui.set_background("sheet", "#f5f0e1");
+    CHECK_EQ(ui.background("sheet", "panel"), std::string("#f5f0e1"));
+    ui.set_dot_size("sheet", 3);
+    ui.set_dot_color("sheet", "muted");
+    CHECK_EQ(ui.dot_size("sheet", 2), int64_t{3});
+    CHECK_EQ(ui.dot_color("sheet", ""), std::string("muted"));
 }

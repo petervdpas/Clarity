@@ -186,6 +186,11 @@ fn part_property(property: &str) -> Option<&'static str> {
         "y" => "Y",
         "fromX" => "FromX",
         "fromY" => "FromY",
+        "grid" => "Grid",
+        "snap" => "Snap",
+        "background" => "Background",
+        "dotSize" => "DotSize",
+        "dotColor" => "DotColor",
         _ => return None,
     })
 }
@@ -1065,6 +1070,10 @@ impl<'a> Emitter<'a> {
         }
         // round(value, places), as every runtime rounds (conformance/rounding.json).
         // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SNAPPED && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("Numbers.Snapped({})", values.join(", "));
+        }
         if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
             let value = args.first().map(|a| self.value(a)).unwrap_or_default();
             let function = if name == clarity_spec::code::check::SIN { "Sin" } else { "Cos" };

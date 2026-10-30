@@ -201,3 +201,30 @@ fn a_custom_parts_values_and_hears_are_as_every_runtime_says() {
         assert_eq!(reply.get("hears").cloned().unwrap_or(serde_json::Value::Null), case["reply"], "{case}");
     }
 }
+
+/// `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps (conformance/drawing.json, grids).
+#[test]
+fn snapped_rounds_to_its_step_as_every_runtime_does() {
+    let file: serde_json::Value = serde_json::from_str(DRAWING).unwrap();
+    for case in file["grids"]["snapped"].as_array().unwrap() {
+        let (value, step) = (case["value"].as_i64().unwrap(), case["step"].as_i64().unwrap());
+        assert_eq!(clarity_runtime::snapped(value, step), case["result"].as_i64().unwrap(), "{case}");
+    }
+}
+
+/// A canvas's grid and snap are as its line says until code sets them.
+#[test]
+fn a_canvas_keeps_the_grid_and_snap_code_sets() {
+    use clarity_runtime::ui::{Ui, WindowState};
+    let mut ui = Ui::from_state(&WindowState::default());
+    assert_eq!((ui.grid("sheet", 20), ui.snap("sheet", true)), (20, true));
+    ui.set_grid("sheet", 0);
+    ui.set_snap("sheet", false);
+    assert_eq!((ui.grid("sheet", 20), ui.snap("sheet", true)), (0, false));
+    assert_eq!(ui.background("sheet", "panel"), "panel");
+    ui.set_background("sheet", "#f5f0e1".into());
+    assert_eq!(ui.background("sheet", "panel"), "#f5f0e1");
+    ui.set_dot_size("sheet", 3);
+    ui.set_dot_color("sheet", "muted".into());
+    assert_eq!((ui.dot_size("sheet", 2), ui.dot_color("sheet", "")), (3, "muted".to_string()));
+}

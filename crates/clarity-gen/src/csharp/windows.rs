@@ -1472,12 +1472,8 @@ impl<'a> Window<'a> {
                 if p.zoom {
                     click.push_str(" Zoom=\"True\"");
                 }
-                if let Some(grid) = p.grid {
-                    let _ = write!(click, " Grid=\"{grid}\"");
-                }
-                if p.snap {
-                    click.push_str(" Snap=\"True\"");
-                }
+                // The grid and paper the part's state has: as the line says, until code changes them.
+                let _ = write!(click, " Grid=\"{{Binding {name}.Grid}}\" Paper=\"{{Binding {name}.Background}}\" DotSize=\"{{Binding {name}.DotSize}}\" DotColor=\"{{Binding {name}.DotColor}}\"");
                 if Self::handler(widget, Event::Drag).is_some() {
                     let _ = write!(click, " DragCommand=\"{{Binding DragAt_{name}Command}}\"");
                 }
@@ -1794,6 +1790,29 @@ public partial class {name}View : UserControl
                 " { IsFolded = true }"
             } else {
                 ""
+            }
+            .to_string();
+            // A canvas's grid, snap and background start as its line says; code can change them.
+            let starts = if widget.props.kind == WidgetKind::Canvas {
+                let mut set = Vec::new();
+                if let Some(grid) = widget.props.grid {
+                    set.push(format!("Grid = {grid}"));
+                }
+                if widget.props.snap {
+                    set.push("Snap = true".to_string());
+                }
+                if let Some(background) = &widget.props.background {
+                    set.push(format!("Background = {}", string(background)));
+                }
+                if let Some(size) = widget.props.dot_size {
+                    set.push(format!("DotSize = {size}"));
+                }
+                if let Some(color) = &widget.props.dot_color {
+                    set.push(format!("DotColor = {}", string(color)));
+                }
+                if set.is_empty() { starts } else { format!(" {{ {} }}", set.join(", ")) }
+            } else {
+                starts
             };
             // A custom part starts with the values written on its line.
             if let Some(declared) = widget.props.part.as_deref().and_then(|k| crate::parts::declaration(self.project, k)) {

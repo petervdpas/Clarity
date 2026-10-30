@@ -1659,6 +1659,8 @@ pub const RECORD_ID: &str = "id";
 pub const RANDOM: &str = "random";
 /// `join(texts, separator)`: a list of texts put together.
 pub const JOIN: &str = "join";
+/// `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps.
+pub const SNAPPED: &str = "snapped";
 /// The service a long engine call says how far it is with (DESIGN 5.12).
 pub const PROGRESS: &str = "progress";
 
@@ -1696,7 +1698,8 @@ pub struct Shape {
 }
 
 pub const SHAPES: [Shape; 7] = [
-    Shape { name: "clear", values: &[("color", ShapeValue::Color, None)] },
+    // Without a color, the canvas's background.
+    Shape { name: "clear", values: &[("color", ShapeValue::Color, Some(""))] },
     Shape {
         name: "line",
         values: &[
@@ -2899,6 +2902,14 @@ impl<'a> BodyChecker<'_, 'a> {
             // A sidebar folded to its button, or filling the window.
             "collapsed" if matches!(part, Part::Sidebar(p) if p.collapsible) => value(Ty::Bool),
             "maximized" if matches!(part, Part::Sidebar(p) if p.maximizable) => value(Ty::Bool),
+            // A canvas's grid, in its units (0 for none), and whether code snaps to it: as its line says, until code sets them.
+            "grid" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Integer),
+            "snap" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Bool),
+            // What its clear() fills it with; empty is the theme's panel.
+            "background" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Text),
+            // Its grid's dots: how many pixels across, and their color (empty is the theme's border).
+            "dotSize" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Integer),
+            "dotColor" if matches!(part, Part::Widget(p) if p.kind == WidgetKind::Canvas) => value(Ty::Text),
             // A ribbon folded to its tabs, and its open tab, counted from 1.
             "collapsed" if matches!(part, Part::Ribbon(r) if r.collapsible) => value(Ty::Bool),
             "tab" if matches!(part, Part::Ribbon(_)) => value(Ty::Integer),
@@ -3286,7 +3297,7 @@ impl<'a> BodyChecker<'_, 'a> {
             return Some(self.expr(expr, None));
         };
         // Only functions and actions take values by name.
-        let built_in = ["count", JOIN, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
+        let built_in = ["count", JOIN, SNAPPED, SIN, COS, ROUND, TODAY, NOW].contains(&function.name.as_str()) || (function.name == RANDOM && self.env.function(RANDOM).is_none());
         let handler = self.decl.is_none() && self.handlers.iter().any(|h| h.name.name == function.name);
         if !named.is_empty() && (built_in || handler) {
             for n in named {
@@ -3310,6 +3321,13 @@ impl<'a> BodyChecker<'_, 'a> {
                 self.error("'join' takes a list of texts and the text between them, as in join(names, \", \")", expr.span);
             }
             return Some(Ty::Text);
+        }
+        if function.name == SNAPPED && self.env.function(SNAPPED).is_none() {
+            let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();
+            if !matches!(tys.as_slice(), [Ty::Integer | Ty::Unknown, Ty::Integer | Ty::Unknown]) {
+                self.error("'snapped' takes a whole number and the step it rounds to, as in snapped(x, 20)", expr.span);
+            }
+            return Some(Ty::Integer);
         }
         if function.name == SIN || function.name == COS {
             let tys: Vec<Ty> = args.iter().map(|a| self.expr(a, None)).collect();

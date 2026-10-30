@@ -59,4 +59,34 @@ public class ColorCaseTests
         input.Pick("#000000");
         Assert.Equal("#ef4444", input.Value);
     }
+
+    /// The swatch shows the color picked, as a filled square beside its text.
+    [global::Avalonia.Headless.XUnit.AvaloniaFact]
+    public void The_swatch_shows_the_color_picked()
+    {
+        var input = new ColorInput { Value = "#ff0000" };
+        var window = new global::Avalonia.Controls.Window { Width = 200, Height = 40, Content = input };
+        // As a generated app's theme: a button in a grid centers what it holds.
+        var centered = new global::Avalonia.Styling.Style(x => global::Avalonia.Styling.Selectors.OfType(global::Avalonia.Styling.Selectors.Child(global::Avalonia.Styling.Selectors.OfType(x, typeof(global::Avalonia.Controls.Grid))), typeof(global::Avalonia.Controls.Button)));
+        centered.Setters.Add(new global::Avalonia.Styling.Setter(global::Avalonia.Controls.ContentControl.HorizontalContentAlignmentProperty, global::Avalonia.Layout.HorizontalAlignment.Center));
+        centered.Setters.Add(new global::Avalonia.Styling.Setter(global::Avalonia.Controls.ContentControl.VerticalContentAlignmentProperty, global::Avalonia.Layout.VerticalAlignment.Center));
+        window.Styles.Add(centered);
+        window.Show();
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var frame = global::Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window)!;
+        var pixels = new byte[frame.PixelSize.Width * frame.PixelSize.Height * 4];
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            frame.CopyPixels(new global::Avalonia.PixelRect(frame.PixelSize), handle.AddrOfPinnedObject(), pixels.Length, frame.PixelSize.Width * 4);
+        }
+        finally
+        {
+            handle.Free();
+        }
+        // The middle of the swatch, 32 pixels wide at the left: red, green, blue.
+        var at = (frame.PixelSize.Height / 2 * frame.PixelSize.Width + 16) * 4;
+        Assert.Equal((255, 0, 0), (pixels[at], pixels[at + 1], pixels[at + 2]));
+        window.Close();
+    }
 }

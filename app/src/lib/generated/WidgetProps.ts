@@ -131,6 +131,16 @@ grid: number | null,
  */
 snap: boolean, 
 /**
+ * `background panel`: what a canvas's `clear()` fills it with, a theme
+ * color by name or written out; the theme's panel without it.
+ */
+background: string | null, 
+/**
+ * `dots 3 muted`: how many pixels across a canvas's grid dots are, and
+ * their color; 2 and the theme's border without it.
+ */
+dotSize: number | null, dotColor: string | null, 
+/**
  * `runs Screen`: the engine beside the screen that draws the canvas
  * (DESIGN 5.12), in place of a draw handler.
  */

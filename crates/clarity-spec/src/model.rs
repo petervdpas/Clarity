@@ -582,6 +582,16 @@ pub struct WidgetProps {
     /// `snap`: the pointer on a canvas snaps to its grid.
     #[serde(default)]
     pub snap: bool,
+    /// `background panel`: what a canvas's `clear()` fills it with, a theme
+    /// color by name or written out; the theme's panel without it.
+    #[serde(default)]
+    pub background: Option<String>,
+    /// `dots 3 muted`: how many pixels across a canvas's grid dots are, and
+    /// their color; 2 and the theme's border without it.
+    #[serde(default)]
+    pub dot_size: Option<u32>,
+    #[serde(default)]
+    pub dot_color: Option<String>,
     /// `runs Screen`: the engine beside the screen that draws the canvas
     /// (DESIGN 5.12), in place of a draw handler.
     pub runs: Option<String>,

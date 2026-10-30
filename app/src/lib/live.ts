@@ -38,6 +38,14 @@ export type PartState = {
   pointer?: Pointer | null;
   /** A canvas's drawing: the shapes its draw handler sent (conformance/drawing.json). */
   drawing?: Shape[] | null;
+  /** A canvas's grid in its units (0 for none) and whether code snaps to it, as a handler set them; none keeps the design. */
+  grid?: number | null;
+  snap?: boolean | null;
+  /** What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel. */
+  background?: string | null;
+  /** A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border). */
+  dotSize?: number | null;
+  dotColor?: string | null;
   /** Whether a foldable panel or form is folded, as the person or a handler left it (conformance/folding.json). */
   folded?: boolean | null;
   /** Whether a collapsible sidebar is folded to its button (conformance/sidebars.json). */

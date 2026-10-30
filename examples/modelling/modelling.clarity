@@ -2,12 +2,19 @@ module modelling
 
 use model
 
-// What each person sets for themselves: the language, and where exports go.
+// What each person sets for themselves: the language, where exports go, and how the diagrams help.
 settings
     language
     exportsFolder: folder, default "exports", label @settingsExportsFolderLabel
     codeFolder: folder, default "code", label @settingsCodeFolderLabel
     openProject: ref Project, label @settingsOpenProjectLabel
+    showGrid: bool, default true, label @settingsShowGridLabel
+    snapToGrid: bool, default true, label @settingsSnapToGridLabel
+    // The diagrams' background; none keeps the theme's.
+    diagramColor: color, label @settingsDiagramColorLabel
+    // The grid's dots: how many pixels across, and their color; none keeps the theme's.
+    gridDotSize: integer, min 1, max 20, default 2, label @settingsGridDotSizeLabel
+    gridDotColor: color, label @settingsGridDotColorLabel
 
 app Modelling
     title @modellingTitle
@@ -146,12 +153,13 @@ page Diagrams: window
     data movedX: integer
     data movedY: integer
     on open: diagramsOpened
+    on return: gridFromSettings
 
     tabs name diagramTabs at 1,1 span 12 rows 12
         tab @diagramsClassDiagramTab
-            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap on draw: drawClasses on drag: classDragged on drop: classDropped
+            canvas name classCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawClasses on drag: classDragged on drop: classDropped
         tab @diagramsEntityRelationshipDiagramTab
-            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap on draw: drawEntities on drag: entityDragged on drop: entityDropped
+            canvas name erdCanvas at 1,1 span 12 rows 11 units 4000 x 3000 zoom grid 20 snap background panel on draw: drawEntities on drag: entityDragged on drop: entityDropped
 
 // The model as Mermaid and as an OpenAPI description, as they are now.
 page Output: window
@@ -196,11 +204,16 @@ page Versions: window
 page Preferences: dialog
     title @preferencesTitle
 
-    form name settingsForm at 1,1 span 12 rows 3 bind settings labels 3
+    form name settingsForm at 1,1 span 12 rows 8 bind settings labels 3
         dropdown name languageBox at 4,1 span 6 bind settings.language
         folder name exportsFolderBox at 4,2 span 9 bind settings.exportsFolder
         folder name codeFolderBox at 4,3 span 9 bind settings.codeFolder
-    button @closePreferencesCaption name closePreferences at 11,5 span 2 cancel on click -> close
+        checkbox name showGridBox at 4,4 span 6 bind settings.showGrid
+        checkbox name snapToGridBox at 4,5 span 6 bind settings.snapToGrid
+        color name diagramColorBox at 4,6 span 4 bind settings.diagramColor
+        spinbox name gridDotSizeBox at 4,7 span 2 bind settings.gridDotSize min 1 max 20
+        color name gridDotColorBox at 4,8 span 4 bind settings.gridDotColor
+    button @closePreferencesCaption name closePreferences at 11,10 span 2 cancel on click -> close
 
 code Projects
     handler projectsOpened
@@ -443,6 +456,7 @@ code Diagrams
         project = settings.openProject
         types = find t in ClassType where t.project == project order by t.name
         entities = find e in DataEntity where e.project == project order by e.name
+        gridFromSettings()
         placeTypes()
         placeEntities()
 
@@ -501,9 +515,27 @@ code Diagrams
         if placed
             entities = find e in DataEntity where e.project == project order by e.name
 
+    // Show grid, Snap to grid, the background and the grid's dots, from the person's settings, for both diagrams; without a grid there is nothing to snap to.
+    handler gridFromSettings
+        if settings.showGrid
+            classCanvas.grid = 20
+            erdCanvas.grid = 20
+        else
+            classCanvas.grid = 0
+            erdCanvas.grid = 0
+        classCanvas.snap = settings.snapToGrid
+        erdCanvas.snap = settings.snapToGrid
+        // An empty color is the theme's panel.
+        classCanvas.background = settings.diagramColor
+        erdCanvas.background = settings.diagramColor
+        classCanvas.dotSize = settings.gridDotSize
+        erdCanvas.dotSize = settings.gridDotSize
+        classCanvas.dotColor = settings.gridDotColor
+        erdCanvas.dotColor = settings.gridDotColor
+
     // Every type as a box with its parameters, where it was put, and the lines between them.
     handler drawClasses
-        classCanvas.clear("panel")
+        classCanvas.clear()
         let names: list<text> = []
         let xs: list<integer> = []
         let ys: list<integer> = []
@@ -560,6 +592,10 @@ code Diagrams
         if movingId != 0
             movedX = at_least_zero(classCanvas.x - grabX)
             movedY = at_least_zero(classCanvas.y - grabY)
+            // The box follows the pointer; its corner lands on the grid.
+            if classCanvas.snap
+                movedX = snapped(movedX, classCanvas.grid)
+                movedY = snapped(movedY, classCanvas.grid)
 
     handler classDropped
         for t in types
@@ -572,7 +608,7 @@ code Diagrams
 
     // Every entity as a box with its columns and keys, where it was put, and the relationships between them.
     handler drawEntities
-        erdCanvas.clear("panel")
+        erdCanvas.clear()
         let names: list<text> = []
         let xs: list<integer> = []
         let ys: list<integer> = []
@@ -622,6 +658,9 @@ code Diagrams
         if movingId != 0
             movedX = at_least_zero(erdCanvas.x - grabX)
             movedY = at_least_zero(erdCanvas.y - grabY)
+            if erdCanvas.snap
+                movedX = snapped(movedX, erdCanvas.grid)
+                movedY = snapped(movedY, erdCanvas.grid)
 
     handler entityDropped
         for e in entities

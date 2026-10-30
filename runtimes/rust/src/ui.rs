@@ -269,6 +269,20 @@ pub struct PartState {
     /// handler left it; none keeps the design (conformance/folding.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folded: Option<bool>,
+    /// A canvas's grid in its units (0 for none), and whether code snaps to
+    /// it, as a handler set them; none keeps the design.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snap: Option<bool>,
+    /// What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    /// A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
+    #[serde(default, rename = "dotSize", skip_serializing_if = "Option::is_none")]
+    pub dot_size: Option<i64>,
+    #[serde(default, rename = "dotColor", skip_serializing_if = "Option::is_none")]
+    pub dot_color: Option<String>,
     /// Whether a collapsible sidebar is folded to its button, as the person or
     /// a handler left it; none keeps the design (conformance/sidebars.json).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -564,6 +578,51 @@ impl Ui {
     }
 
     /// Whether a collapsible sidebar is folded to its button: as left, or `design`.
+    /// A canvas's grid: `canvas.grid`, as its line says until a handler sets it.
+    pub fn grid(&self, part: &str, design: i64) -> i64 {
+        self.parts.get(part).and_then(|p| p.grid).unwrap_or(design)
+    }
+
+    pub fn set_grid(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().grid = Some(value);
+    }
+
+    /// Whether code snaps to a canvas's grid: `canvas.snap`.
+    pub fn snap(&self, part: &str, design: bool) -> bool {
+        self.parts.get(part).and_then(|p| p.snap).unwrap_or(design)
+    }
+
+    pub fn set_snap(&mut self, part: &str, value: bool) {
+        self.parts.entry(part.to_string()).or_default().snap = Some(value);
+    }
+
+    /// What a canvas's clear() fills it with: `canvas.background`.
+    pub fn background(&self, part: &str, design: &str) -> String {
+        self.parts.get(part).and_then(|p| p.background.clone()).unwrap_or_else(|| design.to_string())
+    }
+
+    pub fn set_background(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().background = Some(value);
+    }
+
+    /// How many pixels across a canvas's grid dots are: `canvas.dotSize`.
+    pub fn dot_size(&self, part: &str, design: i64) -> i64 {
+        self.parts.get(part).and_then(|p| p.dot_size).unwrap_or(design)
+    }
+
+    pub fn set_dot_size(&mut self, part: &str, value: i64) {
+        self.parts.entry(part.to_string()).or_default().dot_size = Some(value);
+    }
+
+    /// The color of a canvas's grid dots: `canvas.dotColor`.
+    pub fn dot_color(&self, part: &str, design: &str) -> String {
+        self.parts.get(part).and_then(|p| p.dot_color.clone()).unwrap_or_else(|| design.to_string())
+    }
+
+    pub fn set_dot_color(&mut self, part: &str, value: String) {
+        self.parts.entry(part.to_string()).or_default().dot_color = Some(value);
+    }
+
     pub fn collapsed(&self, part: &str, design: bool) -> bool {
         self.parts.get(part).and_then(|p| p.collapsed).unwrap_or(design)
     }

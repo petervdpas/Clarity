@@ -415,3 +415,38 @@ void ranges_and_joins_are_as_every_runtime_gives_them(void) {
         CHECK_TEXT(clarity_joined(clarity_texts(count, items), cJSON_GetObjectItem(c, "separator")->valuestring), cJSON_GetObjectItem(c, "gives")->valuestring);
     }
 }
+
+// `snapped(value, step)`: the multiple of step nearest to value, as a canvas's grid snaps (conformance/drawing.json, grids).
+void snapped_rounds_to_its_step_as_every_runtime_does(void) {
+    cJSON* file = conformance("drawing.json");
+    const cJSON* cases = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(file, "grids"), "snapped");
+    REQUIRE(cJSON_GetArraySize(cases) > 0);
+    const cJSON* c;
+    cJSON_ArrayForEach(c, cases) {
+        int64_t value = (int64_t)cJSON_GetObjectItemCaseSensitive(c, "value")->valuedouble;
+        int64_t step = (int64_t)cJSON_GetObjectItemCaseSensitive(c, "step")->valuedouble;
+        CHECK_INT(clarity_snapped(value, step), (int64_t)cJSON_GetObjectItemCaseSensitive(c, "result")->valuedouble);
+    }
+    cJSON_Delete(file);
+}
+
+// A canvas's grid and snap are as its line says until code sets them.
+void a_canvas_keeps_the_grid_and_snap_code_sets(void) {
+    ClarityWindowState state = {0};
+    ClarityUi* ui = clarity_ui(&state);
+    CHECK_INT(clarity_ui_grid(ui, "sheet", 20), 20);
+    CHECK(clarity_ui_snap(ui, "sheet", true));
+    clarity_ui_set_grid(ui, "sheet", 0);
+    clarity_ui_set_snap(ui, "sheet", false);
+    CHECK_INT(clarity_ui_grid(ui, "sheet", 20), 0);
+    CHECK(!clarity_ui_snap(ui, "sheet", true));
+    cJSON* out = clarity_window_state_json(&clarity_ui_reply(ui, "Main", cJSON_CreateObject())->state);
+    CHECK_JSON(cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(out, "parts"), "sheet"), "{\"grid\":0,\"snap\":false}");
+    CHECK_TEXT(clarity_ui_background(ui, "sheet", "panel"), "panel");
+    clarity_ui_set_background(ui, "sheet", "#f5f0e1");
+    CHECK_TEXT(clarity_ui_background(ui, "sheet", "panel"), "#f5f0e1");
+    clarity_ui_set_dot_size(ui, "sheet", 3);
+    clarity_ui_set_dot_color(ui, "sheet", "muted");
+    CHECK_INT(clarity_ui_dot_size(ui, "sheet", 2), 3);
+    CHECK_TEXT(clarity_ui_dot_color(ui, "sheet", ""), "muted");
+}

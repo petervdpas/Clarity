@@ -282,7 +282,39 @@
     }
   ],
   "views": {
-    "about": "A canvas with `zoom` shows a view of its units: the rectangle `[x, y, width, height]` of units in the part, fitted and centred. It starts as the whole canvas, fitted whole in proportion, with empty bands where the part is wider or taller. `zoomed` gives the view after zooming by `factor` (above 1 closer, below 1 farther) in a part of size `part` (pixels), around the point `at` in units, which stays where it is: the pixels a unit takes (the scale) change by the factor, from the whole canvas fitted up to 16 times that; the view then fills the part at that scale, along each side up to the canvas's own size, and is moved back inside the canvas. `scrolled` gives the view moved by `by` units, kept inside the canvas. `points` gives where in units a pointer in the part is, as clicks do, through the view, rounded down; null beside the drawing.",
+    "about": "A canvas with `zoom` shows a view of its units, as Clarity's own diagram designer does: `[scale, x, y]`, the pixels a unit takes and the unit at the part's top left corner. It starts whole: the canvas fitted in proportion and centred (`whole`). Zooming by `factor` (the wheel with Ctrl or Cmd: 1.15 a notch; the buttons: 1.2) keeps the unit under the pointer's pixel `at` where it is (`zoomed`); the scale stays from a quarter (or the whole fit, when that is less) up to 3 (or 4 times the whole fit, when that is more). Panning, by the wheel or by dragging, moves the view by `by` pixels (`scrolled`), past the canvas's edges too. `points` gives the unit under a pixel `at`, rounded down; null outside the canvas's units.",
+    "whole": [
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "view": [
+          0.4,
+          0,
+          0
+        ]
+      },
+      {
+        "units": [
+          1000,
+          1000
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "view": [
+          0.2,
+          -500,
+          0
+        ]
+      }
+    ],
     "zoomed": [
       {
         "units": [
@@ -290,415 +322,199 @@
           500
         ],
         "part": [
-          1000,
-          500
+          400,
+          200
         ],
         "view": [
-          0,
-          0,
-          1000,
-          500
-        ],
-        "factor": 2,
-        "at": [
-          500,
-          250
-        ],
-        "result": [
-          250,
-          125,
-          500,
-          250
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "part": [
-          1000,
-          500
-        ],
-        "view": [
-          0,
-          0,
-          1000,
-          500
-        ],
-        "factor": 2,
-        "at": [
+          0.4,
           0,
           0
         ],
-        "result": [
-          0,
-          0,
-          500,
-          250
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "part": [
-          1000,
-          500
-        ],
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "factor": 0.25,
-        "at": [
-          500,
-          250
-        ],
-        "result": [
-          0,
-          0,
-          1000,
-          500
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "part": [
-          1000,
-          500
-        ],
-        "view": [
-          0,
-          0,
-          1000,
-          500
-        ],
-        "factor": 100,
-        "at": [
-          100,
-          100
-        ],
-        "result": [
-          93.75,
-          93.75,
-          62.5,
-          31.25
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "part": [
-          1000,
-          500
-        ],
-        "view": [
-          0,
-          0,
-          500,
-          250
-        ],
-        "factor": 0.5,
-        "at": [
-          500,
-          250
-        ],
-        "result": [
-          0,
-          0,
-          1000,
-          500
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "part": [
-          1000,
-          500
-        ],
-        "view": [
-          500,
-          250,
-          500,
-          250
-        ],
-        "factor": 0.8,
-        "at": [
-          1000,
-          500
-        ],
-        "result": [
-          375,
-          187.5,
-          625,
-          312.5
-        ]
-      },
-      {
-        "units": [
-          1000,
-          1000
-        ],
-        "part": [
-          400,
-          200
-        ],
-        "view": [
-          0,
-          0,
-          1000,
-          1000
-        ],
         "factor": 2,
-        "at": [
-          500,
-          500
-        ],
-        "result": [
-          0,
-          250,
-          1000,
-          500
-        ]
-      },
-      {
-        "units": [
-          1000,
-          1000
-        ],
-        "part": [
-          400,
-          200
-        ],
-        "view": [
-          0,
-          250,
-          1000,
-          500
-        ],
-        "factor": 2,
-        "at": [
-          500,
-          500
-        ],
-        "result": [
-          250,
-          375,
-          500,
-          250
-        ]
-      }
-    ],
-    "scrolled": [
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "by": [
-          100,
-          -50
-        ],
-        "result": [
-          350,
-          75,
-          500,
-          250
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "by": [
-          1000,
-          1000
-        ],
-        "result": [
-          500,
-          250,
-          500,
-          250
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "by": [
-          -1000,
-          0
-        ],
-        "result": [
-          0,
-          125,
-          500,
-          250
-        ]
-      },
-      {
-        "units": [
-          1000,
-          500
-        ],
-        "view": [
-          0,
-          0,
-          1000,
-          500
-        ],
-        "by": [
-          40,
-          40
-        ],
-        "result": [
-          0,
-          0,
-          1000,
-          500
-        ]
-      }
-    ],
-    "points": [
-      {
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "part": [
-          400,
-          200
-        ],
         "at": [
           200,
           100
         ],
-        "point": [
-          500,
-          250
-        ]
-      },
-      {
-        "view": [
-          250,
-          125,
-          500,
-          250
-        ],
-        "part": [
-          400,
-          200
-        ],
-        "at": [
-          0,
-          0
-        ],
-        "point": [
+        "result": [
+          0.8,
           250,
           125
         ]
       },
       {
-        "view": [
-          250,
-          125,
-          500,
-          250
+        "units": [
+          1000,
+          500
         ],
         "part": [
           400,
-          300
+          200
+        ],
+        "view": [
+          0.4,
+          0,
+          0
+        ],
+        "factor": 100,
+        "at": [
+          0,
+          0
+        ],
+        "result": [
+          3,
+          0,
+          0
+        ]
+      },
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "part": [
+          400,
+          200
+        ],
+        "view": [
+          0.4,
+          0,
+          0
+        ],
+        "factor": 0.1,
+        "at": [
+          200,
+          100
+        ],
+        "result": [
+          0.25,
+          -300,
+          -150
+        ]
+      },
+      {
+        "units": [
+          100,
+          100
+        ],
+        "part": [
+          600,
+          600
+        ],
+        "view": [
+          6,
+          0,
+          0
+        ],
+        "factor": 8,
+        "at": [
+          0,
+          0
+        ],
+        "result": [
+          24,
+          0,
+          0
+        ]
+      }
+    ],
+    "scrolled": [
+      {
+        "view": [
+          0.8,
+          250,
+          125
+        ],
+        "by": [
+          40,
+          -80
+        ],
+        "result": [
+          0.8,
+          300,
+          25
+        ]
+      },
+      {
+        "view": [
+          2,
+          0,
+          0
+        ],
+        "by": [
+          -100,
+          0
+        ],
+        "result": [
+          2,
+          -50,
+          0
+        ]
+      }
+    ],
+    "points": [
+      {
+        "units": [
+          1000,
+          500
+        ],
+        "view": [
+          0.8,
+          250,
+          125
         ],
         "at": [
           200,
-          40
+          100
+        ],
+        "point": [
+          500,
+          250
+        ]
+      },
+      {
+        "units": [
+          1000,
+          1000
+        ],
+        "view": [
+          0.2,
+          -500,
+          0
+        ],
+        "at": [
+          50,
+          50
         ],
         "point": null
       },
       {
-        "view": [
-          250,
-          125,
-          500,
-          250
+        "units": [
+          1000,
+          1000
         ],
-        "part": [
-          400,
-          300
+        "view": [
+          0.2,
+          -500,
+          0
         ],
         "at": [
-          200,
-          150
-        ],
-        "point": [
-          500,
-          250
-        ]
-      },
-      {
-        "view": [
-          0,
-          0,
-          300,
-          300
-        ],
-        "part": [
           150,
-          200
-        ],
-        "at": [
-          60,
-          100
+          40
         ],
         "point": [
-          120,
-          150
+          250,
+          200
         ]
       },
       {
-        "view": [
-          93.75,
-          93.75,
-          62.5,
-          31.25
+        "units": [
+          1000,
+          500
         ],
-        "part": [
-          625,
-          312.5
+        "view": [
+          10,
+          93.75,
+          93.75
         ],
         "at": [
           5,
@@ -712,7 +528,7 @@
     ]
   },
   "grids": {
-    "about": "A canvas with `grid N` shows a grid every N units, drawn after its drawing's `clear` (first, when it has none), in the theme's `border` color, one pixel wide whatever the zoom. Lines closer than 8 pixels apart are thinned: the grid shows every 2N, 4N, ... units, the smallest that is 8 pixels or more (`lines`: the grid, the pixels a unit takes, the units between shown lines). With `snap`, where the pointer is (x, y) and where it was pressed (fromX, fromY) are the nearest point of the grid, a half rounding up, and never past the canvas's last unit: a point that rounds out goes back one step (`snapped`: units, grid, the point, what handlers read).",
+    "about": "A canvas with `grid N` shows a dot every N units over the whole view, as Clarity's own diagram designer does, drawn after its drawing's `clear` (first, when it has none), in the theme's `border` color, the same size whatever the zoom. Dots closer than 8 pixels apart are thinned: every 2N, 4N, ... units, the smallest that is 8 pixels or more (`lines`: the grid, the pixels a unit takes, the units between shown dots). Code that snaps uses `snapped(value, step)`: the multiple of step nearest to value, a half rounding up; a step of 0 gives the value (`snapped`).",
     "lines": [
       {
         "grid": 20,
@@ -737,79 +553,29 @@
     ],
     "snapped": [
       {
-        "units": [
-          3000,
-          2000
-        ],
-        "grid": 20,
-        "point": [
-          29,
-          31
-        ],
-        "snapped": [
-          20,
-          40
-        ]
+        "value": 29,
+        "step": 20,
+        "result": 20
       },
       {
-        "units": [
-          3000,
-          2000
-        ],
-        "grid": 20,
-        "point": [
-          30,
-          30
-        ],
-        "snapped": [
-          40,
-          40
-        ]
+        "value": 30,
+        "step": 20,
+        "result": 40
       },
       {
-        "units": [
-          3000,
-          2000
-        ],
-        "grid": 20,
-        "point": [
-          0,
-          9
-        ],
-        "snapped": [
-          0,
-          0
-        ]
+        "value": -30,
+        "step": 20,
+        "result": -20
       },
       {
-        "units": [
-          3000,
-          2000
-        ],
-        "grid": 20,
-        "point": [
-          2999,
-          1999
-        ],
-        "snapped": [
-          2980,
-          1980
-        ]
+        "value": 95,
+        "step": 30,
+        "result": 90
       },
       {
-        "units": [
-          100,
-          100
-        ],
-        "grid": 30,
-        "point": [
-          95,
-          46
-        ],
-        "snapped": [
-          90,
-          60
-        ]
+        "value": 7,
+        "step": 0,
+        "result": 7
       }
     ]
   }

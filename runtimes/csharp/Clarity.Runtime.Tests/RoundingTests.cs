@@ -41,3 +41,17 @@ public class AngleTests
         }
     }
 }
+
+/// <c>snapped(value, step)</c>: the multiple of step nearest to value, as a canvas's grid snaps (conformance/drawing.json, grids).
+public class SnappedTests
+{
+    [Fact]
+    public void Snapped_rounds_to_its_step_as_every_runtime_does()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "conformance", "drawing.json");
+        var cases = JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("grids").GetProperty("snapped");
+        Assert.True(cases.GetArrayLength() > 0);
+        foreach (var c in cases.EnumerateArray())
+            Assert.Equal(c.GetProperty("result").GetInt64(), Numbers.Snapped(c.GetProperty("value").GetInt64(), c.GetProperty("step").GetInt64()));
+    }
+}

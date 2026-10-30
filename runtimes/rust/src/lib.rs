@@ -77,6 +77,12 @@ pub fn round(value: Decimal, places: i64) -> Decimal {
     value.round_dp_with_strategy(places, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
 }
 
+/// `snapped(value, step)`: the multiple of `step` nearest to `value`, a half
+/// rounding up; a step of 0 gives the value (conformance/drawing.json, grids).
+pub fn snapped(value: i64, step: i64) -> i64 {
+    if step > 0 { (2 * value + step).div_euclid(2 * step) * step } else { value }
+}
+
 /// `sin(degrees)` in code, rounded to 10 decimals (conformance/drawing.json).
 pub fn sin(degrees: Decimal) -> Decimal {
     angle(degrees, f64::sin)

@@ -9,16 +9,15 @@
 // the pointer while it is down, and takes the keyboard when clicked or
 // tabbed to. What handlers tell it through its State (hears) goes to the
 // engine; what the engine tells comes out as Told, which runs its handler.
-// With Zoom the control shows a view of the units (conformance/drawing.json,
-// views): the wheel scrolls it (with Shift sideways), Control or Command
-// with the wheel zooms around the pointer, and bars say where the view is.
+// With Zoom it moves as Clarity's own diagram designer does
+// (conformance/drawing.json, views): it starts whole; the wheel pans (with
+// Shift sideways), Control or Command with the wheel zooms around the
+// pointer, and the buttons in its corner zoom out, back to whole, and in.
 // With DragCommand a press that moves runs it as the pointer goes, with
 // where it was pressed, and DropCommand when it is let go. A drag that moves
 // nothing (the drawing stays the same after its first run), and any drag
-// without DragCommand, moves the view instead, on a canvas that zooms.
-// With Grid it shows a grid behind the shapes (after the drawing's clear),
-// and with Snap every place it gives is the nearest point of that grid
-// (conformance/drawing.json, grids).
+// without DragCommand, pans. With Grid it shows a dot every so many units
+// over the whole view, after the drawing's clear (conformance/drawing.json, grids).
 
 using System.Globalization;
 using System.Windows.Input;
@@ -51,27 +50,47 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     public static readonly StyledProperty<bool> ZoomProperty =
         AvaloniaProperty.Register<CanvasView, bool>(nameof(Zoom));
 
+    public static readonly StyledProperty<string> PaperProperty =
+        AvaloniaProperty.Register<CanvasView, string>(nameof(Paper), "");
+
+    /// <summary>What a clear without a color fills the canvas with: its part's background; empty is the theme's panel.</summary>
+    public string Paper
+    {
+        get => GetValue(PaperProperty);
+        set => SetValue(PaperProperty, value);
+    }
+
+    public static readonly StyledProperty<double> DotSizeProperty =
+        AvaloniaProperty.Register<CanvasView, double>(nameof(DotSize), 2);
+
+    public static readonly StyledProperty<string> DotColorProperty =
+        AvaloniaProperty.Register<CanvasView, string>(nameof(DotColor), "");
+
+    /// <summary>How many pixels across the grid's dots are.</summary>
+    public double DotSize
+    {
+        get => GetValue(DotSizeProperty);
+        set => SetValue(DotSizeProperty, value);
+    }
+
+    /// <summary>The color of the grid's dots; empty is the theme's border.</summary>
+    public string DotColor
+    {
+        get => GetValue(DotColorProperty);
+        set => SetValue(DotColorProperty, value);
+    }
+
     public static readonly StyledProperty<double> GridProperty =
         AvaloniaProperty.Register<CanvasView, double>(nameof(Grid));
 
-    public static readonly StyledProperty<bool> SnapProperty =
-        AvaloniaProperty.Register<CanvasView, bool>(nameof(Snap));
-
-    /// <summary>The units between the grid's lines; 0 for no grid.</summary>
+    /// <summary>The units between the grid's dots; 0 for no grid.</summary>
     public double Grid
     {
         get => GetValue(GridProperty);
         set => SetValue(GridProperty, value);
     }
 
-    /// <summary>Whether the places it gives snap to the grid.</summary>
-    public bool Snap
-    {
-        get => GetValue(SnapProperty);
-        set => SetValue(SnapProperty, value);
-    }
-
-    /// <summary>The units between a grid's shown lines: every <paramref name="grid"/>, doubled until
+    /// <summary>The units between a grid's shown dots: every <paramref name="grid"/>, doubled until
     /// they are 8 pixels apart (conformance/drawing.json, grids).</summary>
     public static double GridEvery(double grid, double scale)
     {
@@ -80,20 +99,6 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             every *= 2;
         return every;
     }
-
-    /// <summary>The nearest point of the grid, a half rounding up, never past the canvas's last unit.</summary>
-    public static Pointer Snapped(Size units, double grid, Pointer point)
-    {
-        long Near(long v, double size)
-        {
-            var n = Math.Floor(v / grid + 0.5) * grid;
-            return (long)(n > size - 1 ? n - grid : n);
-        }
-        return point with { X = Near(point.X, units.Width), Y = Near(point.Y, units.Height) };
-    }
-
-    /// A place the canvas gives: on the grid when it snaps.
-    Pointer Placed(Pointer point) => Snap && Grid > 0 ? Snapped(new Size(UnitsWidth, UnitsHeight), Grid, point) : point;
 
     public static readonly StyledProperty<ICommand?> DragCommandProperty =
         AvaloniaProperty.Register<CanvasView, ICommand?>(nameof(DragCommand));
@@ -204,6 +209,9 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        // A zoom button says what it does, in Clarity's words.
+        var button = ZoomButtonAt(e.GetPosition(this));
+        ToolTip.SetTip(this, button is null ? null : ZoomWord(button));
         if (pressed)
         {
             Dragged(e);
@@ -276,7 +284,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
 
     static CanvasView()
     {
-        AffectsRender<CanvasView>(DrawingProperty, UnitsWidthProperty, UnitsHeightProperty, StoppedProperty, GridProperty);
+        AffectsRender<CanvasView>(DrawingProperty, UnitsWidthProperty, UnitsHeightProperty, StoppedProperty, GridProperty, PaperProperty, DotSizeProperty, DotColorProperty);
     }
 
     public CanvasView()
@@ -293,35 +301,47 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             Cursor = Command is null ? null : new Cursor(StandardCursorType.Hand);
         // Only a canvas of other units starts over: a redraw keeps the view.
         if (change.Property == UnitsWidthProperty || change.Property == UnitsHeightProperty)
-            view = null;
+            panned = null;
     }
 
-    /// The units shown, once the person zoomed or scrolled; the whole canvas until then.
-    Rect? view;
+    /// Where the person zoomed and panned to; none while the canvas shows whole.
+    CanvasViewport? panned;
 
-    /// <summary>The rectangle of units the control shows.</summary>
-    public Rect View => view ?? new Rect(0, 0, UnitsWidth, UnitsHeight);
+    /// <summary>What the control shows: the canvas whole, fitted and centered, until the person zooms or pans.</summary>
+    public CanvasViewport Viewport => Zoom && panned is { } v ? v : Whole(new Size(UnitsWidth, UnitsHeight), Bounds.Size);
 
-    /// A canvas zooms in to 16 times the scale that fits it whole.
-    const double Closest = 16;
-
-    static Rect Within(Size units, double x, double y, double width, double height) =>
-        new(Math.Min(Math.Max(x, 0), units.Width - width), Math.Min(Math.Max(y, 0), units.Height - height), width, height);
-
-    /// <summary>The view after zooming by <paramref name="factor"/> (above 1 closer) in a part of
-    /// <paramref name="part"/> pixels, around <paramref name="at"/>, in units, which stays where it is:
-    /// the scale changes by the factor, from the whole canvas fitted up to 16 times that, and the view
-    /// fills the part at that scale, up to the canvas's own size (conformance/drawing.json, views).</summary>
-    public static Rect Zoomed(Size units, Size part, Rect view, double factor, Point at)
+    /// <summary>The whole canvas, fitted in proportion and centered (conformance/drawing.json, views).</summary>
+    public static CanvasViewport Whole(Size units, Size part)
     {
-        var whole = Math.Min(part.Width / units.Width, part.Height / units.Height);
-        var now = Math.Min(part.Width / view.Width, part.Height / view.Height);
-        if (!(whole > 0) || !(now > 0))
-            return view;
-        var scale = Math.Min(Math.Max(now * factor, whole), whole * Closest);
-        var width = Math.Min(part.Width / scale, units.Width);
-        var height = Math.Min(part.Height / scale, units.Height);
-        return Within(units, at.X - (at.X - view.X) * (width / view.Width), at.Y - (at.Y - view.Y) * (height / view.Height), width, height);
+        var scale = Math.Min(part.Width / units.Width, part.Height / units.Height);
+        if (!(scale > 0) || !double.IsFinite(scale))
+            return new(1, 0, 0);
+        return new(scale, (units.Width - part.Width / scale) / 2, (units.Height - part.Height / scale) / 2);
+    }
+
+    /// <summary>The view after zooming by <paramref name="factor"/> (above 1 closer), the unit under the pixel
+    /// <paramref name="at"/> staying where it is; from a quarter (or the whole fit, when less) up to 3 (or 4
+    /// times the whole fit, when more).</summary>
+    public static CanvasViewport Zoomed(Size units, Size part, CanvasViewport view, double factor, Point at)
+    {
+        var fit = Math.Min(part.Width / units.Width, part.Height / units.Height);
+        var scale = Math.Min(Math.Max(view.Scale * factor, Math.Min(0.25, fit)), Math.Max(3, fit * 4));
+        var ux = view.X + at.X / view.Scale;
+        var uy = view.Y + at.Y / view.Scale;
+        return new(scale, ux - at.X / scale, uy - at.Y / scale);
+    }
+
+    /// <summary>The view moved by <paramref name="by"/> pixels, past the canvas's edges too.</summary>
+    public static CanvasViewport Scrolled(CanvasViewport view, Vector by) => view with { X = view.X + by.X / view.Scale, Y = view.Y + by.Y / view.Scale };
+
+    /// <summary>The unit under the pixel <paramref name="at"/>, rounded down; null outside the canvas's units.</summary>
+    public static Pointer? PointIn(Size units, CanvasViewport view, Point at)
+    {
+        var x = view.X + at.X / view.Scale;
+        var y = view.Y + at.Y / view.Scale;
+        if (!(x >= 0 && y >= 0 && x < units.Width && y < units.Height))
+            return null;
+        return new Pointer((long)Math.Floor(x), (long)Math.Floor(y));
     }
 
     /// <summary>Whether two drawings show the same: texts by what they show, as records compare their values by reference.</summary>
@@ -332,37 +352,19 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             var (x, y) => Equals(x, y),
         });
 
-    /// <summary>The view moved by <paramref name="by"/> units, kept inside the canvas.</summary>
-    public static Rect Scrolled(Size units, Rect view, Vector by) => Within(units, view.X + by.X, view.Y + by.Y, view.Width, view.Height);
-
-    /// <summary>Where in units a pointer in the part is, through the view it shows, fitted and
-    /// centered, rounded down; null beside the drawing. With the whole canvas as its view this is PointOf.</summary>
-    public static Pointer? PointIn(Rect view, Size part, Point at)
-    {
-        var scale = Math.Min(part.Width / view.Width, part.Height / view.Height);
-        if (!(scale > 0) || !double.IsFinite(scale))
-            return null;
-        var x = (at.X - (part.Width - view.Width * scale) / 2) / scale;
-        var y = (at.Y - (part.Height - view.Height * scale) / 2) / scale;
-        if (x < 0 || y < 0 || x >= view.Width || y >= view.Height)
-            return null;
-        return new Pointer((long)Math.Floor(view.X + x), (long)Math.Floor(view.Y + y));
-    }
-
-    /// Where a pixel is in units, not rounded; beside the drawing too.
-    Point Exact(Point at)
-    {
-        var (scale, left, top) = Placement();
-        return scale <= 0 ? default : new Point((at.X - left) / scale, (at.Y - top) / scale);
-    }
-
-    /// Where a pointer that is down is, in whole units, at the view's nearest edge beside the drawing.
+    /// The unit under a pointer that is down, at the canvas's nearest edge beside it.
     Pointer Held(Point at)
     {
-        var p = Exact(at);
-        var v = View;
-        static long Edge(double value, double from, double size) => (long)Math.Min(Math.Max(Math.Floor(value), Math.Floor(from)), Math.Ceiling(from + size) - 1);
-        return Placed(new Pointer(Edge(p.X, v.X, v.Width), Edge(p.Y, v.Y, v.Height)));
+        var v = Viewport;
+        static long Edge(double u, double end) => (long)Math.Min(Math.Max(Math.Floor(u), 0), Math.Ceiling(end) - 1);
+        return new Pointer(Edge(v.X + at.X / v.Scale, UnitsWidth), Edge(v.Y + at.Y / v.Scale, UnitsHeight));
+    }
+
+    /// Zooms by <paramref name="factor"/> around a pixel of the control; its middle without one.
+    void ZoomBy(double factor, Point? at = null)
+    {
+        panned = Zoomed(new Size(UnitsWidth, UnitsHeight), Bounds.Size, Viewport, factor, at ?? new Point(Bounds.Width / 2, Bounds.Height / 2));
+        InvalidateVisual();
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -371,20 +373,36 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         if (!Zoom || Runs is not null)
             return;
         e.Handled = true;
-        var units = new Size(UnitsWidth, UnitsHeight);
         if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0)
-            view = Zoomed(units, Bounds.Size, View, Math.Exp(e.Delta.Y / 3), Exact(e.GetPosition(this)));
-        else
         {
-            // A wheel's notch is 50 pixels, as browsers scroll about.
-            var (scale, _, _) = Placement();
-            if (scale <= 0)
-                return;
-            var across = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? -e.Delta.Y : -e.Delta.X;
-            var down = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0 : -e.Delta.Y;
-            view = Scrolled(units, View, new Vector(across * 50 / scale, down * 50 / scale));
+            ZoomBy(e.Delta.Y > 0 ? 1.15 : 1 / 1.15, e.GetPosition(this));
+            return;
         }
+        // A wheel's notch is 50 pixels, as browsers scroll about.
+        var across = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? -e.Delta.Y : -e.Delta.X;
+        var down = (e.KeyModifiers & KeyModifiers.Shift) != 0 ? 0 : -e.Delta.Y;
+        panned = Scrolled(Viewport, new Vector(across * 50, down * 50));
         InvalidateVisual();
+    }
+
+    /// The zoom buttons in the top right corner, as the designer's: out, back to whole, in.
+    (Rect Out, Rect Whole, Rect In) ZoomButtons()
+    {
+        var top = 6.0;
+        var right = Bounds.Width - 6;
+        var zoomIn = new Rect(right - 26, top, 26, 24);
+        var whole = new Rect(zoomIn.X - 2 - 52, top, 52, 24);
+        var zoomOut = new Rect(whole.X - 2 - 26, top, 26, 24);
+        return (zoomOut, whole, zoomIn);
+    }
+
+    /// Which zoom button a pixel is on, if any.
+    string? ZoomButtonAt(Point at)
+    {
+        if (!Zoom || Runs is not null)
+            return null;
+        var (zoomOut, whole, zoomIn) = ZoomButtons();
+        return zoomOut.Contains(at) ? "zoomOut" : whole.Contains(at) ? "zoomWhole" : zoomIn.Contains(at) ? "zoomIn" : null;
     }
 
     /// Where in a drawing of `units` a click `at` a part of size `part` is,
@@ -434,13 +452,25 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             }
             return;
         }
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && ZoomButtonAt(e.GetPosition(this)) is { } button)
+        {
+            e.Handled = true;
+            if (button == "zoomWhole")
+            {
+                panned = null;
+                InvalidateVisual();
+            }
+            else
+                ZoomBy(button == "zoomIn" ? 1.2 : 1 / 1.2);
+            return;
+        }
         pressed = (Command is not null || DragCommand is not null || Zoom) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
         if (!pressed)
             return;
         e.Handled = true;
         pressAt = e.GetPosition(this);
-        from = PointIn(View, Bounds.Size, pressAt) is { } pressedAt ? Placed(pressedAt) : null;
-        viewAt = View;
+        viewAt = Viewport;
+        from = PointIn(new Size(UnitsWidth, UnitsHeight), viewAt, pressAt);
         moved = false;
         movesView = DragCommand is null;
         decided = movesView;
@@ -451,7 +481,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     // Where the press was, in pixels and in units, the view then, and whether it moved since.
     Point pressAt;
     Pointer? from;
-    Rect viewAt;
+    CanvasViewport viewAt;
     bool moved;
     // Whether the drag moves the view, and whether its first run said so yet.
     bool movesView;
@@ -481,11 +511,8 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         }
         if (movesView && Zoom)
         {
-            // Without a drag handler, dragging moves the view with the pointer.
-            var (scale, _, _) = Placement();
-            if (scale <= 0)
-                return;
-            view = Scrolled(new Size(UnitsWidth, UnitsHeight), viewAt, (pressAt - at) / scale);
+            // Dragging that moves nothing pans the view with the pointer.
+            panned = Scrolled(viewAt, pressAt - at);
             InvalidateVisual();
         }
     }
@@ -520,7 +547,7 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
         }
         if (at.X < 0 || at.Y < 0 || at.X > Bounds.Width || at.Y > Bounds.Height)
             return;
-        var point = PointIn(View, Bounds.Size, at) is { } clicked ? Placed(clicked) : null;
+        var point = PointIn(new Size(UnitsWidth, UnitsHeight), Viewport, at);
         if (point is not null && Command?.CanExecute(point) == true)
         {
             Command.Execute(point);
@@ -546,28 +573,26 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
     /// proportion, centered in the control.
     public (double Scale, double Left, double Top) Placement()
     {
-        var v = View;
-        var scale = Math.Min(Bounds.Width / v.Width, Bounds.Height / v.Height);
-        if (!double.IsFinite(scale) || scale <= 0)
+        var v = Viewport;
+        if (!double.IsFinite(v.Scale) || v.Scale <= 0)
             return (0, 0, 0);
-        return (scale, (Bounds.Width - v.Width * scale) / 2 - v.X * scale, (Bounds.Height - v.Height * scale) / 2 - v.Y * scale);
+        return (v.Scale, -v.X * v.Scale, -v.Y * v.Scale);
     }
 
-    /// The grid's lines in view, one pixel wide whatever the zoom, thinned to 8 pixels apart or more.
+    /// The grid's dots over the whole view, the same size whatever the zoom, thinned to 8 pixels apart or more.
     void DrawGrid(DrawingContext context, double scale, Func<double, double, Point> at)
     {
         if (Grid <= 0)
             return;
-        var v = View;
+        var v = Viewport;
         var every = GridEvery(Grid, scale);
-        var pen = new Pen(BrushOf("border"), 1) { Brush = BrushOf("border") };
-        using var faint = context.PushOpacity(0.5);
-        var right = Math.Min(v.Right, UnitsWidth);
-        var bottom = Math.Min(v.Bottom, UnitsHeight);
+        var dot = BrushOf(DotColor != "" ? DotColor : "border");
+        var r = Math.Max(DotSize, 1) / 2;
+        var right = v.X + Bounds.Width / scale;
+        var bottom = v.Y + Bounds.Height / scale;
         for (var x = Math.Ceiling(v.X / every) * every; x <= right; x += every)
-            context.DrawLine(pen, at(x, v.Y), at(x, bottom));
-        for (var y = Math.Ceiling(v.Y / every) * every; y <= bottom; y += every)
-            context.DrawLine(pen, at(v.X, y), at(right, y));
+            for (var y = Math.Ceiling(v.Y / every) * every; y <= bottom; y += every)
+                context.DrawEllipse(dot, null, at(x, y), r, r);
     }
 
     public override void Render(DrawingContext context)
@@ -596,7 +621,9 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
             switch (shape)
             {
                 case Shape.Clear clear:
-                    context.FillRectangle(BrushOf(clear.Color), new Rect(left, top, UnitsWidth * scale, UnitsHeight * scale));
+                    // A canvas that zooms is a sheet without edges: its clear fills the whole view.
+                    var color = clear.Color != "" ? clear.Color : Paper != "" ? Paper : "panel";
+                    context.FillRectangle(BrushOf(color), Zoom ? new Rect(Bounds.Size) : new Rect(left, top, UnitsWidth * scale, UnitsHeight * scale));
                     if (!gridDrawn)
                     {
                         gridDrawn = true;
@@ -625,15 +652,33 @@ public class CanvasView : Control, global::Avalonia.Rendering.ICustomHitTest
                     break;
             }
         }
-        // Where the view is in the whole canvas, while zoomed in.
-        var v = View;
-        if (Zoom && (v.Width < UnitsWidth || v.Height < UnitsHeight))
+        if (Zoom && Runs is null)
+            DrawZoomButtons(context);
+    }
+
+    /// The zoom buttons, as the designer's: out, the zoom it is at (back to whole), in.
+    void DrawZoomButtons(DrawingContext context)
+    {
+        var (zoomOut, whole, zoomIn) = ZoomButtons();
+        var font = this.TryFindResource("ClarityFont", ActualThemeVariant, out var family) && family is FontFamily f ? f : FontFamily.Default;
+        var face = BrushOf("panel");
+        var edge = new Pen(BrushOf("border"), 1);
+        foreach (var (box, label) in new[] { (zoomOut, "-"), (whole, $"{Math.Round(Viewport.Scale * 100)}%"), (zoomIn, "+") })
         {
-            var bar = BrushOf("muted");
-            var across = Bounds.Width - 12;
-            var down = Bounds.Height - 12;
-            context.DrawRectangle(bar, null, new RoundedRect(new Rect(2 + across * v.X / UnitsWidth, Bounds.Height - 8, across * v.Width / UnitsWidth, 6), 3));
-            context.DrawRectangle(bar, null, new RoundedRect(new Rect(Bounds.Width - 8, 2 + down * v.Y / UnitsHeight, 6, down * v.Height / UnitsHeight), 3));
+            context.DrawRectangle(face, edge, new RoundedRect(box, 4));
+            var text = new FormattedText(label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface(font), 12, BrushOf("text"));
+            context.DrawText(text, box.Center - new Point(text.Width / 2, text.Height / 2));
         }
     }
+
+    /// Clarity's words for the zoom buttons, in the person's language.
+    static string ZoomWord(string key) => key switch
+    {
+        "zoomOut" => Locale.Translate("zoomOut", "Zoom out"),
+        "zoomWhole" => Locale.Translate("zoomWhole", "Show it whole"),
+        _ => Locale.Translate("zoomIn", "Zoom in"),
+    };
 }
+
+/// <summary>What a canvas that zooms shows: the pixels a unit takes, and the unit at its top left corner.</summary>
+public readonly record struct CanvasViewport(double Scale, double X, double Y);

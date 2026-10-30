@@ -23,6 +23,15 @@ typedef struct {
     /// Whether a collapsible sidebar is folded to its button, and whether a
     /// maximizable one fills the window (conformance/sidebars.json).
     bool has_collapsed, collapsed;
+    /// A canvas's grid in its units (0 for none) and whether code snaps to it, as a handler set them.
+    bool has_grid, has_snap, snap;
+    int64_t grid;
+    /// What a canvas's clear() fills it with, as a handler set it (empty is the theme's panel); NULL keeps the design.
+    const char* background;
+    /// A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
+    bool has_dot_size;
+    int64_t dot_size;
+    const char* dot_color;
     bool has_maximized, maximized;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     bool has_tab;
@@ -181,6 +190,19 @@ void clarity_ui_set_folded(ClarityUi* ui, const char* part, bool value);
 /// Whether a collapsible sidebar is folded to its button: as left, or `design`.
 bool clarity_ui_collapsed(const ClarityUi* ui, const char* part, bool design);
 void clarity_ui_set_collapsed(ClarityUi* ui, const char* part, bool value);
+/// A canvas's grid (`canvas.grid`) and whether code snaps to it (`canvas.snap`), as its line says until a handler sets them.
+int64_t clarity_ui_grid(const ClarityUi* ui, const char* part, int64_t design);
+void clarity_ui_set_grid(ClarityUi* ui, const char* part, int64_t value);
+bool clarity_ui_snap(const ClarityUi* ui, const char* part, bool design);
+void clarity_ui_set_snap(ClarityUi* ui, const char* part, bool value);
+/// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
+const char* clarity_ui_background(const ClarityUi* ui, const char* part, const char* design);
+void clarity_ui_set_background(ClarityUi* ui, const char* part, const char* value);
+/// A canvas's grid dots (`canvas.dotSize`, `canvas.dotColor`), as its line says until a handler sets them.
+int64_t clarity_ui_dot_size(const ClarityUi* ui, const char* part, int64_t design);
+void clarity_ui_set_dot_size(ClarityUi* ui, const char* part, int64_t value);
+const char* clarity_ui_dot_color(const ClarityUi* ui, const char* part, const char* design);
+void clarity_ui_set_dot_color(ClarityUi* ui, const char* part, const char* value);
 /// Whether a maximizable sidebar fills the window.
 bool clarity_ui_maximized(const ClarityUi* ui, const char* part);
 void clarity_ui_set_maximized(ClarityUi* ui, const char* part, bool value);

@@ -317,3 +317,50 @@ func TestARibbonsOpenTabIsAsEveryRuntimeSays(t *testing.T) {
 		}
 	}
 }
+
+// Snapped rounds to its step as every runtime does (conformance/drawing.json, grids).
+func TestSnappedRoundsToItsStep(t *testing.T) {
+	text, err := os.ReadFile("../../../conformance/drawing.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Grids struct {
+			Snapped []struct {
+				Value  int64 `json:"value"`
+				Step   int64 `json:"step"`
+				Result int64 `json:"result"`
+			} `json:"snapped"`
+		} `json:"grids"`
+	}
+	if err := json.Unmarshal(text, &file); err != nil || len(file.Grids.Snapped) == 0 {
+		t.Fatalf("no cases: %v", err)
+	}
+	for _, c := range file.Grids.Snapped {
+		if got := Snapped(c.Value, c.Step); got != c.Result {
+			t.Errorf("Snapped(%d, %d) = %d, want %d", c.Value, c.Step, got, c.Result)
+		}
+	}
+}
+
+// A canvas's grid and snap are as its line says until code sets them.
+func TestACanvasKeepsTheGridAndSnapCodeSets(t *testing.T) {
+	ui := NewUi(WindowState{Window: "Main", Parts: map[string]PartState{}})
+	if ui.Grid("sheet", 20) != 20 || !ui.Snap("sheet", true) {
+		t.Fatal("the line's grid and snap first")
+	}
+	ui.SetGrid("sheet", 0)
+	ui.SetSnap("sheet", false)
+	if ui.Grid("sheet", 20) != 0 || ui.Snap("sheet", true) {
+		t.Fatal("then what code set")
+	}
+	ui.SetBackground("sheet", "#f5f0e1")
+	if ui.Background("sheet", "panel") != "#f5f0e1" || ui.Background("other", "panel") != "panel" {
+		t.Fatal("the background code set, else the line's")
+	}
+	ui.SetDotSize("sheet", 3)
+	ui.SetDotColor("sheet", "muted")
+	if ui.DotSize("sheet", 2) != 3 || ui.DotColor("sheet", "") != "muted" {
+		t.Fatal("the dots code set")
+	}
+}

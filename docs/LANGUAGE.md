@@ -706,7 +706,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 |---|---|---|---|
 | `image` | an `image` field, or nothing | `source "file"` for a fixed picture of the resources folder | `click` |
 | `display` | an integer, decimal or money: `bind shown` | `digits n`, 1 to 24, 12 without it | none |
-| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
+| `canvas` | nothing | `units W x H`, 1 to 10000 each, 100 x 100 without it; `zoom`; `grid N` and `snap`; `background color`; `dots N color`; `surface svg`, `surface bitmap` or `surface gpu` | `draw`, `click`, `drag`, `drop`, `pointer`, `key` |
 
 **Media**
 
@@ -894,7 +894,7 @@ splitter at 1,1 span 12 rows 10 vertical
 
 `tabs` need at least one `tab`, and a `splitter` has exactly two `pane` blocks.
 
-A form with `labels 3` has a label column: each input in it gets a label in the form's first 3 columns of its row, showing its field's label (the `label` of the field, a key such as `customerNameLabel`), so its inputs start at column 4. The label is a part named after its input, `nameBoxLabel` for `nameBox`, which code hides or disables as any part. A checkbox, a switch and a toggle label themselves; a label written `for` an input the form labels is an error.
+A form with `labels 3` has a label column: each input in it gets a label in the form's first 3 columns of its row, showing its field's label (the `label` of the field, a key such as `customerNameLabel`), so its inputs start at column 4. The label is a part named after its input, `nameBoxLabel` for `nameBox`, which code hides or disables as any part. A checkbox, a switch and a toggle label themselves, with their own caption or, without one, their field's label; a label written `for` an input the form labels is an error.
 
 ```clarity
 form name customerForm at 1,1 span 12 rows 4 bind customer labels 3
@@ -1320,7 +1320,7 @@ code Main
 
 | Shape | Values | What it draws |
 |---|---|---|
-| `canvas.clear(color)` | | Fills the whole canvas. |
+| `canvas.clear(color)` | the canvas's `background` when left out | Fills the whole canvas; on a canvas with `zoom`, the whole part, which has no edges. |
 | `canvas.line(x1, y1, x2, y2, color, width)` | width 1 when left out | A line with round ends. |
 | `canvas.rect(x, y, width, height, color)` | | A filled rectangle. |
 | `canvas.circle(x, y, r, color)` | | A filled circle around x, y. |
@@ -1353,9 +1353,11 @@ code Game
             square = square + 3
         status = "Square {square}"
 ```
-- `zoom` on a canvas lets the person zoom and scroll its drawing, for a drawing larger than the part shows well, such as a diagram: the wheel scrolls (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and bars at the edges show where the view is. The drawing starts whole, fitted in proportion; zoomed in, it fills the part, up to 16 times the size it starts at, and never scrolls past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
-- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the nearest edge when it is beside the drawing) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag moves the view instead when there is no drag handler, or when the handler's first run leaves the drawing as it was (a press on nothing it moves); that drag has no drop.
-- `grid 20` shows a grid every 20 of the canvas's units, behind the shapes: after the drawing's `clear`, first when it has none, in the theme's `border` color. Zoomed out, lines closer than 8 pixels are thinned to every second, fourth and so on. `snap` (with a grid) puts every place the canvas gives on the nearest point of the grid: `canvas.x`, `canvas.y`, `canvas.fromX` and `canvas.fromY` of a click, a drag and a drop. Code that moves a box by `canvas.x - canvas.fromX` then moves it by whole steps of the grid, and a box that starts on the grid stays on it.
+- `zoom` on a canvas lets the person zoom and pan its drawing, as Clarity's own diagram designer does, for a drawing larger than the part shows well, such as a diagram. It starts whole, fitted in proportion. The wheel pans (with Shift sideways), Ctrl (Cmd on macOS) with the wheel or a touchpad's pinch zooms around the pointer, and three buttons in its top right corner zoom out, show the zoom it is at (a click shows it whole again) and zoom in, named in Clarity's words `zoomOut`, `zoomWhole` and `zoomIn`. It zooms from a quarter of its size up to three times (further when the whole drawing is smaller or larger than that), and pans past its edges. The view stays while the canvas is drawn anew. `canvas.x` and `canvas.y` stay in the canvas's units, whatever is in view.
+- `on drag: handler` runs while the pointer moves on the canvas with its button down, and `on drop: handler` once when it is let go. Both read where the pointer is (`canvas.x`, `canvas.y`, at the canvas's nearest edge when it is beside it) and where it was pressed (`canvas.fromX`, `canvas.fromY`), in the canvas's units. A press that does not move is a click. The handler runs with the latest place: moves that come while it runs are not queued one by one. The canvas is drawn anew after each, so code that moves what it draws by `canvas.x - canvas.fromX` shows it moving; the drop is the place to save. On a canvas with `zoom`, a drag pans instead when there is no drag handler, or when the handler's first run leaves the drawing as it was (a press on nothing it moves); that drag has no drop.
+- `grid 20` shows a dot every 20 of the canvas's units over the whole view, behind the shapes: after the drawing's `clear`, first when it has none, in the theme's `border` color. Zoomed out, dots closer than 8 pixels are thinned to every second, fourth and so on. `snap` (with a grid) says that what is moved lands on the grid; the pointer itself stays free, and code puts the moved thing on the grid with `snapped(value, step)`, the multiple of step nearest to value (a half rounds up; a step of 0 gives the value): `boxX = snapped(sheet.x - grabX, sheet.grid)`. Code reads and sets both while the app runs: `sheet.grid` (0 for none) and `sheet.snap`, as the line says until a handler sets them, so an app can offer Show grid and Snap to grid.
+- `background panel` (a theme color by name, or written out: `background "#f5f0e1"`) is what `clear()` without a color fills the canvas with; without it, the theme's `panel`. Code reads and sets it as `canvas.background`, as the line says until a handler sets it; an empty one is the theme's panel again. A person's chosen color can so reach a canvas through a setting: `sheet.background = settings.diagramColor`.
+- `dots 3 muted` says how many pixels across a grid's dots are (1 to 20; 2 without it) and their color (a theme color by name, or written out; the theme's `border` without it, and the color can be left out: `dots 3`). They are the same size whatever the zoom. Code reads and sets them as `canvas.dotSize` and `canvas.dotColor`, as the line says until a handler sets them; an empty color is the theme's border again.
 
 ```clarity
 page Sheet: window
@@ -1702,7 +1704,7 @@ One statement per line; `if`, `else` and `for` take an indented block.
 | `squares[3]` | an item of a list, counted from 1; a position outside the list is an error |
 | `Business`, `CustomerKind.Business` | enum values |
 | `none` | the empty value of a date, a date and time or a reference field: `loan.returned_on == none`, `order.customer = none`. Nothing else is ever none; empty text is `""` |
-| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `join(texts, separator)` the texts of a `list<text>` in order with the separator between each two (`join(names, ", ")`), `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
+| `name(arg, ...)` | a call to a function or action; `count(list)` gives the number of items, `join(texts, separator)` the texts of a `list<text>` in order with the separator between each two (`join(names, ", ")`), `round(value, places)` a decimal or money with at most `places` decimals, rounded half away from zero (`round(2.345, 2)` is 2.35), `snapped(value, step)` the multiple of a whole number `step` nearest to `value`, a half rounding up (`snapped(29, 20)` is 20; a step of 0 gives the value), as a canvas's grid snaps, `sin(degrees)` and `cos(degrees)` a decimal rounded to 10 decimals, `today()` the date and `now()` the date and time where the application runs |
 | `(expr)` | grouping |
 | `-x` | negation |
 | `a * b`, `a / b` | multiplication and division |

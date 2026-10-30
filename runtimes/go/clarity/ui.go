@@ -27,6 +27,17 @@ type PartState struct {
 	// Collapsed is whether a collapsible sidebar is folded to its button, as the
 	// person or a handler left it; nil keeps the design (conformance/sidebars.json).
 	Collapsed *bool `json:"collapsed,omitempty"`
+	// Grid is a canvas's grid in its units (0 for none), and Snap whether code
+	// snaps to it, as a handler set them; nil keeps the design.
+	Grid *int64 `json:"grid,omitempty"`
+	Snap *bool  `json:"snap,omitempty"`
+	// Background is what a canvas's clear() fills it with, as a handler set
+	// it; empty is the theme's panel.
+	Background *string `json:"background,omitempty"`
+	// DotSize and DotColor are a canvas's grid dots, as a handler set them:
+	// pixels across, and color (empty is the theme's border).
+	DotSize  *int64  `json:"dotSize,omitempty"`
+	DotColor *string `json:"dotColor,omitempty"`
 	// Maximized is whether a maximizable sidebar fills the window; nil is not.
 	Maximized *bool `json:"maximized,omitempty"`
 	// Tab is the open tab of a ribbon, counted from 1; nil is the first
@@ -291,6 +302,66 @@ func (u *Ui) Collapsed(part string, design bool) bool {
 
 func (u *Ui) SetCollapsed(part string, value bool) {
 	u.part(part, func(p *PartState) { p.Collapsed = &value })
+}
+
+// Grid is a canvas's grid: canvas.grid, as its line says until a handler sets it.
+func (u *Ui) Grid(part string, design int64) int64 {
+	if g := u.parts[part].Grid; g != nil {
+		return *g
+	}
+	return design
+}
+
+func (u *Ui) SetGrid(part string, value int64) {
+	u.part(part, func(p *PartState) { p.Grid = &value })
+}
+
+// Snap is whether code snaps to a canvas's grid: canvas.snap.
+func (u *Ui) Snap(part string, design bool) bool {
+	if s := u.parts[part].Snap; s != nil {
+		return *s
+	}
+	return design
+}
+
+func (u *Ui) SetSnap(part string, value bool) {
+	u.part(part, func(p *PartState) { p.Snap = &value })
+}
+
+// Background is what a canvas's clear() fills it with: canvas.background.
+func (u *Ui) Background(part string, design string) string {
+	if b := u.parts[part].Background; b != nil {
+		return *b
+	}
+	return design
+}
+
+func (u *Ui) SetBackground(part string, value string) {
+	u.part(part, func(p *PartState) { p.Background = &value })
+}
+
+// DotSize is how many pixels across a canvas's grid dots are: canvas.dotSize.
+func (u *Ui) DotSize(part string, design int64) int64 {
+	if d := u.parts[part].DotSize; d != nil {
+		return *d
+	}
+	return design
+}
+
+func (u *Ui) SetDotSize(part string, value int64) {
+	u.part(part, func(p *PartState) { p.DotSize = &value })
+}
+
+// DotColor is the color of a canvas's grid dots: canvas.dotColor.
+func (u *Ui) DotColor(part string, design string) string {
+	if c := u.parts[part].DotColor; c != nil {
+		return *c
+	}
+	return design
+}
+
+func (u *Ui) SetDotColor(part string, value string) {
+	u.part(part, func(p *PartState) { p.DotColor = &value })
 }
 
 // Maximized is whether a maximizable sidebar fills the window.

@@ -10,6 +10,11 @@ public static class Numbers
     public static decimal Round(decimal value, long places) =>
         Math.Round(value, (int)Math.Clamp(places, 0, 28), MidpointRounding.AwayFromZero);
 
+    /// <summary><c>snapped(value, step)</c>: the multiple of step nearest to value, a half rounding up;
+    /// a step of 0 gives the value (conformance/drawing.json, grids).</summary>
+    public static long Snapped(long value, long step) =>
+        step <= 0 ? value : (long)Math.Floor((2m * value + step) / (2m * step)) * step;
+
     /// sin(degrees) and cos(degrees), rounded to 10 decimals (conformance/drawing.json).
     public static decimal Sin(decimal degrees) => Angle(degrees, Math.Sin);
 

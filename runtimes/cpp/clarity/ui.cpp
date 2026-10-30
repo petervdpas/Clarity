@@ -31,6 +31,11 @@ bool Ui::enabled(const std::string& part) const { return part_or(parts_, part, &
 bool Ui::readonly(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::readonly, design); }
 bool Ui::folded(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::folded, design); }
 bool Ui::collapsed(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::collapsed, design); }
+int64_t Ui::grid(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::grid, design); }
+bool Ui::snap(const std::string& part, bool design) const { return part_or(parts_, part, &PartState::snap, design); }
+std::string Ui::background(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::background, design); }
+int64_t Ui::dot_size(const std::string& part, int64_t design) const { return part_or(parts_, part, &PartState::dot_size, design); }
+std::string Ui::dot_color(const std::string& part, const std::string& design) const { return part_or(parts_, part, &PartState::dot_color, design); }
 bool Ui::maximized(const std::string& part) const { return part_or(parts_, part, &PartState::maximized, false); }
 int64_t Ui::tab(const std::string& part) const { return part_or(parts_, part, &PartState::tab, int64_t(1)); }
 int64_t Ui::step(const std::string& part) const { return part_or(parts_, part, &PartState::step, int64_t(1)); }
@@ -111,6 +116,11 @@ void to_json(nlohmann::json& out, const PartState& p) {
     if (p.readonly) out["readonly"] = *p.readonly;
     if (p.folded) out["folded"] = *p.folded;
     if (p.collapsed) out["collapsed"] = *p.collapsed;
+    if (p.grid) out["grid"] = *p.grid;
+    if (p.snap) out["snap"] = *p.snap;
+    if (p.background) out["background"] = *p.background;
+    if (p.dot_size) out["dotSize"] = *p.dot_size;
+    if (p.dot_color) out["dotColor"] = *p.dot_color;
     if (p.maximized) out["maximized"] = *p.maximized;
     if (p.tab) out["tab"] = *p.tab;
     if (p.step) out["step"] = *p.step;
@@ -133,6 +143,11 @@ void from_json(const nlohmann::json& in, PartState& p) {
     take("readonly", p.readonly);
     take("folded", p.folded);
     take("collapsed", p.collapsed);
+    take("grid", p.grid);
+    take("snap", p.snap);
+    take("background", p.background);
+    take("dotSize", p.dot_size);
+    take("dotColor", p.dot_color);
     take("maximized", p.maximized);
     take("tab", p.tab);
     take("step", p.step);

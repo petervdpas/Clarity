@@ -34,6 +34,14 @@ struct PartState {
     /// Whether a collapsible sidebar is folded to its button, and whether a
     /// maximizable one fills the window (conformance/sidebars.json).
     std::optional<bool> collapsed;
+    // A canvas's grid in its units (0 for none) and whether code snaps to it, as a handler set them.
+    std::optional<int64_t> grid;
+    std::optional<bool> snap;
+    // What a canvas's clear() fills it with, as a handler set it; empty is the theme's panel.
+    std::optional<std::string> background;
+    // A canvas's grid dots, as a handler set them: pixels across, and color (empty is the theme's border).
+    std::optional<int64_t> dot_size;
+    std::optional<std::string> dot_color;
     std::optional<bool> maximized;
     /// The open tab of a ribbon, counted from 1 (conformance/ribbons.json).
     std::optional<int64_t> tab;
@@ -184,6 +192,19 @@ public:
     /// Whether a collapsible sidebar is folded to its button: as left, or `design`.
     bool collapsed(const std::string& part, bool design) const;
     void set_collapsed(const std::string& part, bool value) { parts_[part].collapsed = value; }
+    /// A canvas's grid (`canvas.grid`) and whether code snaps to it (`canvas.snap`), as its line says until a handler sets them.
+    int64_t grid(const std::string& part, int64_t design) const;
+    void set_grid(const std::string& part, int64_t value) { parts_[part].grid = value; }
+    bool snap(const std::string& part, bool design) const;
+    void set_snap(const std::string& part, bool value) { parts_[part].snap = value; }
+    /// What a canvas's clear() fills it with (`canvas.background`), as its line says until a handler sets it.
+    std::string background(const std::string& part, const std::string& design) const;
+    void set_background(const std::string& part, const std::string& value) { parts_[part].background = value; }
+    /// A canvas's grid dots (`canvas.dotSize`, `canvas.dotColor`), as its line says until a handler sets them.
+    int64_t dot_size(const std::string& part, int64_t design) const;
+    void set_dot_size(const std::string& part, int64_t value) { parts_[part].dot_size = value; }
+    std::string dot_color(const std::string& part, const std::string& design) const;
+    void set_dot_color(const std::string& part, const std::string& value) { parts_[part].dot_color = value; }
     /// Whether a maximizable sidebar fills the window.
     bool maximized(const std::string& part) const;
     void set_maximized(const std::string& part, bool value) { parts_[part].maximized = value; }

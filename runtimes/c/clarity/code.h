@@ -76,6 +76,8 @@ ClarityDates clarity_dates(size_t count, const ClarityDate* items);
 /// `from to to` in code: the whole numbers from `from` to `to`, both
 /// counted; none when `to` is below `from` (conformance/lists.json, `ranges`).
 ClarityIntegers clarity_range(int64_t from, int64_t to);
+/// `snapped(value, step)`: the multiple of step nearest to value, a half rounding up; a step of 0 gives the value.
+int64_t clarity_snapped(int64_t value, int64_t step);
 /// `join(texts, separator)` in code: the texts in order with the separator
 /// between each two, in the scratch arena (conformance/lists.json, `joins`).
 const char* clarity_joined(ClarityTexts texts, const char* separator);

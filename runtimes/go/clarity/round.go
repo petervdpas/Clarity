@@ -18,6 +18,20 @@ func Round(value decimal.Decimal, places int64) decimal.Decimal {
 	return value.Round(int32(places))
 }
 
+// Snapped is snapped(value, step): the multiple of step nearest to value, a
+// half rounding up; a step of 0 gives the value (conformance/drawing.json, grids).
+func Snapped(value, step int64) int64 {
+	if step <= 0 {
+		return value
+	}
+	n := 2*value + step
+	q := n / (2 * step)
+	if n%(2*step) != 0 && n < 0 {
+		q--
+	}
+	return q * step
+}
+
 // Sin is sin(degrees) in code, rounded to 10 decimals (conformance/drawing.json).
 func Sin(degrees decimal.Decimal) decimal.Decimal {
 	return angle(degrees, math.Sin)

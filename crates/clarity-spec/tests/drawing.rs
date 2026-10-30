@@ -177,22 +177,33 @@ code Main
     assert_has(&errors(button), "zoom");
 }
 
-/// A canvas can show a grid (`grid 20`, in its units) and snap the pointer
-/// to it (`snap`): what handlers read is then on the grid.
+/// A canvas can show a grid (`grid 20`, in its units) and say that code snaps
+/// to it (`snap`). Code reads and sets both while the app runs, and rounds
+/// to the grid with `snapped(value, step)`.
 #[test]
-fn a_canvas_can_show_a_grid_and_snap_to_it() {
+fn a_canvas_can_show_a_grid_and_code_snaps_to_it() {
     let sheet = "module diagram
 
 page Main: window
-    data moved: integer
+    data boxX: integer
     canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 snap on draw: drawSheet on drop: dropped
+    button \"Grid\" name gridButton at 7,1 span 2 on click: gridClicked
 
 code Main
     handler drawSheet
         sheet.clear(\"panel\")
 
     handler dropped
-        moved = sheet.x
+        boxX = sheet.x
+        if sheet.snap
+            boxX = snapped(boxX, sheet.grid)
+
+    handler gridClicked
+        sheet.snap = not sheet.snap
+        if sheet.grid == 0
+            sheet.grid = 20
+        else
+            sheet.grid = 0
 ";
     let (file, diags) = parse(sheet, "diagram.clarity");
     assert!(diags.is_empty(), "{diags:#?}");
@@ -200,6 +211,96 @@ code Main
     assert_eq!((canvas.props.grid, canvas.props.snap), (Some(20), true));
     assert_eq!(widget_line(&canvas.props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 snap on draw: drawSheet on drop: dropped");
     assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
-    assert_has(&errors(&sheet.replace(" grid 20 snap", " snap")), "'snap' snaps the pointer to the grid; give the canvas one, as in grid 20");
+    assert_has(&errors(&sheet.replace(" grid 20 snap", " snap")), "'snap' snaps to the grid; give the canvas one, as in grid 20");
     assert_has(&errors(&sheet.replace("grid 20", "grid 0")), "a canvas's grid is 1 to 10000 units");
+    assert_has(&errors(&sheet.replace("snapped(boxX, sheet.grid)", "snapped(\"a\", 2)")), "'snapped' takes a whole number and the step it rounds to, as in snapped(x, 20)");
+    assert_has(&errors(&sheet.replace("sheet.snap = not sheet.snap", "gridButton.snap = true")), "gridButton");
+}
+
+/// A canvas that zooms has buttons to zoom out, back to whole and in, in Clarity's own words.
+#[test]
+fn a_canvas_that_zooms_has_clarity_s_own_words() {
+    let sheet = "module diagram
+
+page Main: window
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom on draw: drawSheet
+
+code Main
+    handler drawSheet
+        sheet.clear(\"panel\")
+";
+    let project = clarity_spec::keyed::load_keyed([("diagram.clarity", sheet)], &[], "en");
+    let en = &project.translations["en"];
+    assert_eq!((en.get("zoomOut").map(String::as_str), en.get("zoomWhole").map(String::as_str), en.get("zoomIn").map(String::as_str)), (Some("Zoom out"), Some("Show it whole"), Some("Zoom in")));
+    let fixed = sheet.replace(" zoom on draw", " on draw");
+    let project = clarity_spec::keyed::load_keyed([("diagram.clarity", fixed.as_str())], &[], "en");
+    assert_eq!(project.translations["en"].get("zoomIn"), None, "only a project with a canvas that zooms has them");
+}
+
+/// A canvas has a background (`background panel`, a theme color by name or
+/// written out), which `clear()` without a color fills it with. Code reads
+/// and sets it while the app runs; an empty one is the theme's panel.
+#[test]
+fn a_canvas_has_a_background_that_clear_fills() {
+    let sheet = "module diagram
+
+page Main: window
+    data chosen: text
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom background panel on draw: drawSheet
+    button \"Paper\" name paperButton at 7,1 span 2 on click: paperClicked
+
+code Main
+    handler drawSheet
+        sheet.clear()
+
+    handler paperClicked
+        if sheet.background == \"panel\"
+            sheet.background = \"#f5f0e1\"
+        else
+            sheet.background = chosen
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let canvas = &file.pages[0].widgets[0];
+    assert_eq!(canvas.props.background.as_deref(), Some("panel"));
+    assert_eq!(widget_line(&canvas.props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom background panel on draw: drawSheet");
+    let written = sheet.replace("background panel", "background \"#101810\"");
+    let (file, _) = parse(&written, "diagram.clarity");
+    assert_eq!(file.pages[0].widgets[0].props.background.as_deref(), Some("#101810"));
+    assert_eq!(widget_line(&file.pages[0].widgets[0].props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom background \"#101810\" on draw: drawSheet");
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+}
+
+/// A canvas's grid dots have a size in pixels and a color: `dots 3 muted`
+/// (the color can be left out, or written out). Code reads and sets both.
+#[test]
+fn a_canvas_grid_has_dots_of_a_size_and_color() {
+    let sheet = "module diagram
+
+page Main: window
+    data chosen: text
+    canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 dots 3 muted on draw: drawSheet
+    button \"Dots\" name dotsButton at 7,1 span 2 on click: dotsClicked
+
+code Main
+    handler drawSheet
+        sheet.clear()
+
+    handler dotsClicked
+        sheet.dotSize = sheet.dotSize + 1
+        sheet.dotColor = chosen
+";
+    let (file, diags) = parse(sheet, "diagram.clarity");
+    assert!(diags.is_empty(), "{diags:#?}");
+    let canvas = &file.pages[0].widgets[0];
+    assert_eq!((canvas.props.dot_size, canvas.props.dot_color.as_deref()), (Some(3), Some("muted")));
+    assert_eq!(widget_line(&canvas.props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 dots 3 muted on draw: drawSheet");
+    let plain = sheet.replace("dots 3 muted", "dots 4");
+    let (file, _) = parse(&plain, "diagram.clarity");
+    assert_eq!((file.pages[0].widgets[0].props.dot_size, file.pages[0].widgets[0].props.dot_color.as_deref()), (Some(4), None));
+    let written = sheet.replace("dots 3 muted", "dots 3 \"#888888\"");
+    let (file, _) = parse(&written, "diagram.clarity");
+    assert_eq!(widget_line(&file.pages[0].widgets[0].props), "canvas name sheet at 1,1 span 6 rows 6 units 3000 x 2000 zoom grid 20 dots 3 \"#888888\" on draw: drawSheet");
+    assert!(errors(sheet).is_empty(), "{:#?}", errors(sheet));
+    assert_has(&errors(&sheet.replace("dots 3 muted", "dots 0")), "a grid's dots are 1 to 20 pixels");
 }

@@ -558,6 +558,11 @@ impl<'a> Emitter<'a> {
             "y" => "y",
             "fromX" => "from_x",
             "fromY" => "from_y",
+            "grid" => "grid",
+            "snap" => "snap",
+            "background" => "background",
+            "dotSize" => "dot_size",
+            "dotColor" => "dot_color",
             _ => return None,
         };
         Some((name.clone(), property))
@@ -594,6 +599,11 @@ impl<'a> Emitter<'a> {
             ("readonly", Some(info)) => format!("ui.readonly({part:?}, {})", info.readonly),
             ("folded", Some(info)) => format!("ui.folded({part:?}, {})", info.folded),
             ("collapsed", Some(info)) => format!("ui.collapsed({part:?}, {})", info.collapsed),
+            ("grid", Some(info)) => format!("ui.grid({part:?}, {})", info.grid),
+            ("snap", Some(info)) => format!("ui.snap({part:?}, {})", info.snap),
+            ("background", Some(info)) => format!("ui.background({part:?}, {:?})", info.background),
+            ("dot_size", Some(info)) => format!("ui.dot_size({part:?}, {})", info.dot_size),
+            ("dot_color", Some(info)) => format!("ui.dot_color({part:?}, {:?})", info.dot_color),
             ("selected", Some(PartInfo { bind: Some(bind), .. })) => {
                 format!("ui.selected({part:?}, &w.{})?", ident(&bind))
             }
@@ -1262,6 +1272,10 @@ impl<'a> Emitter<'a> {
         }
         // round(value, places), as every runtime rounds (conformance/rounding.json).
         // sin(degrees), cos(degrees), as every runtime gives them (conformance/drawing.json).
+        if name == clarity_spec::code::check::SNAPPED && self.project.files.iter().flat_map(|f| &f.functions).all(|f| f.name.name != name) {
+            let values: Vec<String> = args.iter().map(|a| self.value(a)).collect();
+            return format!("clarity_runtime::snapped({})", values.join(", "));
+        }
         if name == clarity_spec::code::check::SIN || name == clarity_spec::code::check::COS {
             let arg = args.first();
             let value = match arg.map(|a| self.types.type_of(a)) {
@@ -1323,6 +1337,14 @@ pub struct PartInfo {
     pub folded: bool,
     /// Whether the design starts a collapsible sidebar folded to its button.
     pub collapsed: bool,
+    /// A canvas's grid as its line says (0 for none), and whether code snaps to it.
+    pub grid: u32,
+    pub snap: bool,
+    /// A canvas's background as its line says; empty is the theme's panel.
+    pub background: String,
+    /// A canvas's grid dots as its line says: pixels across (2 without it) and color (empty is the theme's border).
+    pub dot_size: u32,
+    pub dot_color: String,
     /// A custom part (DESIGN 5.19): its kind and the values written on its line.
     pub custom: Option<(String, std::collections::BTreeMap<String, clarity_spec::model::Literal>)>,
 }
@@ -1354,6 +1376,11 @@ impl WindowCtx {
                         readonly: widget.props.readonly,
                         folded: widget.props.folded,
                         collapsed: false,
+                        grid: widget.props.grid.unwrap_or(0),
+                        snap: widget.props.snap,
+                        background: widget.props.background.clone().unwrap_or_default(),
+                        dot_size: widget.props.dot_size.unwrap_or(2),
+                        dot_color: widget.props.dot_color.clone().unwrap_or_default(),
                         custom: widget.props.part.clone().map(|kind| (kind, widget.props.values.clone())),
                     },
                 );
@@ -1376,6 +1403,11 @@ impl WindowCtx {
                         readonly: false,
                         folded: false,
                         collapsed: false,
+                        grid: 0,
+                        snap: false,
+                        background: String::new(),
+                        dot_size: 2,
+                        dot_color: String::new(),
                         custom: None,
                     },
                 );

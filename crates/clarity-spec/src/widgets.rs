@@ -296,6 +296,10 @@ pub enum WidgetProperty {
     Grid,
     /// `snap`: the pointer snaps to a canvas's grid.
     Snap,
+    /// `background panel`: what a canvas's `clear()` fills it with.
+    Background,
+    /// `dots 3 muted`: the size and color of a canvas's grid dots.
+    Dots,
     /// `runs Screen`: a canvas an engine beside the screen draws.
     Runs,
     /// `foldable` and `folded`: a panel or form folds by its header.
@@ -920,7 +924,7 @@ const ENTRIES: &[Entry] = &[
         // a click runs a handler, which reads where as `canvas.x` and `canvas.y`;
         // a drag and a drop also read where it was pressed, `fromX` and `fromY`.
         events: &[Event::Draw, Event::Click, Event::Drag, Event::Drop, Event::Pointer, Event::Key],
-        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Runs, WidgetProperty::Surface],
+        properties: &[WidgetProperty::Units, WidgetProperty::Zoom, WidgetProperty::Grid, WidgetProperty::Snap, WidgetProperty::Background, WidgetProperty::Dots, WidgetProperty::Runs, WidgetProperty::Surface],
     },
     // A custom part is written by its declared name; its keyword is two
     // words, so it is never typed and reads well in messages. The Parts
@@ -1189,6 +1193,9 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         zoom: false,
         grid: None,
         snap: false,
+        background: None,
+        dot_size: None,
+        dot_color: None,
         runs: None,
         tooltip: None,
         icon: (kind == WidgetKind::Icon).then(|| "star".to_string()),
@@ -1369,6 +1376,17 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if props.snap {
         parts.push("snap".to_string());
     }
+    if let Some(background) = &props.background {
+        // A color written out is a string; a theme's color is its name.
+        parts.push(if background.starts_with('#') { format!("background {background:?}") } else { format!("background {background}") });
+    }
+    if let Some(size) = props.dot_size {
+        match &props.dot_color {
+            Some(color) if color.starts_with('#') => parts.push(format!("dots {size} {color:?}")),
+            Some(color) => parts.push(format!("dots {size} {color}")),
+            None => parts.push(format!("dots {size}")),
+        }
+    }
     if let Some(engine) = &props.runs {
         parts.push(format!("runs {engine}"));
     }
@@ -1500,8 +1518,11 @@ pub fn canvas_options(props: &WidgetProps) -> Result<(), String> {
     if props.grid.is_some_and(|g| !(1..=10000).contains(&g)) {
         return Err(CANVAS_GRID_PROBLEM.to_string());
     }
+    if props.dot_size.is_some_and(|d| !(1..=20).contains(&d)) {
+        return Err("a grid's dots are 1 to 20 pixels".to_string());
+    }
     if props.snap && props.grid.is_none() {
-        return Err("'snap' snaps the pointer to the grid; give the canvas one, as in grid 20".to_string());
+        return Err("'snap' snaps to the grid; give the canvas one, as in grid 20".to_string());
     }
     Ok(())
 }
@@ -1581,6 +1602,8 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Zoom, props.zoom, "zoom"),
         (WidgetProperty::Grid, props.grid.is_some(), "grid"),
         (WidgetProperty::Snap, props.snap, "snap"),
+        (WidgetProperty::Background, props.background.is_some(), "background"),
+        (WidgetProperty::Dots, props.dot_size.is_some(), "dots"),
         (WidgetProperty::Runs, props.runs.is_some(), "runs"),
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),

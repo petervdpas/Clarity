@@ -73,6 +73,14 @@ public:
 /// `xs[i]` in code: item i of a list, counted from 1.
 /// `from to to` in code: the whole numbers from `from` to `to`, both counted;
 /// none when `to` is below `from` (conformance/lists.json, `ranges`).
+/// `snapped(value, step)`: the multiple of step nearest to value, a half rounding up; a step of 0 gives the value.
+inline int64_t snapped(int64_t value, int64_t step) {
+    if (step <= 0) return value;
+    int64_t n = 2 * value + step, q = n / (2 * step);
+    if (n % (2 * step) != 0 && n < 0) --q;
+    return q * step;
+}
+
 inline std::vector<int64_t> range(int64_t from, int64_t to) {
     std::vector<int64_t> list;
     for (int64_t i = from; i <= to; ++i) list.push_back(i);

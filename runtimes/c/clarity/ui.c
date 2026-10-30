@@ -164,6 +164,53 @@ void clarity_ui_set_collapsed(ClarityUi* ui, const char* part, bool value) {
     p->collapsed = value;
 }
 
+int64_t clarity_ui_grid(const ClarityUi* ui, const char* part, int64_t design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_grid ? p->grid : design;
+}
+
+void clarity_ui_set_grid(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_grid = true;
+    p->grid = value;
+}
+
+bool clarity_ui_snap(const ClarityUi* ui, const char* part, bool design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_snap ? p->snap : design;
+}
+
+void clarity_ui_set_snap(ClarityUi* ui, const char* part, bool value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_snap = true;
+    p->snap = value;
+}
+
+const char* clarity_ui_background(const ClarityUi* ui, const char* part, const char* design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->background ? p->background : design;
+}
+
+void clarity_ui_set_background(ClarityUi* ui, const char* part, const char* value) { part_of(ui, part)->background = clarity_copy(value); }
+
+int64_t clarity_ui_dot_size(const ClarityUi* ui, const char* part, int64_t design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->has_dot_size ? p->dot_size : design;
+}
+
+void clarity_ui_set_dot_size(ClarityUi* ui, const char* part, int64_t value) {
+    ClarityPart* p = part_of(ui, part);
+    p->has_dot_size = true;
+    p->dot_size = value;
+}
+
+const char* clarity_ui_dot_color(const ClarityUi* ui, const char* part, const char* design) {
+    const ClarityPart* p = found(ui, part);
+    return p && p->dot_color ? p->dot_color : design;
+}
+
+void clarity_ui_set_dot_color(ClarityUi* ui, const char* part, const char* value) { part_of(ui, part)->dot_color = clarity_copy(value); }
+
 bool clarity_ui_maximized(const ClarityUi* ui, const char* part) {
     const ClarityPart* p = found(ui, part);
     return p && p->has_maximized && p->maximized;
@@ -380,6 +427,11 @@ static cJSON* part_json(const ClarityPart* p) {
     if (p->has_readonly) cJSON_AddBoolToObject(out, "readonly", p->readonly);
     if (p->has_folded) cJSON_AddBoolToObject(out, "folded", p->folded);
     if (p->has_collapsed) cJSON_AddBoolToObject(out, "collapsed", p->collapsed);
+    if (p->has_grid) cJSON_AddNumberToObject(out, "grid", (double)p->grid);
+    if (p->has_snap) cJSON_AddBoolToObject(out, "snap", p->snap);
+    if (p->background) cJSON_AddStringToObject(out, "background", p->background);
+    if (p->has_dot_size) cJSON_AddNumberToObject(out, "dotSize", (double)p->dot_size);
+    if (p->dot_color) cJSON_AddStringToObject(out, "dotColor", p->dot_color);
     if (p->has_maximized) cJSON_AddBoolToObject(out, "maximized", p->maximized);
     if (p->has_tab) cJSON_AddNumberToObject(out, "tab", (double)p->tab);
     if (p->has_step) cJSON_AddNumberToObject(out, "step", (double)p->step);
@@ -400,6 +452,11 @@ static bool part_from_json(const cJSON* in, ClarityPart* p) {
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "readonly"))) p->has_readonly = true, p->readonly = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "folded"))) p->has_folded = true, p->folded = cJSON_IsTrue(v);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "collapsed"))) p->has_collapsed = true, p->collapsed = cJSON_IsTrue(v);
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "grid"))) p->has_grid = true, p->grid = (int64_t)v->valuedouble;
+    if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "snap"))) p->has_snap = true, p->snap = cJSON_IsTrue(v);
+    if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "background"))) p->background = clarity_copy(v->valuestring);
+    if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "dotSize"))) p->has_dot_size = true, p->dot_size = (int64_t)v->valuedouble;
+    if (cJSON_IsString(v = cJSON_GetObjectItemCaseSensitive(in, "dotColor"))) p->dot_color = clarity_copy(v->valuestring);
     if (cJSON_IsBool(v = cJSON_GetObjectItemCaseSensitive(in, "maximized"))) p->has_maximized = true, p->maximized = cJSON_IsTrue(v);
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "tab"))) p->has_tab = true, p->tab = (int64_t)v->valuedouble;
     if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(in, "step"))) p->has_step = true, p->step = (int64_t)v->valuedouble;

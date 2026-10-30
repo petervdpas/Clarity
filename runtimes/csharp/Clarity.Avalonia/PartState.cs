@@ -79,6 +79,46 @@ public sealed class PartState(string name, string? caption = null, bool readOnly
     /// <summary>Where a drag on a canvas started, down: <c>canvas.fromY</c>.</summary>
     public long FromY => Pointer?.FromY ?? 0;
 
+    /// <summary>A canvas's grid in its units, 0 for none: <c>canvas.grid</c>, as its line says until a handler sets it.</summary>
+    public long Grid
+    {
+        get => grid;
+        set => SetProperty(ref grid, value);
+    }
+    long grid;
+
+    /// <summary>Whether code snaps to a canvas's grid: <c>canvas.snap</c>.</summary>
+    public bool Snap
+    {
+        get => snap;
+        set => SetProperty(ref snap, value);
+    }
+    bool snap;
+
+    /// <summary>What a canvas's clear() fills it with: <c>canvas.background</c>; empty is the theme's panel.</summary>
+    public string Background
+    {
+        get => background;
+        set => SetProperty(ref background, value);
+    }
+    string background = "";
+
+    /// <summary>How many pixels across a canvas's grid dots are: <c>canvas.dotSize</c>.</summary>
+    public long DotSize
+    {
+        get => dotSize;
+        set => SetProperty(ref dotSize, value);
+    }
+    long dotSize = 2;
+
+    /// <summary>The color of a canvas's grid dots: <c>canvas.dotColor</c>; empty is the theme's border.</summary>
+    public string DotColor
+    {
+        get => dotColor;
+        set => SetProperty(ref dotColor, value);
+    }
+    string dotColor = "";
+
     /// <summary>Whether a foldable panel or form is folded, as the person or a handler left it
     /// (conformance/folding.json).</summary>
     public bool IsFolded

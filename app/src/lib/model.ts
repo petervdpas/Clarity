@@ -93,6 +93,10 @@ const OWN_WORDS: Record<string, { key: string; written: string }> = {
   Stop: { key: "stopCall", written: "Stop" },
   // A folder part's button.
   "Choose a folder": { key: "chooseFolder", written: "Choose a folder" },
+  // The zoom buttons of a canvas that zooms.
+  "Zoom out": { key: "zoomOut", written: "Zoom out" },
+  "Show it whole": { key: "zoomWhole", written: "Show it whole" },
+  "Zoom in": { key: "zoomIn", written: "Zoom in" },
   // The page bar of a table shown a page at a time.
   "First page": { key: "firstPage", written: "First page" },
   "Previous page": { key: "previousPage", written: "Previous page" },

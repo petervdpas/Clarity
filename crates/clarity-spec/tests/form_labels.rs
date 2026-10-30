@@ -89,3 +89,17 @@ fn the_rules_of_a_label_column() {
     );
     says(SHOP.replace("    form name", "    text name cityBoxLabel at 1,6 span 3\n    form name"), "duplicate part name 'cityBoxLabel'");
 }
+
+/// A checkbox, a switch or a toggle without a caption of its own shows its
+/// field's label as its caption, so nothing in a labelled form goes unnamed.
+#[test]
+fn a_checkbox_without_a_caption_shows_its_fields_label() {
+    let page = SHOP.replace("    vip: bool\n", "    vip: bool, label \"Valued customer\"\n").replace("        checkbox \"VIP\" name vipBox", "        checkbox name vipBox");
+    let p = load_sources([("shop.clarity", format!("{page}{CODE}").as_str())]);
+    let vip = p.files[0].pages[0].widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
+    assert_eq!(vip.props.caption.as_deref(), Some("Valued customer"));
+    // One with a caption keeps its own.
+    let p = load_sources([("shop.clarity", format!("{SHOP}{CODE}").as_str())]);
+    let vip = p.files[0].pages[0].widgets[0].children.iter().find(|w| w.props.name.as_deref() == Some("vipBox")).unwrap();
+    assert_eq!(vip.props.caption.as_deref(), Some("VIP"));
+}

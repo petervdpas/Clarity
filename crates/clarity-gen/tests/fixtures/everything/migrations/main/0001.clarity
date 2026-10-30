@@ -4,9 +4,11 @@ migration "Step 1"
     add entity Friend
         name: text(80)
         city: text(60)
+        position: integer
     add entity Folder
         name: text(80)
         size: integer
+        position: integer
         parent: ref Folder
     add entity Album
         title: text(120), search
@@ -24,6 +26,7 @@ migration "Step 1"
         lentTo: ref Friend
         price: money
         added: datetime
+        position: integer
         released: date
         length: duration
         cover: image

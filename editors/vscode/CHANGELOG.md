@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.24
+
+- Colors `reorder`: the part option `reorder by position` and the event `on reorder`.
+
 ## 0.1.23
 
 - Colors `undo` and `redo`: the part option `no undo` and the targets `-> undo` and `-> redo`.

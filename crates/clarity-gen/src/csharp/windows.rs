@@ -1256,6 +1256,10 @@ impl<'a> Window<'a> {
                 if p.resizable && let Some(name) = named {
                     let _ = write!(options, " Remember=\"{}.{name}\"", self.page.name.name);
                 }
+                // The person puts the rows in their own order, numbered in this field (DESIGN 5.30).
+                if let (Some(field), Some(entity)) = (&p.reorder, entity) {
+                    let _ = write!(options, " ReorderBy=\"{}\"", property(&entity.name.name, field));
+                }
                 // A page at a time (U1c), the bar's buttons in Clarity's own words.
                 if let Some(size) = p.page {
                     let _ = write!(
@@ -1367,7 +1371,12 @@ impl<'a> Window<'a> {
                 let entity = p.bind.as_deref().and_then(|b| self.entity_of(b));
                 let selected = named.map(|n| format!(" SelectedItem=\"{{Binding {}.SelectedItem}}\"", member(n))).unwrap_or_default();
                 let items = bound.as_deref().map(|b| format!(" ItemsSource=\"{{Binding {b}}}\"")).unwrap_or_default();
-                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{plain_state}{extra}>");
+                // The person puts the rows in their own order, numbered in this field (DESIGN 5.30).
+                let reorder = match (&p.reorder, entity) {
+                    (Some(field), Some(entity)) => format!(" c:RowMoves.By=\"{}\"", property(&entity.name.name, field)),
+                    _ => String::new(),
+                };
+                let _ = writeln!(out, "{pad}<ListBox {at}{items}{selected}{reorder}{plain_state}{extra}>");
                 if let Some(entity) = entity {
                     let _ = writeln!(out, "{pad}  <ListBox.ItemTemplate>\n{pad}    <DataTemplate x:DataType=\"local:{}\">", entity.name.name);
                     let _ = writeln!(out, "{pad}      <StackPanel Orientation=\"Horizontal\" Spacing=\"8\">");
@@ -1553,7 +1562,7 @@ impl<'a> Window<'a> {
                 let kind = widget.props.kind;
                 // A change of a part with undo is an edit, with what its handler changed (DESIGN 5.29).
                 let run = match (&scope, h.event) {
-                    (Some(scope), Event::Change) => format!("Vm.EditOf(\"{name}\", \"{scope}\", true, () => {run})"),
+                    (Some(scope), Event::Change | Event::Reorder) => format!("Vm.EditOf(\"{name}\", \"{scope}\", true, () => {run})"),
                     _ => run,
                 };
                 // Every input of the library tells when the person changed its value.
@@ -1595,6 +1604,9 @@ impl<'a> Window<'a> {
                     // A wizard's Next asks whether the handler refused, so it keeps the step.
                     Event::Next => format!("{control}.Next = Vm.Next_{};", member(name)),
                     Event::Finish => format!("{control}.Finished += () => {run};"),
+                    // A row the person moved (DESIGN 5.30): the list has its new order, the row is chosen.
+                    Event::Reorder if kind == WidgetKind::List => format!("RowMoves.OnReorder({control}, () => {run});"),
+                    Event::Reorder => format!("{control}.Reordered += (_, _) => {run};"),
                     _ => continue,
                 };
                 out.push(line);

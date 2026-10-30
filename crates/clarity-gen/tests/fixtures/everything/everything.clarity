@@ -70,10 +70,12 @@ enum Format
 entity Friend
     name: text(80), required, label @friendName
     city: text(60), label @friendCity
+    position: integer, label @friendPosition
 
 entity Folder
     name: text(80), required, label @folderName
     size: integer, label @folderSize
+    position: integer, label @folderPosition
     parent: ref Folder, cascade, label @folderParent
     children: list<Folder>, label @folderChildren
 
@@ -93,6 +95,7 @@ entity Album
     lentTo: ref Friend, label @albumLentTo
     price: money, label @albumPrice
     added: datetime, label @albumAdded
+    position: integer, label @albumPosition
     released: date, label @albumReleased
     length: duration, label @albumLength
     cover: image, label @albumCover
@@ -170,8 +173,8 @@ page Albums: window
 page Folders: window
     on open: loadFolders
     data folders: list<Folder>
-    tree name folderTree at 1,1 span 4 rows 8 bind folders children children on select: folderPicked
-    treetable name folderTable at 5,1 span 8 rows 8 bind folders children children columns name 200, size on open: folderPicked
+    tree name folderTree at 1,1 span 4 rows 8 bind folders children children reorder by position on select: folderPicked on reorder: foldersMoved
+    treetable name folderTable at 5,1 span 8 rows 8 bind folders children children columns name 200, size reorder by position no undo on open: folderPicked on reorder: foldersMoved
     data albums: list<Album>
     chart bar name formatChart at 1,9 span 4 rows 6 bind albums by format count
     chart line name copiesChart at 5,9 span 4 rows 6 bind albums by copies sum rating
@@ -180,7 +183,7 @@ page Folders: window
 page PickFriend: dialog gives Friend
     data friends: list<Friend>
     data onlyNamed: bool
-    table name grid at 1,1 span 12 rows 6 bind friends columns name page 20
+    table name grid at 1,1 span 12 rows 6 bind friends columns name reorder by position page 20 on reorder: friendsMoved
         menu
             item @pick name pickItem icon "user-check" on click: picked
             separator
@@ -276,6 +279,10 @@ code PickFriend
     handler picked
         close with grid.selected
 
+    handler friendsMoved
+        for f in friends
+            save f
+
     handler refilter
         filters.visible = false
         pickItem.enabled = onlyNamed
@@ -293,8 +300,12 @@ code NewAlbum
 
 code Folders
     handler loadFolders
-        folders = find f in Folder order by f.name
+        folders = find f in Folder order by f.position
         albums = find a in Album
+
+    handler foldersMoved
+        for f in folders
+            save f
 
     handler folderPicked
         if folderTree.selected != none and folderTree.selected.size > 0
@@ -328,7 +339,7 @@ page Gallery: window
         pane
             tabs name galleryTabs at 1,1 span 12 rows 7
                 tab @albums
-                    list name albumList at 1,1 span 12 rows 6 bind albums show title, copies on open: albumPicked
+                    list name albumList at 1,1 span 12 rows 6 bind albums show title, copies reorder by position on open: albumPicked on reorder: albumsMoved
                 tab @cover
                     image name coverImage at 1,1 span 12 rows 6 bind album.cover
                 tab @about
@@ -357,6 +368,11 @@ code Gallery
     handler albumPicked
         if albumList.selected != none
             album = albumList.selected
+
+    // The person's own order of the albums (DESIGN 5.30).
+    handler albumsMoved
+        for a in albums
+            save a
 
     // Dragging across the dial turns it; letting go reads where it ended.
     // Bending the needle line keeps its points.

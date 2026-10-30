@@ -1542,8 +1542,8 @@ fn parse_widget_page(
 }
 
 /// The words a part's line is written with, which a color after `dots 3` is not.
-const LINE_WORDS: [&str; 61] = [
-    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "edit", "show", "surface", "renderer", "source", "for",
+const LINE_WORDS: [&str; 62] = [
+    "name", "on", "at", "span", "rows", "bind", "columns", "resizable", "sortable", "order", "reorder", "edit", "show", "surface", "renderer", "source", "for",
     "runs", "units", "digits", "placeholder", "tooltip", "labels", "volume", "repeat", "points", "every", "split", "by", "count", "sum", "average",
     "children", "page", "typed", "search", "zoom", "grid", "snap", "background", "dots", "to", "max", "min", "step", "icon", "style", "readonly", "no",
     "foldable", "folded", "taborder", "key", "default", "cancel", "tells", "hears", "value", "values", "in", "new", "window",
@@ -1574,6 +1574,7 @@ fn parse_widget_props(
         widths: Default::default(),
         resizable: false,
         sortable: false,
+        reorder: None,
         order: None,
         show: Vec::new(),
         orientation: None,
@@ -1813,6 +1814,13 @@ fn parse_widget_props(
                 let field = cursor.expect_ident("a column to order by")?.name;
                 let desc = cursor.eat_keyword("desc");
                 props.order = Some(crate::model::TableOrder { field, desc });
+            }
+            "reorder" => {
+                applies(WidgetProperty::Reorder)?;
+                if !cursor.eat_keyword("by") {
+                    return Err(cursor.error_here("expected 'by', as in 'reorder by position'".to_string()));
+                }
+                props.reorder = Some(cursor.expect_ident("the integer field that keeps the order")?.name);
             }
             "edit" => {
                 applies(WidgetProperty::Edit)?;

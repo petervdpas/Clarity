@@ -115,7 +115,7 @@ page Types: window
         dropdown name typeBase at 3,6 span 6 bind current.base
         tags name typeInterfaces at 3,7 span 6 bind current.interfaces
         textbox name typeSummary at 3,8 span 6 bind current.summary
-    table name parameterGrid at 5,9 span 8 rows 3 bind parameters columns position 60, type, name edit position, type, name on change: parameterChanged
+    table name parameterGrid at 5,9 span 8 rows 3 bind parameters columns position 60, type, name edit type, name reorder by position on change: parameterChanged on reorder: parametersMoved
     button @addParameterCaption name addParameter at 5,12 span 2 on click: addParameterClicked
     button @removeParameterCaption name removeParameter at 7,12 span 2 on click: removeParameterClicked
     text name typeUpdated at 9,12 span 4 bind current.updated
@@ -142,7 +142,7 @@ page Entities: window
         dropdown name entityType at 3,2 span 6 bind current.type
         dropdown name entityDomain at 3,3 span 6 bind current.domain
         textbox name entitySummary at 3,4 span 6 bind current.summary
-    table name columnGrid at 5,5 span 8 rows 6 bind columns columns position 60, name, type, key, mandatory 80 edit position, name, type, key, mandatory on change: columnChanged
+    table name columnGrid at 5,5 span 8 rows 6 bind columns columns position 60, name, type, key, mandatory 80 edit name, type, key, mandatory reorder by position on change: columnChanged on reorder: columnsMoved
     button @addColumnCaption name addColumn at 5,12 span 2 on click: addColumnClicked
     button @removeColumnCaption name removeColumn at 7,12 span 2 on click: removeColumnClicked
     text name entityUpdated at 9,12 span 4 bind current.updated
@@ -420,6 +420,11 @@ code Types
     handler parameterChanged
         save parameterGrid.selected
 
+    // Dragged, or moved with Alt and the arrows: every parameter keeps its new position.
+    handler parametersMoved
+        for p in parameters
+            save p
+
 code Entities
     handler entitiesOpened
         if settings.openProject == none
@@ -483,6 +488,11 @@ code Entities
 
     handler columnChanged
         save columnGrid.selected
+
+    // Dragged, or moved with Alt and the arrows: every column keeps its new position.
+    handler columnsMoved
+        for c in columns
+            save c
 
 code Relations
     handler relationsOpened

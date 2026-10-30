@@ -535,6 +535,11 @@ pub struct WidgetProps {
     /// `order by field [desc]`: the order a table's rows show in first.
     #[serde(default)]
     pub order: Option<TableOrder>,
+    /// `reorder by position`: the person puts the rows of a list, table,
+    /// tree or tree table in their own order, numbered in this integer field
+    /// (DESIGN 5.30). Without it the rows stay where the data has them.
+    #[serde(default)]
+    pub reorder: Option<String>,
     /// `page 50`: a table shows its rows that many at a time (U1c).
     #[serde(default)]
     pub page: Option<u32>,

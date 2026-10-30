@@ -73,6 +73,8 @@ const KEYWORDS: &[&str] = &[
     "folded", "heading", "status", "sortable", "ask", "yes", "no", "then", "gives", "to", "max", "split", "labels",
     // Undo (DESIGN 5.29): `no undo`, and the targets `undo` and `redo`.
     "undo", "redo",
+    // Reordering (DESIGN 5.30): `reorder by position`.
+    "reorder",
 ];
 
 /// Clarity's own types.

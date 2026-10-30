@@ -149,6 +149,8 @@ pub enum Event {
     Next,
     /// Finish is pressed on a wizard's last step.
     Finish,
+    /// The person moved a row of a part that reorders (DESIGN 5.30).
+    Reorder,
     /// A timer's time has come round again (DESIGN 5.26).
     Tick,
     /// The app's databases did not open, as when a connection kept as a
@@ -158,7 +160,7 @@ pub enum Event {
 
 /// The events a window has, in the order the designer lists them.
 /// Every event, in the order the language lists them.
-pub const ALL_EVENTS: [Event; 20] = [
+pub const ALL_EVENTS: [Event; 21] = [
     Event::Click,
     Event::Change,
     Event::Enter,
@@ -177,6 +179,7 @@ pub const ALL_EVENTS: [Event; 20] = [
     Event::Bend,
     Event::Next,
     Event::Finish,
+    Event::Reorder,
     Event::Tick,
     Event::Unconnected,
 ];
@@ -207,6 +210,7 @@ impl Event {
             Event::Bend => "bend",
             Event::Next => "next",
             Event::Finish => "finish",
+            Event::Reorder => "reorder",
             Event::Tick => "tick",
             Event::Unconnected => "unconnected",
         }
@@ -232,6 +236,7 @@ impl Event {
             "bend" => Some(Event::Bend),
             "next" => Some(Event::Next),
             "finish" => Some(Event::Finish),
+            "reorder" => Some(Event::Reorder),
             "tick" => Some(Event::Tick),
             "unconnected" => Some(Event::Unconnected),
             _ => None,
@@ -317,6 +322,8 @@ pub enum WidgetProperty {
     Sortable,
     /// `order by field [desc]`: the order a table's rows show in first.
     OrderBy,
+    /// `reorder by position`: the person puts the rows in their own order (DESIGN 5.30).
+    Reorder,
     /// `icon "save"`: the icon a button shows beside its caption.
     Icon,
     /// `to "https://..."`: the address a link opens.
@@ -769,8 +776,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open, Event::Change],
-        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Page],
+        events: &[Event::Select, Event::Open, Event::Change, Event::Reorder],
+        properties: &[WidgetProperty::Columns, WidgetProperty::Edit, WidgetProperty::NoUndo, WidgetProperty::Resizable, WidgetProperty::Sortable, WidgetProperty::OrderBy, WidgetProperty::Reorder, WidgetProperty::Page],
     },
     // A list the window holds as a tree, arranged by `children` (U1c).
     Entry {
@@ -785,8 +792,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open],
-        properties: &[WidgetProperty::Children, WidgetProperty::Show],
+        events: &[Event::Select, Event::Open, Event::Reorder],
+        properties: &[WidgetProperty::Children, WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo],
     },
     Entry {
         kind: WidgetKind::TreeTable,
@@ -800,8 +807,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open],
-        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable],
+        events: &[Event::Select, Event::Open, Event::Reorder],
+        properties: &[WidgetProperty::Children, WidgetProperty::Columns, WidgetProperty::Resizable, WidgetProperty::Reorder, WidgetProperty::NoUndo],
     },
     // A list the window holds as a chart: `chart bar ... by status count` (U1c).
     Entry {
@@ -847,8 +854,8 @@ const ENTRIES: &[Entry] = &[
         input: false,
         container: None,
         clickable: false,
-        events: &[Event::Select, Event::Open],
-        properties: &[WidgetProperty::Show],
+        events: &[Event::Select, Event::Open, Event::Reorder],
+        properties: &[WidgetProperty::Show, WidgetProperty::Reorder, WidgetProperty::NoUndo],
     },
     Entry {
         kind: WidgetKind::Progress,
@@ -1071,7 +1078,9 @@ pub fn undo_scope(widgets: &[crate::model::Widget], name: &str) -> Option<String
     fn find(widgets: &[crate::model::Widget], name: &str, scope: Option<&str>) -> Option<Option<String>> {
         for w in widgets {
             if w.props.name.as_deref() == Some(name) {
-                let has = has_property(w.props.kind, WidgetProperty::NoUndo) && !w.props.no_undo;
+                // A list or tree only selects, unless it reorders (DESIGN 5.30).
+                let selects_only = matches!(w.props.kind, WidgetKind::List | WidgetKind::Tree | WidgetKind::TreeTable) && w.props.reorder.is_none();
+                let has = has_property(w.props.kind, WidgetProperty::NoUndo) && !w.props.no_undo && !selects_only;
                 return Some(has.then(|| scope.unwrap_or(name).to_string()));
             }
             let inner = if matches!(w.props.kind, WidgetKind::Form | WidgetKind::Panel) { w.props.name.as_deref().or(scope) } else { scope };
@@ -1213,6 +1222,7 @@ pub fn new_props(kind: WidgetKind, col: u32, row: u32) -> WidgetProps {
         widths: Default::default(),
         resizable: false,
         sortable: false,
+        reorder: None,
         order: None,
         show: Vec::new(),
         // A splitter is written with its direction; a separator is level unless written vertical.
@@ -1454,6 +1464,9 @@ pub fn widget_line(props: &WidgetProps) -> String {
     if let Some(order) = &props.order {
         parts.push(if order.desc { format!("order by {} desc", order.field) } else { format!("order by {}", order.field) });
     }
+    if let Some(field) = &props.reorder {
+        parts.push(format!("reorder by {field}"));
+    }
     if let Some(page) = props.page {
         parts.push(format!("page {page}"));
     }
@@ -1648,6 +1661,7 @@ pub fn validate_props(props: &WidgetProps) -> Result<(), String> {
         (WidgetProperty::Resizable, props.resizable, "resizable"),
         (WidgetProperty::Sortable, props.sortable, "sortable"),
         (WidgetProperty::OrderBy, props.order.is_some(), "order by"),
+        (WidgetProperty::Reorder, props.reorder.is_some(), "reorder"),
         (WidgetProperty::Icon, props.icon.is_some() && props.kind != WidgetKind::Icon, "icon"),
         (WidgetProperty::To, props.to.is_some(), "to"),
         (WidgetProperty::Max, props.max.is_some(), "max"),

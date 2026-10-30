@@ -144,6 +144,15 @@ public sealed class ClarityTable : UserControl
         }
     }
 
+    /// <summary>
+    /// The record property the rows are numbered in when the person moves them
+    /// (<c>reorder by position</c>, DESIGN 5.30); none, and the rows stay put.
+    /// </summary>
+    public string? ReorderBy { get; set; }
+
+    /// <summary>The person moved a row, which is chosen: Clarity's <c>reorder</c>.</summary>
+    public event EventHandler? Reordered;
+
     /// <summary>Whether the column headers show; a tree shows none.</summary>
     public bool HeadersVisible
     {
@@ -306,6 +315,19 @@ public sealed class ClarityTable : UserControl
                 DesignedWidths();
             }
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // Rows the person moves by dragging and with Alt and the arrows (DESIGN 5.30).
+        RowMoves.Attach(Grid, () => ItemsSource as IList, () => ReorderBy, () => treeParent,
+            v => (v as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true),
+            () => SelectedItem,
+            row =>
+            {
+                // The moved row shows where it went, under open rows, and stays chosen.
+                ShowRows();
+                Reveal(row);
+                SelectedItem = row;
+                Grid.SelectedItem = row;
+            },
+            () => Reordered?.Invoke(this, EventArgs.Empty));
         // Enter takes a text cell (the input does that itself), as leaving it
         // does, and does nothing else: the grid would move to the next row,
         // which the web does not.
@@ -331,19 +353,8 @@ public sealed class ClarityTable : UserControl
         }
         else if (change.Property == SelectedItemProperty && !ReferenceEquals(Grid.SelectedItem, SelectedItem))
         {
-            // A row of a tree selected by code opens the rows above it.
-            if (treeParent is not null && SelectedItem is { } picked && treeRows.IndexOf(picked) is var treePlace and >= 0)
-            {
-                var missing = Trees.Above(TreeRows(), treePlace).Where(id => !opened.Contains(id)).ToList();
-                if (missing.Count > 0)
-                {
-                    opened.UnionWith(missing);
-                    ShowRows();
-                }
-            }
-            // A row selected by code shows its page.
-            if (pageSize > 0 && SelectedItem is { } row && ordered.IndexOf(row) is var place and >= 0 && TablePages.With(pageSize, place) != Page)
-                TurnTo(TablePages.With(pageSize, place));
+            if (SelectedItem is { } picked)
+                Reveal(picked);
             Grid.SelectedItem = SelectedItem;
         }
     }
@@ -360,6 +371,25 @@ public sealed class ClarityTable : UserControl
         if (!ReferenceEquals(Grid.SelectedItem, row))
             Grid.SelectedItem = row;
         Edited?.Invoke(row);
+    }
+
+    /// <summary>
+    /// Shows <paramref name="row"/>, as when code selects it: in a tree the rows
+    /// above it open, in a paged table its page shows.
+    /// </summary>
+    void Reveal(object row)
+    {
+        if (treeParent is not null && treeRows.IndexOf(row) is var treePlace and >= 0)
+        {
+            var missing = Trees.Above(TreeRows(), treePlace).Where(id => !opened.Contains(id)).ToList();
+            if (missing.Count > 0)
+            {
+                opened.UnionWith(missing);
+                ShowRows();
+            }
+        }
+        if (pageSize > 0 && ordered.IndexOf(row) is var place and >= 0 && TablePages.With(pageSize, place) != Page)
+            TurnTo(TablePages.With(pageSize, place));
     }
 
     /// <summary>Sorts by the column of <paramref name="field"/>, or the other way when it already is.</summary>

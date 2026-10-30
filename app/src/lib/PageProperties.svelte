@@ -477,6 +477,39 @@
       </fieldset>
     {/if}
 
+    {#if info.properties.includes("reorder")}
+      <!-- Reordering (DESIGN 5.30): the person puts the rows in their own order, kept in an integer field. -->
+      {@const numbers = collectionFields.filter((f) => f.type.kind === "integer")}
+      <fieldset class="checks" title="The person drags rows, or moves the chosen one with Alt and the arrows; wire 'on reorder' to save the rows">
+        <legend>Order</legend>
+        {#if numbers.length > 0}
+          <label>
+            <input
+              type="checkbox"
+              checked={p.reorder !== null}
+              onchange={(e) =>
+                update(
+                  e.currentTarget.checked
+                    ? { reorder: (numbers.find((f) => ["position", "order", "rank"].includes(f.name.name)) ?? numbers[0]).name.name, sortable: false, order: null }
+                    : { reorder: null },
+                )}
+            />
+            Reorder by the person
+          </label>
+          {#if p.reorder !== null}
+            <label class="order" title="The integer field the rows are numbered in, from 1 at each level">
+              <span>Kept in</span>
+              <select value={p.reorder} onchange={(e) => update({ reorder: e.currentTarget.value })}>
+                {#each numbers as field (field.name.name)}<option value={field.name.name}>{field.label}</option>{/each}
+              </select>
+            </label>
+          {/if}
+        {:else}
+          <p class="hint">Add an integer field, such as position, to keep the person's order in.</p>
+        {/if}
+      </fieldset>
+    {/if}
+
     {#if info.properties.includes("sortable") && p.columns.length > 0}
       <fieldset class="checks">
         <legend>Table</legend>
@@ -484,11 +517,11 @@
           <input type="checkbox" checked={p.resizable} onchange={(e) => update({ resizable: e.currentTarget.checked })} /> Resizable columns
         </label>
         <label title="A click on a header sorts by that column; another click the other way">
-          <input type="checkbox" checked={p.sortable} onchange={(e) => update({ sortable: e.currentTarget.checked })} /> Sortable by a header click
+          <input type="checkbox" checked={p.sortable} onchange={(e) => update(e.currentTarget.checked ? { sortable: true, reorder: null } : { sortable: false })} /> Sortable by a header click
         </label>
         <label class="order">
           <span>First order</span>
-          <select value={p.order?.field ?? ""} onchange={(e) => update({ order: e.currentTarget.value ? { field: e.currentTarget.value, desc: p.order?.desc ?? false } : null })}>
+          <select value={p.order?.field ?? ""} onchange={(e) => update(e.currentTarget.value ? { order: { field: e.currentTarget.value, desc: p.order?.desc ?? false }, reorder: null } : { order: null })}>
             <option value="">as the data has them</option>
             {#each p.columns as column (column)}<option value={column}>{column}</option>{/each}
           </select>

@@ -4,6 +4,8 @@
   import { untrack } from "svelte";
   import DateTimeInput from "./ui/DateTimeInput.svelte";
   import Table, { type CellKind, type TableColumn } from "./ui/Table.svelte";
+  import { reorder as reorderRows, type Move } from "./ui/reorder";
+  import { keyMove, rowDrag } from "./ui/rowDrag";
   import CheckInput from "./ui/CheckInput.svelte";
   import ChoiceInput from "./ui/ChoiceInput.svelte";
   import DateInput from "./ui/DateInput.svelte";
@@ -325,6 +327,31 @@
     const other = selectedRow !== index;
     live.select(p.name, index);
     if (other) fire("select");
+  }
+
+  /** Whether the person moves this part's rows now (`reorder by`, DESIGN 5.30). */
+  const reorders = $derived(!!p.reorder && !!live && !design && !disabled);
+
+  /**
+   * A row moved by the person (DESIGN 5.30): the list takes its new order,
+   * each row its number in the `reorder by` field (and in a tree its parent),
+   * as one edit for undo. Then the moved row is chosen and `on reorder` runs.
+   */
+  function reordered(move: Move) {
+    if (!live || design || !p.name || !p.bind || !p.reorder || !Array.isArray(collection?.rows)) return;
+    const rows = collection.rows as Record<string, JsonValue>[];
+    const tree = p.kind === "tree" || p.kind === "treeTable";
+    const own = collection.entity;
+    const parent = tree ? own.fields.find((f) => f.type.kind === "ref" && f.type.entity.name === own.name.name)?.name.name : undefined;
+    const moved = reorderRows(rows.map((r) => ({ id: r.id, parent: parent ? (r[parent] ?? null) : null })), move, tree);
+    if (!moved) return;
+    const before = structuredClone($state.snapshot(rows) as unknown) as Record<string, JsonValue>[];
+    const field = p.reorder;
+    const after = moved.order.map((place, i) => ({ ...before[place], [field]: moved.numbers[i], ...(parent ? { [parent]: moved.parents[i] as JsonValue } : {}) }));
+    live.edited?.(p.name, p.bind, before as JsonValue, structuredClone(after) as JsonValue);
+    rows.splice(0, rows.length, ...after);
+    live.select(p.name, moved.order.indexOf(move.row));
+    void fire("reorder");
   }
 
   /** A column's width dragged in the designer: written into the part, 0 taking it away. */
@@ -949,6 +976,8 @@
           const at = (collection?.rows ?? []).indexOf(record);
           if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
         }}
+        reorder={reorders}
+        onreorder={reordered}
       />
     {:else if p.kind === "tree" || p.kind === "treeTable"}
       <!-- A tree (U1c): the rows under their parents, by the one reference to their own kind. -->
@@ -979,6 +1008,8 @@
           const at = (collection?.rows ?? []).indexOf(record);
           if (live && !design && p.name && p.bind && at >= 0) live.edited?.(p.name, `${p.bind}.${at}.${field}`, before, after);
         }}
+        reorder={reorders}
+        onreorder={reordered}
       />
     {:else if p.kind === "chart" && p.chart && bound?.field.type.kind === "values"}
       <!-- A chart of a list of numbers (DESIGN 5.26): drawn as they are, the last points of them. -->
@@ -1025,9 +1056,21 @@
         }))}
       />
     {:else if p.kind === "list"}
-      <ul class="list">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <ul
+        class="list"
+        tabindex={reorders ? 0 : undefined}
+        use:rowDrag={{ enabled: reorders, tree: false, onmove: reordered }}
+        onkeydown={(e) => {
+          const move = reorders ? keyMove(e, selectedRow ?? null) : null;
+          if (move) {
+            e.preventDefault();
+            reordered(move);
+          }
+        }}
+      >
         {#each collection?.rows ?? [] as row, i (i)}
-          <li class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} oncontextmenu={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
+          <li data-row={i} class:chosen={selectedRow === i} role="presentation" onclick={() => selectRow(i)} oncontextmenu={() => selectRow(i)} ondblclick={() => fire("open")}>{p.show.map((f) => String(row[f] ?? "")).join(" | ")}</li>
         {/each}
       </ul>
     {:else if p.kind === "image" && p.bind}
@@ -1772,6 +1815,19 @@
   .list li {
     padding: calc(var(--padding) - 1px) calc(var(--padding) * 1.5);
     border-bottom: var(--border-width) solid var(--border);
+  }
+
+  /* Where a dragged row lands (DESIGN 5.30). */
+  .list:global(.dragging-row) {
+    cursor: grabbing;
+  }
+
+  .list li:global([data-drop="before"]) {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  .list li:global([data-drop="after"]) {
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
 
   .placeholder {

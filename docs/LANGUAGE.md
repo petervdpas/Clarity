@@ -693,10 +693,10 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 
 | Part | Binds to | Own properties | Events |
 |---|---|---|---|
-| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `page 50` | `select`, `open`, `change` |
-| `list` | a list: `bind orders` | `show field, field, ...` | `select`, `open` |
-| `tree` | a list: `bind folders children children` | `children field`; `show field, ...` | `select`, `open` |
-| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable` | `select`, `open` |
+| `table` | a list: `bind orders` | `columns field [width], ...`; `edit field [as switch], ...`; `resizable`; `sortable`; `order by field [desc]`; `reorder by field`; `page 50` | `select`, `open`, `change`, `reorder` |
+| `list` | a list: `bind orders` | `show field, field, ...`; `reorder by field` | `select`, `open`, `reorder` |
+| `tree` | a list: `bind folders children children` | `children field`; `show field, ...`; `reorder by field` | `select`, `open`, `reorder` |
+| `treetable` | a list: `bind folders children children` | `children field`; `columns field [width], ...`; `resizable`; `reorder by field` | `select`, `open`, `reorder` |
 | `chart` | a list: `chart bar ... bind orders by status count`; or a list of numbers, drawn as they are: `chart line ... bind readings` | `bar`, `line` or `pie` first; `by field`; `count`, `sum field` or `average field`; for a list of numbers `points n` (its last n) and `max n` (the top of the axis) | |
 | `trend` | an integer, decimal, money or duration: `bind cpu` | `points n`, the values it keeps, 60 without it; `max n`, the top of the axis; `every n`, seconds between values, 1 without it; see [Live graphs](#live-graphs) | none |
 
@@ -715,7 +715,7 @@ A panel or form with `foldable` has a header the person clicks to fold it to tha
 | `sound` | nothing; it has no place in the window: no `at`, `span` or `rows` | `source "file"` for a sound of the resources folder; `volume 0` to `100`, 100 without it; `repeat`; see [Sound](#sound) | none |
 | `timer` | nothing; it has no place in the window: no `at`, `span` or `rows` | `every n`, seconds between its ticks, 0.1 to 86400; see [Live graphs](#live-graphs) | `tick` |
 
-`select` fires when another row is chosen, and `open` on a double-click or Enter. `enter` and `leave` fire when the focus moves into and out of an input.
+`select` fires when another row is chosen, and `open` on a double-click or Enter. `reorder` fires when the person moved a row of a part that reorders; see [Reordering](#reordering). `enter` and `leave` fire when the focus moves into and out of an input.
 
 `change` fires when the person changes an input's value to one that differs, and only then, on every stack:
 
@@ -822,6 +822,36 @@ code Files
 - `folderTree.selected` is the record picked, as for a table, and selecting a row in code opens the rows above it. Every renderer arranges the rows alike (`conformance/trees.json`).
 - Sorting changes only how the rows show. A row keeps its place in the data, so `grid.selected` and every event name the record the person sees, and `save grid.selected` saves it.
 
+### Reordering
+
+A `list`, `table`, `tree` or `treetable` lets the person put its rows in their own order when its line says `reorder by` and an integer field of the listed entity, which keeps the order (DESIGN 5.30). It is an option: without it the rows stay where the data has them. In the designer it is the Reorder by the person checkbox, with the field it is kept in.
+
+```clarity
+entity Task
+    title: text, label @title
+    position: integer
+
+page Tasks: window
+    on open: loadTasks
+    data tasks: list<Task>
+    list name taskList at 1,1 span 4 rows 10 bind tasks show title reorder by position on reorder: tasksMoved
+
+code Tasks
+    handler loadTasks
+        tasks = find t in Task order by t.position
+
+    handler tasksMoved
+        for t in tasks
+            save t
+```
+
+- **Moving a row.** The person drags a row with the pointer, and a line shows where it lands; or chooses a row and presses Alt+Up or Alt+Down. In a tree a drop on the middle of a row puts the dragged row under it, as its last row; Alt+Left puts a row after its parent, a level up, and Alt+Right puts it under the row before it. A row takes the rows under it along. Every renderer moves alike (`conformance/reorder.json`).
+- **What it changes.** The list in the window's data takes the new order, and every row gets its number in the field: its place at its level, counted from 1. In a tree the moved row also gets its new parent. A move that would change no number or parent is no move: nothing happens.
+- **`on reorder`** runs after the move, with the moved row chosen (`taskList.selected`). Saving is up to the handler, as with a table that edits; a part that reorders without `on reorder` is a warning, since its order is lost when the data is read again. Load the rows in their order: `order by t.position`.
+- **Undo.** A move and what its `on reorder` saved are one edit, which Ctrl+Z takes back, unless the line says `no undo`; see [Undo](#undo).
+- **A table** that reorders has no `sortable` and no `order by`: its rows keep the person's order. With `page`, a row moves on its page by dragging, and to the page before or after with Alt and the arrows.
+- **Not in the designer**: there the rows are samples, and do not move.
+
 ### Binding
 
 `bind` connects a part to the window's data:
@@ -856,7 +886,7 @@ form name details at 1,1 span 12 rows 3 bind customer
 |---|---|---|
 | `placeholder @key` | textbox, memo, password, number | Shown while the input is empty. |
 | `readonly` | inputs | Shows the value, which cannot be changed. Handlers can change this. |
-| `no undo` | the parts the person edits: inputs, images, canvases, tables with `edit` | Ctrl+Z takes back nothing on this part, not even typing in a text input. Every other one has undo; see [Undo](#undo). |
+| `no undo` | the parts the person edits: inputs, images, canvases, tables with `edit`, and lists, tables and trees that reorder | Ctrl+Z takes back nothing on this part, not even typing in a text input. Every other one has undo; see [Undo](#undo). |
 | `taborder n` | inputs, buttons | Position in the keyboard order, from 1. Parts without one follow in reading order. |
 | `key "Ctrl+S"` | buttons | The key that clicks the button. |
 | `default` | buttons | Enter clicks this button. One per window. |
@@ -1234,7 +1264,7 @@ code CustomerForm
 
 Every part the person edits takes back its own edits with Ctrl+Z, and does them again with Ctrl+Y (or Ctrl+Shift+Z), on every stack, with nothing to write:
 
-- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a table cell, a change of an input (bound or not), a picture loaded into an image or removed. Lists and trees, which only select, have no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on change`) saved or deleted, cascades included.
+- **What one edit is.** A click on a canvas, its drag and drop (from the first drag to the drop), a bent line, a table cell, a change of an input (bound or not), a picture loaded into an image or removed, a row moved in a part that reorders. A list or tree that does not reorder only selects, so it has no undo, nor a custom part, which brings its own, nor a canvas's `on pointer` and `on key`. Its undo puts back the window's data as it was before the edit, and what the handler of that edit (`on drop`, `on bend`, `on change`, `on reorder`) saved or deleted, cascades included.
 - **Where.** Ctrl+Z acts on the part with the focus. In a `form` or a `panel`, it walks back the fields one by one, the last first. In a text input, its own text undo comes first while it has something to take back.
 - **A menu item or a button** reaches it with the built-in targets `undo` and `redo`: `item @undoItem name undoItem key "Ctrl+Z" on click -> undo`. They act on the part that had the focus last.
 - **Not taken back:** moving around (a tab, folding, zoom and pan, the selected row), what a click or a timer did, and effects outside the databases and the window (files written, messages, the clipboard, calls to other services).

@@ -48,6 +48,8 @@
   import { readWidths, resized } from "../columnWidths";
   import { nextOrder, pageOf, pageWith, shownOrder, type Order } from "./tableView";
   import { above, shownTree } from "./trees";
+  import type { Move } from "./reorder";
+  import { keyMove, rowDrag } from "./rowDrag";
 
   let {
     columns,
@@ -69,6 +71,8 @@
     onopen,
     onedit,
     onchanged = () => {},
+    reorder = false,
+    onreorder = () => {},
   }: {
     columns: TableColumn[];
     rows: Row[];
@@ -108,6 +112,10 @@
     onedit: (row: number) => void;
     /** A cell the person changed, with its value before and after: an edit for undo (DESIGN 5.29). */
     onchanged?: (record: Record<string, JsonValue>, field: string, before: JsonValue | undefined, after: JsonValue) => void;
+    /** The person moves rows by dragging and with Alt and the arrows (`reorder by`, DESIGN 5.30). */
+    reorder?: boolean;
+    /** A row was moved: by its place in the list, onto another row or by a key. */
+    onreorder?: (move: Move) => void;
   } = $props();
 
   const inert = $derived(design || disabled);
@@ -258,7 +266,19 @@
   const shown = (column: TableColumn, value: JsonValue | undefined) => (column.shown ? column.shown(value) : value === null || value === undefined ? "" : String(value));
 </script>
 
-<div class="table-wrap" class:paged={paged !== null}>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
+<div
+  class="table-wrap"
+  class:paged={paged !== null}
+  tabindex={reorder && !inert ? 0 : undefined}
+  onkeydown={(e) => {
+    const move = reorder && !inert ? keyMove(e, selected) : null;
+    if (move) {
+      e.preventDefault();
+      onreorder(move);
+    }
+  }}
+>
   <table class:fixed class:no-header={!header} class:tree={tree !== null} style:width={tableWidth}>
     <thead>
       <tr bind:this={head}>
@@ -289,7 +309,7 @@
         {/each}
       </tr>
     </thead>
-    <tbody>
+    <tbody use:rowDrag={{ enabled: reorder && !inert, tree: tree !== null, onmove: onreorder }}>
       {#each shownRows as i (i)}
         {@const row = rows[i]}
         <!-- A right click chooses the row first, so a context menu's handler finds it. -->
@@ -539,6 +559,23 @@
 
   tr.chosen td {
     background: var(--selection);
+  }
+
+  /* Where a dragged row lands (DESIGN 5.30): a line before or after a row, or the row it goes under. */
+  tbody:global(.dragging-row) {
+    cursor: grabbing;
+  }
+
+  tr:global([data-drop="before"]) td {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  tr:global([data-drop="after"]) td {
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  tr:global([data-drop="into"]) td {
+    background: var(--accent-soft);
   }
 
   .numeric {

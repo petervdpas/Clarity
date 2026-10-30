@@ -1446,6 +1446,7 @@ impl<'a> Checker<'a> {
                     self.error(file, format!("{at}: '{}' is not a column of the table; order by one it shows", order.field), widget.span);
                 }
                 self.check_edits(file, &at, entity, widget);
+                self.check_reorder(file, &at, entity, widget);
                 if matches!(p.kind, WidgetKind::Tree | WidgetKind::TreeTable) {
                     self.check_tree(file, &at, entity, widget);
                 }
@@ -1565,6 +1566,32 @@ impl<'a> Checker<'a> {
         let parents = entity.fields.iter().filter(|f| matches!(&f.ty, FieldType::Ref { entity: e } if e.name == *name)).count();
         if parents != 1 {
             self.error(file, format!("{at}: a tree of {name} needs one field 'ref {name}' to know a row's parent"), widget.span);
+        }
+    }
+
+    /// A part that reorders (DESIGN 5.30) numbers its rows in an integer
+    /// field of the listed entity, follows no sort of its own, and saves the
+    /// order in an `on reorder` handler.
+    fn check_reorder(&mut self, file: usize, at: &str, entity: &Entity, widget: &Widget) {
+        let p = &widget.props;
+        let Some(field) = p.reorder.as_deref() else { return };
+        match entity.field(field) {
+            None => self.error(file, format!("{at}: {} has no field '{field}' to keep the order in", entity.name.name), widget.span),
+            Some(f) if f.ty != FieldType::Integer => self.error(
+                file,
+                format!("{at}: '{field}' is {}; the order is kept in an integer field", widgets::field_type_tag(&f.ty)),
+                widget.span,
+            ),
+            Some(_) => {}
+        }
+        if p.sortable {
+            self.error(file, format!("{at}: a table that the person reorders is not 'sortable' too; its rows keep their order"), widget.span);
+        }
+        if p.order.is_some() {
+            self.error(file, format!("{at}: a table that the person reorders has no 'order by'; its rows keep their order"), widget.span);
+        }
+        if !p.handlers.iter().any(|h| h.event == widgets::Event::Reorder) {
+            self.warning(file, format!("{at} reorders its rows but has no 'on reorder' handler to save them"), widget.span);
         }
     }
 

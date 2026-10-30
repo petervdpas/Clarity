@@ -72,6 +72,12 @@ sortable: boolean,
  */
 order: TableOrder | null, 
 /**
+ * `reorder by position`: the person puts the rows of a list, table,
+ * tree or tree table in their own order, numbered in this integer field
+ * (DESIGN 5.30). Without it the rows stay where the data has them.
+ */
+reorder: string | null, 
+/**
  * `page 50`: a table shows its rows that many at a time (U1c).
  */
 page: number | null, 
